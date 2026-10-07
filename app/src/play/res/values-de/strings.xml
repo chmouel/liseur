@@ -75,4 +75,9 @@
     <string name="read_aloud_settings_preview_no_voice">Der Sprachdienst hat diese Stimme nicht.</string>
     <string name="read_aloud_settings_preview_service">Der Sprachdienst konnte die Hörprobe nicht vorlesen.</string>
     <string name="read_aloud_settings_preview_failed">Die Hörprobe konnte nicht abgespielt werden.</string>
+    <string name="read_aloud_settings_voices_choose">Stimmen auswählen</string>
+    <string name="read_aloud_settings_voices_choose_detail">Nur die angehakten Stimmen werden hier und im Player angeboten.</string>
+    <string name="read_aloud_settings_voices_tick_all">Alle anhaken</string>
+    <string name="read_aloud_settings_voices_untick_all">Alle abwählen</string>
+    <string name="read_aloud_settings_voice_hear_named">%1$s anhören</string>
 </resources>

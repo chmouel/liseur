@@ -43,6 +43,16 @@ internal data class VoiceLabel(
             )
         }
 
+        /**
+         * The [listed] voices to offer: those [chosen], keeping the
+         * [stored] one so the voice in use is always seen; all of them
+         * when nothing listed was chosen.
+         */
+        fun offered(listed: List<String>, chosen: Set<String>, stored: String): List<String> {
+            if (listed.none { it in chosen }) return listed
+            return listed.filter { it in chosen || it == stored }
+        }
+
         /** [ids] grouped by language in the order first seen, voices with none last. */
         fun grouped(ids: List<String>): List<Pair<String?, List<VoiceLabel>>> {
             val groups = ids.map(::of).groupBy { it.language }

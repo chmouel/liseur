@@ -1353,7 +1353,9 @@ reader behavior.
   (`VoiceLabel`); tapping one, or typing one, plays a fixed sample
   sentence through `SpeechReadAloud.preview`, which pauses any session
   first. Gemini plays one only on "Hear this voice", since each sample is
-  billed. Both providers return 24 kHz
+  billed. "Choose voices" narrows the chips to a ticked set
+  (`speech_server_voices`, empty offers all; `VoiceLabel.offered` always
+  keeps the voice in use). Both providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
   The OpenAI-compatible provider runs one request at a time with long
@@ -1366,9 +1368,9 @@ reader behavior.
 - Keys (Gemini, optional OpenAI-compatible) live in `noBackupFilesDir`,
   encrypted by `SecretCipher`, each in its own file, and are never logged;
   neither are request bodies or audio. The provider and the speech
-  server's URL, model and voice are app settings in the settings backup
-  but not in liseur-sync settings sync, since a server address is per
-  device. Listening is not counted as reading time.
+  server's URL, model, voice and offered voices are app settings in the
+  settings backup but not in liseur-sync settings sync, since a server
+  address is per device. Listening is not counted as reading time.
 
 ### Covers, UI, and dependencies
 

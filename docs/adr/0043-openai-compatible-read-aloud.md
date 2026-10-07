@@ -56,7 +56,10 @@ they are, without a language. Tapping a voice picks it and plays a
 short fixed sentence in its language, so voices can be compared without
 opening a book. Both fields also take a typed name, since not every
 service lists everything; a typed voice is played the same way, which
-shows at once whether the server has it. The model menu keeps ids that look like speech models
+shows at once whether the server has it. A Kokoro server lists more than
+fifty voices, so "Choose voices" lets the reader tick the few worth
+offering; ticking none, or all, offers every one, and the voice in use
+always stays offered. The model menu keeps ids that look like speech models
 (`tts`, `speech` or `kokoro` in the name) and shows the whole list when
 none does; OpenAI's list is mostly chat models that cannot answer
 `audio/speech`. A service with no voice list (404 or 405, as OpenAI
@@ -68,7 +71,7 @@ a voice.
 
 The key is sent as a bearer token when set, and stored like the Gemini
 key in its own encrypted file under `noBackupFilesDir`. The address,
-model and voice are app settings: in the settings backup, but not in
+model, voice and offered voices are app settings: in the settings backup, but not in
 liseur-sync settings sync, because a LAN address means nothing on
 another device.
 

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +23,8 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -57,6 +60,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -246,6 +250,7 @@ private fun OpenAiRows(feature: SpeechReadAloud) {
     val storedUrl by feature.openAiUrl.collectAsState(initial = "")
     val storedModel by feature.openAiModel.collectAsState(initial = "")
     val storedVoice by feature.openAiVoice.collectAsState(initial = "")
+    val chosenVoices by feature.openAiChosenVoices.collectAsState(initial = emptySet())
     val keyConfigured by feature.openAiKeyConfigured.collectAsState()
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
@@ -366,10 +371,12 @@ private fun OpenAiRows(feature: SpeechReadAloud) {
     RowDivider()
     VoicePicker(
         stored = storedVoice,
+        chosen = chosenVoices,
         enabled = reachable,
         listing = voices?.takeIf { it.url == storedUrl },
         preview = preview,
         onSave = { scope.launch { feature.setOpenAiVoice(it) } },
+        onChoose = { scope.launch { feature.setOpenAiChosenVoices(it) } },
         onRetry = { loadVoices(storedUrl) },
     )
     Text(
@@ -567,14 +574,17 @@ private fun sampleSentence(): (language: String?) -> String {
 @Composable
 private fun VoicePicker(
     stored: String,
+    chosen: Set<String>,
     enabled: Boolean,
     listing: Listing?,
     preview: VoicePreview,
     onSave: (String) -> Unit,
+    onChoose: (Set<String>) -> Unit,
     onRetry: () -> Unit,
 ) {
     val focus = LocalFocusManager.current
     val listed = (listing as? Listing.Loaded)?.items.orEmpty()
+    var choosing by remember { mutableStateOf(false) }
     var typed by remember(stored, listed) { mutableStateOf(stored.takeUnless { it in listed }.orEmpty()) }
     val locale = LocalConfiguration.current.locales[0]
     val sample = sampleSentence()
@@ -609,15 +619,8 @@ private fun VoicePicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            else -> VoiceLabel.grouped(listed).forEach { (language, voices) ->
-                if (language != null) {
-                    Text(
-                        text = Locale.forLanguageTag(language).getDisplayName(locale),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-                    )
-                }
+            else -> VoiceLabel.grouped(VoiceLabel.offered(listed, chosen, stored)).forEach { (language, voices) ->
+                if (language != null) LanguageHeader(language, locale)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = if (language == null) Modifier.padding(top = 8.dp) else Modifier,
@@ -647,6 +650,23 @@ private fun VoicePicker(
                 }
             }
         }
+        if (enabled && listed.size > 1) {
+            TextButton(onClick = { choosing = true }, modifier = Modifier.align(Alignment.End)) {
+                Text(stringResource(R.string.read_aloud_settings_voices_choose))
+            }
+        }
+        if (choosing) {
+            ChooseVoicesDialog(
+                listed = listed,
+                chosen = chosen,
+                preview = preview,
+                onDismiss = { choosing = false },
+                onSave = {
+                    choosing = false
+                    onChoose(it)
+                },
+            )
+        }
         PreviewError(preview, Modifier.padding(top = 4.dp))
         OutlinedTextField(
             value = typed,
@@ -672,6 +692,99 @@ private fun VoicePicker(
             ),
         )
     }
+}
+
+@Composable
+private fun LanguageHeader(language: String, locale: Locale) {
+    Text(
+        text = Locale.forLanguageTag(language).getDisplayName(locale),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+    )
+}
+
+/**
+ * Which of the service's voices to offer, each with a sample to hear.
+ * With nothing chosen yet every voice starts ticked; saving all of them,
+ * or none, offers them all.
+ */
+@Composable
+private fun ChooseVoicesDialog(
+    listed: List<String>,
+    chosen: Set<String>,
+    preview: VoicePreview,
+    onDismiss: () -> Unit,
+    onSave: (Set<String>) -> Unit,
+) {
+    val locale = LocalConfiguration.current.locales[0]
+    val sample = sampleSentence()
+    var ticked by remember { mutableStateOf(listed.filter { it in chosen }.toSet().ifEmpty { listed.toSet() }) }
+    val all = ticked.size == listed.size
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.read_aloud_settings_voices_choose)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.read_aloud_settings_voices_choose_detail),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = { ticked = if (all) emptySet() else listed.toSet() }) {
+                    Text(
+                        stringResource(
+                            if (all) R.string.read_aloud_settings_voices_untick_all else R.string.read_aloud_settings_voices_tick_all,
+                        ),
+                    )
+                }
+                PreviewError(preview)
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    VoiceLabel.grouped(listed).forEach { (language, voices) ->
+                        if (language != null) LanguageHeader(language, locale)
+                        voices.forEach { voice ->
+                            val speaking = preview.playing == voice.id
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .toggleable(
+                                        value = voice.id in ticked,
+                                        role = Role.Checkbox,
+                                        onValueChange = { ticked = if (it) ticked + voice.id else ticked - voice.id },
+                                    ),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = voice.id in ticked, onCheckedChange = null)
+                                Text(
+                                    text = voiceChipLabel(voice),
+                                    modifier = Modifier.weight(1f).padding(start = 12.dp),
+                                )
+                                IconButton(
+                                    onClick = {
+                                        if (speaking) preview.stop() else preview.play(sample(language), voice.id)
+                                    },
+                                ) {
+                                    Icon(
+                                        if (speaking) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                        contentDescription = if (speaking) {
+                                            stringResource(R.string.read_aloud_settings_voice_stop)
+                                        } else {
+                                            stringResource(R.string.read_aloud_settings_voice_hear_named, voice.name)
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(if (all) emptySet() else ticked) }) { Text(stringResource(R.string.save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 /** "Bella · F", or just the name when the id says nothing of a gender. */
