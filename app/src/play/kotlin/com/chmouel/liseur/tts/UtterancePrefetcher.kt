@@ -21,7 +21,7 @@ import kotlinx.coroutines.sync.withPermit
  */
 class SpeechCache(
     private val scope: CoroutineScope,
-    private val synthesize: suspend (String) -> SpeechAudio,
+    private var synthesize: suspend (String) -> SpeechAudio,
     maxConcurrent: Int = MAX_CONCURRENT,
     private val maxBytes: Long = MAX_BYTES,
 ) {
@@ -89,6 +89,12 @@ class SpeechCache(
         val stale = entries.values.toList()
         entries.clear()
         stale.forEach { it.audio.cancel() }
+    }
+
+    /** Speaks with [synthesize] from now on, forgetting what the old voice fetched. */
+    fun swap(synthesize: suspend (String) -> SpeechAudio) {
+        this.synthesize = synthesize
+        restart()
     }
 
     private fun request(

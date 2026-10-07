@@ -9,15 +9,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.RecordVoiceOver
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -29,9 +34,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +49,7 @@ import com.chmouel.liseur.reader.chrome.ChromePill
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * The controls laid over the page while its book is read aloud, painted
@@ -120,6 +128,7 @@ internal fun ReadAloudPlayer(
                     ControlButton(feature::skipForward) {
                         Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                     }
+                    VoiceButton(feature)
                     ControlButton(feature::stop) {
                         Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
                     }
@@ -127,6 +136,82 @@ internal fun ReadAloudPlayer(
             }
         }
     }
+}
+
+/**
+ * Picks the voice the book is read in, from the chosen provider's: the
+ * Gemini ones, or those the service lists narrowed to the ones offered.
+ * The book reads on in it from the start of the sentence.
+ */
+@Composable
+private fun VoiceButton(feature: SpeechReadAloud) {
+    val scope = rememberCoroutineScope()
+    val provider by feature.provider.collectAsStateWithLifecycle(null)
+    var open by remember { mutableStateOf(false) }
+    val url by feature.openAiUrl.collectAsStateWithLifecycle("")
+    // Kept across openings: the service is slow to answer while it reads.
+    var listed by remember(url) { mutableStateOf<List<String>?>(null) }
+    LaunchedEffect(url, open, provider) {
+        if (open && provider == ReadAloudProvider.OPENAI && listed == null) {
+            listed = feature.openAiVoices(url).getOrNull()
+        }
+    }
+    Box {
+        ControlButton({ open = true }) {
+            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
+        }
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.heightIn(max = 420.dp),
+        ) {
+            when (provider) {
+                ReadAloudProvider.GEMINI -> {
+                    val current by feature.geminiVoice.collectAsStateWithLifecycle(null)
+                    GeminiVoice.entries.forEach { voice ->
+                        VoiceItem(geminiVoiceLabel(voice), voice == current) {
+                            open = false
+                            scope.launch { feature.setGeminiVoice(voice) }
+                        }
+                    }
+                }
+                ReadAloudProvider.OPENAI -> OpenAiVoiceItems(feature, listed) { voice ->
+                    open = false
+                    scope.launch { feature.setOpenAiVoice(voice) }
+                }
+                null -> Unit
+            }
+        }
+    }
+}
+
+@Composable
+private fun OpenAiVoiceItems(feature: SpeechReadAloud, listed: List<String>?, onPick: (String) -> Unit) {
+    val stored by feature.openAiVoice.collectAsStateWithLifecycle("")
+    val chosen by feature.openAiChosenVoices.collectAsStateWithLifecycle(emptySet())
+    val locale = LocalConfiguration.current.locales[0]
+    // Until the service answers, or if it cannot, the ones chosen are all there is to offer.
+    val offered = listed?.let { VoiceLabel.offered(it, chosen, stored) }
+        ?: (chosen + stored).filter { it.isNotBlank() }.sorted()
+    VoiceLabel.grouped(offered).forEach { (language, voices) ->
+        if (language != null) LanguageHeader(language, locale, Modifier.padding(horizontal = 12.dp))
+        voices.forEach { voice ->
+            VoiceItem(voiceChipLabel(voice), voice.id == stored) { onPick(voice.id) }
+        }
+    }
+}
+
+@Composable
+private fun VoiceItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(label) },
+        onClick = onClick,
+        trailingIcon = if (selected) {
+            { Icon(Icons.Filled.Check, contentDescription = null) }
+        } else {
+            null
+        },
+    )
 }
 
 /** The selection bar's way into reading aloud. */

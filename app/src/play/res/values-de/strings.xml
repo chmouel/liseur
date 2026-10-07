@@ -91,4 +91,5 @@
         <item quantity="one">%d Stimme</item>
         <item quantity="other">%d Stimmen</item>
     </plurals>
+    <string name="read_aloud_change_voice">Stimme wechseln</string>
 </resources>

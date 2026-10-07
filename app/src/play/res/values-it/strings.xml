@@ -91,4 +91,5 @@
         <item quantity="one">%d voce</item>
         <item quantity="other">%d voci</item>
     </plurals>
+    <string name="read_aloud_change_voice">Cambia voce</string>
 </resources>

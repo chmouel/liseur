@@ -43,8 +43,9 @@ import org.readium.r2.shared.publication.Locator
  *
  * Holds the session in progress and keeps [ReadAloudService] running for
  * it, so playback carries on with the reader gone and the screen off.
- * Changing the provider or a key ends the session; a new server or voice
- * applies from the next one. Main thread only.
+ * Changing the provider or a key ends the session; a new voice is heard
+ * at once, from the start of the sentence being read, and a new server
+ * or model applies from the next session. Main thread only.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class SpeechReadAloud(
@@ -240,7 +241,9 @@ internal class SpeechReadAloud(
     }
 
     suspend fun setGeminiVoice(voice: GeminiVoice) {
+        val changed = GeminiVoice.of(settings.settings.first().readAloudVoice) != voice
         settings.setReadAloudVoice(voice.id)
+        if (changed) switchVoice()
     }
 
     val geminiVoice: Flow<GeminiVoice> =
@@ -256,7 +259,19 @@ internal class SpeechReadAloud(
 
     suspend fun setOpenAiModel(model: String) = settings.setSpeechServerModel(model)
 
-    suspend fun setOpenAiVoice(voice: String) = settings.setSpeechServerVoice(voice)
+    suspend fun setOpenAiVoice(voice: String) {
+        val changed = settings.settings.first().speechServerVoice != voice
+        settings.setSpeechServerVoice(voice)
+        if (changed) switchVoice()
+    }
+
+    /** Has the session read on in the voice now saved. */
+    private suspend fun switchVoice() {
+        val session = mutableCurrent.value ?: return
+        val voice = voiceOf(settings.settings.first()) ?: return
+        // The provider may have changed, and the session with it, while the settings were read.
+        if (mutableCurrent.value === session) session.switchVoice(voice)
+    }
 
     /** The voices the reader wants offered; empty offers all. */
     val openAiChosenVoices: Flow<Set<String>> =

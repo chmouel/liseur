@@ -95,4 +95,5 @@
         <item quantity="many">%d голосов</item>
         <item quantity="other">%d голоса</item>
     </plurals>
+    <string name="read_aloud_change_voice">Сменить голос</string>
 </resources>

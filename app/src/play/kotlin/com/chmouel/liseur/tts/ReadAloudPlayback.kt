@@ -153,6 +153,20 @@ class ReadAloudPlayback(
         return landed
     }
 
+    /**
+     * Speaks the current sentence again from its start, or the one that
+     * failed, on a fresh navigator, so a new voice is heard at once.
+     * Playing or paused stays as it was.
+     */
+    suspend fun replay(): Landing = landing.withLock {
+        val anchor = mutableFailure.value?.anchor
+            ?: mutableNavigator.value?.location?.value?.let(UtteranceAnchor::of)
+            ?: return@withLock Landing.Failed
+        val landed = land(anchor.elementLocator, anchor::isAt, Int.MAX_VALUE, fallbackToElement = false)
+        if (landed == Landing.Sentence) mutableFailure.value = null
+        landed
+    }
+
     /** The reader's own skips: playing on starts from where they lead, not from a failed sentence. */
     fun skipToNext() {
         mutableFailure.value = null

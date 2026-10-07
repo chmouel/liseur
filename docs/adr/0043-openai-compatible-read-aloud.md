@@ -70,7 +70,9 @@ There is no hidden default model: reading needs an address, a model and
 a voice. "Test connection" fetches both lists again and asks for one
 spoken word with the chosen model and voice, so a refused key, a model
 the server does not have, or an unknown voice shows up in settings
-rather than after pressing play.
+rather than after pressing play. The player has the same voices in a
+menu; a pick there, or in settings, applies to the book being read from
+the start of the current sentence.
 
 The key is sent as a bearer token when set, and stored like the Gemini
 key in its own encrypted file under `noBackupFilesDir`. The address,

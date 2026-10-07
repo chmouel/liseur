@@ -775,12 +775,12 @@ private fun VoicePicker(
 }
 
 @Composable
-private fun LanguageHeader(language: String, locale: Locale) {
+internal fun LanguageHeader(language: String, locale: Locale, modifier: Modifier = Modifier) {
     Text(
         text = Locale.forLanguageTag(language).getDisplayName(locale),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+        modifier = modifier.padding(top = 12.dp, bottom = 4.dp),
     )
 }
 
@@ -869,7 +869,7 @@ private fun ChooseVoicesDialog(
 
 /** "Bella · F", or just the name when the id says nothing of a gender. */
 @Composable
-private fun voiceChipLabel(voice: VoiceLabel): String = when (voice.gender) {
+internal fun voiceChipLabel(voice: VoiceLabel): String = when (voice.gender) {
     null -> voice.name
     VoiceLabel.Gender.FEMALE ->
         stringResource(R.string.read_aloud_voice_with_gender, voice.name, stringResource(R.string.read_aloud_voice_female))
@@ -965,5 +965,5 @@ private fun KeyRow(
 }
 
 @Composable
-private fun geminiVoiceLabel(voice: GeminiVoice): String =
+internal fun geminiVoiceLabel(voice: GeminiVoice): String =
     stringResource(R.string.read_aloud_settings_voice_choice, voice.id, stringResource(voice.style))

@@ -172,6 +172,17 @@ internal class ReadAloudSession(
         }
     }
 
+    /** Reads on in [voice] from the start of the current sentence. */
+    fun switchVoice(voice: SessionVoice) {
+        if (ended) return
+        cache.swap(voice.synthesizer::synthesize)
+        // Still starting: the first sentence is fetched with the new voice.
+        if (playback.navigator.value == null) return
+        scope.launch {
+            if (playback.replay() == ReadAloudPlayback.Landing.Failed) onNotice(ReadAloudNotice.Unavailable)
+        }
+    }
+
     fun skipForward() = playback.skipToNext()
 
     fun skipBackward() = playback.skipToPrevious()
