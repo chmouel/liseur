@@ -80,4 +80,9 @@
     <string name="read_aloud_settings_preview_no_voice">The speech service does not have this voice.</string>
     <string name="read_aloud_settings_preview_service">The speech service could not read the sample.</string>
     <string name="read_aloud_settings_preview_failed">The sample could not be played.</string>
+    <string name="read_aloud_settings_voices_choose">Choose voices</string>
+    <string name="read_aloud_settings_voices_choose_detail">Only the voices you tick are offered on this screen and in the player.</string>
+    <string name="read_aloud_settings_voices_tick_all">Tick all</string>
+    <string name="read_aloud_settings_voices_untick_all">Untick all</string>
+    <string name="read_aloud_settings_voice_hear_named">Hear %1$s</string>
 </resources>

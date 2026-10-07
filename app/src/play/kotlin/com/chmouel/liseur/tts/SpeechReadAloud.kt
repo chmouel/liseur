@@ -258,6 +258,12 @@ internal class SpeechReadAloud(
 
     suspend fun setOpenAiVoice(voice: String) = settings.setSpeechServerVoice(voice)
 
+    /** The voices the reader wants offered; empty offers all. */
+    val openAiChosenVoices: Flow<Set<String>> =
+        settings.settings.map { it.speechServerVoices }.distinctUntilChanged()
+
+    suspend fun setOpenAiChosenVoices(voices: Set<String>) = settings.setSpeechServerVoices(voices)
+
     /** Saves the service's [key], ending the session read with the old one. */
     suspend fun setOpenAiKey(key: String) {
         stop()

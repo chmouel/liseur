@@ -75,4 +75,9 @@
     <string name="read_aloud_settings_preview_no_voice">语音服务没有这个声音。</string>
     <string name="read_aloud_settings_preview_service">语音服务无法朗读示例。</string>
     <string name="read_aloud_settings_preview_failed">无法播放示例。</string>
+    <string name="read_aloud_settings_voices_choose">选择声音</string>
+    <string name="read_aloud_settings_voices_choose_detail">只有勾选的声音会出现在此页面和播放器中。</string>
+    <string name="read_aloud_settings_voices_tick_all">全选</string>
+    <string name="read_aloud_settings_voices_untick_all">全不选</string>
+    <string name="read_aloud_settings_voice_hear_named">试听 %1$s</string>
 </resources>

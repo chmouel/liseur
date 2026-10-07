@@ -75,4 +75,9 @@
     <string name="read_aloud_settings_preview_no_voice">Il servizio vocale non ha questa voce.</string>
     <string name="read_aloud_settings_preview_service">Il servizio vocale non è riuscito a leggere l\'esempio.</string>
     <string name="read_aloud_settings_preview_failed">Impossibile riprodurre l\'esempio.</string>
+    <string name="read_aloud_settings_voices_choose">Scegli le voci</string>
+    <string name="read_aloud_settings_voices_choose_detail">Solo le voci spuntate sono proposte in questa schermata e nel lettore.</string>
+    <string name="read_aloud_settings_voices_tick_all">Spunta tutte</string>
+    <string name="read_aloud_settings_voices_untick_all">Togli tutte</string>
+    <string name="read_aloud_settings_voice_hear_named">Ascolta %1$s</string>
 </resources>

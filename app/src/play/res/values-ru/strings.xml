@@ -75,4 +75,9 @@
     <string name="read_aloud_settings_preview_no_voice">У сервиса озвучивания нет такого голоса.</string>
     <string name="read_aloud_settings_preview_service">Сервис озвучивания не смог прочитать образец.</string>
     <string name="read_aloud_settings_preview_failed">Не удалось воспроизвести образец.</string>
+    <string name="read_aloud_settings_voices_choose">Выбрать голоса</string>
+    <string name="read_aloud_settings_voices_choose_detail">На этом экране и в плеере предлагаются только отмеченные голоса.</string>
+    <string name="read_aloud_settings_voices_tick_all">Отметить все</string>
+    <string name="read_aloud_settings_voices_untick_all">Снять все</string>
+    <string name="read_aloud_settings_voice_hear_named">Прослушать: %1$s</string>
 </resources>

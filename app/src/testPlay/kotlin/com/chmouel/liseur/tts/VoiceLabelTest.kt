@@ -25,4 +25,18 @@ class VoiceLabelTest {
         assertEquals(listOf("bf_emma", "bm_lewis"), groups[0].second.map { it.id })
         assertEquals(listOf("alloy"), groups[2].second.map { it.id })
     }
+
+    @Test
+    fun `only chosen voices are offered, and the one in use always is`() {
+        val listed = listOf("af_bella", "af_sky", "bm_george", "alloy")
+        assertEquals(listed, VoiceLabel.offered(listed, emptySet(), "af_sky"))
+        assertEquals(listOf("af_bella", "bm_george"), VoiceLabel.offered(listed, setOf("bm_george", "af_bella"), "af_bella"))
+        assertEquals(listOf("af_sky", "bm_george"), VoiceLabel.offered(listed, setOf("bm_george"), "af_sky"))
+    }
+
+    @Test
+    fun `chosen voices the service no longer lists offer them all`() {
+        val listed = listOf("af_bella", "af_sky")
+        assertEquals(listed, VoiceLabel.offered(listed, setOf("gone"), "af_bella"))
+    }
 }
