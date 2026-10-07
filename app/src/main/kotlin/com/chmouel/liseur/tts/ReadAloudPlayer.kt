@@ -144,12 +144,18 @@ internal fun ReadAloudPlayer(
                         ControlButton(feature::skipForward) {
                             Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                         }
-                        SpeedButton(feature)
-                        SleepButton(feature)
-                        VoiceButton(feature)
                         ControlButton(feature::stop) {
                             Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
                         }
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    ) {
+                        SpeedButton(feature)
+                        SleepButton(feature)
+                        VoiceButton(feature)
                     }
                     VoiceStatus(feature)
                 }
