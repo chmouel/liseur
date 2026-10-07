@@ -59,8 +59,11 @@ service and its two permissions move to the main manifest.
   checking for `generativelanguage` and `Gemini` in the release dex is the
   boundary test now, rather than the absence of `com.chmouel.liseur.tts`.
 - Strings shared by both builds live in `app/src/main/res`. Gemini's live
-  in `app/src/play/res`, which also overrides the provider explanation to
-  mention Gemini.
+  in `app/src/play/res`. Each service carries its own icon and one-line
+  summary for the picker, so no shared string has to know which services
+  a build offers. The picker is one row that opens a sheet of the
+  services, as for the server kind: three names in a row of chips did not
+  fit on a phone.
 - Device voices depend on the engine the device has. Engines that only
   offer network voices, or none, leave the list empty with a line saying
   so; the reader can install voices or pick another provider. The

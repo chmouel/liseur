@@ -1080,8 +1080,7 @@
     <string name="read_aloud_settings_title">Lecture à voix haute</string>
     <string name="read_aloud_settings_entry_missing">Non configurée</string>
     <string name="read_aloud_settings_provider">Service de voix</string>
-    <string name="read_aloud_settings_provider_choose">Lire avec</string>
-    <string name="read_aloud_settings_provider_detail">Les voix de l\'appareil sont celles d\'Android et fonctionnent hors ligne. Un serveur vocal (compatible OpenAI) peut être OpenAI, un autre service hébergé ou votre propre serveur, comme Kokoro.</string>
+    <string name="read_aloud_settings_provider_change">Changer de service vocal</string>
     <string name="read_aloud_settings_server_url">Serveur</string>
     <string name="read_aloud_settings_server_url_detail">L\'adresse de l\'API du service ou de votre propre serveur. Appuyez sur OK pour l\'enregistrer.</string>
     <string name="read_aloud_settings_server_url_invalid">Ce n\'est pas une adresse de serveur.</string>
@@ -1097,7 +1096,9 @@
     <string name="read_aloud_settings_server_model">Modèle</string>
     <string name="read_aloud_settings_server_pick_detail">Choisissez dans la liste, ou saisissez un nom et appuyez sur OK.</string>
     <string name="read_aloud_provider_openai">Serveur vocal (compatible OpenAI)</string>
+    <string name="read_aloud_provider_openai_summary">Votre propre serveur, comme Kokoro, ou un service hébergé comme OpenAI.</string>
     <string name="read_aloud_provider_device">Voix de l\'appareil</string>
+    <string name="read_aloud_provider_device_summary">Les voix d\'Android. Elles fonctionnent hors ligne et aucun texte ne quitte l\'appareil.</string>
     <string name="read_aloud_settings_device_voice_number">Voix %1$d</string>
     <string name="read_aloud_settings_device_voices_loading">Recherche des voix de cet appareil…</string>
     <string name="read_aloud_settings_device_voices_failed">Cet appareil n\'a pas de moteur de synthèse vocale. Installez-en un, puis revenez.</string>

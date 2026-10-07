@@ -1126,8 +1126,7 @@
     <string name="read_aloud_settings_title">Read aloud</string>
     <string name="read_aloud_settings_entry_missing">Not set up</string>
     <string name="read_aloud_settings_provider">Voice service</string>
-    <string name="read_aloud_settings_provider_choose">Speak with</string>
-    <string name="read_aloud_settings_provider_detail">Device voices are Android\'s own and work offline. A speech server (OpenAI-compatible) can be OpenAI, another hosted service, or a server of your own such as Kokoro.</string>
+    <string name="read_aloud_settings_provider_change">Change the voice service</string>
     <string name="read_aloud_settings_server_url">Server</string>
     <string name="read_aloud_settings_server_url_detail">The API address of the service or of your own server. Press Done to save it.</string>
     <string name="read_aloud_settings_server_url_invalid">This is not a server address.</string>
@@ -1143,7 +1142,9 @@
     <string name="read_aloud_settings_server_model">Model</string>
     <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name and press Done.</string>
     <string name="read_aloud_provider_openai">Speech server (OpenAI-compatible)</string>
+    <string name="read_aloud_provider_openai_summary">Your own server, such as Kokoro, or a hosted service like OpenAI.</string>
     <string name="read_aloud_provider_device">Device voices</string>
+    <string name="read_aloud_provider_device_summary">Android\'s own voices. They work offline, and no text leaves the device.</string>
     <string name="read_aloud_settings_device_voice_number">Voice %1$d</string>
     <string name="read_aloud_settings_device_voices_loading">Looking for this device\'s voices…</string>
     <string name="read_aloud_settings_device_voices_failed">This device has no text-to-speech engine. Install one, then come back.</string>

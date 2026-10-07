@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -77,6 +78,8 @@ internal class DeviceSpeechService(
 ) : SpeechService {
     override val id = "device"
     override val label = R.string.read_aloud_provider_device
+    override val summary = R.string.read_aloud_provider_device_summary
+    override val icon = Icons.Outlined.PhoneAndroid
 
     private val engine = DeviceTts(context.applicationContext)
 

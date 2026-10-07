@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -55,6 +57,8 @@ internal class OpenAiSpeechService(
 ) : SpeechService {
     override val id = "openai"
     override val label = R.string.read_aloud_provider_openai
+    override val summary = R.string.read_aloud_provider_openai_summary
+    override val icon = Icons.Outlined.Dns
 
     val keyConfigured: StateFlow<Boolean> = keys.configured
 

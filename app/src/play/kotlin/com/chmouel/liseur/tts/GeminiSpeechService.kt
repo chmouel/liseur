@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -51,6 +53,8 @@ internal class GeminiSpeechService(
 ) : SpeechService {
     override val id = "gemini"
     override val label = R.string.read_aloud_provider_gemini
+    override val summary = R.string.read_aloud_provider_gemini_summary
+    override val icon = Icons.Outlined.Cloud
 
     val keyConfigured: StateFlow<Boolean> = keys.configured
 

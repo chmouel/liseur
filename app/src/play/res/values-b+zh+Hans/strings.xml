@@ -20,6 +20,5 @@
     <string name="read_aloud_settings_gemini_models_none">此密钥没有可用的语音模型。请手动输入一个。</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini 没有列出它的模型。</string>
     <string name="read_aloud_settings_voice_hear">试听此声音</string>
-    <!-- Overrides the main one: the Play build also offers Gemini. -->
-    <string name="read_aloud_settings_provider_detail">Gemini 是 Google 的在线服务，费用记在你的密钥上。设备语音是 Android 自带的，可离线使用。语音服务器（OpenAI 兼容）可以是 OpenAI、其他托管服务或你自己的服务器（如 Kokoro）。</string>
+    <string name="read_aloud_provider_gemini_summary">Google 的在线语音，费用记在你的 Gemini API 密钥上。</string>
 </resources>

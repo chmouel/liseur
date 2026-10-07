@@ -20,6 +20,5 @@
     <string name="read_aloud_settings_gemini_models_none">Aucun modèle vocal n\'est proposé pour cette clé. Saisissez-en un.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini n\'a pas donné la liste de ses modèles.</string>
     <string name="read_aloud_settings_voice_hear">Écouter cette voix</string>
-    <!-- Overrides the main one: the Play build also offers Gemini. -->
-    <string name="read_aloud_settings_provider_detail">Gemini est un service en ligne de Google facturé à votre clé. Les voix de l\'appareil sont celles d\'Android et fonctionnent hors ligne. Un serveur vocal (compatible OpenAI) peut être OpenAI, un autre service hébergé ou votre propre serveur, comme Kokoro.</string>
+    <string name="read_aloud_provider_gemini_summary">Les voix en ligne de Google, facturées à votre clé API Gemini.</string>
 </resources>

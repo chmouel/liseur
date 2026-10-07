@@ -2,6 +2,7 @@ package com.chmouel.liseur.tts
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.chmouel.liseur.data.settings.AppSettings
 import kotlinx.coroutines.flow.Flow
 
@@ -25,6 +26,13 @@ internal interface SpeechService {
 
     @get:StringRes
     val label: Int
+
+    /** One line on what it is and where the text goes, under [label] in the picker. */
+    @get:StringRes
+    val summary: Int
+
+    /** Shown before [label] in the picker, to tell the services apart at a glance. */
+    val icon: ImageVector
 
     /** Whether it can read with what is saved. */
     val configured: Flow<Boolean>

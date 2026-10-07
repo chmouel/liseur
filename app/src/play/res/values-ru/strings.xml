@@ -20,6 +20,5 @@
     <string name="read_aloud_settings_gemini_models_none">Для этого ключа нет моделей озвучивания. Введите название вручную.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini не прислал список моделей.</string>
     <string name="read_aloud_settings_voice_hear">Прослушать голос</string>
-    <!-- Overrides the main one: the Play build also offers Gemini. -->
-    <string name="read_aloud_settings_provider_detail">Gemini — онлайн-сервис Google, оплачиваемый по вашему ключу. Голоса устройства встроены в Android и работают без сети. Речевым сервером (совместимым с OpenAI) может быть OpenAI, другой облачный сервис или ваш собственный сервер, например Kokoro.</string>
+    <string name="read_aloud_provider_gemini_summary">Онлайн-голоса Google, оплата по вашему ключу API Gemini.</string>
 </resources>

@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -33,13 +37,18 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
@@ -50,6 +59,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -63,8 +73,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
-import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
@@ -129,20 +139,106 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     .padding(bottom = 32.dp),
             ) {
                 if (feature.services.size > 1) {
-                    SettingsGroup(stringResource(R.string.read_aloud_settings_provider)) {
-                        ChipRow(
-                            title = stringResource(R.string.read_aloud_settings_provider_choose),
-                            subtitle = stringResource(R.string.read_aloud_settings_provider_detail),
-                            options = feature.services,
+                    var picking by remember { mutableStateOf(false) }
+                    ServiceRow(service, onClick = { picking = true })
+                    if (picking) {
+                        ServiceSheet(
+                            services = feature.services,
                             selected = service,
-                            label = { stringResource(it.label) },
-                            onSelected = { scope.launch { feature.setService(it) } },
+                            onPick = {
+                                picking = false
+                                scope.launch { feature.setService(it) }
+                            },
+                            onDismiss = { picking = false },
                         )
                     }
                 }
                 SettingsGroup(stringResource(service.label)) {
                     service.SettingsRows(feature)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The service in use, as one row that opens a sheet of them all, like
+ * the server kind on the account screen. Choosing a service is rare and
+ * choosing a voice is not, so the choice takes one row's height and the
+ * service's own settings follow it. Chips in a row could not hold three
+ * names as long as "Speech server (OpenAI-compatible)" on a phone.
+ */
+@Composable
+private fun ServiceRow(service: SpeechService, onClick: () -> Unit) {
+    val configured by service.configured.collectAsState(initial = true)
+    OutlinedCard(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+    ) {
+        ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            leadingContent = { Icon(service.icon, contentDescription = null) },
+            overlineContent = { Text(stringResource(R.string.read_aloud_settings_provider)) },
+            headlineContent = { Text(stringResource(service.label)) },
+            supportingContent = {
+                Text(
+                    stringResource(
+                        if (configured) service.summary else R.string.read_aloud_settings_entry_missing,
+                    ),
+                )
+            },
+            trailingContent = {
+                Icon(
+                    imageVector = Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(R.string.read_aloud_settings_provider_change),
+                )
+            },
+        )
+    }
+}
+
+/** Every service with what it is and where the text goes; picking one closes it. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ServiceSheet(
+    services: List<SpeechService>,
+    selected: SpeechService,
+    onPick: (SpeechService) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    LiseurModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .selectableGroup(),
+        ) {
+            Text(
+                stringResource(R.string.read_aloud_settings_provider),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
+            )
+            services.forEach { service ->
+                ListItem(
+                    modifier = Modifier.selectable(
+                        selected = service == selected,
+                        role = Role.RadioButton,
+                        onClick = { onPick(service) },
+                    ),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    leadingContent = { Icon(service.icon, contentDescription = null) },
+                    headlineContent = { Text(stringResource(service.label)) },
+                    supportingContent = { Text(stringResource(service.summary)) },
+                    trailingContent = {
+                        // Null, not a second handler: the row carries the click.
+                        RadioButton(selected = service == selected, onClick = null)
+                    },
+                )
             }
         }
     }
