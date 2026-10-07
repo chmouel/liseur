@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
+import android.media.AudioManager
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.activity.compose.setContent
@@ -59,7 +60,9 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
 import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.ProvideEInk
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -81,6 +84,15 @@ class ReaderActivity : FragmentActivity() {
      * it from DataStore there would be both slow and pointlessly async.
      */
     private var volumeKeysTurnPages = true
+
+    /**
+     * Whether a book is being read aloud, playing or paused. The volume
+     * keys then set how loud it reads instead of turning pages.
+     */
+    private var readingAloud = false
+
+    private val volumeKeysPage: Boolean
+        get() = volumeKeysTurnPages && !readingAloud
 
     private val viewModel: ReaderViewModel by viewModels {
         val open = checkNotNull(target)
@@ -168,6 +180,13 @@ class ReaderActivity : FragmentActivity() {
         lifecycleScope.launch { container.sessionState.setLeftFromReader(true) }
         lifecycleScope.launch {
             container.appSettings.settings.collect { volumeKeysTurnPages = it.volumeKeysTurnPages }
+        }
+        lifecycleScope.launch {
+            container.readAloud.session.map { it != null }.distinctUntilChanged().collect {
+                readingAloud = it
+                // Paused, nothing is playing, so the keys would otherwise set the ringer.
+                volumeControlStream = if (it) AudioManager.STREAM_MUSIC else AudioManager.USE_DEFAULT_STREAM_TYPE
+            }
         }
         setContent {
             // Both stores, nullable until they have each actually answered.
@@ -764,7 +783,7 @@ class ReaderActivity : FragmentActivity() {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
         if (keyCode in VOLUME_KEYS) {
-            if (!volumeKeysTurnPages) return super.onKeyDown(keyCode, event)
+            if (!volumeKeysPage) return super.onKeyDown(keyCode, event)
         } else if (!isWideEnoughForKeyboardPaging) {
             return super.onKeyDown(keyCode, event)
         }
@@ -817,7 +836,7 @@ class ReaderActivity : FragmentActivity() {
      */
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean =
         when {
-            navigator != null && volumeKeysTurnPages && keyCode in VOLUME_KEYS -> true
+            navigator != null && volumeKeysPage && keyCode in VOLUME_KEYS -> true
 
             else -> super.onKeyUp(keyCode, event)
         }
