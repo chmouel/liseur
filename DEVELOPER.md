@@ -1398,7 +1398,8 @@ reader behavior.
   when the session ends.
 - A status line under the player controls names the voice reading (and,
   for an OpenAI-compatible voice whose id carries one, its language). The
-  speed is left out because the speed button already shows it.
+  speed is left out because the speed button already shows it. The
+  page footer is not drawn while the player is up, like the other pills.
 
 ### Covers, UI, and dependencies
 

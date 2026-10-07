@@ -3271,7 +3271,7 @@ fun ReaderScreen(
         // left drawn there prints itself over the text. The figures are
         // one tap away with the rest of the chrome.
         val footerDrawn = footerShowing && !showingEnd && !chromeVisible &&
-            !effectiveScrolling && jumpBack == null && catchUp == null
+            !effectiveScrolling && jumpBack == null && catchUp == null && listening == null
         // The clock and the battery are read when the footer is drawn,
         // and on electronic paper nothing else nudges them, so a page
         // turn has to. A turn usually shows up as a new position in
