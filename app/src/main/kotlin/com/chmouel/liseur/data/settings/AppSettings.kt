@@ -545,6 +545,19 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     /** Stores the speech service's model, or forgets it when [name] is blank. */
     suspend fun setSpeechServerModel(name: String) = setOrRemove(Keys.SPEECH_SERVER_MODEL, name)
 
+    /**
+     * Stores the speech service's model and voice in one write, so nothing
+     * ever reads the new model with the old model's voice.
+     */
+    suspend fun setSpeechServerModelAndVoice(model: String, voice: String) {
+        val m = model.trim()
+        val v = voice.trim()
+        store.edit { p ->
+            if (m.isEmpty()) p.remove(Keys.SPEECH_SERVER_MODEL) else p[Keys.SPEECH_SERVER_MODEL] = m
+            if (v.isEmpty()) p.remove(Keys.SPEECH_SERVER_VOICE) else p[Keys.SPEECH_SERVER_VOICE] = v
+        }
+    }
+
     /** Stores the speech service's voices to offer, or offers them all again when [names] is empty. */
     suspend fun setSpeechServerVoices(names: Set<String>) {
         store.edit { p -> if (names.isEmpty()) p.remove(Keys.SPEECH_SERVER_VOICES) else p[Keys.SPEECH_SERVER_VOICES] = names }

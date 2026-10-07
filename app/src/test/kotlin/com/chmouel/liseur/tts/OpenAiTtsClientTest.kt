@@ -56,7 +56,7 @@ class OpenAiTtsClientTest {
     }
 
     @Test
-    fun `asks for raw PCM from the speech endpoint, with the key as a bearer token`(): Unit = runBlocking {
+    fun `asks for WAV from the speech endpoint, with the key as a bearer token`(): Unit = runBlocking {
         server.enqueue(pcm(byteArrayOf(1, 0, 2, 0)))
 
         val audio = OpenAiTtsClient().synthesize(base, "secret-key", "Bonjour le monde.", "af_bella", "kokoro")
@@ -70,7 +70,7 @@ class OpenAiTtsClientTest {
         assertEquals("kokoro", body.getString("model"))
         assertEquals("Bonjour le monde.", body.getString("input"))
         assertEquals("af_bella", body.getString("voice"))
-        assertEquals("pcm", body.getString("response_format"))
+        assertEquals("wav", body.getString("response_format"))
     }
 
     @Test
@@ -83,6 +83,22 @@ class OpenAiTtsClientTest {
 
         assertNull(server.takeRequest().headers["Authorization"])
         assertNull(server.takeRequest().headers["Authorization"])
+    }
+
+    @Test
+    fun `a WAV answer is read by its header, at any rate`(): Unit = runBlocking {
+        server.enqueue(pcm(WavPcmTest.wav(rate = 24_000, channels = 1, data = byteArrayOf(1, 0, 2, 0)), "audio/wav"))
+        server.enqueue(pcm(WavPcmTest.wav(rate = 48_000, channels = 1, data = ByteArray(400)), "audio/x-wav"))
+
+        assertArrayEquals(byteArrayOf(1, 0, 2, 0), OpenAiTtsClient().synthesize(base, null, "t", "v", "m").pcm)
+        assertEquals(100, OpenAiTtsClient().synthesize(base, null, "t", "v", "m").frames)
+    }
+
+    @Test
+    fun `a cut WAV header is an error, not noise`(): Unit = runBlocking {
+        server.enqueue(pcm("RIFF\u0000\u0000\u0000\u0000WA".toByteArray(Charsets.ISO_8859_1), "audio/wav"))
+
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, null, "t", "v", "m") }
     }
 
     @Test
@@ -175,9 +191,9 @@ class OpenAiTtsClientTest {
         server.enqueue(MockResponse(code = 200, body = """["ff_siwis"]"""))
         server.enqueue(MockResponse(code = 200, body = """{"voices":[{"id":"bf_emma"},{"name":"bm_george"}]}"""))
 
-        assertEquals(listOf("af_bella", "am_adam"), OpenAiTtsClient().voices(base, "k"))
-        assertEquals(listOf("ff_siwis"), OpenAiTtsClient().voices(base, null))
-        assertEquals(listOf("bf_emma", "bm_george"), OpenAiTtsClient().voices(base, null))
+        assertEquals(listOf("af_bella", "am_adam"), OpenAiTtsClient().voices(base, "k", "kokoro"))
+        assertEquals(listOf("ff_siwis"), OpenAiTtsClient().voices(base, null, "kokoro"))
+        assertEquals(listOf("bf_emma", "bm_george"), OpenAiTtsClient().voices(base, null, null))
 
         val request = server.takeRequest()
         assertEquals("GET", request.method)
@@ -188,13 +204,13 @@ class OpenAiTtsClientTest {
     @Test
     fun `a voice list that is not one is an error`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 200, body = "<html>"))
-        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null) }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null, "kokoro") }
 
         server.enqueue(MockResponse(code = 200, body = """{"models":[]}"""))
-        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null) }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null, "kokoro") }
 
         server.enqueue(MockResponse(code = 401))
-        expect<SpeechError.InvalidKey> { OpenAiTtsClient().voices(base, "k") }
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().voices(base, "k", "kokoro") }
     }
 
     @Test
@@ -229,13 +245,135 @@ class OpenAiTtsClientTest {
         assertEquals("hexgrad/Kokoro-82M", JSONObject(request.body!!.utf8()).getString("model"))
     }
 
+    /** A client whose requests to [host] reach the mock server instead, so a hosted service can be played. */
+    private fun clientFor(host: String) = OpenAiTtsClient(
+        okhttp3.OkHttpClient.Builder()
+            .followRedirects(false)
+            .addInterceptor { chain ->
+                val url = chain.request().url
+                val moved = if (url.host == host) {
+                    url.newBuilder().scheme("http").host(server.hostName).port(server.port).build()
+                } else {
+                    url
+                }
+                chain.proceed(chain.request().newBuilder().url(moved).build())
+            }
+            .build(),
+    )
+
+    private val deepInfra = OpenAiTts.baseUrl("https://api.deepinfra.com/v1/openai")!!
+
     @Test
-    fun `a service with no voice list offers OpenAI's voices`(): Unit = runBlocking {
+    fun `a service with no voice list has none to offer, so the voice is typed`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
         server.enqueue(MockResponse(code = 405))
 
-        assertEquals(OpenAiTts.STANDARD_VOICES, OpenAiTtsClient().voices(base, "k"))
-        assertEquals(OpenAiTts.STANDARD_VOICES, OpenAiTtsClient().voices(base, "k"))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "kokoro"))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(OpenAiTts.baseUrl(server.url("/v1/openai").toString())!!, "k", "m"))
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `OpenAI, which has no voice list, offers its own voices`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+
+        assertEquals(OpenAiTts.STANDARD_VOICES, clientFor("api.openai.com").voices(OpenAiTts.baseUrl("https://api.openai.com/v1")!!, "k", "tts-1"))
+    }
+
+    @Test
+    fun `DeepInfra's voices come from the model's description, asked without the key`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"in_schema":{"properties":{"preset_voice":{"type":"array","default":["af_bella"],
+                    "items":{"${'$'}ref":"#/definitions/KokoroTtsVoice"}}},
+                    "definitions":{"KokoroTtsVoice":{"enum":["af_alloy","af_bella","am_adam"]}}}}""",
+            ),
+        )
+
+        assertEquals(listOf("af_bella", "af_alloy", "am_adam"), clientFor("api.deepinfra.com").voices(deepInfra, "secret", "hexgrad/Kokoro-82M"))
+
+        assertEquals("/v1/openai/audio/voices", server.takeRequest().url.encodedPath)
+        val described = server.takeRequest()
+        assertEquals("/models/hexgrad/Kokoro-82M", described.url.encodedPath)
+        assertNull(described.headers["Authorization"])
+    }
+
+    @Test
+    fun `a voice that may be a preset or any text offers the presets`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"in_schema":{"properties":{"voice":{"default":"Vivian","anyOf":[
+                    {"${'$'}ref":"#/${'$'}defs/Qwen3TtsVoice"},{"type":"string"}]}},
+                    "${'$'}defs":{"Qwen3TtsVoice":{"enum":["Serena","Vivian"]}}}}""",
+            ),
+        )
+
+        assertEquals(listOf("Vivian", "Serena"), clientFor("api.deepinfra.com").voices(deepInfra, null, "Qwen/Qwen3-TTS"))
+    }
+
+    @Test
+    fun `a model with no preset voices offers none, and a broken description is an error`(): Unit = runBlocking {
+        val client = clientFor("api.deepinfra.com")
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 200, body = """{"in_schema":{"properties":{"voice_id":{"type":"string"}}}}"""))
+        assertEquals(emptyList<String>(), client.voices(deepInfra, null, "ResembleAI/chatterbox-multilingual"))
+
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 200, body = """{"in_schema":{"properties":{"voice":{"type":"string"}}}}"""))
+        assertEquals(emptyList<String>(), client.voices(deepInfra, null, "Qwen/Qwen3-TTS-VoiceDesign"))
+
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"in_schema":{"properties":{"voice":{"${'$'}ref":"#/definitions/A"}},
+                    "definitions":{"A":{"${'$'}ref":"#/definitions/A"}}}}""",
+            ),
+        )
+        expect<SpeechError.InvalidResponse> { client.voices(deepInfra, null, "m") }
+
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 200, body = """{"in_schema":{"properties":{"voice":{"${'$'}ref":"https://evil.example/x"}}}}"""))
+        expect<SpeechError.InvalidResponse> { client.voices(deepInfra, null, "m") }
+
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 200, body = "<html>"))
+        expect<SpeechError.InvalidResponse> { client.voices(deepInfra, null, "m") }
+
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 503))
+        expect<SpeechError.Service> { client.voices(deepInfra, null, "m") }
+        assertEquals(12, server.requestCount)
+    }
+
+    @Test
+    fun `only DeepInfra's own root is asked for a model's description`() {
+        assertEquals(
+            "https://api.deepinfra.com/models/hexgrad/Kokoro-82M",
+            OpenAiTts.modelDescription(deepInfra, "hexgrad/Kokoro-82M").toString(),
+        )
+        assertEquals(
+            "https://api.deepinfra.com/models/a%20b/c%3Fd",
+            OpenAiTts.modelDescription(deepInfra, "a b/c?d").toString(),
+        )
+        assertNull(OpenAiTts.modelDescription(deepInfra, "../admin"))
+        assertNull(OpenAiTts.modelDescription(deepInfra, "a//b"))
+        assertNull(OpenAiTts.modelDescription(OpenAiTts.baseUrl("http://api.deepinfra.com/v1/openai")!!, "m"))
+        assertNull(OpenAiTts.modelDescription(OpenAiTts.baseUrl("https://api.deepinfra.com/v1")!!, "m"))
+        assertNull(OpenAiTts.modelDescription(OpenAiTts.baseUrl("https://proxy.example/v1/openai")!!, "m"))
+    }
+
+    @Test
+    fun `an unknown voice answered with a server error is still a missing voice`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 500, body = """{"detail":"Voice ID 'af_bella' not found"}"""))
+        server.enqueue(MockResponse(code = 500, body = """{"detail":"Internal error"}"""))
+
+        expect<SpeechError.InvalidVoice> { OpenAiTtsClient().synthesize(base, null, "t", "af_bella", "Qwen/Qwen3-TTS") }
+        expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "Vivian", "Qwen/Qwen3-TTS") }
     }
 
     @Test
@@ -248,11 +386,11 @@ class OpenAiTtsClientTest {
         )
         server.enqueue(MockResponse(code = 200, body = """["kokoro"]"""))
 
-        assertEquals(listOf("gpt-4o-mini-tts", "whisper-1", "tts-1"), OpenAiTtsClient().models(base, "k"))
+        assertEquals(listOf("gpt-4o-mini-tts", "whisper-1", "tts-1"), OpenAiTtsClient().models(base, "k").map { it.id })
         val request = server.takeRequest()
         assertEquals("/v1/models", request.url.encodedPath)
         assertEquals("Bearer k", request.headers["Authorization"])
-        assertEquals(listOf("kokoro"), OpenAiTtsClient().models(base, null))
+        assertEquals(listOf(SpeechModel("kokoro")), OpenAiTtsClient().models(base, null))
     }
 
     @Test
@@ -261,19 +399,46 @@ class OpenAiTtsClientTest {
         server.enqueue(MockResponse(code = 401))
         server.enqueue(MockResponse(code = 200, body = """{"voices":[]}"""))
 
-        assertEquals(emptyList<String>(), OpenAiTtsClient().models(base, null))
+        assertEquals(emptyList<SpeechModel>(), OpenAiTtsClient().models(base, null))
         expect<SpeechError.InvalidKey> { OpenAiTtsClient().models(base, "k") }
         expect<SpeechError.InvalidResponse> { OpenAiTtsClient().models(base, null) }
     }
 
     @Test
     fun `only models that look like they speak are offered, unless none does`() {
+        fun ids(vararg ids: String) = ids.map(::SpeechModel)
         assertEquals(
-            listOf("gpt-4o-mini-tts", "tts-1", "hexgrad/Kokoro-82M", "speech-02"),
-            OpenAiTts.speechModels(listOf("gpt-4o", "gpt-4o-mini-tts", "whisper-1", "tts-1", "hexgrad/Kokoro-82M", "speech-02")),
+            ids("gpt-4o-mini-tts", "tts-1", "hexgrad/Kokoro-82M", "speech-02"),
+            OpenAiTts.speechModels(ids("gpt-4o", "gpt-4o-mini-tts", "whisper-1", "tts-1", "hexgrad/Kokoro-82M", "speech-02")),
         )
-        assertEquals(listOf("my-voice", "other"), OpenAiTts.speechModels(listOf("my-voice", "other")))
-        assertEquals(emptyList<String>(), OpenAiTts.speechModels(emptyList()))
+        assertEquals(ids("my-voice", "other"), OpenAiTts.speechModels(ids("my-voice", "other")))
+        assertEquals(emptyList<SpeechModel>(), OpenAiTts.speechModels(emptyList()))
+    }
+
+    @Test
+    fun `a list that tags its models offers the speech ones, with their price`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"data":[
+                    {"id":"ResembleAI/chatterbox-multilingual","metadata":{"tags":["tts"],"pricing":{"input_characters":1.0}}},
+                    {"id":"openai/whisper-large-v3","metadata":{"tags":["stt"],"pricing":{"input_length":0.0045}}},
+                    {"id":"hexgrad/Kokoro-82M","metadata":{"tags":["tts"],"pricing":{"input_characters":0.62}}},
+                    {"id":"some/tts-chat","metadata":{"tags":["chat"]}},
+                    {"id":"sesame/csm-1b","metadata":{"tags":["TTS"]}}]}""",
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                SpeechModel("ResembleAI/chatterbox-multilingual", listOf("tts"), 1.0),
+                SpeechModel("hexgrad/Kokoro-82M", listOf("tts"), 0.62),
+                SpeechModel("sesame/csm-1b", listOf("TTS"), null),
+            ),
+            OpenAiTts.speechModels(OpenAiTtsClient().models(base, null)),
+        )
+        // Tags that name no speech model mean there is none, not that every model speaks.
+        assertEquals(emptyList<SpeechModel>(), OpenAiTts.speechModels(listOf(SpeechModel("gpt-4o", listOf("chat")))))
     }
 
     @Test

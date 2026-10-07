@@ -255,7 +255,8 @@ internal sealed interface Listing {
 
 /**
  * A name the service knows: picked from the list it gave, or typed when
- * the list is missing or lacks it. Typing saves on Done.
+ * the list is missing or lacks it. Typing saves on Done. [detail] adds a
+ * line under a listed name, such as its price.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -268,6 +269,7 @@ internal fun ListedField(
     listing: Listing?,
     onSave: (String) -> Unit,
     onRetry: () -> Unit,
+    detail: @Composable (String) -> String? = { null },
 ) {
     val focus = LocalFocusManager.current
     var typed by remember(stored) { mutableStateOf(stored) }
@@ -320,7 +322,18 @@ internal fun ListedField(
                 when (listing) {
                     is Listing.Loaded -> listing.items.forEach { choice ->
                         DropdownMenuItem(
-                            text = { Text(choice) },
+                            text = {
+                                Column {
+                                    Text(choice)
+                                    detail(choice)?.let {
+                                        Text(
+                                            text = it,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            },
                             onClick = {
                                 open = false
                                 typed = choice
@@ -667,8 +680,14 @@ internal fun voiceChipLabel(voice: VoiceLabel): String = when (voice.gender) {
         stringResource(R.string.read_aloud_voice_with_gender, voice.name, stringResource(R.string.read_aloud_voice_male))
 }
 
-internal fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @StringRes failed: Int): Listing = fold(
-    onSuccess = { if (it.isEmpty()) Listing.Failed(url, none) else Listing.Loaded(url, it) },
+/** An empty list is [none], unless [emptyIsOk]: a model with no preset voices takes a typed one. */
+internal fun Result<List<String>>.toListing(
+    url: String,
+    @StringRes none: Int,
+    @StringRes failed: Int,
+    emptyIsOk: Boolean = false,
+): Listing = fold(
+    onSuccess = { if (it.isEmpty() && !emptyIsOk) Listing.Failed(url, none) else Listing.Loaded(url, it) },
     onFailure = {
         Listing.Failed(
             url,

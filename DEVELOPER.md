@@ -1360,10 +1360,20 @@ reader behavior.
   `DeviceVoices.toSpeechPcm` converts to 24 kHz mono 16-bit. One
   `TextToSpeech` is shared and shut down after a minute idle.
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
-  address whose path has none. The settings screen fills its model and
-  voice menus from `<root>/models` (speech-looking ids only, else all;
-  404/405 is no list) and `<root>/audio/voices` (404/405 is OpenAI's
-  standard voices), and either can be typed. Voices show as chips
+  address whose path has none, asking for `response_format: "wav"`;
+  `WavPcm` reads the header and converts any rate or channel count, and
+  a reply without one is taken as raw 24 kHz PCM. The settings screen
+  fills its model menu from `<root>/models`: when entries carry
+  `metadata.tags` (DeepInfra), those tagged `tts`, with the price from
+  `metadata.pricing.input_characters`; otherwise speech-looking ids,
+  else all; 404/405 is no list. Voices are listed per model:
+  `<root>/audio/voices`, else, for DeepInfra's root only
+  (`OpenAiTts.modelDescription`), the voice enum in the public
+  `https://api.deepinfra.com/models/<model>` schema, asked without the
+  key; else OpenAI's standard voices for `api.openai.com` only, and an
+  empty list (a typed voice) anywhere else. Picking a model saves it
+  with a voice that model lists (`VoiceChoice`) in one write
+  (`setSpeechServerModelAndVoice`). Voices show as chips
   grouped by language, read from Kokoro's `af_bella` naming
   (`VoiceLabel`). A language with a country gets that country's flag
   (`VoiceLabel.flag`), which screen readers skip. Tapping a chip, or typing one, plays a fixed sample

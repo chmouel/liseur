@@ -1192,6 +1192,7 @@
     <string name="read_aloud_settings_server_model_choose">Выберите модель</string>
     <string name="read_aloud_settings_server_models_loading">Запрашиваем модели у сервера…</string>
     <string name="read_aloud_settings_server_models_none">Сервер не перечисляет модели. Введите название сами.</string>
+    <string name="read_aloud_settings_server_model_price">%1$s $ за миллион символов</string>
     <string name="read_aloud_settings_server_models_failed">Сервер не прислал список моделей.</string>
     <string name="read_aloud_settings_voice_pick_detail">Нажмите на голос, чтобы выбрать и прослушать его.</string>
     <string name="read_aloud_settings_voice_type_detail">Введите название голоса, известного сервису.</string>

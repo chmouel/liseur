@@ -58,4 +58,18 @@ class AppSettingsRepositoryTest {
         repo.setPinchToResize(true)
         assertTrue(repo.settings.first().pinchToResize)
     }
+
+    @Test
+    fun `a speech model and its voice are saved together`() = runTest {
+        val repo = AppSettingsRepository(store())
+        repo.setSpeechServerModelAndVoice(" hexgrad/Kokoro-82M ", "af_bella")
+        val saved = repo.settings.first()
+        assertEquals("hexgrad/Kokoro-82M", saved.speechServerModel)
+        assertEquals("af_bella", saved.speechServerVoice)
+
+        repo.setSpeechServerModelAndVoice("Qwen/Qwen3-TTS-VoiceDesign", " ")
+        val typed = repo.settings.first()
+        assertEquals("Qwen/Qwen3-TTS-VoiceDesign", typed.speechServerModel)
+        assertEquals(null, typed.speechServerVoice)
+    }
 }

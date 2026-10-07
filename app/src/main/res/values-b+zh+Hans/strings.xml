@@ -1065,6 +1065,7 @@
     <string name="read_aloud_settings_server_model_choose">选择模型</string>
     <string name="read_aloud_settings_server_models_loading">正在向服务器获取模型列表…</string>
     <string name="read_aloud_settings_server_models_none">服务器没有列出任何模型。请手动输入。</string>
+    <string name="read_aloud_settings_server_model_price">每百万字符 $%1$s</string>
     <string name="read_aloud_settings_server_models_failed">服务器没有列出它的模型。</string>
     <string name="read_aloud_settings_voice_pick_detail">点按某个声音即可选择并试听。</string>
     <string name="read_aloud_settings_voice_type_detail">输入服务支持的声音名称。</string>

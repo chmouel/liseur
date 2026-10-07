@@ -82,7 +82,10 @@ a server of your own running a model such as Kokoro, OpenAI itself, or
 another hosted service. Nothing is sent until you choose Speech server
 in Settings, Read aloud, and enter that server's address. Liseur then
 asks it for its lists of models and voices, with your API key if you entered one, when you save the address
-or the key and when you open that screen. Tapping a voice there, or
+or the key and when you open that screen. When the address is
+DeepInfra's, `https://api.deepinfra.com/v1/openai`, it also asks
+`https://api.deepinfra.com/models/` followed by the model's name for
+that model's voices, without your key or any text. Tapping a voice there, or
 typing one, sends a fixed sample sentence so you can hear it; it is not
 text from a book. "Test connection" asks for the same lists and sends
 the single word "Hello." with the model and voice you picked. Once you press play it sends

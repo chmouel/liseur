@@ -36,11 +36,17 @@ just under Reading & navigation, so it can be found without opening
 Advanced. The row says which service and voice are in use, or that none
 is set up.
 
-The service is asked for `response_format: "pcm"`, which is 24 kHz mono
-16-bit PCM, the same as Gemini's. The engine, the sentence cache and the
-`AudioTrack` output are shared unchanged; a session is built with a
-`SpeechSynthesizer` for the chosen provider and nothing else differs. MP3
-or Opus would have needed a decoder for no gain on a local network.
+The service is asked for `response_format: "wav"` and the reply is
+converted to 24 kHz mono 16-bit PCM, the same as Gemini's. Raw `pcm`
+was tried first, but it carries no rate: DeepInfra's Audio8 answers it
+at 44.1 kHz, which then played slowed down, and MiMo VoiceDesign
+answers it empty. The WAV header says the rate and channels, and a
+reply without one is still taken as raw 24 kHz PCM, since some models
+(DeepInfra's Higgs) send that whatever is asked. The engine, the
+sentence cache and the `AudioTrack` output are shared unchanged; a
+session is built with a `SpeechSynthesizer` for the chosen provider and
+nothing else differs. MP3 or Opus would have needed a decoder for no
+gain on a local network.
 
 The reader enters one address, an optional API key, a model and a voice
 for every book. The address is read as an OpenAI-style API root: when
@@ -61,11 +67,22 @@ service lists everything; a typed voice is played the same way, which
 shows at once whether the server has it. A Kokoro server lists more than
 fifty voices, so "Choose voices" lets the reader tick the few worth
 offering; ticking none, or all, offers every one, and the voice in use
-always stays offered. The model menu keeps ids that look like speech models
-(`tts`, `speech` or `kokoro` in the name) and shows the whole list when
-none does; OpenAI's list is mostly chat models that cannot answer
-`audio/speech`. A service with no voice list (404 or 405, as OpenAI
-answers) gets OpenAI's standard voices. A service with no model list
+always stays offered. When the list tags its models, as DeepInfra's
+does, the menu keeps those tagged `tts` and shows each one's price per
+million characters; names alone missed models such as Chatterbox. A
+list without tags keeps ids that look like speech models (`tts`,
+`speech` or `kokoro` in the name) and shows the whole list when none
+does; OpenAI's list is mostly chat models that cannot answer
+`audio/speech`. Voices belong to a model, so they are listed again when
+the model changes, and a saved voice the new model does not list is
+replaced by that model's default. A service with no voice list (404 or
+405) offers OpenAI's standard voices only when it is OpenAI. DeepInfra
+has no voice list on its OpenAI root, but each model's public
+description at `https://api.deepinfra.com/models/<model>` names its
+preset voices, and every one of them was checked to speak; the app asks
+for it without the key. Any other service, or a model with no presets,
+leaves the voice to be typed, since a list of voices the model refuses
+is worse than none. A service with no model list
 leaves the field to be typed. When nothing is chosen yet, the first
 model and first voice are taken, so a new setup reads without more taps.
 There is no hidden default model: reading needs an address, a model and

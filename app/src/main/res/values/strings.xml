@@ -1154,6 +1154,7 @@
     <string name="read_aloud_settings_server_model_choose">Choose a model</string>
     <string name="read_aloud_settings_server_models_loading">Asking the server for its models…</string>
     <string name="read_aloud_settings_server_models_none">The server lists no models. Type one instead.</string>
+    <string name="read_aloud_settings_server_model_price">$%1$s per million characters</string>
     <string name="read_aloud_settings_server_models_failed">The server did not list its models.</string>
     <string name="read_aloud_settings_voice_pick_detail">Tap a voice to choose it and hear it.</string>
     <string name="read_aloud_settings_voice_type_detail">Type the name of a voice the service knows.</string>
