@@ -3,6 +3,7 @@ package com.chmouel.liseur.tts
 import android.app.Application
 import android.content.Intent
 import android.os.SystemClock
+import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.AppSettings
@@ -27,7 +28,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -35,29 +35,27 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl
 import org.readium.r2.shared.publication.Locator
 
 /**
  * Reading aloud, one book at a time, with the voice of the chosen
- * [ReadAloudProvider]: Gemini on the reader's key, or an OpenAI-compatible
- * service of their choice.
+ * [SpeechService], among those the build offers.
  *
  * Holds the session in progress and keeps [ReadAloudService] running for
  * it, so playback carries on with the reader gone and the screen off.
- * Changing the provider or a key ends the session; a new voice is heard
+ * Changing the service or a key ends the session; a new voice is heard
  * at once, from the start of the sentence being read, a new speed at
  * once, and a new server or model from the next session. Main thread only.
+ *
+ * @param offered The services offered, given the control they have over
+ *   the session; the first is the default.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class SpeechReadAloud(
     private val application: Application,
-    private val geminiKeys: ApiKeyStore,
-    private val openAiKeys: ApiKeyStore,
     private val settings: AppSettingsRepository,
     private val checkpoints: ListeningCheckpoints,
-    private val gemini: GeminiTtsClient = GeminiTtsClient(),
-    private val openAi: OpenAiTtsClient = OpenAiTtsClient(),
+    offered: (SessionControl) -> List<SpeechService>,
 ) : ReadAloudFeature {
 
     private val scope = MainScope()
@@ -70,31 +68,32 @@ internal class SpeechReadAloud(
 
     override val isAvailable = true
 
-    val provider: Flow<ReadAloudProvider> =
-        settings.settings.map { ReadAloudProvider.of(it.readAloudProvider) }.distinctUntilChanged()
+    private val control = object : SessionControl {
+        override fun stop() = this@SpeechReadAloud.stop()
+        override suspend fun switchVoice() = this@SpeechReadAloud.switchVoice()
+    }
 
-    /** Gemini needs a key; an OpenAI-compatible service an address, a model and a voice, its key being optional. */
+    val services: List<SpeechService> = offered(control)
+
+    init {
+        require(services.isNotEmpty()) { "Read aloud needs a speech service" }
+    }
+
+    /** The stored choice, or the default for none or one this build does not offer. */
+    private fun serviceOf(s: AppSettings): SpeechService =
+        services.firstOrNull { it.id == s.readAloudProvider } ?: services.first()
+
+    val service: Flow<SpeechService> = settings.settings.map(::serviceOf).distinctUntilChanged()
+
     override val configured: StateFlow<Boolean> =
-        combine(settings.settings, geminiKeys.configured) { s, geminiKey ->
-            when (ReadAloudProvider.of(s.readAloudProvider)) {
-                ReadAloudProvider.GEMINI -> geminiKey
-                ReadAloudProvider.OPENAI ->
-                    OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) != null &&
-                        !s.speechServerModel.isNullOrBlank() && !s.speechServerVoice.isNullOrBlank()
-            }
-        }.stateIn(scope, SharingStarted.Eagerly, false)
+        service.flatMapLatest { it.configured }.stateIn(scope, SharingStarted.Eagerly, false)
 
-    val geminiKeyConfigured: StateFlow<Boolean> = geminiKeys.configured
-    val openAiKeyConfigured: StateFlow<Boolean> = openAiKeys.configured
-
-    /** The provider the last session read with, for naming it in a notice. */
-    var noticeProvider: ReadAloudProvider = ReadAloudProvider.Default
+    /** The service the last session read with, for naming it in a notice. */
+    @StringRes
+    var noticeLabel: Int = services.first().label
         private set
 
-    /**
-     * The host the last OpenAI-compatible session read from, which names
-     * it in a notice better than "OpenAI-compatible" does; null for Gemini.
-     */
+    /** What names that service in a notice better than its label, such as a server's host; null for the label. */
     var noticeHost: String? = null
         private set
 
@@ -206,42 +205,23 @@ internal class SpeechReadAloud(
 
     /** The voice the next session reads with, or null, with the reason told, when there is none. */
     private suspend fun voiceFor(s: AppSettings, bookId: String): SessionVoice? {
-        val provider = ReadAloudProvider.of(s.readAloudProvider)
-        noticeProvider = provider
-        noticeHost = if (provider == ReadAloudProvider.OPENAI) OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())?.host else null
-        return voiceOf(s) ?: null.also { mutableNotices.tryEmit(ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)) }
-    }
-
-    /** The chosen provider's voice, or [voice] of that provider instead; null when it is not set up. */
-    private suspend fun voiceOf(s: AppSettings, voice: String? = null): SessionVoice? {
-        val provider = ReadAloudProvider.of(s.readAloudProvider)
-        return when (provider) {
-            ReadAloudProvider.GEMINI -> {
-                val key = geminiKeys.get() ?: return null
-                val name = GeminiVoice.of(voice ?: s.readAloudVoice).id
-                val model = GeminiTts.modelOf(s.readAloudModel)
-                SessionVoice(name, provider.maxConcurrent) { text -> gemini.synthesize(key, text, name, model) }
-            }
-            ReadAloudProvider.OPENAI -> {
-                val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) ?: return null
-                val model = s.speechServerModel?.takeIf { it.isNotBlank() } ?: return null
-                val name = (voice ?: s.speechServerVoice)?.takeIf { it.isNotBlank() } ?: return null
-                val key = openAiKeys.get()
-                SessionVoice(name, provider.maxConcurrent) { text -> openAi.synthesize(base, key, text, name, model) }
-            }
-        }
+        val service = serviceOf(s)
+        noticeLabel = service.label
+        noticeHost = service.noticeName(s)
+        return service.voice(s) ?: null.also { mutableNotices.tryEmit(ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)) }
     }
 
     /**
-     * Says [sample] with the chosen provider, in [voice] or the one chosen,
+     * Says [sample] with the chosen service, in [voice] or the one chosen,
      * pausing the book being read. Fails with a [SpeechError], with
-     * [IllegalStateException] when the provider is not set up, or with the
+     * [IllegalStateException] when the service is not set up, or with the
      * output's own exception when the device cannot play it. Cancelling
      * silences it.
      */
     suspend fun preview(sample: String, voice: String? = null): Result<Unit> {
         pause()
-        val chosen = voiceOf(settings.settings.first(), voice)
+        val s = settings.settings.first()
+        val chosen = serviceOf(s).voice(s, voice)
             ?: return Result.failure(IllegalStateException("Read aloud is not set up"))
         val output = AudioTrackPcmOutput({ speed.value })
         return try {
@@ -257,73 +237,18 @@ internal class SpeechReadAloud(
         }
     }
 
-    /** Switches provider, ending a session read with the other one. */
-    suspend fun setProvider(provider: ReadAloudProvider) {
-        if (ReadAloudProvider.of(settings.settings.first().readAloudProvider) != provider) stop()
-        settings.setReadAloudProvider(provider.id)
-    }
-
-    /** Saves the Gemini [key], ending the session read with the old one. */
-    suspend fun setGeminiKey(key: String) {
-        stop()
-        geminiKeys.set(key)
-    }
-
-    suspend fun clearGeminiKey() {
-        stop()
-        geminiKeys.clear()
-    }
-
-    suspend fun setGeminiVoice(voice: GeminiVoice) {
-        val changed = GeminiVoice.of(settings.settings.first().readAloudVoice) != voice
-        settings.setReadAloudVoice(voice.id)
-        if (changed) switchVoice()
-    }
-
-    val geminiVoice: Flow<GeminiVoice> =
-        settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
-
-    /** The Gemini speech model in use, the default when none is saved. */
-    val geminiModel: Flow<String> =
-        settings.settings.map { GeminiTts.modelOf(it.readAloudModel) }.distinctUntilChanged()
-
-    suspend fun setGeminiModel(model: String) {
-        val before = GeminiTts.modelOf(settings.settings.first().readAloudModel)
-        settings.setReadAloudModel(model.trim())
-        if (GeminiTts.modelOf(model) != before) switchVoice()
-    }
-
-    /** The speech models the saved Gemini key can use. */
-    suspend fun geminiModels(): Result<List<String>> {
-        val key = geminiKeys.get() ?: return Result.failure(IllegalStateException("No Gemini key"))
-        return try {
-            Result.success(gemini.models(key))
-        } catch (e: SpeechError) {
-            Result.failure(e)
-        }
-    }
-
-    val openAiUrl: Flow<String> = settings.settings.map { it.speechServerUrl.orEmpty() }.distinctUntilChanged()
-
-    val openAiModel: Flow<String> = settings.settings.map { it.speechServerModel.orEmpty() }.distinctUntilChanged()
-
-    val openAiVoice: Flow<String> = settings.settings.map { it.speechServerVoice.orEmpty() }.distinctUntilChanged()
-
-    suspend fun setOpenAiUrl(url: String) = settings.setSpeechServerUrl(url)
-
-    suspend fun setOpenAiModel(model: String) = settings.setSpeechServerModel(model)
-
-    suspend fun setOpenAiVoice(voice: String) {
-        val changed = settings.settings.first().speechServerVoice != voice
-        settings.setSpeechServerVoice(voice)
-        if (changed) switchVoice()
+    /** Switches service, ending a session read with another. */
+    suspend fun setService(service: SpeechService) {
+        if (serviceOf(settings.settings.first()) != service) stop()
+        settings.setReadAloudProvider(service.id)
     }
 
     /** Has the session read on in the voice now saved. */
     private suspend fun switchVoice() {
         val session = mutableCurrent.value ?: return
-        val voice = voiceOf(settings.settings.first()) ?: return
-        // The provider may have changed, and the session with it, while the settings were read.
+        val s = settings.settings.first()
+        val voice = serviceOf(s).voice(s) ?: return
+        // The service may have changed, and the session with it, while the settings were read.
         if (mutableCurrent.value === session) session.switchVoice(voice)
     }
 
@@ -333,58 +258,6 @@ internal class SpeechReadAloud(
         .stateIn(scope, SharingStarted.Eagerly, 1f)
 
     suspend fun setSpeed(speed: Float) = settings.setReadAloudSpeed(ReadAloudSpeed.of(speed))
-
-    /** The voices the reader wants offered; empty offers all. */
-    val openAiChosenVoices: Flow<Set<String>> =
-        settings.settings.map { it.speechServerVoices }.distinctUntilChanged()
-
-    suspend fun setOpenAiChosenVoices(voices: Set<String>) = settings.setSpeechServerVoices(voices)
-
-    /** Saves the service's [key], ending the session read with the old one. */
-    suspend fun setOpenAiKey(key: String) {
-        stop()
-        openAiKeys.set(key)
-    }
-
-    suspend fun clearOpenAiKey() {
-        stop()
-        openAiKeys.clear()
-    }
-
-    /** The models the service at [url] lists that look like they speak, asked with the saved key. */
-    suspend fun openAiModels(url: String): Result<List<String>> =
-        ask(url) { base, key -> OpenAiTts.speechModels(openAi.models(base, key)) }
-
-    /** The voices the service at [url] offers, asked with the saved key. */
-    suspend fun openAiVoices(url: String): Result<List<String>> = ask(url) { base, key -> openAi.voices(base, key) }
-
-    /** What the service answered when tested: the speech models and the voices it lists. */
-    class ServerCheck(val models: List<String>, val voices: List<String>)
-
-    /**
-     * Asks the service at [url] for its models and voices, then has it say
-     * one word with the chosen model and voice when both are set, so a
-     * wrong key, model or voice shows before a book is opened.
-     */
-    suspend fun testOpenAi(url: String): Result<ServerCheck> {
-        val s = settings.settings.first()
-        return ask(url) { base, key ->
-            val check = ServerCheck(OpenAiTts.speechModels(openAi.models(base, key)), openAi.voices(base, key))
-            val model = s.speechServerModel?.takeIf { it.isNotBlank() }
-            val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
-            if (model != null && voice != null) openAi.synthesize(base, key, TEST_WORD, voice, model)
-            check
-        }
-    }
-
-    private suspend fun <T> ask(url: String, block: suspend (HttpUrl, String?) -> T): Result<T> {
-        val base = OpenAiTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
-        return try {
-            Result.success(block(base, openAiKeys.get()))
-        } catch (e: SpeechError) {
-            Result.failure(e)
-        }
-    }
 
     @Composable
     override fun SettingsEntry(onClick: () -> Unit) = ReadAloudSettingsEntry(this, onClick)
@@ -399,8 +272,5 @@ internal class SpeechReadAloud(
     @Composable
     override fun SelectionButton(onClick: () -> Unit) = ReadAloudSelectionButton(onClick)
 }
-
-/** Said, not played, by a connection test: the shortest request that proves the model and voice work. */
-private const val TEST_WORD = "Hello."
 
 private const val SLEEP_CHECK_MS = 30_000L

@@ -62,7 +62,6 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /**
  * The controls laid over the page while its book is read aloud, shown
@@ -101,7 +100,7 @@ internal fun ReadAloudPlayer(
                     text = notice?.let {
                         stringResource(
                             it.message(),
-                            feature.noticeHost ?: stringResource(feature.noticeProvider.label),
+                            feature.noticeHost ?: stringResource(feature.noticeLabel),
                         )
                     }.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
@@ -160,26 +159,9 @@ internal fun ReadAloudPlayer(
 /** Which voice is reading, and in what language, under the controls. */
 @Composable
 private fun VoiceStatus(feature: SpeechReadAloud) {
-    val provider by feature.provider.collectAsStateWithLifecycle(null)
-    val locale = LocalConfiguration.current.locales[0]
+    val service by feature.service.collectAsStateWithLifecycle(null)
     // The text, and the same without the flag for a screen reader.
-    val (text, spoken) = when (provider) {
-        ReadAloudProvider.GEMINI -> {
-            val voice by feature.geminiVoice.collectAsStateWithLifecycle(null)
-            voice?.let { geminiVoiceLabel(it) }?.let { it to it }
-        }
-        ReadAloudProvider.OPENAI -> {
-            val id by feature.openAiVoice.collectAsStateWithLifecycle("")
-            id.takeIf { it.isNotBlank() }?.let(VoiceLabel::of)?.let { voice ->
-                val language = voice.language
-                val name = language?.let { Locale.forLanguageTag(it).getDisplayName(locale) }
-                val label = language?.let { VoiceLabel.languageLabel(it, locale) }
-                listOfNotNull(voice.name, label).joinToString(" · ") to
-                    listOfNotNull(voice.name, name).joinToString(" · ")
-            }
-        }
-        null -> null
-    } ?: return
+    val (text, spoken) = service?.voiceStatus() ?: return
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
@@ -260,23 +242,13 @@ private fun SleepButton(feature: SpeechReadAloud) {
 }
 
 /**
- * Picks the voice the book is read in, from the chosen provider's: the
- * Gemini ones, or those the service lists narrowed to the ones offered.
- * The book reads on in it from the start of the sentence.
+ * Picks the voice the book is read in, from the chosen service's. The
+ * book reads on in it from the start of the sentence.
  */
 @Composable
 private fun VoiceButton(feature: SpeechReadAloud) {
-    val scope = rememberCoroutineScope()
-    val provider by feature.provider.collectAsStateWithLifecycle(null)
+    val service by feature.service.collectAsStateWithLifecycle(null)
     var open by remember { mutableStateOf(false) }
-    val url by feature.openAiUrl.collectAsStateWithLifecycle("")
-    // Kept across openings: the service is slow to answer while it reads.
-    var listed by remember(url) { mutableStateOf<List<String>?>(null) }
-    LaunchedEffect(url, open, provider) {
-        if (open && provider == ReadAloudProvider.OPENAI && listed == null) {
-            listed = feature.openAiVoices(url).getOrNull()
-        }
-    }
     Box {
         ControlButton({ open = true }) {
             Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
@@ -286,44 +258,13 @@ private fun VoiceButton(feature: SpeechReadAloud) {
             onDismissRequest = { open = false },
             modifier = Modifier.heightIn(max = 420.dp),
         ) {
-            when (provider) {
-                ReadAloudProvider.GEMINI -> {
-                    val current by feature.geminiVoice.collectAsStateWithLifecycle(null)
-                    GeminiVoice.entries.forEach { voice ->
-                        MenuItem(geminiVoiceLabel(voice), voice == current) {
-                            open = false
-                            scope.launch { feature.setGeminiVoice(voice) }
-                        }
-                    }
-                }
-                ReadAloudProvider.OPENAI -> OpenAiVoiceItems(feature, listed) { voice ->
-                    open = false
-                    scope.launch { feature.setOpenAiVoice(voice) }
-                }
-                null -> Unit
-            }
+            service?.VoiceMenuItems(onPicked = { open = false })
         }
     }
 }
 
 @Composable
-private fun OpenAiVoiceItems(feature: SpeechReadAloud, listed: List<String>?, onPick: (String) -> Unit) {
-    val stored by feature.openAiVoice.collectAsStateWithLifecycle("")
-    val chosen by feature.openAiChosenVoices.collectAsStateWithLifecycle(emptySet())
-    val locale = LocalConfiguration.current.locales[0]
-    // Until the service answers, or if it cannot, the ones chosen are all there is to offer.
-    val offered = listed?.let { VoiceLabel.offered(it, chosen, stored) }
-        ?: (chosen + stored).filter { it.isNotBlank() }.sorted()
-    VoiceLabel.grouped(offered).forEach { (language, voices) ->
-        if (language != null) LanguageHeader(language, locale, Modifier.padding(horizontal = 12.dp))
-        voices.forEach { voice ->
-            MenuItem(voiceChipLabel(voice), voice.id == stored) { onPick(voice.id) }
-        }
-    }
-}
-
-@Composable
-private fun MenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun MenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label) },
         onClick = onClick,

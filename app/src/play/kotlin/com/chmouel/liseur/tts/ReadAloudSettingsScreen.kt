@@ -41,7 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,7 +54,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -68,7 +66,6 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.ConnectionRow
-import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.CoroutineScope
@@ -81,18 +78,13 @@ import java.util.Locale
 @Composable
 internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Unit) {
     val configured by feature.configured.collectAsState()
-    val provider by feature.provider.collectAsState(initial = ReadAloudProvider.Default)
-    val geminiVoice by feature.geminiVoice.collectAsState(initial = GeminiVoice.Default)
-    val openAiVoice by feature.openAiVoice.collectAsState(initial = "")
-    val voice = when (provider) {
-        ReadAloudProvider.GEMINI -> geminiVoice.id
-        ReadAloudProvider.OPENAI -> openAiVoice
-    }
+    val service by feature.service.collectAsState(initial = feature.services.first())
+    val voice by service.voiceName.collectAsState(initial = "")
     ConnectionRow(
         icon = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
         title = stringResource(R.string.read_aloud_settings_title),
         subtitle = if (configured) {
-            stringResource(R.string.read_aloud_settings_entry_summary, stringResource(provider.label), voice)
+            stringResource(R.string.read_aloud_settings_entry_summary, stringResource(service.label), voice)
         } else {
             stringResource(R.string.read_aloud_settings_entry_missing)
         },
@@ -101,16 +93,14 @@ internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Uni
 }
 
 /**
- * Read aloud's own screen: which service makes the voice, and that
- * service's key, server, model and voice. A Gemini key is first used on
- * the first play; an OpenAI-compatible service is asked for its models and
- * voices once its address is saved, and again when its key changes.
+ * Read aloud's own screen: which service makes the voice, when the build
+ * offers more than one, and that service's own rows.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Unit) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val provider by feature.provider.collectAsState(initial = ReadAloudProvider.Default)
+    val service by feature.service.collectAsState(initial = feature.services.first())
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -136,361 +126,33 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
             ) {
-                SettingsGroup(stringResource(R.string.read_aloud_settings_provider)) {
-                    ChipRow(
-                        title = stringResource(R.string.read_aloud_settings_provider_choose),
-                        subtitle = stringResource(R.string.read_aloud_settings_provider_detail),
-                        options = ReadAloudProvider.entries,
-                        selected = provider,
-                        label = { stringResource(it.label) },
-                        onSelected = { scope.launch { feature.setProvider(it) } },
-                    )
-                }
-                SettingsGroup(stringResource(provider.label)) {
-                    when (provider) {
-                        ReadAloudProvider.GEMINI -> GeminiRows(feature)
-                        ReadAloudProvider.OPENAI -> OpenAiRows(feature)
+                if (feature.services.size > 1) {
+                    SettingsGroup(stringResource(R.string.read_aloud_settings_provider)) {
+                        ChipRow(
+                            title = stringResource(R.string.read_aloud_settings_provider_choose),
+                            subtitle = stringResource(R.string.read_aloud_settings_provider_detail),
+                            options = feature.services,
+                            selected = service,
+                            label = { stringResource(it.label) },
+                            onSelected = { scope.launch { feature.setService(it) } },
+                        )
                     }
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun GeminiRows(feature: SpeechReadAloud) {
-    val configured by feature.geminiKeyConfigured.collectAsState()
-    val voice by feature.geminiVoice.collectAsState(initial = GeminiVoice.Default)
-    val model by feature.geminiModel.collectAsState(initial = GeminiTts.DEFAULT_MODEL)
-    val scope = rememberCoroutineScope()
-    var voicesOpen by remember { mutableStateOf(false) }
-    var models by remember { mutableStateOf<Listing?>(null) }
-    val preview = rememberVoicePreview(feature)
-
-    val loadModels = {
-        models = Listing.Loading(GEMINI_LISTING)
-        scope.launch {
-            models = feature.geminiModels().toListing(
-                GEMINI_LISTING,
-                none = R.string.read_aloud_settings_gemini_models_none,
-                failed = R.string.read_aloud_settings_gemini_models_failed,
-            )
-        }
-    }
-    LaunchedEffect(configured) {
-        if (configured) loadModels() else models = null
-    }
-
-    KeyRow(
-        title = stringResource(R.string.read_aloud_settings_key),
-        missing = stringResource(R.string.read_aloud_settings_key_missing),
-        privacy = stringResource(R.string.read_aloud_settings_privacy),
-        configured = configured,
-        onKey = {
-            scope.launch {
-                feature.setGeminiKey(it)
-                loadModels()
-            }
-        },
-        onClear = { scope.launch { feature.clearGeminiKey() } },
-    )
-    RowDivider()
-    ListedField(
-        title = stringResource(R.string.read_aloud_settings_server_model),
-        placeholder = GeminiTts.DEFAULT_MODEL,
-        loading = stringResource(R.string.read_aloud_settings_gemini_models_loading),
-        stored = model,
-        enabled = configured,
-        listing = models,
-        onSave = { scope.launch { feature.setGeminiModel(it) } },
-        onRetry = { loadModels() },
-    )
-    RowDivider()
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(
-            text = stringResource(R.string.read_aloud_settings_voice),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        ExposedDropdownMenuBox(
-            expanded = voicesOpen,
-            onExpandedChange = { voicesOpen = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        ) {
-            OutlinedTextField(
-                value = geminiVoiceLabel(voice),
-                onValueChange = {},
-                readOnly = true,
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = voicesOpen) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-            )
-            ExposedDropdownMenu(expanded = voicesOpen, onDismissRequest = { voicesOpen = false }) {
-                GeminiVoice.entries.forEach { choice ->
-                    DropdownMenuItem(
-                        text = { Text(geminiVoiceLabel(choice)) },
-                        onClick = {
-                            voicesOpen = false
-                            preview.stop()
-                            scope.launch { feature.setGeminiVoice(choice) }
-                        },
-                    )
-                }
-            }
-        }
-        // Not played on every pick, as the OpenAI-compatible voices are:
-        // each sample is a request billed to the reader's key.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PreviewError(preview, Modifier.weight(1f))
-            if (preview.playing != null) {
-                TextButton(onClick = preview::stop) { Text(stringResource(R.string.read_aloud_settings_voice_stop)) }
-            } else {
-                val sample = sampleSentence()
-                TextButton(onClick = { preview.play(sample(null), voice.id) }, enabled = configured) {
-                    Text(stringResource(R.string.read_aloud_settings_voice_hear))
+                SettingsGroup(stringResource(service.label)) {
+                    service.SettingsRows(feature)
                 }
             }
         }
     }
 }
-
-/** Gemini's lists have one address, so they are all kept under this one. */
-private const val GEMINI_LISTING = "gemini"
 
 /** What a menu knows of one of the service's lists, for [url]. */
-private sealed interface Listing {
+internal sealed interface Listing {
     val url: String
 
     data class Loading(override val url: String) : Listing
     data class Loaded(override val url: String, val items: List<String>) : Listing
     data class Failed(override val url: String, @StringRes val message: Int) : Listing
-}
-
-@Composable
-private fun OpenAiRows(feature: SpeechReadAloud) {
-    val storedUrl by feature.openAiUrl.collectAsState(initial = "")
-    val storedModel by feature.openAiModel.collectAsState(initial = "")
-    val storedVoice by feature.openAiVoice.collectAsState(initial = "")
-    val chosenVoices by feature.openAiChosenVoices.collectAsState(initial = emptySet())
-    val keyConfigured by feature.openAiKeyConfigured.collectAsState()
-    val scope = rememberCoroutineScope()
-    val focus = LocalFocusManager.current
-    var typed by remember(storedUrl) { mutableStateOf(storedUrl) }
-    val invalid = typed.isNotBlank() && OpenAiTts.baseUrl(typed) == null
-    val reachable = OpenAiTts.baseUrl(storedUrl) != null
-    var models by remember { mutableStateOf<Listing?>(null) }
-    var voices by remember { mutableStateOf<Listing?>(null) }
-    val preview = rememberVoicePreview(feature)
-
-    // Each list is fetched for one address; a reply for an address the
-    // reader has since moved on from is dropped. A fresh setup takes the
-    // first entry, so it can read without another tap.
-    val loadModels = { url: String ->
-        models = Listing.Loading(url)
-        scope.launch {
-            val result = feature.openAiModels(url)
-            if (models?.url != url) return@launch
-            models = result.toListing(
-                url,
-                none = R.string.read_aloud_settings_server_models_none,
-                failed = R.string.read_aloud_settings_server_models_failed,
-            )
-            val first = result.getOrNull()?.firstOrNull()
-            if (first != null && feature.openAiModel.first().isBlank()) feature.setOpenAiModel(first)
-        }
-    }
-    val loadVoices = { url: String ->
-        voices = Listing.Loading(url)
-        scope.launch {
-            val result = feature.openAiVoices(url)
-            if (voices?.url != url) return@launch
-            voices = result.toListing(
-                url,
-                none = R.string.read_aloud_settings_server_voices_none,
-                failed = R.string.read_aloud_settings_server_voices_failed,
-            )
-            val first = result.getOrNull()?.firstOrNull()
-            if (first != null && feature.openAiVoice.first().isBlank()) feature.setOpenAiVoice(first)
-        }
-    }
-    val refresh = { url: String ->
-        if (OpenAiTts.baseUrl(url) != null) {
-            loadModels(url)
-            loadVoices(url)
-        }
-    }
-    LaunchedEffect(storedUrl) { refresh(storedUrl) }
-
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(
-            text = stringResource(R.string.read_aloud_settings_server_url),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Text(
-            text = stringResource(R.string.read_aloud_settings_server_url_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = typed,
-            onValueChange = { typed = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            singleLine = true,
-            isError = invalid,
-            placeholder = { Text(stringResource(R.string.read_aloud_settings_server_url_hint)) },
-            supportingText = if (invalid) {
-                { Text(stringResource(R.string.read_aloud_settings_server_url_invalid)) }
-            } else {
-                null
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                autoCorrectEnabled = false,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    if (!invalid) {
-                        val url = typed.trim()
-                        focus.clearFocus()
-                        scope.launch { feature.setOpenAiUrl(url) }
-                    }
-                },
-            ),
-        )
-    }
-    RowDivider()
-    KeyRow(
-        title = stringResource(R.string.read_aloud_settings_server_key),
-        missing = stringResource(R.string.read_aloud_settings_server_key_missing),
-        privacy = null,
-        configured = keyConfigured,
-        onKey = {
-            scope.launch {
-                feature.setOpenAiKey(it)
-                refresh(storedUrl)
-            }
-        },
-        onClear = {
-            scope.launch {
-                feature.clearOpenAiKey()
-                refresh(storedUrl)
-            }
-        },
-    )
-    RowDivider()
-    ListedField(
-        title = stringResource(R.string.read_aloud_settings_server_model),
-        placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
-        loading = stringResource(R.string.read_aloud_settings_server_models_loading),
-        stored = storedModel,
-        enabled = reachable,
-        listing = models?.takeIf { it.url == storedUrl },
-        onSave = { scope.launch { feature.setOpenAiModel(it) } },
-        onRetry = { loadModels(storedUrl) },
-    )
-    RowDivider()
-    VoicePicker(
-        stored = storedVoice,
-        chosen = chosenVoices,
-        enabled = reachable,
-        listing = voices?.takeIf { it.url == storedUrl },
-        preview = preview,
-        onSave = { scope.launch { feature.setOpenAiVoice(it) } },
-        onChoose = { scope.launch { feature.setOpenAiChosenVoices(it) } },
-        onRetry = { loadVoices(storedUrl) },
-    )
-    RowDivider()
-    TestConnectionRow(
-        enabled = reachable,
-        url = storedUrl,
-        test = feature::testOpenAi,
-        onLists = { url, check ->
-            models = Result.success(check.models).toListing(
-                url,
-                none = R.string.read_aloud_settings_server_models_none,
-                failed = R.string.read_aloud_settings_server_models_failed,
-            )
-            voices = Result.success(check.voices).toListing(
-                url,
-                none = R.string.read_aloud_settings_server_voices_none,
-                failed = R.string.read_aloud_settings_server_voices_failed,
-            )
-        },
-    )
-    Text(
-        text = stringResource(R.string.read_aloud_settings_server_privacy),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
-    )
-}
-
-private sealed interface ConnectionTest {
-    data object Testing : ConnectionTest
-    data class Passed(val models: Int, val voices: Int) : ConnectionTest
-    data class Failed(@StringRes val message: Int) : ConnectionTest
-}
-
-/**
- * Tests the saved address, key, model and voice in one go and says what
- * came back. The lists it gets replace the ones on screen.
- */
-@Composable
-private fun TestConnectionRow(
-    enabled: Boolean,
-    url: String,
-    test: suspend (String) -> Result<SpeechReadAloud.ServerCheck>,
-    onLists: (String, SpeechReadAloud.ServerCheck) -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    var state by remember(url) { mutableStateOf<ConnectionTest?>(null) }
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = when (val s = state) {
-                null -> ""
-                ConnectionTest.Testing -> stringResource(R.string.read_aloud_settings_test_running)
-                is ConnectionTest.Passed -> stringResource(
-                    R.string.read_aloud_settings_test_passed,
-                    pluralStringResource(R.plurals.read_aloud_settings_test_models, s.models, s.models),
-                    pluralStringResource(R.plurals.read_aloud_settings_test_voices, s.voices, s.voices),
-                )
-                is ConnectionTest.Failed -> stringResource(s.message)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (state is ConnectionTest.Failed) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(
-            enabled = enabled && state != ConnectionTest.Testing,
-            onClick = {
-                state = ConnectionTest.Testing
-                scope.launch {
-                    val result = test(url)
-                    result.onSuccess { onLists(url, it) }
-                    state = result.fold(
-                        onSuccess = { ConnectionTest.Passed(it.models.size, it.voices.size) },
-                        onFailure = { ConnectionTest.Failed(previewMessage(it)) },
-                    )
-                }
-            },
-        ) {
-            Text(stringResource(R.string.read_aloud_settings_test))
-        }
-    }
 }
 
 /**
@@ -499,7 +161,7 @@ private fun TestConnectionRow(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ListedField(
+internal fun ListedField(
     title: String,
     placeholder: String,
     loading: String,
@@ -593,7 +255,7 @@ private fun ListedField(
  * silences it.
  */
 @Stable
-private class VoicePreview(private val scope: CoroutineScope, private val feature: SpeechReadAloud) {
+internal class VoicePreview(private val scope: CoroutineScope, private val feature: SpeechReadAloud) {
     /** The voice being heard. */
     var playing by mutableStateOf<String?>(null)
         private set
@@ -626,13 +288,13 @@ private class VoicePreview(private val scope: CoroutineScope, private val featur
 }
 
 @Composable
-private fun rememberVoicePreview(feature: SpeechReadAloud): VoicePreview {
+internal fun rememberVoicePreview(feature: SpeechReadAloud): VoicePreview {
     val scope = rememberCoroutineScope()
     return remember(feature) { VoicePreview(scope, feature) }
 }
 
 @StringRes
-private fun previewMessage(error: Throwable): Int = when (error) {
+internal fun previewMessage(error: Throwable): Int = when (error) {
     is SpeechError.Network -> R.string.read_aloud_settings_preview_unreachable
     is SpeechError.InvalidKey -> R.string.read_aloud_settings_preview_refused
     is SpeechError.InvalidVoice -> R.string.read_aloud_settings_preview_no_voice
@@ -641,7 +303,7 @@ private fun previewMessage(error: Throwable): Int = when (error) {
 }
 
 @Composable
-private fun PreviewError(preview: VoicePreview, modifier: Modifier = Modifier) {
+internal fun PreviewError(preview: VoicePreview, modifier: Modifier = Modifier) {
     val error = preview.error ?: return
     Text(
         text = stringResource(error),
@@ -657,7 +319,7 @@ private fun PreviewError(preview: VoicePreview, modifier: Modifier = Modifier) {
  * the app's.
  */
 @Composable
-private fun sampleSentence(): (language: String?) -> String {
+internal fun sampleSentence(): (language: String?) -> String {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     return { language ->
@@ -678,7 +340,7 @@ private fun sampleSentence(): (language: String?) -> String {
  * Below them, a field for a voice the service does not list.
  */
 @Composable
-private fun VoicePicker(
+internal fun VoicePicker(
     stored: String,
     chosen: Set<String>,
     enabled: Boolean,
@@ -820,7 +482,7 @@ internal fun LanguageHeader(language: String, locale: Locale, modifier: Modifier
  * or none, offers them all.
  */
 @Composable
-private fun ChooseVoicesDialog(
+internal fun ChooseVoicesDialog(
     listed: List<String>,
     chosen: Set<String>,
     preview: VoicePreview,
@@ -907,7 +569,7 @@ internal fun voiceChipLabel(voice: VoiceLabel): String = when (voice.gender) {
         stringResource(R.string.read_aloud_voice_with_gender, voice.name, stringResource(R.string.read_aloud_voice_male))
 }
 
-private fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @StringRes failed: Int): Listing = fold(
+internal fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @StringRes failed: Int): Listing = fold(
     onSuccess = { if (it.isEmpty()) Listing.Failed(url, none) else Listing.Loaded(url, it) },
     onFailure = {
         Listing.Failed(
@@ -927,7 +589,7 @@ private fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @S
  * field to paste a new one, and a way to remove it.
  */
 @Composable
-private fun KeyRow(
+internal fun KeyRow(
     title: String,
     missing: String,
     privacy: String?,
@@ -993,7 +655,3 @@ private fun KeyRow(
         }
     }
 }
-
-@Composable
-internal fun geminiVoiceLabel(voice: GeminiVoice): String =
-    stringResource(R.string.read_aloud_settings_voice_choice, voice.id, stringResource(voice.style))

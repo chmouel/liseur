@@ -1340,10 +1340,16 @@ reader behavior.
   drop that capture as an unchanged position. On opening, the wide-content
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
-- Two providers (`ReadAloudProvider`), chosen on the Read aloud screen
-  reached from its row on the main Settings list, under Reading &
-  navigation: Gemini and any OpenAI-compatible speech API (OpenAI, a hosted service, or a
-  self-hosted server such as Kokoro).
+- Two providers, chosen on the Read aloud screen reached from its row on
+  the main Settings list, under Reading & navigation: Gemini and any
+  OpenAI-compatible speech API (OpenAI, a hosted service, or a
+  self-hosted server such as Kokoro). Each is a `SpeechService`
+  (`GeminiSpeechService`, `OpenAiSpeechService`) that owns its settings
+  rows, its part of the player's voice menu and status line, and the
+  `SessionVoice` a session reads with. The flavor's
+  `ReadAloudFeatureFactory` passes the list to `SpeechReadAloud`; the
+  first is the default for a reader who never chose, and the picker
+  hides itself when there is only one.
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
   address whose path has none. The settings screen fills its model and
   voice menus from `<root>/models` (speech-looking ids only, else all;
@@ -1359,7 +1365,7 @@ reader behavior.
   `v1beta/models` ids containing `tts`, or typed. "Choose voices"
   narrows the chips to a ticked set
   (`speech_server_voices`, empty offers all; `VoiceLabel.offered` always
-  keeps the voice in use). "Test connection" (`SpeechReadAloud.testOpenAi`)
+  keeps the voice in use). "Test connection" (`OpenAiSpeechService.test`)
   fetches both lists and, when a model and voice are set, synthesizes one
   fixed word, so a wrong key, model or voice shows before a book is
   opened. Both providers return 24 kHz
