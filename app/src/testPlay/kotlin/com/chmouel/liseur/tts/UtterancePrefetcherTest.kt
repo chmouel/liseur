@@ -90,6 +90,26 @@ class UtterancePrefetcherTest {
     }
 
     @Test
+    fun aNewVoiceDropsWhatTheOldOneFetched() = runTest {
+        val old = FakeSynth()
+        val new = FakeSynth()
+        val (cache, prefetcher) = setUp(old, mapOf("p1" to { cursor("A", "B", "C") }))
+        prefetcher.onUtterance("A", null, "p1")
+        advanceUntilIdle()
+        old.reply("B").complete(audio())
+        advanceUntilIdle()
+
+        cache.swap(new::synthesize)
+        val taken = CoroutineScope(StandardTestDispatcher(testScheduler)).launch { cache.take("B") }
+        advanceUntilIdle()
+        assertEquals(listOf("C"), old.cancelled)
+        assertEquals(listOf("B"), new.calls)
+        new.reply("B").complete(audio())
+        advanceUntilIdle()
+        assertTrue(taken.isCompleted)
+    }
+
+    @Test
     fun aJumpDropsTheSpeculativeWork() = runTest {
         val synth = FakeSynth()
         val (_, prefetcher) = setUp(

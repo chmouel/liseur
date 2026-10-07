@@ -1377,6 +1377,11 @@ reader behavior.
 - While a session exists, playing or paused, `ReaderActivity` hands the
   volume keys to the system with `STREAM_MUSIC` as its volume stream, so
   they set how loud it reads instead of turning pages.
+- The player's voice menu lists the offered voices (Gemini's, or the
+  service's narrowed by "Choose voices") and saves the pick as the
+  setting. A running session hears it at once: `SpeechCache.swap` drops
+  what the old voice fetched and `ReadAloudPlayback.replay` starts the
+  current sentence again, playing or paused as it was.
 
 ### Covers, UI, and dependencies
 

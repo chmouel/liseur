@@ -326,6 +326,26 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun replayingWhilePausedStaysPausedOnTheSameSentence() {
+        runBlocking(main) {
+            playback.start(chapterStart, target = {
+                if (it.utterance == FIRST) playback.pause()
+                it.utterance == THIRD
+            })
+            val before = playback.navigator.value
+
+            assertEquals(ReadAloudPlayback.Landing.Sentence, playback.replay())
+            assertTrue(playback.navigator.value !== before)
+            assertEquals(THIRD, playback.navigator.value!!.location.value.utterance)
+            assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+            assertTrue(played.isEmpty())
+            playback.resume()
+        }
+        awaitPlayed(1)
+        assertEquals(THIRD, played.first())
+    }
+
+    @Test
     fun pausingWhileTheFallbackOpensPreventsPlayback() = runBlocking(main) {
         val opening = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

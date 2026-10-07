@@ -89,4 +89,5 @@
     <plurals name="read_aloud_settings_test_voices">
         <item quantity="other">%d 个声音</item>
     </plurals>
+    <string name="read_aloud_change_voice">更换声音</string>
 </resources>
