@@ -2011,7 +2011,22 @@ fun ReaderScreen(
             }
         }
         nav?.addDecorationListener(DECORATION_GROUP, listener)
-        onDispose { nav?.removeDecorationListener(listener) }
+        // A tap on the sentence being read raises the chrome, and with it
+        // the player, rather than turning the page under the voice.
+        val spokenListener = object : DecorableNavigator.Listener {
+            override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+                effectScope.launch {
+                    if (nav == null || navigatorNow !== nav || isPinching()) return@launch
+                    chromeVisible = !chromeVisible
+                }
+                return true
+            }
+        }
+        nav?.addDecorationListener(READ_ALOUD_DECORATION_GROUP, spokenListener)
+        onDispose {
+            nav?.removeDecorationListener(listener)
+            nav?.removeDecorationListener(spokenListener)
+        }
     }
 
     // Tracked rather than read: the setting arrives with the book, and

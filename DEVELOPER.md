@@ -1384,7 +1384,9 @@ reader behavior.
 - While reading aloud the page shows only the spoken sentence's highlight.
   The player controls appear with the rest of the chrome when the reader
   taps the page (`ReadAloudFeature.Player`'s `controls`), and go with it;
-  notices such as a failed request still show on their own.
+  notices such as a failed request still show on their own. A tap on the
+  highlighted sentence toggles the chrome through the read-aloud decoration
+  listener, so it never turns the page, even in a page-turn zone.
 - The player's voice menu lists the offered voices (Gemini's, or the
   service's narrowed by "Choose voices") and saves the pick as the
   setting. A running session hears it at once: `SpeechCache.swap` drops
