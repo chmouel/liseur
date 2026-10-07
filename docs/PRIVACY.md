@@ -74,13 +74,14 @@ The Google Play build can read a book aloud with a voice made by Google's
 Gemini service. The F-Droid and GitHub builds do not contain this feature
 at all.
 
-It does nothing until you choose Gemini in Settings, Read aloud, and paste
-a Gemini API key of your own from Google AI Studio. Once you press play, Liseur sends the text being
-read, one sentence or short passage at a time and a few sentences ahead of
-the voice, to `generativelanguage.googleapis.com` over HTTPS, together
-with your key and the voice you picked. Nothing else goes with it: no book
-title, no file, no identifier, no reading position. Requests are billed to
-your key under Google's terms.
+It does nothing until you choose Gemini in Settings, Reading &
+navigation, Advanced, Read aloud, and paste a Gemini API key of your own
+from Google AI Studio. Once you press play, Liseur sends the text being
+read, one sentence or short passage at a time and a few sentences ahead
+of the voice, to `generativelanguage.googleapis.com` over HTTPS,
+together with your key and the voice you picked. Nothing else goes with
+it: no book title, no file, no identifier, no reading position. Requests
+are billed to your key under Google's terms.
 
 Each request asks Google not to store it (`store: false`). That turns off
 the optional storage of the request on Google's side; it does not change
@@ -96,8 +97,8 @@ more are made.
 The Google Play build can also read aloud with any speech service that
 speaks OpenAI's API: OpenAI itself, another hosted service, or a server
 of your own running a model such as Kokoro. Nothing is sent until you
-choose OpenAI-compatible in Settings, Read aloud, and enter that
-service's address. Liseur then asks it for its lists of models and
+choose OpenAI-compatible in Settings, Reading & navigation, Advanced,
+Read aloud, and enter that service's address. Liseur then asks it for its lists of models and
 voices, with your API key if you entered one, when you save the address
 or the key and when you open that screen. Once you press play it sends
 the text being read, one sentence at a time and a few sentences ahead of

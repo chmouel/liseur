@@ -256,6 +256,7 @@ private fun LiseurApp(
     // The server screen is reached from two places now, and Back has to
     // go back to whichever one it was, not to the one it usually is.
     var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
+    var readingAdvancedOpen by rememberSaveable { mutableStateOf(false) }
     var statsBook by rememberSaveable(stateSaver = StatsTargetSaver) {
         mutableStateOf<StatsTarget?>(null)
     }
@@ -402,14 +403,11 @@ private fun LiseurApp(
                 server = context.container.remoteAccount.server,
                 onOpenAbout = { screen = Screen.ABOUT },
                 onBack = { screen = Screen.LIBRARY },
-                flavorReadingRows = {
-                    context.container.readAloud.SettingsEntry(onClick = { screen = Screen.READ_ALOUD })
-                },
             )
         }
 
         Screen.READ_ALOUD -> {
-            val back = { screen = Screen.SETTINGS }
+            val back = { screen = Screen.READING_NAVIGATION }
             BackHandler { back() }
             context.container.readAloud.SettingsScreen(onBack = back)
         }
@@ -439,7 +437,10 @@ private fun LiseurApp(
         }
 
         Screen.READING_NAVIGATION -> {
-            val back = { screen = Screen.SETTINGS }
+            val back = {
+                readingAdvancedOpen = false
+                screen = Screen.SETTINGS
+            }
             BackHandler { back() }
             ReadingNavigationScreen(
                 settings = settings,
@@ -465,6 +466,15 @@ private fun LiseurApp(
                     scope.launch { repository.setDictionaryBaseUrl(it) }
                 },
                 onBack = back,
+                advancedInitiallyOpen = readingAdvancedOpen,
+                flavorAdvancedRows = {
+                    context.container.readAloud.SettingsEntry(
+                        onClick = {
+                            readingAdvancedOpen = true
+                            screen = Screen.READ_ALOUD
+                        },
+                    )
+                },
             )
         }
 
