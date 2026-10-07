@@ -89,6 +89,9 @@ Google's own retention policy for the Gemini API, which this policy does
 not cover. The audio that comes back is kept in memory while you listen
 and is never written to storage.
 
+Pressing "Hear this voice" on that screen sends one fixed sample
+sentence, not text from a book, the same way and billed the same way.
+
 Stopping the voice stops the requests. Remove the key in Settings and no
 more are made.
 
@@ -100,7 +103,9 @@ of your own running a model such as Kokoro. Nothing is sent until you
 choose OpenAI-compatible in Settings, Reading & navigation, Advanced,
 Read aloud, and enter that service's address. Liseur then asks it for its lists of models and
 voices, with your API key if you entered one, when you save the address
-or the key and when you open that screen. Once you press play it sends
+or the key and when you open that screen. Tapping a voice there, or
+typing one, sends a fixed sample sentence so you can hear it; it is not
+text from a book. Once you press play it sends
 the text being read, one sentence at a time and a few sentences ahead of
 the voice, to that address together with the model and voice you picked
 and, if you entered one, your API key. As with Gemini, no book

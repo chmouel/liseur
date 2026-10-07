@@ -48,9 +48,15 @@ address works as typed, and so does a hosted root such as
 `https://api.openai.com/v1` or `https://api.example.com/v1/openai`.
 
 Once the address is saved, and again when the key changes, the screen
-asks for `models` and `audio/voices` and offers what comes back in two
-menus. Both fields also take a typed name, since not every service lists
-everything. The model menu keeps ids that look like speech models
+asks for `models` and `audio/voices`. Models come back in a menu; voices
+show as chips grouped by language, with a name and gender read from
+Kokoro's ids (`af_bella` is Bella, a woman's voice, American English).
+Ids that follow no such pattern, such as OpenAI's `alloy`, are shown as
+they are, without a language. Tapping a voice picks it and plays a
+short fixed sentence in its language, so voices can be compared without
+opening a book. Both fields also take a typed name, since not every
+service lists everything; a typed voice is played the same way, which
+shows at once whether the server has it. The model menu keeps ids that look like speech models
 (`tts`, `speech` or `kokoro` in the name) and shows the whole list when
 none does; OpenAI's list is mostly chat models that cannot answer
 `audio/speech`. A service with no voice list (404 or 405, as OpenAI

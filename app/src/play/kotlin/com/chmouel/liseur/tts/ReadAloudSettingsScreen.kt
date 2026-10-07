@@ -1,13 +1,17 @@
 package com.chmouel.liseur.tts
 
+import android.content.res.Configuration
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -15,11 +19,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -34,6 +42,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +53,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -56,8 +67,11 @@ import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /** Read aloud's row in Reading & navigation, Advanced: which service and voice, or that none is set up. */
 @Composable
@@ -154,6 +168,7 @@ private fun GeminiRows(feature: SpeechReadAloud) {
     val voice by feature.geminiVoice.collectAsState(initial = GeminiVoice.Default)
     val scope = rememberCoroutineScope()
     var voicesOpen by remember { mutableStateOf(false) }
+    val preview = rememberVoicePreview(feature)
 
     KeyRow(
         title = stringResource(R.string.read_aloud_settings_key),
@@ -190,9 +205,27 @@ private fun GeminiRows(feature: SpeechReadAloud) {
                         text = { Text(geminiVoiceLabel(choice)) },
                         onClick = {
                             voicesOpen = false
+                            preview.stop()
                             scope.launch { feature.setGeminiVoice(choice) }
                         },
                     )
+                }
+            }
+        }
+        // Not played on every pick, as the OpenAI-compatible voices are:
+        // each sample is a request billed to the reader's key.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PreviewError(preview, Modifier.weight(1f))
+            if (preview.playing != null) {
+                TextButton(onClick = preview::stop) { Text(stringResource(R.string.read_aloud_settings_voice_stop)) }
+            } else {
+                val sample = sampleSentence()
+                TextButton(onClick = { preview.play(sample(null), voice.id) }, enabled = configured) {
+                    Text(stringResource(R.string.read_aloud_settings_voice_hear))
                 }
             }
         }
@@ -221,6 +254,7 @@ private fun OpenAiRows(feature: SpeechReadAloud) {
     val reachable = OpenAiTts.baseUrl(storedUrl) != null
     var models by remember { mutableStateOf<Listing?>(null) }
     var voices by remember { mutableStateOf<Listing?>(null) }
+    val preview = rememberVoicePreview(feature)
 
     // Each list is fetched for one address; a reply for an address the
     // reader has since moved on from is dropped. A fresh setup takes the
@@ -330,13 +364,11 @@ private fun OpenAiRows(feature: SpeechReadAloud) {
         onRetry = { loadModels(storedUrl) },
     )
     RowDivider()
-    ListedField(
-        title = stringResource(R.string.read_aloud_settings_voice),
-        placeholder = stringResource(R.string.read_aloud_settings_server_voice_choose),
-        loading = stringResource(R.string.read_aloud_settings_server_voices_loading),
+    VoicePicker(
         stored = storedVoice,
         enabled = reachable,
         listing = voices?.takeIf { it.url == storedUrl },
+        preview = preview,
         onSave = { scope.launch { feature.setOpenAiVoice(it) } },
         onRetry = { loadVoices(storedUrl) },
     )
@@ -440,6 +472,216 @@ private fun ListedField(
             }
         }
     }
+}
+
+/**
+ * One voice sample at a time, for the settings screen: which voice is
+ * being heard, and why the last one could not be. Leaving the screen
+ * silences it.
+ */
+@Stable
+private class VoicePreview(private val scope: CoroutineScope, private val feature: SpeechReadAloud) {
+    /** The voice being heard. */
+    var playing by mutableStateOf<String?>(null)
+        private set
+
+    @get:StringRes
+    var error by mutableStateOf<Int?>(null)
+        private set
+
+    private var job: Job? = null
+
+    fun play(sample: String, voice: String) {
+        job?.cancel()
+        error = null
+        playing = voice
+        lateinit var mine: Job
+        mine = scope.launch {
+            val result = feature.preview(sample, voice)
+            if (job !== mine) return@launch
+            playing = null
+            error = result.exceptionOrNull()?.let(::previewMessage)
+        }
+        job = mine
+    }
+
+    fun stop() {
+        job?.cancel()
+        job = null
+        playing = null
+    }
+}
+
+@Composable
+private fun rememberVoicePreview(feature: SpeechReadAloud): VoicePreview {
+    val scope = rememberCoroutineScope()
+    return remember(feature) { VoicePreview(scope, feature) }
+}
+
+@StringRes
+private fun previewMessage(error: Throwable): Int = when (error) {
+    is SpeechError.Network -> R.string.read_aloud_settings_preview_unreachable
+    is SpeechError.InvalidKey -> R.string.read_aloud_settings_preview_refused
+    is SpeechError.InvalidVoice -> R.string.read_aloud_settings_preview_no_voice
+    is SpeechError -> R.string.read_aloud_settings_preview_service
+    else -> R.string.read_aloud_settings_preview_failed
+}
+
+@Composable
+private fun PreviewError(preview: VoicePreview, modifier: Modifier = Modifier) {
+    val error = preview.error ?: return
+    Text(
+        text = stringResource(error),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+        modifier = modifier,
+    )
+}
+
+/**
+ * The sample sentence in a voice's language when Liseur has it in that
+ * language, so a French voice is not heard reading English; otherwise in
+ * the app's.
+ */
+@Composable
+private fun sampleSentence(): (language: String?) -> String {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    return { language ->
+        val localized = if (language == null) {
+            context
+        } else {
+            context.createConfigurationContext(
+                Configuration(configuration).apply { setLocale(Locale.forLanguageTag(language)) },
+            )
+        }
+        localized.getString(R.string.read_aloud_settings_voice_sample)
+    }
+}
+
+/**
+ * The service's voices as chips, grouped by language: tapping one picks
+ * it and plays a sample, tapping it again while it speaks silences it.
+ * Below them, a field for a voice the service does not list.
+ */
+@Composable
+private fun VoicePicker(
+    stored: String,
+    enabled: Boolean,
+    listing: Listing?,
+    preview: VoicePreview,
+    onSave: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val focus = LocalFocusManager.current
+    val listed = (listing as? Listing.Loaded)?.items.orEmpty()
+    var typed by remember(stored, listed) { mutableStateOf(stored.takeUnless { it in listed }.orEmpty()) }
+    val locale = LocalConfiguration.current.locales[0]
+    val sample = sampleSentence()
+
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(text = stringResource(R.string.read_aloud_settings_voice), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = stringResource(
+                if (listed.isEmpty()) {
+                    R.string.read_aloud_settings_voice_type_detail
+                } else {
+                    R.string.read_aloud_settings_voice_pick_detail
+                },
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        when {
+            !enabled -> Unit
+            listing is Listing.Failed -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(listing.message),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.read_aloud_settings_server_retry)) }
+            }
+            listing !is Listing.Loaded -> Text(
+                text = stringResource(R.string.read_aloud_settings_server_voices_loading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            else -> VoiceLabel.grouped(listed).forEach { (language, voices) ->
+                if (language != null) {
+                    Text(
+                        text = Locale.forLanguageTag(language).getDisplayName(locale),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                    )
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = if (language == null) Modifier.padding(top = 8.dp) else Modifier,
+                ) {
+                    voices.forEach { voice ->
+                        val speaking = preview.playing == voice.id
+                        FilterChip(
+                            selected = voice.id == stored,
+                            onClick = {
+                                if (speaking) {
+                                    preview.stop()
+                                } else {
+                                    onSave(voice.id)
+                                    preview.play(sample(language), voice.id)
+                                }
+                            },
+                            label = { Text(voiceChipLabel(voice)) },
+                            leadingIcon = {
+                                Icon(
+                                    if (speaking) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        PreviewError(preview, Modifier.padding(top = 4.dp))
+        OutlinedTextField(
+            value = typed,
+            onValueChange = { typed = it },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            singleLine = true,
+            enabled = enabled,
+            label = { Text(stringResource(R.string.read_aloud_settings_voice_other)) },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    focus.clearFocus()
+                    val voice = typed.trim()
+                    if (voice.isNotEmpty()) {
+                        onSave(voice)
+                        preview.play(sample(VoiceLabel.of(voice).language), voice)
+                    }
+                },
+            ),
+        )
+    }
+}
+
+/** "Bella · F", or just the name when the id says nothing of a gender. */
+@Composable
+private fun voiceChipLabel(voice: VoiceLabel): String = when (voice.gender) {
+    null -> voice.name
+    VoiceLabel.Gender.FEMALE ->
+        stringResource(R.string.read_aloud_voice_with_gender, voice.name, stringResource(R.string.read_aloud_voice_female))
+    VoiceLabel.Gender.MALE ->
+        stringResource(R.string.read_aloud_voice_with_gender, voice.name, stringResource(R.string.read_aloud_voice_male))
 }
 
 private fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @StringRes failed: Int): Listing = fold(

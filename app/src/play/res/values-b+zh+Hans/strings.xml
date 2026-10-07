@@ -47,7 +47,6 @@
     <string name="read_aloud_settings_server_url_invalid">这不是服务器地址。</string>
     <string name="read_aloud_settings_server_key">API 密钥</string>
     <string name="read_aloud_settings_server_key_missing">可选。仅在服务要求时需要。</string>
-    <string name="read_aloud_settings_server_voice_choose">选择声音</string>
     <string name="read_aloud_settings_server_voices_loading">正在向服务器获取声音列表…</string>
     <string name="read_aloud_settings_server_voices_none">服务器没有列出任何声音。请手动输入。</string>
     <string name="read_aloud_settings_server_voices_failed">服务器没有列出它的声音。</string>
@@ -62,4 +61,18 @@
     <string name="read_aloud_settings_server_models_loading">正在向服务器获取模型列表…</string>
     <string name="read_aloud_settings_server_models_none">服务器没有列出任何模型。请手动输入。</string>
     <string name="read_aloud_settings_server_models_failed">服务器没有列出它的模型。</string>
+    <string name="read_aloud_settings_voice_pick_detail">点按某个声音即可选择并试听。</string>
+    <string name="read_aloud_settings_voice_type_detail">输入服务支持的声音名称。</string>
+    <string name="read_aloud_settings_voice_other">其他声音</string>
+    <string name="read_aloud_settings_voice_hear">试听此声音</string>
+    <string name="read_aloud_settings_voice_stop">停止</string>
+    <string name="read_aloud_settings_voice_sample">这个声音会这样为你朗读书籍。</string>
+    <string name="read_aloud_voice_with_gender">%1$s · %2$s</string>
+    <string name="read_aloud_voice_female">女</string>
+    <string name="read_aloud_voice_male">男</string>
+    <string name="read_aloud_settings_preview_unreachable">无法连接语音服务。</string>
+    <string name="read_aloud_settings_preview_refused">语音服务拒绝了 API 密钥。</string>
+    <string name="read_aloud_settings_preview_no_voice">语音服务没有这个声音。</string>
+    <string name="read_aloud_settings_preview_service">语音服务无法朗读示例。</string>
+    <string name="read_aloud_settings_preview_failed">无法播放示例。</string>
 </resources>

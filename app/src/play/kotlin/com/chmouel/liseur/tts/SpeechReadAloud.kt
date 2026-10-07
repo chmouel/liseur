@@ -174,25 +174,51 @@ internal class SpeechReadAloud(
     private suspend fun voiceFor(s: AppSettings, bookId: String): SessionVoice? {
         val provider = ReadAloudProvider.of(s.readAloudProvider)
         noticeProvider = provider
-        noticeHost = null
-        val notSetUp = ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)
+        noticeHost = if (provider == ReadAloudProvider.OPENAI) OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())?.host else null
+        return voiceOf(s) ?: null.also { mutableNotices.tryEmit(ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)) }
+    }
+
+    /** The chosen provider's voice, or [voice] of that provider instead; null when it is not set up. */
+    private suspend fun voiceOf(s: AppSettings, voice: String? = null): SessionVoice? {
+        val provider = ReadAloudProvider.of(s.readAloudProvider)
         return when (provider) {
             ReadAloudProvider.GEMINI -> {
-                val key = geminiKeys.get() ?: return null.also { mutableNotices.tryEmit(notSetUp) }
-                val voice = GeminiVoice.of(s.readAloudVoice).id
-                SessionVoice(voice, provider.maxConcurrent) { text -> gemini.synthesize(key, text, voice) }
+                val key = geminiKeys.get() ?: return null
+                val name = GeminiVoice.of(voice ?: s.readAloudVoice).id
+                SessionVoice(name, provider.maxConcurrent) { text -> gemini.synthesize(key, text, name) }
             }
             ReadAloudProvider.OPENAI -> {
-                val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())
-                val model = s.speechServerModel?.takeIf { it.isNotBlank() }
-                val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
-                if (base == null || model == null || voice == null) {
-                    return null.also { mutableNotices.tryEmit(notSetUp) }
-                }
-                noticeHost = base.host
+                val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) ?: return null
+                val model = s.speechServerModel?.takeIf { it.isNotBlank() } ?: return null
+                val name = (voice ?: s.speechServerVoice)?.takeIf { it.isNotBlank() } ?: return null
                 val key = openAiKeys.get()
-                SessionVoice(voice, provider.maxConcurrent) { text -> openAi.synthesize(base, key, text, voice, model) }
+                SessionVoice(name, provider.maxConcurrent) { text -> openAi.synthesize(base, key, text, name, model) }
             }
+        }
+    }
+
+    /**
+     * Says [sample] with the chosen provider, in [voice] or the one chosen,
+     * pausing the book being read. Fails with a [SpeechError], with
+     * [IllegalStateException] when the provider is not set up, or with the
+     * output's own exception when the device cannot play it. Cancelling
+     * silences it.
+     */
+    suspend fun preview(sample: String, voice: String? = null): Result<Unit> {
+        pause()
+        val chosen = voiceOf(settings.settings.first(), voice)
+            ?: return Result.failure(IllegalStateException("Read aloud is not set up"))
+        val output = AudioTrackPcmOutput()
+        return try {
+            output.play(chosen.synthesizer.synthesize(sample).pcm)
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // AudioTrack throws its own exceptions besides ours.
+            Result.failure(e)
+        } finally {
+            output.release()
         }
     }
 
