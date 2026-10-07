@@ -46,21 +46,47 @@ data class UtteranceAnchor(val locator: Locator, val text: String) {
  * requires all of the selection's context and is tried first; [matches]
  * settles for what there is, so a repeated sentence earlier in the same
  * element is not taken for the one selected.
+ *
+ * A sentence that opens its element has nothing before it at all, so
+ * [matches] compares what follows instead: [onward], the selection and the
+ * text after it, must agree with the sentence and the rest of its element,
+ * past the sentence when the element goes on.
  */
-class SelectionTarget(private val href: Url, private val prefix: String, private val before: String) {
+class SelectionTarget(
+    private val href: Url,
+    private val prefix: String,
+    private val before: String,
+    private val onward: String = "",
+) {
 
     @OptIn(ExperimentalReadiumApi::class)
     fun matches(location: TtsNavigator.Location): Boolean =
-        location.href == href && matches(location.utterance, location.textBefore)
+        location.href == href && matches(location.utterance, location.textBefore, following(location))
 
     @OptIn(ExperimentalReadiumApi::class)
     fun matchesClosely(location: TtsNavigator.Location): Boolean =
-        location.href == href && matches(location.utterance, location.textBefore, closely = true)
+        location.href == href &&
+            matches(location.utterance, location.textBefore, following(location), closely = true)
 
-    fun matches(utterance: String, textBefore: String?, closely: Boolean = false): Boolean {
+    fun matches(utterance: String, textBefore: String?, textAfter: String? = null, closely: Boolean = false): Boolean {
         val spoken = squash(utterance)
         val leading = squash(textBefore.orEmpty())
-        return starts(spoken).any { at -> agrees(leading + spoken.substring(0, at), closely) }
+        return starts(spoken).any { at ->
+            val context = leading + spoken.substring(0, at)
+            if (context.isEmpty() && before.isNotEmpty()) {
+                !closely && continues(spoken.substring(at), squash(textAfter.orEmpty()))
+            } else {
+                agrees(context, closely)
+            }
+        }
+    }
+
+    /** Whether [onward] reads as [sentence] then [after], past the sentence unless nothing follows it. */
+    private fun continues(sentence: String, after: String): Boolean {
+        val candidate = sentence + after
+        val compared = minOf(onward.length, candidate.length)
+        if (compared == 0 || onward.take(compared) != candidate.take(compared)) return false
+        return compared > sentence.length || (after.isEmpty() && compared == sentence.length)
     }
 
     /** Where in [spoken] the target can begin: where it is, or where a tail of [spoken] begins it. */
@@ -103,12 +129,31 @@ class SelectionTarget(private val href: Url, private val prefix: String, private
             val selected = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return null
             val first = sentences.tokenize(selected).firstOrNull()?.let(selected::substring) ?: selected
             val prefix = squash(first).take(PREFIX).takeIf { it.isNotEmpty() } ?: return null
-            return SelectionTarget(locator.href, prefix, squash(locator.text.before.orEmpty()))
+            return SelectionTarget(
+                locator.href,
+                prefix,
+                squash(locator.text.before.orEmpty()),
+                onward = squash(selected + locator.text.after.orEmpty()),
+            )
         }
 
         // Whitespace differs between the page's selection and the
         // tokenized content (line breaks, collapsed runs), so it is ignored.
         private fun squash(text: String) = text.filterNot(Char::isWhitespace)
+
+        /**
+         * The text after [utterance] in its element. Readium starts it at
+         * the utterance's last character, so that character comes first
+         * again and a sentence ending its element is followed by its own
+         * full stop.
+         */
+        fun following(utterance: String, textAfter: String?): String? {
+            val last = utterance.lastOrNull() ?: return textAfter
+            return if (textAfter?.firstOrNull() == last) textAfter.drop(1) else textAfter
+        }
+
+        @OptIn(ExperimentalReadiumApi::class)
+        private fun following(location: TtsNavigator.Location) = following(location.utterance, location.textAfter)
     }
 }
 
