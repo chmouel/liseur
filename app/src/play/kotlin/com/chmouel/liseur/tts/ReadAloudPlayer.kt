@@ -51,6 +51,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
@@ -61,6 +62,7 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 /**
  * The controls laid over the page while its book is read aloud, painted
@@ -112,43 +114,75 @@ internal fun ReadAloudPlayer(
             exit = if (eInk) ExitTransition.None else fadeOut(),
         ) {
             ChromePill(theme = theme) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                ) {
-                    ControlButton(feature::skipBackward) {
-                        Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
-                    }
-                    when {
-                        // Nothing heard yet: the first sentence is still on its way.
-                        here?.utterance == null -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            BusyIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = LocalContentColor.current,
-                                strokeWidth = 2.dp,
-                            )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    ) {
+                        ControlButton(feature::skipBackward) {
+                            Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
                         }
-                        here?.playing == true -> ControlButton(feature::pause) {
-                            Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause))
+                        when {
+                            // Nothing heard yet: the first sentence is still on its way.
+                            here?.utterance == null -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                BusyIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = LocalContentColor.current,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                            here?.playing == true -> ControlButton(feature::pause) {
+                                Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause))
+                            }
+                            else -> ControlButton(feature::resume) {
+                                Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume))
+                            }
                         }
-                        else -> ControlButton(feature::resume) {
-                            Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume))
+                        ControlButton(feature::skipForward) {
+                            Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
+                        }
+                        SpeedButton(feature)
+                        SleepButton(feature)
+                        VoiceButton(feature)
+                        ControlButton(feature::stop) {
+                            Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
                         }
                     }
-                    ControlButton(feature::skipForward) {
-                        Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
-                    }
-                    SpeedButton(feature)
-                    SleepButton(feature)
-                    VoiceButton(feature)
-                    ControlButton(feature::stop) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
-                    }
+                    VoiceStatus(feature)
                 }
             }
         }
     }
+}
+
+/** Which voice is reading, and in what language, under the controls. */
+@Composable
+private fun VoiceStatus(feature: SpeechReadAloud) {
+    val provider by feature.provider.collectAsStateWithLifecycle(null)
+    val locale = LocalConfiguration.current.locales[0]
+    val text = when (provider) {
+        ReadAloudProvider.GEMINI -> {
+            val voice by feature.geminiVoice.collectAsStateWithLifecycle(null)
+            voice?.let { geminiVoiceLabel(it) }
+        }
+        ReadAloudProvider.OPENAI -> {
+            val id by feature.openAiVoice.collectAsStateWithLifecycle("")
+            id.takeIf { it.isNotBlank() }?.let(VoiceLabel::of)?.let { voice ->
+                listOfNotNull(voice.name, voice.language?.let { Locale.forLanguageTag(it).getDisplayName(locale) })
+                    .joinToString(" · ")
+            }
+        }
+        null -> null
+    } ?: return
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = LocalContentColor.current.copy(alpha = 0.75f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+    )
 }
 
 /** Picks how fast the book is read, heard at once. */
