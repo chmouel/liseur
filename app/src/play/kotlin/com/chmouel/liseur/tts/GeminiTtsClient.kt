@@ -21,8 +21,17 @@ import org.json.JSONException
 import org.json.JSONObject
 
 object GeminiTts {
-    const val MODEL = "gemini-3.8-flash-tts"
+    /** Fast and cheap, which suits a whole book read aloud. */
+    const val DEFAULT_MODEL = "gemini-3.8-flash-lite-tts"
     const val ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
+    const val MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    /** The model a stored name stands for; none stored is the default. */
+    fun modelOf(stored: String?): String = stored?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_MODEL
+
+    /** The speech models among the ids the API lists, in its order. */
+    fun speechModels(ids: List<String>): List<String> =
+        ids.map { it.removePrefix("models/") }.filter { it.contains("tts", ignoreCase = true) }.distinct()
 }
 
 /**
@@ -34,12 +43,33 @@ object GeminiTts {
 class GeminiTtsClient(
     private val client: OkHttpClient = default(),
     private val endpoint: HttpUrl = GeminiTts.ENDPOINT.toHttpUrl(),
-    private val model: String = GeminiTts.MODEL,
+    private val modelsEndpoint: HttpUrl = GeminiTts.MODELS_ENDPOINT.toHttpUrl(),
 ) {
 
     /** Throws [SpeechError]; cancelling the caller cancels the request. */
-    suspend fun synthesize(apiKey: String, text: String, voice: String): SpeechAudio {
-        val builder = Request.Builder().url(endpoint)
+    suspend fun synthesize(
+        apiKey: String,
+        text: String,
+        voice: String,
+        model: String = GeminiTts.DEFAULT_MODEL,
+    ): SpeechAudio {
+        val request = request(endpoint, apiKey)
+            .post(requestBody(text, voice, model).toRequestBody(JSON))
+            .build()
+        return execute(request, ::parse)
+    }
+
+    /**
+     * The speech models the key can use, by id, in the API's order.
+     * Throws [SpeechError].
+     */
+    suspend fun models(apiKey: String): List<String> {
+        val url = modelsEndpoint.newBuilder().addQueryParameter("pageSize", MODELS_PAGE.toString()).build()
+        return execute(request(url, apiKey).get().build(), ::modelList)
+    }
+
+    private fun request(url: HttpUrl, apiKey: String): Request.Builder {
+        val builder = Request.Builder().url(url)
         try {
             builder.header("x-goog-api-key", apiKey)
         } catch (_: IllegalArgumentException) {
@@ -47,10 +77,10 @@ class GeminiTtsClient(
             // would repeat the key, so it is not kept as the cause.
             throw SpeechError.InvalidKey()
         }
-        val request = builder
-            .header("User-Agent", USER_AGENT)
-            .post(requestBody(text, voice).toRequestBody(JSON))
-            .build()
+        return builder.header("User-Agent", USER_AGENT)
+    }
+
+    private suspend fun <T> execute(request: Request, parse: (Response) -> T): T {
         val call = client.newCall(request)
         // A blocking execute() would carry on after its coroutine was
         // cancelled; an enqueued call is cancelled with it.
@@ -64,7 +94,7 @@ class GeminiTtsClient(
 
                     override fun onResponse(call: Call, response: Response) {
                         val outcome = try {
-                            Result.success(response.use(::parse))
+                            Result.success(response.use(parse))
                         } catch (e: SpeechError) {
                             Result.failure(e)
                         } catch (e: IOException) {
@@ -78,7 +108,23 @@ class GeminiTtsClient(
         }
     }
 
-    private fun requestBody(text: String, voice: String): String = JSONObject()
+    private fun modelList(response: Response): List<String> {
+        val source = response.body.source()
+        if (source.request(MODELS_BYTES + 1)) {
+            if (!response.isSuccessful) throw errorFor(response.code, "")
+            throw SpeechError.InvalidResponse("response too large")
+        }
+        val text = source.buffer.readUtf8()
+        if (!response.isSuccessful) throw errorFor(response.code, text)
+        val models = try {
+            JSONObject(text).optJSONArray("models")
+        } catch (_: JSONException) {
+            throw SpeechError.InvalidResponse("not JSON")
+        } ?: return emptyList()
+        return GeminiTts.speechModels((0 until models.length()).mapNotNull { models.optJSONObject(it)?.optString("name") })
+    }
+
+    private fun requestBody(text: String, voice: String, model: String): String = JSONObject()
         .put("model", model)
         // The API keeps interactions unless told not to. This does not
         // change Google's general retention terms; PRIVACY.md says so.
@@ -178,6 +224,8 @@ class GeminiTtsClient(
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private const val ENVELOPE_BYTES = 64 * 1024L
+        private const val MODELS_BYTES = 1024 * 1024L
+        private const val MODELS_PAGE = 1000
         private val USER_AGENT =
             "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
 

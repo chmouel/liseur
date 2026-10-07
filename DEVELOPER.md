@@ -1353,7 +1353,10 @@ reader behavior.
   (`VoiceLabel`); tapping one, or typing one, plays a fixed sample
   sentence through `SpeechReadAloud.preview`, which pauses any session
   first. Gemini plays one only on "Hear this voice", since each sample is
-  billed. "Choose voices" narrows the chips to a ticked set
+  billed. Gemini's model (`read_aloud_model`, blank is
+  `GeminiTts.DEFAULT_MODEL`, Flash-Lite TTS) is picked from the key's
+  `v1beta/models` ids containing `tts`, or typed. "Choose voices"
+  narrows the chips to a ticked set
   (`speech_server_voices`, empty offers all; `VoiceLabel.offered` always
   keeps the voice in use). "Test connection" (`SpeechReadAloud.testOpenAi`)
   fetches both lists and, when a model and voice are set, synthesizes one

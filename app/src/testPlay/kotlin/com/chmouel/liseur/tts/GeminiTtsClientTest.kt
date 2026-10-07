@@ -35,7 +35,10 @@ class GeminiTtsClientTest {
         server.close()
     }
 
-    private fun client() = GeminiTtsClient(endpoint = server.url("/v1beta/interactions"))
+    private fun client() = GeminiTtsClient(
+        endpoint = server.url("/v1beta/interactions"),
+        modelsEndpoint = server.url("/v1beta/models"),
+    )
 
     private fun audioBody(
         pcm: ByteArray,
@@ -103,7 +106,7 @@ class GeminiTtsClientTest {
         assertEquals("secret-key", request.headers["x-goog-api-key"])
         assertFalse(request.url.toString().contains("secret-key"))
         val body = JSONObject(request.body!!.utf8())
-        assertEquals(GeminiTts.MODEL, body.getString("model"))
+        assertEquals(GeminiTts.DEFAULT_MODEL, body.getString("model"))
         assertEquals(false, body.getBoolean("store"))
         assertEquals("Bonjour le monde.", body.getString("input"))
         val format = body.getJSONObject("response_format")
@@ -112,6 +115,50 @@ class GeminiTtsClientTest {
         assertEquals(24000, format.getInt("sample_rate"))
         val voice = body.getJSONObject("generation_config").getJSONArray("speech_config").getJSONObject(0)
         assertEquals("Kore", voice.getString("voice"))
+    }
+
+    @Test
+    fun `sends the model asked for`() = runBlocking {
+        server.enqueue(MockResponse(code = 200, body = audioBody(byteArrayOf(1, 0))))
+
+        client().synthesize("k", "t", "Kore", "gemini-3.8-flash-tts")
+
+        assertEquals("gemini-3.8-flash-tts", JSONObject(server.takeRequest().body!!.utf8()).getString("model"))
+    }
+
+    @Test
+    fun `lists the speech models the key can use, with the key as a header`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"models":[
+                    {"name":"models/gemini-3.8-flash","displayName":"Flash"},
+                    {"name":"models/gemini-3.8-flash-lite-tts"},
+                    {"name":"models/gemini-3.8-flash-TTS"},
+                    {"name":"models/gemini-3.8-flash-lite-tts"}
+                ],"nextPageToken":"x"}""",
+            ),
+        )
+
+        assertEquals(listOf("gemini-3.8-flash-lite-tts", "gemini-3.8-flash-TTS"), client().models("secret-key"))
+        val request = server.takeRequest()
+        assertEquals("GET", request.method)
+        assertEquals("secret-key", request.headers["x-goog-api-key"])
+        assertFalse(request.url.toString().contains("secret-key"))
+        assertEquals("1000", request.url.queryParameter("pageSize"))
+
+        server.enqueue(MockResponse(code = 200, body = "{}"))
+        assertEquals(emptyList<String>(), client().models("k"))
+
+        server.enqueue(MockResponse(code = 403, body = """{"error":{"status":"PERMISSION_DENIED"}}"""))
+        expect<SpeechError.InvalidKey> { client().models("k") }
+    }
+
+    @Test
+    fun `no saved model is the default`() {
+        assertEquals(GeminiTts.DEFAULT_MODEL, GeminiTts.modelOf(null))
+        assertEquals(GeminiTts.DEFAULT_MODEL, GeminiTts.modelOf("  "))
+        assertEquals("gemini-3.8-flash-tts", GeminiTts.modelOf(" gemini-3.8-flash-tts "))
     }
 
     @Test

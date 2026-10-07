@@ -30,6 +30,13 @@ Settings. The key is encrypted with a Keystore key in a file under
 export. The voice is one of twelve curated prebuilt voices, each shown
 with its style; Kore is the default.
 
+The model defaults to Gemini 3.8 Flash-Lite TTS
+(`gemini-3.8-flash-lite-tts`): a whole book is many requests, and the
+cheaper, faster model suits that. The settings screen lists the speech
+models the key can use (`v1beta/models`, ids containing `tts`) and takes
+a typed name too, so a reader can pick the more expressive Flash TTS or
+a newer model without an app update.
+
 Playback runs on Readium's `TtsNavigator` with a custom engine. The engine
 sends one sentence per request to the Interactions API with
 `store: false`, asks for 24 kHz 16-bit PCM, and plays it through an
