@@ -1374,6 +1374,9 @@ reader behavior.
   server's URL, model, voice and offered voices are app settings in the
   settings backup but not in liseur-sync settings sync, since a server
   address is per device. Listening is not counted as reading time.
+- While a session exists, playing or paused, `ReaderActivity` hands the
+  volume keys to the system with `STREAM_MUSIC` as its volume stream, so
+  they set how loud it reads instead of turning pages.
 
 ### Covers, UI, and dependencies
 
