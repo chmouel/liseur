@@ -84,6 +84,8 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Rows a build flavor adds to Reading: read aloud, in the Play build. */
+    flavorReadingRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
@@ -339,6 +341,7 @@ fun SettingsScreen(
                         },
                         onClick = onOpenReadingNavigation,
                     )
+                    flavorReadingRows()
                 }
 
                 SettingsGroup(stringResource(R.string.settings_export_import)) {
@@ -412,7 +415,7 @@ internal fun BackupActionRow(
  * the row reads as a door into them rather than a new kind of thing.
  */
 @Composable
-private fun ConnectionRow(
+internal fun ConnectionRow(
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,

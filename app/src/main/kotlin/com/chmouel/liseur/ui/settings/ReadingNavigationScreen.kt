@@ -85,10 +85,6 @@ fun ReadingNavigationScreen(
     onDictionaryBaseUrl: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Opens Advanced at once, for a return from a screen it leads to. */
-    advancedInitiallyOpen: Boolean = false,
-    /** Rows a build flavor adds at the end of Advanced: read aloud, in the Play build. */
-    flavorAdvancedRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -213,7 +209,7 @@ fun ReadingNavigationScreen(
                     }
                 }
 
-                var advancedOpen by remember { mutableStateOf(advancedInitiallyOpen) }
+                var advancedOpen by remember { mutableStateOf(false) }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
@@ -250,7 +246,6 @@ fun ReadingNavigationScreen(
                         onCheckedChange = onPinchToResize,
                         enabled = !pinchOffForEInk,
                     )
-                    flavorAdvancedRows()
                 }
             }
         }
