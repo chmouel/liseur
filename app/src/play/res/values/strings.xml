@@ -61,8 +61,6 @@
     <string name="read_aloud_settings_kokoro_voices_refused">The server refused the API key.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Try again</string>
     <string name="read_aloud_settings_kokoro_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
-    <string name="read_aloud_kokoro_deepinfra" translatable="false">DeepInfra</string>
-    <string name="read_aloud_settings_kokoro_use_preset">Use %1$s</string>
     <string name="read_aloud_settings_kokoro_model">Model</string>
     <string name="read_aloud_settings_kokoro_model_detail">Leave empty for your own Kokoro server. A hosted service names its own. Press Done to save it.</string>
 </resources>

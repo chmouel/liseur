@@ -55,7 +55,6 @@
     <string name="read_aloud_settings_kokoro_voices_refused">服务器拒绝了该 API 密钥。</string>
     <string name="read_aloud_settings_kokoro_voices_retry">重试</string>
     <string name="read_aloud_settings_kokoro_privacy">朗读的文字会发送到你填写的服务器以生成语音。</string>
-    <string name="read_aloud_settings_kokoro_use_preset">使用 %1$s</string>
     <string name="read_aloud_settings_kokoro_model">模型</string>
     <string name="read_aloud_settings_kokoro_model_detail">使用自己的 Kokoro 服务器时留空。托管服务有自己的模型名称。按“完成”保存。</string>
 </resources>

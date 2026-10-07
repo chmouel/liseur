@@ -1341,12 +1341,12 @@ reader behavior.
   page, which Readium has not scrolled yet.
 - Two providers, chosen on the Read aloud settings screen
   (`ReadAloudProvider`): Gemini and a Kokoro server, self-hosted or a
-  hosted OpenAI-style API such as DeepInfra (`<root>/audio/speech`, where
-  `/v1` is added to an address whose path has none; the model is a
-  setting, `kokoro` by default). A missing `audio/voices` (404/405) falls
-  back to Kokoro-82M's built-in voices. Both return 24 kHz mono 16-bit PCM,
-  so the engine, cache and `AudioTrack` output are shared; only the
-  `SpeechSynthesizer` a session is built with differs. Kokoro runs one
+  hosted OpenAI-style API (`<root>/audio/speech`, where `/v1` is added to
+  an address whose path has none; the model is a setting, `kokoro` by
+  default). A missing `audio/voices` (404/405) is an empty list. Both
+  return 24 kHz mono 16-bit PCM, so the engine, cache and `AudioTrack`
+  output are shared; only the `SpeechSynthesizer` a session is built with
+  differs. Kokoro runs one
   request at a time with long timeouts, since a small server can be
   slower than real time. See `docs/adr/0043-kokoro-read-aloud.md`.
 - Engine callbacks arrive on the main thread. A failed sentence pauses on

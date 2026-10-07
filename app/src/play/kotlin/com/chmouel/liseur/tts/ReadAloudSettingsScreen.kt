@@ -268,23 +268,6 @@ private fun KokoroRows(feature: SpeechReadAloud) {
                 },
             ),
         )
-        TextButton(
-            onClick = {
-                focus.clearFocus()
-                scope.launch {
-                    feature.setKokoroUrl(KokoroTts.DEEPINFRA_URL)
-                    feature.setKokoroModel(KokoroTts.DEEPINFRA_MODEL)
-                }
-                loadVoices(KokoroTts.DEEPINFRA_URL)
-            },
-        ) {
-            Text(
-                stringResource(
-                    R.string.read_aloud_settings_kokoro_use_preset,
-                    stringResource(R.string.read_aloud_kokoro_deepinfra),
-                ),
-            )
-        }
     }
     RowDivider()
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {

@@ -55,7 +55,6 @@
     <string name="read_aloud_settings_kokoro_voices_refused">El servidor rechazó la clave de API.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Reintentar</string>
     <string name="read_aloud_settings_kokoro_privacy">El texto que se lee en voz alta se envía al servidor que indicaste para generar la voz.</string>
-    <string name="read_aloud_settings_kokoro_use_preset">Usar %1$s</string>
     <string name="read_aloud_settings_kokoro_model">Modelo</string>
     <string name="read_aloud_settings_kokoro_model_detail">Déjalo vacío para tu propio servidor Kokoro. Un servicio alojado usa su propio nombre de modelo. Pulsa Listo para guardarlo.</string>
 </resources>
