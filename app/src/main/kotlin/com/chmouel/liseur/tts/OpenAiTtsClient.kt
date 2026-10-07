@@ -83,8 +83,24 @@ object OpenAiTts {
             .build()
     }
 
+    /** Whether [base] is Groq's API, which bills speech per character and has no voice list. */
+    fun isGroq(base: HttpUrl): Boolean = base.scheme == "https" && base.host.equals(GROQ_HOST, ignoreCase = true)
+
+    /**
+     * The voices Groq's speech models take, as its documentation lists them
+     * and as each was heard to answer: Groq has no voice list. Null for
+     * another server or a model not listed here.
+     */
+    fun groqVoices(base: HttpUrl, model: String): List<String>? = if (isGroq(base)) GROQ_VOICES[model.trim()] else null
+
+    private val GROQ_VOICES = mapOf(
+        "canopylabs/orpheus-v1-english" to listOf("autumn", "diana", "hannah", "austin", "daniel", "troy"),
+        "canopylabs/orpheus-arabic-saudi" to listOf("abdullah", "fahad", "sultan", "lulwa", "noura", "aisha"),
+    )
+
     private const val OPENAI_HOST = "api.openai.com"
     private const val DEEPINFRA_HOST = "api.deepinfra.com"
+    private const val GROQ_HOST = "api.groq.com"
 
     /**
      * The OpenAI-style API root from what the reader typed, which the
@@ -143,8 +159,8 @@ class OpenAiTtsClient(
         return when (val reply = speak(base, apiKey, text, voice, model, WAV)) {
             is Reply.Audio -> decode(reply, WAV)
             is Reply.Failure -> {
-                if (reply.code != 400 && reply.code != 422 || !reply.text.contains("response_format", ignoreCase = true)) {
-                    throw errorFor(reply.code, reply.text)
+                if (reply.code != 400 && reply.code != 422 || !reply.error.text.contains("response_format", ignoreCase = true)) {
+                    throw errorFor(reply.code, reply.error)
                 }
                 decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3).also { mp3Models += key }
             }
@@ -172,8 +188,9 @@ class OpenAiTtsClient(
     /**
      * The voices [model] has, in the server's order: the server's voice
      * list; when it has none, the ones DeepInfra describes for [model] (see
-     * [OpenAiTts.modelDescription]), OpenAI's own for OpenAI, or the ones
-     * the server's model list names for it (OpenRouter's). Empty when the
+     * [OpenAiTts.modelDescription]), OpenAI's own for OpenAI, Groq's (see
+     * [OpenAiTts.groqVoices]), or the ones the server's model list names
+     * for it (OpenRouter's). Empty when the
      * server names none, so the voice is typed: nothing is guessed.
      * Throws [SpeechError].
      */
@@ -188,6 +205,7 @@ class OpenAiTtsClient(
                 ::describedVoices,
             )
             OpenAiTts.isOpenAi(base) -> OpenAiTts.STANDARD_VOICES
+            OpenAiTts.isGroq(base) -> named?.let { OpenAiTts.groqVoices(base, it) }.orEmpty()
             named != null -> models(base, apiKey).firstOrNull { it.id == named }?.voices.orEmpty()
             else -> emptyList()
         }
@@ -202,10 +220,10 @@ class OpenAiTtsClient(
     suspend fun models(base: HttpUrl, apiKey: String?): List<SpeechModel> {
         val speech = base.newBuilder().addPathSegment("models").addQueryParameter("output_modalities", "speech").build()
         return try {
-            execute(request(speech, apiKey).get().build(), ::modelList)
+            execute(request(speech, apiKey).get().build()) { modelList(it, base) }
         } catch (e: SpeechError.Service) {
             if (e.code != 400 && e.code != 422) throw e
-            execute(request(base, "models", apiKey).get().build(), ::modelList)
+            execute(request(base, "models", apiKey).get().build()) { modelList(it, base) }
         }
     }
 
@@ -327,7 +345,7 @@ class OpenAiTtsClient(
     }
 
     private fun speech(response: Response): Reply {
-        if (!response.isSuccessful) return Reply.Failure(response.code, errorText(response))
+        if (!response.isSuccessful) return Reply.Failure(response.code, errorBody(response))
         val type = response.body.contentType()?.let { "${it.type}/${it.subtype}".lowercase() }
         if (type != null && type !in AUDIO_TYPES && type != "application/json") {
             throw SpeechError.InvalidResponse("unexpected format")
@@ -341,11 +359,11 @@ class OpenAiTtsClient(
     /** What the server answered to a speech request, read but not yet decoded. */
     private sealed interface Reply {
         class Audio(val body: ByteArray, val type: String?) : Reply
-        class Failure(val code: Int, val text: String) : Reply
+        class Failure(val code: Int, val error: ErrorBody) : Reply
 
         fun orThrow(): Audio = when (this) {
             is Audio -> this
-            is Failure -> throw errorFor(code, text)
+            is Failure -> throw errorFor(code, error)
         }
     }
 
@@ -372,14 +390,14 @@ class OpenAiTtsClient(
         }
     }
 
-    private fun modelList(response: Response): List<SpeechModel> {
+    private fun modelList(response: Response, base: HttpUrl): List<SpeechModel> {
         if (response.code == 404 || response.code == 405) return emptyList()
         val items = listItems(response, "data")
         return (0 until items.length()).mapNotNull { i ->
             val item = items.optJSONObject(i) ?: return@mapNotNull items.optString(i).takeIf { it.isNotBlank() }?.let(::SpeechModel)
             val id = item.optString("id").ifEmpty { item.optString("name") }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val voices = item.optJSONArray("supported_voices")?.let(::strings)?.distinct()
-            SpeechModel(id, makesSpeech(item), price(item), voices)
+            SpeechModel(id, makesSpeech(item), price(item, OpenAiTts.isGroq(base)), voices)
         }.distinctBy { it.id }
     }
 
@@ -401,12 +419,15 @@ class OpenAiTtsClient(
     /**
      * The price per million characters: DeepInfra's, or OpenRouter's
      * prompt price when that is all it bills (its per-character models).
+     * Groq's speech models bill the prompt per character and list no
+     * completion price; elsewhere a missing one could hide token billing.
      */
-    private fun price(item: JSONObject): Double? {
+    private fun price(item: JSONObject, groq: Boolean): Double? {
         item.optJSONObject("metadata")?.optJSONObject("pricing")?.optDouble("input_characters")
             ?.takeIf { it.isFinite() && it >= 0 }?.let { return it }
         val pricing = item.optJSONObject("pricing") ?: return null
-        if (pricing.optString("completion").toDoubleOrNull() != 0.0) return null
+        val perCharacter = pricing.optString("completion").toDoubleOrNull() == 0.0 || groq && !pricing.has("completion")
+        if (!perCharacter) return null
         return pricing.optString("prompt").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }?.times(1_000_000)
     }
 
@@ -460,27 +481,32 @@ class OpenAiTtsClient(
                 ?: (items.opt(i) as? String)
         }.filter { it.isNotBlank() }.distinct()
 
-    private fun errorFor(response: Response): SpeechError = errorFor(response.code, errorText(response))
+    private fun errorFor(response: Response): SpeechError = errorFor(response.code, errorBody(response))
 
     /**
-     * The message in an error reply, to recognise it, never to show it:
-     * FastAPI's `detail`, a top-level `message` (Mistral), or OpenAI's
-     * `error.message` (OpenRouter); else the reply as it is.
+     * What an error reply says, to recognise it, never to show it: its
+     * message (FastAPI's `detail`, a top-level `message` as Mistral's, or
+     * OpenAI's `error.message`; else the reply as it is), and OpenAI's
+     * `error.code` when it has one.
      */
-    private fun errorText(response: Response): String {
+    private class ErrorBody(val text: String, val code: String? = null)
+
+    private fun errorBody(response: Response): ErrorBody {
         val text = try {
             boundedText(response, MAX_ERROR_BYTES)
         } catch (_: IOException) {
             null
-        } ?: return ""
+        } ?: return ErrorBody("")
         val reply = try {
             JSONObject(text)
         } catch (_: JSONException) {
-            return text
+            return ErrorBody(text)
         }
-        return reply.optString("detail").ifEmpty { reply.opt("message") as? String ?: "" }
-            .ifEmpty { reply.optJSONObject("error")?.opt("message") as? String ?: "" }
+        val error = reply.optJSONObject("error")
+        val message = reply.optString("detail").ifEmpty { reply.opt("message") as? String ?: "" }
+            .ifEmpty { error?.opt("message") as? String ?: "" }
             .ifEmpty { text }
+        return ErrorBody(message, error?.opt("code") as? String)
     }
 
     private fun boundedText(response: Response, limit: Long): String? {
@@ -511,9 +537,13 @@ class OpenAiTtsClient(
         private val USER_AGENT =
             "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
 
-        private fun errorFor(code: Int, text: String): SpeechError = when {
+        private fun errorFor(code: Int, error: ErrorBody): SpeechError = errorFor(code, error.text, error.code)
+
+        private fun errorFor(code: Int, text: String, kind: String?): SpeechError = when {
             code == 401 || code == 403 -> SpeechError.InvalidKey(code)
             code == 429 -> SpeechError.RateLimited(code)
+            // Groq's, until the model's terms are accepted in its console.
+            kind == "model_terms_required" -> SpeechError.TermsRequired(code)
             (code == 400 || code == 404) && text.contains("voice", ignoreCase = true) -> SpeechError.InvalidVoice(code)
             // DeepInfra's Qwen3 and Higgs answer an unknown voice with a 500.
             code == 500 && text.contains("voice", true) && text.contains("not found", true) -> SpeechError.InvalidVoice(code)

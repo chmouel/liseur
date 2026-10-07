@@ -1160,13 +1160,14 @@
     <string name="read_aloud_notice_selection_not_found">Чтение с начала абзаца.</string>
     <string name="read_aloud_notice_unavailable">Эту книгу нельзя прочитать вслух с этого места.</string>
     <string name="read_aloud_notice_invalid_voice">У сервиса %1$s нет выбранного голоса. Выберите другой в разделе Настройки, Чтение вслух.</string>
+    <string name="read_aloud_notice_terms_required">Сервис %1$s требует сначала принять условия этой модели на своём сайте.</string>
     <string name="read_aloud_notice_not_set_up">Чтение вслух ещё не настроено. Настройте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_settings_title">Чтение вслух</string>
     <string name="read_aloud_settings_entry_missing">Не настроено</string>
     <string name="read_aloud_settings_provider">Голосовой сервис</string>
     <string name="read_aloud_settings_provider_change">Сменить голосовой сервис</string>
     <string name="read_aloud_settings_server_url">Сервер</string>
-    <string name="read_aloud_settings_server_url_detail">Адрес API сервиса или вашего собственного сервера. Нажмите «Готово», чтобы сохранить.</string>
+    <string name="read_aloud_settings_server_url_detail">Введите адрес сервера или выберите сервис из списка.</string>
     <string name="read_aloud_settings_server_url_invalid">Это не адрес сервера.</string>
     <string name="read_aloud_settings_server_key">Ключ API</string>
     <string name="read_aloud_settings_server_key_missing">Необязательно. Нужен, только если сервис его требует.</string>
@@ -1178,7 +1179,7 @@
     <string name="read_aloud_settings_server_retry">Повторить</string>
     <string name="read_aloud_settings_server_privacy">Читаемый вслух текст отправляется на указанный вами сервер для создания голоса.</string>
     <string name="read_aloud_settings_server_model">Модель</string>
-    <string name="read_aloud_settings_server_pick_detail">Выберите из списка или введите название и нажмите «Готово».</string>
+    <string name="read_aloud_settings_server_pick_detail">Выберите из списка или введите название.</string>
     <string name="read_aloud_provider_openai">Речевой сервер (совместимый с OpenAI)</string>
     <string name="read_aloud_provider_openai_summary">Ваш собственный сервер, например Kokoro, или облачный сервис вроде OpenAI.</string>
     <string name="read_aloud_provider_device">Голоса устройства</string>
@@ -1205,6 +1206,11 @@
     <string name="read_aloud_settings_preview_unreachable">Не удалось связаться с сервисом озвучивания.</string>
     <string name="read_aloud_settings_preview_refused">Сервис озвучивания отклонил ключ API.</string>
     <string name="read_aloud_settings_preview_no_voice">У сервиса озвучивания нет такого голоса.</string>
+    <string name="read_aloud_settings_terms_required">Примите условия этой модели на сайте сервиса и повторите попытку.</string>
+    <string name="read_aloud_settings_key_needs_url">Сначала введите адрес сервера.</string>
+    <string name="read_aloud_settings_key_not_saved">Не удалось сохранить ключ. Вставьте его ещё раз.</string>
+    <string name="read_aloud_settings_server_presets">Выбрать сервис озвучивания</string>
+    <string name="read_aloud_settings_server_preset_own">Ваш собственный сервер в локальной сети</string>
     <string name="read_aloud_settings_preview_service">Сервис озвучивания не смог прочитать образец.</string>
     <string name="read_aloud_settings_preview_failed">Не удалось воспроизвести образец.</string>
     <string name="read_aloud_settings_voices_choose">Выбрать голоса</string>

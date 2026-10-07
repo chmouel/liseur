@@ -1076,13 +1076,14 @@
     <string name="read_aloud_notice_selection_not_found">Leyendo desde el principio del párrafo.</string>
     <string name="read_aloud_notice_unavailable">Este libro no se puede leer en voz alta desde aquí.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s no tiene la voz elegida. Elige otra en Ajustes, Leer en voz alta.</string>
+    <string name="read_aloud_notice_terms_required">%1$s pide aceptar antes los términos de este modelo en su sitio web.</string>
     <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_settings_title">Leer en voz alta</string>
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>
     <string name="read_aloud_settings_provider_change">Cambiar el servicio de voz</string>
     <string name="read_aloud_settings_server_url">Servidor</string>
-    <string name="read_aloud_settings_server_url_detail">La dirección de la API del servicio o de tu propio servidor. Pulsa Listo para guardarla.</string>
+    <string name="read_aloud_settings_server_url_detail">Escribe la dirección de un servidor o elige un servicio de la lista.</string>
     <string name="read_aloud_settings_server_url_invalid">No es una dirección de servidor.</string>
     <string name="read_aloud_settings_server_key">Clave de API</string>
     <string name="read_aloud_settings_server_key_missing">Opcional. Solo hace falta si el servicio la pide.</string>
@@ -1094,7 +1095,7 @@
     <string name="read_aloud_settings_server_retry">Reintentar</string>
     <string name="read_aloud_settings_server_privacy">El texto que se lee en voz alta se envía al servidor que indicaste para generar la voz.</string>
     <string name="read_aloud_settings_server_model">Modelo</string>
-    <string name="read_aloud_settings_server_pick_detail">Elige uno de la lista, o escribe un nombre y pulsa Listo.</string>
+    <string name="read_aloud_settings_server_pick_detail">Elige uno de la lista, o escribe un nombre.</string>
     <string name="read_aloud_provider_openai">Servidor de voz (compatible con OpenAI)</string>
     <string name="read_aloud_provider_openai_summary">Tu propio servidor, como Kokoro, o un servicio alojado como OpenAI.</string>
     <string name="read_aloud_provider_device">Voces del dispositivo</string>
@@ -1121,6 +1122,11 @@
     <string name="read_aloud_settings_preview_unreachable">No se pudo conectar con el servicio de voz.</string>
     <string name="read_aloud_settings_preview_refused">El servicio de voz rechazó la clave de API.</string>
     <string name="read_aloud_settings_preview_no_voice">El servicio de voz no tiene esta voz.</string>
+    <string name="read_aloud_settings_terms_required">Acepta los términos de este modelo en el sitio web del servicio y vuelve a intentarlo.</string>
+    <string name="read_aloud_settings_key_needs_url">Escribe primero la dirección del servidor.</string>
+    <string name="read_aloud_settings_key_not_saved">No se pudo guardar la clave. Vuelve a pegarla.</string>
+    <string name="read_aloud_settings_server_presets">Elegir un servicio de voz</string>
+    <string name="read_aloud_settings_server_preset_own">Tu propio servidor, en tu red local</string>
     <string name="read_aloud_settings_preview_service">El servicio de voz no pudo leer la muestra.</string>
     <string name="read_aloud_settings_preview_failed">No se pudo reproducir la muestra.</string>
     <string name="read_aloud_settings_voices_choose">Elegir voces</string>

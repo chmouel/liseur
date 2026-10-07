@@ -70,11 +70,54 @@ class ApiKeyStoreTest {
     }
 
     @Test
-    fun theServerKeyIsKeptUnderNoBackup() {
+    fun serverKeysAreKeptUnderNoBackup() = runTest {
         val context = ApplicationProvider.getApplicationContext<Application>()
+        val keys = ServerKeys(context)
         val field = ApiKeyStore::class.java.getDeclaredField("file").apply { isAccessible = true }
-        val file = field.get(ApiKeyStore.openAi(context)) as File
+        val file = field.get(keys.store("https://api.groq.com:443")) as File
         assertEquals(context.noBackupFilesDir.canonicalFile, file.parentFile!!.canonicalFile)
-        assertEquals("openai-key", file.name)
+        assertTrue(file.name.matches(Regex("openai-key-[0-9a-f]{16}")))
+    }
+
+    private fun serverKeys(dir: File = folder.root) = ServerKeys(dir, cipher(), UnconfinedTestDispatcher())
+
+    private fun origin(url: String) = ServerKeys.origin(OpenAiTts.baseUrl(url)!!)
+
+    @Test
+    fun eachServerKeepsItsOwnKey() = runTest {
+        val keys = serverKeys()
+        val deepInfra = origin("https://api.deepinfra.com/v1/openai")
+        val mistral = origin("https://api.mistral.ai/v1")
+        keys.set(deepInfra, "di-key")
+        keys.set(mistral, "mi-key")
+        assertEquals("di-key", keys.get(deepInfra))
+        assertEquals("mi-key", keys.get(mistral))
+        assertNull(keys.get(origin("http://192.168.1.10:8880")))
+
+        keys.clear(mistral)
+        assertNull(keys.get(mistral))
+        assertEquals("di-key", keys.get(deepInfra))
+        assertTrue(keys.configured(deepInfra).value)
+        assertFalse(keys.configured(mistral).value)
+        assertFalse(folder.root.listFiles()!!.any { it.name.contains("deepinfra") })
+    }
+
+    @Test
+    fun aServerIsItsSchemeHostAndPort() {
+        assertEquals("https://api.groq.com:443", origin("https://API.groq.com/openai/v1"))
+        assertEquals(origin("https://api.groq.com:443/openai/v1"), origin("https://api.groq.com/v1"))
+        assertEquals("http://192.168.1.10:8880", origin("192.168.1.10:8880"))
+        assertTrue(origin("http://api.groq.com") != origin("https://api.groq.com"))
+        assertTrue(origin("http://localhost:8880") != origin("http://localhost:8881"))
+    }
+
+    @Test
+    fun theSingleKeyOfOldBuildsIsDeletedUnused() = runTest {
+        val legacy = File(folder.root, "openai-key")
+        keyStore(legacy).set("whose-key")
+        val keys = serverKeys()
+        val deepInfra = origin("https://api.deepinfra.com/v1/openai")
+        assertNull(keys.get(deepInfra))
+        assertFalse(legacy.exists())
     }
 }

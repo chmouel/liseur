@@ -1088,13 +1088,14 @@
     <string name="read_aloud_notice_selection_not_found">Vorlesen ab dem Anfang des Absatzes.</string>
     <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Vorlesen eine andere.</string>
+    <string name="read_aloud_notice_terms_required">%1$s verlangt zuerst, dass du die Bedingungen dieses Modells auf seiner Website akzeptierst.</string>
     <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Vorlesen ein.</string>
     <string name="read_aloud_settings_title">Vorlesen</string>
     <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
     <string name="read_aloud_settings_provider">Sprachdienst</string>
     <string name="read_aloud_settings_provider_change">Sprachdienst ändern</string>
     <string name="read_aloud_settings_server_url">Server</string>
-    <string name="read_aloud_settings_server_url_detail">Die API-Adresse des Dienstes oder deines eigenen Servers. Tippe auf Fertig, um sie zu speichern.</string>
+    <string name="read_aloud_settings_server_url_detail">Gib die Adresse eines Servers ein oder wähle einen Dienst aus der Liste.</string>
     <string name="read_aloud_settings_server_url_invalid">Das ist keine Serveradresse.</string>
     <string name="read_aloud_settings_server_key">API-Schlüssel</string>
     <string name="read_aloud_settings_server_key_missing">Optional. Nur nötig, wenn der Dienst einen verlangt.</string>
@@ -1106,7 +1107,7 @@
     <string name="read_aloud_settings_server_retry">Erneut versuchen</string>
     <string name="read_aloud_settings_server_privacy">Der vorgelesene Text wird an den angegebenen Server gesendet, um die Stimme zu erzeugen.</string>
     <string name="read_aloud_settings_server_model">Modell</string>
-    <string name="read_aloud_settings_server_pick_detail">Wähle einen Eintrag aus der Liste oder gib einen Namen ein und tippe auf Fertig.</string>
+    <string name="read_aloud_settings_server_pick_detail">Wähle einen Eintrag aus der Liste oder gib einen Namen ein.</string>
     <string name="read_aloud_provider_openai">Sprachserver (OpenAI-kompatibel)</string>
     <string name="read_aloud_provider_openai_summary">Ein eigener Server wie Kokoro oder ein gehosteter Dienst wie OpenAI.</string>
     <string name="read_aloud_provider_device">Gerätestimmen</string>
@@ -1133,6 +1134,11 @@
     <string name="read_aloud_settings_preview_unreachable">Der Sprachdienst ist nicht erreichbar.</string>
     <string name="read_aloud_settings_preview_refused">Der Sprachdienst hat den API-Schlüssel abgelehnt.</string>
     <string name="read_aloud_settings_preview_no_voice">Der Sprachdienst hat diese Stimme nicht.</string>
+    <string name="read_aloud_settings_terms_required">Akzeptiere die Bedingungen dieses Modells auf der Website des Dienstes und versuche es dann erneut.</string>
+    <string name="read_aloud_settings_key_needs_url">Gib zuerst die Serveradresse ein.</string>
+    <string name="read_aloud_settings_key_not_saved">Der Schlüssel konnte nicht gespeichert werden. Füge ihn erneut ein.</string>
+    <string name="read_aloud_settings_server_presets">Sprachdienst wählen</string>
+    <string name="read_aloud_settings_server_preset_own">Dein eigener Server in deinem lokalen Netzwerk</string>
     <string name="read_aloud_settings_preview_service">Der Sprachdienst konnte die Hörprobe nicht vorlesen.</string>
     <string name="read_aloud_settings_preview_failed">Die Hörprobe konnte nicht abgespielt werden.</string>
     <string name="read_aloud_settings_voices_choose">Stimmen auswählen</string>

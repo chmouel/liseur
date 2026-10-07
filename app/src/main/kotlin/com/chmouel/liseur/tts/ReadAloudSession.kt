@@ -235,6 +235,7 @@ internal class ReadAloudSession(
     private fun SpeechTtsEngine.Error.notice(): ReadAloudNotice = when (this) {
         is SpeechTtsEngine.Error.InvalidKey -> ReadAloudNotice.InvalidKey
         is SpeechTtsEngine.Error.InvalidVoice -> ReadAloudNotice.InvalidVoice
+        is SpeechTtsEngine.Error.TermsRequired -> ReadAloudNotice.TermsRequired
         is SpeechTtsEngine.Error.RateLimited -> ReadAloudNotice.RateLimited
         is SpeechTtsEngine.Error.Network -> ReadAloudNotice.Network
         is SpeechTtsEngine.Error.Service, is SpeechTtsEngine.Error.InvalidResponse -> ReadAloudNotice.Service

@@ -33,8 +33,9 @@ All of this stays in the app's own private storage:
 - If you connect a book server, its address and the credentials or token
   it issued. Those are encrypted with a key held in the Android Keystore,
   which cannot be exported from the device.
-- The speech server or Gemini API key you paste for reading aloud,
-  encrypted the same way.
+- The speech server or Gemini API keys you paste for reading aloud,
+  encrypted the same way. A speech server key is kept for the server
+  you pasted it for, and is sent only to that server.
 
 Uninstalling the app removes all of it.
 
@@ -80,7 +81,9 @@ terms, chosen in Android's settings.
 Liseur can read aloud with any speech server that speaks OpenAI's API:
 a server of your own running a model such as Kokoro, OpenAI itself, or
 another hosted service. Nothing is sent until you choose Speech server
-in Settings, Read aloud, and enter that server's address. Liseur then
+in Settings, Read aloud, and enter that server's address, typed or
+picked from the services listed on that field (picking one only fills
+in its address). Liseur then
 asks it for its lists of models and voices, with your API key if you entered one, when you save the address
 or the key and when you open that screen. When the address is
 DeepInfra's, `https://api.deepinfra.com/v1/openai`, it also asks
@@ -91,7 +94,7 @@ text from a book. "Test connection" asks for the same lists and sends
 the single word "Hello." with the model and voice you picked. Once you press play it sends
 the text being read, one sentence at a time and a few sentences ahead of
 the voice, to that address together with the model and voice you picked
-and, if you entered one, your API key. No book title, file, identifier
+and, if you entered one for that server, your API key. No book title, file, identifier
 or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
 `http://` address is not encrypted. With a hosted service, the text goes

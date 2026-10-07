@@ -107,8 +107,53 @@ rather than after pressing play. The player has the same voices in a
 menu; a pick there, or in settings, applies to the book being read from
 the start of the current sentence.
 
-The key is sent as a bearer token when set, and stored like the Gemini
-key in its own encrypted file under `noBackupFilesDir`. The address,
+The address field also offers a short list of services by name
+(OpenAI, DeepInfra, OpenRouter, Mistral, Groq) whose OpenAI-compatible
+root was each checked to answer, plus an example address for a Kokoro
+server on the local network. Picking a hosted one saves its address and
+moves to the key field; picking the example fills the field with its
+host selected, to be typed over. They only fill in an address: nothing
+else about the service is special-cased by the list, so a service that
+is not on it works the same way when typed.
+
+The key, the address and a typed model are saved when the field loses
+focus, as well as on Done, and when the screen closes with text still in
+them: pasting a key and tapping the next field kept nothing before. The
+saves run in the service's own scope so they finish after the screen is
+gone; key saves and removals run in the order they were made.
+
+The key is sent as a bearer token when set. One key is kept per server,
+by scheme, host and port, each stored like the Gemini key in its own
+encrypted file under `noBackupFilesDir` (named by a hash of the server).
+Every request reads the key of the server it is about to reach, so
+switching from one service to another never sends the first one's key
+to the second; a key typed while one server was shown is saved for that
+server even if the address changes before it is saved. Removing a key
+removes the shown server's only. The single key kept before this, whose
+server is unknown, is deleted unused, so it is pasted again.
+
+A new address is remembered as unsettled (locally, not in the settings
+backup) until its own lists have chosen a model and voice. Until then its
+lists replace the old server's model, even when the key is pasted only
+after the first lists failed for lack of it, and even after the screen or
+the app was closed. A model choice is saved only if the address and the
+model choice are still the ones it was made for, so a slow reply from
+the old server never writes onto the new one. A model the reader picks or
+types for the new server settles it too, once that model's voices are
+asked for. The address and model fields keep what the reader is typing
+when a save lands meanwhile; they follow the saved value only while
+they still show it.
+
+Groq lists its speech models with `output_modalities`, bills them per
+character with a `pricing.prompt` and no completion price (shown only for
+Groq's host, since elsewhere a missing completion price may hide token
+billing), and has no voice list. Its documented voices for each Orpheus
+model, every one checked to speak, are offered for Groq's host only.
+Orpheus reads text in square brackets as a vocal direction, so a book's
+`[...]` may be acted rather than read. Until a model's terms are accepted
+in its console, Groq answers every request with `model_terms_required`;
+that stops the session with a notice saying so, and the settings screen
+says the same. The address,
 model, voice and offered voices are app settings: in the settings backup, but not in
 liseur-sync settings sync, because a LAN address means nothing on
 another device.

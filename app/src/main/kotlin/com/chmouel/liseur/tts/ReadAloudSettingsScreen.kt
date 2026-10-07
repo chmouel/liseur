@@ -50,6 +50,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.composed
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -255,8 +262,9 @@ internal sealed interface Listing {
 
 /**
  * A name the service knows: picked from the list it gave, or typed when
- * the list is missing or lacks it. Typing saves on Done. [detail] adds a
- * line under a listed name, such as its price.
+ * the list is missing or lacks it. A typed name is saved on Done, or when
+ * the field is left, the screen included; left blank, it goes back to the
+ * saved one. [detail] adds a line under a listed name, such as its price.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -272,8 +280,30 @@ internal fun ListedField(
     detail: @Composable (String) -> String? = { null },
 ) {
     val focus = LocalFocusManager.current
-    var typed by remember(stored) { mutableStateOf(stored) }
+    var typed by remember { mutableStateOf(stored) }
+    // The saved name the field last showed: a name chosen for the reader,
+    // such as a new server's first model, does not replace one being typed.
+    var synced by remember { mutableStateOf(stored) }
+    LaunchedEffect(stored) {
+        if (TypedField.follows(typed, synced, stored)) {
+            typed = stored
+            synced = stored
+        }
+    }
     var open by remember { mutableStateOf(false) }
+    // Picking from the menu, Done and leaving the field may all follow one another: one name is saved once.
+    var saved by remember(stored) { mutableStateOf<String?>(null) }
+    val commit = {
+        val name = typed.trim()
+        if (name.isEmpty()) {
+            typed = stored
+        } else if (name != stored && name != saved) {
+            saved = name
+            onSave(name)
+        }
+    }
+    val latestCommit by rememberUpdatedState(commit)
+    DisposableEffect(Unit) { onDispose { latestCommit() } }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
@@ -310,13 +340,14 @@ internal fun ListedField(
                 keyboardActions = KeyboardActions(
                     onDone = {
                         open = false
+                        commit()
                         focus.clearFocus()
-                        onSave(typed.trim())
                     },
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled),
+                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled)
+                    .onLeaving { commit() },
             )
             ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 when (listing) {
@@ -337,8 +368,8 @@ internal fun ListedField(
                             onClick = {
                                 open = false
                                 typed = choice
+                                commit()
                                 focus.clearFocus()
-                                onSave(choice)
                             },
                         )
                     }
@@ -409,6 +440,7 @@ internal fun previewMessage(error: Throwable): Int = when (error) {
     is SpeechError.Network -> R.string.read_aloud_settings_preview_unreachable
     is SpeechError.InvalidKey -> R.string.read_aloud_settings_preview_refused
     is SpeechError.InvalidVoice -> R.string.read_aloud_settings_preview_no_voice
+    is SpeechError.TermsRequired -> R.string.read_aloud_settings_terms_required
     is SpeechError -> R.string.read_aloud_settings_preview_service
     else -> R.string.read_aloud_settings_preview_failed
 }
@@ -694,6 +726,7 @@ internal fun Result<List<String>>.toListing(
             when (it) {
                 is SpeechError.Network -> R.string.read_aloud_settings_server_unreachable
                 is SpeechError.InvalidKey -> R.string.read_aloud_settings_server_refused
+                is SpeechError.TermsRequired -> R.string.read_aloud_settings_terms_required
                 is IllegalArgumentException -> R.string.read_aloud_settings_server_url_invalid
                 else -> failed
             },
@@ -703,40 +736,64 @@ internal fun Result<List<String>>.toListing(
 
 /**
  * A key typed once and never shown again: whether one is saved, a masked
- * field to paste a new one, and a way to remove it.
+ * field to paste a new one, and a way to remove it. A key typed is saved
+ * on Done or when the field is left, the screen included, and always to
+ * the [owner] shown when it was typed: one key per server. With no
+ * [owner] (no server address yet) there is nowhere to save one.
  */
 @Composable
 internal fun KeyRow(
     title: String,
     missing: String,
     privacy: String?,
+    owner: String?,
     configured: Boolean,
-    onKey: (String) -> Unit,
-    onClear: () -> Unit,
+    failed: Boolean,
+    onKey: (owner: String, key: String, done: (Boolean) -> Unit) -> Unit,
+    onClear: (owner: String) -> Unit,
+    focusRequester: FocusRequester = remember { FocusRequester() },
 ) {
     val focus = LocalFocusManager.current
     // Plain remember on purpose: a key half pasted must not outlive the
     // screen in saved instance state.
-    var typed by remember { mutableStateOf("") }
+    val draft = remember { KeyDraft() }
+    val save by rememberUpdatedState(onKey)
+    LaunchedEffect(owner) { draft.follow(owner, save) }
+    DisposableEffect(Unit) { onDispose { draft.commit(save) } }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(text = title, style = MaterialTheme.typography.bodyLarge)
         Text(
-            text = if (configured) stringResource(R.string.read_aloud_settings_key_saved) else missing,
+            text = when {
+                owner == null -> stringResource(R.string.read_aloud_settings_key_needs_url)
+                configured -> stringResource(R.string.read_aloud_settings_key_saved)
+                else -> missing
+            },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
-            value = typed,
-            onValueChange = { typed = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            value = draft.text,
+            onValueChange = { draft.edit(it, owner) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+                .focusRequester(focusRequester)
+                .onLeaving { draft.commit(save) },
+            enabled = owner != null,
             singleLine = true,
+            isError = failed,
             placeholder = {
                 Text(
                     stringResource(
                         if (configured) R.string.read_aloud_settings_key_replace else R.string.read_aloud_settings_key_hint,
                     ),
                 )
+            },
+            supportingText = if (failed) {
+                { Text(stringResource(R.string.read_aloud_settings_key_not_saved)) }
+            } else {
+                null
             },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
@@ -746,16 +803,14 @@ internal fun KeyRow(
             ),
             keyboardActions = KeyboardActions(
                 onDone = {
-                    val key = typed.trim()
-                    if (key.isNotEmpty()) {
-                        typed = ""
+                    if (draft.text.isNotBlank()) {
+                        draft.commit(save)
                         focus.clearFocus()
-                        onKey(key)
                     }
                 },
             ),
         )
-        if (privacy != null || configured) {
+        if (privacy != null || (configured && owner != null)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = privacy.orEmpty(),
@@ -763,12 +818,36 @@ internal fun KeyRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
-                if (configured) {
-                    TextButton(onClick = onClear) {
+                if (configured && owner != null) {
+                    TextButton(
+                        onClick = {
+                            draft.clear()
+                            onClear(owner)
+                        },
+                    ) {
                         Text(stringResource(R.string.read_aloud_settings_key_clear))
                     }
                 }
             }
         }
+    }
+}
+
+/** Runs [onLeft] when focus leaves this field, not when it was never there. */
+internal object TypedField {
+    /**
+     * Whether a field showing [typed] takes the newly [saved] value in
+     * place of [synced], the saved one it last showed: only if the reader
+     * has not typed since, nor saved a [newer] one still on its way.
+     */
+    fun follows(typed: String, synced: String, saved: String, newer: Boolean = false): Boolean =
+        typed.trim().let { it == saved || !newer && it == synced }
+}
+
+internal fun Modifier.onLeaving(onLeft: () -> Unit): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    onFocusChanged {
+        if (focused && !it.isFocused) onLeft()
+        focused = it.isFocused
     }
 }

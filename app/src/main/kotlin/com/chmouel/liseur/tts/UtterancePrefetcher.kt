@@ -115,6 +115,9 @@ class SpeechCache(
             } catch (e: SpeechError.InvalidVoice) {
                 halted = true
                 throw e
+            } catch (e: SpeechError.TermsRequired) {
+                halted = true
+                throw e
             }
         }
     }

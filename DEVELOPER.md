@@ -1380,7 +1380,8 @@ reader behavior.
   (DeepInfra). When any entry says, only speech models are kept;
   otherwise speech-looking ids, else all; 404/405 is no list. The price
   is `metadata.pricing.input_characters`, or OpenRouter's
-  `pricing.prompt` when `pricing.completion` is 0. Voices are listed
+  `pricing.prompt` when `pricing.completion` is 0, or Groq's
+  `pricing.prompt` with no `completion` (on `api.groq.com` only). Voices are listed
   per model: `<root>/audio/voices` (`voices` or `items`, entries named
   by `slug`, `id` or `name`; a reply with `items` and `total` is read
   by `offset` to the end, and one that stops short is an error), else,
@@ -1388,6 +1389,9 @@ reader behavior.
   (`OpenAiTts.modelDescription`), the voice enum in the public
   `https://api.deepinfra.com/models/<model>` schema, asked without the
   key; else OpenAI's standard voices for `api.openai.com` only; else
+  for `api.groq.com` only, the voices Groq documents per model
+  (`OpenAiTts.groqVoices`, all checked to speak; an unknown model has
+  none); else
   the model's `supported_voices` in the model list (OpenRouter), and an
   empty list (a typed voice) anywhere else. Picking a model saves it
   with a voice that model lists (`VoiceChoice`) in one write
@@ -1408,6 +1412,19 @@ reader behavior.
   opened. All providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
+  The address field's menu (`SpeechServerPresets`) fills in a hosted
+  service's root, saving it and focusing the key field, or a Kokoro
+  example address with its host selected. The key, address and a typed
+  model save on Done, on focus loss (`Modifier.onLeaving`) and on
+  dispose; key saves go through `KeyCommits` in submission order and a
+  `KeyDraft` belongs to the server shown when it was started. Address and
+  model commits run in the service's scope under one lock with a
+  generation counter, so a superseded model choice or one for a previous
+  address never writes. A new address is `speech_server_unsettled_url`
+  (local, not backed up) until its lists chose a model and voice; until
+  then a refresh replaces the old server's model. Groq's
+  `model_terms_required` error is `SpeechError.TermsRequired`, which
+  stops the session like a refused key.
   The OpenAI-compatible provider runs one request at a time with long
   timeouts, since a small server can be slower than real time. Its
   notices name the server's host. See
@@ -1416,7 +1433,10 @@ reader behavior.
   that sentence with a notice; play retries it. Nothing is ever skipped.
   A refused key or a voice the server does not have stops the session.
 - Keys (Gemini, optional OpenAI-compatible) live in `noBackupFilesDir`,
-  encrypted by `SecretCipher`, each in its own file, and are never logged;
+  encrypted by `SecretCipher`, each in its own file, and are never logged.
+  Speech server keys are kept per server origin (`ServerKeys`, file
+  `openai-key-<hash>`); each request reads the key of the origin it
+  calls, and the old single `openai-key` file is deleted unused;
   neither are request bodies or audio. The provider and the speech
   server's URL, model, voice and offered voices are app settings in the
   settings backup but not in liseur-sync settings sync, since a server

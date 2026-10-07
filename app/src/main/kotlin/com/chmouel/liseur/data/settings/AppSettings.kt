@@ -232,6 +232,7 @@ data class AppSettings(
     val speechServerVoice: String? = null,
     val speechServerModel: String? = null,
     val speechServerVoices: Set<String> = emptySet(),
+    val speechServerUnsettledUrl: String? = null,
     val readAloudSpeed: Float = 1f,
     val deviceVoice: String? = null,
 )
@@ -298,6 +299,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val SPEECH_SERVER_VOICE = stringPreferencesKey("speech_server_voice")
         val SPEECH_SERVER_MODEL = stringPreferencesKey("speech_server_model")
         val SPEECH_SERVER_VOICES = stringSetPreferencesKey("speech_server_voices")
+
+        /** A server address saved whose model and voice are not yet chosen from its lists; never backed up. */
+        val SPEECH_SERVER_UNSETTLED_URL = stringPreferencesKey("speech_server_unsettled_url")
         val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
         val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
     }
@@ -374,6 +378,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             speechServerVoice = p[Keys.SPEECH_SERVER_VOICE],
             speechServerModel = p[Keys.SPEECH_SERVER_MODEL],
             speechServerVoices = p[Keys.SPEECH_SERVER_VOICES].orEmpty(),
+            speechServerUnsettledUrl = p[Keys.SPEECH_SERVER_UNSETTLED_URL],
             readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
             deviceVoice = p[Keys.READ_ALOUD_DEVICE_VOICE],
         )
@@ -535,6 +540,29 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
 
     /** Stores the speech service's address as typed, or forgets it when [url] is blank. */
     suspend fun setSpeechServerUrl(url: String) = setOrRemove(Keys.SPEECH_SERVER_URL, url)
+
+    /**
+     * Stores a new speech service address together with the mark that
+     * its model and voice are still to be chosen from its own lists, so
+     * that choice survives leaving the screen or the app.
+     */
+    suspend fun setSpeechServerUrlUnsettled(url: String) {
+        val trimmed = url.trim()
+        store.edit { p ->
+            if (trimmed.isEmpty()) {
+                p.remove(Keys.SPEECH_SERVER_URL)
+                p.remove(Keys.SPEECH_SERVER_UNSETTLED_URL)
+            } else {
+                p[Keys.SPEECH_SERVER_URL] = trimmed
+                p[Keys.SPEECH_SERVER_UNSETTLED_URL] = trimmed
+            }
+        }
+    }
+
+    /** Clears the mark left by [setSpeechServerUrlUnsettled], if it is still [url]'s. */
+    suspend fun settleSpeechServer(url: String) {
+        store.edit { p -> if (p[Keys.SPEECH_SERVER_UNSETTLED_URL] == url) p.remove(Keys.SPEECH_SERVER_UNSETTLED_URL) }
+    }
 
     /** Stores the speech service's voice, or forgets it when [name] is blank. */
     suspend fun setSpeechServerVoice(name: String) = setOrRemove(Keys.SPEECH_SERVER_VOICE, name)

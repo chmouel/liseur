@@ -509,6 +509,60 @@ class OpenAiTtsClientTest {
         assertNull(models[1].voices)
     }
 
+    private val groq = OpenAiTts.baseUrl("https://api.groq.com/openai/v1")!!
+
+    @Test
+    fun `Groq's speech models are priced by character, and the same list elsewhere is not`(): Unit = runBlocking {
+        val body = """{"data":[
+            {"id":"canopylabs/orpheus-v1-english","output_modalities":["speech"],"pricing":{"prompt":"0.000022"}},
+            {"id":"canopylabs/orpheus-arabic-saudi","output_modalities":["speech"],"pricing":{"prompt":"0.00004"}}]}"""
+        server.enqueue(MockResponse(code = 200, body = body))
+        server.enqueue(MockResponse(code = 200, body = body))
+
+        val prices = clientFor("api.groq.com").models(groq, "k").map { it.pricePerMillionChars }
+        assertEquals(22.0, prices[0]!!, 1e-9)
+        assertEquals(40.0, prices[1]!!, 1e-9)
+        // Without a completion price, another server's prompt price may be per token.
+        assertEquals(listOf(null, null), OpenAiTtsClient().models(base, "k").map { it.pricePerMillionChars })
+    }
+
+    @Test
+    fun `Groq, which has no voice list, offers each model's documented voices`(): Unit = runBlocking {
+        val client = clientFor("api.groq.com")
+        server.enqueue(MockResponse(code = 404))
+        assertEquals(
+            listOf("autumn", "diana", "hannah", "austin", "daniel", "troy"),
+            client.voices(groq, "k", "canopylabs/orpheus-v1-english"),
+        )
+        server.enqueue(MockResponse(code = 404))
+        assertEquals(
+            listOf("abdullah", "fahad", "sultan", "lulwa", "noura", "aisha"),
+            client.voices(groq, "k", "canopylabs/orpheus-arabic-saudi"),
+        )
+        // A model it does not document takes a typed voice; nothing is guessed.
+        server.enqueue(MockResponse(code = 404))
+        assertEquals(emptyList<String>(), client.voices(groq, "k", "canopylabs/orpheus-v2"))
+        assertEquals(3, server.requestCount)
+        // Only Groq's own server has them.
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 200, body = """{"data":[{"id":"canopylabs/orpheus-v1-english"}]}"""))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "canopylabs/orpheus-v1-english"))
+    }
+
+    @Test
+    fun `a model whose terms are not accepted says so, even when its message names the voice`(): Unit = runBlocking {
+        val terms = """{"error":{"message":"The model requires terms acceptance before any voice can be used.",
+            "type":"invalid_request_error","code":"model_terms_required"}}"""
+        server.enqueue(MockResponse(code = 400, body = terms))
+        server.enqueue(MockResponse(code = 400, body = terms))
+        server.enqueue(MockResponse(code = 400, body = """{"error":{"message":"voice must be one of [autumn]","code":"invalid_voice"}}"""))
+
+        val error = expect<SpeechError.TermsRequired> { OpenAiTtsClient().synthesize(base, "k", "t", "autumn", "m") }
+        assertFalse(error.message!!.contains("acceptance"))
+        expect<SpeechError.TermsRequired> { OpenAiTtsClient().models(base, "k") }
+        expect<SpeechError.InvalidVoice> { OpenAiTtsClient().synthesize(base, "k", "t", "nope", "m") }
+    }
+
     @Test
     fun `a server without a voice list offers the voices its model list names`(): Unit = runBlocking {
         val models = """{"data":[{"id":"hexgrad/kokoro-82m","supported_voices":["af_heart","ff_siwis"]},

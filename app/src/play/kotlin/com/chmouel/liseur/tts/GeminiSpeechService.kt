@@ -34,12 +34,19 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.ui.settings.RowDivider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+/** Gemini has one key, whatever the server: the owner of every key typed for it. */
+private const val KEY_OWNER = "gemini"
 
 /** Where the reader's Gemini key is kept. */
 internal fun ApiKeyStore.Companion.gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
@@ -50,6 +57,8 @@ internal class GeminiSpeechService(
     private val settings: AppSettingsRepository,
     private val control: SessionControl,
     private val client: GeminiTtsClient = GeminiTtsClient(),
+    // Saves outlive the settings screen: one made as it closes still completes.
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : SpeechService {
     override val id = "gemini"
     override val label = R.string.read_aloud_provider_gemini
@@ -57,6 +66,11 @@ internal class GeminiSpeechService(
     override val icon = Icons.Outlined.Cloud
 
     val keyConfigured: StateFlow<Boolean> = keys.configured
+
+    private val keyCommits = KeyCommits(scope)
+
+    /** [KEY_OWNER] when the last key save or removal failed. */
+    val keyFailure: StateFlow<String?> = keyCommits.failure
 
     override val configured: Flow<Boolean> = keys.configured
 
@@ -78,20 +92,25 @@ internal class GeminiSpeechService(
     }
 
     /** Saves the [key], ending the session read with the old one. */
-    suspend fun setKey(key: String) {
+    fun commitKey(key: String, done: (Boolean) -> Unit) = keyCommits.submit(KEY_OWNER, {
         control.stop()
         keys.set(key)
-    }
+    }, done)
 
-    suspend fun clearKey() {
+    fun commitKeyRemoval() = keyCommits.submit(KEY_OWNER, {
         control.stop()
         keys.clear()
-    }
+    })
 
     suspend fun setVoice(voice: GeminiVoice) {
         val changed = GeminiVoice.of(settings.settings.first().readAloudVoice) != voice
         settings.setReadAloudVoice(voice.id)
         if (changed) control.switchVoice()
+    }
+
+    /** Saves [model] in the service's scope, so one typed as the screen closes is still saved. */
+    fun commitModel(model: String) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { setModel(model) }
     }
 
     suspend fun setModel(model: String) {
@@ -157,18 +176,21 @@ private fun GeminiRows(feature: SpeechReadAloud, service: GeminiSpeechService) {
         if (configured) loadModels() else models = null
     }
 
+    val keyFailure by service.keyFailure.collectAsState()
     KeyRow(
         title = stringResource(R.string.read_aloud_settings_key),
         missing = stringResource(R.string.read_aloud_settings_key_missing),
         privacy = stringResource(R.string.read_aloud_settings_privacy),
+        owner = KEY_OWNER,
         configured = configured,
-        onKey = {
-            scope.launch {
-                service.setKey(it)
-                loadModels()
+        failed = keyFailure == KEY_OWNER,
+        onKey = { _, key, done ->
+            service.commitKey(key) { ok ->
+                done(ok)
+                if (ok) loadModels()
             }
         },
-        onClear = { scope.launch { service.clearKey() } },
+        onClear = { service.commitKeyRemoval() },
     )
     RowDivider()
     ListedField(
@@ -178,7 +200,7 @@ private fun GeminiRows(feature: SpeechReadAloud, service: GeminiSpeechService) {
         stored = model,
         enabled = configured,
         listing = models,
-        onSave = { scope.launch { service.setModel(it) } },
+        onSave = { service.commitModel(it) },
         onRetry = { loadModels() },
     )
     RowDivider()

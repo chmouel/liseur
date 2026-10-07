@@ -66,7 +66,5 @@ class ApiKeyStore(
 
     private suspend fun <T> locked(block: () -> T): T = lock.withLock { withContext(io) { block() } }
 
-    companion object {
-        fun openAi(context: Context) = ApiKeyStore(context, "openai-key", "liseur.openai.key")
-    }
+    companion object
 }

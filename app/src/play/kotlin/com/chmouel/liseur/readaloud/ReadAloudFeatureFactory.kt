@@ -7,6 +7,7 @@ import com.chmouel.liseur.tts.ApiKeyStore
 import com.chmouel.liseur.tts.DeviceSpeechService
 import com.chmouel.liseur.tts.GeminiSpeechService
 import com.chmouel.liseur.tts.OpenAiSpeechService
+import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.tts.SpeechReadAloud
 import com.chmouel.liseur.tts.gemini
 
@@ -23,7 +24,7 @@ object ReadAloudFeatureFactory {
     ) { control ->
         listOf(
             GeminiSpeechService(ApiKeyStore.gemini(context), container.appSettings, control),
-            OpenAiSpeechService(ApiKeyStore.openAi(context), container.appSettings, control),
+            OpenAiSpeechService(ServerKeys(context), container.appSettings, control),
             DeviceSpeechService(context, container.appSettings, control),
         )
     }

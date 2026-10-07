@@ -1121,14 +1121,21 @@
     <string name="read_aloud_notice_unavailable">This book cannot be read aloud from here.</string>
     <string name="read_aloud_settings_entry_summary" translatable="false">%1$s · %2$s</string>
     <string name="read_aloud_settings_server_url_hint" translatable="false">http://192.168.1.10:8880</string>
+    <string name="speech_preset_openai" translatable="false">OpenAI</string>
+    <string name="speech_preset_deepinfra" translatable="false">DeepInfra</string>
+    <string name="speech_preset_openrouter" translatable="false">OpenRouter</string>
+    <string name="speech_preset_mistral" translatable="false">Mistral</string>
+    <string name="speech_preset_groq" translatable="false">Groq</string>
+    <string name="speech_preset_kokoro" translatable="false">Kokoro</string>
     <string name="read_aloud_notice_invalid_voice">%1$s does not have the chosen voice. Pick another in Settings, Read aloud.</string>
+    <string name="read_aloud_notice_terms_required">%1$s wants this model\'s terms accepted on its website first.</string>
     <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
     <string name="read_aloud_settings_title">Read aloud</string>
     <string name="read_aloud_settings_entry_missing">Not set up</string>
     <string name="read_aloud_settings_provider">Voice service</string>
     <string name="read_aloud_settings_provider_change">Change the voice service</string>
     <string name="read_aloud_settings_server_url">Server</string>
-    <string name="read_aloud_settings_server_url_detail">The API address of the service or of your own server. Press Done to save it.</string>
+    <string name="read_aloud_settings_server_url_detail">Type the address of a server, or pick a service from the list.</string>
     <string name="read_aloud_settings_server_url_invalid">This is not a server address.</string>
     <string name="read_aloud_settings_server_key">API key</string>
     <string name="read_aloud_settings_server_key_missing">Optional. Only needed if the service asks for one.</string>
@@ -1140,7 +1147,7 @@
     <string name="read_aloud_settings_server_retry">Try again</string>
     <string name="read_aloud_settings_server_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
     <string name="read_aloud_settings_server_model">Model</string>
-    <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name and press Done.</string>
+    <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name.</string>
     <string name="read_aloud_provider_openai">Speech server (OpenAI-compatible)</string>
     <string name="read_aloud_provider_openai_summary">Your own server, such as Kokoro, or a hosted service like OpenAI.</string>
     <string name="read_aloud_provider_device">Device voices</string>
@@ -1167,6 +1174,11 @@
     <string name="read_aloud_settings_preview_unreachable">Could not reach the speech service.</string>
     <string name="read_aloud_settings_preview_refused">The speech service refused the API key.</string>
     <string name="read_aloud_settings_preview_no_voice">The speech service does not have this voice.</string>
+    <string name="read_aloud_settings_terms_required">Accept this model\'s terms on the service\'s website, then try again.</string>
+    <string name="read_aloud_settings_key_needs_url">Enter the server address first.</string>
+    <string name="read_aloud_settings_key_not_saved">The key could not be saved. Paste it again.</string>
+    <string name="read_aloud_settings_server_presets">Choose a speech service</string>
+    <string name="read_aloud_settings_server_preset_own">Your own server on your local network</string>
     <string name="read_aloud_settings_preview_service">The speech service could not read the sample.</string>
     <string name="read_aloud_settings_preview_failed">The sample could not be played.</string>
     <string name="read_aloud_settings_voices_choose">Choose voices</string>

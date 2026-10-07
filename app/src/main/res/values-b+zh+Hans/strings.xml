@@ -1033,13 +1033,14 @@
     <string name="read_aloud_notice_selection_not_found">从段落开头开始朗读。</string>
     <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
     <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 朗读”中另选一个。</string>
+    <string name="read_aloud_notice_terms_required">%1$s 要求先在其网站上接受此模型的条款。</string>
     <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 朗读”中设置。</string>
     <string name="read_aloud_settings_title">朗读</string>
     <string name="read_aloud_settings_entry_missing">未设置</string>
     <string name="read_aloud_settings_provider">语音服务</string>
     <string name="read_aloud_settings_provider_change">更改语音服务</string>
     <string name="read_aloud_settings_server_url">服务器</string>
-    <string name="read_aloud_settings_server_url_detail">服务的 API 地址，或你自己服务器的地址。按“完成”保存。</string>
+    <string name="read_aloud_settings_server_url_detail">输入服务器地址，或从列表中选择一个服务。</string>
     <string name="read_aloud_settings_server_url_invalid">这不是服务器地址。</string>
     <string name="read_aloud_settings_server_key">API 密钥</string>
     <string name="read_aloud_settings_server_key_missing">可选。仅在服务要求时需要。</string>
@@ -1051,7 +1052,7 @@
     <string name="read_aloud_settings_server_retry">重试</string>
     <string name="read_aloud_settings_server_privacy">朗读的文字会发送到你填写的服务器以生成语音。</string>
     <string name="read_aloud_settings_server_model">模型</string>
-    <string name="read_aloud_settings_server_pick_detail">从列表中选择，或输入名称后按“完成”。</string>
+    <string name="read_aloud_settings_server_pick_detail">从列表中选择，或输入名称。</string>
     <string name="read_aloud_provider_openai">语音服务器（OpenAI 兼容）</string>
     <string name="read_aloud_provider_openai_summary">你自己的服务器（如 Kokoro），或 OpenAI 等托管服务。</string>
     <string name="read_aloud_provider_device">设备语音</string>
@@ -1078,6 +1079,11 @@
     <string name="read_aloud_settings_preview_unreachable">无法连接语音服务。</string>
     <string name="read_aloud_settings_preview_refused">语音服务拒绝了 API 密钥。</string>
     <string name="read_aloud_settings_preview_no_voice">语音服务没有这个声音。</string>
+    <string name="read_aloud_settings_terms_required">请在服务的网站上接受此模型的条款，然后重试。</string>
+    <string name="read_aloud_settings_key_needs_url">请先输入服务器地址。</string>
+    <string name="read_aloud_settings_key_not_saved">无法保存密钥。请重新粘贴。</string>
+    <string name="read_aloud_settings_server_presets">选择语音服务</string>
+    <string name="read_aloud_settings_server_preset_own">你自己的服务器，位于本地网络中</string>
     <string name="read_aloud_settings_preview_service">语音服务无法朗读示例。</string>
     <string name="read_aloud_settings_preview_failed">无法播放示例。</string>
     <string name="read_aloud_settings_voices_choose">选择声音</string>

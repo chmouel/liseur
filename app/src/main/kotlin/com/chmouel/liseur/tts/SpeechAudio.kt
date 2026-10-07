@@ -24,6 +24,8 @@ sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(
     class InvalidVoice(code: Int? = null) : SpeechError(
         "The speech service has no such voice" + (code?.let { " (HTTP $it)" } ?: ""),
     )
+    /** The service serves the model only once its terms are accepted on its website (Groq's). */
+    class TermsRequired(code: Int) : SpeechError("The speech service wants the model's terms accepted (HTTP $code)")
     class RateLimited(code: Int) : SpeechError("Speech quota or rate limit reached (HTTP $code)")
     class Network(cause: IOException) :
         SpeechError("The speech service could not be reached (${cause.javaClass.simpleName})", cause)

@@ -42,6 +42,9 @@ enum class ReadAloudNotice {
     /** The speech service has no such voice; reading aloud stopped. */
     InvalidVoice,
 
+    /** The speech service wants the model's terms accepted on its website first; reading aloud stopped. */
+    TermsRequired,
+
     /** The chosen service has no key, server or voice yet; nothing was read. */
     NotSetUp,
 
