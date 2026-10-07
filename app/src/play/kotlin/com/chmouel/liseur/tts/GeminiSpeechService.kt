@@ -1,5 +1,6 @@
 package com.chmouel.liseur.tts
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +38,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+
+/** Where the reader's Gemini key is kept. */
+internal fun ApiKeyStore.Companion.gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
 
 /** Gemini's voices on the reader's own key. */
 internal class GeminiSpeechService(

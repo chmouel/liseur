@@ -23,8 +23,8 @@ Use the Gradle wrapper, never a system Gradle:
 
 Use `make check` when the change crosses tests, lint, and the debug build.
 There are two flavors: `foss` (F-Droid, GitHub) and `play` (Google Play,
-adds Gemini and OpenAI-compatible read-aloud). Code that calls a speech service or
-uses Readium TTS belongs only in `app/src/play/`; see
+adds the Gemini read-aloud voices). Read aloud itself is in both; code that
+calls Gemini belongs only in `app/src/play/`; see
 [DEVELOPER.md](DEVELOPER.md#building).
 See [DEVELOPER.md](DEVELOPER.md#testing) for emulator and end-to-end checks.
 

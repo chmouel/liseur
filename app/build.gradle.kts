@@ -103,10 +103,10 @@ android {
 
     // Two builds of the same app. `foss` is what F-Droid rebuilds and what
     // the GitHub release carries; `play` adds features that call a
-    // non-free network service (Gemini read-aloud) and ships only on
-    // Google Play. Everything for those features lives in src/play, so
-    // the foss APK has neither the code, the dependencies nor the
-    // endpoint, and F-Droid has nothing to flag.
+    // non-free network service (Gemini's read-aloud voices) and ships only
+    // on Google Play. Everything for those features lives in src/play, so
+    // the foss APK has neither the code nor the endpoint, and F-Droid has
+    // nothing to flag.
     flavorDimensions += "distribution"
     productFlavors {
         create("foss") {
@@ -225,12 +225,13 @@ dependencies {
     implementation(libs.readium.streamer)
     implementation(libs.readium.navigator)
 
-    // Gemini read-aloud, Google Play only. Readium's TTS navigator walks
-    // the publication sentence by sentence and hands each one to an
-    // engine; ours is the Gemini one in src/play. The foss flavor gets
-    // neither, so the F-Droid APK's dependency tree is unchanged.
-    "playImplementation"(libs.readium.navigator.media.tts)
-    "playImplementation"(libs.media3.session)
+    // Read aloud. Readium's TTS navigator walks the publication sentence
+    // by sentence and hands each one to our engine, which gets the voice
+    // from a speech service; media3-session keeps it playing with the
+    // screen off. Both are FOSS and in both builds; only the Gemini
+    // service is Play's.
+    implementation(libs.readium.navigator.media.tts)
+    implementation(libs.media3.session)
 
     // Already inside readium-navigator, which uses it to lift footnotes out
     // of a chapter. Declared here because the reader parses notes of its own

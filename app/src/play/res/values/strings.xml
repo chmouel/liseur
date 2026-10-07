@@ -2,28 +2,9 @@
 <resources>
     <string name="read_aloud_settings_key">Gemini API key for reading aloud</string>
     <string name="read_aloud_settings_key_missing">Paste a key from Google AI Studio to have books read aloud. Requests are billed to that key.</string>
-    <string name="read_aloud_settings_key_saved">A key is saved on this device.</string>
-    <string name="read_aloud_settings_key_hint">Paste your key</string>
-    <string name="read_aloud_settings_key_replace">Paste a new key to replace it</string>
-    <string name="read_aloud_settings_key_clear">Remove key</string>
     <string name="read_aloud_settings_privacy">The text being read aloud is sent to Google to make the voice.</string>
-    <string name="read_aloud_settings_voice">Voice</string>
     <!-- A Gemini voice name, then how Google describes it: "Kore (Firm)". -->
     <string name="read_aloud_settings_voice_choice">%1$s (%2$s)</string>
-    <string name="read_aloud_previous_sentence">Previous sentence</string>
-    <string name="read_aloud_next_sentence">Next sentence</string>
-    <string name="read_aloud_from_here">Read aloud from here</string>
-    <string name="read_aloud_pause">Pause reading aloud</string>
-    <string name="read_aloud_resume">Resume reading aloud</string>
-    <string name="read_aloud_stop">Stop reading aloud</string>
-    <string name="read_aloud_notice_network">%1$s could not be reached. Paused; press play to try again.</string>
-    <string name="read_aloud_notice_rate_limited">%1$s is not taking more requests for now. Paused; try again later.</string>
-    <string name="read_aloud_notice_service">%1$s could not read this sentence. Paused; press play to try again.</string>
-    <string name="read_aloud_notice_output">This device could not play the voice. Paused.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s refused the API key. Check it in Settings, Read aloud.</string>
-    <string name="read_aloud_notice_selection_not_found">Reading from the start of the paragraph.</string>
-    <string name="read_aloud_notice_unavailable">This book cannot be read aloud from here.</string>
-
     <!-- Gemini voice styles, as Google describes each prebuilt voice. -->
     <string name="read_aloud_voice_firm">Firm</string>
     <string name="read_aloud_voice_informative">Informative</string>
@@ -38,75 +19,10 @@
     <string name="read_aloud_voice_gentle">Gentle</string>
     <string name="read_aloud_voice_even">Even</string>
     <string name="read_aloud_provider_gemini" translatable="false">Gemini</string>
-    <string name="read_aloud_settings_entry_summary" translatable="false">%1$s · %2$s</string>
-    <string name="read_aloud_settings_server_url_hint" translatable="false">http://192.168.1.10:8880</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s does not have the chosen voice. Pick another in Settings, Read aloud.</string>
-    <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
-    <string name="read_aloud_settings_title">Read aloud</string>
-    <string name="read_aloud_settings_entry_missing">Not set up</string>
-    <string name="read_aloud_settings_provider">Voice service</string>
-    <string name="read_aloud_settings_provider_choose">Speak with</string>
-    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. OpenAI-compatible works with OpenAI, other hosted services, or a server of your own such as Kokoro.</string>
-    <string name="read_aloud_settings_server_url">Server</string>
-    <string name="read_aloud_settings_server_url_detail">The API address of the service or of your own server. Press Done to save it.</string>
-    <string name="read_aloud_settings_server_url_invalid">This is not a server address.</string>
-    <string name="read_aloud_settings_server_key">API key</string>
-    <string name="read_aloud_settings_server_key_missing">Optional. Only needed if the service asks for one.</string>
-    <string name="read_aloud_settings_server_voices_loading">Asking the server for its voices…</string>
-    <string name="read_aloud_settings_server_voices_none">The server lists no voices. Type one instead.</string>
-    <string name="read_aloud_settings_server_voices_failed">The server did not list its voices.</string>
-    <string name="read_aloud_settings_server_unreachable">The server could not be reached.</string>
-    <string name="read_aloud_settings_server_refused">The server refused the API key.</string>
-    <string name="read_aloud_settings_server_retry">Try again</string>
-    <string name="read_aloud_settings_server_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
-    <string name="read_aloud_settings_server_model">Model</string>
-    <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name and press Done.</string>
-    <string name="read_aloud_provider_openai">OpenAI-compatible</string>
-    <string name="read_aloud_settings_server_model_choose">Choose a model</string>
-    <string name="read_aloud_settings_server_models_loading">Asking the server for its models…</string>
-    <string name="read_aloud_settings_server_models_none">The server lists no models. Type one instead.</string>
-    <string name="read_aloud_settings_server_models_failed">The server did not list its models.</string>
     <string name="read_aloud_settings_gemini_models_loading">Asking Gemini for its speech models…</string>
     <string name="read_aloud_settings_gemini_models_none">This key has no speech models listed. Type one instead.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini did not list its models.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Tap a voice to choose it and hear it.</string>
-    <string name="read_aloud_settings_voice_type_detail">Type the name of a voice the service knows.</string>
-    <string name="read_aloud_settings_voice_other">Other voice</string>
     <string name="read_aloud_settings_voice_hear">Hear this voice</string>
-    <string name="read_aloud_settings_voice_stop">Stop</string>
-    <string name="read_aloud_settings_voice_sample">This is how this voice will read your books.</string>
-    <string name="read_aloud_voice_with_gender">%1$s · %2$s</string>
-    <string name="read_aloud_voice_female">F</string>
-    <string name="read_aloud_voice_male">M</string>
-    <string name="read_aloud_settings_preview_unreachable">Could not reach the speech service.</string>
-    <string name="read_aloud_settings_preview_refused">The speech service refused the API key.</string>
-    <string name="read_aloud_settings_preview_no_voice">The speech service does not have this voice.</string>
-    <string name="read_aloud_settings_preview_service">The speech service could not read the sample.</string>
-    <string name="read_aloud_settings_preview_failed">The sample could not be played.</string>
-    <string name="read_aloud_settings_voices_choose">Choose voices</string>
-    <string name="read_aloud_settings_voices_choose_detail">Only the voices you tick are offered on this screen and in the player.</string>
-    <string name="read_aloud_settings_voices_tick_all">Tick all</string>
-    <string name="read_aloud_settings_voices_untick_all">Untick all</string>
-    <string name="read_aloud_settings_voice_hear_named">Hear %1$s</string>
-    <string name="read_aloud_settings_test">Test connection</string>
-    <string name="read_aloud_settings_test_running">Testing…</string>
-    <string name="read_aloud_settings_test_passed">Connected: %1$s and %2$s.</string>
-    <plurals name="read_aloud_settings_test_models">
-        <item quantity="one">%d speech model</item>
-        <item quantity="other">%d speech models</item>
-    </plurals>
-    <plurals name="read_aloud_settings_test_voices">
-        <item quantity="one">%d voice</item>
-        <item quantity="other">%d voices</item>
-    </plurals>
-    <string name="read_aloud_change_voice">Change voice</string>
-    <string name="read_aloud_speed">Reading speed</string>
-    <string name="read_aloud_sleep_timer">Sleep timer</string>
-    <string name="read_aloud_sleep_off">Off</string>
-    <string name="read_aloud_sleep_left">%1$d min</string>
-    <plurals name="read_aloud_sleep_minutes">
-        <item quantity="one">%d minute</item>
-        <item quantity="other">%d minutes</item>
-    </plurals>
-    <string name="read_aloud_speed_value" translatable="false">%1$s×</string>
+    <!-- Overrides the main one: the Play build also offers Gemini. -->
+    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. A speech server (OpenAI-compatible) can be OpenAI, another hosted service, or a server of your own such as Kokoro.</string>
 </resources>

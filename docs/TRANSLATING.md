@@ -3,8 +3,8 @@
 UI strings live in
 [`app/src/main/res/values/strings.xml`](../app/src/main/res/values/strings.xml).
 Locales ship in the tree as `app/src/main/res/values-*/strings.xml`.
-Strings used only by the Google Play build (reading aloud) live in
-`app/src/play/res/values*/strings.xml` and need the same locales.
+Strings used only by the Google Play build (Gemini's read-aloud voices)
+live in `app/src/play/res/values*/strings.xml` and need the same locales.
 
 French (`values-fr`), Spanish (`values-es`), Russian (`values-ru`),
 Italian (`values-it`), German (`values-de`) and Simplified Chinese

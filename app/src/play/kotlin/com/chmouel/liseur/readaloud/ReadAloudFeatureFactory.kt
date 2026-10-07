@@ -7,6 +7,7 @@ import com.chmouel.liseur.tts.ApiKeyStore
 import com.chmouel.liseur.tts.GeminiSpeechService
 import com.chmouel.liseur.tts.OpenAiSpeechService
 import com.chmouel.liseur.tts.SpeechReadAloud
+import com.chmouel.liseur.tts.gemini
 
 /**
  * The Play build reads aloud with a Gemini voice on the reader's own key,

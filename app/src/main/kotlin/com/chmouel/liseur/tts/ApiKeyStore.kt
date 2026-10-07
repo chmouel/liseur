@@ -13,8 +13,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * One API key a speech service is used with (Gemini's, or an
- * OpenAI-compatible service's), encrypted with a Keystore key in a file under no_backup:
+ * One API key a speech service is used with, encrypted with a Keystore key in a file under no_backup:
  * outside Auto Backup, device transfer and the settings export, so it
  * never leaves the device. A key that can no longer be decrypted (the
  * Keystore was reset) counts as no key. Reads, saves and removals take
@@ -26,7 +25,7 @@ class ApiKeyStore(
     private val cipher: SecretCipher,
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
-    private constructor(context: Context, fileName: String, keyAlias: String) :
+    internal constructor(context: Context, fileName: String, keyAlias: String) :
         this(File(context.noBackupFilesDir, fileName), SecretCipher(keyAlias))
 
     private val mutableConfigured = MutableStateFlow(file.exists())
@@ -68,8 +67,6 @@ class ApiKeyStore(
     private suspend fun <T> locked(block: () -> T): T = lock.withLock { withContext(io) { block() } }
 
     companion object {
-        fun gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
-
         fun openAi(context: Context) = ApiKeyStore(context, "openai-key", "liseur.openai.key")
     }
 }

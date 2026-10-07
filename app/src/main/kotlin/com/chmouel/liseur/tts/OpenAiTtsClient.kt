@@ -64,7 +64,7 @@ object OpenAiTts {
 /**
  * An OpenAI-compatible speech API (OpenAI's, a hosted service's, or a
  * self-hosted server such as Kokoro), asked for raw PCM: 24 kHz mono 16-bit
- * little-endian, as Gemini's, so it plays through the same output.
+ * little-endian, the format every speech service hands the shared output.
  *
  * There is no logging interceptor on purpose: the request may carry a key
  * in a header and carries the book's text in the body.

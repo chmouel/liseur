@@ -2,6 +2,10 @@
 
 Status: accepted
 
+Keeping this provider in the `play` flavor is superseded by
+[ADR-0044](0044-read-aloud-in-the-f-droid-build.md), which also renames
+it "Speech server (OpenAI-compatible)".
+
 ## Context
 
 Read-aloud ([0042](0042-gemini-read-aloud.md)) speaks only with Gemini,

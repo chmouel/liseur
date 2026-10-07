@@ -2,6 +2,11 @@
 
 Status: accepted
 
+Keeping all of read aloud in the `play` flavor is superseded by
+[ADR-0044](0044-read-aloud-in-the-f-droid-build.md): the engine and the
+speech server provider are in both builds, and only Gemini stays in
+`play`.
+
 ## Context
 
 Readers asked for books to be read aloud. Android's own text-to-speech
