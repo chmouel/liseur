@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s 暂时不接受更多请求。已暂停；请稍后再试。</string>
     <string name="read_aloud_notice_service">%1$s 无法朗读这一句。已暂停；按播放重试。</string>
     <string name="read_aloud_notice_output">此设备无法播放语音。已暂停。</string>
-    <string name="read_aloud_notice_invalid_key">%1$s 拒绝了该 API 密钥。请在“设置 &gt; 朗读”中检查。</string>
+    <string name="read_aloud_notice_invalid_key">%1$s 拒绝了该 API 密钥。请在“设置 &gt; 阅读与导航 &gt; 高级 &gt; 朗读”中检查。</string>
     <string name="read_aloud_notice_selection_not_found">从段落开头开始朗读。</string>
     <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">成熟</string>
     <string name="read_aloud_voice_gentle">温柔</string>
     <string name="read_aloud_voice_even">平稳</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 朗读”中另选一个。</string>
-    <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 朗读”中设置。</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 阅读与导航 &gt; 高级 &gt; 朗读”中另选一个。</string>
+    <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 阅读与导航 &gt; 高级 &gt; 朗读”中设置。</string>
     <string name="read_aloud_settings_title">朗读</string>
     <string name="read_aloud_settings_entry_missing">未设置</string>
     <string name="read_aloud_settings_provider">语音服务</string>
