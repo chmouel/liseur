@@ -276,10 +276,30 @@ class OpenAiTtsClientTest {
     }
 
     @Test
-    fun `OpenAI, which has no voice list, offers its own voices`(): Unit = runBlocking {
-        server.enqueue(MockResponse(code = 404))
+    fun `OpenAI, which has no voice list, offers its own voices for the model`(): Unit = runBlocking {
+        val openAi = OpenAiTts.baseUrl("https://api.openai.com/v1")!!
+        val legacy = listOf("alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer")
+        val current = listOf(
+            "marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
+        )
+        repeat(4) { server.enqueue(MockResponse(code = 404)) }
 
-        assertEquals(OpenAiTts.STANDARD_VOICES, clientFor("api.openai.com").voices(OpenAiTts.baseUrl("https://api.openai.com/v1")!!, "k", "tts-1"))
+        assertEquals(current, clientFor("api.openai.com").voices(openAi, "k", "gpt-4o-mini-tts"))
+        assertEquals(legacy, clientFor("api.openai.com").voices(openAi, "k", "tts-1"))
+        assertEquals(legacy, clientFor("api.openai.com").voices(openAi, "k", "tts-1-hd"))
+        assertEquals(current, clientFor("api.openai.com").voices(openAi, "k", null))
+    }
+
+    @Test
+    fun `OpenAI's models start with gpt-4o-mini-tts`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(code = 200, body = """{"data":[{"id":"tts-1"},{"id":"whisper-1"},{"id":"tts-1-hd"},{"id":"gpt-4o-mini-tts"}]}"""),
+        )
+
+        assertEquals(
+            listOf("gpt-4o-mini-tts", "tts-1", "tts-1-hd"),
+            OpenAiTts.speechModels(clientFor("api.openai.com").models(OpenAiTts.baseUrl("https://api.openai.com/v1")!!, "k")).map { it.id },
+        )
     }
 
     @Test

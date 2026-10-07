@@ -39,11 +39,20 @@ data class SpeechModel(
 
 object OpenAiTts {
     /**
-     * OpenAI's own voices, offered for OpenAI, which has no voice list.
-     * Any other name can still be typed.
+     * OpenAI's own voices for [model], offered for OpenAI, which has no
+     * voice list: `tts-1` and `tts-1-hd` take fewer than its newer models,
+     * whose list starts with the two OpenAI recommends. Any other name can
+     * still be typed.
      */
-    val STANDARD_VOICES = listOf(
-        "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
+    fun openAiVoices(model: String?): List<String> =
+        if (model?.trim()?.startsWith(LEGACY_OPENAI_MODEL) == true) LEGACY_OPENAI_VOICES else OPENAI_VOICES
+
+    private const val LEGACY_OPENAI_MODEL = "tts-1"
+    private val LEGACY_OPENAI_VOICES = listOf(
+        "alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer",
+    )
+    private val OPENAI_VOICES = listOf(
+        "marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
     )
 
     private val SPEECH_MODEL_HINTS = listOf("tts", "speech", "kokoro")
@@ -60,8 +69,17 @@ object OpenAiTts {
         return all.filter { m -> SPEECH_MODEL_HINTS.any { m.id.contains(it, ignoreCase = true) } }.ifEmpty { all }
     }
 
-    /** Whether [base] is OpenAI's own API, the one service whose voices are [STANDARD_VOICES]. */
+    /** Whether [base] is OpenAI's own API, the one service whose voices are [openAiVoices]. */
     fun isOpenAi(base: HttpUrl): Boolean = base.host.equals(OPENAI_HOST, ignoreCase = true)
+
+    /**
+     * OpenAI's [models] with `gpt-4o-mini-tts` first, the one that takes
+     * every voice, so a new OpenAI server starts on it; the rest keep the
+     * server's order.
+     */
+    fun openAiModels(models: List<SpeechModel>): List<SpeechModel> = models.sortedBy { it.id != OPENAI_MODEL }
+
+    private const val OPENAI_MODEL = "gpt-4o-mini-tts"
 
     /**
      * Where DeepInfra describes [model], voices included, when [base] is
@@ -204,7 +222,7 @@ class OpenAiTtsClient(
                 Request.Builder().url(description).header("User-Agent", USER_AGENT).get().build(),
                 ::describedVoices,
             )
-            OpenAiTts.isOpenAi(base) -> OpenAiTts.STANDARD_VOICES
+            OpenAiTts.isOpenAi(base) -> OpenAiTts.openAiVoices(named)
             OpenAiTts.isGroq(base) -> named?.let { OpenAiTts.groqVoices(base, it) }.orEmpty()
             named != null -> models(base, apiKey).firstOrNull { it.id == named }?.voices.orEmpty()
             else -> emptyList()
@@ -398,7 +416,7 @@ class OpenAiTtsClient(
             val id = item.optString("id").ifEmpty { item.optString("name") }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val voices = item.optJSONArray("supported_voices")?.let(::strings)?.distinct()
             SpeechModel(id, makesSpeech(item), price(item, OpenAiTts.isGroq(base)), voices)
-        }.distinctBy { it.id }
+        }.distinctBy { it.id }.let { if (OpenAiTts.isOpenAi(base)) OpenAiTts.openAiModels(it) else it }
     }
 
     /**
