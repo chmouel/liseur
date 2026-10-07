@@ -1392,6 +1392,9 @@ reader behavior.
   off. It counts on `SystemClock.elapsedRealtime`, which keeps time while
   the device sleeps, pauses the session when it fires, and is dropped
   when the session ends.
+- A status line under the player controls names the voice reading (and,
+  for an OpenAI-compatible voice whose id carries one, its language). The
+  speed is left out because the speed button already shows it.
 
 ### Covers, UI, and dependencies
 
