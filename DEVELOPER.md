@@ -1382,6 +1382,11 @@ reader behavior.
   setting. A running session hears it at once: `SpeechCache.swap` drops
   what the old voice fetched and `ReadAloudPlayback.replay` starts the
   current sentence again, playing or paused as it was.
+- Speed (`read_aloud_speed`, 0.75× to 2×, in the player) is applied by
+  `AudioTrackPcmOutput` through `AudioTrack.playbackParams`, read on every
+  write and poll: it keeps the pitch, applies mid-sentence, works for both
+  providers and leaves cached audio valid. The output's stall deadline
+  allows for the slowest speed.
 
 ### Covers, UI, and dependencies
 

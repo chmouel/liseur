@@ -40,6 +40,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
@@ -128,10 +130,44 @@ internal fun ReadAloudPlayer(
                     ControlButton(feature::skipForward) {
                         Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                     }
+                    SpeedButton(feature)
                     VoiceButton(feature)
                     ControlButton(feature::stop) {
                         Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Picks how fast the book is read, heard at once. */
+@Composable
+private fun SpeedButton(feature: SpeechReadAloud) {
+    val scope = rememberCoroutineScope()
+    val speed by feature.speed.collectAsStateWithLifecycle()
+    val locale = LocalConfiguration.current.locales[0]
+    val description = stringResource(R.string.read_aloud_speed)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { open = true },
+            colors = IconButtonDefaults.iconButtonColors(contentColor = LocalContentColor.current),
+            modifier = Modifier.semantics { contentDescription = description },
+        ) {
+            Text(
+                stringResource(R.string.read_aloud_speed_value, ReadAloudSpeed.number(speed, locale)),
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ReadAloudSpeed.STEPS.forEach { step ->
+                MenuItem(
+                    stringResource(R.string.read_aloud_speed_value, ReadAloudSpeed.number(step, locale)),
+                    step == speed,
+                ) {
+                    open = false
+                    scope.launch { feature.setSpeed(step) }
                 }
             }
         }
@@ -169,7 +205,7 @@ private fun VoiceButton(feature: SpeechReadAloud) {
                 ReadAloudProvider.GEMINI -> {
                     val current by feature.geminiVoice.collectAsStateWithLifecycle(null)
                     GeminiVoice.entries.forEach { voice ->
-                        VoiceItem(geminiVoiceLabel(voice), voice == current) {
+                        MenuItem(geminiVoiceLabel(voice), voice == current) {
                             open = false
                             scope.launch { feature.setGeminiVoice(voice) }
                         }
@@ -196,13 +232,13 @@ private fun OpenAiVoiceItems(feature: SpeechReadAloud, listed: List<String>?, on
     VoiceLabel.grouped(offered).forEach { (language, voices) ->
         if (language != null) LanguageHeader(language, locale, Modifier.padding(horizontal = 12.dp))
         voices.forEach { voice ->
-            VoiceItem(voiceChipLabel(voice), voice.id == stored) { onPick(voice.id) }
+            MenuItem(voiceChipLabel(voice), voice.id == stored) { onPick(voice.id) }
         }
     }
 }
 
 @Composable
-private fun VoiceItem(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun MenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
     DropdownMenuItem(
         text = { Text(label) },
         onClick = onClick,

@@ -32,13 +32,29 @@ class PcmOutputException(message: String) : Exception(message)
  * Writes are non-blocking and made under a lock that [halt] also takes, so
  * a halt can never be followed by a stale chunk from the sentence it
  * stopped. Completion is the playback head reaching the frames written.
+ *
+ * [speed] is read as it plays, so a new speed is heard mid-sentence; the
+ * track stretches time and keeps the pitch.
  */
 class AudioTrackPcmOutput(
+    private val speed: () -> Float = { 1f },
     private val writer: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1),
 ) : PcmOutput {
     private val lock = Any()
     private var track: AudioTrack? = null
     private var turn = 0L
+    private var applied = 1f
+
+    /** The speed the track plays at, set to [speed] first. Under [lock]. */
+    private fun speedLocked(track: AudioTrack): Float {
+        val wanted = speed()
+        if (wanted != applied) {
+            // A speed the device refuses leaves it as it was rather than failing the sentence.
+            runCatching { track.playbackParams = track.playbackParams.setSpeed(wanted) }
+                .onSuccess { applied = wanted }
+        }
+        return applied
+    }
 
     private fun trackLocked(): AudioTrack =
         track ?: run {
@@ -71,6 +87,7 @@ class AudioTrackPcmOutput(
                         throw PcmOutputException("PCM output did not initialise")
                     }
                     track = it
+                    applied = 1f
                 }
         }
 
@@ -81,18 +98,22 @@ class AudioTrackPcmOutput(
             // clip shorter than that is padded with silence to get heard.
             val bufferBytes = track.bufferSizeInFrames * 2
             val padded = if (pcm.size < bufferBytes) pcm.copyOf(bufferBytes) else pcm
+            speedLocked(track)
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
             Quad(turn, track, track.playbackHeadPosition.toLong() and 0xffffffffL, padded)
         }
         val frameMs = 1000.0 / SpeechAudio.SAMPLE_RATE
-        // How long a track that stops moving is given: its whole buffer plus slack.
-        val stallNanos = ((track.bufferSizeInFrames * frameMs).toLong() + STALL_SLACK_MS) * 1_000_000
+        // How long a track that stops moving is given: its whole buffer, at
+        // the slowest speed, plus slack.
+        val stallNanos =
+            ((track.bufferSizeInFrames * frameMs / ReadAloudSpeed.STEPS.first()).toLong() + STALL_SLACK_MS) * 1_000_000
         var offset = 0
         var progressAt = System.nanoTime()
         while (offset < padded.size) {
             coroutineContext.ensureActive()
             val written = synchronized(lock) {
                 if (turn != myTurn) return@withContext
+                speedLocked(track)
                 track.write(padded, offset, padded.size - offset, AudioTrack.WRITE_NON_BLOCKING)
             }
             if (written < 0) throw PcmOutputException("PCM write failed: $written")
@@ -108,14 +129,14 @@ class AudioTrackPcmOutput(
         val deadline = System.nanoTime() + stallNanos
         while (true) {
             coroutineContext.ensureActive()
-            val head = synchronized(lock) {
+            val (head, rate) = synchronized(lock) {
                 if (turn != myTurn) return@withContext
-                track.playbackHeadPosition.toLong() and 0xffffffffL
+                (track.playbackHeadPosition.toLong() and 0xffffffffL) to speedLocked(track)
             }
             if (head >= target) return@withContext
             // Not heard to the end: the sentence fails rather than being skipped.
             if (System.nanoTime() > deadline) throw PcmOutputException("PCM output stalled")
-            delay(((target - head) * frameMs).toLong().coerceIn(1, POLL_MS))
+            delay(((target - head) * frameMs / rate).toLong().coerceIn(1, POLL_MS))
         }
     }
 
