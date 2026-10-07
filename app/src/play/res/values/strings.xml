@@ -85,4 +85,15 @@
     <string name="read_aloud_settings_voices_tick_all">Tick all</string>
     <string name="read_aloud_settings_voices_untick_all">Untick all</string>
     <string name="read_aloud_settings_voice_hear_named">Hear %1$s</string>
+    <string name="read_aloud_settings_test">Test connection</string>
+    <string name="read_aloud_settings_test_running">Testing…</string>
+    <string name="read_aloud_settings_test_passed">Connected: %1$s and %2$s.</string>
+    <plurals name="read_aloud_settings_test_models">
+        <item quantity="one">%d speech model</item>
+        <item quantity="other">%d speech models</item>
+    </plurals>
+    <plurals name="read_aloud_settings_test_voices">
+        <item quantity="one">%d voice</item>
+        <item quantity="other">%d voices</item>
+    </plurals>
 </resources>

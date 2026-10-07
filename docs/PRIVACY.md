@@ -105,7 +105,8 @@ Read aloud, and enter that service's address. Liseur then asks it for its lists 
 voices, with your API key if you entered one, when you save the address
 or the key and when you open that screen. Tapping a voice there, or
 typing one, sends a fixed sample sentence so you can hear it; it is not
-text from a book. Once you press play it sends
+text from a book. "Test connection" asks for the same lists and sends
+the single word "Hello." with the model and voice you picked. Once you press play it sends
 the text being read, one sentence at a time and a few sentences ahead of
 the voice, to that address together with the model and voice you picked
 and, if you entered one, your API key. As with Gemini, no book

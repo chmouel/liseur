@@ -80,4 +80,13 @@
     <string name="read_aloud_settings_voices_tick_all">全选</string>
     <string name="read_aloud_settings_voices_untick_all">全不选</string>
     <string name="read_aloud_settings_voice_hear_named">试听 %1$s</string>
+    <string name="read_aloud_settings_test">测试连接</string>
+    <string name="read_aloud_settings_test_running">正在测试…</string>
+    <string name="read_aloud_settings_test_passed">已连接：%1$s，%2$s。</string>
+    <plurals name="read_aloud_settings_test_models">
+        <item quantity="other">%d 个语音模型</item>
+    </plurals>
+    <plurals name="read_aloud_settings_test_voices">
+        <item quantity="other">%d 个声音</item>
+    </plurals>
 </resources>

@@ -80,4 +80,15 @@
     <string name="read_aloud_settings_voices_tick_all">Alle anhaken</string>
     <string name="read_aloud_settings_voices_untick_all">Alle abwählen</string>
     <string name="read_aloud_settings_voice_hear_named">%1$s anhören</string>
+    <string name="read_aloud_settings_test">Verbindung testen</string>
+    <string name="read_aloud_settings_test_running">Wird getestet…</string>
+    <string name="read_aloud_settings_test_passed">Verbunden: %1$s und %2$s.</string>
+    <plurals name="read_aloud_settings_test_models">
+        <item quantity="one">%d Sprachmodell</item>
+        <item quantity="other">%d Sprachmodelle</item>
+    </plurals>
+    <plurals name="read_aloud_settings_test_voices">
+        <item quantity="one">%d Stimme</item>
+        <item quantity="other">%d Stimmen</item>
+    </plurals>
 </resources>
