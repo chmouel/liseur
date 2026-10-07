@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s per ora non accetta altre richieste. In pausa; riprova più tardi.</string>
     <string name="read_aloud_notice_service">%1$s non è riuscito a leggere questa frase. In pausa; premi riproduci per riprovare.</string>
     <string name="read_aloud_notice_output">Questo dispositivo non è riuscito a riprodurre la voce. In pausa.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s ha rifiutato la chiave API. Controllala in Impostazioni, Lettura e navigazione, Avanzate, Lettura ad alta voce.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s ha rifiutato la chiave API. Controllala in Impostazioni, Lettura ad alta voce.</string>
     <string name="read_aloud_notice_selection_not_found">Lettura dall\'inizio del paragrafo.</string>
     <string name="read_aloud_notice_unavailable">Questo libro non può essere letto ad alta voce da qui.</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">Matura</string>
     <string name="read_aloud_voice_gentle">Gentile</string>
     <string name="read_aloud_voice_even">Pacata</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s non ha la voce scelta. Scegline un\'altra in Impostazioni, Lettura e navigazione, Avanzate, Lettura ad alta voce.</string>
-    <string name="read_aloud_notice_not_set_up">La lettura ad alta voce non è ancora configurata. Configurala in Impostazioni, Lettura e navigazione, Avanzate, Lettura ad alta voce.</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s non ha la voce scelta. Scegline un\'altra in Impostazioni, Lettura ad alta voce.</string>
+    <string name="read_aloud_notice_not_set_up">La lettura ad alta voce non è ancora configurata. Configurala in Impostazioni, Lettura ad alta voce.</string>
     <string name="read_aloud_settings_title">Lettura ad alta voce</string>
     <string name="read_aloud_settings_entry_missing">Non configurata</string>
     <string name="read_aloud_settings_provider">Servizio vocale</string>

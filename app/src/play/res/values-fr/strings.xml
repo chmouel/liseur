@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s n\'accepte plus de requêtes pour le moment. En pause ; réessayez plus tard.</string>
     <string name="read_aloud_notice_service">%1$s n\'a pas pu lire cette phrase. En pause ; appuyez sur lecture pour réessayer.</string>
     <string name="read_aloud_notice_output">Cet appareil n\'a pas pu jouer la voix. En pause.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s a refusé la clé API. Vérifiez-la dans Paramètres, Lecture et navigation, Avancé, Lecture à voix haute.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s a refusé la clé API. Vérifiez-la dans Paramètres, Lecture à voix haute.</string>
     <string name="read_aloud_notice_selection_not_found">Lecture depuis le début du paragraphe.</string>
     <string name="read_aloud_notice_unavailable">Ce livre ne peut pas être lu à voix haute à partir d\'ici.</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">Mûre</string>
     <string name="read_aloud_voice_gentle">Tendre</string>
     <string name="read_aloud_voice_even">Posée</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s ne propose pas la voix choisie. Choisissez-en une autre dans Paramètres, Lecture et navigation, Avancé, Lecture à voix haute.</string>
-    <string name="read_aloud_notice_not_set_up">La lecture à voix haute n\'est pas encore configurée. Configurez-la dans Paramètres, Lecture et navigation, Avancé, Lecture à voix haute.</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s ne propose pas la voix choisie. Choisissez-en une autre dans Paramètres, Lecture à voix haute.</string>
+    <string name="read_aloud_notice_not_set_up">La lecture à voix haute n\'est pas encore configurée. Configurez-la dans Paramètres, Lecture à voix haute.</string>
     <string name="read_aloud_settings_title">Lecture à voix haute</string>
     <string name="read_aloud_settings_entry_missing">Non configurée</string>
     <string name="read_aloud_settings_provider">Service de voix</string>

@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s пока не принимает новые запросы. Пауза; повторите позже.</string>
     <string name="read_aloud_notice_service">Сервису %1$s не удалось прочитать это предложение. Пауза; нажмите воспроизведение, чтобы повторить.</string>
     <string name="read_aloud_notice_output">Это устройство не смогло воспроизвести голос. Пауза.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s отклонил ключ API. Проверьте его в разделе Настройки, Чтение и навигация, Дополнительно, Чтение вслух.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s отклонил ключ API. Проверьте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_notice_selection_not_found">Чтение с начала абзаца.</string>
     <string name="read_aloud_notice_unavailable">Эту книгу нельзя прочитать вслух с этого места.</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">Зрелый</string>
     <string name="read_aloud_voice_gentle">Нежный</string>
     <string name="read_aloud_voice_even">Ровный</string>
-    <string name="read_aloud_notice_invalid_voice">У сервиса %1$s нет выбранного голоса. Выберите другой в разделе Настройки, Чтение и навигация, Дополнительно, Чтение вслух.</string>
-    <string name="read_aloud_notice_not_set_up">Чтение вслух ещё не настроено. Настройте его в разделе Настройки, Чтение и навигация, Дополнительно, Чтение вслух.</string>
+    <string name="read_aloud_notice_invalid_voice">У сервиса %1$s нет выбранного голоса. Выберите другой в разделе Настройки, Чтение вслух.</string>
+    <string name="read_aloud_notice_not_set_up">Чтение вслух ещё не настроено. Настройте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_settings_title">Чтение вслух</string>
     <string name="read_aloud_settings_entry_missing">Не настроено</string>
     <string name="read_aloud_settings_provider">Голосовой сервис</string>
