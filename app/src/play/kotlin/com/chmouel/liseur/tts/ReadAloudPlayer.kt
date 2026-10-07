@@ -161,16 +161,20 @@ internal fun ReadAloudPlayer(
 private fun VoiceStatus(feature: SpeechReadAloud) {
     val provider by feature.provider.collectAsStateWithLifecycle(null)
     val locale = LocalConfiguration.current.locales[0]
-    val text = when (provider) {
+    // The text, and the same without the flag for a screen reader.
+    val (text, spoken) = when (provider) {
         ReadAloudProvider.GEMINI -> {
             val voice by feature.geminiVoice.collectAsStateWithLifecycle(null)
-            voice?.let { geminiVoiceLabel(it) }
+            voice?.let { geminiVoiceLabel(it) }?.let { it to it }
         }
         ReadAloudProvider.OPENAI -> {
             val id by feature.openAiVoice.collectAsStateWithLifecycle("")
             id.takeIf { it.isNotBlank() }?.let(VoiceLabel::of)?.let { voice ->
-                listOfNotNull(voice.name, voice.language?.let { Locale.forLanguageTag(it).getDisplayName(locale) })
-                    .joinToString(" · ")
+                val language = voice.language
+                val name = language?.let { Locale.forLanguageTag(it).getDisplayName(locale) }
+                val label = language?.let { VoiceLabel.languageLabel(it, locale) }
+                listOfNotNull(voice.name, label).joinToString(" · ") to
+                    listOfNotNull(voice.name, name).joinToString(" · ")
             }
         }
         null -> null
@@ -181,7 +185,9 @@ private fun VoiceStatus(feature: SpeechReadAloud) {
         color = LocalContentColor.current.copy(alpha = 0.75f),
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+        modifier = Modifier
+            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            .semantics { contentDescription = spoken },
     )
 }
 

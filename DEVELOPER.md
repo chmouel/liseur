@@ -1350,7 +1350,8 @@ reader behavior.
   404/405 is no list) and `<root>/audio/voices` (404/405 is OpenAI's
   standard voices), and either can be typed. Voices show as chips
   grouped by language, read from Kokoro's `af_bella` naming
-  (`VoiceLabel`); tapping one, or typing one, plays a fixed sample
+  (`VoiceLabel`). A language with a country gets that country's flag
+  (`VoiceLabel.flag`), which screen readers skip. Tapping a chip, or typing one, plays a fixed sample
   sentence through `SpeechReadAloud.preview`, which pauses any session
   first. Gemini plays one only on "Hear this voice", since each sample is
   billed. Gemini's model (`read_aloud_model`, blank is

@@ -62,6 +62,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -811,11 +813,15 @@ private fun VoicePicker(
 
 @Composable
 internal fun LanguageHeader(language: String, locale: Locale, modifier: Modifier = Modifier) {
+    val name = Locale.forLanguageTag(language).getDisplayName(locale)
     Text(
-        text = Locale.forLanguageTag(language).getDisplayName(locale),
+        text = VoiceLabel.languageLabel(language, locale),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(top = 12.dp, bottom = 4.dp),
+        // The flag is for the eye; a screen reader says the name once.
+        modifier = modifier
+            .padding(top = 12.dp, bottom = 4.dp)
+            .semantics { contentDescription = name },
     )
 }
 
