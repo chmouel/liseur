@@ -52,7 +52,6 @@
     <string name="read_aloud_settings_server_url_invalid">This is not a server address.</string>
     <string name="read_aloud_settings_server_key">API key</string>
     <string name="read_aloud_settings_server_key_missing">Optional. Only needed if the service asks for one.</string>
-    <string name="read_aloud_settings_server_voice_choose">Choose a voice</string>
     <string name="read_aloud_settings_server_voices_loading">Asking the server for its voices…</string>
     <string name="read_aloud_settings_server_voices_none">The server lists no voices. Type one instead.</string>
     <string name="read_aloud_settings_server_voices_failed">The server did not list its voices.</string>
@@ -67,4 +66,18 @@
     <string name="read_aloud_settings_server_models_loading">Asking the server for its models…</string>
     <string name="read_aloud_settings_server_models_none">The server lists no models. Type one instead.</string>
     <string name="read_aloud_settings_server_models_failed">The server did not list its models.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Tap a voice to choose it and hear it.</string>
+    <string name="read_aloud_settings_voice_type_detail">Type the name of a voice the service knows.</string>
+    <string name="read_aloud_settings_voice_other">Other voice</string>
+    <string name="read_aloud_settings_voice_hear">Hear this voice</string>
+    <string name="read_aloud_settings_voice_stop">Stop</string>
+    <string name="read_aloud_settings_voice_sample">This is how this voice will read your books.</string>
+    <string name="read_aloud_voice_with_gender">%1$s · %2$s</string>
+    <string name="read_aloud_voice_female">F</string>
+    <string name="read_aloud_voice_male">M</string>
+    <string name="read_aloud_settings_preview_unreachable">Could not reach the speech service.</string>
+    <string name="read_aloud_settings_preview_refused">The speech service refused the API key.</string>
+    <string name="read_aloud_settings_preview_no_voice">The speech service does not have this voice.</string>
+    <string name="read_aloud_settings_preview_service">The speech service could not read the sample.</string>
+    <string name="read_aloud_settings_preview_failed">The sample could not be played.</string>
 </resources>

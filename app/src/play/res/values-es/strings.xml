@@ -47,7 +47,6 @@
     <string name="read_aloud_settings_server_url_invalid">No es una dirección de servidor.</string>
     <string name="read_aloud_settings_server_key">Clave de API</string>
     <string name="read_aloud_settings_server_key_missing">Opcional. Solo hace falta si el servicio la pide.</string>
-    <string name="read_aloud_settings_server_voice_choose">Elige una voz</string>
     <string name="read_aloud_settings_server_voices_loading">Pidiendo las voces al servidor…</string>
     <string name="read_aloud_settings_server_voices_none">El servidor no lista ninguna voz. Escribe una.</string>
     <string name="read_aloud_settings_server_voices_failed">El servidor no dio la lista de sus voces.</string>
@@ -62,4 +61,18 @@
     <string name="read_aloud_settings_server_models_loading">Pidiendo los modelos al servidor…</string>
     <string name="read_aloud_settings_server_models_none">El servidor no lista ningún modelo. Escribe uno.</string>
     <string name="read_aloud_settings_server_models_failed">El servidor no dio la lista de sus modelos.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Toca una voz para elegirla y escucharla.</string>
+    <string name="read_aloud_settings_voice_type_detail">Escribe el nombre de una voz que conozca el servicio.</string>
+    <string name="read_aloud_settings_voice_other">Otra voz</string>
+    <string name="read_aloud_settings_voice_hear">Escuchar esta voz</string>
+    <string name="read_aloud_settings_voice_stop">Detener</string>
+    <string name="read_aloud_settings_voice_sample">Así leerá esta voz tus libros.</string>
+    <string name="read_aloud_voice_with_gender">%1$s · %2$s</string>
+    <string name="read_aloud_voice_female">M</string>
+    <string name="read_aloud_voice_male">H</string>
+    <string name="read_aloud_settings_preview_unreachable">No se pudo conectar con el servicio de voz.</string>
+    <string name="read_aloud_settings_preview_refused">El servicio de voz rechazó la clave de API.</string>
+    <string name="read_aloud_settings_preview_no_voice">El servicio de voz no tiene esta voz.</string>
+    <string name="read_aloud_settings_preview_service">El servicio de voz no pudo leer la muestra.</string>
+    <string name="read_aloud_settings_preview_failed">No se pudo reproducir la muestra.</string>
 </resources>

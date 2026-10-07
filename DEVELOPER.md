@@ -1348,7 +1348,12 @@ reader behavior.
   address whose path has none. The settings screen fills its model and
   voice menus from `<root>/models` (speech-looking ids only, else all;
   404/405 is no list) and `<root>/audio/voices` (404/405 is OpenAI's
-  standard voices), and either can be typed. Both providers return 24 kHz
+  standard voices), and either can be typed. Voices show as chips
+  grouped by language, read from Kokoro's `af_bella` naming
+  (`VoiceLabel`); tapping one, or typing one, plays a fixed sample
+  sentence through `SpeechReadAloud.preview`, which pauses any session
+  first. Gemini plays one only on "Hear this voice", since each sample is
+  billed. Both providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
   The OpenAI-compatible provider runs one request at a time with long
