@@ -97,4 +97,13 @@
     </plurals>
     <string name="read_aloud_change_voice">Сменить голос</string>
     <string name="read_aloud_speed">Скорость чтения</string>
+    <string name="read_aloud_sleep_timer">Таймер сна</string>
+    <string name="read_aloud_sleep_off">Выключен</string>
+    <string name="read_aloud_sleep_left">%1$d мин</string>
+    <plurals name="read_aloud_sleep_minutes">
+        <item quantity="one">%d минута</item>
+        <item quantity="few">%d минуты</item>
+        <item quantity="many">%d минут</item>
+        <item quantity="other">%d минуты</item>
+    </plurals>
 </resources>

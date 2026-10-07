@@ -2,6 +2,7 @@ package com.chmouel.liseur.tts
 
 import android.app.Application
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.AppSettings
@@ -17,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,6 +146,36 @@ internal class SpeechReadAloud(
 
     override fun pause() {
         mutableCurrent.value?.pause()
+    }
+
+    private val mutableSleepTimer = MutableStateFlow<SleepTimer?>(null)
+
+    /** When reading aloud pauses by itself, or null for never. */
+    val sleepTimer: StateFlow<SleepTimer?> = mutableSleepTimer.asStateFlow()
+
+    private var sleeping: Job? = null
+
+    init {
+        // The timer belongs to the session it was set in.
+        scope.launch { mutableCurrent.collect { if (it == null) setSleepTimer(null) } }
+    }
+
+    /** Pauses reading aloud in [minutes], or never when null. */
+    fun setSleepTimer(minutes: Int?) {
+        sleeping?.cancel()
+        val timer = minutes?.let { SleepTimer.starting(it, SystemClock.elapsedRealtime()) }
+        mutableSleepTimer.value = timer
+        if (timer == null) return
+        sleeping = scope.launch {
+            // Measured on the clock that counts deep sleep, which a delay alone does not.
+            while (true) {
+                val left = timer.endsAt - SystemClock.elapsedRealtime()
+                if (left <= 0) break
+                delay(left.coerceAtMost(SLEEP_CHECK_MS))
+            }
+            mutableSleepTimer.value = null
+            pause()
+        }
     }
 
     override fun resume() {
@@ -349,3 +381,5 @@ internal class SpeechReadAloud(
 
 /** Said, not played, by a connection test: the shortest request that proves the model and voice work. */
 private const val TEST_WORD = "Hello."
+
+private const val SLEEP_CHECK_MS = 30_000L

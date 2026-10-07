@@ -93,4 +93,11 @@
     </plurals>
     <string name="read_aloud_change_voice">Cambiar de voz</string>
     <string name="read_aloud_speed">Velocidad de lectura</string>
+    <string name="read_aloud_sleep_timer">Temporizador de apagado</string>
+    <string name="read_aloud_sleep_off">Desactivado</string>
+    <string name="read_aloud_sleep_left">%1$d min</string>
+    <plurals name="read_aloud_sleep_minutes">
+        <item quantity="one">%d minuto</item>
+        <item quantity="other">%d minutos</item>
+    </plurals>
 </resources>
