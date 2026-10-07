@@ -21,7 +21,7 @@ object ReadAloudFeatureFactory {
     ) { control ->
         listOf(
             DeviceSpeechService(context, container.appSettings, control),
-            OpenAiSpeechService(ServerKeys(context), container.appSettings, control),
+            OpenAiSpeechService(ServerKeys(context), container.appSettings, control, localNetwork = container.localNetwork),
         )
     }
 }

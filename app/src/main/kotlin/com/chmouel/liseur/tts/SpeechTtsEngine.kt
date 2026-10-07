@@ -100,6 +100,7 @@ class SpeechTtsEngine(
                 is SpeechError.TermsRequired -> TermsRequired(error)
                 is SpeechError.RateLimited -> RateLimited(error)
                 is SpeechError.Network -> Network(error)
+                is SpeechError.LocalNetworkBlocked -> Network(error)
                 is SpeechError.Service -> Service(error)
                 is SpeechError.InvalidResponse -> InvalidResponse(error)
             }

@@ -49,8 +49,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.ui.settings.RowDivider
 import okhttp3.HttpUrl
 import java.text.NumberFormat
@@ -85,6 +87,7 @@ internal class OpenAiSpeechService(
     private val client: OpenAiTtsClient = OpenAiTtsClient(),
     // Saves outlive the settings screen: one made as it closes still completes.
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    val localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
 ) : SpeechService {
     override val id = "openai"
     override val label = R.string.read_aloud_provider_openai
@@ -146,7 +149,10 @@ internal class OpenAiSpeechService(
         val name = (voice ?: s.speechServerVoice)?.takeIf { it.isNotBlank() } ?: return null
         val key = keys.get(ServerKeys.origin(base))
         // One sentence at a time: a small self-hosted server only slows down with more.
-        return SessionVoice(name, 1) { text -> client.synthesize(base, key, text, name, model) }
+        return SessionVoice(name, 1) { text ->
+            requireAccess(base.toString())
+            client.synthesize(base, key, text, name, model)
+        }
     }
 
     /**
@@ -155,6 +161,7 @@ internal class OpenAiSpeechService(
      * chosen its model and voice, see [settled].
      */
     fun commitUrl(url: String) {
+        blockedUrl.value = null
         generation.incrementAndGet()
         urlWrites.update { it + 1 }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -297,10 +304,26 @@ internal class OpenAiSpeechService(
     private suspend fun <T> ask(url: String, block: suspend (HttpUrl, String?) -> T): Result<T> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
         return try {
+            requireAccess(base.toString())
             Result.success(block(base, keys.get(ServerKeys.origin(base))))
         } catch (e: SpeechError) {
             Result.failure(e)
         }
+    }
+
+    private suspend fun requireAccess(url: String) {
+        if (localNetwork.blocks(url)) {
+            blockedUrl.value = url
+            throw SpeechError.LocalNetworkBlocked()
+        }
+    }
+
+    private val blockedUrl = MutableStateFlow<String?>(null)
+
+    @Composable
+    override fun AccessPrompt(theme: ReaderTheme) {
+        val blocked by blockedUrl.collectAsStateWithLifecycle()
+        if (blocked != null) SpeechLocalNetworkPrompt(localNetwork, blocked.orEmpty(), theme)
     }
 
     @Composable
@@ -395,6 +418,7 @@ private fun priceText(price: Double, locale: Locale): String =
 @Composable
 private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
     val storedUrl by service.url.collectAsState(initial = "")
+    val accessAllowed = SpeechLocalNetworkPrompt(service.localNetwork, storedUrl)
     val storedModel by service.model.collectAsState(initial = "")
     val storedVoice by service.voice.collectAsState(initial = "")
     val chosenVoices by service.chosenVoices.collectAsState(initial = emptySet())
@@ -413,7 +437,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
     val shownUrl = pendingUrl ?: storedUrl
     val owner = OpenAiTts.baseUrl(shownUrl)?.let(ServerKeys::origin)
     val keyConfigured by remember(owner) { owner?.let(service::keyConfigured) ?: MutableStateFlow(false) }.collectAsState()
-    val reachable = OpenAiTts.baseUrl(storedUrl) != null
+    val reachable = accessAllowed && OpenAiTts.baseUrl(storedUrl) != null
     var models by remember { mutableStateOf<Listing?>(null) }
     var prices by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var voices by remember { mutableStateOf<Listing?>(null) }
@@ -508,7 +532,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
         }
     }
     val refresh = { url: String, changed: Boolean ->
-        if (OpenAiTts.baseUrl(url) != null) {
+        if (accessAllowed && OpenAiTts.baseUrl(url) != null) {
             loadModels(url, changed)
             // After a server change the voices wait for the models, which may replace the model.
             // A picked model still waiting for its voices is asked again, and saved with them.
@@ -528,7 +552,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
             scope.launch { refresh(storedUrl, service.unsettled(storedUrl)) }
         }
     }
-    LaunchedEffect(storedUrl) {
+    LaunchedEffect(storedUrl, accessAllowed) {
         requests.invalidate()
         refresh(storedUrl, service.unsettled(storedUrl))
     }

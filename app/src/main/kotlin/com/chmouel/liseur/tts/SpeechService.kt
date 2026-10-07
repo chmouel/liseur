@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ReaderTheme
 import kotlinx.coroutines.flow.Flow
 
 /** What a speech service may ask of the session in progress when its settings change. */
@@ -54,6 +55,10 @@ internal interface SpeechService {
     /** The entries of the player's voice menu; [onPicked] closes it. */
     @Composable
     fun VoiceMenuItems(onPicked: () -> Unit)
+
+    /** Permission needed to reach this service, shown in the reader. */
+    @Composable
+    fun AccessPrompt(theme: ReaderTheme) = Unit
 
     /** Its rows on the Read aloud screen. */
     @Composable

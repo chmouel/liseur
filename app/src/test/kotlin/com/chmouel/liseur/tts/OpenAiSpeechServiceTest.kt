@@ -3,6 +3,7 @@ package com.chmouel.liseur.tts
 import android.app.Application
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.data.security.SecretCipher
+import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import java.io.File
 import java.net.InetAddress
@@ -108,6 +109,54 @@ class OpenAiSpeechServiceTest {
     private fun server() = Server().also { servers += it }
 
     private fun service() = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope)
+
+    @Test
+    fun blockedLocalServerReceivesNoListsTestsOrSpeechUntilAccessIsGranted(): Unit = runBlocking {
+        val server = server()
+        var allowed = false
+        val access = object : LocalNetworkAccess {
+            override val required = true
+            override val granted get() = allowed
+            override suspend fun blocks(url: String?) = !granted && OpenAiTts.baseUrl(url.orEmpty()) == OpenAiTts.baseUrl(server.url)
+        }
+        val service = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope, access)
+        saveUrl(service, server.url)
+        settings.setSpeechServerModelAndVoice("tts", "tts-1")
+        val voice = service.voice(settings.settings.first())!!
+
+        assertTrue(service.models(server.url).exceptionOrNull() is SpeechError.LocalNetworkBlocked)
+        assertTrue(service.voices(server.url, "tts").exceptionOrNull() is SpeechError.LocalNetworkBlocked)
+        assertTrue(service.test(server.url).exceptionOrNull() is SpeechError.LocalNetworkBlocked)
+        val speech = try {
+            voice.synthesizer.synthesize("Hello.")
+            null
+        } catch (e: SpeechError) {
+            e
+        }
+        assertTrue(speech is SpeechError.LocalNetworkBlocked)
+        assertTrue(server.keys.isEmpty())
+
+        allowed = true
+        assertTrue(service.models(server.url).isSuccess)
+        assertTrue(server.keys.isNotEmpty())
+    }
+
+    @Test
+    fun missingLocalPermissionDoesNotBlockOtherSpeechServers(): Unit = runBlocking {
+        val local = server()
+        val public = server()
+        val access = object : LocalNetworkAccess {
+            override val required = true
+            override val granted = false
+            override suspend fun blocks(url: String?) = OpenAiTts.baseUrl(url.orEmpty()) == OpenAiTts.baseUrl(local.url)
+        }
+        val service = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope, access)
+
+        assertTrue(service.models(local.url).exceptionOrNull() is SpeechError.LocalNetworkBlocked)
+        assertTrue(service.models(public.url).isSuccess)
+        assertTrue(local.keys.isEmpty())
+        assertTrue(public.keys.isNotEmpty())
+    }
 
     private suspend fun saveUrl(service: OpenAiSpeechService, url: String) {
         service.commitUrl(url)

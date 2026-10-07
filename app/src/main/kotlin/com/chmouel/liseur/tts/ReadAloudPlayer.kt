@@ -90,6 +90,8 @@ internal fun ReadAloudPlayer(
         notice = null
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        val service by feature.service.collectAsStateWithLifecycle(null)
+        service?.AccessPrompt(theme)
         AnimatedVisibility(
             visible = notice != null,
             enter = if (eInk) EnterTransition.None else fadeIn(),

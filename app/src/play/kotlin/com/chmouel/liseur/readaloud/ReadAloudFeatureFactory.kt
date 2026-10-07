@@ -24,7 +24,7 @@ object ReadAloudFeatureFactory {
     ) { control ->
         listOf(
             GeminiSpeechService(ApiKeyStore.gemini(context), container.appSettings, control),
-            OpenAiSpeechService(ServerKeys(context), container.appSettings, control),
+            OpenAiSpeechService(ServerKeys(context), container.appSettings, control, localNetwork = container.localNetwork),
             DeviceSpeechService(context, container.appSettings, control),
         )
     }

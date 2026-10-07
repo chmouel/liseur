@@ -27,6 +27,7 @@ sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(
     /** The service serves the model only once its terms are accepted on its website (Groq's). */
     class TermsRequired(code: Int) : SpeechError("The speech service wants the model's terms accepted (HTTP $code)")
     class RateLimited(code: Int) : SpeechError("Speech quota or rate limit reached (HTTP $code)")
+    class LocalNetworkBlocked : SpeechError("Local network access is not allowed")
     class Network(cause: IOException) :
         SpeechError("The speech service could not be reached (${cause.javaClass.simpleName})", cause)
     class Service(val code: Int) : SpeechError("The speech service answered HTTP $code")

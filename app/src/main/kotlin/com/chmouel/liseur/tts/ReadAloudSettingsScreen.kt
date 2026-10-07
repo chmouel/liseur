@@ -437,6 +437,7 @@ internal fun rememberVoicePreview(feature: SpeechReadAloud): VoicePreview {
 
 @StringRes
 internal fun previewMessage(error: Throwable): Int = when (error) {
+    is SpeechError.LocalNetworkBlocked -> R.string.server_local_network_blocked
     is SpeechError.Network -> R.string.read_aloud_settings_preview_unreachable
     is SpeechError.InvalidKey -> R.string.read_aloud_settings_preview_refused
     is SpeechError.InvalidVoice -> R.string.read_aloud_settings_preview_no_voice
@@ -724,6 +725,7 @@ internal fun Result<List<String>>.toListing(
         Listing.Failed(
             url,
             when (it) {
+                is SpeechError.LocalNetworkBlocked -> R.string.server_local_network_blocked
                 is SpeechError.Network -> R.string.read_aloud_settings_server_unreachable
                 is SpeechError.InvalidKey -> R.string.read_aloud_settings_server_refused
                 is SpeechError.TermsRequired -> R.string.read_aloud_settings_terms_required
