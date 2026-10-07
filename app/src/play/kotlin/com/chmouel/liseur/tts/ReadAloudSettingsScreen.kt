@@ -1,5 +1,6 @@
 package com.chmouel.liseur.tts
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,7 @@ import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** Read aloud's row on the main settings screen: which service and voice, or that none is set up. */
@@ -59,10 +62,10 @@ internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Uni
     val configured by feature.configured.collectAsState()
     val provider by feature.provider.collectAsState(initial = ReadAloudProvider.Default)
     val geminiVoice by feature.geminiVoice.collectAsState(initial = GeminiVoice.Default)
-    val kokoroVoice by feature.kokoroVoice.collectAsState(initial = null)
+    val openAiVoice by feature.openAiVoice.collectAsState(initial = "")
     val voice = when (provider) {
         ReadAloudProvider.GEMINI -> geminiVoice.id
-        ReadAloudProvider.KOKORO -> kokoroVoice.orEmpty()
+        ReadAloudProvider.OPENAI -> openAiVoice
     }
     ConnectionRow(
         icon = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
@@ -78,9 +81,9 @@ internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Uni
 
 /**
  * Read aloud's own screen: which service makes the voice, and that
- * service's key, server and voice. Nothing here reaches the network on
- * its own; a key is first used on the first play, and a Kokoro server is
- * only asked for its voices when the reader asks to choose one.
+ * service's key, server, model and voice. A Gemini key is first used on
+ * the first play; an OpenAI-compatible service is asked for its models and
+ * voices once its address is saved, and again when its key changes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -125,7 +128,7 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                 SettingsGroup(stringResource(provider.label)) {
                     when (provider) {
                         ReadAloudProvider.GEMINI -> GeminiRows(feature)
-                        ReadAloudProvider.KOKORO -> KokoroRows(feature)
+                        ReadAloudProvider.OPENAI -> OpenAiRows(feature)
                     }
                 }
             }
@@ -185,58 +188,75 @@ private fun GeminiRows(feature: SpeechReadAloud) {
     }
 }
 
-/** What the voice menu knows of the Kokoro server's voices, for [url]. */
-private sealed interface KokoroVoices {
+/** What a menu knows of one of the service's lists, for [url]. */
+private sealed interface Listing {
     val url: String
 
-    data class Loading(override val url: String) : KokoroVoices
-    data class Loaded(override val url: String, val voices: List<String>) : KokoroVoices
-    data class Failed(override val url: String, val message: Int) : KokoroVoices
+    data class Loading(override val url: String) : Listing
+    data class Loaded(override val url: String, val items: List<String>) : Listing
+    data class Failed(override val url: String, @StringRes val message: Int) : Listing
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun KokoroRows(feature: SpeechReadAloud) {
-    val storedUrl by feature.kokoroUrl.collectAsState(initial = "")
-    val voice by feature.kokoroVoice.collectAsState(initial = null)
-    val storedModel by feature.kokoroModel.collectAsState(initial = "")
-    val keyConfigured by feature.kokoroKeyConfigured.collectAsState()
+private fun OpenAiRows(feature: SpeechReadAloud) {
+    val storedUrl by feature.openAiUrl.collectAsState(initial = "")
+    val storedModel by feature.openAiModel.collectAsState(initial = "")
+    val storedVoice by feature.openAiVoice.collectAsState(initial = "")
+    val keyConfigured by feature.openAiKeyConfigured.collectAsState()
     val scope = rememberCoroutineScope()
     val focus = LocalFocusManager.current
     var typed by remember(storedUrl) { mutableStateOf(storedUrl) }
-    var typedModel by remember(storedModel) { mutableStateOf(storedModel) }
-    val invalid = typed.isNotBlank() && KokoroTts.baseUrl(typed) == null
-    var voices by remember { mutableStateOf<KokoroVoices?>(null) }
-    var voicesOpen by remember { mutableStateOf(false) }
+    val invalid = typed.isNotBlank() && OpenAiTts.baseUrl(typed) == null
+    val reachable = OpenAiTts.baseUrl(storedUrl) != null
+    var models by remember { mutableStateOf<Listing?>(null) }
+    var voices by remember { mutableStateOf<Listing?>(null) }
 
-    val loadVoices = { url: String ->
-        if (KokoroTts.baseUrl(url) != null) {
-            voices = KokoroVoices.Loading(url)
-            scope.launch {
-                val result = feature.kokoroVoices(url)
-                // Only if the reader has not moved on to another server meanwhile.
-                if (voices?.url != url) return@launch
-                voices = result.fold(
-                    onSuccess = { list ->
-                        if (list.isEmpty()) {
-                            KokoroVoices.Failed(url, R.string.read_aloud_settings_kokoro_voices_none)
-                        } else {
-                            KokoroVoices.Loaded(url, list)
-                        }
-                    },
-                    onFailure = { KokoroVoices.Failed(url, it.voicesMessage()) },
-                )
-            }
+    // Each list is fetched for one address; a reply for an address the
+    // reader has since moved on from is dropped. A fresh setup takes the
+    // first entry, so it can read without another tap.
+    val loadModels = { url: String ->
+        models = Listing.Loading(url)
+        scope.launch {
+            val result = feature.openAiModels(url)
+            if (models?.url != url) return@launch
+            models = result.toListing(
+                url,
+                none = R.string.read_aloud_settings_server_models_none,
+                failed = R.string.read_aloud_settings_server_models_failed,
+            )
+            val first = result.getOrNull()?.firstOrNull()
+            if (first != null && feature.openAiModel.first().isBlank()) feature.setOpenAiModel(first)
         }
     }
+    val loadVoices = { url: String ->
+        voices = Listing.Loading(url)
+        scope.launch {
+            val result = feature.openAiVoices(url)
+            if (voices?.url != url) return@launch
+            voices = result.toListing(
+                url,
+                none = R.string.read_aloud_settings_server_voices_none,
+                failed = R.string.read_aloud_settings_server_voices_failed,
+            )
+            val first = result.getOrNull()?.firstOrNull()
+            if (first != null && feature.openAiVoice.first().isBlank()) feature.setOpenAiVoice(first)
+        }
+    }
+    val refresh = { url: String ->
+        if (OpenAiTts.baseUrl(url) != null) {
+            loadModels(url)
+            loadVoices(url)
+        }
+    }
+    LaunchedEffect(storedUrl) { refresh(storedUrl) }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
         Text(
-            text = stringResource(R.string.read_aloud_settings_kokoro_url),
+            text = stringResource(R.string.read_aloud_settings_server_url),
             style = MaterialTheme.typography.bodyLarge,
         )
         Text(
-            text = stringResource(R.string.read_aloud_settings_kokoro_url_detail),
+            text = stringResource(R.string.read_aloud_settings_server_url_detail),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -246,9 +266,9 @@ private fun KokoroRows(feature: SpeechReadAloud) {
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
             singleLine = true,
             isError = invalid,
-            placeholder = { Text(stringResource(R.string.read_aloud_settings_kokoro_url_hint)) },
+            placeholder = { Text(stringResource(R.string.read_aloud_settings_server_url_hint)) },
             supportingText = if (invalid) {
-                { Text(stringResource(R.string.read_aloud_settings_kokoro_url_invalid)) }
+                { Text(stringResource(R.string.read_aloud_settings_server_url_invalid)) }
             } else {
                 null
             },
@@ -262,122 +282,169 @@ private fun KokoroRows(feature: SpeechReadAloud) {
                     if (!invalid) {
                         val url = typed.trim()
                         focus.clearFocus()
-                        scope.launch { feature.setKokoroUrl(url) }
-                        loadVoices(url)
+                        scope.launch { feature.setOpenAiUrl(url) }
                     }
-                },
-            ),
-        )
-    }
-    RowDivider()
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(
-            text = stringResource(R.string.read_aloud_settings_kokoro_model),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Text(
-            text = stringResource(R.string.read_aloud_settings_kokoro_model_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = typedModel,
-            onValueChange = { typedModel = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            singleLine = true,
-            placeholder = { Text(KokoroTts.MODEL) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                autoCorrectEnabled = false,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(
-                onDone = {
-                    val model = typedModel.trim()
-                    focus.clearFocus()
-                    scope.launch { feature.setKokoroModel(model) }
                 },
             ),
         )
     }
     RowDivider()
     KeyRow(
-        title = stringResource(R.string.read_aloud_settings_kokoro_key),
-        missing = stringResource(R.string.read_aloud_settings_kokoro_key_missing),
+        title = stringResource(R.string.read_aloud_settings_server_key),
+        missing = stringResource(R.string.read_aloud_settings_server_key_missing),
         privacy = null,
         configured = keyConfigured,
-        onKey = { scope.launch { feature.setKokoroKey(it) } },
-        onClear = { scope.launch { feature.clearKokoroKey() } },
+        onKey = {
+            scope.launch {
+                feature.setOpenAiKey(it)
+                refresh(storedUrl)
+            }
+        },
+        onClear = {
+            scope.launch {
+                feature.clearOpenAiKey()
+                refresh(storedUrl)
+            }
+        },
     )
     RowDivider()
+    ListedField(
+        title = stringResource(R.string.read_aloud_settings_server_model),
+        placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
+        loading = stringResource(R.string.read_aloud_settings_server_models_loading),
+        stored = storedModel,
+        enabled = reachable,
+        listing = models?.takeIf { it.url == storedUrl },
+        onSave = { scope.launch { feature.setOpenAiModel(it) } },
+        onRetry = { loadModels(storedUrl) },
+    )
+    RowDivider()
+    ListedField(
+        title = stringResource(R.string.read_aloud_settings_voice),
+        placeholder = stringResource(R.string.read_aloud_settings_server_voice_choose),
+        loading = stringResource(R.string.read_aloud_settings_server_voices_loading),
+        stored = storedVoice,
+        enabled = reachable,
+        listing = voices?.takeIf { it.url == storedUrl },
+        onSave = { scope.launch { feature.setOpenAiVoice(it) } },
+        onRetry = { loadVoices(storedUrl) },
+    )
+    Text(
+        text = stringResource(R.string.read_aloud_settings_server_privacy),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+    )
+}
+
+/**
+ * A name the service knows: picked from the list it gave, or typed when
+ * the list is missing or lacks it. Typing saves on Done.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ListedField(
+    title: String,
+    placeholder: String,
+    loading: String,
+    stored: String,
+    enabled: Boolean,
+    listing: Listing?,
+    onSave: (String) -> Unit,
+    onRetry: () -> Unit,
+) {
+    val focus = LocalFocusManager.current
+    var typed by remember(stored) { mutableStateOf(stored) }
+    var open by remember { mutableStateOf(false) }
+
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
         Text(
-            text = stringResource(R.string.read_aloud_settings_voice),
-            style = MaterialTheme.typography.bodyLarge,
+            text = stringResource(R.string.read_aloud_settings_server_pick_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         ExposedDropdownMenuBox(
-            expanded = voicesOpen,
-            onExpandedChange = { open ->
-                voicesOpen = open && KokoroTts.baseUrl(storedUrl) != null
-                val known = voices
-                if (voicesOpen && (known == null || known.url != storedUrl || known is KokoroVoices.Failed)) {
-                    loadVoices(storedUrl)
-                }
+            expanded = open,
+            onExpandedChange = { expand ->
+                open = expand && enabled
+                if (open && (listing == null || listing is Listing.Failed)) onRetry()
             },
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
         ) {
             OutlinedTextField(
-                value = voice ?: stringResource(R.string.read_aloud_settings_kokoro_voice_choose),
-                onValueChange = {},
-                readOnly = true,
+                value = typed,
+                onValueChange = { typed = it },
                 singleLine = true,
-                enabled = KokoroTts.baseUrl(storedUrl) != null,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = voicesOpen) },
+                enabled = enabled,
+                placeholder = { Text(placeholder) },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(
+                        expanded = open,
+                        modifier = Modifier.menuAnchor(MenuAnchorType.SecondaryEditable, enabled),
+                    )
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    autoCorrectEnabled = false,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        open = false
+                        focus.clearFocus()
+                        onSave(typed.trim())
+                    },
+                ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled),
             )
-            ExposedDropdownMenu(expanded = voicesOpen, onDismissRequest = { voicesOpen = false }) {
-                when (val known = voices?.takeIf { it.url == storedUrl }) {
-                    is KokoroVoices.Loaded -> known.voices.forEach { choice ->
+            ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                when (listing) {
+                    is Listing.Loaded -> listing.items.forEach { choice ->
                         DropdownMenuItem(
                             text = { Text(choice) },
                             onClick = {
-                                voicesOpen = false
-                                scope.launch { feature.setKokoroVoice(choice) }
+                                open = false
+                                typed = choice
+                                focus.clearFocus()
+                                onSave(choice)
                             },
                         )
                     }
-                    is KokoroVoices.Failed -> {
-                        DropdownMenuItem(text = { Text(stringResource(known.message)) }, onClick = {}, enabled = false)
+                    is Listing.Failed -> {
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.read_aloud_settings_kokoro_voices_retry)) },
-                            onClick = { loadVoices(storedUrl) },
+                            text = { Text(stringResource(listing.message)) },
+                            onClick = {},
+                            enabled = false,
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.read_aloud_settings_server_retry)) },
+                            onClick = onRetry,
                         )
                     }
-                    else -> DropdownMenuItem(
-                        text = { Text(stringResource(R.string.read_aloud_settings_kokoro_voices_loading)) },
-                        onClick = {},
-                        enabled = false,
-                    )
+                    else -> DropdownMenuItem(text = { Text(loading) }, onClick = {}, enabled = false)
                 }
             }
         }
-        Text(
-            text = stringResource(R.string.read_aloud_settings_kokoro_privacy),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
     }
 }
 
-private fun Throwable.voicesMessage(): Int = when (this) {
-    is SpeechError.Network -> R.string.read_aloud_settings_kokoro_voices_unreachable
-    is SpeechError.InvalidKey -> R.string.read_aloud_settings_kokoro_voices_refused
-    is IllegalArgumentException -> R.string.read_aloud_settings_kokoro_url_invalid
-    else -> R.string.read_aloud_settings_kokoro_voices_failed
-}
+private fun Result<List<String>>.toListing(url: String, @StringRes none: Int, @StringRes failed: Int): Listing = fold(
+    onSuccess = { if (it.isEmpty()) Listing.Failed(url, none) else Listing.Loaded(url, it) },
+    onFailure = {
+        Listing.Failed(
+            url,
+            when (it) {
+                is SpeechError.Network -> R.string.read_aloud_settings_server_unreachable
+                is SpeechError.InvalidKey -> R.string.read_aloud_settings_server_refused
+                is IllegalArgumentException -> R.string.read_aloud_settings_server_url_invalid
+                else -> failed
+            },
+        )
+    },
+)
 
 /**
  * A key typed once and never shown again: whether one is saved, a masked

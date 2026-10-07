@@ -76,7 +76,12 @@ internal fun ReadAloudPlayer(
         ) {
             ChromePill(theme = theme) {
                 Text(
-                    text = notice?.let { stringResource(it.message(), stringResource(feature.noticeProvider.label)) }.orEmpty(),
+                    text = notice?.let {
+                        stringResource(
+                            it.message(),
+                            feature.noticeHost ?: stringResource(feature.noticeProvider.label),
+                        )
+                    }.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )

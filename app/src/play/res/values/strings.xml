@@ -38,29 +38,33 @@
     <string name="read_aloud_voice_gentle">Gentle</string>
     <string name="read_aloud_voice_even">Even</string>
     <string name="read_aloud_provider_gemini" translatable="false">Gemini</string>
-    <string name="read_aloud_provider_kokoro" translatable="false">Kokoro</string>
     <string name="read_aloud_settings_entry_summary" translatable="false">%1$s · %2$s</string>
-    <string name="read_aloud_settings_kokoro_url_hint" translatable="false">http://192.168.1.10:8880</string>
+    <string name="read_aloud_settings_server_url_hint" translatable="false">http://192.168.1.10:8880</string>
     <string name="read_aloud_notice_invalid_voice">%1$s does not have the chosen voice. Pick another in Settings, Read aloud.</string>
     <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
     <string name="read_aloud_settings_title">Read aloud</string>
     <string name="read_aloud_settings_entry_missing">Not set up</string>
     <string name="read_aloud_settings_provider">Voice service</string>
     <string name="read_aloud_settings_provider_choose">Speak with</string>
-    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. Kokoro runs on a server of your own or on a hosted service.</string>
-    <string name="read_aloud_settings_kokoro_url">Kokoro server</string>
-    <string name="read_aloud_settings_kokoro_url_detail">The address of your Kokoro server, or the API address of a hosted service. Press Done to save it.</string>
-    <string name="read_aloud_settings_kokoro_url_invalid">This is not a server address.</string>
-    <string name="read_aloud_settings_kokoro_key">Kokoro API key</string>
-    <string name="read_aloud_settings_kokoro_key_missing">Optional. Only needed if your server asks for one.</string>
-    <string name="read_aloud_settings_kokoro_voice_choose">Choose a voice</string>
-    <string name="read_aloud_settings_kokoro_voices_loading">Asking the server for its voices…</string>
-    <string name="read_aloud_settings_kokoro_voices_none">The server offers no voices.</string>
-    <string name="read_aloud_settings_kokoro_voices_failed">The server did not list its voices.</string>
-    <string name="read_aloud_settings_kokoro_voices_unreachable">The server could not be reached.</string>
-    <string name="read_aloud_settings_kokoro_voices_refused">The server refused the API key.</string>
-    <string name="read_aloud_settings_kokoro_voices_retry">Try again</string>
-    <string name="read_aloud_settings_kokoro_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
-    <string name="read_aloud_settings_kokoro_model">Model</string>
-    <string name="read_aloud_settings_kokoro_model_detail">Leave empty for your own Kokoro server. A hosted service names its own. Press Done to save it.</string>
+    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. OpenAI-compatible works with OpenAI, other hosted services, or a server of your own such as Kokoro.</string>
+    <string name="read_aloud_settings_server_url">Server</string>
+    <string name="read_aloud_settings_server_url_detail">The API address of the service or of your own server. Press Done to save it.</string>
+    <string name="read_aloud_settings_server_url_invalid">This is not a server address.</string>
+    <string name="read_aloud_settings_server_key">API key</string>
+    <string name="read_aloud_settings_server_key_missing">Optional. Only needed if the service asks for one.</string>
+    <string name="read_aloud_settings_server_voice_choose">Choose a voice</string>
+    <string name="read_aloud_settings_server_voices_loading">Asking the server for its voices…</string>
+    <string name="read_aloud_settings_server_voices_none">The server lists no voices. Type one instead.</string>
+    <string name="read_aloud_settings_server_voices_failed">The server did not list its voices.</string>
+    <string name="read_aloud_settings_server_unreachable">The server could not be reached.</string>
+    <string name="read_aloud_settings_server_refused">The server refused the API key.</string>
+    <string name="read_aloud_settings_server_retry">Try again</string>
+    <string name="read_aloud_settings_server_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
+    <string name="read_aloud_settings_server_model">Model</string>
+    <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name and press Done.</string>
+    <string name="read_aloud_provider_openai">OpenAI-compatible</string>
+    <string name="read_aloud_settings_server_model_choose">Choose a model</string>
+    <string name="read_aloud_settings_server_models_loading">Asking the server for its models…</string>
+    <string name="read_aloud_settings_server_models_none">The server lists no models. Type one instead.</string>
+    <string name="read_aloud_settings_server_models_failed">The server did not list its models.</string>
 </resources>

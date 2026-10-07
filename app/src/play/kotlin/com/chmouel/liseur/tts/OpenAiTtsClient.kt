@@ -19,16 +19,31 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-object KokoroTts {
-    /** The model a Kokoro server answers to; a hosted service names its own. */
-    const val MODEL = "kokoro"
+object OpenAiTts {
+    /**
+     * OpenAI's own voices, offered when a service has no voice list, as
+     * OpenAI itself has not. Any other name can still be typed.
+     */
+    val STANDARD_VOICES = listOf(
+        "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
+    )
+
+    private val SPEECH_MODEL_HINTS = listOf("tts", "speech", "kokoro")
+
+    /**
+     * The models of [all] that look like they make speech, in the server's
+     * order, or every one when none does: a server's chat and transcription
+     * models cannot answer `audio/speech`.
+     */
+    fun speechModels(all: List<String>): List<String> =
+        all.filter { id -> SPEECH_MODEL_HINTS.any { id.contains(it, ignoreCase = true) } }.ifEmpty { all }
 
     /**
      * The OpenAI-style API root from what the reader typed, which the
-     * `audio/...` paths are added to. A bare `host:port` is taken as http,
-     * and an address with no `v1` in its path gets one, so a Kokoro
-     * server's own address works as well as a hosted service's API root,
-     * such as `/v1/openai`. Null when it is no http(s) address.
+     * `models` and `audio/...` paths are added to. A bare `host:port` is
+     * taken as http, and an address with no `v1` in its path gets one, so a
+     * self-hosted server's own address works as well as a hosted service's
+     * API root, such as `/v1/openai`. Null when it is no http(s) address.
      */
     fun baseUrl(input: String): HttpUrl? {
         var text = input.trim()
@@ -44,19 +59,17 @@ object KokoroTts {
             .fragment(null)
             .build()
     }
-
-    /** The model to ask for: the one the reader set, else Kokoro's. */
-    fun model(input: String?): String = input?.trim()?.takeIf { it.isNotEmpty() } ?: MODEL
 }
 
 /**
- * A Kokoro server's, or a hosted Kokoro's, OpenAI-style speech API, asked for raw PCM: 24 kHz mono
- * 16-bit little-endian, as Gemini's, so it plays through the same output.
+ * An OpenAI-compatible speech API (OpenAI's, a hosted service's, or a
+ * self-hosted server such as Kokoro), asked for raw PCM: 24 kHz mono 16-bit
+ * little-endian, as Gemini's, so it plays through the same output.
  *
  * There is no logging interceptor on purpose: the request may carry a key
  * in a header and carries the book's text in the body.
  */
-class KokoroTtsClient(private val client: OkHttpClient = default()) {
+class OpenAiTtsClient(private val client: OkHttpClient = default()) {
 
     /** Throws [SpeechError]; cancelling the caller cancels the request. */
     suspend fun synthesize(
@@ -64,7 +77,7 @@ class KokoroTtsClient(private val client: OkHttpClient = default()) {
         apiKey: String?,
         text: String,
         voice: String,
-        model: String = KokoroTts.MODEL,
+        model: String,
     ): SpeechAudio {
         val body = JSONObject()
             .put("model", model)
@@ -76,9 +89,19 @@ class KokoroTtsClient(private val client: OkHttpClient = default()) {
         return execute(request, ::speech)
     }
 
-    /** The voices the server offers, in its order, or none when it has no voice list. Throws [SpeechError]. */
+    /**
+     * The voices the server offers, in its order, or OpenAI's own when it
+     * has no voice list. Throws [SpeechError].
+     */
     suspend fun voices(base: HttpUrl, apiKey: String?): List<String> =
         execute(request(base, "audio/voices", apiKey).get().build(), ::voiceList)
+
+    /**
+     * Every model the server lists, in its order, or none when it has no
+     * model list. Throws [SpeechError].
+     */
+    suspend fun models(base: HttpUrl, apiKey: String?): List<String> =
+        execute(request(base, "models", apiKey).get().build(), ::modelList)
 
     private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
         val builder = Request.Builder()
@@ -139,19 +162,28 @@ class KokoroTtsClient(private val client: OkHttpClient = default()) {
         return SpeechAudio(pcm)
     }
 
-    private fun voiceList(response: Response): List<String> {
-        if (response.code == 404 || response.code == 405) return emptyList()
+    private fun voiceList(response: Response): List<String> =
+        if (response.code == 404 || response.code == 405) OpenAiTts.STANDARD_VOICES else names(response, "voices")
+
+    private fun modelList(response: Response): List<String> =
+        if (response.code == 404 || response.code == 405) emptyList() else names(response, "data")
+
+    /**
+     * The names in a list response: a bare array, or one under [field],
+     * of strings or of objects with an `id` or `name`.
+     */
+    private fun names(response: Response, field: String): List<String> {
         if (!response.isSuccessful) throw errorFor(response)
-        val text = boundedText(response, MAX_VOICES_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
-        val voices = try {
+        val text = boundedText(response, MAX_LIST_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
+        val items = try {
             val trimmed = text.trimStart()
-            if (trimmed.startsWith("[")) JSONArray(trimmed) else JSONObject(trimmed).optJSONArray("voices")
+            if (trimmed.startsWith("[")) JSONArray(trimmed) else JSONObject(trimmed).optJSONArray(field)
         } catch (_: JSONException) {
             null
-        } ?: throw SpeechError.InvalidResponse("no voices")
-        return (0 until voices.length()).mapNotNull { i ->
-            voices.optJSONObject(i)?.let { it.optString("id").ifEmpty { it.optString("name") } }
-                ?: voices.optString(i)
+        } ?: throw SpeechError.InvalidResponse("no list")
+        return (0 until items.length()).mapNotNull { i ->
+            items.optJSONObject(i)?.let { it.optString("id").ifEmpty { it.optString("name") } }
+                ?: items.optString(i)
         }.filter { it.isNotBlank() }.distinct()
     }
 
@@ -190,7 +222,7 @@ class KokoroTtsClient(private val client: OkHttpClient = default()) {
         private val JSON = "application/json; charset=utf-8".toMediaType()
         private val AUDIO_TYPES = setOf("audio/pcm", "audio/l16", "application/octet-stream")
         private const val MAX_ERROR_BYTES = 64 * 1024L
-        private const val MAX_VOICES_BYTES = 1024 * 1024L
+        private const val MAX_LIST_BYTES = 1024 * 1024L
         private val USER_AGENT =
             "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
 

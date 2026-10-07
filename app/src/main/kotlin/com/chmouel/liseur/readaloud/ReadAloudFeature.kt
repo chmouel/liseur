@@ -57,7 +57,7 @@ data class ReadAloudBookNotice(val bookId: String, val notice: ReadAloudNotice)
 
 /**
  * Reading aloud, as the flavor-neutral reader sees it. The Play build
- * provides Gemini and Kokoro voices; the F-Droid build provides [None],
+ * provides Gemini and OpenAI-compatible voices; the F-Droid build provides [None],
  * which is never available and draws nothing.
  */
 interface ReadAloudFeature {

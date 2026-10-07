@@ -13,8 +13,8 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * One API key a speech service is used with (Gemini's, or a Kokoro
- * server's), encrypted with a Keystore key in a file under no_backup:
+ * One API key a speech service is used with (Gemini's, or an
+ * OpenAI-compatible service's), encrypted with a Keystore key in a file under no_backup:
  * outside Auto Backup, device transfer and the settings export, so it
  * never leaves the device. A key that can no longer be decrypted (the
  * Keystore was reset) counts as no key. Reads, saves and removals take
@@ -70,6 +70,6 @@ class ApiKeyStore(
     companion object {
         fun gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
 
-        fun kokoro(context: Context) = ApiKeyStore(context, "kokoro-key", "liseur.kokoro.key")
+        fun openAi(context: Context) = ApiKeyStore(context, "openai-key", "liseur.openai.key")
     }
 }
