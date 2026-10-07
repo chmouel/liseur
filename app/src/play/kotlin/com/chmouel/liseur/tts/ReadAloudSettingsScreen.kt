@@ -59,6 +59,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -379,12 +380,91 @@ private fun OpenAiRows(feature: SpeechReadAloud) {
         onChoose = { scope.launch { feature.setOpenAiChosenVoices(it) } },
         onRetry = { loadVoices(storedUrl) },
     )
+    RowDivider()
+    TestConnectionRow(
+        enabled = reachable,
+        url = storedUrl,
+        test = feature::testOpenAi,
+        onLists = { url, check ->
+            models = Result.success(check.models).toListing(
+                url,
+                none = R.string.read_aloud_settings_server_models_none,
+                failed = R.string.read_aloud_settings_server_models_failed,
+            )
+            voices = Result.success(check.voices).toListing(
+                url,
+                none = R.string.read_aloud_settings_server_voices_none,
+                failed = R.string.read_aloud_settings_server_voices_failed,
+            )
+        },
+    )
     Text(
         text = stringResource(R.string.read_aloud_settings_server_privacy),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
     )
+}
+
+private sealed interface ConnectionTest {
+    data object Testing : ConnectionTest
+    data class Passed(val models: Int, val voices: Int) : ConnectionTest
+    data class Failed(@StringRes val message: Int) : ConnectionTest
+}
+
+/**
+ * Tests the saved address, key, model and voice in one go and says what
+ * came back. The lists it gets replace the ones on screen.
+ */
+@Composable
+private fun TestConnectionRow(
+    enabled: Boolean,
+    url: String,
+    test: suspend (String) -> Result<SpeechReadAloud.ServerCheck>,
+    onLists: (String, SpeechReadAloud.ServerCheck) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var state by remember(url) { mutableStateOf<ConnectionTest?>(null) }
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = when (val s = state) {
+                null -> ""
+                ConnectionTest.Testing -> stringResource(R.string.read_aloud_settings_test_running)
+                is ConnectionTest.Passed -> stringResource(
+                    R.string.read_aloud_settings_test_passed,
+                    pluralStringResource(R.plurals.read_aloud_settings_test_models, s.models, s.models),
+                    pluralStringResource(R.plurals.read_aloud_settings_test_voices, s.voices, s.voices),
+                )
+                is ConnectionTest.Failed -> stringResource(s.message)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state is ConnectionTest.Failed) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(
+            enabled = enabled && state != ConnectionTest.Testing,
+            onClick = {
+                state = ConnectionTest.Testing
+                scope.launch {
+                    val result = test(url)
+                    result.onSuccess { onLists(url, it) }
+                    state = result.fold(
+                        onSuccess = { ConnectionTest.Passed(it.models.size, it.voices.size) },
+                        onFailure = { ConnectionTest.Failed(previewMessage(it)) },
+                    )
+                }
+            },
+        ) {
+            Text(stringResource(R.string.read_aloud_settings_test))
+        }
+    }
 }
 
 /**

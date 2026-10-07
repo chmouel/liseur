@@ -80,4 +80,19 @@
     <string name="read_aloud_settings_voices_tick_all">Отметить все</string>
     <string name="read_aloud_settings_voices_untick_all">Снять все</string>
     <string name="read_aloud_settings_voice_hear_named">Прослушать: %1$s</string>
+    <string name="read_aloud_settings_test">Проверить подключение</string>
+    <string name="read_aloud_settings_test_running">Проверка…</string>
+    <string name="read_aloud_settings_test_passed">Подключено: %1$s и %2$s.</string>
+    <plurals name="read_aloud_settings_test_models">
+        <item quantity="one">%d речевая модель</item>
+        <item quantity="few">%d речевые модели</item>
+        <item quantity="many">%d речевых моделей</item>
+        <item quantity="other">%d речевой модели</item>
+    </plurals>
+    <plurals name="read_aloud_settings_test_voices">
+        <item quantity="one">%d голос</item>
+        <item quantity="few">%d голоса</item>
+        <item quantity="many">%d голосов</item>
+        <item quantity="other">%d голоса</item>
+    </plurals>
 </resources>

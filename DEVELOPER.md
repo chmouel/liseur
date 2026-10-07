@@ -1355,7 +1355,10 @@ reader behavior.
   first. Gemini plays one only on "Hear this voice", since each sample is
   billed. "Choose voices" narrows the chips to a ticked set
   (`speech_server_voices`, empty offers all; `VoiceLabel.offered` always
-  keeps the voice in use). Both providers return 24 kHz
+  keeps the voice in use). "Test connection" (`SpeechReadAloud.testOpenAi`)
+  fetches both lists and, when a model and voice are set, synthesizes one
+  fixed word, so a wrong key, model or voice shows before a book is
+  opened. Both providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
   The OpenAI-compatible provider runs one request at a time with long

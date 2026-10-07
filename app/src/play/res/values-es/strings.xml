@@ -80,4 +80,15 @@
     <string name="read_aloud_settings_voices_tick_all">Marcar todas</string>
     <string name="read_aloud_settings_voices_untick_all">Desmarcar todas</string>
     <string name="read_aloud_settings_voice_hear_named">Escuchar %1$s</string>
+    <string name="read_aloud_settings_test">Probar la conexión</string>
+    <string name="read_aloud_settings_test_running">Probando…</string>
+    <string name="read_aloud_settings_test_passed">Conectado: %1$s y %2$s.</string>
+    <plurals name="read_aloud_settings_test_models">
+        <item quantity="one">%d modelo de voz</item>
+        <item quantity="other">%d modelos de voz</item>
+    </plurals>
+    <plurals name="read_aloud_settings_test_voices">
+        <item quantity="one">%d voz</item>
+        <item quantity="other">%d voces</item>
+    </plurals>
 </resources>

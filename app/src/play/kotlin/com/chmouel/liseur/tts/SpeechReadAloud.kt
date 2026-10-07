@@ -282,7 +282,26 @@ internal class SpeechReadAloud(
     /** The voices the service at [url] offers, asked with the saved key. */
     suspend fun openAiVoices(url: String): Result<List<String>> = ask(url) { base, key -> openAi.voices(base, key) }
 
-    private suspend fun ask(url: String, block: suspend (HttpUrl, String?) -> List<String>): Result<List<String>> {
+    /** What the service answered when tested: the speech models and the voices it lists. */
+    class ServerCheck(val models: List<String>, val voices: List<String>)
+
+    /**
+     * Asks the service at [url] for its models and voices, then has it say
+     * one word with the chosen model and voice when both are set, so a
+     * wrong key, model or voice shows before a book is opened.
+     */
+    suspend fun testOpenAi(url: String): Result<ServerCheck> {
+        val s = settings.settings.first()
+        return ask(url) { base, key ->
+            val check = ServerCheck(OpenAiTts.speechModels(openAi.models(base, key)), openAi.voices(base, key))
+            val model = s.speechServerModel?.takeIf { it.isNotBlank() }
+            val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
+            if (model != null && voice != null) openAi.synthesize(base, key, TEST_WORD, voice, model)
+            check
+        }
+    }
+
+    private suspend fun <T> ask(url: String, block: suspend (HttpUrl, String?) -> T): Result<T> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
         return try {
             Result.success(block(base, openAiKeys.get()))
@@ -304,3 +323,6 @@ internal class SpeechReadAloud(
     @Composable
     override fun SelectionButton(onClick: () -> Unit) = ReadAloudSelectionButton(onClick)
 }
+
+/** Said, not played, by a connection test: the shortest request that proves the model and voice work. */
+private const val TEST_WORD = "Hello."

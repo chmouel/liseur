@@ -67,7 +67,10 @@ answers) gets OpenAI's standard voices. A service with no model list
 leaves the field to be typed. When nothing is chosen yet, the first
 model and first voice are taken, so a new setup reads without more taps.
 There is no hidden default model: reading needs an address, a model and
-a voice.
+a voice. "Test connection" fetches both lists again and asks for one
+spoken word with the chosen model and voice, so a refused key, a model
+the server does not have, or an unknown voice shows up in settings
+rather than after pressing play.
 
 The key is sent as a bearer token when set, and stored like the Gemini
 key in its own encrypted file under `noBackupFilesDir`. The address,
