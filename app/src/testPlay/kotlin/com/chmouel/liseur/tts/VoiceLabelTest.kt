@@ -1,6 +1,8 @@
 package com.chmouel.liseur.tts
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class VoiceLabelTest {
@@ -9,6 +11,17 @@ class VoiceLabelTest {
         assertEquals(VoiceLabel("af_bella", "Bella", "en-US", VoiceLabel.Gender.FEMALE), VoiceLabel.of("af_bella"))
         assertEquals(VoiceLabel("bm_george", "George", "en-GB", VoiceLabel.Gender.MALE), VoiceLabel.of("bm_george"))
         assertEquals("fr-FR", VoiceLabel.of("ff_siwis").language)
+        assertEquals("ja-JP", VoiceLabel.of("jf_alpha").language)
+    }
+
+    @Test
+    fun `a language with a country shows its flag`() {
+        assertEquals("\uD83C\uDDFA\uD83C\uDDF8", VoiceLabel.flag("en-US"))
+        assertEquals("\uD83C\uDDEB\uD83C\uDDF7", VoiceLabel.flag("fr-FR"))
+        assertNull(VoiceLabel.flag("it"))
+        assertNull(VoiceLabel.flag("es-419"))
+        assertEquals("\uD83C\uDDEC\uD83C\uDDE7 English (United Kingdom)", VoiceLabel.languageLabel("en-GB", Locale.ENGLISH))
+        assertEquals("Italian", VoiceLabel.languageLabel("it", Locale.ENGLISH))
     }
 
     @Test
