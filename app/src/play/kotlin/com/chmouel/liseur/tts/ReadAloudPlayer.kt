@@ -59,7 +59,10 @@ internal fun ReadAloudPlayer(
     val session by feature.session.collectAsStateWithLifecycle()
     val here = session?.takeIf { it.bookId == bookId }
     var notice by remember { mutableStateOf<ReadAloudNotice?>(null) }
-    LaunchedEffect(feature) { feature.notices.collect { notice = it } }
+    // A book still playing in the background speaks only in its own reader.
+    LaunchedEffect(feature, bookId) {
+        feature.notices.collect { if (it.bookId == bookId) notice = it.notice }
+    }
     LaunchedEffect(notice) {
         if (notice == null) return@LaunchedEffect
         delay(NOTICE_MS)

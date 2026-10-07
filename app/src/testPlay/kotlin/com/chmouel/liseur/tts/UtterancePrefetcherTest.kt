@@ -137,6 +137,18 @@ class UtterancePrefetcherTest {
     }
 
     @Test
+    fun audioThatComesBackAtOnceIsKept() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler) + SupervisorJob())
+        scopes += scope
+        val cache = SpeechCache(scope, { audio() })
+        cache.prefetch("A")
+        advanceUntilIdle()
+        assertEquals(4L, cache.cachedBytes)
+        cache.take("A")
+        assertEquals(1, cache.requestsMade)
+    }
+
+    @Test
     fun takingAPrefetchedSentenceDoesNotAskAgain() = runTest {
         val synth = FakeSynth()
         val (cache, prefetcher) = setUp(synth, mapOf("p" to { cursor("A", "B") }))

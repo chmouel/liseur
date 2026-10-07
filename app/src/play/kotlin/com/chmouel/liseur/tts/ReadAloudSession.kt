@@ -114,7 +114,13 @@ internal class ReadAloudSession(
         }
         scope.launch {
             playWhenReady.collect { playing ->
-                if (playing) claim() else settle()
+                if (playing) {
+                    // Playing on within the same sentence moves no location.
+                    spokenAt = System.currentTimeMillis()
+                    claim()
+                } else {
+                    settle()
+                }
             }
         }
         scope.launch {

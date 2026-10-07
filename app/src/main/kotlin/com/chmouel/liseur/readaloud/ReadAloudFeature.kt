@@ -46,6 +46,9 @@ enum class ReadAloudNotice {
     Unavailable,
 }
 
+/** A [notice] about [bookId], shown only in that book's reader. */
+data class ReadAloudBookNotice(val bookId: String, val notice: ReadAloudNotice)
+
 /**
  * Reading aloud, as the flavor-neutral reader sees it. The Play build
  * provides the Gemini voice; the F-Droid build provides [None], which is
@@ -60,7 +63,7 @@ interface ReadAloudFeature {
     /** The session in progress, whichever book it is reading. */
     val session: StateFlow<ReadAloudUi?>
 
-    val notices: SharedFlow<ReadAloudNotice>
+    val notices: SharedFlow<ReadAloudBookNotice>
 
     /**
      * Reads [handle]'s book aloud from the sentence [selection] starts in,
@@ -102,7 +105,7 @@ interface ReadAloudFeature {
         override val isAvailable = false
         override val configured: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val session: StateFlow<ReadAloudUi?> = MutableStateFlow<ReadAloudUi?>(null).asStateFlow()
-        override val notices: SharedFlow<ReadAloudNotice> = MutableSharedFlow<ReadAloudNotice>().asSharedFlow()
+        override val notices: SharedFlow<ReadAloudBookNotice> = MutableSharedFlow<ReadAloudBookNotice>().asSharedFlow()
 
         override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent) = Unit
         override fun pause() = Unit

@@ -43,6 +43,9 @@ class ReadAloudService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var feature: GeminiReadAloud? = null
 
+    /** The session this service shows; a replacement starting meanwhile is not this one's to pause. */
+    private var shown: ReadAloudSession? = null
+
     override fun onCreate() {
         super.onCreate()
         val feature = application.container.readAloud as? GeminiReadAloud
@@ -58,6 +61,7 @@ class ReadAloudService : MediaSessionService() {
                 }
                 .collect { current ->
                     if (current == null) {
+                        shown = null
                         release()
                         stopSelf()
                         return@collect
@@ -70,6 +74,7 @@ class ReadAloudService : MediaSessionService() {
     }
 
     private fun show(session: ReadAloudSession, player: Player) {
+        shown = session
         val existing = mediaSession
         if (existing != null) {
             existing.player = player
@@ -121,7 +126,7 @@ class ReadAloudService : MediaSessionService() {
     override fun onDestroy() {
         scope.cancel()
         // Destroyed under a playing voice, nothing would keep it alive: pause it.
-        feature?.current?.value?.pause()
+        shown?.pause()
         release()
         super.onDestroy()
     }

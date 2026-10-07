@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.readaloud.ReadAloudBookNotice
 import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.OpenBookHandle
@@ -63,8 +64,8 @@ internal class GeminiReadAloud(
         mutableCurrent.flatMapLatest { it?.ui ?: flowOf(null) }
             .stateIn(scope, SharingStarted.Eagerly, null)
 
-    private val mutableNotices = MutableSharedFlow<ReadAloudNotice>(extraBufferCapacity = 8)
-    override val notices: SharedFlow<ReadAloudNotice> = mutableNotices.asSharedFlow()
+    private val mutableNotices = MutableSharedFlow<ReadAloudBookNotice>(extraBufferCapacity = 8)
+    override val notices: SharedFlow<ReadAloudBookNotice> = mutableNotices.asSharedFlow()
 
     override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent) {
         stop()
@@ -75,7 +76,7 @@ internal class GeminiReadAloud(
             var held = true
             try {
                 val key = keys.get() ?: run {
-                    mutableNotices.tryEmit(ReadAloudNotice.InvalidKey)
+                    mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.InvalidKey))
                     return@launch
                 }
                 val voice = GeminiVoice.of(settings.settings.first().readAloudVoice)
@@ -87,7 +88,7 @@ internal class GeminiReadAloud(
                     voice = voice,
                     client = client,
                     checkpoints = checkpoints,
-                    onNotice = { mutableNotices.tryEmit(it) },
+                    onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
                 )
                 held = false

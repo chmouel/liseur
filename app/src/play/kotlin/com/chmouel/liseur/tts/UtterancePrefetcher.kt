@@ -51,8 +51,9 @@ class SpeechCache(
         if (!hasRoom || entries.containsKey(text)) return
         val generation = generation
         lateinit var entry: Entry
+        // Started only once stored: audio that comes back at once is looked up by its entry.
         entry = Entry(
-            request(text) { audio ->
+            request(text, CoroutineStart.LAZY) { audio ->
                 if (generation == this.generation && entries[text] === entry) {
                     val bytes = audio.pcm.size.toLong()
                     // Requests in flight weigh nothing until they arrive, so
@@ -62,6 +63,7 @@ class SpeechCache(
             },
         )
         entries[text] = entry
+        entry.audio.start()
     }
 
     /**
@@ -70,7 +72,7 @@ class SpeechCache(
      * once, and a restart cannot cancel what is being waited for.
      */
     suspend fun take(text: String): SpeechAudio {
-        val audio = entries.remove(text)?.audio?.takeUnless { it.isCancelled } ?: request(text) {}
+        val audio = entries.remove(text)?.audio?.takeUnless { it.isCancelled } ?: request(text, CoroutineStart.UNDISPATCHED) {}
         try {
             return audio.await()
         } catch (e: CancellationException) {
@@ -89,9 +91,13 @@ class SpeechCache(
         stale.forEach { it.audio.cancel() }
     }
 
-    private fun request(text: String, onArrived: (SpeechAudio) -> Unit): Deferred<SpeechAudio> {
+    private fun request(
+        text: String,
+        start: CoroutineStart,
+        onArrived: (SpeechAudio) -> Unit,
+    ): Deferred<SpeechAudio> {
         requestsMade++
-        return scope.async(start = CoroutineStart.UNDISPATCHED) {
+        return scope.async(start = start) {
             try {
                 requests.withPermit { synthesize(text) }.also(onArrived)
             } catch (e: SpeechError.RateLimited) {
