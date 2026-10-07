@@ -103,7 +103,9 @@ Some things came out differently from the plan:
   Readium's player steps past a failed sentence on its own.
 - A selection is found by the first 60 characters of its first sentence,
   cut with Readium's own sentence tokenizer rather than the bounded one,
-  and the text before it tells repeated phrases apart.
+  and the text before it tells repeated phrases apart. Readium gives a
+  paragraph's first sentence no text before it, so that sentence is
+  matched by the selection and the text after it instead.
 - The session owns the place only while it plays, not while paused, so
   the guard on leaving the reader is simpler.
 - Follow-along turns the page only when the spoken sentence leaves the

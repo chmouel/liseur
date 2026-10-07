@@ -71,6 +71,47 @@ class UtteranceAlignmentTest {
     }
 
     @Test
+    fun aSelectionOpeningAParagraphIsFoundByWhatFollowsIt() {
+        // Readium gives a paragraph's first sentence nothing before it, while
+        // the selection has the paragraph above.
+        val sentence = "Le long de la grande route, retenus par des gardes, j'avisai nos ennemis."
+        val rest = " Il y en avait six ou sept rangées."
+        val target = SelectionTarget(
+            HREF,
+            prefix = "Le",
+            before = squash("Relevant la tête, je découvris la foule."),
+            onward = squash("Le" + sentence.removePrefix("Le") + rest),
+        )
+        assertTrue(target.matches(sentence, textBefore = null, textAfter = rest))
+        assertFalse(target.matches(sentence, textBefore = null, textAfter = rest, closely = true))
+        // Another paragraph opening with the same word reads on differently.
+        assertFalse(target.matches("Le soir tomba.", textBefore = null, textAfter = " La nuit vint."))
+    }
+
+    @Test
+    fun aRepeatedOpeningSentenceFollowedByOtherTextIsNotTakenForTheOneSelected() {
+        val sentence = "The rain fell all night over the quiet harbour town."
+        val target = SelectionTarget(
+            HREF,
+            prefix = squash(sentence),
+            before = squash(sentence),
+            onward = squash("$sentence Nobody slept."),
+        )
+        assertFalse(target.matches(sentence, textBefore = null, textAfter = " The boats rocked."))
+        assertTrue(target.matches(sentence, textBefore = null, textAfter = " Nobody slept."))
+        // A paragraph of one sentence has nothing after it to compare.
+        assertTrue(target.matches(sentence, textBefore = null, textAfter = null))
+    }
+
+    @Test
+    fun theTextAfterAnUtteranceLosesTheLastCharacterReadiumRepeats() {
+        val sentence = "Well, these are useless complaints."
+        assertEquals(" Yet some feelings", SelectionTarget.following(sentence, ". Yet some feelings"))
+        assertEquals("", SelectionTarget.following(sentence, "."))
+        assertEquals(null, SelectionTarget.following(sentence, null))
+    }
+
+    @Test
     fun aRepeatedPhraseInOneSentenceIsCheckedAtEachOccurrence() {
         // "aa" first appears after "x", then after "xaab".
         val target = SelectionTarget(HREF, prefix = "aa", before = "xaab")
