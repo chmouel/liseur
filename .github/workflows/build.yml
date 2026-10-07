@@ -20,8 +20,13 @@ jobs:
           hack/test-fdroid-tags
           hack/test-prune-prereleases
 
+      # Tests, lint and builds run locally and in the pre-push hook, so
+      # pull requests only get the quick checks above: skipping this step
+      # skips every Gradle step, and the required `build` check still
+      # reports. The full build runs on push to main.
       - name: Check for Android/Gradle changes
         id: changes
+        if: github.event_name != 'pull_request'
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           filters: |
@@ -58,10 +63,10 @@ jobs:
         run: ./gradlew assembleDebug --console=plain
 
       # The release build is the one people install, and it is the only
-      # one that runs R8. Building it here means a rule that strips
-      # something Readium reflects on is caught in review, not on the
-      # evening a tag is cut. Unsigned without a keystore, which is fine:
-      # the point is that it builds and shrinks.
+      # one that runs R8. Building it on main means a rule that strips
+      # something Readium reflects on is caught before the evening a tag
+      # is cut. Unsigned without a keystore, which is fine: the point is
+      # that it builds and shrinks.
       - name: Assemble release APK
         if: steps.changes.outputs.android == 'true'
         run: ./gradlew assembleRelease --console=plain
