@@ -67,6 +67,14 @@ installed on your device instead. When you pick or type a dictionary site in
 Settings, Liseur checks it once with a fixed word ("book"). A dead address
 fails then, and opening the screen makes no request.
 
+### Device voices, for reading aloud
+
+Reading aloud with Device voices uses the text-to-speech engine already
+on your device, and only its voices that work offline. The text being
+read goes to that engine and nowhere else; Liseur sends nothing over
+the network for it. The engine is an app on your device with its own
+terms, chosen in Android's settings.
+
 ### A speech server, for reading aloud
 
 Liseur can read aloud with any speech server that speaks OpenAI's API:

@@ -27,9 +27,22 @@ provider move to `main`, so both builds have them. Only Gemini stays in
 Each provider is a `SpeechService`. The flavor's `ReadAloudFeatureFactory`
 passes the list it offers to `SpeechReadAloud`, and the first one is the
 choice of a reader who never made one. Play offers Gemini first, so a
-reader who set it up in v0.21.0 keeps it. The F-Droid build offers the
-speech server alone, and the provider picker hides itself when there is
-only one choice.
+reader who set it up in v0.21.0 keeps it. The F-Droid build offers
+device voices first, since they work with no setup, then the speech
+server. The provider picker hides itself when there is only one choice.
+
+Device voices are a third provider, in both builds: the voices of
+Android's default text-to-speech engine that are installed and do not
+need a network connection, so no text leaves the device. They are named
+"Voice 1", "Voice 2" within each language, since engine voice names
+such as `en-us-x-iob-local` mean nothing to a reader. Each sentence is
+synthesized to a throwaway file and the PCM is taken from the engine's
+audio callbacks, converted to 24 kHz mono 16-bit, so the cache, speed,
+highlight, player and media session are the same as for the other
+providers. A button opens Android's text-to-speech settings to install
+more voices. This replaces the `TtsNavigator` plan of
+[0003](0003-read-aloud-tts.md), which would have been a second player
+with its own rules.
 
 The provider is now called "Speech server (OpenAI-compatible)". The old
 name, "OpenAI-compatible", read as if it needed an OpenAI account, and
@@ -48,6 +61,10 @@ service and its two permissions move to the main manifest.
 - Strings shared by both builds live in `app/src/main/res`. Gemini's live
   in `app/src/play/res`, which also overrides the provider explanation to
   mention Gemini.
+- Device voices depend on the engine the device has. Engines that only
+  offer network voices, or none, leave the list empty with a line saying
+  so; the reader can install voices or pick another provider. The
+  engine is released after a minute without a request.
 - F-Droid readers can send book text to a hosted speech service if they
   enter its address. That is their choice, made the same way as with the
   dictionary site, and the privacy policy says so.

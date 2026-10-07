@@ -1,6 +1,11 @@
 # 3. Read aloud
 
 Status: proposed
+
+Superseded by [ADR-0044](0044-read-aloud-in-the-f-droid-build.md):
+the system engine's offline voices are one provider of the shared
+read-aloud engine, which keeps its own player, highlight and position
+rules, instead of a separate `TtsNavigator` session.
 GitHub issue: [#42](https://github.com/chmouel/liseur/issues/42)
 
 ## Context

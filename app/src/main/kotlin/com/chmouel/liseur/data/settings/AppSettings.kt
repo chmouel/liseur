@@ -200,6 +200,9 @@ enum class DefinitionTarget(val id: String) {
  *   offered, by name; empty offers every voice it lists.
  * @param readAloudSpeed How fast reading aloud plays, 1 being as the voice
  *   speaks.
+ * @param deviceVoice The voice of the device's own speech engine reading
+ *   aloud uses, by the engine's name for it, or null for the engine's
+ *   default.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -230,6 +233,7 @@ data class AppSettings(
     val speechServerModel: String? = null,
     val speechServerVoices: Set<String> = emptySet(),
     val readAloudSpeed: Float = 1f,
+    val deviceVoice: String? = null,
 )
 
 /**
@@ -295,6 +299,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val SPEECH_SERVER_MODEL = stringPreferencesKey("speech_server_model")
         val SPEECH_SERVER_VOICES = stringSetPreferencesKey("speech_server_voices")
         val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
+        val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
     }
 
     /**
@@ -370,6 +375,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             speechServerModel = p[Keys.SPEECH_SERVER_MODEL],
             speechServerVoices = p[Keys.SPEECH_SERVER_VOICES].orEmpty(),
             readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
+            deviceVoice = p[Keys.READ_ALOUD_DEVICE_VOICE],
         )
     }
 
@@ -533,6 +539,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     /** Stores the speech service's voice, or forgets it when [name] is blank. */
     suspend fun setSpeechServerVoice(name: String) = setOrRemove(Keys.SPEECH_SERVER_VOICE, name)
 
+    /** Stores the device's voice, or goes back to the engine's default when [name] is blank. */
+    suspend fun setDeviceVoice(name: String) = setOrRemove(Keys.READ_ALOUD_DEVICE_VOICE, name)
+
     /** Stores the speech service's model, or forgets it when [name] is blank. */
     suspend fun setSpeechServerModel(name: String) = setOrRemove(Keys.SPEECH_SERVER_MODEL, name)
 
@@ -599,4 +608,5 @@ internal val APP_BACKUP_TYPES = mapOf(
     "speech_server_model" to BackupValueType.STRING,
     "speech_server_voices" to BackupValueType.STRING_SET,
     "read_aloud_speed" to BackupValueType.FLOAT,
+    "read_aloud_device_voice" to BackupValueType.STRING,
 )

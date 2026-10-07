@@ -24,8 +24,8 @@ and the GitHub release carries. `play` adds Gemini's read-aloud voices,
 which send book text to a non-free Google service, and ships only on
 Google Play. Gemini's code lives under `app/src/play/` and
 `app/src/testPlay/`; the `foss` APK has none of its code, strings or
-endpoint. Read aloud itself, with a speech server the reader enters, is
-in both. Both flavors share the application id, version and signing
+endpoint. Read aloud itself, with the device's offline voices or a
+speech server the reader enters, is in both. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
 
 Output APKs land in `app/build/outputs/apk/{foss,play}/{debug,dev,release}/`,
@@ -1319,8 +1319,8 @@ reader behavior.
 
 ### Read-aloud
 
-- The engine, player, settings screen and speech server provider live
-  under `app/src/main/kotlin/.../tts/`; Gemini (`GeminiSpeechService`,
+- The engine, player, settings screen, device voices and speech server
+  provider live under `app/src/main/kotlin/.../tts/`; Gemini (`GeminiSpeechService`,
   its client and voices) lives under `app/src/play/`. The reader sees the
   feature only through the `ReadAloudFeature` interface and
   `OpenBookHandle`. Nothing in `main` may name Gemini; see
@@ -1341,15 +1341,24 @@ reader behavior.
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
 - Providers are chosen on the Read aloud screen reached from its row on
-  the main Settings list, under Reading & navigation: Gemini (Play only)
-  and a speech server speaking OpenAI's API (OpenAI, a hosted service,
-  or a self-hosted server such as Kokoro). Each is a `SpeechService`
-  (`GeminiSpeechService`, `OpenAiSpeechService`) that owns its settings
+  the main Settings list, under Reading & navigation: Gemini (Play only),
+  device voices, and a speech server speaking OpenAI's API (OpenAI, a
+  hosted service, or a self-hosted server such as Kokoro). Each is a
+  `SpeechService` (`GeminiSpeechService`, `DeviceSpeechService`,
+  `OpenAiSpeechService`) that owns its settings
   rows, its part of the player's voice menu and status line, and the
   `SessionVoice` a session reads with. The flavor's
   `ReadAloudFeatureFactory` passes the list to `SpeechReadAloud`; the
-  first is the default for a reader who never chose, and the picker
-  hides itself when there is only one.
+  first is the default for a reader who never chose (Gemini in Play,
+  device voices in F-Droid), and the picker hides itself when there is
+  only one.
+  Device voices list the default engine's installed voices that need no
+  network (`DeviceVoices.offline`), numbered per language; the choice is
+  `read_aloud_device_voice`, blank is the engine's default. A sentence
+  is synthesized with `synthesizeToFile` to a throwaway file while
+  `UtteranceProgressListener.onAudioAvailable` collects the PCM, which
+  `DeviceVoices.toSpeechPcm` converts to 24 kHz mono 16-bit. One
+  `TextToSpeech` is shared and shut down after a minute idle.
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
   address whose path has none. The settings screen fills its model and
   voice menus from `<root>/models` (speech-looking ids only, else all;
@@ -1368,7 +1377,7 @@ reader behavior.
   keeps the voice in use). "Test connection" (`OpenAiSpeechService.test`)
   fetches both lists and, when a model and voice are set, synthesizes one
   fixed word, so a wrong key, model or voice shows before a book is
-  opened. Both providers return 24 kHz
+  opened. All providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
   The OpenAI-compatible provider runs one request at a time with long
@@ -2008,7 +2017,8 @@ what lets it sync a book that came off an SD card.
   constraint on the sync workers.
 - Gemini read-aloud, which sends book text to Google, is in the `play`
   flavor only. F-Droid builds `foss`, which has none of its code, strings
-  or endpoint, so the NonFreeNet anti-feature does not apply. Read aloud
+  or endpoint, so the NonFreeNet anti-feature does not apply. Device
+  voices are in both and stay on the device. Read aloud
   with a speech server is in both: like the dictionary site, it has no
   built-in address and talks only to the server the user enters. Before
   changing that boundary, check the `foss` release dex for

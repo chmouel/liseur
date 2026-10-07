@@ -79,11 +79,13 @@ import java.util.Locale
 internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Unit) {
     val configured by feature.configured.collectAsState()
     val service by feature.service.collectAsState(initial = feature.services.first())
-    val voice by service.voiceName.collectAsState(initial = "")
+    val voice = service.voiceName()
     ConnectionRow(
         icon = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
         title = stringResource(R.string.read_aloud_settings_title),
-        subtitle = if (configured) {
+        subtitle = if (configured && voice.isBlank()) {
+            stringResource(service.label)
+        } else if (configured) {
             stringResource(R.string.read_aloud_settings_entry_summary, stringResource(service.label), voice)
         } else {
             stringResource(R.string.read_aloud_settings_entry_missing)

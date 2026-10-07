@@ -1081,7 +1081,7 @@
     <string name="read_aloud_settings_entry_missing">Non configurée</string>
     <string name="read_aloud_settings_provider">Service de voix</string>
     <string name="read_aloud_settings_provider_choose">Lire avec</string>
-    <string name="read_aloud_settings_provider_detail">Un serveur vocal (compatible OpenAI) peut être OpenAI, un autre service hébergé ou votre propre serveur, comme Kokoro.</string>
+    <string name="read_aloud_settings_provider_detail">Les voix de l\'appareil sont celles d\'Android et fonctionnent hors ligne. Un serveur vocal (compatible OpenAI) peut être OpenAI, un autre service hébergé ou votre propre serveur, comme Kokoro.</string>
     <string name="read_aloud_settings_server_url">Serveur</string>
     <string name="read_aloud_settings_server_url_detail">L\'adresse de l\'API du service ou de votre propre serveur. Appuyez sur OK pour l\'enregistrer.</string>
     <string name="read_aloud_settings_server_url_invalid">Ce n\'est pas une adresse de serveur.</string>
@@ -1097,6 +1097,13 @@
     <string name="read_aloud_settings_server_model">Modèle</string>
     <string name="read_aloud_settings_server_pick_detail">Choisissez dans la liste, ou saisissez un nom et appuyez sur OK.</string>
     <string name="read_aloud_provider_openai">Serveur vocal (compatible OpenAI)</string>
+    <string name="read_aloud_provider_device">Voix de l\'appareil</string>
+    <string name="read_aloud_settings_device_voice_number">Voix %1$d</string>
+    <string name="read_aloud_settings_device_voices_loading">Recherche des voix de cet appareil…</string>
+    <string name="read_aloud_settings_device_voices_failed">Cet appareil n\'a pas de moteur de synthèse vocale. Installez-en un, puis revenez.</string>
+    <string name="read_aloud_settings_device_voices_none">Aucune voix utilisable hors ligne n\'est installée. Ajoutez-en une dans les paramètres de synthèse vocale.</string>
+    <string name="read_aloud_settings_device_privacy">Ces voix sont produites sur cet appareil ; aucun texte n\'en sort.</string>
+    <string name="read_aloud_settings_device_open">Paramètres de synthèse vocale</string>
     <string name="read_aloud_settings_server_model_choose">Choisir un modèle</string>
     <string name="read_aloud_settings_server_models_loading">Demande des modèles au serveur…</string>
     <string name="read_aloud_settings_server_models_none">Le serveur ne liste aucun modèle. Saisissez-en un.</string>

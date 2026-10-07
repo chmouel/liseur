@@ -59,7 +59,8 @@ internal class GeminiSpeechService(
     val voiceChoice: Flow<GeminiVoice> =
         settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
 
-    override val voiceName: Flow<String> = voiceChoice.map { it.id }
+    @Composable
+    override fun voiceName(): String = voiceChoice.collectAsState(initial = GeminiVoice.Default).value.id
 
     /** The speech model in use, the default when none is saved. */
     val model: Flow<String> =

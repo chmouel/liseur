@@ -69,7 +69,8 @@ internal class OpenAiSpeechService(
 
     val voice: Flow<String> = settings.settings.map { it.speechServerVoice.orEmpty() }.distinctUntilChanged()
 
-    override val voiceName: Flow<String> = voice
+    @Composable
+    override fun voiceName(): String = voice.collectAsState(initial = "").value
 
     /** The voices the reader wants offered; empty offers all. */
     val chosenVoices: Flow<Set<String>> = settings.settings.map { it.speechServerVoices }.distinctUntilChanged()

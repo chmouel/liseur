@@ -30,7 +30,8 @@ internal interface SpeechService {
     val configured: Flow<Boolean>
 
     /** The voice it reads in, as the settings row names it; blank for none. */
-    val voiceName: Flow<String>
+    @Composable
+    fun voiceName(): String
 
     /** What names it in a notice instead of [label], such as a server's host; null for the label. */
     fun noticeName(s: AppSettings): String? = null

@@ -1165,7 +1165,7 @@
     <string name="read_aloud_settings_entry_missing">Не настроено</string>
     <string name="read_aloud_settings_provider">Голосовой сервис</string>
     <string name="read_aloud_settings_provider_choose">Читать с помощью</string>
-    <string name="read_aloud_settings_provider_detail">Речевым сервером (совместимым с OpenAI) может быть OpenAI, другой облачный сервис или ваш собственный сервер, например Kokoro.</string>
+    <string name="read_aloud_settings_provider_detail">Голоса устройства встроены в Android и работают без сети. Речевым сервером (совместимым с OpenAI) может быть OpenAI, другой облачный сервис или ваш собственный сервер, например Kokoro.</string>
     <string name="read_aloud_settings_server_url">Сервер</string>
     <string name="read_aloud_settings_server_url_detail">Адрес API сервиса или вашего собственного сервера. Нажмите «Готово», чтобы сохранить.</string>
     <string name="read_aloud_settings_server_url_invalid">Это не адрес сервера.</string>
@@ -1181,6 +1181,13 @@
     <string name="read_aloud_settings_server_model">Модель</string>
     <string name="read_aloud_settings_server_pick_detail">Выберите из списка или введите название и нажмите «Готово».</string>
     <string name="read_aloud_provider_openai">Речевой сервер (совместимый с OpenAI)</string>
+    <string name="read_aloud_provider_device">Голоса устройства</string>
+    <string name="read_aloud_settings_device_voice_number">Голос %1$d</string>
+    <string name="read_aloud_settings_device_voices_loading">Поиск голосов на этом устройстве…</string>
+    <string name="read_aloud_settings_device_voices_failed">На этом устройстве нет движка синтеза речи. Установите его и вернитесь.</string>
+    <string name="read_aloud_settings_device_voices_none">Не установлено ни одного голоса, работающего без сети. Добавьте его в настройках синтеза речи.</string>
+    <string name="read_aloud_settings_device_privacy">Эти голоса создаются на устройстве; текст никуда не отправляется.</string>
+    <string name="read_aloud_settings_device_open">Настройки синтеза речи</string>
     <string name="read_aloud_settings_server_model_choose">Выберите модель</string>
     <string name="read_aloud_settings_server_models_loading">Запрашиваем модели у сервера…</string>
     <string name="read_aloud_settings_server_models_none">Сервер не перечисляет модели. Введите название сами.</string>

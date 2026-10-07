@@ -1081,7 +1081,7 @@
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>
     <string name="read_aloud_settings_provider_choose">Leer con</string>
-    <string name="read_aloud_settings_provider_detail">Un servidor de voz (compatible con OpenAI) puede ser OpenAI, otro servicio alojado o un servidor propio, como Kokoro.</string>
+    <string name="read_aloud_settings_provider_detail">Las voces del dispositivo son las de Android y funcionan sin conexión. Un servidor de voz (compatible con OpenAI) puede ser OpenAI, otro servicio alojado o un servidor propio, como Kokoro.</string>
     <string name="read_aloud_settings_server_url">Servidor</string>
     <string name="read_aloud_settings_server_url_detail">La dirección de la API del servicio o de tu propio servidor. Pulsa Listo para guardarla.</string>
     <string name="read_aloud_settings_server_url_invalid">No es una dirección de servidor.</string>
@@ -1097,6 +1097,13 @@
     <string name="read_aloud_settings_server_model">Modelo</string>
     <string name="read_aloud_settings_server_pick_detail">Elige uno de la lista, o escribe un nombre y pulsa Listo.</string>
     <string name="read_aloud_provider_openai">Servidor de voz (compatible con OpenAI)</string>
+    <string name="read_aloud_provider_device">Voces del dispositivo</string>
+    <string name="read_aloud_settings_device_voice_number">Voz %1$d</string>
+    <string name="read_aloud_settings_device_voices_loading">Buscando las voces de este dispositivo…</string>
+    <string name="read_aloud_settings_device_voices_failed">Este dispositivo no tiene motor de texto a voz. Instala uno y vuelve.</string>
+    <string name="read_aloud_settings_device_voices_none">No hay ninguna voz instalada que funcione sin conexión. Añade una en los ajustes de texto a voz.</string>
+    <string name="read_aloud_settings_device_privacy">Estas voces se generan en este dispositivo; ningún texto sale de él.</string>
+    <string name="read_aloud_settings_device_open">Ajustes de texto a voz</string>
     <string name="read_aloud_settings_server_model_choose">Elige un modelo</string>
     <string name="read_aloud_settings_server_models_loading">Pidiendo los modelos al servidor…</string>
     <string name="read_aloud_settings_server_models_none">El servidor no lista ningún modelo. Escribe uno.</string>

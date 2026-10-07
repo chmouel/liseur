@@ -1093,7 +1093,7 @@
     <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
     <string name="read_aloud_settings_provider">Sprachdienst</string>
     <string name="read_aloud_settings_provider_choose">Vorlesen mit</string>
-    <string name="read_aloud_settings_provider_detail">Ein Sprachserver (OpenAI-kompatibel) kann OpenAI, ein anderer gehosteter Dienst oder ein eigener Server wie Kokoro sein.</string>
+    <string name="read_aloud_settings_provider_detail">Gerätestimmen sind die von Android und funktionieren offline. Ein Sprachserver (OpenAI-kompatibel) kann OpenAI, ein anderer gehosteter Dienst oder ein eigener Server wie Kokoro sein.</string>
     <string name="read_aloud_settings_server_url">Server</string>
     <string name="read_aloud_settings_server_url_detail">Die API-Adresse des Dienstes oder deines eigenen Servers. Tippe auf Fertig, um sie zu speichern.</string>
     <string name="read_aloud_settings_server_url_invalid">Das ist keine Serveradresse.</string>
@@ -1109,6 +1109,13 @@
     <string name="read_aloud_settings_server_model">Modell</string>
     <string name="read_aloud_settings_server_pick_detail">Wähle einen Eintrag aus der Liste oder gib einen Namen ein und tippe auf Fertig.</string>
     <string name="read_aloud_provider_openai">Sprachserver (OpenAI-kompatibel)</string>
+    <string name="read_aloud_provider_device">Gerätestimmen</string>
+    <string name="read_aloud_settings_device_voice_number">Stimme %1$d</string>
+    <string name="read_aloud_settings_device_voices_loading">Stimmen dieses Geräts werden gesucht …</string>
+    <string name="read_aloud_settings_device_voices_failed">Dieses Gerät hat keine Sprachausgabe. Installiere eine und komm dann zurück.</string>
+    <string name="read_aloud_settings_device_voices_none">Es ist keine Stimme installiert, die offline funktioniert. Füge eine in den Einstellungen der Sprachausgabe hinzu.</string>
+    <string name="read_aloud_settings_device_privacy">Diese Stimmen entstehen auf dem Gerät; kein Text verlässt es.</string>
+    <string name="read_aloud_settings_device_open">Einstellungen der Sprachausgabe</string>
     <string name="read_aloud_settings_server_model_choose">Modell wählen</string>
     <string name="read_aloud_settings_server_models_loading">Modelle werden beim Server abgefragt…</string>
     <string name="read_aloud_settings_server_models_none">Der Server listet keine Modelle auf. Gib einen Namen ein.</string>

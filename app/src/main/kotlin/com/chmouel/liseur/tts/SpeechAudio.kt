@@ -20,7 +20,10 @@ sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(
     class InvalidKey(code: Int? = null) : SpeechError(
         code?.let { "The speech service rejected the API key (HTTP $it)" } ?: "The API key cannot be sent",
     )
-    class InvalidVoice(code: Int) : SpeechError("The speech service has no such voice (HTTP $code)")
+    /** [code] is null when the voice is not the server's but the device's. */
+    class InvalidVoice(code: Int? = null) : SpeechError(
+        "The speech service has no such voice" + (code?.let { " (HTTP $it)" } ?: ""),
+    )
     class RateLimited(code: Int) : SpeechError("Speech quota or rate limit reached (HTTP $code)")
     class Network(cause: IOException) :
         SpeechError("The speech service could not be reached (${cause.javaClass.simpleName})", cause)

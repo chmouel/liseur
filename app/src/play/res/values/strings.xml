@@ -24,5 +24,5 @@
     <string name="read_aloud_settings_gemini_models_failed">Gemini did not list its models.</string>
     <string name="read_aloud_settings_voice_hear">Hear this voice</string>
     <!-- Overrides the main one: the Play build also offers Gemini. -->
-    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. A speech server (OpenAI-compatible) can be OpenAI, another hosted service, or a server of your own such as Kokoro.</string>
+    <string name="read_aloud_settings_provider_detail">Gemini is an online Google service billed to your key. Device voices are Android\'s own and work offline. A speech server (OpenAI-compatible) can be OpenAI, another hosted service, or a server of your own such as Kokoro.</string>
 </resources>
