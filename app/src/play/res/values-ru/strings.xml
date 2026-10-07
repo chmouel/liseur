@@ -55,7 +55,6 @@
     <string name="read_aloud_settings_kokoro_voices_refused">Сервер отклонил ключ API.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Повторить</string>
     <string name="read_aloud_settings_kokoro_privacy">Читаемый вслух текст отправляется на указанный вами сервер для создания голоса.</string>
-    <string name="read_aloud_settings_kokoro_use_preset">Использовать %1$s</string>
     <string name="read_aloud_settings_kokoro_model">Модель</string>
     <string name="read_aloud_settings_kokoro_model_detail">Оставьте пустым для собственного сервера Kokoro. У облачного сервиса своё название модели. Нажмите «Готово», чтобы сохранить.</string>
 </resources>

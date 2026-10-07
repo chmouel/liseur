@@ -203,7 +203,7 @@ class KokoroTtsClientTest {
         assertEquals("http://pi.lan:8880/v1", KokoroTts.baseUrl("http://pi.lan:8880/").toString())
         assertEquals("https://tts.example.com/v1", KokoroTts.baseUrl("https://tts.example.com/v1/").toString())
         assertEquals("https://example.com/kokoro/v1", KokoroTts.baseUrl("https://example.com/kokoro").toString())
-        assertEquals("https://api.deepinfra.com/v1/openai", KokoroTts.baseUrl(KokoroTts.DEEPINFRA_URL).toString())
+        assertEquals("https://api.example.com/v1/openai", KokoroTts.baseUrl("https://api.example.com/v1/openai").toString())
         assertNull(KokoroTts.baseUrl(""))
         assertNull(KokoroTts.baseUrl("   "))
         assertNull(KokoroTts.baseUrl("ftp://pi.lan"))
@@ -222,23 +222,22 @@ class KokoroTtsClientTest {
         server.enqueue(pcm(byteArrayOf(1, 0)))
         val root = KokoroTts.baseUrl(server.url("/v1/openai").toString())!!
 
-        KokoroTtsClient().synthesize(root, "k", "t", "af_heart", KokoroTts.model(" ${KokoroTts.DEEPINFRA_MODEL} "))
+        KokoroTtsClient().synthesize(root, "k", "t", "af_heart", KokoroTts.model(" hexgrad/Kokoro-82M "))
 
         val request = server.takeRequest()
         assertEquals("/v1/openai/audio/speech", request.url.encodedPath)
-        assertEquals(KokoroTts.DEEPINFRA_MODEL, JSONObject(request.body!!.utf8()).getString("model"))
+        assertEquals("hexgrad/Kokoro-82M", JSONObject(request.body!!.utf8()).getString("model"))
         assertEquals(KokoroTts.MODEL, KokoroTts.model(null))
         assertEquals(KokoroTts.MODEL, KokoroTts.model("  "))
     }
 
     @Test
-    fun `a service with no voice list offers Kokoro's own voices`(): Unit = runBlocking {
+    fun `a service with no voice list offers no voices`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
         server.enqueue(MockResponse(code = 405))
 
-        assertEquals(KokoroTts.BUILT_IN_VOICES, KokoroTtsClient().voices(base, "k"))
-        assertEquals(KokoroTts.BUILT_IN_VOICES, KokoroTtsClient().voices(base, "k"))
-        assertEquals(54, KokoroTts.BUILT_IN_VOICES.distinct().size)
+        assertEquals(emptyList<String>(), KokoroTtsClient().voices(base, "k"))
+        assertEquals(emptyList<String>(), KokoroTtsClient().voices(base, "k"))
     }
 
     @Test

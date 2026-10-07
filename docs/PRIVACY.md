@@ -94,18 +94,17 @@ more are made.
 ### Kokoro, for reading aloud (Google Play build only)
 
 The Google Play build can also read aloud with Kokoro, a speech model you
-run on a server of your own or use through a hosted service such as
-DeepInfra. Nothing is sent until you choose Kokoro in Settings, Read
-aloud, and enter that server's address or press Use DeepInfra. Liseur then asks
-the server for its list of voices when you open the voice menu, and once
+run on a server of your own or use through a hosted service. Nothing is
+sent until you choose Kokoro in Settings, Read aloud, and enter that
+server's address. Liseur then asks the server for its list of voices
+when you open the voice menu, and once
 you press play it sends the text being read, one sentence at a time and a
 few sentences ahead of the voice, to that address together with the voice
 you picked and, if you entered one, your API key. As with Gemini, no book
 title, file, identifier or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
-`http://` address is not encrypted. With DeepInfra, the text goes to
-DeepInfra under its own terms and privacy policy, billed to your
-DeepInfra key.
+`http://` address is not encrypted. With a hosted service, the text goes
+to that service under its own terms and privacy policy.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing

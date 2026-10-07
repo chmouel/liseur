@@ -55,7 +55,6 @@
     <string name="read_aloud_settings_kokoro_voices_refused">Der Server hat den API-Schlüssel abgelehnt.</string>
     <string name="read_aloud_settings_kokoro_voices_retry">Erneut versuchen</string>
     <string name="read_aloud_settings_kokoro_privacy">Der vorgelesene Text wird an den angegebenen Server gesendet, um die Stimme zu erzeugen.</string>
-    <string name="read_aloud_settings_kokoro_use_preset">%1$s verwenden</string>
     <string name="read_aloud_settings_kokoro_model">Modell</string>
     <string name="read_aloud_settings_kokoro_model_detail">Für einen eigenen Kokoro-Server leer lassen. Ein gehosteter Dienst hat einen eigenen Modellnamen. Tippe auf Fertig, um ihn zu speichern.</string>
 </resources>
