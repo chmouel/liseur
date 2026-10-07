@@ -46,7 +46,13 @@ reply without one is still taken as raw 24 kHz PCM, since some models
 sentence cache and the `AudioTrack` output are shared unchanged; a
 session is built with a `SpeechSynthesizer` for the chosen provider and
 nothing else differs. MP3 or Opus would have needed a decoder for no
-gain on a local network.
+gain on a local network, so WAV stays the first ask. OpenRouter,
+though, refuses WAV and offers only MP3 or a PCM whose rate it
+documents for one family of models, so a refusal that names
+`response_format` is asked again for MP3, decoded by the platform's
+own decoder (no new dependency), and that model asks MP3 first from
+then on. Mistral answers WAV inside JSON, base64 under `audio_data`;
+replies are therefore decoded by what they are, not by what was asked.
 
 The reader enters one address, an optional API key, a model and a voice
 for every book. The address is read as an OpenAI-style API root: when
@@ -67,16 +73,24 @@ service lists everything; a typed voice is played the same way, which
 shows at once whether the server has it. A Kokoro server lists more than
 fifty voices, so "Choose voices" lets the reader tick the few worth
 offering; ticking none, or all, offers every one, and the voice in use
-always stays offered. When the list tags its models, as DeepInfra's
-does, the menu keeps those tagged `tts` and shows each one's price per
-million characters; names alone missed models such as Chatterbox. A
-list without tags keeps ids that look like speech models (`tts`,
+always stays offered. When the list says what its models do, the menu
+keeps the speech models: DeepInfra tags them `tts` and shows each one's
+price per million characters; Groq and OpenRouter give their output
+(OpenRouter lists them only when asked for `output_modalities=speech`,
+and its per-character price is shown too); Mistral gives an
+`audio_speech` capability. Names alone missed models such as
+Chatterbox. A list that says none of this keeps ids that look like speech models (`tts`,
 `speech` or `kokoro` in the name) and shows the whole list when none
 does; OpenAI's list is mostly chat models that cannot answer
 `audio/speech`. Voices belong to a model, so they are listed again when
 the model changes, and a saved voice the new model does not list is
-replaced by that model's default. A service with no voice list (404 or
-405) offers OpenAI's standard voices only when it is OpenAI. DeepInfra
+replaced by that model's default. Mistral's voice list comes ten at a
+time, so it is read to the total it states; a list that stops short is
+an error rather than a partial list, since a partial list would replace
+a saved voice. A service with no voice list (404 or
+405) offers OpenAI's standard voices only when it is OpenAI, and
+otherwise the voices its model list names for the model (OpenRouter's
+`supported_voices`). DeepInfra
 has no voice list on its OpenAI root, but each model's public
 description at `https://api.deepinfra.com/models/<model>` names its
 preset voices, and every one of them was checked to speak; the app asks

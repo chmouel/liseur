@@ -2,10 +2,15 @@ package com.chmouel.liseur.tts
 
 import com.chmouel.liseur.BuildConfig
 import java.io.IOException
+import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl
@@ -20,11 +25,17 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * A model a server lists: its [tags] when the list says what each model
- * does (DeepInfra tags speech models `tts`), and its [pricePerMillionChars]
- * in dollars when the list has one.
+ * A model a server lists. [speech] says whether it makes speech, null when
+ * the list does not say; [pricePerMillionChars] is in dollars when the
+ * list has a price per character; [voices] are the ones the list names for
+ * it (OpenRouter's `supported_voices`), null when it names none.
  */
-data class SpeechModel(val id: String, val tags: List<String>? = null, val pricePerMillionChars: Double? = null)
+data class SpeechModel(
+    val id: String,
+    val speech: Boolean? = null,
+    val pricePerMillionChars: Double? = null,
+    val voices: List<String>? = null,
+)
 
 object OpenAiTts {
     /**
@@ -40,11 +51,12 @@ object OpenAiTts {
     /**
      * The models of [all] that make speech, in the server's order: a
      * server's chat and transcription models cannot answer `audio/speech`.
-     * A list that tags its models is taken at its word; otherwise the ones
-     * whose names look like speech models, or every one when none does.
+     * A list that says what its models do is taken at its word; otherwise
+     * the ones whose names look like speech models, or every one when none
+     * does.
      */
     fun speechModels(all: List<SpeechModel>): List<SpeechModel> {
-        if (all.any { it.tags != null }) return all.filter { m -> m.tags.orEmpty().any { it.equals("tts", ignoreCase = true) } }
+        if (all.any { it.speech != null }) return all.filter { it.speech == true }
         return all.filter { m -> SPEECH_MODEL_HINTS.any { m.id.contains(it, ignoreCase = true) } }.ifEmpty { all }
     }
 
@@ -107,9 +119,18 @@ object OpenAiTts {
  * There is no logging interceptor on purpose: the request may carry a key
  * in a header and carries the book's text in the body.
  */
-class OpenAiTtsClient(private val client: OkHttpClient = default()) {
+class OpenAiTtsClient(
+    private val client: OkHttpClient = default(),
+    private val decodeMp3: suspend (ByteArray) -> ByteArray = Mp3Pcm::toSpeechPcm,
+) {
+    /** Models, per server, that refused WAV and answered MP3 instead (OpenRouter's). */
+    private val mp3Models: MutableSet<Pair<HttpUrl, String>> = ConcurrentHashMap.newKeySet()
 
-    /** Throws [SpeechError]; cancelling the caller cancels the request. */
+    /**
+     * Throws [SpeechError]; cancelling the caller cancels the request. WAV
+     * is asked first; a server that refuses the format is asked for MP3,
+     * which is remembered for that model once it worked.
+     */
     suspend fun synthesize(
         base: HttpUrl,
         apiKey: String?,
@@ -117,11 +138,32 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
         voice: String,
         model: String,
     ): SpeechAudio {
+        val key = base to model
+        if (key in mp3Models) return decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3)
+        return when (val reply = speak(base, apiKey, text, voice, model, WAV)) {
+            is Reply.Audio -> decode(reply, WAV)
+            is Reply.Failure -> {
+                if (reply.code != 400 && reply.code != 422 || !reply.text.contains("response_format", ignoreCase = true)) {
+                    throw errorFor(reply.code, reply.text)
+                }
+                decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3).also { mp3Models += key }
+            }
+        }
+    }
+
+    private suspend fun speak(
+        base: HttpUrl,
+        apiKey: String?,
+        text: String,
+        voice: String,
+        model: String,
+        format: String,
+    ): Reply {
         val body = JSONObject()
             .put("model", model)
             .put("input", text)
             .put("voice", voice)
-            .put("response_format", "wav")
+            .put("response_format", format)
             .toString()
         val request = request(base, "audio/speech", apiKey).post(body.toRequestBody(JSON)).build()
         return execute(request, ::speech)
@@ -130,13 +172,15 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
     /**
      * The voices [model] has, in the server's order: the server's voice
      * list; when it has none, the ones DeepInfra describes for [model] (see
-     * [OpenAiTts.modelDescription]), or OpenAI's own for OpenAI. Empty when
-     * the server names none, so the voice is typed: nothing is guessed.
+     * [OpenAiTts.modelDescription]), OpenAI's own for OpenAI, or the ones
+     * the server's model list names for it (OpenRouter's). Empty when the
+     * server names none, so the voice is typed: nothing is guessed.
      * Throws [SpeechError].
      */
     suspend fun voices(base: HttpUrl, apiKey: String?, model: String?): List<String> {
-        execute(request(base, "audio/voices", apiKey).get().build(), ::voiceList)?.let { return it }
-        val description = model?.takeIf { it.isNotBlank() }?.let { OpenAiTts.modelDescription(base, it) }
+        voiceList(base, apiKey)?.let { return it }
+        val named = model?.takeIf { it.isNotBlank() }
+        val description = named?.let { OpenAiTts.modelDescription(base, it) }
         return when {
             // Public, so asked without the key.
             description != null -> execute(
@@ -144,20 +188,104 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
                 ::describedVoices,
             )
             OpenAiTts.isOpenAi(base) -> OpenAiTts.STANDARD_VOICES
+            named != null -> models(base, apiKey).firstOrNull { it.id == named }?.voices.orEmpty()
             else -> emptyList()
         }
     }
 
     /**
      * Every model the server lists, in its order, or none when it has no
-     * model list. Throws [SpeechError].
+     * model list. Speech models are asked for, as OpenRouter lists them
+     * only then; other servers ignore the question, and one that refuses
+     * it is asked again without. Throws [SpeechError].
      */
-    suspend fun models(base: HttpUrl, apiKey: String?): List<SpeechModel> =
-        execute(request(base, "models", apiKey).get().build(), ::modelList)
+    suspend fun models(base: HttpUrl, apiKey: String?): List<SpeechModel> {
+        val speech = base.newBuilder().addPathSegment("models").addQueryParameter("output_modalities", "speech").build()
+        return try {
+            execute(request(speech, apiKey).get().build(), ::modelList)
+        } catch (e: SpeechError.Service) {
+            if (e.code != 400 && e.code != 422) throw e
+            execute(request(base, "models", apiKey).get().build(), ::modelList)
+        }
+    }
 
-    private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
+    /**
+     * The server's own voice list, every page of it, or null when it has
+     * none. A list that says its total is read to the end (Mistral's comes
+     * ten at a time); one that stops short is an error, never taken as
+     * complete.
+     */
+    private suspend fun voiceList(base: HttpUrl, apiKey: String?): List<String>? {
+        val first = execute(request(base, "audio/voices", apiKey).get().build(), ::voicePage) ?: return null
+        val total = first.total ?: return first.names
+        val names = LinkedHashSet(first.names)
+        var read = first.items
+        var pages = 1
+        while (read < total) {
+            if (pages >= MAX_VOICE_PAGES) throw SpeechError.InvalidResponse("voice list too long")
+            val url = base.newBuilder().addPathSegments("audio/voices").addQueryParameter("offset", read.toString()).build()
+            val page = execute(request(url, apiKey).get().build(), ::voicePage)
+            if (page == null || page.items == 0) throw SpeechError.InvalidResponse("voice list cut short")
+            names += page.names
+            read += page.items
+            pages++
+        }
+        return names.toList()
+    }
+
+    /** Turns a reply into speech, off the network thread so it can be cancelled. */
+    private suspend fun decode(reply: Reply.Audio, asked: String): SpeechAudio = withContext(Dispatchers.Default) {
+        try {
+            val wrapped = reply.type == "application/json"
+            val bytes = if (wrapped) audioData(reply.body) else reply.body
+            when {
+                WavPcm.isWav(bytes) -> SpeechAudio(WavPcm.toSpeechPcm(bytes))
+                reply.type in MP3_TYPES || asked == MP3 -> SpeechAudio(decodeMp3(bytes))
+                wrapped -> throw SpeechError.InvalidResponse("unexpected format")
+                else -> SpeechAudio(rawPcm(bytes))
+            }
+        } catch (e: SpeechError) {
+            throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // The platform's words are not shown: they may quote the reply.
+            throw SpeechError.InvalidResponse("undecodable audio")
+        }
+    }
+
+    /** The audio in a JSON reply, as Mistral sends it: base64 under `audio_data`. */
+    private fun audioData(body: ByteArray): ByteArray {
+        val data = try {
+            JSONObject(String(body, Charsets.UTF_8)).opt("audio_data") as? String
+        } catch (_: JSONException) {
+            null
+        } ?: throw SpeechError.InvalidResponse("unexpected format")
+        val audio = try {
+            Base64.getDecoder().decode(data)
+        } catch (_: IllegalArgumentException) {
+            throw SpeechError.InvalidResponse("bad audio encoding")
+        }
+        if (audio.size > MAX_AUDIO_BYTES) throw SpeechError.InvalidResponse("audio too long")
+        return audio
+    }
+
+    /** A reply without a header: 24 kHz mono 16-bit PCM already (DeepInfra's Higgs). */
+    private fun rawPcm(body: ByteArray): ByteArray {
+        when {
+            body.isEmpty() -> throw SpeechError.InvalidResponse("empty audio")
+            body.size > SpeechAudio.MAX_PCM_BYTES -> throw SpeechError.InvalidResponse("audio too long")
+            body.size % 2 != 0 -> throw SpeechError.InvalidResponse("odd byte count")
+        }
+        return body
+    }
+
+    private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder =
+        request(base.newBuilder().addPathSegments(path).build(), apiKey)
+
+    private fun request(url: HttpUrl, apiKey: String?): Request.Builder {
         val builder = Request.Builder()
-            .url(base.newBuilder().addPathSegments(path).build())
+            .url(url)
             .header("User-Agent", USER_AGENT)
         if (apiKey.isNullOrBlank()) return builder
         try {
@@ -198,27 +326,51 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
         }
     }
 
-    private fun speech(response: Response): SpeechAudio {
-        if (!response.isSuccessful) throw errorFor(response)
-        val type = response.body.contentType()
-        if (type != null && "${type.type}/${type.subtype}".lowercase() !in AUDIO_TYPES) {
+    private fun speech(response: Response): Reply {
+        if (!response.isSuccessful) return Reply.Failure(response.code, errorText(response))
+        val type = response.body.contentType()?.let { "${it.type}/${it.subtype}".lowercase() }
+        if (type != null && type !in AUDIO_TYPES && type != "application/json") {
             throw SpeechError.InvalidResponse("unexpected format")
         }
+        val limit = if (type == "application/json") MAX_ENVELOPE_BYTES else MAX_AUDIO_BYTES
         val source = response.body.source()
-        if (source.request(MAX_AUDIO_BYTES + 1L)) throw SpeechError.InvalidResponse("audio too long")
-        val body = source.buffer.readByteArray()
-        if (WavPcm.isWav(body)) return SpeechAudio(WavPcm.toSpeechPcm(body))
-        when {
-            body.isEmpty() -> throw SpeechError.InvalidResponse("empty audio")
-            body.size > SpeechAudio.MAX_PCM_BYTES -> throw SpeechError.InvalidResponse("audio too long")
-            body.size % 2 != 0 -> throw SpeechError.InvalidResponse("odd byte count")
-        }
-        return SpeechAudio(body)
+        if (source.request(limit + 1L)) throw SpeechError.InvalidResponse("audio too long")
+        return Reply.Audio(source.buffer.readByteArray(), type)
     }
 
+    /** What the server answered to a speech request, read but not yet decoded. */
+    private sealed interface Reply {
+        class Audio(val body: ByteArray, val type: String?) : Reply
+        class Failure(val code: Int, val text: String) : Reply
+
+        fun orThrow(): Audio = when (this) {
+            is Audio -> this
+            is Failure -> throw errorFor(code, text)
+        }
+    }
+
+    private class VoicePage(val names: List<String>, val items: Int, val total: Int?)
+
     /** Null when the server has no voice list. */
-    private fun voiceList(response: Response): List<String>? =
-        if (response.code == 404 || response.code == 405) null else names(listItems(response, "voices"))
+    private fun voicePage(response: Response): VoicePage? {
+        if (response.code == 404 || response.code == 405) return null
+        if (!response.isSuccessful) throw errorFor(response)
+        val text = boundedText(response, MAX_LIST_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
+        val trimmed = text.trimStart()
+        return try {
+            if (trimmed.startsWith("[")) {
+                JSONArray(trimmed).let { VoicePage(names(it), it.length(), null) }
+            } else {
+                val reply = JSONObject(trimmed)
+                val paged = reply.optJSONArray("items")
+                val items = reply.optJSONArray("voices") ?: paged ?: throw SpeechError.InvalidResponse("no list")
+                val total = (reply.opt("total") as? Int)?.takeIf { paged != null && items === paged && it >= 0 }
+                VoicePage(names(items), items.length(), total)
+            }
+        } catch (_: JSONException) {
+            throw SpeechError.InvalidResponse("no list")
+        }
+    }
 
     private fun modelList(response: Response): List<SpeechModel> {
         if (response.code == 404 || response.code == 405) return emptyList()
@@ -226,12 +378,40 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
         return (0 until items.length()).mapNotNull { i ->
             val item = items.optJSONObject(i) ?: return@mapNotNull items.optString(i).takeIf { it.isNotBlank() }?.let(::SpeechModel)
             val id = item.optString("id").ifEmpty { item.optString("name") }.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val metadata = item.optJSONObject("metadata")
-            val tags = metadata?.optJSONArray("tags")?.let { tags -> (0 until tags.length()).mapNotNull { tags.optString(it).takeIf(String::isNotBlank) } }
-            val price = metadata?.optJSONObject("pricing")?.optDouble("input_characters")?.takeIf { it.isFinite() && it >= 0 }
-            SpeechModel(id, tags, price)
+            val voices = item.optJSONArray("supported_voices")?.let(::strings)?.distinct()
+            SpeechModel(id, makesSpeech(item), price(item), voices)
         }.distinctBy { it.id }
     }
+
+    /**
+     * Whether a listed model makes speech, from the first thing its entry
+     * says: its output (Groq, OpenRouter), its capabilities (Mistral), or
+     * its tags (DeepInfra). Null when it says none of these.
+     */
+    private fun makesSpeech(item: JSONObject): Boolean? {
+        val output = item.optJSONArray("output_modalities")
+            ?: item.optJSONObject("architecture")?.optJSONArray("output_modalities")
+        if (output != null) return strings(output).any { it.equals("speech", ignoreCase = true) }
+        val capability = item.optJSONObject("capabilities")?.opt("audio_speech")
+        if (capability is Boolean) return capability
+        val tags = item.optJSONObject("metadata")?.optJSONArray("tags") ?: return null
+        return strings(tags).any { it.equals("tts", ignoreCase = true) }
+    }
+
+    /**
+     * The price per million characters: DeepInfra's, or OpenRouter's
+     * prompt price when that is all it bills (its per-character models).
+     */
+    private fun price(item: JSONObject): Double? {
+        item.optJSONObject("metadata")?.optJSONObject("pricing")?.optDouble("input_characters")
+            ?.takeIf { it.isFinite() && it >= 0 }?.let { return it }
+        val pricing = item.optJSONObject("pricing") ?: return null
+        if (pricing.optString("completion").toDoubleOrNull() != 0.0) return null
+        return pricing.optString("prompt").toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }?.times(1_000_000)
+    }
+
+    private fun strings(array: JSONArray): List<String> =
+        (0 until array.length()).mapNotNull { (array.opt(it) as? String)?.takeIf(String::isNotBlank) }
 
     /**
      * The voices in DeepInfra's description of a model: the values its
@@ -273,39 +453,34 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
         } ?: throw SpeechError.InvalidResponse("no list")
     }
 
-    /** The names in [items]: strings, or objects with an `id` or `name`. */
+    /** The names in [items]: strings, or objects with a `slug` (Mistral's), `id` or `name`. */
     private fun names(items: JSONArray): List<String> =
         (0 until items.length()).mapNotNull { i ->
-            items.optJSONObject(i)?.let { it.optString("id").ifEmpty { it.optString("name") } }
-                ?: items.optString(i)
+            items.optJSONObject(i)?.let { o -> NAME_FIELDS.firstNotNullOfOrNull { (o.opt(it) as? String)?.takeIf(String::isNotBlank) } }
+                ?: (items.opt(i) as? String)
         }.filter { it.isNotBlank() }.distinct()
 
-    private fun errorFor(response: Response): SpeechError {
-        val code = response.code
-        return when {
-            code == 401 || code == 403 -> SpeechError.InvalidKey(code)
-            code == 429 -> SpeechError.RateLimited(code)
-            (code == 400 || code == 404) && detail(response).contains("voice", ignoreCase = true) ->
-                SpeechError.InvalidVoice(code)
-            // DeepInfra's Qwen3 and Higgs answer an unknown voice with a 500.
-            code == 500 && detail(response).let { it.contains("voice", true) && it.contains("not found", true) } ->
-                SpeechError.InvalidVoice(code)
-            else -> SpeechError.Service(code)
-        }
-    }
+    private fun errorFor(response: Response): SpeechError = errorFor(response.code, errorText(response))
 
-    /** The FastAPI `detail` of an error, when it is a plain message. */
-    private fun detail(response: Response): String {
+    /**
+     * The message in an error reply, to recognise it, never to show it:
+     * FastAPI's `detail`, a top-level `message` (Mistral), or OpenAI's
+     * `error.message` (OpenRouter); else the reply as it is.
+     */
+    private fun errorText(response: Response): String {
         val text = try {
             boundedText(response, MAX_ERROR_BYTES)
         } catch (_: IOException) {
             null
         } ?: return ""
-        return try {
-            JSONObject(text).optString("detail")
+        val reply = try {
+            JSONObject(text)
         } catch (_: JSONException) {
-            ""
+            return text
         }
+        return reply.optString("detail").ifEmpty { reply.opt("message") as? String ?: "" }
+            .ifEmpty { reply.optJSONObject("error")?.opt("message") as? String ?: "" }
+            .ifEmpty { text }
     }
 
     private fun boundedText(response: Response, limit: Long): String? {
@@ -316,15 +491,34 @@ class OpenAiTtsClient(private val client: OkHttpClient = default()) {
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
-        private val AUDIO_TYPES =
-            setOf("audio/wav", "audio/x-wav", "audio/wave", "audio/pcm", "audio/l16", "application/octet-stream")
+        private val AUDIO_TYPES = setOf(
+            "audio/wav", "audio/x-wav", "audio/wave", "audio/pcm", "audio/l16", "application/octet-stream",
+            "audio/mpeg", "audio/mp3",
+        )
+        private val MP3_TYPES = setOf("audio/mpeg", "audio/mp3")
+        private const val WAV = "wav"
+        private const val MP3 = "mp3"
+        private val NAME_FIELDS = listOf("slug", "id", "name")
+        private const val MAX_VOICE_PAGES = 20
 
         /** A reply's bytes: the longest PCM, with room for a WAV header. */
         private const val MAX_AUDIO_BYTES = SpeechAudio.MAX_PCM_BYTES + 64 * 1024L
+
+        /** That audio in base64 inside JSON, with room for the rest of the object. */
+        private const val MAX_ENVELOPE_BYTES = (MAX_AUDIO_BYTES + 2) / 3 * 4 + 64 * 1024L
         private const val MAX_ERROR_BYTES = 64 * 1024L
         private const val MAX_LIST_BYTES = 1024 * 1024L
         private val USER_AGENT =
             "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
+
+        private fun errorFor(code: Int, text: String): SpeechError = when {
+            code == 401 || code == 403 -> SpeechError.InvalidKey(code)
+            code == 429 -> SpeechError.RateLimited(code)
+            (code == 400 || code == 404) && text.contains("voice", ignoreCase = true) -> SpeechError.InvalidVoice(code)
+            // DeepInfra's Qwen3 and Higgs answer an unknown voice with a 500.
+            code == 500 && text.contains("voice", true) && text.contains("not found", true) -> SpeechError.InvalidVoice(code)
+            else -> SpeechError.Service(code)
+        }
 
         // A small server, a Raspberry Pi say, can take longer than the
         // sentence lasts to make it.

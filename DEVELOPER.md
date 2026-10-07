@@ -1360,17 +1360,35 @@ reader behavior.
   `DeviceVoices.toSpeechPcm` converts to 24 kHz mono 16-bit. One
   `TextToSpeech` is shared and shut down after a minute idle.
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
-  address whose path has none, asking for `response_format: "wav"`;
-  `WavPcm` reads the header and converts any rate or channel count, and
-  a reply without one is taken as raw 24 kHz PCM. The settings screen
-  fills its model menu from `<root>/models`: when entries carry
-  `metadata.tags` (DeepInfra), those tagged `tts`, with the price from
-  `metadata.pricing.input_characters`; otherwise speech-looking ids,
-  else all; 404/405 is no list. Voices are listed per model:
-  `<root>/audio/voices`, else, for DeepInfra's root only
+  address whose path has none, asking for `response_format: "wav"`.
+  A 400/422 whose message names `response_format` (OpenRouter takes
+  only mp3 or pcm) is asked again for `mp3`, and that (root, model)
+  then asks mp3 first, once it worked. Error messages are read from
+  `detail`, `message` or `error.message`, only to classify them. The
+  reply is decoded off the network thread by what it is: JSON with a
+  base64 `audio_data` (Mistral) is unwrapped first and must hold WAV,
+  or MP3 when MP3 was asked; `WavPcm` reads a
+  WAV header and converts any rate or channel count; MP3 goes to
+  `Mp3Pcm` (platform `MediaExtractor` + `MediaCodec`, injected into
+  `OpenAiTtsClient` so JVM tests fake it); a reply without a header is
+  taken as raw 24 kHz PCM. The settings screen fills its model menu
+  from `<root>/models?output_modalities=speech` (OpenRouter lists its
+  speech models only then; a 400/422 asks plain `models`). A model
+  makes speech by the first thing its entry says: `output_modalities`
+  or `architecture.output_modalities` (Groq, OpenRouter),
+  `capabilities.audio_speech` (Mistral), `metadata.tags` with `tts`
+  (DeepInfra). When any entry says, only speech models are kept;
+  otherwise speech-looking ids, else all; 404/405 is no list. The price
+  is `metadata.pricing.input_characters`, or OpenRouter's
+  `pricing.prompt` when `pricing.completion` is 0. Voices are listed
+  per model: `<root>/audio/voices` (`voices` or `items`, entries named
+  by `slug`, `id` or `name`; a reply with `items` and `total` is read
+  by `offset` to the end, and one that stops short is an error), else,
+  for DeepInfra's root only
   (`OpenAiTts.modelDescription`), the voice enum in the public
   `https://api.deepinfra.com/models/<model>` schema, asked without the
-  key; else OpenAI's standard voices for `api.openai.com` only, and an
+  key; else OpenAI's standard voices for `api.openai.com` only; else
+  the model's `supported_voices` in the model list (OpenRouter), and an
   empty list (a typed voice) anywhere else. Picking a model saves it
   with a voice that model lists (`VoiceChoice`) in one write
   (`setSpeechServerModelAndVoice`). Voices show as chips

@@ -266,11 +266,13 @@ class OpenAiTtsClientTest {
     @Test
     fun `a service with no voice list has none to offer, so the voice is typed`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
+        server.enqueue(MockResponse(code = 404))
         server.enqueue(MockResponse(code = 405))
+        server.enqueue(MockResponse(code = 200, body = """{"data":[{"id":"m"}]}"""))
 
         assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "kokoro"))
         assertEquals(emptyList<String>(), OpenAiTtsClient().voices(OpenAiTts.baseUrl(server.url("/v1/openai").toString())!!, "k", "m"))
-        assertEquals(2, server.requestCount)
+        assertEquals(4, server.requestCount)
     }
 
     @Test
@@ -431,14 +433,230 @@ class OpenAiTtsClientTest {
 
         assertEquals(
             listOf(
-                SpeechModel("ResembleAI/chatterbox-multilingual", listOf("tts"), 1.0),
-                SpeechModel("hexgrad/Kokoro-82M", listOf("tts"), 0.62),
-                SpeechModel("sesame/csm-1b", listOf("TTS"), null),
+                SpeechModel("ResembleAI/chatterbox-multilingual", true, 1.0),
+                SpeechModel("hexgrad/Kokoro-82M", true, 0.62),
+                SpeechModel("sesame/csm-1b", true, null),
             ),
             OpenAiTts.speechModels(OpenAiTtsClient().models(base, null)),
         )
-        // Tags that name no speech model mean there is none, not that every model speaks.
-        assertEquals(emptyList<SpeechModel>(), OpenAiTts.speechModels(listOf(SpeechModel("gpt-4o", listOf("chat")))))
+        // A list that says none of its models speak has none, not every one.
+        assertEquals(emptyList<SpeechModel>(), OpenAiTts.speechModels(listOf(SpeechModel("gpt-4o", false))))
+    }
+
+    @Test
+    fun `asks for speech models, and asks plainly a server that refuses the question`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 200, body = """{"data":[{"id":"kokoro"}]}"""))
+        server.enqueue(MockResponse(code = 400, body = """{"detail":"unknown parameter"}"""))
+        server.enqueue(MockResponse(code = 200, body = """{"data":[{"id":"tts-1"}]}"""))
+        server.enqueue(MockResponse(code = 500))
+
+        assertEquals(listOf(SpeechModel("kokoro")), OpenAiTtsClient().models(base, null))
+        assertEquals("speech", server.takeRequest().url.queryParameter("output_modalities"))
+        assertEquals(listOf(SpeechModel("tts-1")), OpenAiTtsClient().models(base, null))
+        assertEquals("speech", server.takeRequest().url.queryParameter("output_modalities"))
+        val plain = server.takeRequest().url
+        assertEquals("/v1/models", plain.encodedPath)
+        assertNull(plain.query)
+        expect<SpeechError.Service> { OpenAiTtsClient().models(base, null) }
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `a model's own word on speech comes from its output, capabilities or tags, in that order`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"data":[
+                    {"id":"canopylabs/orpheus-v1-english","output_modalities":["speech"]},
+                    {"id":"openai/gpt-oss-20b","output_modalities":["text"]},
+                    {"id":"voxtral-mini-tts-2603","capabilities":{"audio_speech":true}},
+                    {"id":"mistral-small","capabilities":{"audio_speech":false}},
+                    {"id":"codestral","capabilities":{"completion_chat":true}},
+                    {"id":"odd/tts","output_modalities":["text"],"metadata":{"tags":["tts"]}},
+                    {"id":"plain"}]}""",
+            ),
+        )
+
+        val models = OpenAiTtsClient().models(base, null)
+
+        assertEquals(listOf(true, false, true, false, null, false, null), models.map { it.speech })
+        assertEquals(
+            listOf("canopylabs/orpheus-v1-english", "voxtral-mini-tts-2603"),
+            OpenAiTts.speechModels(models).map { it.id },
+        )
+    }
+
+    @Test
+    fun `OpenRouter's speech models come with their voices, and a price when billed by character`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"data":[
+                    {"id":"hexgrad/kokoro-82m","architecture":{"output_modalities":["speech"]},
+                     "pricing":{"prompt":"0.00000062","completion":"0"},"supported_voices":["af_heart","ff_siwis",7]},
+                    {"id":"google/gemini-tts","architecture":{"output_modalities":["speech"]},
+                     "pricing":{"prompt":"0.0000005","completion":"0.00001"},"supported_voices":null},
+                    {"id":"openai/gpt-4o","architecture":{"output_modalities":["text"]},"pricing":{"prompt":"0.0000025","completion":"0.00001"}}]}""",
+            ),
+        )
+
+        val models = OpenAiTts.speechModels(OpenAiTtsClient().models(base, "k"))
+
+        assertEquals(listOf("hexgrad/kokoro-82m", "google/gemini-tts"), models.map { it.id })
+        assertEquals(0.62, models[0].pricePerMillionChars!!, 1e-9)
+        assertEquals(listOf("af_heart", "ff_siwis"), models[0].voices)
+        assertNull(models[1].pricePerMillionChars)
+        assertNull(models[1].voices)
+    }
+
+    @Test
+    fun `a server without a voice list offers the voices its model list names`(): Unit = runBlocking {
+        val models = """{"data":[{"id":"hexgrad/kokoro-82m","supported_voices":["af_heart","ff_siwis"]},
+            {"id":"google/gemini-tts","supported_voices":null},{"id":"mute","supported_voices":[]}]}"""
+        for (model in listOf("hexgrad/kokoro-82m", "google/gemini-tts", "mute", "unlisted")) {
+            server.enqueue(MockResponse(code = 404))
+            server.enqueue(MockResponse(code = 200, body = models))
+        }
+
+        assertEquals(listOf("af_heart", "ff_siwis"), OpenAiTtsClient().voices(base, "k", "hexgrad/kokoro-82m"))
+        assertEquals("/v1/audio/voices", server.takeRequest().url.encodedPath)
+        val listing = server.takeRequest()
+        assertEquals("/v1/models", listing.url.encodedPath)
+        assertEquals("Bearer k", listing.headers["Authorization"])
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "google/gemini-tts"))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "mute"))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, "k", "unlisted"))
+    }
+
+    @Test
+    fun `Mistral's voices are read page by page, by their slug`(): Unit = runBlocking {
+        fun page(vararg slugs: String?) = MockResponse(
+            code = 200,
+            body = JSONObject()
+                .put("items", org.json.JSONArray(slugs.map { s -> JSONObject().put("name", "N").apply { if (s != null) put("slug", s) } }))
+                .put("total", 5).put("page_size", 2).toString(),
+        )
+        server.enqueue(page("fr_marie_neutral", "en_paul_happy"))
+        server.enqueue(page("en_paul_happy", null))
+        server.enqueue(page("fr_marie_sad"))
+
+        assertEquals(
+            listOf("fr_marie_neutral", "en_paul_happy", "N", "fr_marie_sad"),
+            OpenAiTtsClient().voices(base, "k", "voxtral-mini-tts-2603"),
+        )
+        assertNull(server.takeRequest().url.queryParameter("offset"))
+        // A duplicate still counts towards the total.
+        assertEquals("2", server.takeRequest().url.queryParameter("offset"))
+        assertEquals("4", server.takeRequest().url.queryParameter("offset"))
+    }
+
+    @Test
+    fun `a voice list that stops short of its total is an error, never a partial list`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 200, body = """{"items":[{"slug":"a"}],"total":3}"""))
+        server.enqueue(MockResponse(code = 200, body = """{"items":[],"total":3}"""))
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, "k", "m") }
+
+        repeat(20) { server.enqueue(MockResponse(code = 200, body = """{"items":[{"slug":"v$it"}],"total":1000}""")) }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, "k", "m") }
+        assertEquals(22, server.requestCount)
+    }
+
+    private fun failure(code: Int, body: String) = MockResponse(code = code, body = body)
+
+    private val openRouterRefusal =
+        """{"success":false,"error":{"name":"ZodError","message":"[{\"code\":\"invalid_value\",\"values\":[\"mp3\",\"pcm\"],\"path\":[\"response_format\"]}]"}}"""
+
+    @Test
+    fun `a server that refuses WAV is asked for MP3, which is then asked first for that model`(): Unit = runBlocking {
+        val decoded = byteArrayOf(5, 0, 6, 0)
+        val mp3s = mutableListOf<ByteArray>()
+        val client = OpenAiTtsClient(decodeMp3 = { mp3s += it; decoded })
+        server.enqueue(failure(400, openRouterRefusal))
+        server.enqueue(pcm(byteArrayOf(1, 2, 3), "audio/mpeg"))
+        server.enqueue(pcm(byteArrayOf(4, 5), "audio/mpeg"))
+        server.enqueue(pcm(byteArrayOf(7, 0)))
+
+        assertArrayEquals(decoded, client.synthesize(base, "k", "t", "af_heart", "hexgrad/kokoro-82m").pcm)
+        assertArrayEquals(decoded, client.synthesize(base, "k", "t", "af_heart", "hexgrad/kokoro-82m").pcm)
+        assertArrayEquals(byteArrayOf(7, 0), client.synthesize(base, "k", "t", "v", "other").pcm)
+
+        val formats = (0 until 4).map { JSONObject(server.takeRequest().body!!.utf8()).getString("response_format") }
+        assertEquals(listOf("wav", "mp3", "mp3", "wav"), formats)
+        assertEquals(2, mp3s.size)
+        assertArrayEquals(byteArrayOf(1, 2, 3), mp3s[0])
+    }
+
+    @Test
+    fun `a FastAPI refusal of the format also falls back, and other refusals do not`(): Unit = runBlocking {
+        val client = OpenAiTtsClient(decodeMp3 = { byteArrayOf(9, 0) })
+        server.enqueue(failure(422, """{"detail":[{"loc":["body","response_format"],"msg":"Input should be 'mp3'"}]}"""))
+        server.enqueue(pcm(byteArrayOf(1), "audio/mp3"))
+        assertArrayEquals(byteArrayOf(9, 0), client.synthesize(base, null, "t", "v", "a").pcm)
+
+        server.enqueue(failure(400, """{"error":{"message":"input too long"}}"""))
+        assertEquals(400, expect<SpeechError.Service> { client.synthesize(base, null, "t", "v", "b") }.code)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
+    fun `a failed MP3 retry is reported, and WAV is asked again next time`(): Unit = runBlocking {
+        val client = OpenAiTtsClient(decodeMp3 = { byteArrayOf(9, 0) })
+        server.enqueue(failure(400, openRouterRefusal))
+        server.enqueue(failure(403, """{"error":{"message":"Key limit exceeded"}}"""))
+        server.enqueue(failure(400, openRouterRefusal))
+        server.enqueue(pcm(byteArrayOf(1), "audio/mpeg"))
+
+        expect<SpeechError.InvalidKey> { client.synthesize(base, "k", "t", "v", "m") }
+        client.synthesize(base, "k", "t", "v", "m")
+        val decoder = OpenAiTtsClient(decodeMp3 = { throw IllegalStateException("codec said: secret text") })
+        server.enqueue(failure(400, openRouterRefusal))
+        server.enqueue(pcm(byteArrayOf(1), "audio/mpeg"))
+        val error = expect<SpeechError.InvalidResponse> { decoder.synthesize(base, "k", "t", "v", "m") }
+        assertFalse(error.toString().contains("secret"))
+
+        val formats = (0 until 6).map { JSONObject(server.takeRequest().body!!.utf8()).getString("response_format") }
+        assertEquals(listOf("wav", "mp3", "wav", "mp3", "wav", "mp3"), formats)
+    }
+
+    private fun mistral(audio: String) = MockResponse.Builder()
+        .code(200)
+        .addHeader("Content-Type", "application/json")
+        .body("""{"audio_data":$audio}""")
+        .build()
+
+    @Test
+    fun `audio sent as base64 in JSON is unwrapped, whatever format was asked`(): Unit = runBlocking {
+        val wav = WavPcmTest.wav(rate = 24_000, channels = 1, data = byteArrayOf(1, 0, 2, 0))
+        val encoded = "\"${java.util.Base64.getEncoder().encodeToString(wav)}\""
+        server.enqueue(mistral(encoded))
+        assertArrayEquals(byteArrayOf(1, 0, 2, 0), OpenAiTtsClient().synthesize(base, "k", "t", "fr_marie_neutral", "voxtral-mini-tts-2603").pcm)
+
+        val client = OpenAiTtsClient(decodeMp3 = { throw AssertionError("a WAV is not decoded as MP3") })
+        server.enqueue(failure(400, openRouterRefusal))
+        server.enqueue(mistral(encoded))
+        assertArrayEquals(byteArrayOf(1, 0, 2, 0), client.synthesize(base, "k", "t", "v", "m").pcm)
+    }
+
+    @Test
+    fun `JSON that does not carry WAV or asked MP3 is an error`(): Unit = runBlocking {
+        for (audio in listOf("\"not base64!\"", "42", "null", "\"${java.util.Base64.getEncoder().encodeToString(byteArrayOf(1, 0))}\"")) {
+            server.enqueue(mistral(audio))
+            expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, "k", "t", "v", "m") }
+        }
+        server.enqueue(mistral("\"${"A".repeat(12 * 1024 * 1024)}\""))
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, "k", "t", "v", "m") }
+    }
+
+    @Test
+    fun `an MP3 answer to a WAV request is decoded as MP3`(): Unit = runBlocking {
+        server.enqueue(pcm(byteArrayOf(1, 2, 3), "audio/mpeg"))
+        assertArrayEquals(byteArrayOf(8, 0), OpenAiTtsClient(decodeMp3 = { byteArrayOf(8, 0) }).synthesize(base, null, "t", "v", "m").pcm)
+    }
+
+    @Test
+    fun `Mistral's unknown voice is a missing voice`(): Unit = runBlocking {
+        server.enqueue(failure(404, """{"object":"error","message":"Voice 'x' not found.","type":"invalid_voice"}"""))
+        expect<SpeechError.InvalidVoice> { OpenAiTtsClient().synthesize(base, "k", "t", "x", "voxtral-mini-tts-2603") }
     }
 
     @Test
