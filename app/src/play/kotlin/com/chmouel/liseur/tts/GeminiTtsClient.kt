@@ -211,6 +211,9 @@ class GeminiTtsClient(
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(60, TimeUnit.SECONDS)
+            // A redirect could carry the key header and the book text elsewhere.
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
     }
 }

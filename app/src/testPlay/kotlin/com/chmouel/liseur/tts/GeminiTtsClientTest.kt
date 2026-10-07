@@ -74,6 +74,24 @@ class GeminiTtsClientTest {
     }
 
     @Test
+    fun `a redirect is not followed, so the key and text stay on the endpoint`() = runBlocking {
+        MockWebServer().use { elsewhere ->
+            elsewhere.start(InetAddress.getByName("127.0.0.1"), 0)
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(307)
+                    .addHeader("Location", elsewhere.url("/stolen").toString())
+                    .build(),
+            )
+
+            val error = expect<SpeechError.Service> { client().synthesize("secret-key", "Bonjour.", "Kore") }
+
+            assertEquals(307, error.code)
+            assertEquals(0, elsewhere.requestCount)
+        }
+    }
+
+    @Test
     fun `sends the model, voice, raw PCM format and store false, with the key as a header`() = runBlocking {
         server.enqueue(MockResponse(code = 200, body = audioBody(byteArrayOf(1, 0, 2, 0))))
 

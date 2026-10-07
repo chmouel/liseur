@@ -93,7 +93,15 @@ internal class GeminiReadAloud(
                 )
                 held = false
                 mutableCurrent.value = session
-                startService()
+                // The reads above suspend, so the reader may have left the
+                // foreground and Android may refuse the start.
+                try {
+                    startService()
+                } catch (e: RuntimeException) {
+                    session.stop()
+                    mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.Output))
+                    return@launch
+                }
                 session.start(selection)
             } catch (e: CancellationException) {
                 throw e
