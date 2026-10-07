@@ -187,12 +187,12 @@ enum class DefinitionTarget(val id: String) {
  *   null for the engine's default. Only builds that can read aloud offer it.
  * @param readAloudProvider Which speech service reads aloud, by id, or null
  *   for the build's default.
- * @param kokoroUrl The Kokoro server reading aloud uses, as typed, or null
- *   for none.
- * @param kokoroVoice The Kokoro voice reading aloud uses, by name, or null
+ * @param speechServerUrl The OpenAI-compatible speech service reading aloud
+ *   uses, as typed, or null for none.
+ * @param speechServerVoice The voice asked of that service, by name, or null
  *   for none chosen yet.
- * @param kokoroModel The model asked of the Kokoro server, or null for
- *   Kokoro's own name; hosted services name it differently.
+ * @param speechServerModel The model asked of that service, by name, or null
+ *   for none chosen yet.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -217,9 +217,9 @@ data class AppSettings(
     val highlightPalette: HighlightPalette = HighlightPalette(),
     val readAloudVoice: String? = null,
     val readAloudProvider: String? = null,
-    val kokoroUrl: String? = null,
-    val kokoroVoice: String? = null,
-    val kokoroModel: String? = null,
+    val speechServerUrl: String? = null,
+    val speechServerVoice: String? = null,
+    val speechServerModel: String? = null,
 )
 
 /**
@@ -279,9 +279,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
         val READ_ALOUD_VOICE = stringPreferencesKey("read_aloud_voice")
         val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
-        val KOKORO_URL = stringPreferencesKey("kokoro_url")
-        val KOKORO_VOICE = stringPreferencesKey("kokoro_voice")
-        val KOKORO_MODEL = stringPreferencesKey("kokoro_model")
+        val SPEECH_SERVER_URL = stringPreferencesKey("speech_server_url")
+        val SPEECH_SERVER_VOICE = stringPreferencesKey("speech_server_voice")
+        val SPEECH_SERVER_MODEL = stringPreferencesKey("speech_server_model")
     }
 
     /**
@@ -351,9 +351,9 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             ),
             readAloudVoice = p[Keys.READ_ALOUD_VOICE],
             readAloudProvider = p[Keys.READ_ALOUD_PROVIDER],
-            kokoroUrl = p[Keys.KOKORO_URL],
-            kokoroVoice = p[Keys.KOKORO_VOICE],
-            kokoroModel = p[Keys.KOKORO_MODEL],
+            speechServerUrl = p[Keys.SPEECH_SERVER_URL],
+            speechServerVoice = p[Keys.SPEECH_SERVER_VOICE],
+            speechServerModel = p[Keys.SPEECH_SERVER_MODEL],
         )
     }
 
@@ -506,20 +506,18 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.READ_ALOUD_PROVIDER] = id }
     }
 
-    /** Stores the Kokoro server as typed, or forgets it when [url] is blank. */
-    suspend fun setKokoroUrl(url: String) {
-        val trimmed = url.trim()
-        store.edit { p -> if (trimmed.isEmpty()) p.remove(Keys.KOKORO_URL) else p[Keys.KOKORO_URL] = trimmed }
-    }
+    /** Stores the speech service's address as typed, or forgets it when [url] is blank. */
+    suspend fun setSpeechServerUrl(url: String) = setOrRemove(Keys.SPEECH_SERVER_URL, url)
 
-    suspend fun setKokoroVoice(name: String) {
-        store.edit { it[Keys.KOKORO_VOICE] = name }
-    }
+    /** Stores the speech service's voice, or forgets it when [name] is blank. */
+    suspend fun setSpeechServerVoice(name: String) = setOrRemove(Keys.SPEECH_SERVER_VOICE, name)
 
-    /** Stores the Kokoro model, or forgets it when [model] is blank. */
-    suspend fun setKokoroModel(model: String) {
-        val trimmed = model.trim()
-        store.edit { p -> if (trimmed.isEmpty()) p.remove(Keys.KOKORO_MODEL) else p[Keys.KOKORO_MODEL] = trimmed }
+    /** Stores the speech service's model, or forgets it when [name] is blank. */
+    suspend fun setSpeechServerModel(name: String) = setOrRemove(Keys.SPEECH_SERVER_MODEL, name)
+
+    private suspend fun setOrRemove(key: Preferences.Key<String>, value: String) {
+        val trimmed = value.trim()
+        store.edit { p -> if (trimmed.isEmpty()) p.remove(key) else p[key] = trimmed }
     }
 
     /**
@@ -567,6 +565,6 @@ internal val APP_BACKUP_TYPES = mapOf(
     "highlight_tint_default" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,
-    "kokoro_url" to BackupValueType.STRING, "kokoro_voice" to BackupValueType.STRING,
-    "kokoro_model" to BackupValueType.STRING,
+    "speech_server_url" to BackupValueType.STRING, "speech_server_voice" to BackupValueType.STRING,
+    "speech_server_model" to BackupValueType.STRING,
 )

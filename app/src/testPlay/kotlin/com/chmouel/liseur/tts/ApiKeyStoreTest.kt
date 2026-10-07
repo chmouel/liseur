@@ -73,7 +73,7 @@ class ApiKeyStoreTest {
     fun eachServiceKeepsItsOwnKeyUnderNoBackup() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val field = ApiKeyStore::class.java.getDeclaredField("file").apply { isAccessible = true }
-        val files = listOf(ApiKeyStore.gemini(context), ApiKeyStore.kokoro(context)).map { field.get(it) as File }
+        val files = listOf(ApiKeyStore.gemini(context), ApiKeyStore.openAi(context)).map { field.get(it) as File }
         files.forEach { assertEquals(context.noBackupFilesDir.canonicalFile, it.parentFile!!.canonicalFile) }
         assertEquals("gemini-key", files[0].name)
         assertEquals(2, files.toSet().size)

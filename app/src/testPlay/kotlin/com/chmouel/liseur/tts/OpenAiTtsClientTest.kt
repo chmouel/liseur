@@ -21,7 +21,7 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 
-class KokoroTtsClientTest {
+class OpenAiTtsClientTest {
 
     private lateinit var server: MockWebServer
 
@@ -36,7 +36,7 @@ class KokoroTtsClientTest {
         server.close()
     }
 
-    private val base: HttpUrl get() = KokoroTts.baseUrl(server.url("/").toString())!!
+    private val base: HttpUrl get() = OpenAiTts.baseUrl(server.url("/").toString())!!
 
     private fun pcm(bytes: ByteArray, type: String? = "audio/pcm") = MockResponse.Builder()
         .code(200)
@@ -59,7 +59,7 @@ class KokoroTtsClientTest {
     fun `asks for raw PCM from the speech endpoint, with the key as a bearer token`(): Unit = runBlocking {
         server.enqueue(pcm(byteArrayOf(1, 0, 2, 0)))
 
-        val audio = KokoroTtsClient().synthesize(base, "secret-key", "Bonjour le monde.", "af_bella")
+        val audio = OpenAiTtsClient().synthesize(base, "secret-key", "Bonjour le monde.", "af_bella", "kokoro")
 
         assertArrayEquals(byteArrayOf(1, 0, 2, 0), audio.pcm)
         val request = server.takeRequest()
@@ -67,7 +67,7 @@ class KokoroTtsClientTest {
         assertEquals("/v1/audio/speech", request.url.encodedPath)
         assertEquals("Bearer secret-key", request.headers["Authorization"])
         val body = JSONObject(request.body!!.utf8())
-        assertEquals(KokoroTts.MODEL, body.getString("model"))
+        assertEquals("kokoro", body.getString("model"))
         assertEquals("Bonjour le monde.", body.getString("input"))
         assertEquals("af_bella", body.getString("voice"))
         assertEquals("pcm", body.getString("response_format"))
@@ -78,8 +78,8 @@ class KokoroTtsClientTest {
         server.enqueue(pcm(byteArrayOf(1, 0)))
         server.enqueue(pcm(byteArrayOf(1, 0)))
 
-        KokoroTtsClient().synthesize(base, null, "t", "af_bella")
-        KokoroTtsClient().synthesize(base, "  ", "t", "af_bella")
+        OpenAiTtsClient().synthesize(base, null, "t", "af_bella", "kokoro")
+        OpenAiTtsClient().synthesize(base, "  ", "t", "af_bella", "kokoro")
 
         assertNull(server.takeRequest().headers["Authorization"])
         assertNull(server.takeRequest().headers["Authorization"])
@@ -90,63 +90,63 @@ class KokoroTtsClientTest {
         server.enqueue(pcm(byteArrayOf(1, 0), "application/octet-stream"))
         server.enqueue(pcm(byteArrayOf(3, 0), null))
 
-        assertArrayEquals(byteArrayOf(1, 0), KokoroTtsClient().synthesize(base, null, "t", "v").pcm)
-        assertArrayEquals(byteArrayOf(3, 0), KokoroTtsClient().synthesize(base, null, "t", "v").pcm)
+        assertArrayEquals(byteArrayOf(1, 0), OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro").pcm)
+        assertArrayEquals(byteArrayOf(3, 0), OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro").pcm)
     }
 
     @Test
     fun `empty, odd-sized, oversized or non-audio answers are errors, not silence`(): Unit = runBlocking {
         server.enqueue(pcm(ByteArray(0)))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
 
         server.enqueue(pcm(byteArrayOf(1, 0, 2)))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
 
         server.enqueue(pcm(ByteArray(SpeechAudio.MAX_PCM_BYTES + 2)))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
 
         server.enqueue(pcm("""{"ok":true}""".toByteArray(), "application/json"))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
     }
 
     @Test
     fun `maps refusals, a missing voice, throttling and failures`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 401, body = """{"detail":"Not authenticated"}"""))
-        expect<SpeechError.InvalidKey> { KokoroTtsClient().synthesize(base, "k", "t", "v") }
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().synthesize(base, "k", "t", "v", "kokoro") }
 
         server.enqueue(MockResponse(code = 403))
-        expect<SpeechError.InvalidKey> { KokoroTtsClient().synthesize(base, "k", "t", "v") }
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().synthesize(base, "k", "t", "v", "kokoro") }
 
         server.enqueue(MockResponse(code = 400, body = """{"detail":"Voice 'nope' is not available"}"""))
-        expect<SpeechError.InvalidVoice> { KokoroTtsClient().synthesize(base, null, "t", "nope") }
+        expect<SpeechError.InvalidVoice> { OpenAiTtsClient().synthesize(base, null, "t", "nope", "kokoro") }
 
         server.enqueue(MockResponse(code = 400, body = """{"detail":"Unsupported language"}"""))
-        assertEquals(400, expect<SpeechError.Service> { KokoroTtsClient().synthesize(base, null, "t", "v") }.code)
+        assertEquals(400, expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }.code)
 
         server.enqueue(MockResponse(code = 422, body = """{"detail":[{"msg":"voice field required"}]}"""))
-        assertEquals(422, expect<SpeechError.Service> { KokoroTtsClient().synthesize(base, null, "t", "v") }.code)
+        assertEquals(422, expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }.code)
 
         server.enqueue(MockResponse(code = 429))
-        expect<SpeechError.RateLimited> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.RateLimited> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
 
         server.enqueue(MockResponse(code = 500, body = "<html>"))
-        expect<SpeechError.Service> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
 
         server.enqueue(MockResponse.Builder().onRequestStart(SocketEffect.CloseSocket()).build())
-        expect<SpeechError.Network> { KokoroTtsClient().synthesize(base, null, "t", "v") }
+        expect<SpeechError.Network> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
     }
 
     @Test
     fun `errors never repeat the key or the text`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 401, body = """{"detail":"bad key secret-key for Une phrase."}"""))
-        val error = expect<SpeechError.InvalidKey> { KokoroTtsClient().synthesize(base, "secret-key", "Une phrase.", "v") }
+        val error = expect<SpeechError.InvalidKey> { OpenAiTtsClient().synthesize(base, "secret-key", "Une phrase.", "v", "kokoro") }
         assertFalse(error.toString().contains("secret-key"))
         assertFalse(error.toString().contains("Une phrase"))
     }
 
     @Test
     fun `a key that cannot be a header is an invalid key, without being repeated`(): Unit = runBlocking {
-        val error = expect<SpeechError.InvalidKey> { KokoroTtsClient().synthesize(base, "secret\nkey", "t", "v") }
+        val error = expect<SpeechError.InvalidKey> { OpenAiTtsClient().synthesize(base, "secret\nkey", "t", "v", "kokoro") }
         assertFalse(error.toString().contains("secret"))
         assertEquals(0, server.requestCount)
     }
@@ -162,7 +162,7 @@ class KokoroTtsClientTest {
                     .build(),
             )
 
-            val error = expect<SpeechError.Service> { KokoroTtsClient().synthesize(base, "secret-key", "Bonjour.", "v") }
+            val error = expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, "secret-key", "Bonjour.", "v", "kokoro") }
 
             assertEquals(307, error.code)
             assertEquals(0, elsewhere.requestCount)
@@ -175,9 +175,9 @@ class KokoroTtsClientTest {
         server.enqueue(MockResponse(code = 200, body = """["ff_siwis"]"""))
         server.enqueue(MockResponse(code = 200, body = """{"voices":[{"id":"bf_emma"},{"name":"bm_george"}]}"""))
 
-        assertEquals(listOf("af_bella", "am_adam"), KokoroTtsClient().voices(base, "k"))
-        assertEquals(listOf("ff_siwis"), KokoroTtsClient().voices(base, null))
-        assertEquals(listOf("bf_emma", "bm_george"), KokoroTtsClient().voices(base, null))
+        assertEquals(listOf("af_bella", "am_adam"), OpenAiTtsClient().voices(base, "k"))
+        assertEquals(listOf("ff_siwis"), OpenAiTtsClient().voices(base, null))
+        assertEquals(listOf("bf_emma", "bm_george"), OpenAiTtsClient().voices(base, null))
 
         val request = server.takeRequest()
         assertEquals("GET", request.method)
@@ -188,56 +188,92 @@ class KokoroTtsClientTest {
     @Test
     fun `a voice list that is not one is an error`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 200, body = "<html>"))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().voices(base, null) }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null) }
 
         server.enqueue(MockResponse(code = 200, body = """{"models":[]}"""))
-        expect<SpeechError.InvalidResponse> { KokoroTtsClient().voices(base, null) }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().voices(base, null) }
 
         server.enqueue(MockResponse(code = 401))
-        expect<SpeechError.InvalidKey> { KokoroTtsClient().voices(base, "k") }
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().voices(base, "k") }
     }
 
     @Test
     fun `server addresses are read the way people type them`() {
-        assertEquals("http://192.168.1.18:8880/v1", KokoroTts.baseUrl(" 192.168.1.18:8880 ").toString())
-        assertEquals("http://pi.lan:8880/v1", KokoroTts.baseUrl("http://pi.lan:8880/").toString())
-        assertEquals("https://tts.example.com/v1", KokoroTts.baseUrl("https://tts.example.com/v1/").toString())
-        assertEquals("https://example.com/kokoro/v1", KokoroTts.baseUrl("https://example.com/kokoro").toString())
-        assertEquals("https://api.example.com/v1/openai", KokoroTts.baseUrl("https://api.example.com/v1/openai").toString())
-        assertNull(KokoroTts.baseUrl(""))
-        assertNull(KokoroTts.baseUrl("   "))
-        assertNull(KokoroTts.baseUrl("ftp://pi.lan"))
-        assertNull(KokoroTts.baseUrl("http://"))
+        assertEquals("http://192.168.1.18:8880/v1", OpenAiTts.baseUrl(" 192.168.1.18:8880 ").toString())
+        assertEquals("http://pi.lan:8880/v1", OpenAiTts.baseUrl("http://pi.lan:8880/").toString())
+        assertEquals("https://tts.example.com/v1", OpenAiTts.baseUrl("https://tts.example.com/v1/").toString())
+        assertEquals("https://example.com/kokoro/v1", OpenAiTts.baseUrl("https://example.com/kokoro").toString())
+        assertEquals("https://api.example.com/v1/openai", OpenAiTts.baseUrl("https://api.example.com/v1/openai").toString())
+        assertNull(OpenAiTts.baseUrl(""))
+        assertNull(OpenAiTts.baseUrl("   "))
+        assertNull(OpenAiTts.baseUrl("ftp://pi.lan"))
+        assertNull(OpenAiTts.baseUrl("http://"))
     }
 
     @Test
     fun `a server under a path keeps it`(): Unit = runBlocking {
         server.enqueue(pcm(byteArrayOf(1, 0)))
-        KokoroTtsClient().synthesize(KokoroTts.baseUrl(server.url("/kokoro/v1").toString())!!, null, "t", "v")
+        OpenAiTtsClient().synthesize(OpenAiTts.baseUrl(server.url("/kokoro/v1").toString())!!, null, "t", "v", "kokoro")
         assertEquals("/kokoro/v1/audio/speech", server.takeRequest().url.encodedPath)
     }
 
     @Test
     fun `a hosted API root is used as is, with the model it names`(): Unit = runBlocking {
         server.enqueue(pcm(byteArrayOf(1, 0)))
-        val root = KokoroTts.baseUrl(server.url("/v1/openai").toString())!!
+        val root = OpenAiTts.baseUrl(server.url("/v1/openai").toString())!!
 
-        KokoroTtsClient().synthesize(root, "k", "t", "af_heart", KokoroTts.model(" hexgrad/Kokoro-82M "))
+        OpenAiTtsClient().synthesize(root, "k", "t", "af_heart", "hexgrad/Kokoro-82M")
 
         val request = server.takeRequest()
         assertEquals("/v1/openai/audio/speech", request.url.encodedPath)
         assertEquals("hexgrad/Kokoro-82M", JSONObject(request.body!!.utf8()).getString("model"))
-        assertEquals(KokoroTts.MODEL, KokoroTts.model(null))
-        assertEquals(KokoroTts.MODEL, KokoroTts.model("  "))
     }
 
     @Test
-    fun `a service with no voice list offers no voices`(): Unit = runBlocking {
+    fun `a service with no voice list offers OpenAI's voices`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 404, body = """{"detail":"Not Found"}"""))
         server.enqueue(MockResponse(code = 405))
 
-        assertEquals(emptyList<String>(), KokoroTtsClient().voices(base, "k"))
-        assertEquals(emptyList<String>(), KokoroTtsClient().voices(base, "k"))
+        assertEquals(OpenAiTts.STANDARD_VOICES, OpenAiTtsClient().voices(base, "k"))
+        assertEquals(OpenAiTts.STANDARD_VOICES, OpenAiTtsClient().voices(base, "k"))
+    }
+
+    @Test
+    fun `lists models from OpenAI's shape or a bare array, with the key`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """{"object":"list","data":[{"id":"gpt-4o-mini-tts"},{"id":"whisper-1"},{"id":"tts-1"}]}""",
+            ),
+        )
+        server.enqueue(MockResponse(code = 200, body = """["kokoro"]"""))
+
+        assertEquals(listOf("gpt-4o-mini-tts", "whisper-1", "tts-1"), OpenAiTtsClient().models(base, "k"))
+        val request = server.takeRequest()
+        assertEquals("/v1/models", request.url.encodedPath)
+        assertEquals("Bearer k", request.headers["Authorization"])
+        assertEquals(listOf("kokoro"), OpenAiTtsClient().models(base, null))
+    }
+
+    @Test
+    fun `a service with no model list offers none, and other failures are errors`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 401))
+        server.enqueue(MockResponse(code = 200, body = """{"voices":[]}"""))
+
+        assertEquals(emptyList<String>(), OpenAiTtsClient().models(base, null))
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().models(base, "k") }
+        expect<SpeechError.InvalidResponse> { OpenAiTtsClient().models(base, null) }
+    }
+
+    @Test
+    fun `only models that look like they speak are offered, unless none does`() {
+        assertEquals(
+            listOf("gpt-4o-mini-tts", "tts-1", "hexgrad/Kokoro-82M", "speech-02"),
+            OpenAiTts.speechModels(listOf("gpt-4o", "gpt-4o-mini-tts", "whisper-1", "tts-1", "hexgrad/Kokoro-82M", "speech-02")),
+        )
+        assertEquals(listOf("my-voice", "other"), OpenAiTts.speechModels(listOf("my-voice", "other")))
+        assertEquals(emptyList<String>(), OpenAiTts.speechModels(emptyList()))
     }
 
     @Test
@@ -260,8 +296,8 @@ class KokoroTtsClientTest {
                 },
             )
             .build()
-        val client = KokoroTtsClient(okhttp)
-        val pending = async(kotlinx.coroutines.Dispatchers.Default) { client.synthesize(base, null, "t", "v") }
+        val client = OpenAiTtsClient(okhttp)
+        val pending = async(kotlinx.coroutines.Dispatchers.Default) { client.synthesize(base, null, "t", "v", "kokoro") }
         server.takeRequest()
         delay(100)
         val started = System.nanoTime()

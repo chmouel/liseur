@@ -21,8 +21,9 @@ Manager package list).
 
 There are two product flavors. `foss` is the build F-Droid reproduces
 and the GitHub release carries. `play` adds read-aloud, which sends
-book text to a non-free Google service (Gemini) or to the reader's own
-Kokoro server, and ships only on Google Play. Everything for that feature lives under `app/src/play/` and
+book text to a non-free Google service (Gemini) or to an
+OpenAI-compatible speech service the reader enters, and ships only on
+Google Play. Everything for that feature lives under `app/src/play/` and
 `app/src/testPlay/`; the `foss` APK has none of its code, dependencies or
 endpoints. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
@@ -1340,24 +1341,28 @@ reader behavior.
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
 - Two providers, chosen on the Read aloud settings screen
-  (`ReadAloudProvider`): Gemini and a Kokoro server, self-hosted or a
-  hosted OpenAI-style API (`<root>/audio/speech`, where `/v1` is added to
-  an address whose path has none; the model is a setting, `kokoro` by
-  default). A missing `audio/voices` (404/405) is an empty list. Both
-  return 24 kHz mono 16-bit PCM, so the engine, cache and `AudioTrack`
-  output are shared; only the `SpeechSynthesizer` a session is built with
-  differs. Kokoro runs one
-  request at a time with long timeouts, since a small server can be
-  slower than real time. See `docs/adr/0043-kokoro-read-aloud.md`.
+  (`ReadAloudProvider`): Gemini and any OpenAI-compatible speech API
+  (OpenAI, a hosted service, or a self-hosted server such as Kokoro).
+  Requests go to `<root>/audio/speech`, where `/v1` is added to an
+  address whose path has none. The settings screen fills its model and
+  voice menus from `<root>/models` (speech-looking ids only, else all;
+  404/405 is no list) and `<root>/audio/voices` (404/405 is OpenAI's
+  standard voices), and either can be typed. Both providers return 24 kHz
+  mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
+  shared; only the `SpeechSynthesizer` a session is built with differs.
+  The OpenAI-compatible provider runs one request at a time with long
+  timeouts, since a small server can be slower than real time. Its
+  notices name the server's host. See
+  `docs/adr/0043-openai-compatible-read-aloud.md`.
 - Engine callbacks arrive on the main thread. A failed sentence pauses on
   that sentence with a notice; play retries it. Nothing is ever skipped.
   A refused key or a voice the server does not have stops the session.
-- Keys (Gemini, optional Kokoro) live in `noBackupFilesDir`, encrypted by
-  `SecretCipher`, each in its own file, and are never logged; neither are
-  request bodies or audio. The provider, Kokoro URL, model and voice are app
-  settings in the settings backup but not in liseur-sync settings sync,
-  since a server address is per device. Listening is not counted as
-  reading time.
+- Keys (Gemini, optional OpenAI-compatible) live in `noBackupFilesDir`,
+  encrypted by `SecretCipher`, each in its own file, and are never logged;
+  neither are request bodies or audio. The provider and the speech
+  server's URL, model and voice are app settings in the settings backup
+  but not in liseur-sync settings sync, since a server address is per
+  device. Listening is not counted as reading time.
 
 ### Covers, UI, and dependencies
 
@@ -1953,8 +1958,8 @@ what lets it sync a book that came off an SD card.
   TetheredNet anti-feature. Together those justify `INTERNET`;
   `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
   constraint on the sync workers.
-- Read-aloud, which sends book text to Google or to a Kokoro server the
-  user enters, is in the `play` flavor only. F-Droid builds `foss`, which has none of its code,
+- Read-aloud, which sends book text to Google or to an OpenAI-compatible
+  speech service the user enters, is in the `play` flavor only. F-Droid builds `foss`, which has none of its code,
   dependencies or endpoint, so the NonFreeNet anti-feature does not apply.
   Before changing that boundary, check the `foss` release APK for
   `org.readium.navigator.media.tts`, `com.chmouel.liseur.tts` and

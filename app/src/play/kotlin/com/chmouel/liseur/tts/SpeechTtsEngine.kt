@@ -57,7 +57,7 @@ interface SpeechObserver {
 
 /**
  * A Readium [TtsEngine] whose voice comes from a speech service: Gemini or
- * a Kokoro server.
+ * an OpenAI-compatible one.
  *
  * The audio for each sentence comes from [cache], which the session's
  * prefetcher keeps a few sentences ahead; a sentence it did not see coming

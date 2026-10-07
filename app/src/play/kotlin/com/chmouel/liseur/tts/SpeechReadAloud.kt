@@ -33,12 +33,13 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl
 import org.readium.r2.shared.publication.Locator
 
 /**
  * Reading aloud, one book at a time, with the voice of the chosen
- * [ReadAloudProvider]: Gemini on the reader's key, or their own Kokoro
- * server.
+ * [ReadAloudProvider]: Gemini on the reader's key, or an OpenAI-compatible
+ * service of their choice.
  *
  * Holds the session in progress and keeps [ReadAloudService] running for
  * it, so playback carries on with the reader gone and the screen off.
@@ -49,11 +50,11 @@ import org.readium.r2.shared.publication.Locator
 internal class SpeechReadAloud(
     private val application: Application,
     private val geminiKeys: ApiKeyStore,
-    private val kokoroKeys: ApiKeyStore,
+    private val openAiKeys: ApiKeyStore,
     private val settings: AppSettingsRepository,
     private val checkpoints: ListeningCheckpoints,
     private val gemini: GeminiTtsClient = GeminiTtsClient(),
-    private val kokoro: KokoroTtsClient = KokoroTtsClient(),
+    private val openAi: OpenAiTtsClient = OpenAiTtsClient(),
 ) : ReadAloudFeature {
 
     private val scope = MainScope()
@@ -69,21 +70,29 @@ internal class SpeechReadAloud(
     val provider: Flow<ReadAloudProvider> =
         settings.settings.map { ReadAloudProvider.of(it.readAloudProvider) }.distinctUntilChanged()
 
-    /** Gemini needs a key; Kokoro a server and a voice, its key being optional. */
+    /** Gemini needs a key; an OpenAI-compatible service an address, a model and a voice, its key being optional. */
     override val configured: StateFlow<Boolean> =
         combine(settings.settings, geminiKeys.configured) { s, geminiKey ->
             when (ReadAloudProvider.of(s.readAloudProvider)) {
                 ReadAloudProvider.GEMINI -> geminiKey
-                ReadAloudProvider.KOKORO ->
-                    KokoroTts.baseUrl(s.kokoroUrl.orEmpty()) != null && !s.kokoroVoice.isNullOrBlank()
+                ReadAloudProvider.OPENAI ->
+                    OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) != null &&
+                        !s.speechServerModel.isNullOrBlank() && !s.speechServerVoice.isNullOrBlank()
             }
         }.stateIn(scope, SharingStarted.Eagerly, false)
 
     val geminiKeyConfigured: StateFlow<Boolean> = geminiKeys.configured
-    val kokoroKeyConfigured: StateFlow<Boolean> = kokoroKeys.configured
+    val openAiKeyConfigured: StateFlow<Boolean> = openAiKeys.configured
 
     /** The provider the last session read with, for naming it in a notice. */
     var noticeProvider: ReadAloudProvider = ReadAloudProvider.Default
+        private set
+
+    /**
+     * The host the last OpenAI-compatible session read from, which names
+     * it in a notice better than "OpenAI-compatible" does; null for Gemini.
+     */
+    var noticeHost: String? = null
         private set
 
     override val session: StateFlow<ReadAloudUi?> =
@@ -165,6 +174,7 @@ internal class SpeechReadAloud(
     private suspend fun voiceFor(s: AppSettings, bookId: String): SessionVoice? {
         val provider = ReadAloudProvider.of(s.readAloudProvider)
         noticeProvider = provider
+        noticeHost = null
         val notSetUp = ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp)
         return when (provider) {
             ReadAloudProvider.GEMINI -> {
@@ -172,13 +182,16 @@ internal class SpeechReadAloud(
                 val voice = GeminiVoice.of(s.readAloudVoice).id
                 SessionVoice(voice, provider.maxConcurrent) { text -> gemini.synthesize(key, text, voice) }
             }
-            ReadAloudProvider.KOKORO -> {
-                val base = KokoroTts.baseUrl(s.kokoroUrl.orEmpty())
-                val voice = s.kokoroVoice?.takeIf { it.isNotBlank() }
-                if (base == null || voice == null) return null.also { mutableNotices.tryEmit(notSetUp) }
-                val key = kokoroKeys.get()
-                val model = KokoroTts.model(s.kokoroModel)
-                SessionVoice(voice, provider.maxConcurrent) { text -> kokoro.synthesize(base, key, text, voice, model) }
+            ReadAloudProvider.OPENAI -> {
+                val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())
+                val model = s.speechServerModel?.takeIf { it.isNotBlank() }
+                val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
+                if (base == null || model == null || voice == null) {
+                    return null.also { mutableNotices.tryEmit(notSetUp) }
+                }
+                noticeHost = base.host
+                val key = openAiKeys.get()
+                SessionVoice(voice, provider.maxConcurrent) { text -> openAi.synthesize(base, key, text, voice, model) }
             }
         }
     }
@@ -207,34 +220,40 @@ internal class SpeechReadAloud(
     val geminiVoice: Flow<GeminiVoice> =
         settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
 
-    val kokoroUrl: Flow<String> = settings.settings.map { it.kokoroUrl.orEmpty() }.distinctUntilChanged()
+    val openAiUrl: Flow<String> = settings.settings.map { it.speechServerUrl.orEmpty() }.distinctUntilChanged()
 
-    val kokoroVoice: Flow<String?> = settings.settings.map { it.kokoroVoice }.distinctUntilChanged()
+    val openAiModel: Flow<String> = settings.settings.map { it.speechServerModel.orEmpty() }.distinctUntilChanged()
 
-    suspend fun setKokoroUrl(url: String) = settings.setKokoroUrl(url)
+    val openAiVoice: Flow<String> = settings.settings.map { it.speechServerVoice.orEmpty() }.distinctUntilChanged()
 
-    suspend fun setKokoroVoice(voice: String) = settings.setKokoroVoice(voice)
+    suspend fun setOpenAiUrl(url: String) = settings.setSpeechServerUrl(url)
 
-    val kokoroModel: Flow<String> = settings.settings.map { it.kokoroModel.orEmpty() }.distinctUntilChanged()
+    suspend fun setOpenAiModel(model: String) = settings.setSpeechServerModel(model)
 
-    suspend fun setKokoroModel(model: String) = settings.setKokoroModel(model)
+    suspend fun setOpenAiVoice(voice: String) = settings.setSpeechServerVoice(voice)
 
-    /** Saves the Kokoro server's [key], ending the session read with the old one. */
-    suspend fun setKokoroKey(key: String) {
+    /** Saves the service's [key], ending the session read with the old one. */
+    suspend fun setOpenAiKey(key: String) {
         stop()
-        kokoroKeys.set(key)
+        openAiKeys.set(key)
     }
 
-    suspend fun clearKokoroKey() {
+    suspend fun clearOpenAiKey() {
         stop()
-        kokoroKeys.clear()
+        openAiKeys.clear()
     }
 
-    /** The voices the Kokoro server at [url] offers, asked with the saved key. */
-    suspend fun kokoroVoices(url: String): Result<List<String>> {
-        val base = KokoroTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
+    /** The models the service at [url] lists that look like they speak, asked with the saved key. */
+    suspend fun openAiModels(url: String): Result<List<String>> =
+        ask(url) { base, key -> OpenAiTts.speechModels(openAi.models(base, key)) }
+
+    /** The voices the service at [url] offers, asked with the saved key. */
+    suspend fun openAiVoices(url: String): Result<List<String>> = ask(url) { base, key -> openAi.voices(base, key) }
+
+    private suspend fun ask(url: String, block: suspend (HttpUrl, String?) -> List<String>): Result<List<String>> {
+        val base = OpenAiTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
         return try {
-            Result.success(kokoro.voices(base, kokoroKeys.get()))
+            Result.success(block(base, openAiKeys.get()))
         } catch (e: SpeechError) {
             Result.failure(e)
         }

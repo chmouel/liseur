@@ -7,11 +7,11 @@ import com.chmouel.liseur.R
 enum class ReadAloudProvider(
     val id: String,
     @StringRes val label: Int,
-    /** Sentences fetched at once: a small Kokoro server only slows down with more. */
+    /** Sentences fetched at once: a small self-hosted server only slows down with more. */
     val maxConcurrent: Int,
 ) {
     GEMINI("gemini", R.string.read_aloud_provider_gemini, SpeechCache.MAX_CONCURRENT),
-    KOKORO("kokoro", R.string.read_aloud_provider_kokoro, 1),
+    OPENAI("openai", R.string.read_aloud_provider_openai, 1),
     ;
 
     companion object {
