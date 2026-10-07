@@ -1341,8 +1341,8 @@ reader behavior.
   fit restores to the gate's non-exact target instead of capturing the
   page, which Readium has not scrolled yet.
 - Two providers (`ReadAloudProvider`), chosen on the Read aloud screen
-  reached from Reading & navigation, Advanced: Gemini and any
-  OpenAI-compatible speech API (OpenAI, a hosted service, or a
+  reached from its row on the main Settings list, under Reading &
+  navigation: Gemini and any OpenAI-compatible speech API (OpenAI, a hosted service, or a
   self-hosted server such as Kokoro).
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
   address whose path has none. The settings screen fills its model and

@@ -91,7 +91,7 @@ interface ReadAloudFeature {
     fun skipForward()
     fun skipBackward()
 
-    /** The row at the end of Reading & navigation, Advanced, that opens [SettingsScreen]. */
+    /** The row on the main settings screen that opens [SettingsScreen]. */
     @Composable
     fun SettingsEntry(onClick: () -> Unit)
 

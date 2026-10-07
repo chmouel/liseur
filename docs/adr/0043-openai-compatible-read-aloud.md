@@ -27,12 +27,10 @@ service does not change the reasons in 0042 for keeping the feature out
 of it, and one boundary is simpler to check than two.
 
 Read aloud gets a screen of its own, where the reader picks the service
-and sets it up. It is reached from one row at the end of Reading &
-navigation, Advanced, where the Gemini settings were; read-aloud is an
-add-on most readers never set up, and a row on the main Settings list
-gave it more weight than it has. The row says which service and voice
-are in use, or that none is set up. Back from the screen returns to
-Advanced, still open.
+and sets it up. It is reached from a row on the main Settings list,
+just under Reading & navigation, so it can be found without opening
+Advanced. The row says which service and voice are in use, or that none
+is set up.
 
 The service is asked for `response_format: "pcm"`, which is 24 kHz mono
 16-bit PCM, the same as Gemini's. The engine, the sentence cache and the
