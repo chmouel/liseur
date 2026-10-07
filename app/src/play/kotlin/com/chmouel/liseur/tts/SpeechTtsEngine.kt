@@ -230,7 +230,7 @@ class SpeechTtsEngineProvider(
 
     override fun createEmptyPreferences() = SpeechTtsPreferences()
 
-    // The voice speaks at one pace; speed and pitch stay at their defaults.
+    // Speed is the app's own setting, applied by the PCM output; Readium's stays at its default.
     override fun getPlaybackParameters(settings: SpeechTtsSettings) = PlaybackParameters.DEFAULT
 
     override fun updatePlaybackParameters(

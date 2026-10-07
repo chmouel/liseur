@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -195,6 +196,8 @@ enum class DefinitionTarget(val id: String) {
  *   for none chosen yet.
  * @param speechServerVoices The voices of that service the reader wants
  *   offered, by name; empty offers every voice it lists.
+ * @param readAloudSpeed How fast reading aloud plays, 1 being as the voice
+ *   speaks.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -223,6 +226,7 @@ data class AppSettings(
     val speechServerVoice: String? = null,
     val speechServerModel: String? = null,
     val speechServerVoices: Set<String> = emptySet(),
+    val readAloudSpeed: Float = 1f,
 )
 
 /**
@@ -286,6 +290,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val SPEECH_SERVER_VOICE = stringPreferencesKey("speech_server_voice")
         val SPEECH_SERVER_MODEL = stringPreferencesKey("speech_server_model")
         val SPEECH_SERVER_VOICES = stringSetPreferencesKey("speech_server_voices")
+        val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
     }
 
     /**
@@ -359,6 +364,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             speechServerVoice = p[Keys.SPEECH_SERVER_VOICE],
             speechServerModel = p[Keys.SPEECH_SERVER_MODEL],
             speechServerVoices = p[Keys.SPEECH_SERVER_VOICES].orEmpty(),
+            readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
         )
     }
 
@@ -525,6 +531,10 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { p -> if (names.isEmpty()) p.remove(Keys.SPEECH_SERVER_VOICES) else p[Keys.SPEECH_SERVER_VOICES] = names }
     }
 
+    suspend fun setReadAloudSpeed(speed: Float) {
+        store.edit { it[Keys.READ_ALOUD_SPEED] = speed }
+    }
+
     private suspend fun setOrRemove(key: Preferences.Key<String>, value: String) {
         val trimmed = value.trim()
         store.edit { p -> if (trimmed.isEmpty()) p.remove(key) else p[key] = trimmed }
@@ -578,4 +588,5 @@ internal val APP_BACKUP_TYPES = mapOf(
     "speech_server_url" to BackupValueType.STRING, "speech_server_voice" to BackupValueType.STRING,
     "speech_server_model" to BackupValueType.STRING,
     "speech_server_voices" to BackupValueType.STRING_SET,
+    "read_aloud_speed" to BackupValueType.FLOAT,
 )

@@ -54,6 +54,8 @@ internal class ReadAloudSession(
     /** Brings the reader back to this book, for the notification. */
     val reader: Intent,
     voice: SessionVoice,
+    /** How fast it plays, read as it plays. */
+    private val speed: () -> Float,
     private val checkpoints: ListeningCheckpoints,
     private val onNotice: (ReadAloudNotice) -> Unit,
     private val onEnded: (ReadAloudSession) -> Unit,
@@ -79,7 +81,7 @@ internal class ReadAloudSession(
     val playback: ReadAloudPlayback = ReadAloudPlayback(
         scope = scope,
         opener = { initial, observer, listener ->
-            val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput() }, voices, observer)
+            val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
             TtsNavigatorFactory(application, publication, provider, BoundedSentenceTokenizer.factory)
                 ?.createNavigator(listener, initial)
                 ?.getOrNull()

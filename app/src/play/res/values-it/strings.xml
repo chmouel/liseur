@@ -92,4 +92,5 @@
         <item quantity="other">%d voci</item>
     </plurals>
     <string name="read_aloud_change_voice">Cambia voce</string>
+    <string name="read_aloud_speed">Velocità di lettura</string>
 </resources>
