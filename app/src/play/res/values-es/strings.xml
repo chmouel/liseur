@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s no acepta más solicitudes por ahora. En pausa; inténtalo más tarde.</string>
     <string name="read_aloud_notice_service">%1$s no pudo leer esta frase. En pausa; pulsa reproducir para intentarlo de nuevo.</string>
     <string name="read_aloud_notice_output">Este dispositivo no pudo reproducir la voz. En pausa.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s rechazó la clave de API. Revísala en Ajustes, Leer en voz alta.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s rechazó la clave de API. Revísala en Ajustes, Lectura y navegación, Avanzado, Leer en voz alta.</string>
     <string name="read_aloud_notice_selection_not_found">Leyendo desde el principio del párrafo.</string>
     <string name="read_aloud_notice_unavailable">Este libro no se puede leer en voz alta desde aquí.</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">Madura</string>
     <string name="read_aloud_voice_gentle">Amable</string>
     <string name="read_aloud_voice_even">Serena</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s no tiene la voz elegida. Elige otra en Ajustes, Leer en voz alta.</string>
-    <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Leer en voz alta.</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s no tiene la voz elegida. Elige otra en Ajustes, Lectura y navegación, Avanzado, Leer en voz alta.</string>
+    <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Lectura y navegación, Avanzado, Leer en voz alta.</string>
     <string name="read_aloud_settings_title">Leer en voz alta</string>
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>

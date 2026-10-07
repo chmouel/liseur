@@ -19,7 +19,7 @@
     <string name="read_aloud_notice_rate_limited">%1$s nimmt vorerst keine weiteren Anfragen an. Pausiert; versuche es später erneut.</string>
     <string name="read_aloud_notice_service">%1$s konnte diesen Satz nicht vorlesen. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
     <string name="read_aloud_notice_output">Dieses Gerät konnte die Stimme nicht abspielen. Pausiert.</string>
-    <string name="read_aloud_notice_invalid_key">%1$s hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Vorlesen.</string>
+    <string name="read_aloud_notice_invalid_key">%1$s hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Lesen &amp; Navigation, Erweitert, Vorlesen.</string>
     <string name="read_aloud_notice_selection_not_found">Vorlesen ab dem Anfang des Absatzes.</string>
     <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
 
@@ -35,8 +35,8 @@
     <string name="read_aloud_voice_mature">Reif</string>
     <string name="read_aloud_voice_gentle">Sanft</string>
     <string name="read_aloud_voice_even">Ausgeglichen</string>
-    <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Vorlesen eine andere.</string>
-    <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Vorlesen ein.</string>
+    <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Lesen &amp; Navigation, Erweitert, Vorlesen eine andere.</string>
+    <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Lesen &amp; Navigation, Erweitert, Vorlesen ein.</string>
     <string name="read_aloud_settings_title">Vorlesen</string>
     <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
     <string name="read_aloud_settings_provider">Sprachdienst</string>
