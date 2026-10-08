@@ -744,7 +744,6 @@ fun ReadingScrubber(
                 pending = it
             },
             onValueChangeFinished = {
-                dragged = null
                 onSeek(positionAtProgression(pending))
             },
             colors = SliderDefaults.colors(
