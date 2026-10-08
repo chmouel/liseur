@@ -65,6 +65,11 @@ readonly FIRST_CHAPTER="I: Loomings"
 readonly DICTIONARY_SWITCH="Look up definitions online"
 readonly READING_SETTINGS="Reading & navigation"
 
+# Read aloud is captured with the device's own voices: they need no
+# server and no key, so every emulator has them. The service the device
+# was on before is put back at the end, like the dictionary switch.
+readonly DEVICE_VOICES="Device voices"
+
 # A row only the Advanced sheet has, which is how the script tells it
 # from the short sheet it opens out of. It has to sit near the top: a
 # row below the fold is a row the sheet has and the dump does not.
@@ -217,6 +222,35 @@ open_dictionary_settings() {
         die "no \"$DICTIONARY_SWITCH\" switch under \"$READING_SETTINGS\""
 }
 
+# Which service read aloud speaks with, as its own settings screen names
+# it. The screen shows only the chosen one, so whichever label is there
+# is the answer.
+voice_service() {
+    local service
+    dump_ui || return 1
+    for service in "$DEVICE_VOICES" "Speech server (OpenAI-compatible)" "Gemini"; do
+        if find_node "$service" exact >/dev/null; then
+            printf '%s\n' "$service"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Pick a voice service, from read aloud's settings screen.
+#
+#   choose_voice_service <label>
+choose_voice_service() {
+    local want=$1
+    [[ $(voice_service) == "$want" ]] && return 0
+    tap_on "Change the voice service" exact
+    wait_for "$want" 15 exact >/dev/null || die "no \"$want\" in the voice services"
+    tap_on "$want" exact
+    sleep 2
+    [[ $(voice_service) == "$want" ]] || die "could not switch read aloud to \"$want\""
+    note "read aloud now speaks with $want"
+}
+
 # Bring something below the fold into view, on any screen that scrolls
 # with a swipe. `wait_for` only ever looks at what is already on screen,
 # so a switch further down a long form is a switch it never finds.
@@ -278,6 +312,8 @@ readonly TINTS="FFD54F,9CCC65,64B5F6"
 readonly POPUP_CHIP_PITCH_DP=36
 readonly POPUP_NOTE_DP=118
 readonly POPUP_DEFINE_DP=179
+# After Define come Search and Share, 36dp buttons 6dp apart.
+readonly POPUP_READ_ALOUD_DP=318
 
 density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -n 1)
 [[ -n "$density" ]] || density=420
@@ -757,6 +793,7 @@ tap_in_popup() {
         highlight) adb shell input tap "$chip_x" "$chip_y" ;;
         note) adb shell input tap "$((chip_x + $(dp $POPUP_NOTE_DP)))" "$chip_y" ;;
         define) adb shell input tap "$((chip_x + $(dp $POPUP_DEFINE_DP)))" "$chip_y" ;;
+        read_aloud) adb shell input tap "$((chip_x + $(dp $POPUP_READ_ALOUD_DP)))" "$chip_y" ;;
     esac
     sleep 2
 }
@@ -1175,6 +1212,16 @@ if ((want_dictionary)) && [[ $shot_class == phone ]]; then
     back
     sleep 2
 fi
+voice_before=""
+if [[ $shot_class == phone ]]; then
+    scroll_to "Read aloud" exact || die "no Read aloud row in Settings"
+    tap_on "Read aloud" exact
+    wait_for "Voice service" 15 exact >/dev/null || die "the read aloud settings never opened"
+    voice_before=$(voice_service) || die "could not tell which voice service read aloud uses"
+    choose_voice_service "$DEVICE_VOICES"
+    back
+    sleep 2
+fi
 back
 
 if [[ $shot_class == tablet ]]; then
@@ -1349,6 +1396,30 @@ else
     note "skipping the definition card"
 fi
 
+step "Read aloud"
+# Started from a word on the page, which is where it is offered. The
+# picture is of it speaking, so wait for Pause rather than for the
+# player: until the first sentence is ready the player is already there,
+# showing that it is busy.
+spoken=0
+for across in 0.50 0.35 0.65; do
+    select_a_word "$across" || continue
+    tap_in_popup read_aloud
+    reader_chrome_up
+    if wait_for "Pause reading aloud" 30 exact >/dev/null; then
+        spoken=1
+        break
+    fi
+    note "read aloud never started; trying another word"
+    tap_if_there "Stop reading aloud" exact || true
+    reader_chrome_down
+done
+((spoken)) || die "read aloud never started speaking"
+sleep 2
+shot 24-read-aloud
+tap_on "Stop reading aloud" exact
+reader_chrome_down
+
 step "Series"
 
 # The Series view only exists once the shelf holds a series, which the
@@ -1493,6 +1564,19 @@ if [[ $dictionary_before == off ]]; then
     back
 fi
 
+# And read aloud's voice service, for the same reason.
+if [[ -n $voice_before && $voice_before != "$DEVICE_VOICES" ]]; then
+    open_library
+    open_settings
+    scroll_to "Read aloud" exact || die "no Read aloud row to put back"
+    tap_on "Read aloud" exact
+    wait_for "Voice service" 15 exact >/dev/null || die "the read aloud settings never opened"
+    choose_voice_service "$voice_before"
+    back
+    sleep 2
+    back
+fi
+
 step "The F-Droid set"
 i=1
 # All light. A dark screenshot in a store listing is read as the app
@@ -1500,11 +1584,11 @@ i=1
 # theme is worth more as a line in the description than as one picture
 # in six that does not match the other five.
 #
-# All six now come from this one run. An empty shelf used to be among
+# All seven now come from this one run. An empty shelf used to be among
 # them, which meant the set could only be completed by a second command
-# with a different flag -- and it was the weakest of the six anyway:
+# with a different flag -- and it was the weakest of the lot anyway:
 # nothing sells a reader like the hours somebody has already put into it.
-for name in 01-library 02-reading 13-series 04-typography 18-stats 06-highlights; do
+for name in 01-library 02-reading 24-read-aloud 13-series 04-typography 18-stats 06-highlights; do
     [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"

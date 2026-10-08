@@ -24,12 +24,12 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
   <tr>
     <td width="33%"><img src="docs/screenshots/01-library.png" alt="Library"></td>
     <td width="33%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
-    <td width="33%"><img src="docs/screenshots/04-typography.png" alt="Typography"></td>
+    <td width="33%"><img src="docs/screenshots/24-read-aloud.png" alt="Read aloud"></td>
   </tr>
   <tr>
     <td align="center"><sub>The shelf, sorted by what you are currently reading.</sub></td>
     <td align="center"><sub>Distraction-free page with notes and bookmarks.</sub></td>
-    <td align="center"><sub>Themes, open typefaces, spacing, and brightness.</sub></td>
+    <td align="center"><sub>Read aloud with device voices or your own speech server.</sub></td>
   </tr>
 </table>
 

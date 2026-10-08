@@ -28,6 +28,16 @@ them; the rest are here.
     <td align="center"><sub>Everything set once, if ever, a tap further in.</sub></td>
     <td align="center"><sub>In-book search, with the line each hit sits on.</sub></td>
   </tr>
+  <tr>
+    <td><img src="screenshots/24-read-aloud.png" alt="Read aloud"></td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Read aloud, following the sentence on the page.</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
 </table>
 
 ## Marks and lookups

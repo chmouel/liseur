@@ -926,7 +926,7 @@ against a tablet cannot quietly overwrite the phone images. Pass
 `--class` for a device whose shape does not match how its pictures
 should be filed.
 
-The phone set is the full tour, seventeen screens, gathered on
+The phone set is the full tour, gathered on
 `docs/SCREENSHOTS.md`; the README shows three of them. The tablet set is
 three pictures of what a phone cannot show (two columns, the control
 that chooses them, and a shelf with room on it) and lands in
@@ -956,6 +956,11 @@ it. It used to keep the previous image and carry on when nothing came
 back, which is how a stale picture survived several releases. It now
 fails. `--no-dictionary` is how to say an offline run was expected.
 
+Read aloud is captured with device voices, which need no server and no
+key. The run switches the service to them in Settings, starts reading
+from a word on the page, waits until it is actually speaking, and puts
+the previous service back at the end.
+
 `--empty` is its own mode, and short: the empty library is the one screen
 the tour cannot reach, because the tour needs a shelf with books on it.
 It wipes app storage, photographs what a new reader sees, and stops. Run
@@ -965,7 +970,7 @@ the demo shelf back.
 Everything that gets published is in the light theme. A dark screenshot
 in a store listing reads as the app looking like that, rather than as the
 app being able to; the dark theme earns more as a line in the description
-than as one picture in six that matches none of the others. The script
+than as one picture in seven that matches none of the others. The script
 still captures `11-reading-dark` and `17-empty-library-dark`, which are
 useful to look at, but it just does not file them with fastlane or the
 README.
