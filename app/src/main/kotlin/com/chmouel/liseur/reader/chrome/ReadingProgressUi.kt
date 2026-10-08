@@ -127,7 +127,7 @@ fun ReadingFooter(
     onCycleField: (FooterSlot, onChosen: (FooterField) -> Unit) -> Unit,
     onPickSlot: (FooterPickTarget) -> Unit,
     onNote: (label: Int, unknown: Boolean) -> Unit,
-    onLockFooter : Boolean,
+    footerLocked: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (!footerHasAnythingToSay(mode, left, right)) return
@@ -213,7 +213,7 @@ fun ReadingFooter(
             figure = footerFigure(startField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(startSlot.cycleLabel),
-            enabled = !onLockFooter,
+            enabled = !footerLocked,
             onClick = { onCycleField(startSlot, noteForField) },
             onLongClick = { onPickSlot(startSlot.pickTarget) },
             padding = PaddingValues(
@@ -228,7 +228,7 @@ fun ReadingFooter(
         val middle = middleText(progress, mode, reflowable, screens)
         FooterSlotBox(
             clickLabel = stringResource(R.string.footer_cycle_middle),
-            enabled = !onLockFooter,
+            enabled = !footerLocked,
             onClick = { onCycleMode(noteForMode) },
             onLongClick = { onPickSlot(FooterPickTarget.MIDDLE) },
             padding = PaddingValues(horizontal = FOOTER_GAP, vertical = slotPadding),
@@ -259,7 +259,7 @@ fun ReadingFooter(
             figure = footerFigure(endField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(endSlot.cycleLabel),
-            enabled = !onLockFooter,
+            enabled = !footerLocked,
             onClick = { onCycleField(endSlot, noteForField) },
             onLongClick = { onPickSlot(endSlot.pickTarget) },
             padding = PaddingValues(

@@ -3415,7 +3415,7 @@ fun ReaderScreen(
                 mode = prefs.footerMode,
                 left = prefs.footerLeft,
                 right = prefs.footerRight,
-                onLockFooter = lockFooterOn,
+                footerLocked = lockFooterOn,
                 turn = footerTurn,
                 theme = readingTheme,
                 onCycleMode = onProgressAction.cycleFooterMode,

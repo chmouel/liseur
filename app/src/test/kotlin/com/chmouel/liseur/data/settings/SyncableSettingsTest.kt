@@ -363,6 +363,9 @@ class SyncableSettingsTest {
 
         // And the account-wide ones are not.
         assertFalse(entries.getValue("app.resume_last_book").affectsOpenBook)
+
+        // Locking the footer only toggles its taps; the page is untouched.
+        assertFalse(entries.getValue("app.lock_footer_on").affectsOpenBook)
     }
 
     private suspend fun configure(a: AppSettingsRepository, r: ReaderPreferencesRepository) {

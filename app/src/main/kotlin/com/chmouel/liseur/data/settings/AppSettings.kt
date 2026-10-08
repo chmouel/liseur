@@ -454,10 +454,10 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     }
 
     /**
-     * Controls whether the reader footer is clickable.
+     * Locks the reader footer.
      *
-     * When enabled, the user can interact with the footer.
-     * When disabled, the footer remains visible but is not clickable.
+     * When true, the footer stays visible but ignores taps and long
+     * presses. When false, taps cycle its fields and long presses pick them.
      */
     suspend fun setLockFooterOn(enabled: Boolean) {
         store.edit { it[Keys.LOCK_FOOTER_ON] = enabled }

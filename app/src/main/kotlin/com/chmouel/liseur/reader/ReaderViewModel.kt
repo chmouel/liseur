@@ -1134,7 +1134,7 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val lockFooterOn: StateFlow<Boolean> = appSettings.settings
-        .map { it.lockFooterOn }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+        .map { it.lockFooterOn }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /**
      * Whether this book is read by scrolling: the app-wide setting,

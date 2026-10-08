@@ -215,7 +215,6 @@ fun syncableSettings(
         key = "app.lock_footer_on",
         read = { app.current().lockFooterOn.toString() },
         write = { raw -> writeBoolean(raw) { app.setLockFooterOn(it) } },
-        affectsOpenBook = true,
     ),
     SyncableSetting(
         key = "app.resume_last_book",
