@@ -39,6 +39,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -695,6 +696,20 @@ fun ChromeEdgeFade(
 }
 
 /**
+ * Where a released scrubber was dropped ([to]) and the reader's place when
+ * it was let go ([from]).
+ */
+internal data class ScrubberHold(val from: Float, val to: Float)
+
+/**
+ * The scrubber's value: the finger while dragging, then the dropped place
+ * until the reader reports where the seek landed (#222). Falling straight
+ * back to the reader's place would show the old one for a moment.
+ */
+internal fun scrubberValue(dragged: Float?, held: ScrubberHold?, progression: Float): Float =
+    dragged ?: held?.takeIf { it.from == progression }?.to ?: progression
+
+/**
  * The scrubber shown with the reader chrome: drag to move through the
  * book, with a tick for every chapter and a preview of where you are
  * heading.
@@ -714,7 +729,13 @@ fun ReadingScrubber(
     if (progress == null) return
     var dragged by remember { mutableStateOf<Float?>(null) }
     var pending by remember { mutableFloatStateOf(0f) }
-    val value = dragged ?: progress.totalProgression
+    var held by remember { mutableStateOf<ScrubberHold?>(null) }
+    // Once the reader reports any new place the hold is spent, so a later
+    // return to the old place (the way-back chip) is shown as it is.
+    LaunchedEffect(progress.totalProgression) {
+        if (held?.from != progress.totalProgression) held = null
+    }
+    val value = scrubberValue(dragged, held, progress.totalProgression)
     val previewPosition = positionAtProgression(value)
     val accent = theme.foreground
 
@@ -744,6 +765,8 @@ fun ReadingScrubber(
                 pending = it
             },
             onValueChangeFinished = {
+                held = ScrubberHold(from = progress.totalProgression, to = pending)
+                dragged = null
                 onSeek(positionAtProgression(pending))
             },
             colors = SliderDefaults.colors(
