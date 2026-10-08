@@ -741,6 +741,8 @@
     <string name="settings_keep_screen_on_detail">L\'écran reste éveillé tant qu\'un livre est ouvert, quelle que soit la mise en veille de l\'appareil. Consomme de la batterie, et un seul livre peut être réglé à part depuis l\'interrupteur du lecteur.</string>
     <string name="settings_scroll_mode">Lire par défilement</string>
     <string name="settings_scroll_mode_detail">Le chapitre se déroule en une longue page au lieu d\'être découpé en pages à tourner. Un seul livre peut être réglé à part depuis l\'interrupteur du lecteur.</string>
+    <string name="settings_lock_footer">Verrouiller le pied de page</string>
+    <string name="settings_lock_footer_detail">Empêche les modifications accidentelles de la configuration du pied de page pendant la lecture.</string>
     <string name="settings_eink">Écran e-ink</string>
     <string name="settings_eink_detail">Supprime les animations, que l\'encre électronique étale plutôt que de dessiner. Détecté automatiquement ; réglez-le vous-même si la détection se trompe.</string>
     <string name="settings_color_eink">E-ink couleur</string>

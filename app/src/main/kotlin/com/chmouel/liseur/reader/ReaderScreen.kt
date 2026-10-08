@@ -424,6 +424,7 @@ fun ReaderScreen(
     footnoteFlow: StateFlow<ReaderViewModel.Footnote?>,
     onDismissFootnote: () -> Unit,
     keepScreenOnFlow: StateFlow<Boolean>,
+    lockFooterOnFlow: StateFlow<Boolean>,
     onKeepScreenOnChanged: (Boolean) -> Unit,
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
@@ -480,6 +481,7 @@ fun ReaderScreen(
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
     val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
     val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
+    val lockFooterOn by lockFooterOnFlow.collectAsStateWithLifecycle()
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
@@ -3413,6 +3415,7 @@ fun ReaderScreen(
                 mode = prefs.footerMode,
                 left = prefs.footerLeft,
                 right = prefs.footerRight,
+                onLockFooter = lockFooterOn,
                 turn = footerTurn,
                 theme = readingTheme,
                 onCycleMode = onProgressAction.cycleFooterMode,

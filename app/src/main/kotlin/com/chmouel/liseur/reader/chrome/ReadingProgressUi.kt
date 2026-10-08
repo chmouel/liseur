@@ -127,6 +127,7 @@ fun ReadingFooter(
     onCycleField: (FooterSlot, onChosen: (FooterField) -> Unit) -> Unit,
     onPickSlot: (FooterPickTarget) -> Unit,
     onNote: (label: Int, unknown: Boolean) -> Unit,
+    onLockFooter : Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (!footerHasAnythingToSay(mode, left, right)) return
@@ -212,8 +213,8 @@ fun ReadingFooter(
             figure = footerFigure(startField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(startSlot.cycleLabel),
-            onClick = { onCycleField(startSlot, noteForField) },
-            onLongClick = { onPickSlot(startSlot.pickTarget) },
+            onClick = { if (!onLockFooter)onCycleField(startSlot, noteForField) },
+            onLongClick = { if (!onLockFooter) onPickSlot(startSlot.pickTarget) },
             padding = PaddingValues(
                 start = FOOTER_MARGIN,
                 end = FOOTER_GAP,
@@ -226,8 +227,8 @@ fun ReadingFooter(
         val middle = middleText(progress, mode, reflowable, screens)
         FooterSlotBox(
             clickLabel = stringResource(R.string.footer_cycle_middle),
-            onClick = { onCycleMode(noteForMode) },
-            onLongClick = { onPickSlot(FooterPickTarget.MIDDLE) },
+            onClick = { if (!onLockFooter) onCycleMode(noteForMode) },
+            onLongClick = { if (!onLockFooter) onPickSlot(FooterPickTarget.MIDDLE) },
             padding = PaddingValues(horizontal = FOOTER_GAP, vertical = slotPadding),
             alignment = Alignment.Center,
             modifier = Modifier
@@ -256,8 +257,8 @@ fun ReadingFooter(
             figure = footerFigure(endField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(endSlot.cycleLabel),
-            onClick = { onCycleField(endSlot, noteForField) },
-            onLongClick = { onPickSlot(endSlot.pickTarget) },
+            onClick = { if (!onLockFooter) onCycleField(endSlot, noteForField) },
+            onLongClick = { if (!onLockFooter) onPickSlot(endSlot.pickTarget)},
             padding = PaddingValues(
                 start = FOOTER_GAP,
                 end = FOOTER_MARGIN,

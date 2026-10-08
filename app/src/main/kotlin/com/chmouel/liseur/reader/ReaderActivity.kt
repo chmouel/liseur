@@ -490,6 +490,7 @@ class ReaderActivity : FragmentActivity() {
                                     },
                                     keepScreenOnFlow = viewModel.keepScreenOn,
                                     onKeepScreenOnChanged = viewModel::setKeepScreenOn,
+                                    lockFooterOnFlow = viewModel.lockFooterOn,
                                     scrollModeFlow = viewModel.scrollMode,
                                     onScrollModeChanged = viewModel::setScrollMode,
                                     onScrollingChanged = viewModel::onScrollingChanged,

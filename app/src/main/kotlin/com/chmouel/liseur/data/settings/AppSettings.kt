@@ -216,6 +216,7 @@ data class AppSettings(
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
+    val lockFooterOn: Boolean = false,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
     val libraryFilters: LibraryFilters = LibraryFilters.None,
@@ -287,6 +288,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
+        val LOCK_FOOTER_ON = booleanPreferencesKey("lock_footer_on")
         val LIBRARY_SORT = stringPreferencesKey("library_sort")
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
         val LIBRARY_FILTERS = stringPreferencesKey("library_filters")
@@ -365,6 +367,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
+            lockFooterOn = p[Keys.LOCK_FOOTER_ON] ?: false,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
             libraryFilters = LibraryFilters(
@@ -448,6 +451,16 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
 
     suspend fun setScrollMode(enabled: Boolean) {
         store.edit { it[Keys.SCROLL_MODE] = enabled }
+    }
+
+    /**
+     * Controls whether the reader footer is clickable.
+     *
+     * When enabled, the user can interact with the footer.
+     * When disabled, the footer remains visible but is not clickable.
+     */
+    suspend fun setLockFooterOn(enabled: Boolean) {
+        store.edit { it[Keys.LOCK_FOOTER_ON] = enabled }
     }
 
     suspend fun setLibrarySort(sort: LibrarySort) {
@@ -706,7 +719,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
-    "highlight_tints_offered" to BackupValueType.STRING_SET,
+    "highlight_tints_offered" to BackupValueType.STRING_SET,"lock_footer_on" to BackupValueType.BOOLEAN,
     "highlight_tint_default" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING, "read_aloud_model" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,

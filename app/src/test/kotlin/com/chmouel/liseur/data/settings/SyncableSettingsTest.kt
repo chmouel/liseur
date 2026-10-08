@@ -121,6 +121,7 @@ class SyncableSettingsTest {
                 "app.definition_target",
                 "app.highlight_tints",
                 "app.highlight_tint_default",
+                "app.lock_footer_on"
             ),
             registry().map { it.key }.toSet(),
         )
@@ -377,6 +378,7 @@ class SyncableSettingsTest {
         r.setFooterField(FooterSlot.LEFT, FooterField.PAGES_LEFT_CHAPTER)
         r.setFooterField(FooterSlot.RIGHT, FooterField.CLOCK)
         a.setScrollMode(true)
+        a.setLockFooterOn(true)
         a.setResumeLastBook(false)
         a.setDictionaryLookupEnabled(true)
         a.setOfferedHighlightTints(setOf(HighlightTint.BLUE.name, HighlightTint.GREEN.name))

@@ -451,6 +451,7 @@ private fun LiseurApp(
                 onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
                 onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                 onScrollMode = { scope.launch { repository.setScrollMode(it) } },
+                onLockFooter = { scope.launch { repository.setLockFooterOn(it) } },
                 onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
                 onEInkMode = { scope.launch { repository.setEInkMode(it) } },
                 onColorEInk = { scope.launch { repository.setColorEInk(it) } },

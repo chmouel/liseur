@@ -76,6 +76,7 @@ fun ReadingNavigationScreen(
     onPageTurnStyle: (PageTurnStyle) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onScrollMode: (Boolean) -> Unit,
+    onLockFooter: (Boolean) -> Unit,
     onKeepScreenOn: (Boolean) -> Unit,
     onEInkMode: (EInkMode) -> Unit,
     onColorEInk: (Boolean) -> Unit,
@@ -137,6 +138,13 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_scroll_mode_detail),
                         checked = settings.scrollMode,
                         onCheckedChange = onScrollMode,
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.settings_lock_footer),
+                        subtitle = stringResource(R.string.settings_lock_footer_detail),
+                        checked = settings.lockFooterOn,
+                        onCheckedChange = onLockFooter,
                     )
                 }
 

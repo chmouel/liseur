@@ -1133,6 +1133,9 @@ class ReaderViewModel(
         .combine(bookScreenDao.observe(bookId)) { global, own -> own.keepsScreenOnWith(global) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val lockFooterOn: StateFlow<Boolean> = appSettings.settings
+        .map { it.lockFooterOn }.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     /**
      * Whether this book is read by scrolling: the app-wide setting,
      * unless the book has been answered for on its own.
