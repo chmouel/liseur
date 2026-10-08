@@ -1605,16 +1605,10 @@ class ReaderViewModel(
             bookOrbitCatchUpApplying != null
         ) return
         bookHandle?.let { handle ->
-            if (handle.listeningOwnsPlace) {
-                // Read-aloud saves the place while it plays. A move of the
-                // reader's own pauses it, which saves what was heard and
-                // hands the place back, so this move is saved after it.
-                // Anything else, like the place left when the reader
-                // goes to the background, is the past and is dropped.
-                if (!readerActive) return
-                readAloud.pause()
-                if (handle.listeningOwnsPlace) return
-            }
+            // Read-aloud saves the place while it plays. The reader may
+            // browse meanwhile without stopping the voice, so moves of
+            // the reader's own are not saved until the voice pauses.
+            if (handle.listeningOwnsPlace) return
             handle.awaitingPageCapture = false
         }
         readingGeneration++

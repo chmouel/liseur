@@ -62,10 +62,17 @@ skipped.
 ### Where the reader is
 
 The voice and the reader share one place. While the voice plays, it owns
-the place and the page follows the sentence being spoken. Any move the
-reader makes, a page turn, a scroll, a jump, pauses the voice and the
-place becomes the reader's again. Auto-scroll and the voice are the same
-kind of conflict: starting either pauses or disarms the other.
+the place and the page follows the sentence being spoken. A move the
+reader makes, a page turn, a scroll, a jump, leaves the voice playing:
+the page stops following and stays where the reader took it until the
+spoken sentence is on screen again or the voice is paused and resumed.
+The move is not saved, because the place is still the voice's; pausing
+hands it back and brings the page to the sentence heard. To listen from
+somewhere else, the reader selects text there and starts read aloud
+from the selection. (The first version paused the voice on any move,
+which stopped listening whenever the reader looked ahead.) Auto-scroll
+and the voice are a real conflict, as both move the page: starting
+either pauses or disarms the other.
 
 A heard sentence is saved the way a page turn to it would be, through the
 book's `prepareLocator` and positions, so the two store the same

@@ -242,6 +242,8 @@ import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
+import org.readium.r2.navigator.input.DragEvent
+import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Layout
@@ -527,8 +529,16 @@ fun ReaderScreen(
     // When the page last went after the voice. Readium can report a move
     // more than once, and only the first report carries the marker, so
     // the rest are recognised by arriving just after it: taken for the
-    // reader's own, they would pause the voice the page was following.
+    // reader's own, they would stop the page following the voice.
     var followedAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
+    // The reader moved away while the voice plays on. The page stays
+    // where they took it until the sentence being read is on screen
+    // again or the voice is paused and played again.
+    var followDetached by remember { mutableStateOf(false) }
+    // When the reader's finger last moved the page, so reattaching waits
+    // for the gesture to end rather than looking at a page about to move.
+    var lastDragAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
+    var wasListeningPlaying by remember { mutableStateOf(false) }
 
     // The activity decides what a keyboard's arrows mean, and the
     // answer depends on whether there is any chrome to move focus
@@ -893,6 +903,27 @@ fun ReaderScreen(
         withFrameNanos { }
     }
 
+    // Returns once the reader's finger has been still for a moment, no
+    // issued move is in the air, and the page has stopped: the same web
+    // view, scrolled the same, in the same place on screen, on two looks
+    // in a row. A fling and a swipe animation both keep it waiting.
+    suspend fun awaitPageAtRest(nav: EpubNavigatorFragment) {
+        val origin = IntArray(2)
+        var last: List<Int>? = null
+        while (true) {
+            delay(PAGE_REST_POLL_MS)
+            val now = SystemClock.elapsedRealtime()
+            val web = visibleWebView(nav.publicationView)
+            val here = web?.let {
+                it.getLocationOnScreen(origin)
+                listOf(System.identityHashCode(it), it.scrollX, it.scrollY, origin[0], origin[1])
+            }
+            val fingerStill = lastDragAt == Long.MIN_VALUE || now - lastDragAt >= DRAG_QUIET_MS
+            if (fingerStill && moves.mark(now) != IssuedMoves.NONE && here != null && here == last) return
+            last = here
+        }
+    }
+
     // Waits for the WebView to finish reflowing after a preference lands.
     // Readium applies preferences as CSS inside the WebView on its own
     // schedule, so counting frames of the Compose clock says nothing
@@ -1079,8 +1110,9 @@ fun ReaderScreen(
             onMoveIssued = { from, to ->
                 // A turn of the reader's own, even one just after the
                 // page followed the voice, is theirs: its arrival must
-                // not be taken for following, so that it pauses the
-                // voice and is saved.
+                // not be taken for following, so that the page stops
+                // following the voice and the move is saved once the
+                // voice is paused.
                 followedAt = Long.MIN_VALUE
                 moves.issue(
                     from = from?.restorePoint(),
@@ -1256,6 +1288,13 @@ fun ReaderScreen(
                 // Anywhere the reader actually goes ends the run of
                 // preference changes the held anchor was covering.
                 if (event != NavigatorPositionEvent.PREFERENCE_REFLOW) reflowAnchor = null
+                if (listeningPlayingNow && (
+                        event == NavigatorPositionEvent.READER_MOVEMENT ||
+                            event == NavigatorPositionEvent.LOCAL_JUMP
+                        )
+                ) {
+                    followDetached = true
+                }
                 // This is fresher than anything a scroll watcher had in
                 // flight, so those answers are refused from here on. The
                 // place already held stands until this one is taken:
@@ -1886,13 +1925,21 @@ fun ReaderScreen(
 
     // The page follows the voice, but only once it has read past what
     // is on screen. A reader selecting text, or a page being rebuilt,
-    // is left alone until they are done.
+    // is left alone until they are done, and a reader who moved away
+    // until the voice reaches the page they are on.
     val followBlocked = selection != null || tappedSelection != null
-    LaunchedEffect(navigator, spoken, listeningPlaying, followBlocked, lifecycle) {
+    LaunchedEffect(navigator, spoken, listeningPlaying, followBlocked, followDetached, lifecycle) {
         val nav = navigator ?: return@LaunchedEffect
         val utterance = spoken ?: return@LaunchedEffect
         if (!listeningPlaying || followBlocked) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (followDetached) {
+                // Detaching is noticed as the move begins, while the
+                // sentence is still on screen; looking now would undo it.
+                awaitPageAtRest(nav)
+                if (SpokenPassage.isShowing(nav, utterance)) followDetached = false
+                return@repeatOnLifecycle
+            }
             // A move still in the air is the reader's, or the last
             // follow: going after the voice now would undo the one or
             // repeat the other.
@@ -1908,15 +1955,19 @@ fun ReaderScreen(
     }
 
     // While the voice plays its place is listening's, so a place held
-    // from before would be saved over it when the reader leaves. Two
-    // things moving the page at once is one too many: the voice stops
-    // the page carrying itself, and the page carrying itself stops the
-    // voice.
+    // from before, or one the reader browsed to while it played, would
+    // be saved over it when the reader leaves. Two things moving the
+    // page at once is one too many: the voice stops the page carrying
+    // itself, and the page carrying itself stops the voice.
     LaunchedEffect(listeningPlaying) {
         if (listeningPlaying) {
             heldPlace.retire()
             autoScrollArmed = false
+            followDetached = false
+        } else if (wasListeningPlaying) {
+            heldPlace.retire()
         }
+        wasListeningPlaying = listeningPlaying
     }
     LaunchedEffect(autoScrollArmed) {
         if (autoScrollArmed && listeningPlayingNow) readAloudFeature.pause()
@@ -2451,6 +2502,18 @@ fun ReaderScreen(
                     isPinching = isPinching,
                     onStepChapter = { forward -> pageTurner.stepChapter(forward) },
                 ),
+                // A finger moving the page is the reader's own move, even
+                // just after the page followed the voice, when the
+                // navigator's report of it would be taken for following.
+                object : InputListener {
+                    override fun onDrag(event: DragEvent): Boolean {
+                        if (listeningPlayingNow && !isPinching()) {
+                            lastDragAt = SystemClock.elapsedRealtime()
+                            followDetached = true
+                        }
+                        return false
+                    }
+                },
             ).onEach(it::addInputListener)
         }
         onDispose {
@@ -4014,6 +4077,12 @@ private const val FOLLOW_SETTLE_MS = 1_500L
 
 /** How long a listened place waits for the page before it is measured. */
 private const val READ_ALOUD_CAPTURE_WAIT_MS = 300L
+
+/** How long without a drag before the reader's gesture counts as over. */
+private const val DRAG_QUIET_MS = 300L
+
+/** How often a moving page is looked at to see whether it has stopped. */
+private const val PAGE_REST_POLL_MS = 150L
 private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
 
 private const val POPUP_HEIGHT_PX = 160f
