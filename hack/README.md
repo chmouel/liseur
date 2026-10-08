@@ -124,6 +124,14 @@ target wrapping them. Run `make help` for the short list. See
   to a flat PNG for the F-Droid listing and the README.
 - `feature-graphic`: Renders the 1024x500 store feature graphic
   from the app's own emblem.
+- `store-images`: Converts screenshots in place to what Google Play
+  accepts (no alpha, no more than 2:1, padded by repeating the edge
+  pixels). `screenshots` runs it on every image it files with fastlane.
+  `--check DIR...` validates without changing anything; the fastlane
+  `screenshots` lane runs that before it contacts Play.
+- `test-store-images`: Runs the deterministic tests for `store-images` on
+  synthetic PNGs, and checks the committed store screenshots. It is part
+  of `make check` and CI.
 
 See also `tests/`, which holds the headless, assertion-shaped end-to-end
 scenarios. They measure behaviour rather than walk the screen.

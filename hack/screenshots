@@ -49,6 +49,7 @@ readonly DEVICE_BOOKS="/sdcard/Books"
 
 # shellcheck source=hack/lib/demo-books.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/demo-books.sh"
+readonly STORE_IMAGES="$(dirname "${BASH_SOURCE[0]}")/store-images"
 
 # The word held down to raise the selection popup, and the one searched
 # for in-book. Both are Moby Dick's, which is the book that opens first.
@@ -1256,6 +1257,7 @@ if [[ $shot_class == tablet ]]; then
     i=1
     for name in 01-two-columns 02-columns-control 03-library; do
         cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
+        "$STORE_IMAGES" "$FASTLANE_DIR/$i.png" >/dev/null
         note "$FASTLANE_DIR/$i.png"
         i=$((i + 1))
     done
@@ -1592,6 +1594,8 @@ for name in 01-library 02-reading 24-read-aloud 13-series 04-typography 18-stats
     [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"
+    # Play takes no alpha and nothing over 2:1; see hack/store-images.
+    "$STORE_IMAGES" "$FASTLANE_DIR/$i.png" >/dev/null
     note "$FASTLANE_DIR/$i.png"
     i=$((i + 1))
 done

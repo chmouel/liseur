@@ -3,11 +3,14 @@
 # never see this directory.
 #
 # The metadata under fastlane/metadata/android is written for F-Droid and
-# happens to be supply's native layout, so Play reads the same files. Only
-# the changelog is pushed from here: the store listing itself is edited in
-# the console, because Play holds the declarations (data safety, content
-# rating, target audience) that no file in this repository describes, and
-# an accidental metadata push is a listing change under review.
+# happens to be supply's native layout, so Play reads the same files. The
+# release lanes push the changelog and nothing else. The screenshots lane
+# pushes the phone and tablet screenshots, which the repository owns: the
+# set here replaces whatever the console holds. The rest of the listing is
+# edited in the console, because Play holds the declarations (data safety,
+# content rating, target audience) that no file in this repository
+# describes, and an accidental metadata push is a listing change under
+# review.
 #
 # A build goes to two tracks, not one. Internal testing is the fast lane
 # and holds a hundred hand-listed addresses at most; the closed track is
@@ -101,6 +104,45 @@ platform :android do
     version_code = requested.to_i
     liseur_promote(version_code, PRODUCTION_TRACK)
     UI.success("#{version_code} is published on #{PRODUCTION_TRACK}")
+  end
+
+  desc "Replace the Play listing's phone and tablet screenshots with the repository's"
+  lane :screenshots do |options|
+    requested = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_s
+    unless requested.match?(/\A[1-9][0-9]*\z/)
+      UI.user_error!("version_code must be a positive integer, got #{requested.inspect}")
+    end
+
+    # Refuse a set Play would refuse before opening an edit, rather than
+    # after half of it has been uploaded.
+    images = File.expand_path("metadata/android/en-US/images", __dir__)
+    checker = File.expand_path("../hack/store-images", __dir__)
+    unless system(checker, "--check", File.join(images, "phoneScreenshots"), File.join(images, "tenInchScreenshots"))
+      UI.user_error!("the store screenshots would be refused; run hack/store-images on them")
+    end
+
+    # A listing edit still has to name a release on some track; internal
+    # holds every build. With no track_promote_to and no rollout, supply
+    # leaves the tracks exactly as they are.
+    upload_to_play_store(
+      track: INTERNAL_TRACK,
+      version_code: requested.to_i,
+      skip_upload_aab: true,
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_changelogs: true,
+      skip_upload_screenshots: false,
+      # Compare checksums in order: an unchanged set is no upload and no
+      # deletion, and anything else is replaced to match the repository.
+      sync_image_upload: true,
+      validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
+    )
+    if ENV["PLAY_VALIDATE_ONLY"] == "true"
+      UI.success("Play accepted the screenshot edit; nothing was committed")
+    else
+      UI.success("the Play listing screenshots match the repository")
+    end
   end
 
   desc "Promote a build already on the internal track to the closed track, without rebuilding"

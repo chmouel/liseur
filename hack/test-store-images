@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Deterministic tests for hack/store-images, on synthetic PNGs."""
+
+from __future__ import annotations
+
+import hashlib
+import struct
+import subprocess
+import sys
+import tempfile
+import zlib
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+SCRIPT = HERE / "store-images"
+COMMITTED = HERE.parent / "fastlane/metadata/android/en-US/images"
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
+failures = 0
+
+
+def chunk(kind: bytes, body: bytes, crc: int | None = None) -> bytes:
+    crc = zlib.crc32(kind + body) if crc is None else crc
+    return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", crc)
+
+
+def filtered(rows: list[bytes], bpp: int) -> bytes:
+    """Scanlines with filters 0..4 in turn, so decoding exercises all five."""
+    out = bytearray()
+    prev = bytes(len(rows[0]))
+    for n, row in enumerate(rows):
+        kind = n % 5
+        line = bytearray()
+        for i, x in enumerate(row):
+            a = row[i - bpp] if i >= bpp else 0
+            b = prev[i]
+            c = prev[i - bpp] if i >= bpp else 0
+            if kind == 0:
+                pred = 0
+            elif kind == 1:
+                pred = a
+            elif kind == 2:
+                pred = b
+            elif kind == 3:
+                pred = (a + b) >> 1
+            else:
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+            line.append((x - pred) & 255)
+        out += bytes([kind]) + line
+        prev = row
+    return bytes(out)
+
+
+def png(path: Path, width: int, height: int, *, colour: int = 2, rows: list[bytes] | None = None,
+        depth: int = 8, interlace: int = 0, raw: bytes | None = None, idat: bytes | None = None,
+        extra: bytes = b"", bad_crc: bool = False, iend: bytes = b"") -> Path:
+    channels = {2: 3, 6: 4, 3: 1}[colour]
+    if raw is None:
+        if rows is None:
+            rows = [bytes([200, 190, 180, 255][:channels]) * width] * height
+        raw = filtered(rows, channels) if len(set(rows)) > 1 else b"".join(b"\x00" + r for r in rows)
+    data = zlib.compress(raw) if idat is None else idat
+    ihdr = struct.pack(">IIBBBBB", width, height, depth, colour, 0, 0, interlace)
+    path.write_bytes(SIGNATURE + chunk(b"IHDR", ihdr) + extra
+                     + chunk(b"IDAT", data, 0 if bad_crc else None) + chunk(b"IEND", iend))
+    return path
+
+
+def decode(path: Path) -> tuple[int, int, int, bytes]:
+    """Read back an output file, which the tool always writes with filter 0."""
+    data = path.read_bytes()
+    pos, idat = 8, b""
+    while pos < len(data):
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        body = data[pos + 8:pos + 8 + length]
+        if kind == b"IHDR":
+            width, height, _, colour = struct.unpack(">IIBB", body[:10])
+        elif kind == b"IDAT":
+            idat += body
+        pos += 12 + length
+    raw = zlib.decompress(idat)
+    stride = width * 3
+    assert all(raw[r * (stride + 1)] == 0 for r in range(height))
+    pixels = b"".join(raw[r * (stride + 1) + 1:(r + 1) * (stride + 1)] for r in range(height))
+    return width, height, colour, pixels
+
+
+def run(*args: str | Path) -> subprocess.CompletedProcess:
+    return subprocess.run([sys.executable, str(SCRIPT), *map(str, args)], capture_output=True, text=True)
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expect(name: str, condition: bool, detail: str = "") -> None:
+    global failures
+    if condition:
+        print(f"ok   {name}")
+    else:
+        failures += 1
+        print(f"FAIL {name} {detail}")
+
+
+def gradient(width: int, height: int, channels: int, alpha: int = 255) -> list[bytes]:
+    rows = []
+    for y in range(height):
+        row = bytearray()
+        for x in range(width):
+            px = [(x * 7 + y) & 255, (y * 3) & 255, (x ^ y) & 255, alpha]
+            row += bytes(px[:channels])
+        rows.append(bytes(row))
+    return rows
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory(prefix="liseur-store-images.") as tmp:
+        work = Path(tmp)
+
+        # A tall RGBA capture, every filter type in play: padded to 2:1 with
+        # the edge pixels, the original pixels untouched, the alpha gone.
+        rows = gradient(400, 900, 4)
+        tall = png(work / "tall.png", 400, 900, colour=6, rows=rows)
+        result = run(tall)
+        width, height, colour, px = decode(tall)
+        expect("tall capture is padded to 2:1", (width, height, colour) == (450, 900, 2), result.stderr)
+        centre = all(px[y * 1350 + 75:y * 1350 + 1275] == bytes(b for i, b in enumerate(rows[y]) if i % 4 != 3)
+                     for y in range(0, 900, 37))
+        edges = all(px[y * 1350:y * 1350 + 75] == bytes(rows[y][:3]) * 25
+                    and px[y * 1350 + 1275:(y + 1) * 1350] == bytes(rows[y][-4:-1]) * 25
+                    for y in range(0, 900, 37))
+        expect("tall capture keeps its pixels in the middle", centre)
+        expect("tall capture repeats its edge pixels", edges)
+        before = digest(tall)
+        run(tall)
+        expect("a second run leaves the file alone", digest(tall) == before)
+
+        rows = gradient(700, 300, 3)
+        wide = png(work / "wide.png", 700, 300, rows=rows)
+        run(wide)
+        width, height, _, px = decode(wide)
+        stride = 2100
+        expect("wide capture is padded to 2:1", (width, height) == (700, 350))
+        expect("wide capture repeats its top and bottom rows",
+               px[:25 * stride] == rows[0] * 25 and px[25 * stride:325 * stride] == b"".join(rows)
+               and px[325 * stride:] == rows[-1] * 25)
+
+        clear = bytes([10, 20, 30, 0]) + bytes([100, 50, 0, 128]) + bytes([1, 2, 3, 255]) * 398
+        alpha = png(work / "alpha.png", 400, 400, colour=6, rows=[clear] * 400)
+        run(alpha)
+        width, height, colour, px = decode(alpha)
+        expect("alpha is flattened onto white",
+               (width, height, colour) == (400, 400, 2) and px[:9] == bytes([255, 255, 255, 177, 152, 127, 1, 2, 3]),
+               repr(px[:9]))
+
+        valid = png(work / "valid.png", 400, 800)
+        before = digest(valid)
+        result = run(valid)
+        expect("an acceptable file is not rewritten", result.returncode == 0 and digest(valid) == before)
+
+        for name, kwargs in {
+            "16-bit": dict(depth=16, raw=b"\x00" * (800 * 6 + 1) * 400),
+            "interlaced": dict(interlace=1),
+            "palette": dict(colour=3, extra=chunk(b"PLTE", b"\x00\x00\x00")),
+            "bad CRC": dict(bad_crc=True),
+            "tRNS": dict(extra=chunk(b"tRNS", b"\x00\x00\x00\x00\x00\x00")),
+        }.items():
+            path = png(work / f"refuse-{name}.png", 800, 400, **kwargs)
+            before = digest(path)
+            result = run(path)
+            expect(f"refile refuses {name} and leaves it alone",
+                   result.returncode != 0 and digest(path) == before, result.stderr)
+
+        good = png(work / "good.png", 400, 800).read_bytes()
+        rgb_row = b"\x00" + b"\x80" * 1200
+        checks = {
+            "tRNS": dict(extra=chunk(b"tRNS", b"\x00\x00\x00\x00\x00\x00")),
+            "RGBA": dict(colour=6),
+            "ratio over 2:1": dict(width=320, height=641),
+            "bad CRC": dict(bad_crc=True),
+            "truncated IDAT": dict(idat=zlib.compress(rgb_row * 800)[:-10]),
+            "malformed IDAT": dict(idat=b"not zlib at all"),
+            "short image data": dict(raw=rgb_row * 799),
+            "filter byte 5": dict(raw=b"\x05" + rgb_row[1:] + rgb_row * 799),
+            "a second IHDR": dict(extra=chunk(b"IHDR", struct.pack(">IIBBBBB", 400, 800, 8, 2, 0, 0, 0))),
+            "an unknown critical chunk": dict(extra=chunk(b"ABCD", b"")),
+            "split IDAT": dict(extra=chunk(b"IDAT", b"") + chunk(b"tEXt", b"k\x00v")),
+            "a non-empty IEND": dict(iend=b"x"),
+            "side of 319": dict(width=319, height=400),
+            "side of 3841": dict(width=3841, height=1921),
+        }
+        for name, kwargs in checks.items():
+            folder = work / f"check-{name}"
+            folder.mkdir()
+            (folder / "1.png").write_bytes(good)
+            size = (kwargs.pop("width", 400), kwargs.pop("height", 800))
+            path = png(folder / "2.png", *size, **kwargs)
+            before = digest(path)
+            result = run("--check", folder)
+            expect(f"--check rejects {name}", result.returncode == 1 and "2.png" in result.stderr, result.stderr)
+            expect(f"--check leaves {name} alone", digest(path) == before)
+
+        for name, size in {"exactly 2:1": (320, 640), "sides of 320 and 3840": (3840, 1920)}.items():
+            folder = work / f"accept-{name}"
+            folder.mkdir()
+            (folder / "1.png").write_bytes(good)
+            png(folder / "2.png", *size)
+            result = run("--check", folder)
+            expect(f"--check accepts {name}", result.returncode == 0, result.stderr)
+
+        crowded = work / "crowded"
+        crowded.mkdir()
+        for n in range(9):
+            (crowded / f"{n}.png").write_bytes(good)
+        expect("--check refuses nine of a kind", run("--check", crowded).returncode == 1)
+
+        lonely = work / "lonely"
+        lonely.mkdir()
+        (lonely / "1.png").write_bytes(good)
+        empty = work / "empty"
+        empty.mkdir()
+        expect("--check wants two screenshots in all", run("--check", lonely, empty).returncode == 1)
+        expect("--check counts across directories", run("--check", lonely, crowded).returncode == 1
+               and run("--check", lonely, lonely).returncode == 0)
+
+        jpeg = work / "jpeg"
+        jpeg.mkdir()
+        (jpeg / "1.png").write_bytes(good)
+        (jpeg / "2.jpg").write_bytes(b"\xff\xd8\xff")
+        expect("--check refuses a JPEG", run("--check", jpeg).returncode == 1)
+
+    result = run("--check", COMMITTED / "phoneScreenshots", COMMITTED / "tenInchScreenshots")
+    expect("the committed store screenshots pass --check", result.returncode == 0, result.stderr)
+
+    print(f"{failures} failure(s)" if failures else "all passed")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

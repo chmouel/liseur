@@ -17,6 +17,14 @@ permissions:
   contents: write
   pull-requests: read
 
+# One release at a time, so two tags pushed close together never hold
+# Play edits open against each other. queue: max keeps every pending run;
+# the default would cancel all but the newest one waiting.
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   release:
     name: Build and publish the release
@@ -271,6 +279,7 @@ jobs:
           SUPPLY_JSON_KEY="$key" fastlane android internal
 
       - name: Publish the final release to the Play production track
+        id: play_production
         if: steps.play.outputs.enabled == 'true' && steps.version.outputs.prerelease == 'false'
         continue-on-error: true
         env:
@@ -282,3 +291,28 @@ jobs:
           (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
           SUPPLY_JSON_KEY="$key" fastlane android production \
             version_code:"${{ steps.version.outputs.version_code }}"
+
+      # The listing is shared by every track, so its screenshots follow
+      # production only: a release candidate must not advertise what the
+      # store cannot install yet. Unchanged screenshots are a no-op, and a
+      # failed sync is caught up by the next final release.
+      - name: Sync the Play listing screenshots
+        id: play_screenshots
+        if: steps.play_production.outcome == 'success'
+        continue-on-error: true
+        env:
+          SERVICE_ACCOUNT: ${{ secrets.LISEUR_PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/play-screenshots-service-account.json"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
+          SUPPLY_JSON_KEY="$key" fastlane android screenshots \
+            version_code:"${{ steps.version.outputs.version_code }}"
+
+      - name: Report a failed screenshot sync
+        if: steps.play_screenshots.outcome == 'failure'
+        run: |
+          message='The Play listing screenshots were not synced. Retry with: fastlane android screenshots version_code:${{ steps.version.outputs.version_code }}'
+          printf '::warning::%s\n' "$message"
+          printf '%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"

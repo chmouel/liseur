@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""File screenshots in the shape Google Play accepts, and check that they are.
+
+Play refuses a screenshot whose long side is more than twice its short one,
+and one with an alpha channel. A modern phone captures at 1080x2400, which
+is 2.22:1, and adb's screencap writes RGBA. So a capture cannot go to the
+store as it comes off the device.
+
+    hack/store-images FILE...         convert in place
+    hack/store-images --check DIR...  validate, change nothing
+
+Converting flattens the alpha onto white (every published screenshot is in
+the light theme, and a capture is opaque anyway) and, if the picture is too
+tall or too wide, pads the short side to exactly half the long one by
+repeating the edge pixels of each row or column. Repeating the edge carries
+the status bar, the app bar and the page out to the new border rather than
+guessing a colour that would show as a frame. The original pixels are not
+touched. A file that is already acceptable is left alone byte for byte, so
+running this twice changes nothing.
+
+--check is what the fastlane screenshots lane runs before it opens a Play
+edit: every PNG in each directory must be well formed, 8-bit RGB with no
+transparency, between 320 and 3840 pixels a side, no more than 2:1 and no
+larger than 8 MB; a directory holds at most eight, and the directories
+together hold at least two.
+
+Standard library only, so it runs on a release runner as it is.
+"""
+
+from __future__ import annotations
+
+import os
+import struct
+import sys
+import tempfile
+import zlib
+from pathlib import Path
+
+SIGNATURE = b"\x89PNG\r\n\x1a\n"
+MIN_SIDE = 320
+MAX_SIDE = 3840
+MAX_BYTES = 8 * 1024 * 1024
+MAX_PER_TYPE = 8
+MIN_TOTAL = 2
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
+
+
+class Rejected(Exception):
+    pass
+
+
+class Png:
+    def __init__(self, width: int, height: int, colour: int, transparency: bool, raw: bytes):
+        self.width = width
+        self.height = height
+        self.colour = colour
+        self.transparency = transparency
+        self.raw = raw
+
+    @property
+    def channels(self) -> int:
+        return 4 if self.colour == 6 else 3
+
+
+def read_png(path: Path) -> Png:
+    """Parse and structurally validate a PNG; the scanlines stay filtered."""
+    data = path.read_bytes()
+    if data[:8] != SIGNATURE:
+        raise Rejected("not a PNG")
+    pos = 8
+    header = None
+    idat = []
+    transparency = False
+    ended = False
+    idat_closed = False
+    while pos < len(data):
+        if pos + 8 > len(data):
+            raise Rejected("truncated chunk header")
+        length, kind = struct.unpack(">I4s", data[pos:pos + 8])
+        end = pos + 12 + length
+        if end > len(data):
+            raise Rejected(f"truncated {kind!r} chunk")
+        body = data[pos + 8:pos + 8 + length]
+        (crc,) = struct.unpack(">I", data[pos + 8 + length:end])
+        if zlib.crc32(kind + body) != crc:
+            raise Rejected(f"bad CRC in {kind.decode('latin-1')} chunk")
+        if header is None and kind != b"IHDR":
+            raise Rejected("IHDR is not the first chunk")
+        if idat and kind != b"IDAT":
+            idat_closed = True
+        if kind == b"IHDR":
+            if header is not None:
+                raise Rejected("more than one IHDR")
+            if length != 13:
+                raise Rejected("malformed IHDR")
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"IDAT":
+            if idat_closed:
+                raise Rejected("IDAT chunks are not consecutive")
+            idat.append(body)
+        elif kind == b"tRNS":
+            transparency = True
+        elif kind == b"IEND":
+            if length:
+                raise Rejected("IEND is not empty")
+            ended = True
+            break
+        elif kind[0] & 0x20 == 0 and kind != b"PLTE":
+            raise Rejected(f"unknown critical chunk {kind.decode('latin-1')}")
+        pos = end
+    if header is None or not ended:
+        raise Rejected("missing IHDR or IEND")
+    width, height, depth, colour, compression, filtering, interlace = header
+    if width == 0 or height == 0:
+        raise Rejected("empty image")
+    if depth != 8:
+        raise Rejected(f"bit depth {depth}, only 8 is supported")
+    if colour not in (2, 6):
+        raise Rejected(f"colour type {colour}, only RGB and RGBA are supported")
+    if compression != 0 or filtering != 0:
+        raise Rejected("unknown compression or filter method")
+    if interlace != 0:
+        raise Rejected("interlaced PNGs are not supported")
+    if not idat:
+        raise Rejected("no image data")
+    stride = width * (4 if colour == 6 else 3)
+    try:
+        inflater = zlib.decompressobj()
+        raw = inflater.decompress(b"".join(idat), height * (stride + 1) + 1)
+        if not inflater.eof:
+            raise Rejected("truncated image data")
+    except zlib.error as error:
+        raise Rejected(f"corrupt image data: {error}") from None
+    if len(raw) != height * (stride + 1):
+        raise Rejected("image data does not match the dimensions")
+    if any(f > 4 for f in raw[::stride + 1]):
+        raise Rejected("invalid scanline filter")
+    return Png(width, height, colour, transparency, raw)
+
+
+def unfilter(png: Png) -> bytearray:
+    bpp = png.channels
+    stride = png.width * bpp
+    out = bytearray(png.height * stride)
+    prev = bytearray(stride)
+    pos = 0
+    for row in range(png.height):
+        kind = png.raw[pos]
+        line = bytearray(png.raw[pos + 1:pos + 1 + stride])
+        pos += stride + 1
+        if kind == 1:
+            for i in range(bpp, stride):
+                line[i] = (line[i] + line[i - bpp]) & 255
+        elif kind == 2:
+            for i in range(stride):
+                line[i] = (line[i] + prev[i]) & 255
+        elif kind == 3:
+            for i in range(stride):
+                left = line[i - bpp] if i >= bpp else 0
+                line[i] = (line[i] + ((left + prev[i]) >> 1)) & 255
+        elif kind == 4:
+            for i in range(stride):
+                a = line[i - bpp] if i >= bpp else 0
+                b = prev[i]
+                c = prev[i - bpp] if i >= bpp else 0
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                pred = a if pa <= pb and pa <= pc else b if pb <= pc else c
+                line[i] = (line[i] + pred) & 255
+        out[row * stride:(row + 1) * stride] = line
+        prev = line
+    return out
+
+
+def to_rgb(png: Png, pixels: bytearray) -> bytearray:
+    if png.colour == 2:
+        return pixels
+    count = png.width * png.height
+    alpha = pixels[3::4]
+    rgb = bytearray(count * 3)
+    if alpha == b"\xff" * count:
+        for c in range(3):
+            rgb[c::3] = pixels[c::4]
+        return rgb
+    for i in range(count):
+        a = pixels[i * 4 + 3]
+        for c in range(3):
+            rgb[i * 3 + c] = (pixels[i * 4 + c] * a + 255 * (255 - a) + 127) // 255
+    return rgb
+
+
+def pad(width: int, height: int, rgb: bytearray) -> tuple[int, int, bytearray]:
+    """Pad the short side to half the long one by repeating edge pixels."""
+    stride = width * 3
+    if height > 2 * width:
+        target = -(-height // 2)
+        left = (target - width) // 2
+        right = target - width - left
+        out = bytearray()
+        for row in range(height):
+            line = rgb[row * stride:(row + 1) * stride]
+            out += line[:3] * left + line + line[-3:] * right
+        return target, height, out
+    if width > 2 * height:
+        target = -(-width // 2)
+        top = (target - height) // 2
+        bottom = target - height - top
+        first, last = rgb[:stride], rgb[-stride:]
+        return width, target, first * top + rgb + last * bottom
+    return width, height, rgb
+
+
+def encode(width: int, height: int, rgb: bytes) -> bytes:
+    stride = width * 3
+    raw = bytearray()
+    for row in range(height):
+        raw += b"\x00" + rgb[row * stride:(row + 1) * stride]
+
+    def chunk(kind: bytes, body: bytes) -> bytes:
+        return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return SIGNATURE + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b"")
+
+
+def problems(path: Path) -> list[str]:
+    """Why Play would refuse this file, or nothing."""
+    try:
+        png = read_png(path)
+    except Rejected as error:
+        return [str(error)]
+    found = []
+    if png.colour != 2:
+        found.append("has an alpha channel")
+    if png.transparency:
+        found.append("has a tRNS transparency chunk")
+    short, long = sorted((png.width, png.height))
+    if short < MIN_SIDE or long > MAX_SIDE:
+        found.append(f"{png.width}x{png.height} is outside {MIN_SIDE}..{MAX_SIDE}")
+    if long > 2 * short:
+        found.append(f"{png.width}x{png.height} is longer than 2:1")
+    if path.stat().st_size > MAX_BYTES:
+        found.append("is larger than 8 MB")
+    return found
+
+
+def refile(path: Path) -> None:
+    if not problems(path):
+        print(f"{path}: already acceptable")
+        return
+    png = read_png(path)
+    if png.transparency:
+        raise Rejected("tRNS transparency is not supported")
+    width, height, rgb = pad(png.width, png.height, to_rgb(png, unfilter(png)))
+    fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(encode(width, height, rgb))
+        left = problems(Path(temp))
+        if left:
+            raise Rejected("converted image still " + "; ".join(left))
+        os.chmod(temp, path.stat().st_mode & 0o777)
+        os.replace(temp, path)
+    except BaseException:
+        os.unlink(temp)
+        raise
+    print(f"{path}: {png.width}x{png.height} -> {width}x{height} RGB")
+
+
+def check(directories: list[Path]) -> bool:
+    ok = True
+    total = 0
+    for directory in directories:
+        if not directory.is_dir():
+            print(f"{directory}: not a directory", file=sys.stderr)
+            ok = False
+            continue
+        files = sorted(p for p in directory.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
+        total += len(files)
+        if len(files) > MAX_PER_TYPE:
+            print(f"{directory}: {len(files)} screenshots, Play takes {MAX_PER_TYPE}", file=sys.stderr)
+            ok = False
+        for path in files:
+            if path.suffix.lower() != ".png":
+                print(f"{path}: only PNG screenshots are filed", file=sys.stderr)
+                ok = False
+                continue
+            for problem in problems(path):
+                print(f"{path}: {problem}", file=sys.stderr)
+                ok = False
+    if total < MIN_TOTAL:
+        print(f"{total} screenshots in all, Play wants at least {MIN_TOTAL}", file=sys.stderr)
+        ok = False
+    return ok
+
+
+def main(argv: list[str]) -> int:
+    if argv[:1] == ["--check"]:
+        if len(argv) < 2:
+            print("usage: hack/store-images --check DIR...", file=sys.stderr)
+            return 2
+        return 0 if check([Path(a) for a in argv[1:]]) else 1
+    if not argv or argv[0].startswith("-"):
+        print(__doc__.strip().splitlines()[0], file=sys.stderr)
+        print("usage: hack/store-images FILE... | --check DIR...", file=sys.stderr)
+        return 2
+    failed = False
+    for arg in argv:
+        try:
+            refile(Path(arg))
+        except (Rejected, OSError) as error:
+            print(f"{arg}: {error}", file=sys.stderr)
+            failed = True
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

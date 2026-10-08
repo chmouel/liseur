@@ -703,9 +703,10 @@ the AAB again. RC and legacy test tags never enter production, and
 failure remains non-load-bearing for GitHub and F-Droid, but the workflow
 reports it clearly.
 
-Only the changelog is pushed from the repository. The store listing is
-edited in the console, because Play holds declarations that no file here
-describes (data safety, content rating, target audience, app access, ads),
+The release lanes push only the changelog. The phone and tablet
+screenshots are pushed separately (see *Play screenshots* below). The rest
+of the store listing is edited in the console, because Play holds
+declarations that no file here describes (data safety, content rating, target audience, app access, ads),
 and those have to be revisited whenever the app gains a permission,
 talks to something new, or changes what it stores. The privacy policy
 Play links to is `docs/PRIVACY.md`, served by GitHub Pages from `main`
@@ -720,8 +721,41 @@ and tablet screenshots, contact details, privacy-policy URL, data safety,
 content rating, target audience, app access, ads declaration and country
 availability. The repository's starting copy and assets live under
 `fastlane/metadata/android/en-US/`; refresh them when they no longer show the
-current app. Verify the privacy URL anonymously before publishing the first
+current app. The screenshots among them are synced automatically (see *Play
+screenshots* below); the rest is copied into the console by hand. Verify the privacy URL anonymously before publishing the first
 final release.
+
+**Play screenshots.** The phone and tablet screenshots are the
+repository's, not the console's. After a final release's production
+promotion succeeds, the workflow runs `fastlane android screenshots`,
+which compares the files under `fastlane/metadata/android/en-US/images/`
+with Play's in order: an unchanged set uploads and deletes nothing, and
+anything else is replaced to match the repository, including screenshots
+edited in the console since. RCs never touch it, because the listing is
+shared by every track and must not show what production cannot install.
+A successful sync means the edit was committed, not that Play's review
+has finished. A failed sync warns in the job summary and does not fail
+the release; the next final release catches up, or run it by hand:
+
+```bash
+fastlane android screenshots version_code:19
+PLAY_VALIDATE_ONLY=true fastlane android screenshots   # dry run
+```
+
+The dry run still uploads the images, into an edit that is validated and
+then dropped: the live listing does not change, and Play accepting the
+edit says nothing about how its content review will go.
+
+Play refuses a screenshot with an alpha channel or a long side over twice
+the short one, and a phone captures RGBA at 1080x2400. `hack/screenshots`
+therefore runs `hack/store-images` on every image it files, which flattens
+the alpha and pads phone shots to 1200x2400 by repeating the edge pixels;
+the lane runs `hack/store-images --check` before it opens an edit. F-Droid
+reads the same files from the tag it builds, so it gets the padded set too.
+Do not run the lane by hand or edit the console screenshots while a release
+workflow is running: both open Play edits, and only one of them wins.
+The service account needs *Manage store presence* on Liseur (an app-level
+grant, not an account-wide one) for this step.
 
 **The signing key.** Play App Signing holds the same key as the GitHub
 release, enrolled from `pass` through Google's PEPK tool rather than
@@ -913,7 +947,9 @@ hack/feature-graphic        # fastlane featureGraphic.png, from the brand emblem
 ```
 
 `hack/screenshots` drives a connected device through adb and writes both
-`docs/screenshots` and the matching fastlane directory. It finds controls
+`docs/screenshots` and the matching fastlane directory. The fastlane copies
+go through `hack/store-images`, which makes them acceptable to Google Play
+(see *Play screenshots*); `docs/screenshots` keeps the raw captures. It finds controls
 by what they say rather than by where they sat when it was written, so a
 moved button is something it waits for and fails on, not a tap into empty
 space.
