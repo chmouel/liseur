@@ -1,1 +1,1 @@
-Читалка EPUB и клиент для серверов calibre-web, Komga, BookOrbit и OPDS
+Читалка EPUB с чтением вслух и клиент для calibre-web, Komga и OPDS

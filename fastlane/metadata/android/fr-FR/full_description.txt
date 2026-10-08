@@ -1,4 +1,13 @@
-Liseur est un lecteur EPUB pour Android basé sur Readium. Il lit les livres de dossiers locaux et sert aussi de client pour calibre-web, Komga, BookOrbit, liseur-sync et les catalogues OPDS. Les livres de toutes les sources apparaissent sur la même étagère.
+Liseur est un lecteur EPUB pour Android basé sur Readium. Il lit les livres de dossiers locaux, peut vous les lire à voix haute et sert aussi de client pour calibre-web, Komga, BookOrbit, liseur-sync et les catalogues OPDS. Les livres de toutes les sources apparaissent sur la même étagère.
+
+Lecture à voix haute
+
+Liseur vous lit n'importe quel livre, en surlignant chaque phrase et en tournant les pages au fil de la lecture. Par défaut, il utilise les voix déjà installées sur votre téléphone : il fonctionne hors ligne et le texte reste sur l'appareil. Pour d'autres voix, vous pouvez brancher un serveur de synthèse vocale : le vôtre, comme Kokoro, ou un service hébergé comme OpenAI, Mistral ou Groq.
+
+* Continue de lire écran éteint, avec les commandes dans la notification
+* Vitesse de 0,75× à 2×
+* Minuteur de mise en veille, ou arrêt à la fin du chapitre
+* Retient la voix choisie pour chaque langue
 
 Lecture
 
@@ -30,6 +39,6 @@ Synchronisation
 
 Vie privée
 
-Pas de publicité, de traqueurs, d'analyse d'utilisation ni de compte. Liseur ne se connecte qu'aux serveurs que vous ajoutez, au site de dictionnaire si vous l'activez et à Project Gutenberg quand vous le parcourez. Aucun service Google Play ni aucune bibliothèque propriétaire.
+Pas de publicité, de traqueurs, d'analyse d'utilisation ni de compte. Liseur ne se connecte qu'aux serveurs de livres et de synthèse vocale que vous ajoutez, au site de dictionnaire si vous l'activez et à Project Gutenberg quand vous le parcourez. Aucun service Google Play ni aucune bibliothèque propriétaire.
 
 Licence MIT. Code source et suivi des bugs : https://github.com/chmouel/liseur

@@ -1,4 +1,13 @@
-Liseur is an EPUB reader for Android built on the Readium toolkit. It reads books from local folders and is also a client for calibre-web, Komga, BookOrbit, liseur-sync and OPDS catalogs. Books from every source show up on the same shelf.
+Liseur is an EPUB reader for Android built on the Readium toolkit. It opens books from local folders, can read them aloud to you, and is also a client for calibre-web, Komga, BookOrbit, liseur-sync and OPDS catalogs. Books from every source show up on the same shelf.
+
+Read aloud
+
+Liseur reads any book to you, highlighting each sentence and turning the page as it goes. By default it uses the voices already on your phone, so it works offline and the text stays on the device. For other voices, you can connect a speech server: one you run yourself, such as Kokoro, or a hosted service like OpenAI, Mistral or Groq.
+
+* Keeps reading with the screen off, with controls in the notification
+* Speed from 0.75× to 2×
+* Sleep timer, or stop at the end of the chapter
+* Remembers the voice you picked for each language
 
 Reading
 
@@ -30,6 +39,6 @@ Sync
 
 Privacy
 
-No ads, trackers, analytics or account. Liseur only connects to the servers you add, to the dictionary site if you turn it on, and to Project Gutenberg when you browse it. It does not use Google Play services or any proprietary library.
+No ads, trackers, analytics or account. Liseur only connects to the book and speech servers you add, to the dictionary site if you turn it on, and to Project Gutenberg when you browse it. It does not use Google Play services or any proprietary library.
 
 MIT licensed. Source code and issue tracker: https://github.com/chmouel/liseur

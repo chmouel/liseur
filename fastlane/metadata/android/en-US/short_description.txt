@@ -1,1 +1,1 @@
-EPUB reader and client for calibre-web, Komga, BookOrbit and OPDS servers
+EPUB reader that reads aloud, and a client for calibre-web, Komga and OPDS
