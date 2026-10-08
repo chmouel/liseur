@@ -7,10 +7,12 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.RecordVoiceOver
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -58,6 +62,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.readaloud.ReadAloudNotice
+import com.chmouel.liseur.readaloud.ReadAloudUi
+import com.chmouel.liseur.reader.chrome.ChromeCard
 import com.chmouel.liseur.reader.chrome.ChromePill
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
@@ -124,76 +130,112 @@ internal fun ReadAloudPlayer(
             enter = if (eInk) EnterTransition.None else fadeIn(),
             exit = if (eInk) ExitTransition.None else fadeOut(),
         ) {
-            ChromePill(theme = theme) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            ChromeCard(theme = theme) {
+                Column(Modifier.padding(vertical = 4.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
                     ) {
-                        ControlButton(feature::skipBackward) {
-                            Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
-                        }
-                        when {
-                            // Nothing heard yet: the first sentence is still on its way.
-                            here?.utterance == null -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                                BusyIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    color = LocalContentColor.current,
-                                    strokeWidth = 2.dp,
-                                )
-                            }
-                            here?.playing == true -> ControlButton(feature::pause) {
-                                Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause))
-                            }
-                            else -> ControlButton(feature::resume) {
-                                Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume))
-                            }
-                        }
-                        ControlButton(feature::skipForward) {
-                            Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
-                        }
+                        VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { choosing = true }
                         ControlButton(feature::stop) {
                             Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
                         }
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     ) {
                         SpeedButton(feature)
+                        ControlButton(feature::skipBackward) {
+                            Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
+                        }
+                        PlayButton(feature, here, theme)
+                        ControlButton(feature::skipForward) {
+                            Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
+                        }
                         SleepButton(feature)
-                        VoiceButton { choosing = true }
                     }
-                    VoiceStatus(feature, bookId)
                 }
             }
         }
     }
 }
 
-/** Which voice is reading, and in what language, under the controls: the session's, whatever the settings now hold. */
+/**
+ * Play, pause, or the wait for the first sentence, filled in the page's
+ * ink so the one control that matters most is found without looking.
+ */
 @Composable
-private fun VoiceStatus(feature: SpeechReadAloud, bookId: String) {
+private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, theme: ReaderTheme) {
+    val colors = IconButtonDefaults.filledIconButtonColors(
+        containerColor = theme.foreground,
+        contentColor = theme.background,
+    )
+    when {
+        // Nothing heard yet: the first sentence is still on its way.
+        here?.utterance == null -> Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(PLAY_SIZE).clip(CircleShape).background(theme.foreground),
+        ) {
+            BusyIndicator(modifier = Modifier.size(24.dp), color = theme.background, strokeWidth = 2.dp)
+        }
+        here.playing -> FilledIconButton(feature::pause, Modifier.size(PLAY_SIZE), colors = colors) {
+            Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause), Modifier.size(32.dp))
+        }
+        else -> FilledIconButton(feature::resume, Modifier.size(PLAY_SIZE), colors = colors) {
+            Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume), Modifier.size(32.dp))
+        }
+    }
+}
+
+/**
+ * Which voice is reading, and in what language: the session's, whatever
+ * the settings now hold. A tap opens the voice sheet to change either.
+ */
+@Composable
+private fun VoiceChip(feature: SpeechReadAloud, bookId: String, modifier: Modifier, onClick: () -> Unit) {
     val service by feature.service.collectAsStateWithLifecycle(null)
     val choice by remember(feature, bookId) { feature.sessionChoice(bookId) }.collectAsStateWithLifecycle(null)
-    val reading = choice ?: return
-    val name = service?.voiceLabel(reading.voice) ?: return
     val locale = LocalConfiguration.current.locales[0]
-    // The text, and the same without the flag for a screen reader.
-    val text = "$name · ${VoiceLabel.languageLabel(reading.language, locale)}"
-    val spoken = "$name · ${Locale.forLanguageTag(reading.language).getDisplayName(locale)}"
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        color = LocalContentColor.current.copy(alpha = 0.75f),
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier
-            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-            .semantics { contentDescription = spoken },
-    )
+    val name = choice?.let { service?.voiceLabel(it.voice) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
+            .clickable(
+                role = Role.Button,
+                onClickLabel = stringResource(R.string.read_aloud_change_voice),
+                onClick = onClick,
+            )
+            .padding(horizontal = 8.dp),
+    ) {
+        val reading = choice
+        if (name == null || reading == null) {
+            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
+            return@Row
+        }
+        Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(20.dp))
+        // The text, and the same without the flag for a screen reader.
+        val text = "$name · ${VoiceLabel.languageLabel(reading.language, locale)}"
+        val spoken = "$name · ${Locale.forLanguageTag(reading.language).getDisplayName(locale)}"
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = spoken },
+        )
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = LocalContentColor.current.copy(alpha = 0.6f),
+        )
+    }
 }
 
 /** Picks how fast the book is read, heard at once. */
@@ -245,11 +287,15 @@ private fun SleepButton(feature: SpeechReadAloud) {
                     stringResource(R.string.read_aloud_sleep_chapter_end),
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = SLEEP_LABEL_MAX),
                 )
                 is SleepTimer.Timed -> Text(
                     stringResource(R.string.read_aloud_sleep_left, set.minutesLeft(now)),
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = SLEEP_LABEL_MAX),
                 )
             }
         }
@@ -269,14 +315,6 @@ private fun SleepButton(feature: SpeechReadAloud) {
                 }
             }
         }
-    }
-}
-
-/** Opens the voice sheet, where the book's language and voice are picked. */
-@Composable
-private fun VoiceButton(onClick: () -> Unit) {
-    ControlButton(onClick) {
-        Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
     }
 }
 
@@ -344,3 +382,8 @@ private fun ReadAloudNotice.message(): Int = when (this) {
 }
 
 private const val NOTICE_MS = 5_000L
+
+private val PLAY_SIZE = 56.dp
+
+// Long enough for "12 min", short enough that a translated "end of chapter" leaves the row its five controls.
+private val SLEEP_LABEL_MAX = 72.dp

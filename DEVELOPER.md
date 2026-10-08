@@ -1486,7 +1486,7 @@ reader behavior.
   (`AppSettingsRepository.editReadAloudVoice`), which first checks the
   scope is still the one shown, so a server or model changed meanwhile
   writes nothing. Automatic picks never write.
-- The player's voice button opens the voice sheet (`ReadAloudVoiceSheet`):
+- The player's voice chip opens the voice sheet (`ReadAloudVoiceSheet`):
   a language menu (the book's and session's first; every language when
   some voices are unclassified), the voices for it grouped under the
   language with their accent's country, then the unclassified ones, and
@@ -1511,10 +1511,13 @@ reader behavior.
   clears itself, and leaves that section ready to resume. It uses reading-order
   resources as chapter boundaries, like the reader's chapter matching; chapters
   sharing a single resource are not distinguished.
-- A status line under the player controls names the session's voice and
-  language (`ReadAloudSession.choice`), which may differ from the
-  service's global voice. The
-  speed is left out because the speed button already shows it.
+- The player is a card in the page's colours (`ChromeCard`; solid with
+  an outline on e-ink) docked above the scrubber. Its first row is the
+  voice chip, naming the session's voice and language
+  (`ReadAloudSession.choice`, which may differ from the service's global
+  voice), and Stop on the right. The second holds speed, previous,
+  play/pause as a filled circle, next and the sleep timer. The speed is
+  left out of the chip because the speed button already shows it.
 
 ### Covers, UI, and dependencies
 

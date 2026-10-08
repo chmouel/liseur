@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.chrome
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -49,6 +50,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
@@ -866,6 +868,38 @@ internal fun ChromePill(
         modifier = modifier
             .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
             .padding(16.dp),
+        content = content,
+    )
+}
+
+/**
+ * A panel of controls docked over the bottom of the page, for what is
+ * too much for a [ChromePill]: a pill's round ends turn more than one
+ * row into an oval.
+ *
+ * It is the page's paper raised a shade, with the page's ink on it, so
+ * it reads as part of the chrome rather than a slab laid on the text.
+ * Electronic paper gets the paper as it is and a solid rule round it,
+ * for the same reasons as [ChromePill].
+ */
+@Composable
+internal fun ChromeCard(
+    theme: ReaderTheme,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val eInk = LocalEInk.current
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = if (eInk) theme.background else lerp(theme.background, theme.foreground, 0.07f),
+        contentColor = theme.foreground,
+        border = BorderStroke(1.dp, if (eInk) theme.foreground else theme.foreground.copy(alpha = 0.14f)),
+        shadowElevation = if (eInk) 0.dp else 3.dp,
+        modifier = modifier
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .widthIn(max = 480.dp)
+            .fillMaxWidth(),
         content = content,
     )
 }
