@@ -5,7 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal enum class BackupValueType { STRING, BOOLEAN, DOUBLE, FLOAT, STRING_SET }
+internal enum class BackupValueType { STRING, BOOLEAN, DOUBLE, FLOAT, INT, STRING_SET }
 
 internal fun Preferences.backupJson(allowlist: Set<String>): JSONObject = JSONObject().apply {
     asMap().forEach { (key, value) ->
@@ -49,6 +49,9 @@ private fun JSONObject.decodeBackupValues(known: Map<String, BackupValueType>): 
             BackupValueType.BOOLEAN -> raw as? Boolean ?: malformed(name)
             BackupValueType.DOUBLE -> (raw as? Number)?.toDouble()?.takeIf { it.isFinite() } ?: malformed(name)
             BackupValueType.FLOAT -> (raw as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: malformed(name)
+            BackupValueType.INT -> (raw as? Number)?.toDouble()
+                ?.takeIf { it % 1.0 == 0.0 && it >= Int.MIN_VALUE && it <= Int.MAX_VALUE }?.toInt()
+                ?: malformed(name)
             BackupValueType.STRING_SET -> {
                 val array = raw as? JSONArray ?: malformed(name)
                 buildSet {
@@ -70,5 +73,6 @@ private fun String.asPreferencesKey(type: BackupValueType): Preferences.Key<Any>
     BackupValueType.BOOLEAN -> androidx.datastore.preferences.core.booleanPreferencesKey(this)
     BackupValueType.DOUBLE -> androidx.datastore.preferences.core.doublePreferencesKey(this)
     BackupValueType.FLOAT -> androidx.datastore.preferences.core.floatPreferencesKey(this)
+    BackupValueType.INT -> androidx.datastore.preferences.core.intPreferencesKey(this)
     BackupValueType.STRING_SET -> androidx.datastore.preferences.core.stringSetPreferencesKey(this)
 } as Preferences.Key<Any>

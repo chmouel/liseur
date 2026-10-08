@@ -201,6 +201,8 @@ enum class DefinitionTarget(val id: String) {
  *   offered, by name; empty offers every voice it lists.
  * @param readAloudSpeed How fast reading aloud plays, 1 being as the voice
  *   speaks.
+ * @param readAloudSentencesPerRequest How many sentences reading aloud asks
+ *   the voice for at once, as stored; see `BoundedSentenceTokenizer`.
  * @param deviceVoice The voice of the device's own speech engine reading
  *   aloud uses, by the engine's name for it, or null for the engine's
  *   default.
@@ -235,10 +237,16 @@ data class AppSettings(
     val speechServerVoices: Set<String> = emptySet(),
     val speechServerUnsettledUrl: String? = null,
     val readAloudSpeed: Float = 1f,
+    val readAloudSentencesPerRequest: Int = 1,
     val deviceVoice: String? = null,
     /** The voice chosen for each language, per speech service; see [VoicePreference]. */
     val voicePreferences: List<VoicePreference> = emptyList(),
-)
+) {
+    companion object {
+        /** The sentences per read-aloud request on offer; a stored value outside is brought within. */
+        val SENTENCES_PER_REQUEST = 1..5
+    }
+}
 
 /**
  * What to do with a book that arrives on the device when the connected
@@ -306,6 +314,7 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         /** A server address saved whose model and voice are not yet chosen from its lists; never backed up. */
         val SPEECH_SERVER_UNSETTLED_URL = stringPreferencesKey("speech_server_unsettled_url")
         val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
+        val READ_ALOUD_SENTENCES_PER_REQUEST = intPreferencesKey("read_aloud_sentences_per_request")
         val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
         val READ_ALOUD_VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
     }
@@ -384,6 +393,8 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             speechServerVoices = p[Keys.SPEECH_SERVER_VOICES].orEmpty(),
             speechServerUnsettledUrl = p[Keys.SPEECH_SERVER_UNSETTLED_URL],
             readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
+            readAloudSentencesPerRequest = (p[Keys.READ_ALOUD_SENTENCES_PER_REQUEST] ?: 1)
+                .coerceIn(AppSettings.SENTENCES_PER_REQUEST),
             deviceVoice = p[Keys.READ_ALOUD_DEVICE_VOICE],
             voicePreferences = VoicePreferences.decode(p[Keys.READ_ALOUD_VOICE_PREFERENCES]),
         )
@@ -645,6 +656,10 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.READ_ALOUD_SPEED] = speed }
     }
 
+    suspend fun setReadAloudSentencesPerRequest(count: Int) {
+        store.edit { it[Keys.READ_ALOUD_SENTENCES_PER_REQUEST] = count.coerceIn(AppSettings.SENTENCES_PER_REQUEST) }
+    }
+
     private suspend fun setOrRemove(key: Preferences.Key<String>, value: String) {
         val trimmed = value.trim()
         store.edit { p -> if (trimmed.isEmpty()) p.remove(key) else p[key] = trimmed }
@@ -699,6 +714,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "speech_server_model" to BackupValueType.STRING,
     "speech_server_voices" to BackupValueType.STRING_SET,
     "read_aloud_speed" to BackupValueType.FLOAT,
+    "read_aloud_sentences_per_request" to BackupValueType.INT,
     "read_aloud_device_voice" to BackupValueType.STRING,
     "read_aloud_voice_preferences" to BackupValueType.STRING,
 )

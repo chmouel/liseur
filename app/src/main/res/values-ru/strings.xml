@@ -1163,6 +1163,9 @@
     <string name="read_aloud_notice_terms_required">Сервис %1$s требует сначала принять условия этой модели на своём сайте.</string>
     <string name="read_aloud_notice_not_set_up">Чтение вслух ещё не настроено. Настройте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_settings_title">Чтение вслух</string>
+    <string name="read_aloud_settings_playback">Воспроизведение</string>
+    <string name="read_aloud_settings_sentences_per_request">Предложений за запрос</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Больше предложений — меньше запросов и пауз у медленного голоса, но дольше ожидание перед началом. Подсветка и кнопки перехода тогда перемещаются на всю группу. Действует со следующего запуска чтения вслух.</string>
     <string name="read_aloud_settings_entry_missing">Не настроено</string>
     <string name="read_aloud_settings_provider">Голосовой сервис</string>
     <string name="read_aloud_settings_provider_change">Сменить голосовой сервис</string>

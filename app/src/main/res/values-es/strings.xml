@@ -1079,6 +1079,9 @@
     <string name="read_aloud_notice_terms_required">%1$s pide aceptar antes los términos de este modelo en su sitio web.</string>
     <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_settings_title">Leer en voz alta</string>
+    <string name="read_aloud_settings_playback">Reproducción</string>
+    <string name="read_aloud_settings_sentences_per_request">Frases por solicitud</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Más frases significan menos solicitudes y menos pausas con una voz lenta, pero una espera más larga antes de empezar. El resaltado y los botones de salto avanzan entonces por el grupo entero. Se aplica la próxima vez que empiece la lectura en voz alta.</string>
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>
     <string name="read_aloud_settings_provider_change">Cambiar el servicio de voz</string>

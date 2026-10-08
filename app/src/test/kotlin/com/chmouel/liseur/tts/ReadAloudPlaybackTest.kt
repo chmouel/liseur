@@ -82,7 +82,7 @@ class ReadAloudPlaybackTest {
     private lateinit var publication: Publication
     private lateinit var playback: ReadAloudPlayback
     private var beforeOpen: suspend () -> Unit = {}
-    private var tokenizerFactory: (Language?) -> TextTokenizer = BoundedSentenceTokenizer.factory
+    private var tokenizerFactory: (Language?) -> TextTokenizer = BoundedSentenceTokenizer.factory()
 
     @Before
     fun setUp() = runBlocking {
@@ -334,7 +334,7 @@ class ReadAloudPlaybackTest {
         awaitFailure()
         val failed = playback.failure.value
         tokenizerFactory = { language ->
-            val sentences = BoundedSentenceTokenizer.factory(language)
+            val sentences = BoundedSentenceTokenizer.factory()(language)
             object : TextTokenizer {
                 override fun tokenize(data: String): List<IntRange> =
                     sentences.tokenize(data).filter { data.substring(it) != THIRD }
@@ -410,7 +410,7 @@ class ReadAloudPlaybackTest {
             })
             // The new language's tokenizer reads two sentences at a time.
             tokenizerFactory = { language ->
-                val sentences = BoundedSentenceTokenizer.factory(language)
+                val sentences = BoundedSentenceTokenizer.factory()(language)
                 object : TextTokenizer {
                     override fun tokenize(data: String): List<IntRange> =
                         sentences.tokenize(data).chunked(2) { it.first().first..it.last().last }

@@ -56,6 +56,8 @@ internal class ReadAloudSession(
     voice: SessionVoice,
     /** The normalized tag of the language the book is read in, such as `fr-FR`. */
     language: String,
+    /** How many sentences each request carries, fixed for the session. */
+    sentencesPerRequest: Int,
     /** How fast it plays, read as it plays. */
     private val speed: () -> Float,
     private val checkpoints: ListeningCheckpoints,
@@ -75,12 +77,14 @@ internal class ReadAloudSession(
     /** Chosen once for the session: the whole book is cut into sentences and spoken in it. */
     private val spoken: Language get() = Language(mutableChoice.value.language)
 
+    private val tokenizerFactory = BoundedSentenceTokenizer.factory(sentencesPerRequest)
+
     private val prefetcher = UtterancePrefetcher<Locator>(scope, cache, { locator ->
         val settings = playback.navigator.value?.settings?.value
         PublicationUtteranceCursor(
             publication,
             locator,
-            BoundedSentenceTokenizer.factory,
+            tokenizerFactory,
             settings?.language ?: spoken,
             settings?.overrideContentLanguage ?: true,
         )
@@ -92,7 +96,7 @@ internal class ReadAloudSession(
             val language = spoken
             val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, language))
             val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
-            TtsNavigatorFactory(application, publication, provider, BoundedSentenceTokenizer.factory)
+            TtsNavigatorFactory(application, publication, provider, tokenizerFactory)
                 ?.createNavigator(listener, initial, SpeechTtsPreferences(language))
                 ?.getOrNull()
         },

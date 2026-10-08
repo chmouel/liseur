@@ -1091,6 +1091,9 @@
     <string name="read_aloud_notice_terms_required">%1$s verlangt zuerst, dass du die Bedingungen dieses Modells auf seiner Website akzeptierst.</string>
     <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Vorlesen ein.</string>
     <string name="read_aloud_settings_title">Vorlesen</string>
+    <string name="read_aloud_settings_playback">Wiedergabe</string>
+    <string name="read_aloud_settings_sentences_per_request">Sätze pro Anfrage</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Mehr Sätze bedeuten weniger Anfragen und weniger Pausen bei einer langsamen Stimme, aber eine längere Wartezeit vor dem Start. Die Markierung und die Sprungtasten bewegen sich dann um die ganze Gruppe. Gilt ab dem nächsten Start des Vorlesens.</string>
     <string name="read_aloud_settings_entry_missing">Nicht eingerichtet</string>
     <string name="read_aloud_settings_provider">Sprachdienst</string>
     <string name="read_aloud_settings_provider_change">Sprachdienst ändern</string>

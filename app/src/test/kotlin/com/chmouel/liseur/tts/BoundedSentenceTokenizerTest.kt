@@ -21,8 +21,58 @@ class BoundedSentenceTokenizerTest {
         ranges
     }
 
-    private fun tokenize(data: String, min: Int = 40, max: Int = 600) =
-        BoundedSentenceTokenizer(sentences, min, max).tokenize(data).map { data.substring(it) }
+    private fun tokenize(data: String, min: Int = 40, max: Int = 600, perRequest: Int = 1) =
+        BoundedSentenceTokenizer(sentences, min, max, perRequest).tokenize(data).map { data.substring(it) }
+
+    private val four = listOf(
+        "The first sentence is long enough to stand alone.",
+        "The second sentence is long enough to stand alone.",
+        "The third sentence is long enough to stand alone.",
+        "The fourth sentence is long enough to stand alone.",
+    )
+
+    @Test
+    fun oneSentencePerRequestCutsEverySentence() {
+        assertEquals(four, tokenize(four.joinToString(" ")))
+    }
+
+    @Test
+    fun groupsSentencesPerRequestWithTheRestLast() {
+        val text = four.joinToString(" ")
+        assertEquals(
+            listOf(four.take(2).joinToString(" "), four.drop(2).joinToString(" ")),
+            tokenize(text, perRequest = 2),
+        )
+        assertEquals(listOf(four.take(3).joinToString(" "), four[3]), tokenize(text, perRequest = 3))
+    }
+
+    @Test
+    fun aGroupClosesRatherThanOutgrowTheLimit() {
+        val text = four.joinToString(" ")
+        // Two sentences fit in 110 characters, three do not.
+        assertEquals(
+            listOf(four.take(2).joinToString(" "), four.drop(2).joinToString(" ")),
+            tokenize(text, max = 110, perRequest = 5),
+        )
+    }
+
+    @Test
+    fun shortSentencesMergedTogetherCountAsOne() {
+        val text = "No. Yes. " + four.joinToString(" ")
+        assertEquals(
+            listOf("No. Yes. " + four[0] + " " + four[1], four[2] + " " + four[3]),
+            tokenize(text, perRequest = 2),
+        )
+    }
+
+    @Test
+    fun aSentenceTooLongIsStillCutWhenGrouping() {
+        val long = "a".repeat(30) + ", " + "b".repeat(30) + "."
+        assertEquals(
+            listOf("a".repeat(30) + ",", "b".repeat(30) + "."),
+            tokenize(long, min = 10, max = 40, perRequest = 3),
+        )
+    }
 
     @Test
     fun mergesShortSentencesWithTheNextOne() {

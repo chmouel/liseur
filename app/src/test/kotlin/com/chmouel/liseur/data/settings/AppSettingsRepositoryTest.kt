@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.settings
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -57,6 +58,28 @@ class AppSettingsRepositoryTest {
 
         repo.setPinchToResize(true)
         assertTrue(repo.settings.first().pinchToResize)
+    }
+
+    @Test
+    fun `read aloud asks for one sentence at a time until changed`() = runTest {
+        val repo = AppSettingsRepository(store())
+        assertEquals(1, repo.settings.first().readAloudSentencesPerRequest)
+
+        repo.setReadAloudSentencesPerRequest(3)
+        assertEquals(3, repo.settings.first().readAloudSentencesPerRequest)
+    }
+
+    @Test
+    fun `sentences per request out of range are brought within it`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+        store.edit { it[intPreferencesKey("read_aloud_sentences_per_request")] = 0 }
+        assertEquals(1, repo.settings.first().readAloudSentencesPerRequest)
+        store.edit { it[intPreferencesKey("read_aloud_sentences_per_request")] = 99 }
+        assertEquals(5, repo.settings.first().readAloudSentencesPerRequest)
+
+        repo.setReadAloudSentencesPerRequest(9)
+        assertEquals(5, store.data.first()[intPreferencesKey("read_aloud_sentences_per_request")])
     }
 
     @Test

@@ -1131,6 +1131,9 @@
     <string name="read_aloud_notice_terms_required">%1$s wants this model\'s terms accepted on its website first.</string>
     <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
     <string name="read_aloud_settings_title">Read aloud</string>
+    <string name="read_aloud_settings_playback">Playback</string>
+    <string name="read_aloud_settings_sentences_per_request">Sentences per request</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">More sentences mean fewer requests and fewer pauses with a slow voice, but a longer wait before it starts. The highlight and the skip buttons then move by the whole group. Takes effect the next time read aloud starts.</string>
     <string name="read_aloud_settings_entry_missing">Not set up</string>
     <string name="read_aloud_settings_provider">Voice service</string>
     <string name="read_aloud_settings_provider_change">Change the voice service</string>

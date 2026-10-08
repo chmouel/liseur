@@ -51,13 +51,16 @@ data class UtteranceAnchor(val locator: Locator, val text: String) {
  * A sentence that opens its element has nothing before it at all, so
  * [matches] compares what follows instead: [onward], the selection and the
  * text after it, must agree with the sentence and the rest of its element,
- * past the sentence when the element goes on.
+ * past the sentence when the element goes on. An utterance grouping several
+ * sentences can outrun [onward]; it still agrees when all of [onward] does
+ * and reaches past the selection's first sentence, [selectedLength] long.
  */
 class SelectionTarget(
     private val href: Url,
     private val prefix: String,
     private val before: String,
     private val onward: String = "",
+    private val selectedLength: Int? = null,
 ) {
 
     @OptIn(ExperimentalReadiumApi::class)
@@ -87,7 +90,8 @@ class SelectionTarget(
         val candidate = sentence + after
         val compared = minOf(onward.length, candidate.length)
         if (compared == 0 || onward.take(compared) != candidate.take(compared)) return false
-        return compared > sentence.length || (after.isEmpty() && compared == sentence.length)
+        if (compared > sentence.length || (after.isEmpty() && compared == sentence.length)) return true
+        return selectedLength != null && compared == onward.length && compared > selectedLength
     }
 
     /** Where in [spoken] the target can begin: where it is, or where a tail of [spoken] begins it. */
@@ -137,12 +141,14 @@ class SelectionTarget(
         fun of(locator: Locator, sentences: TextTokenizer): SelectionTarget? {
             val selected = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return null
             val first = sentences.tokenize(selected).firstOrNull()?.let(selected::substring) ?: selected
-            val prefix = squash(first).take(PREFIX).takeIf { it.isNotEmpty() } ?: return null
+            val sentence = squash(first)
+            val prefix = sentence.take(PREFIX).takeIf { it.isNotEmpty() } ?: return null
             return SelectionTarget(
                 locator.href,
                 prefix,
                 squash(locator.text.before.orEmpty()),
                 onward = squash(selected + locator.text.after.orEmpty()),
+                selectedLength = sentence.length,
             )
         }
 

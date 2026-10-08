@@ -1036,6 +1036,9 @@
     <string name="read_aloud_notice_terms_required">%1$s 要求先在其网站上接受此模型的条款。</string>
     <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 朗读”中设置。</string>
     <string name="read_aloud_settings_title">朗读</string>
+    <string name="read_aloud_settings_playback">播放</string>
+    <string name="read_aloud_settings_sentences_per_request">每次请求的句子数</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">句子越多，请求和停顿越少，适合较慢的语音，但开始前需要等待更久。高亮和跳转按钮将按整组移动。下次开始朗读时生效。</string>
     <string name="read_aloud_settings_entry_missing">未设置</string>
     <string name="read_aloud_settings_provider">语音服务</string>
     <string name="read_aloud_settings_provider_change">更改语音服务</string>

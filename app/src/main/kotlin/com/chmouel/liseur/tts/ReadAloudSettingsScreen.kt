@@ -45,6 +45,9 @@ import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -80,6 +83,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
@@ -162,6 +166,39 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                 }
                 SettingsGroup(stringResource(service.label)) {
                     service.SettingsRows(feature)
+                }
+                SettingsGroup(stringResource(R.string.read_aloud_settings_playback)) {
+                    SentencesPerRequestRow(feature)
+                }
+            }
+        }
+    }
+}
+
+/** How many sentences go in one request, from one to five; heard from the next start. */
+@Composable
+private fun SentencesPerRequestRow(feature: SpeechReadAloud) {
+    val count by feature.sentencesPerRequest.collectAsState(initial = 1)
+    val scope = rememberCoroutineScope()
+    val choices = AppSettings.SENTENCES_PER_REQUEST.toList()
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Text(
+            text = stringResource(R.string.read_aloud_settings_sentences_per_request),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stringResource(R.string.read_aloud_settings_sentences_per_request_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+            choices.forEachIndexed { index, choice ->
+                SegmentedButton(
+                    selected = count == choice,
+                    onClick = { scope.launch { feature.setSentencesPerRequest(choice) } },
+                    shape = SegmentedButtonDefaults.itemShape(index, choices.size),
+                ) {
+                    Text(choice.toString())
                 }
             }
         }

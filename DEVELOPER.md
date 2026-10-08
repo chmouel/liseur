@@ -1545,6 +1545,20 @@ reader behavior.
   write and poll: it keeps the pitch, applies mid-sentence, works for both
   providers and leaves cached audio valid. The output's stall deadline
   allows for the slowest speed.
+- Sentences per request (`read_aloud_sentences_per_request`, 1 to 5,
+  default 1, in the read-aloud settings, for every service) is read when a
+  session starts. `BoundedSentenceTokenizer.factory(n)` joins n sentences
+  (after short ones are merged) into one utterance while it stays within
+  600 characters; the navigator and the prefetcher get that one factory,
+  so they still cut text alike. The highlight and previous/next move by
+  the whole group. `AppSettingsRepository` clamps it to
+  `AppSettings.SENTENCES_PER_REQUEST`, so a restored 0 or 99 is read as 1
+  or 5. It is in the settings backup (`BackupValueType.INT`) but not in
+  liseur-sync settings sync. Play from a selection that opens its
+  paragraph has no text before it to compare, so `SelectionTarget` checks
+  what follows instead; a group can be longer than that, so it also
+  accepts a group when everything the page gave after the selection
+  agrees and reaches past the selected sentence.
 - The sleep timer (5 to 60 minutes or "Stop at end of chapter") lives
   with the session rather than the reader, so it runs with the screen
   off. It counts on `SystemClock.elapsedRealtime`, which keeps time while

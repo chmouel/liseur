@@ -7,10 +7,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Url
+import org.readium.r2.shared.util.mediatype.MediaType
+import org.readium.r2.shared.util.tokenizer.DefaultTextContentTokenizer
+import org.readium.r2.shared.util.tokenizer.TextUnit
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+@OptIn(ExperimentalReadiumApi::class)
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
 class UtteranceAlignmentTest {
@@ -101,6 +108,51 @@ class UtteranceAlignmentTest {
         assertTrue(target.matches(sentence, textBefore = null, textAfter = " Nobody slept."))
         // A paragraph of one sentence has nothing after it to compare.
         assertTrue(target.matches(sentence, textBefore = null, textAfter = null))
+    }
+
+    @Test
+    fun aSelectionOpeningAParagraphIsFoundInAGroupLongerThanWhatFollowsIt() {
+        val sentence = "The rain fell all night over the quiet harbour town."
+        val group = "$sentence Nobody slept in the houses down by the water."
+        val target = SelectionTarget(
+            HREF,
+            prefix = squash(sentence),
+            before = squash("The storm came in from the west."),
+            onward = squash("$sentence Nobody slept"),
+            selectedLength = squash(sentence).length,
+        )
+        assertTrue(target.matches(group, textBefore = null, textAfter = " The boats rocked."))
+        // The same opening sentence grouped with other text is another occurrence.
+        assertFalse(target.matches("$sentence The boats rocked against the pier.", textBefore = null))
+        // What follows has to reach past the selected sentence to tell them apart.
+        val short = SelectionTarget(
+            HREF,
+            prefix = squash(sentence),
+            before = squash("The storm came in from the west."),
+            onward = squash(sentence),
+            selectedLength = squash(sentence).length,
+        )
+        assertFalse(short.matches(group, textBefore = null))
+    }
+
+    @Test
+    fun aGroupedParagraphOpeningIsFoundFromTheSelection() {
+        val repeated = "The rain fell all night over the quiet harbour town."
+        val elsewhere = "$repeated The boats rocked against the old stone pier."
+        val selected = "$repeated Nobody slept in the houses down by the water. The lamps in every window stayed lit until the dawn came."
+        val cut = BoundedSentenceTokenizer.factory(2)(Language("en"))
+        fun groups(paragraph: String) = cut.tokenize(paragraph).map(paragraph::substring)
+        val selection = Locator(
+            href = HREF,
+            mediaType = MediaType.XHTML,
+            text = Locator.Text(before = "The storm came in from the west. ", highlight = repeated, after = " Nobody slept"),
+        )
+        val target = SelectionTarget.of(selection, DefaultTextContentTokenizer(TextUnit.Sentence, Language("en")))!!
+
+        val opening = groups(selected).first()
+        assertEquals("$repeated Nobody slept in the houses down by the water.", opening)
+        assertTrue(target.matches(opening, textBefore = null, textAfter = selected.removePrefix(opening)))
+        assertFalse(target.matches(groups(elsewhere).first(), textBefore = null))
     }
 
     @Test

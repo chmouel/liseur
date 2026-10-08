@@ -1079,6 +1079,9 @@
     <string name="read_aloud_notice_terms_required">%1$s demande d\'abord d\'accepter les conditions de ce modèle sur son site.</string>
     <string name="read_aloud_notice_not_set_up">La lecture à voix haute n\'est pas encore configurée. Configurez-la dans Paramètres, Lecture à voix haute.</string>
     <string name="read_aloud_settings_title">Lecture à voix haute</string>
+    <string name="read_aloud_settings_playback">Lecture</string>
+    <string name="read_aloud_settings_sentences_per_request">Phrases par requête</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Plus de phrases, c\'est moins de requêtes et moins de pauses avec une voix lente, mais une attente plus longue avant le début. Le surlignage et les boutons de saut avancent alors par groupe entier. S\'applique au prochain démarrage de la lecture à voix haute.</string>
     <string name="read_aloud_settings_entry_missing">Non configurée</string>
     <string name="read_aloud_settings_provider">Service de voix</string>
     <string name="read_aloud_settings_provider_change">Changer de service vocal</string>

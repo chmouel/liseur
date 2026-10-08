@@ -157,13 +157,15 @@ internal class SpeechReadAloud(
                     is VoiceResolution.Resolved -> resolved.pick
                     is VoiceResolution.NeedsChoice -> ask(PendingChoice(handle.bookId, service, book, resolved.reason))
                 }
-                val voice = service.voice(settings.settings.first(), pick.voice) ?: return@launch notSetUp(handle.bookId)
+                val current = settings.settings.first()
+                val voice = service.voice(current, pick.voice) ?: return@launch notSetUp(handle.bookId)
                 val session = ReadAloudSession(
                     application = application,
                     handle = handle,
                     reader = reader,
                     voice = voice,
                     language = pick.language,
+                    sentencesPerRequest = current.readAloudSentencesPerRequest,
                     speed = { speed.value },
                     checkpoints = checkpoints,
                     onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
@@ -402,6 +404,14 @@ internal class SpeechReadAloud(
         .stateIn(scope, SharingStarted.Eagerly, 1f)
 
     suspend fun setSpeed(speed: Float) = settings.setReadAloudSpeed(ReadAloudSpeed.of(speed))
+
+    /** How many sentences each request carries, within [AppSettings.SENTENCES_PER_REQUEST]. */
+    val sentencesPerRequest: Flow<Int> = settings.settings
+        .map { it.readAloudSentencesPerRequest }
+        .distinctUntilChanged()
+
+    /** Saves [count]; a session already playing keeps cutting text as it started. */
+    suspend fun setSentencesPerRequest(count: Int) = settings.setReadAloudSentencesPerRequest(count)
 
     @Composable
     override fun SettingsEntry(onClick: () -> Unit) = ReadAloudSettingsEntry(this, onClick)
