@@ -63,10 +63,12 @@ readonly FIRST_CHAPTER="I: Loomings"
 # someone turns it on, deliberately, so a run that wants a picture of a
 # definition has to turn it on and put it back.
 readonly DICTIONARY_SWITCH="Look up definitions online"
+readonly READING_SETTINGS="Reading & navigation"
 
 # A row only the Advanced sheet has, which is how the script tells it
-# from the short sheet it opens out of.
-readonly ADVANCED_MARKER="Use separate settings for this book"
+# from the short sheet it opens out of. It has to sit near the top: a
+# row below the fold is a row the sheet has and the dump does not.
+readonly ADVANCED_MARKER="Hyphenation"
 
 setup=0
 setup_only=0
@@ -206,6 +208,15 @@ set_switch() {
     note "$label turned $want"
 }
 
+# The dictionary switch sits on the reading and navigation screen, not
+# on Settings itself.
+open_dictionary_settings() {
+    scroll_to "$READING_SETTINGS" exact || die "no \"$READING_SETTINGS\" row in Settings"
+    tap_on "$READING_SETTINGS" exact
+    scroll_to "$DICTIONARY_SWITCH" ||
+        die "no \"$DICTIONARY_SWITCH\" switch under \"$READING_SETTINGS\""
+}
+
 # Bring something below the fold into view, on any screen that scrolls
 # with a swipe. `wait_for` only ever looks at what is already on screen,
 # so a switch further down a long form is a switch it never finds.
@@ -254,18 +265,19 @@ shelf_to_top() {
 # colours give it away in a screenshot instead, and the rest of the row
 # sits a fixed distance from the first of them.
 #
-# Every colour has to be listed, in the order HighlightTint declares
-# them. The offsets below are measured from the first chip, so a colour
-# this file has not heard of puts Note and Define a chip further right
-# than it aims -- which is what a fifth and a sixth did: Define landed on
-# Note, opened the note editor, and the run photographed the old
-# definition card for several releases running.
-readonly TINTS="FFD54F,9CCC65,64B5F6,F06292,B39DDB,FFB74D"
+# The colours listed are exactly the ones the bar offers out of the box
+# (HighlightPalette.DEFAULT_OFFERED), in the order HighlightTint declares
+# them. The offsets below are measured from the first chip, so a chip
+# more or less than this file expects moves every action after it --
+# which is what a change of palette did: Define landed on Note, opened
+# the note editor, and the run photographed the old definition card for
+# several releases running.
+readonly TINTS="FFD54F,9CCC65,64B5F6"
 # 30dp of chip and 6dp of gap: what the colours are spaced at, which is
 # how a row of chips is told from marks that happen to line up.
 readonly POPUP_CHIP_PITCH_DP=36
-readonly POPUP_NOTE_DP=227
-readonly POPUP_DEFINE_DP=291
+readonly POPUP_NOTE_DP=118
+readonly POPUP_DEFINE_DP=179
 
 density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -n 1)
 [[ -n "$density" ]] || density=420
@@ -1156,11 +1168,12 @@ set_switch "Colours from your wallpaper" off
 # about who the device talks to and not a capture setting.
 dictionary_before=""
 if ((want_dictionary)) && [[ $shot_class == phone ]]; then
-    scroll_to "$DICTIONARY_SWITCH" ||
-        die "no \"$DICTIONARY_SWITCH\" switch in Settings"
+    open_dictionary_settings
     dictionary_before=$(switch_state "$DICTIONARY_SWITCH") ||
         die "could not read the \"$DICTIONARY_SWITCH\" switch"
     set_switch "$DICTIONARY_SWITCH" on
+    back
+    sleep 2
 fi
 back
 
@@ -1443,7 +1456,7 @@ shot 09-server
 # Every kind at once: what each server is for, and whether your place in
 # a book will follow you there. The row says only which one is picked, so
 # the sheet under it is the picture worth having.
-tap_on "Which kind of server?"
+tap_on "Change the kind of server" exact
 wait_for "Custom" 15 >/dev/null || die "the server kind sheet never opened"
 shot 22-server-kind
 dismiss_sheet "Custom"
@@ -1473,9 +1486,10 @@ reader_chrome_down
 if [[ $dictionary_before == off ]]; then
     open_library
     open_settings
-    scroll_to "$DICTIONARY_SWITCH" ||
-        die "no \"$DICTIONARY_SWITCH\" switch to put back"
+    open_dictionary_settings
     set_switch "$DICTIONARY_SWITCH" off
+    back
+    sleep 2
     back
 fi
 
