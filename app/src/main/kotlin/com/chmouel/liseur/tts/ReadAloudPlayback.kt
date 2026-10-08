@@ -167,13 +167,21 @@ class ReadAloudPlayback(
      * Speaks the current sentence again from its start, or the one that
      * failed, on a fresh navigator, so a new voice is heard at once.
      * Playing or paused stays as it was.
+     *
+     * After a change of language the sentences may be cut differently, so
+     * when [recut] the one holding the start of the old sentence will do,
+     * and failing that the start of its element.
      */
-    suspend fun replay(): Landing = landing.withLock {
+    suspend fun replay(recut: Boolean = false): Landing = landing.withLock {
         val anchor = mutableFailure.value?.anchor
             ?: mutableNavigator.value?.location?.value?.let(UtteranceAnchor::of)
             ?: return@withLock Landing.Failed
-        val landed = land(anchor.elementLocator, anchor::isAt, Int.MAX_VALUE, fallbackToElement = false)
-        if (landed == Landing.Sentence) mutableFailure.value = null
+        val landed = if (recut) {
+            land(anchor.elementLocator, anchor::isAt, START_STEPS, looser = SelectionTarget.of(anchor)?.let { it::matches })
+        } else {
+            land(anchor.elementLocator, anchor::isAt, Int.MAX_VALUE, fallbackToElement = false)
+        }
+        if (landed != Landing.Failed) mutableFailure.value = null
         landed
     }
 

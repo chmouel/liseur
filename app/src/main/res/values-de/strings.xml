@@ -1158,6 +1158,19 @@
         <item quantity="other">%d Stimmen</item>
     </plurals>
     <string name="read_aloud_change_voice">Stimme wechseln</string>
+    <string name="read_aloud_voice_sheet_title">Sprache und Stimme</string>
+    <string name="read_aloud_voice_sheet_language">Sprache</string>
+    <string name="read_aloud_voice_sheet_apply">Übernehmen</string>
+    <string name="read_aloud_voice_sheet_settings">Stimmeinstellungen</string>
+    <string name="read_aloud_voice_sheet_loading">Stimmen werden gesucht…</string>
+    <string name="read_aloud_voice_sheet_none">Keine Stimme spricht %1$s.</string>
+    <string name="read_aloud_voice_sheet_other">Weitere Stimmen</string>
+    <string name="read_aloud_voice_sheet_other_detail">Diese Stimmen geben ihre Sprache nicht an. Wähle eine, um damit %1$s zu lesen.</string>
+    <string name="read_aloud_voice_sheet_failed">Die Stimmenliste konnte nicht geladen werden, daher werden nur gespeicherte Stimmen angezeigt.</string>
+    <string name="read_aloud_voice_reason_missing">Dieses Buch gibt seine Sprache nicht an. Wähle eine, um es vorlesen zu lassen.</string>
+    <string name="read_aloud_voice_reason_ambiguous">Dieses Buch gibt mehrere Sprachen an. Wähle die, in der es gelesen werden soll.</string>
+    <string name="read_aloud_voice_reason_no_voice">Keine Stimme liest %1$s. Wähle eine andere Sprache oder Stimme oder füge in den Stimmeinstellungen Stimmen hinzu.</string>
+    <string name="read_aloud_voice_reason_failed">Die Stimmen konnten nicht abgerufen werden, und keine gespeicherte Stimme liest die Sprache dieses Buchs. Prüfe die Stimmeinstellungen.</string>
     <string name="read_aloud_speed">Lesegeschwindigkeit</string>
     <string name="read_aloud_sleep_timer">Schlaftimer</string>
     <string name="read_aloud_sleep_off">Aus</string>

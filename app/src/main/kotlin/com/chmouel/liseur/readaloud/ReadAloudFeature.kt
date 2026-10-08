@@ -82,6 +82,12 @@ interface ReadAloudFeature {
     fun start(handle: OpenBookHandle, selection: Locator, reader: Intent)
 
     /**
+     * Gives up a start of [bookId] still waiting for its language or voice
+     * to be chosen, as its reader is going; its place stays as it was.
+     */
+    fun cancelChoice(bookId: String) = Unit
+
+    /**
      * Pauses. On the main thread, the place heard so far is queued and
      * handed back to the reader before this returns, so a move the
      * reader makes next is saved after it.

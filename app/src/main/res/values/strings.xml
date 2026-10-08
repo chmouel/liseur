@@ -1198,6 +1198,19 @@
         <item quantity="other">%d voices</item>
     </plurals>
     <string name="read_aloud_change_voice">Change voice</string>
+    <string name="read_aloud_voice_sheet_title">Language and voice</string>
+    <string name="read_aloud_voice_sheet_language">Language</string>
+    <string name="read_aloud_voice_sheet_apply">Apply</string>
+    <string name="read_aloud_voice_sheet_settings">Voice settings</string>
+    <string name="read_aloud_voice_sheet_loading">Looking for voices…</string>
+    <string name="read_aloud_voice_sheet_none">No voice speaks %1$s.</string>
+    <string name="read_aloud_voice_sheet_other">Other voices</string>
+    <string name="read_aloud_voice_sheet_other_detail">These voices don\'t say which language they speak. Pick one to read %1$s with it.</string>
+    <string name="read_aloud_voice_sheet_failed">The voice list could not be loaded, so only saved voices are shown.</string>
+    <string name="read_aloud_voice_reason_missing">This book doesn\'t say which language it is written in. Choose one to read it aloud.</string>
+    <string name="read_aloud_voice_reason_ambiguous">This book lists several languages. Choose the one to read it in.</string>
+    <string name="read_aloud_voice_reason_no_voice">No voice reads %1$s. Choose another language or voice, or add voices in the voice settings.</string>
+    <string name="read_aloud_voice_reason_failed">The voices could not be listed, and no saved voice reads this book\'s language. Check the voice settings.</string>
     <string name="read_aloud_speed">Reading speed</string>
     <string name="read_aloud_sleep_timer">Sleep timer</string>
     <string name="read_aloud_sleep_off">Off</string>

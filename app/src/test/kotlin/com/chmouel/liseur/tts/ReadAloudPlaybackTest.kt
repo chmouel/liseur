@@ -402,6 +402,49 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun replayingInAnotherLanguageFindsTheSentenceCutDifferently() {
+        runBlocking(main) {
+            playback.start(chapterStart, target = {
+                if (it.utterance == FIRST) playback.pause()
+                it.utterance == THIRD
+            })
+            // The new language's tokenizer reads two sentences at a time.
+            tokenizerFactory = { language ->
+                val sentences = BoundedSentenceTokenizer.factory(language)
+                object : TextTokenizer {
+                    override fun tokenize(data: String): List<IntRange> =
+                        sentences.tokenize(data).chunked(2) { it.first().first..it.last().last }
+                }
+            }
+
+            assertEquals(ReadAloudPlayback.Landing.Sentence, playback.replay(recut = true))
+            assertTrue(playback.navigator.value!!.location.value.utterance.startsWith(THIRD))
+            assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+            assertTrue(played.isEmpty())
+            playback.resume()
+        }
+        awaitPlayed(1)
+        assertTrue(played.first().startsWith(THIRD))
+    }
+
+    @Test
+    fun chapterTimerSurvivesAReplayInAnotherLanguage() {
+        runBlocking(main) {
+            playback.stopAtChapterEnd(true)
+            playback.start(chapterStart, target = {
+                playback.pause()
+                it.utterance == TAIL.last()
+            })
+            assertEquals(ReadAloudPlayback.Landing.Sentence, playback.replay(recut = true))
+            assertTrue(played.isEmpty())
+            playback.resume()
+        }
+        awaitChapterStop()
+        assertEquals(listOf(TAIL.last()), played.toList())
+        assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+    }
+
+    @Test
     fun pausingWhileTheFallbackOpensPreventsPlayback() = runBlocking(main) {
         val opening = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()

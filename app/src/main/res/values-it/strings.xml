@@ -1146,6 +1146,19 @@
         <item quantity="other">%d voci</item>
     </plurals>
     <string name="read_aloud_change_voice">Cambia voce</string>
+    <string name="read_aloud_voice_sheet_title">Lingua e voce</string>
+    <string name="read_aloud_voice_sheet_language">Lingua</string>
+    <string name="read_aloud_voice_sheet_apply">Applica</string>
+    <string name="read_aloud_voice_sheet_settings">Impostazioni voce</string>
+    <string name="read_aloud_voice_sheet_loading">Ricerca delle voci…</string>
+    <string name="read_aloud_voice_sheet_none">Nessuna voce disponibile per questa lingua (%1$s).</string>
+    <string name="read_aloud_voice_sheet_other">Altre voci</string>
+    <string name="read_aloud_voice_sheet_other_detail">Queste voci non indicano la loro lingua. Scegline una per leggere questa lingua (%1$s).</string>
+    <string name="read_aloud_voice_sheet_failed">Impossibile caricare l\'elenco delle voci: sono mostrate solo quelle salvate.</string>
+    <string name="read_aloud_voice_reason_missing">Questo libro non indica in che lingua è scritto. Scegline una per leggerlo ad alta voce.</string>
+    <string name="read_aloud_voice_reason_ambiguous">Questo libro indica più lingue. Scegli quella in cui leggerlo.</string>
+    <string name="read_aloud_voice_reason_no_voice">Nessuna voce legge questa lingua (%1$s). Scegli un\'altra lingua o voce, oppure aggiungi voci nelle impostazioni voce.</string>
+    <string name="read_aloud_voice_reason_failed">Impossibile elencare le voci e nessuna voce salvata legge la lingua di questo libro. Controlla le impostazioni voce.</string>
     <string name="read_aloud_speed">Velocità di lettura</string>
     <string name="read_aloud_sleep_timer">Timer di spegnimento</string>
     <string name="read_aloud_sleep_off">Disattivato</string>

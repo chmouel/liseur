@@ -8,6 +8,7 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.tokenizer.TextTokenizer
+import org.readium.r2.shared.util.tokenizer.Tokenizer
 
 /**
  * One sentence the voice spoke, precise enough to find it again: the
@@ -123,6 +124,14 @@ class SelectionTarget(
     companion object {
         const val PREFIX = 60
         private const val CONTEXT = 40
+
+        /** [anchor]'s sentence, found by its start and the text before it, however the sentences are now cut. */
+        fun of(anchor: UtteranceAnchor): SelectionTarget? = of(
+            anchor.locator.copy(text = anchor.locator.text.copy(highlight = anchor.text)),
+            object : Tokenizer<String, IntRange> {
+                override fun tokenize(data: String) = listOf(data.indices)
+            },
+        )
 
         /** Null when the selection has no text to look for. */
         fun of(locator: Locator, sentences: TextTokenizer): SelectionTarget? {

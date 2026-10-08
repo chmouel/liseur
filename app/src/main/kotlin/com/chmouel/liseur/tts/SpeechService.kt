@@ -12,8 +12,11 @@ internal interface SessionControl {
     /** Ends the session: it reads with something that is gone, such as a key. */
     fun stop()
 
-    /** Has the session read on in the voice now saved, from the start of the sentence. */
+    /** Has the session read on in the voice now saved for its language, from the start of the sentence. */
     suspend fun switchVoice()
+
+    /** The language the session in progress reads in, when it reads with [service]; null otherwise. */
+    fun sessionLanguage(service: SpeechService): String?
 }
 
 /**
@@ -48,13 +51,22 @@ internal interface SpeechService {
     /** Its voice, or its [voice] of that name instead; null when it is not set up. */
     suspend fun voice(s: AppSettings, voice: String? = null): SessionVoice?
 
-    /** Which voice reads, under the player's controls: the text, and the same for a screen reader. */
-    @Composable
-    fun voiceStatus(): Pair<String, String>?
+    /**
+     * The voices it can read with now, with the languages each speaks when
+     * known; null when it is not set up. Asking may reach the service.
+     */
+    suspend fun catalogue(s: AppSettings): VoiceCatalogue?
 
-    /** The entries of the player's voice menu; [onPicked] closes it. */
+    /**
+     * Saves [voice] as its voice and, with a [language], as the one for
+     * that language, in one write; nothing is written, and false returned,
+     * once [scope] is no longer what it reads with.
+     */
+    suspend fun remember(scope: VoiceScope, language: String?, voice: String): Boolean
+
+    /** [voice] as the reader knows it, without its language. */
     @Composable
-    fun VoiceMenuItems(onPicked: () -> Unit)
+    fun voiceLabel(voice: String): String
 
     /** Permission needed to reach this service, shown in the reader. */
     @Composable

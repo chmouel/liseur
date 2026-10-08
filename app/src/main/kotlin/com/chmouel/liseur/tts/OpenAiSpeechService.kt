@@ -232,7 +232,10 @@ internal class OpenAiSpeechService(
             val s = settings.settings.first()
             if (s.speechServerUrl.orEmpty() != url || s.speechServerModel.orEmpty() != model) return
             if (generation.get() != choice) return
-            if (s.speechServerVoice.orEmpty() != voice) setVoice(voice)
+            if (s.speechServerVoice.orEmpty() != voice) {
+                settings.setSpeechServerVoice(voice)
+                control.switchVoice()
+            }
             if (settle) settings.settleSpeechServer(url)
         }
     }
@@ -248,11 +251,64 @@ internal class OpenAiSpeechService(
         if (changed) control.switchVoice()
     }
 
+    /**
+     * Saves the [voice] the reader picked, also as the one for its
+     * language, or for the one being read when its name does not say.
+     */
     suspend fun setVoice(voice: String) {
-        val changed = settings.settings.first().speechServerVoice != voice
-        settings.setSpeechServerVoice(voice)
-        if (changed) control.switchVoice()
+        val before = settings.settings.first()
+        val scope = scopeOf(before)
+        val language = VoiceResolver.settingsLanguage(languagesOf(voice), control.sessionLanguage(this))
+        if (scope == null || !remember(scope, language, voice)) settings.setSpeechServerVoice(voice)
+        if (settings.settings.first() != before) control.switchVoice()
     }
+
+    private fun scopeOf(s: AppSettings): VoiceScope? = scopeOf(s.speechServerUrl, s.speechServerModel)
+
+    private fun scopeOf(url: String?, model: String?): VoiceScope? {
+        val base = OpenAiTts.baseUrl(url.orEmpty()) ?: return null
+        return VoiceScope(id, base.toString(), model?.trim()?.takeIf { it.isNotEmpty() } ?: return null)
+    }
+
+    /**
+     * The voices offered for the saved server and model: those it lists,
+     * narrowed by the voices chosen, with the saved one, which may be typed.
+     * With no list, or none to be had, the voices typed, chosen or
+     * remembered are all there is, and [VoiceCatalogue.failed] tells the
+     * two apart.
+     */
+    override suspend fun catalogue(s: AppSettings): VoiceCatalogue? {
+        val scope = scopeOf(s) ?: return null
+        val url = s.speechServerUrl.orEmpty()
+        val stored = s.speechServerVoice.orEmpty()
+        // The server is slow to answer while it reads, so the last list it gave is kept.
+        val listing = listedVoices?.takeIf { it.first == url to s.speechServerModel.orEmpty() }?.second?.let { Result.success(it) }
+            ?: voices(url, s.speechServerModel.orEmpty())
+        val listed = listing.getOrNull().orEmpty()
+        val ids = if (listed.isNotEmpty()) {
+            VoiceLabel.offered(listed, s.speechServerVoices, stored) + stored
+        } else {
+            s.speechServerVoices.sorted() + stored + s.voicePreferences.filter(scope::owns).map { it.voice }
+        }
+        return VoiceCatalogue(
+            scope = scope,
+            voices = ids.filter { it.isNotBlank() }.distinct().map { CatalogueVoice(it, languagesOf(it)) },
+            global = stored.takeIf { it.isNotBlank() },
+            failed = listing.isFailure,
+        )
+    }
+
+    override suspend fun remember(scope: VoiceScope, language: String?, voice: String): Boolean = settingsLock.withLock {
+        settings.editReadAloudVoice {
+            if (scopeOf(serverUrl, serverModel) != scope) return@editReadAloudVoice false
+            setServerVoice(voice)
+            language?.let { remember(scope.preference(it, voice)) }
+            true
+        }
+    }
+
+    @Composable
+    override fun voiceLabel(voice: String): String = voiceChipLabel(VoiceLabel.of(voice))
 
     suspend fun setChosenVoices(voices: Set<String>) = settings.setSpeechServerVoices(voices)
 
@@ -324,45 +380,6 @@ internal class OpenAiSpeechService(
     override fun AccessPrompt(theme: ReaderTheme) {
         val blocked by blockedUrl.collectAsStateWithLifecycle()
         if (blocked != null) SpeechLocalNetworkPrompt(localNetwork, blocked.orEmpty(), theme)
-    }
-
-    @Composable
-    override fun voiceStatus(): Pair<String, String>? {
-        val id by voice.collectAsStateWithLifecycle("")
-        val locale = LocalConfiguration.current.locales[0]
-        return id.takeIf { it.isNotBlank() }?.let(VoiceLabel::of)?.let { voice ->
-            val language = voice.language
-            val name = language?.let { Locale.forLanguageTag(it).getDisplayName(locale) }
-            val label = language?.let { VoiceLabel.languageLabel(it, locale) }
-            listOfNotNull(voice.name, label).joinToString(" · ") to
-                listOfNotNull(voice.name, name).joinToString(" · ")
-        }
-    }
-
-    /** The voices the server lists, narrowed to the ones offered. */
-    @Composable
-    override fun VoiceMenuItems(onPicked: () -> Unit) {
-        val scope = rememberCoroutineScope()
-        val url by url.collectAsStateWithLifecycle("")
-        val model by model.collectAsStateWithLifecycle("")
-        val stored by voice.collectAsStateWithLifecycle("")
-        val chosen by chosenVoices.collectAsStateWithLifecycle(emptySet())
-        val locale = LocalConfiguration.current.locales[0]
-        // The server is slow to answer while it reads, so the last list it gave is kept.
-        var listed by remember(url, model) { mutableStateOf(listedVoices?.takeIf { it.first == url to model }?.second) }
-        LaunchedEffect(url, model) { if (listed == null) listed = voices(url, model).getOrNull() }
-        // Until the server answers, or if it cannot, the ones chosen are all there is to offer.
-        val offered = listed?.let { VoiceLabel.offered(it, chosen, stored) }
-            ?: (chosen + stored).filter { it.isNotBlank() }.sorted()
-        VoiceLabel.grouped(offered).forEach { (language, voices) ->
-            if (language != null) LanguageHeader(language, locale, Modifier.padding(horizontal = 12.dp))
-            voices.forEach { voice ->
-                MenuItem(voiceChipLabel(voice), voice.id == stored) {
-                    onPicked()
-                    scope.launch { setVoice(voice.id) }
-                }
-            }
-        }
     }
 
     @Composable
@@ -842,3 +859,6 @@ private fun TestConnectionRow(
     }
 }
 
+/** The language a voice's name says it speaks, as Kokoro's do; null when it says none. */
+private fun languagesOf(voice: String): Set<String>? =
+    VoiceLabel.of(voice).language?.let(SpeechLanguage::normalize)?.let(::setOf)

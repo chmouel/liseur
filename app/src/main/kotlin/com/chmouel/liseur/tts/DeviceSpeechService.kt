@@ -114,10 +114,45 @@ internal class DeviceSpeechService(
         return SessionVoice(chosen.id, 1) { text -> engine.synthesize(text, chosen.id) }
     }
 
+    /** Saves [voice], also as the one for its language, or the one being read when the engine does not say. */
     suspend fun setVoice(voice: String) {
-        val changed = settings.settings.first().deviceVoice != voice
-        settings.setDeviceVoice(voice)
-        if (changed) control.switchVoice()
+        val before = settings.settings.first()
+        val language = listed.value?.firstOrNull { it.id == voice }?.let(::languagesOf)
+        val scope = scope()
+        val remembered = scope != null &&
+            remember(scope, VoiceResolver.settingsLanguage(language, control.sessionLanguage(this)), voice)
+        if (!remembered) settings.setDeviceVoice(voice)
+        if (settings.settings.first() != before) control.switchVoice()
+    }
+
+    private suspend fun scope(): VoiceScope? = engine.engine()?.let { VoiceScope(id, it, "") }
+
+    override suspend fun catalogue(s: AppSettings): VoiceCatalogue? {
+        val voices = voices().getOrNull() ?: return null
+        val scope = scope() ?: return null
+        return VoiceCatalogue(
+            scope = scope,
+            voices = voices.map { CatalogueVoice(it.id, languagesOf(it)) },
+            default = defaultVoice.value,
+            global = s.deviceVoice,
+        )
+    }
+
+    override suspend fun remember(scope: VoiceScope, language: String?, voice: String): Boolean {
+        // The engine is chosen in Android's settings, so it is checked before the write rather than in it.
+        if (scope() != scope) return false
+        return settings.editReadAloudVoice {
+            setDeviceVoice(voice)
+            language?.let { remember(scope.preference(it, voice)) }
+            true
+        }
+    }
+
+    @Composable
+    override fun voiceLabel(voice: String): String {
+        val listed by listed.collectAsStateWithLifecycle()
+        LaunchedEffect(Unit) { if (listed == null) voices() }
+        return listed?.firstOrNull { it.id == voice }?.let { deviceVoiceLabel(it) } ?: voice
     }
 
     /** The voice reading: the saved one, else the one last used, else the one a session would pick. */
@@ -134,29 +169,6 @@ internal class DeviceSpeechService(
 
     @Composable
     override fun voiceName(): String = current()?.let { deviceVoiceLabel(it) }.orEmpty()
-
-    @Composable
-    override fun voiceStatus(): Pair<String, String>? {
-        val voice = current() ?: return null
-        val locale = LocalConfiguration.current.locales[0]
-        val name = deviceVoiceLabel(voice)
-        return "$name · ${VoiceLabel.languageLabel(voice.language, locale)}" to
-            "$name · ${Locale.forLanguageTag(voice.language).getDisplayName(locale)}"
-    }
-
-    /** The voices in the language of the one reading, which is the one a book is read in. */
-    @Composable
-    override fun VoiceMenuItems(onPicked: () -> Unit) {
-        val scope = rememberCoroutineScope()
-        val current = current() ?: return
-        val listed by listed.collectAsStateWithLifecycle()
-        listed.orEmpty().filter { it.language == current.language }.forEach { voice ->
-            MenuItem(deviceVoiceLabel(voice), voice.id == current.id) {
-                onPicked()
-                scope.launch { setVoice(voice.id) }
-            }
-        }
-    }
 
     @Composable
     override fun SettingsRows(feature: SpeechReadAloud) = DeviceRows(feature, this)
@@ -375,6 +387,13 @@ private class DeviceTts(private val context: Context) {
 
     suspend fun voices(): List<DeviceVoice> = use { tts -> DeviceVoices.offline(engineVoices(tts)) }
 
+    /** The package of the engine voices come from, or null when there is no engine. */
+    suspend fun engine(): String? = try {
+        use { it.defaultEngine }
+    } catch (_: SpeechError) {
+        null
+    }
+
     suspend fun defaultVoice(): String? = try {
         use { it.defaultVoice?.name }
     } catch (_: SpeechError) {
@@ -423,3 +442,6 @@ private class DeviceTts(private val context: Context) {
         const val IDLE_MILLIS = 60_000L
     }
 }
+
+/** What the engine says [voice] speaks, normalized; null when its tag is not a language. */
+private fun languagesOf(voice: DeviceVoice): Set<String>? = SpeechLanguage.normalize(voice.language)?.let(::setOf)

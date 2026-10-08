@@ -72,4 +72,33 @@ class AppSettingsRepositoryTest {
         assertEquals("Qwen/Qwen3-TTS-VoiceDesign", typed.speechServerModel)
         assertEquals(null, typed.speechServerVoice)
     }
+
+    @Test
+    fun `a voice and the language it is remembered for are written together`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+        val english = VoicePreference("device", "engine", "", "en", "en-gb-x-a")
+        val french = VoicePreference("device", "engine", "", "fr", "fr-fr-x-b")
+
+        assertTrue(repo.editReadAloudVoice { setDeviceVoice(english.voice); remember(english); true })
+        assertTrue(repo.editReadAloudVoice { setDeviceVoice(french.voice); remember(french); true })
+
+        // As after the app restarts: each language keeps its own voice.
+        val s = AppSettingsRepository(store).settings.first()
+        assertEquals("fr-fr-x-b", s.deviceVoice)
+        assertEquals(setOf(english, french), s.voicePreferences.toSet())
+    }
+
+    @Test
+    fun `an edit that gives up writes nothing`() = runTest {
+        val repo = AppSettingsRepository(store())
+        repo.setDeviceVoice("kept")
+
+        val pref = VoicePreference("device", "engine", "", "en", "dropped")
+        assertFalse(repo.editReadAloudVoice { setDeviceVoice("dropped"); remember(pref); false })
+
+        val s = repo.settings.first()
+        assertEquals("kept", s.deviceVoice)
+        assertTrue(s.voicePreferences.isEmpty())
+    }
 }

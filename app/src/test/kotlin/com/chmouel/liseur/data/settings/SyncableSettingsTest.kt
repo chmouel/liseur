@@ -139,6 +139,8 @@ class SyncableSettingsTest {
             "app.eink_mode",
             "app.color_eink",
             "app.dynamic_color",
+            // Which voices are installed or served differs from one device to the next.
+            "app.read_aloud_voice_preferences",
         )) {
             assertFalse("$local should not travel", local in keys)
         }

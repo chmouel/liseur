@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -102,11 +101,39 @@ internal class GeminiSpeechService(
         keys.clear()
     })
 
+    /** Saves [voice], also as the one for the language being read when there is a session. */
     suspend fun setVoice(voice: GeminiVoice) {
-        val changed = GeminiVoice.of(settings.settings.first().readAloudVoice) != voice
-        settings.setReadAloudVoice(voice.id)
-        if (changed) control.switchVoice()
+        val s = settings.settings.first()
+        val model = GeminiTts.modelOf(s.readAloudModel)
+        val language = VoiceResolver.settingsLanguage(GeminiLanguages.of(model), control.sessionLanguage(this))
+        if (!remember(scopeOf(model), language, voice.id)) settings.setReadAloudVoice(voice.id)
+        if (settings.settings.first() != s) control.switchVoice()
     }
+
+    private fun scopeOf(model: String) = VoiceScope(id, "", model)
+
+    override suspend fun catalogue(s: AppSettings): VoiceCatalogue? {
+        if (keys.get() == null) return null
+        val model = GeminiTts.modelOf(s.readAloudModel)
+        val languages = GeminiLanguages.of(model)
+        return VoiceCatalogue(
+            scope = scopeOf(model),
+            voices = GeminiVoice.entries.map { CatalogueVoice(it.id, languages) },
+            default = GeminiVoice.Default.id,
+            global = GeminiVoice.of(s.readAloudVoice).id,
+        )
+    }
+
+    override suspend fun remember(scope: VoiceScope, language: String?, voice: String): Boolean =
+        settings.editReadAloudVoice {
+            if (scope != scopeOf(GeminiTts.modelOf(geminiModel))) return@editReadAloudVoice false
+            setGeminiVoice(voice)
+            language?.let { remember(scope.preference(it, voice)) }
+            true
+        }
+
+    @Composable
+    override fun voiceLabel(voice: String): String = geminiVoiceLabel(GeminiVoice.of(voice))
 
     /** Saves [model] in the service's scope, so one typed as the screen closes is still saved. */
     fun commitModel(model: String) {
@@ -126,24 +153,6 @@ internal class GeminiSpeechService(
             Result.success(client.models(key))
         } catch (e: SpeechError) {
             Result.failure(e)
-        }
-    }
-
-    @Composable
-    override fun voiceStatus(): Pair<String, String>? {
-        val voice by voiceChoice.collectAsStateWithLifecycle(null)
-        return voice?.let { geminiVoiceLabel(it) }?.let { it to it }
-    }
-
-    @Composable
-    override fun VoiceMenuItems(onPicked: () -> Unit) {
-        val scope = rememberCoroutineScope()
-        val current by voiceChoice.collectAsStateWithLifecycle(null)
-        GeminiVoice.entries.forEach { voice ->
-            MenuItem(geminiVoiceLabel(voice), voice == current) {
-                onPicked()
-                scope.launch { setVoice(voice) }
-            }
         }
     }
 

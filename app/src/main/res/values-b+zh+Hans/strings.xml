@@ -1101,6 +1101,19 @@
         <item quantity="other">%d 个声音</item>
     </plurals>
     <string name="read_aloud_change_voice">更换声音</string>
+    <string name="read_aloud_voice_sheet_title">语言和声音</string>
+    <string name="read_aloud_voice_sheet_language">语言</string>
+    <string name="read_aloud_voice_sheet_apply">应用</string>
+    <string name="read_aloud_voice_sheet_settings">声音设置</string>
+    <string name="read_aloud_voice_sheet_loading">正在查找声音…</string>
+    <string name="read_aloud_voice_sheet_none">没有会说%1$s的声音。</string>
+    <string name="read_aloud_voice_sheet_other">其他声音</string>
+    <string name="read_aloud_voice_sheet_other_detail">这些声音未标明所说的语言。选择一个用来朗读%1$s。</string>
+    <string name="read_aloud_voice_sheet_failed">无法加载声音列表，仅显示已保存的声音。</string>
+    <string name="read_aloud_voice_reason_missing">这本书没有标明语言。请选择一种语言来朗读。</string>
+    <string name="read_aloud_voice_reason_ambiguous">这本书标明了多种语言。请选择朗读所用的语言。</string>
+    <string name="read_aloud_voice_reason_no_voice">没有能朗读%1$s的声音。请选择其他语言或声音，或在声音设置中添加声音。</string>
+    <string name="read_aloud_voice_reason_failed">无法列出声音，且没有已保存的声音能朗读这本书的语言。请检查声音设置。</string>
     <string name="read_aloud_speed">朗读速度</string>
     <string name="read_aloud_sleep_timer">睡眠定时器</string>
     <string name="read_aloud_sleep_off">关闭</string>

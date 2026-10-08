@@ -1234,6 +1234,19 @@
         <item quantity="other">%d голоса</item>
     </plurals>
     <string name="read_aloud_change_voice">Сменить голос</string>
+    <string name="read_aloud_voice_sheet_title">Язык и голос</string>
+    <string name="read_aloud_voice_sheet_language">Язык</string>
+    <string name="read_aloud_voice_sheet_apply">Применить</string>
+    <string name="read_aloud_voice_sheet_settings">Настройки голоса</string>
+    <string name="read_aloud_voice_sheet_loading">Поиск голосов…</string>
+    <string name="read_aloud_voice_sheet_none">Нет голоса для языка: %1$s.</string>
+    <string name="read_aloud_voice_sheet_other">Другие голоса</string>
+    <string name="read_aloud_voice_sheet_other_detail">Эти голоса не сообщают свой язык. Выберите один, чтобы читать им на языке: %1$s.</string>
+    <string name="read_aloud_voice_sheet_failed">Не удалось загрузить список голосов, поэтому показаны только сохранённые.</string>
+    <string name="read_aloud_voice_reason_missing">В книге не указан язык. Выберите его, чтобы читать вслух.</string>
+    <string name="read_aloud_voice_reason_ambiguous">В книге указано несколько языков. Выберите, на каком её читать.</string>
+    <string name="read_aloud_voice_reason_no_voice">Нет голоса для языка: %1$s. Выберите другой язык или голос либо добавьте голоса в настройках голоса.</string>
+    <string name="read_aloud_voice_reason_failed">Не удалось получить список голосов, и ни один сохранённый голос не читает на языке этой книги. Проверьте настройки голоса.</string>
     <string name="read_aloud_speed">Скорость чтения</string>
     <string name="read_aloud_sleep_timer">Таймер сна</string>
     <string name="read_aloud_sleep_off">Выключен</string>

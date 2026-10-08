@@ -1346,8 +1346,8 @@ reader behavior.
   hosted service, or a self-hosted server such as Kokoro). Each is a
   `SpeechService` (`GeminiSpeechService`, `DeviceSpeechService`,
   `OpenAiSpeechService`) that owns its settings
-  rows, its part of the player's voice menu and status line, and the
-  `SessionVoice` a session reads with. The flavor's
+  rows, its voice catalogue and labels, and the `SessionVoice` a session
+  reads with. The flavor's
   `ReadAloudFeatureFactory` passes the list to `SpeechReadAloud`; the
   first is the default for a reader who never chose (Gemini in Play,
   device voices in F-Droid), and the picker hides itself when there is
@@ -1438,9 +1438,10 @@ reader behavior.
   `openai-key-<hash>`); each request reads the key of the origin it
   calls, and the old single `openai-key` file is deleted unused;
   neither are request bodies or audio. The provider and the speech
-  server's URL, model, voice and offered voices are app settings in the
-  settings backup but not in liseur-sync settings sync, since a server
-  address is per device. Listening is not counted as reading time.
+  server's URL, model, voice and offered voices, and the voices
+  remembered per language, are app settings in the settings backup but
+  not in liseur-sync settings sync, since a server address and the
+  installed voices are per device. Listening is not counted as reading time.
 - While a session exists, playing or paused, `ReaderActivity` hands the
   volume keys to the system with `STREAM_MUSIC` as its volume stream, so
   they set how loud it reads instead of turning pages.
@@ -1450,11 +1451,52 @@ reader behavior.
   notices such as a failed request still show on their own. A tap on the
   highlighted sentence toggles the chrome through the read-aloud decoration
   listener, so it never turns the page, even in a page-turn zone.
-- The player's voice menu lists the offered voices (Gemini's, or the
-  service's narrowed by "Choose voices") and saves the pick as the
-  setting. A running session hears it at once: `SpeechCache.swap` drops
-  what the old voice fetched and `ReadAloudPlayback.replay` starts the
-  current sentence again, playing or paused as it was.
+- A session reads in one language, chosen when it starts from the
+  book's declared `dc:language` (`SpeechLanguage.ofBook`: tags
+  normalized, `eng` is `en`, `fra`/`fre` is `fr`; none, `und` or several
+  distinct ones are not decided). The language goes to the sentence
+  tokenizer, the navigator's `SpeechTtsPreferences` and the prefetcher;
+  the text itself is never inspected and the language never changes
+  mid-session on its own.
+- Each service lists a `VoiceCatalogue`: its voices with the languages
+  they speak (`null` when unknown), its default and the global voice in
+  the settings. Device voices use Android's locale, server voices
+  Kokoro's naming (`VoiceLabel`; other servers' voices are unclassified),
+  Gemini voices the languages its model documents (`GeminiLanguages`,
+  bundled for Flash-Lite and Flash TTS; another model is unclassified).
+  A server whose list fails gives `failed`, with the saved, ticked and
+  remembered voices, so a network error is told apart from no voice. A
+  server with no list still offers its typed voice.
+- `VoiceResolver` picks, in order: the voice remembered for the book's
+  primary language, the global voice if it speaks it, a voice for the
+  exact regional tag, then any voice for the language; within a step the
+  provider's default, then list order. "Choose voices" narrows what a
+  server offers. An unclassified voice is only used once remembered.
+  The service is never changed. When nothing is decided the start waits
+  on a `PendingChoice` and the player opens the voice sheet before a
+  word is spoken; dismissing it, leaving the reader, a new start or a
+  change of service gives up the start and releases the book without
+  touching the reading position.
+- Remembered voices are `read_aloud_voice_preferences`, a JSON list of
+  (provider, context, model, primary language, voice): context is the
+  device engine's package or the server's normalized API root, model the
+  server's or Gemini's. Explicit picks (the sheet, or a settings voice
+  whose language is known or matches the session's) write the global
+  voice and the language's entry in one DataStore edit
+  (`AppSettingsRepository.editReadAloudVoice`), which first checks the
+  scope is still the one shown, so a server or model changed meanwhile
+  writes nothing. Automatic picks never write.
+- The player's voice button opens the voice sheet (`ReadAloudVoiceSheet`):
+  a language menu (the book's and session's first; every language when
+  some voices are unclassified), the voices for it grouped under the
+  language with their accent's country, then the unclassified ones, and
+  Apply. Looking changes nothing. Apply remembers the voice and the
+  session reads on in it: `SpeechCache.swap` drops what the old voice
+  fetched and `ReadAloudPlayback.replay` starts the current sentence
+  again, playing or paused as it was; after a change of language the
+  sentence may be cut differently, so `replay(recut = true)` lands on
+  the one holding its start, or its element. A voice picked in the
+  settings is heard the same way, staying in the session's language.
 - Speed (`read_aloud_speed`, 0.75× to 2×, in the player) is applied by
   `AudioTrackPcmOutput` through `AudioTrack.playbackParams`, read on every
   write and poll: it keeps the pitch, applies mid-sentence, works for both
@@ -1469,8 +1511,9 @@ reader behavior.
   clears itself, and leaves that section ready to resume. It uses reading-order
   resources as chapter boundaries, like the reader's chapter matching; chapters
   sharing a single resource are not distinguished.
-- A status line under the player controls names the voice reading (and,
-  for an OpenAI-compatible voice whose id carries one, its language). The
+- A status line under the player controls names the session's voice and
+  language (`ReadAloudSession.choice`), which may differ from the
+  service's global voice. The
   speed is left out because the speed button already shows it.
 
 ### Covers, UI, and dependencies

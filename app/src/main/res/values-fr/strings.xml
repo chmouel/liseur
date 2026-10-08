@@ -1146,6 +1146,19 @@
         <item quantity="other">%d voix</item>
     </plurals>
     <string name="read_aloud_change_voice">Changer de voix</string>
+    <string name="read_aloud_voice_sheet_title">Langue et voix</string>
+    <string name="read_aloud_voice_sheet_language">Langue</string>
+    <string name="read_aloud_voice_sheet_apply">Appliquer</string>
+    <string name="read_aloud_voice_sheet_settings">Réglages des voix</string>
+    <string name="read_aloud_voice_sheet_loading">Recherche des voix…</string>
+    <string name="read_aloud_voice_sheet_none">Aucune voix disponible pour cette langue (%1$s).</string>
+    <string name="read_aloud_voice_sheet_other">Autres voix</string>
+    <string name="read_aloud_voice_sheet_other_detail">Ces voix n\'indiquent pas leur langue. Choisissez-en une pour lire cette langue (%1$s).</string>
+    <string name="read_aloud_voice_sheet_failed">La liste des voix n\'a pas pu être chargée : seules les voix enregistrées sont affichées.</string>
+    <string name="read_aloud_voice_reason_missing">Ce livre n\'indique pas sa langue. Choisissez-en une pour le lire à voix haute.</string>
+    <string name="read_aloud_voice_reason_ambiguous">Ce livre indique plusieurs langues. Choisissez celle dans laquelle le lire.</string>
+    <string name="read_aloud_voice_reason_no_voice">Aucune voix ne lit cette langue (%1$s). Choisissez une autre langue ou une autre voix, ou ajoutez des voix dans les réglages des voix.</string>
+    <string name="read_aloud_voice_reason_failed">Les voix n\'ont pas pu être listées, et aucune voix enregistrée ne lit la langue de ce livre. Vérifiez les réglages des voix.</string>
     <string name="read_aloud_speed">Vitesse de lecture</string>
     <string name="read_aloud_sleep_timer">Minuterie de mise en veille</string>
     <string name="read_aloud_sleep_off">Désactivée</string>

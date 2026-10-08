@@ -22,6 +22,7 @@ import com.chmouel.liseur.domain.BackedUpBook
 import com.chmouel.liseur.domain.encodeAnnotationBackup
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ThemeMode
@@ -232,6 +233,26 @@ class SettingsBackupRepositoryTest {
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
+    }
+
+    @Test
+    fun `remembered voices are backed up and restored`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val sourceApp = AppSettingsRepository(store("voices-source.preferences_pb"))
+        val english = VoicePreference("openai", "http://kokoro/v1/", "kokoro", "en", "af_bella")
+        val french = VoicePreference("openai", "http://kokoro/v1/", "kokoro", "fr", "ff_siwis")
+        sourceApp.editReadAloudVoice { remember(english); remember(french); true }
+
+        val backup = File(folder.root, "voices.zip")
+        val uri = Uri.fromFile(backup)
+        val source = repository(sourceApp, ReaderPreferencesRepository(store("voices-reader.preferences_pb")), fonts)
+        assertEquals(SettingsBackupExportResult.Exported(0), source.exportTo(uri))
+
+        val restoredApp = AppSettingsRepository(store("voices-restored.preferences_pb"))
+        val restored = repository(restoredApp, ReaderPreferencesRepository(store("voices-restored-reader.preferences_pb")), fonts)
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(restored, uri))
+        assertEquals(setOf(english, french), restoredApp.settings.first().voicePreferences.toSet())
     }
 
     @Test

@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.reader.chrome.ChromePill
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -88,6 +90,13 @@ internal fun ReadAloudPlayer(
         if (notice == null) return@LaunchedEffect
         delay(NOTICE_MS)
         notice = null
+    }
+    val pending by feature.pendingChoice.collectAsStateWithLifecycle()
+    val asking = pending?.takeIf { it.bookId == bookId }
+    var choosing by remember { mutableStateOf(false) }
+    // Asked before the book is read, or opened from the controls of the one being read.
+    if (asking != null || (choosing && here != null)) {
+        key(asking) { ReadAloudVoiceSheet(feature, bookId, asking, onDismiss = { choosing = false }) }
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
@@ -155,21 +164,26 @@ internal fun ReadAloudPlayer(
                     ) {
                         SpeedButton(feature)
                         SleepButton(feature)
-                        VoiceButton(feature)
+                        VoiceButton { choosing = true }
                     }
-                    VoiceStatus(feature)
+                    VoiceStatus(feature, bookId)
                 }
             }
         }
     }
 }
 
-/** Which voice is reading, and in what language, under the controls. */
+/** Which voice is reading, and in what language, under the controls: the session's, whatever the settings now hold. */
 @Composable
-private fun VoiceStatus(feature: SpeechReadAloud) {
+private fun VoiceStatus(feature: SpeechReadAloud, bookId: String) {
     val service by feature.service.collectAsStateWithLifecycle(null)
+    val choice by remember(feature, bookId) { feature.sessionChoice(bookId) }.collectAsStateWithLifecycle(null)
+    val reading = choice ?: return
+    val name = service?.voiceLabel(reading.voice) ?: return
+    val locale = LocalConfiguration.current.locales[0]
     // The text, and the same without the flag for a screen reader.
-    val (text, spoken) = service?.voiceStatus() ?: return
+    val text = "$name · ${VoiceLabel.languageLabel(reading.language, locale)}"
+    val spoken = "$name · ${Locale.forLanguageTag(reading.language).getDisplayName(locale)}"
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall,
@@ -258,25 +272,11 @@ private fun SleepButton(feature: SpeechReadAloud) {
     }
 }
 
-/**
- * Picks the voice the book is read in, from the chosen service's. The
- * book reads on in it from the start of the sentence.
- */
+/** Opens the voice sheet, where the book's language and voice are picked. */
 @Composable
-private fun VoiceButton(feature: SpeechReadAloud) {
-    val service by feature.service.collectAsStateWithLifecycle(null)
-    var open by remember { mutableStateOf(false) }
-    Box {
-        ControlButton({ open = true }) {
-            Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
-        }
-        DropdownMenu(
-            expanded = open,
-            onDismissRequest = { open = false },
-            modifier = Modifier.heightIn(max = 420.dp),
-        ) {
-            service?.VoiceMenuItems(onPicked = { open = false })
-        }
+private fun VoiceButton(onClick: () -> Unit) {
+    ControlButton(onClick) {
+        Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
     }
 }
 

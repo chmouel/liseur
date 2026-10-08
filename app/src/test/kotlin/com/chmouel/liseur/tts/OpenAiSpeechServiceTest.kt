@@ -87,7 +87,11 @@ class OpenAiSpeechServiceTest {
         }
 
         override suspend fun switchVoice() = Unit
+
+        override fun sessionLanguage(service: SpeechService): String? = sessionLanguage
     }
+
+    private var sessionLanguage: String? = null
 
     @Before
     fun setUp() {
@@ -280,6 +284,55 @@ class OpenAiSpeechServiceTest {
 
         service.keepVoice(a.url, "tts", "tts-2", service.choice(), settle = false)
         assertEquals("tts-2", settings.settings.first().speechServerVoice)
+    }
+
+    @Test
+    fun aServerWithoutAVoiceListStillOffersItsTypedVoice(): Unit = runBlocking {
+        val a = server()
+        val service = service()
+        saveUrl(service, a.url)
+        settings.setSpeechServerModelAndVoice("custom", "af_bella")
+
+        val catalogue = service.catalogue(settings.settings.first())!!
+
+        // An empty list is an answer, not a failure: the typed voice is offered, and Kokoro's name says English.
+        assertFalse(catalogue.failed)
+        assertEquals(listOf(CatalogueVoice("af_bella", setOf("en-US"))), catalogue.voices)
+        assertEquals(VoiceScope("openai", OpenAiTts.baseUrl(a.url).toString(), "custom"), catalogue.scope)
+    }
+
+    @Test
+    fun aFailedVoiceListKeepsTheSavedAndRememberedVoicesAndSaysSo(): Unit = runBlocking {
+        val a = server()
+        val service = service()
+        saveUrl(service, a.url)
+        settings.setSpeechServerModelAndVoice("tts", "narrator")
+        val scope = service.catalogue(settings.settings.first())!!.scope
+        assertTrue(service.remember(scope, "fr-FR", "conteur"))
+        settings.setSpeechServerModelAndVoice("tts", "narrator")
+
+        a.status = 500
+        val catalogue = service().catalogue(settings.settings.first())!!
+
+        assertTrue(catalogue.failed)
+        assertEquals(listOf("narrator", "conteur"), catalogue.voices.map { it.id })
+        assertEquals(null, catalogue.voices.first().languages)
+    }
+
+    @Test
+    fun aVoiceRememberedForAnotherModelWritesNothing(): Unit = runBlocking {
+        val a = server()
+        val service = service()
+        saveUrl(service, a.url)
+        settings.setSpeechServerModelAndVoice("tts", "tts-1")
+        val scope = service.catalogue(settings.settings.first())!!.scope
+
+        settings.setSpeechServerModelAndVoice("older", "older-1")
+        assertFalse(service.remember(scope, "en", "tts-2"))
+
+        val s = settings.settings.first()
+        assertEquals("older-1", s.speechServerVoice)
+        assertTrue(s.voicePreferences.isEmpty())
     }
 }
 

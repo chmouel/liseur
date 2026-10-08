@@ -7,7 +7,7 @@
 - [ ] Show Preparing audio while speech is being generated, with Pause/Cancel available.
 - [ ] Distinguish Resume listening from Read from this page after the user browses elsewhere.
 - [ ] Separate voice previews from choosing the voice used for books.
-- [ ] Allow language switching in the player and remember the preferred voice per language.
+- [x] Allow language switching in the player and remember the preferred voice per language.
 - [ ] Fix saving Untick all: an empty voice selection currently offers all voices again.
 - [ ] Add chapter navigation to the read-aloud player.
 - [ ] Add a Continue listening shortcut on the shelf.

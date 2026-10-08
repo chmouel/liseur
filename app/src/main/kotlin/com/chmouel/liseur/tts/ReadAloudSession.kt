@@ -54,6 +54,8 @@ internal class ReadAloudSession(
     /** Brings the reader back to this book, for the notification. */
     val reader: Intent,
     voice: SessionVoice,
+    /** The normalized tag of the language the book is read in, such as `fr-FR`. */
+    language: String,
     /** How fast it plays, read as it plays. */
     private val speed: () -> Float,
     private val checkpoints: ListeningCheckpoints,
@@ -65,8 +67,13 @@ internal class ReadAloudSession(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val publication = handle.publication
     private val cache = SpeechCache(scope, voice.synthesizer::synthesize, voice.maxConcurrent)
-    private val language = publication.metadata.language ?: Language("en")
-    private val voices = setOf(SpeechTtsEngine.Voice(voice.name, language))
+    private val mutableChoice = MutableStateFlow(VoicePick(voice.name, language))
+
+    /** The voice reading and the language it reads in, which may differ from what the settings hold. */
+    val choice: StateFlow<VoicePick> = mutableChoice.asStateFlow()
+
+    /** Chosen once for the session: the whole book is cut into sentences and spoken in it. */
+    private val spoken: Language get() = Language(mutableChoice.value.language)
 
     private val prefetcher = UtterancePrefetcher<Locator>(scope, cache, { locator ->
         val settings = playback.navigator.value?.settings?.value
@@ -74,17 +81,19 @@ internal class ReadAloudSession(
             publication,
             locator,
             BoundedSentenceTokenizer.factory,
-            settings?.language ?: language,
-            settings?.overrideContentLanguage ?: false,
+            settings?.language ?: spoken,
+            settings?.overrideContentLanguage ?: true,
         )
     })
 
     val playback: ReadAloudPlayback = ReadAloudPlayback(
         scope = scope,
         opener = { initial, observer, listener ->
+            val language = spoken
+            val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, language))
             val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
             TtsNavigatorFactory(application, publication, provider, BoundedSentenceTokenizer.factory)
-                ?.createNavigator(listener, initial)
+                ?.createNavigator(listener, initial, SpeechTtsPreferences(language))
                 ?.getOrNull()
         },
         prefetcher = prefetcher,
@@ -147,7 +156,7 @@ internal class ReadAloudSession(
     fun start(selection: Locator) {
         claim()
         scope.launch {
-            val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, language)
+            val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, spoken)
             val target = SelectionTarget.of(selection, sentences)
             val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches })
             mutableStarting.value = false
@@ -179,14 +188,20 @@ internal class ReadAloudSession(
         }
     }
 
-    /** Reads on in [voice] from the start of the current sentence. */
-    fun switchVoice(voice: SessionVoice) {
+    /**
+     * Reads on in [voice], in [language], from the start of the current
+     * sentence, dropping what the old voice fetched. Playing or paused,
+     * the speed and the sleep timer stay as they were.
+     */
+    fun switchVoice(voice: SessionVoice, language: String = choice.value.language) {
         if (ended) return
+        val recut = language != choice.value.language
+        mutableChoice.value = VoicePick(voice.name, language)
         cache.swap(voice.synthesizer::synthesize)
         // Still starting: the first sentence is fetched with the new voice.
         if (playback.navigator.value == null) return
         scope.launch {
-            if (playback.replay() == ReadAloudPlayback.Landing.Failed) onNotice(ReadAloudNotice.Unavailable)
+            if (playback.replay(recut) == ReadAloudPlayback.Landing.Failed) onNotice(ReadAloudNotice.Unavailable)
         }
     }
 
