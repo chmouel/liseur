@@ -65,6 +65,40 @@ class VoiceResolverTest {
     }
 
     @Test
+    fun `a language's own default comes before the service default, after any choice`() {
+        val device = VoiceScope("device", "com.google.android.tts", "")
+        val voices = VoiceCatalogue(
+            device,
+            listOf(
+                CatalogueVoice("en-us-x-iob-local", setOf("en-US")),
+                CatalogueVoice("en-us-x-tpc-local", setOf("en-US")),
+                CatalogueVoice("en-gb-x-gba-local", setOf("en-GB")),
+                CatalogueVoice("fr-fr-x-fra-local", setOf("fr-FR")),
+                CatalogueVoice("fr-fr-x-frd-local", setOf("fr-FR")),
+                CatalogueVoice("fr-ca-x-caa-local", setOf("fr-CA")),
+            ),
+            default = "en-us-x-iob-local",
+            defaults = mapOf("en" to "en-us-x-tpc-local", "fr" to "fr-fr-x-frd-local"),
+        )
+
+        assertEquals(resolved("en-us-x-tpc-local", "en"), VoiceResolver.resolve(english, voices, emptyList()))
+        assertEquals(resolved("en-us-x-tpc-local", "en-US"), VoiceResolver.resolve(BookLanguage.Known("en-US"), voices, emptyList()))
+        assertEquals(resolved("fr-fr-x-frd-local", "fr"), VoiceResolver.resolve(french, voices, emptyList()))
+        assertEquals(resolved("fr-fr-x-frd-local", "fr-FR"), VoiceResolver.resolve(BookLanguage.Known("fr-FR"), voices, emptyList()))
+        // Another region keeps its own accent.
+        assertEquals(resolved("en-gb-x-gba-local", "en-GB"), VoiceResolver.resolve(BookLanguage.Known("en-GB"), voices, emptyList()))
+        assertEquals(resolved("fr-ca-x-caa-local", "fr-CA"), VoiceResolver.resolve(BookLanguage.Known("fr-CA"), voices, emptyList()))
+        // A remembered or saved voice still wins.
+        val chosen = listOf(device.preference("en", "en-us-x-iob-local"))
+        assertEquals(resolved("en-us-x-iob-local", "en"), VoiceResolver.resolve(english, voices, chosen))
+        assertEquals(resolved("fr-fr-x-fra-local", "fr"), VoiceResolver.resolve(french, voices.copy(global = "fr-fr-x-fra-local"), emptyList()))
+        // Without it, the service default reads.
+        assertEquals(resolved("en-us-x-iob-local", "en"), VoiceResolver.resolve(english, voices.copy(defaults = emptyMap()), emptyList()))
+        val tpcGone = voices.copy(voices = voices.voices.filter { it.id != "en-us-x-tpc-local" })
+        assertEquals(resolved("en-us-x-iob-local", "en"), VoiceResolver.resolve(english, tpcGone, emptyList()))
+    }
+
+    @Test
     fun `an unknown, mixed or unspoken language is asked about`() {
         assertEquals(VoiceResolution.NeedsChoice(ChoiceReason.Missing), VoiceResolver.resolve(BookLanguage.Missing, catalogue, emptyList()))
         assertEquals(

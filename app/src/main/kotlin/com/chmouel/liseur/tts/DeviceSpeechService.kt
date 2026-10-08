@@ -144,6 +144,7 @@ internal class DeviceSpeechService(
             voices = voices.map { CatalogueVoice(it.id, languagesOf(it)) },
             default = defaultVoice.value,
             global = s.deviceVoice,
+            defaults = DeviceVoices.preferred(voices),
         )
     }
 

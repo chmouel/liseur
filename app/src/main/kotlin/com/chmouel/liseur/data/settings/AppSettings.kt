@@ -204,8 +204,8 @@ enum class DefinitionTarget(val id: String) {
  * @param readAloudSentencesPerRequest How many sentences reading aloud asks
  *   the voice for at once, as stored; see `BoundedSentenceTokenizer`.
  * @param deviceVoice The voice of the device's own speech engine reading
- *   aloud uses, by the engine's name for it, or null for the engine's
- *   default.
+ *   aloud uses, by the engine's name for it, or null to pick one
+ *   automatically; see `DeviceVoices.pick`.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,

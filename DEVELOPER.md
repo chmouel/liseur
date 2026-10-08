@@ -1397,7 +1397,9 @@ reader behavior.
   provider on its own. The picker hides itself when there is only one.
   Device voices list the default engine's installed voices that need no
   network (`DeviceVoices.offline`), numbered per language; the choice is
-  `read_aloud_device_voice`, blank is the engine's default. A sentence
+  `read_aloud_device_voice`, blank picks one automatically: for English
+  and French `DeviceVoices.PREFERRED` (Google's `en-us-x-tpc-local` and
+  `fr-fr-x-frd-local`) when installed, else the engine's default. A sentence
   is synthesized with `synthesizeToFile` to a throwaway file while
   `UtteranceProgressListener.onAudioAvailable` collects the PCM, which
   `DeviceVoices.toSpeechPcm` converts to 24 kHz mono 16-bit. One

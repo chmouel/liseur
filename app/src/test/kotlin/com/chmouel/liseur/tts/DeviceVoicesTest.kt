@@ -59,6 +59,22 @@ class DeviceVoicesTest {
     }
 
     @Test
+    fun englishAndFrenchHaveTheirOwnDefaultBeforeTheEnginesWhenOffered() {
+        val tpc = DeviceVoice("en-us-x-tpc-local", "en-US", 7)
+        val iob = DeviceVoice("en-us-x-iob-local", "en-US", 2)
+        val frd = DeviceVoice("fr-fr-x-frd-local", "fr-FR", 5)
+        val fra = DeviceVoice("fr-fr-x-fra-local", "fr-FR", 2)
+        val voices = listOf(iob, tpc, fra, frd)
+
+        assertEquals(mapOf("en" to tpc.id, "fr" to frd.id), DeviceVoices.preferred(voices))
+        assertEquals(mapOf("en" to tpc.id), DeviceVoices.preferred(listOf(iob, tpc, fra)))
+        assertEquals(tpc, DeviceVoices.pick(voices, null, iob.id, Locale.US))
+        assertEquals(frd, DeviceVoices.pick(voices, null, fra.id, Locale.FRANCE))
+        assertEquals(iob, DeviceVoices.pick(voices, iob.id, null, Locale.US))
+        assertEquals(fra, DeviceVoices.pick(listOf(iob, fra), null, fra.id, Locale.FRANCE))
+    }
+
+    @Test
     fun theReadersLanguageIsListedFirst() {
         val voices = listOf(
             DeviceVoice("de", "de-DE", 1),

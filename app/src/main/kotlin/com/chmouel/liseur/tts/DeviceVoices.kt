@@ -20,6 +20,22 @@ internal data class EngineVoice(
 
 internal object DeviceVoices {
     /**
+     * The voice read in a language when the reader has chosen none, by
+     * primary language, while the engine offers it: Google's en-US and
+     * fr-FR voices that are Voice 7 and Voice 5 with the full packs
+     * installed. Named rather than numbered, since numbers move as
+     * voices are installed.
+     */
+    val PREFERRED = mapOf(
+        "en" to "en-us-x-tpc-local",
+        "fr" to "fr-fr-x-frd-local",
+    )
+
+    /** The [PREFERRED] voices among [voices], by primary language. */
+    fun preferred(voices: List<DeviceVoice>): Map<String, String> =
+        PREFERRED.filterValues { name -> voices.any { it.id == name } }
+
+    /**
      * The [voices] that speak without a network, so no text leaves the
      * device, numbered within their language by name. Engines name voices
      * with codes nobody can read, which is why they get numbers.
@@ -32,12 +48,14 @@ internal object DeviceVoices {
         }
 
     /**
-     * The voice to read with: the [stored] one when it is offered, else the
-     * engine's [default], else the first in the language of [locale], else
-     * the first. Null when there is none.
+     * The voice to read with: the [stored] one when it is offered, else
+     * the [PREFERRED] one for [locale]'s language, else the engine's
+     * [default], else the first in the language of [locale], else the
+     * first. Null when there is none.
      */
     fun pick(voices: List<DeviceVoice>, stored: String?, default: String?, locale: Locale): DeviceVoice? =
         voices.firstOrNull { it.id == stored }
+            ?: voices.firstOrNull { it.id == PREFERRED[locale.language] }
             ?: voices.firstOrNull { it.id == default }
             ?: voices.firstOrNull { Locale.forLanguageTag(it.language).language == locale.language }
             ?: voices.firstOrNull()

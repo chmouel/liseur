@@ -48,6 +48,7 @@ internal data class CatalogueVoice(val id: String, val languages: Set<String>?) 
 /**
  * The voices a service offers right now, in its own order and narrowed by
  * any "Choose voices" filter: [default] is the service's own default voice,
+ * [defaults] the voices it prefers over [default] for a primary language,
  * [global] the one saved in its settings, and [failed] says the list could
  * not be fetched, so [voices] are only those typed or remembered.
  */
@@ -57,6 +58,7 @@ internal data class VoiceCatalogue(
     val default: String? = null,
     val global: String? = null,
     val failed: Boolean = false,
+    val defaults: Map<String, String> = emptyMap(),
 )
 
 /** A voice and the language tag a book is read in with it. */
@@ -102,14 +104,16 @@ internal object VoiceResolver {
     /**
      * The voice for [language]: the one remembered for it, else the saved
      * voice when it speaks it, else one with the exact region, else one
-     * in the same language; among several, the service's default first.
+     * in the same language; among several, the service's default for the
+     * language first, then its default.
      */
     fun voiceFor(language: String, catalogue: VoiceCatalogue, preferences: List<VoicePreference>): String? {
         remembered(language, catalogue, preferences)?.let { return it }
         catalogue.voices.firstOrNull { it.id == catalogue.global && it.speaks(language) }?.let { return it.id }
         val speaking = catalogue.voices.filter { it.speaks(language) }
-        return preferred(speaking.filter { it.speaksExactly(language) }, catalogue.default)
-            ?: preferred(speaking, catalogue.default)
+        val defaults = listOfNotNull(catalogue.defaults[SpeechLanguage.primary(language)], catalogue.default)
+        return preferred(speaking.filter { it.speaksExactly(language) }, defaults)
+            ?: preferred(speaking, defaults)
     }
 
     /**
@@ -122,8 +126,8 @@ internal object VoiceResolver {
         return voice.takeIf { id -> catalogue.voices.any { it.id == id && (it.languages == null || it.speaks(language)) } }
     }
 
-    private fun preferred(voices: List<CatalogueVoice>, default: String?): String? =
-        (voices.firstOrNull { it.id == default } ?: voices.firstOrNull())?.id
+    private fun preferred(voices: List<CatalogueVoice>, defaults: List<String>): String? =
+        (defaults.firstNotNullOfOrNull { d -> voices.firstOrNull { it.id == d } } ?: voices.firstOrNull())?.id
 
     /**
      * The language a voice picked in Settings is remembered for: the one
