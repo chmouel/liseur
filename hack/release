@@ -27,7 +27,7 @@ readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
 readonly LOCAL_SIGNING_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/liseur/signing"
 readonly LOCAL_KEYSTORE="$LOCAL_SIGNING_DIR/release.p12"
 readonly KEYSTORE_PROPERTIES="keystore.properties"
-readonly NOTES_MODEL="gemini-3.6-flash"
+readonly NOTES_MODEL="gemini-flash-latest"
 readonly NOTES_COPILOT_MODEL="${LISEUR_NOTES_COPILOT_MODEL:-gpt-6-luna}"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64

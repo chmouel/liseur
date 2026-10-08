@@ -13,7 +13,7 @@ set -euo pipefail
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly GH_REPO="chmouel/liseur"
-readonly MODEL="gemini-3.6-flash"
+readonly MODEL="gemini-flash-latest"
 # Screenshots come from pull-request bodies, where they were sized for a
 # wide review page. At full size they push a release note apart, so every
 # one of them is re-sized here, in pixels. Only the width is set: the
