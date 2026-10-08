@@ -41,7 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -81,6 +80,7 @@ import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.footerMiddle
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.reading.label
+import kotlinx.coroutines.delay
 
 /** How tall the ramp at a chrome edge is. */
 private val CHROME_FADE_HEIGHT = 20.dp
@@ -695,19 +695,57 @@ fun ChromeEdgeFade(
     )
 }
 
-/**
- * Where a released scrubber was dropped ([to]) and the reader's place when
- * it was let go ([from]).
- */
-internal data class ScrubberHold(val from: Float, val to: Float)
+/** How long a dropped scrubber waits for the reader to report the jump. */
+private const val SCRUBBER_HOLD_MS = 3_000L
 
 /**
- * The scrubber's value: the finger while dragging, then the dropped place
- * until the reader reports where the seek landed (#222). Falling straight
- * back to the reader's place would show the old one for a moment.
+ * Where a released scrubber was dropped ([to]) and the reader's place when
+ * it was let go ([from]). Compared by identity, so a second drop to the
+ * same place is a new hold with its own time limit.
  */
-internal fun scrubberValue(dragged: Float?, held: ScrubberHold?, progression: Float): Float =
-    dragged ?: held?.takeIf { it.from == progression }?.to ?: progression
+internal class ScrubberHold(val from: Float, val to: Float)
+
+/**
+ * The scrubber's place: the finger while dragging, then the dropped place
+ * until the reader reports any new place or the hold runs out (#222).
+ * Falling straight back to the reader's place would show the old one until
+ * the jump lands.
+ */
+internal class ScrubberDrag {
+    private var dragged by mutableStateOf<Float?>(null)
+    var held by mutableStateOf<ScrubberHold?>(null)
+        private set
+
+    fun value(progression: Float): Float =
+        dragged ?: held?.takeIf { it.from == progression }?.to ?: progression
+
+    fun drag(to: Float) {
+        dragged = to
+    }
+
+    /**
+     * Ends the gesture. Returns the place to seek to, or null when the
+     * gesture never changed the value: a tap on the thumb finishes
+     * without one, and must not seek to a place from an earlier drag.
+     * A drop that did change it replaces any earlier one still held.
+     */
+    fun release(): Float? = dragged?.also {
+        dragged = null
+        held = null
+    }
+
+    fun hold(from: Float, to: Float) {
+        held = ScrubberHold(from, to)
+    }
+
+    fun progressed(progression: Float) {
+        if (held?.from != progression) held = null
+    }
+
+    fun expire(hold: ScrubberHold) {
+        if (held === hold) held = null
+    }
+}
 
 /**
  * The scrubber shown with the reader chrome: drag to move through the
@@ -721,21 +759,26 @@ fun ReadingScrubber(
     chapterTicks: List<Float>,
     titleAtPosition: (Int) -> String?,
     positionAtProgression: (Float) -> Int,
-    onSeek: (Int) -> Unit,
+    /** Jumps to a position; false when there was nowhere to jump to. */
+    onSeek: (Int) -> Boolean,
     onGoToPage: () -> Unit,
     onGoToPercent: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (progress == null) return
-    var dragged by remember { mutableStateOf<Float?>(null) }
-    var pending by remember { mutableFloatStateOf(0f) }
-    var held by remember { mutableStateOf<ScrubberHold?>(null) }
+    val drag = remember { ScrubberDrag() }
     // Once the reader reports any new place the hold is spent, so a later
     // return to the old place (the way-back chip) is shown as it is.
-    LaunchedEffect(progress.totalProgression) {
-        if (held?.from != progress.totalProgression) held = null
+    LaunchedEffect(progress.totalProgression) { drag.progressed(progress.totalProgression) }
+    // A jump that never reports back must not leave the thumb on a place
+    // the reader is not at.
+    drag.held?.let { hold ->
+        LaunchedEffect(hold) {
+            delay(SCRUBBER_HOLD_MS)
+            drag.expire(hold)
+        }
     }
-    val value = scrubberValue(dragged, held, progress.totalProgression)
+    val value = drag.value(progress.totalProgression)
     val previewPosition = positionAtProgression(value)
     val accent = theme.foreground
 
@@ -760,14 +803,15 @@ fun ReadingScrubber(
         )
         Slider(
             value = value,
-            onValueChange = {
-                dragged = it
-                pending = it
-            },
+            onValueChange = drag::drag,
             onValueChangeFinished = {
-                held = ScrubberHold(from = progress.totalProgression, to = pending)
-                dragged = null
-                onSeek(positionAtProgression(pending))
+                drag.release()?.let { to ->
+                    val target = positionAtProgression(to)
+                    // A jump to the page already shown reports nothing back.
+                    if (onSeek(target) && target != progress.position) {
+                        drag.hold(from = progress.totalProgression, to = to)
+                    }
+                }
             },
             colors = SliderDefaults.colors(
                 thumbColor = accent,

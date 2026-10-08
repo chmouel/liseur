@@ -3307,11 +3307,11 @@ fun ReaderScreen(
                         },
                         titleAtPosition = onProgressAction.chapterTitleAtPosition,
                         positionAtProgression = onProgressAction.positionAtProgression,
-                        onSeek = { position ->
-                            onProgressAction.locatorAtPosition(position)?.let {
-                                onProgressAction.onJump()
-                                navigateLater(it, NavigatorPositionEvent.LOCAL_JUMP)
-                            }
+                        onSeek = seek@{ position ->
+                            val target = onProgressAction.locatorAtPosition(position) ?: return@seek false
+                            onProgressAction.onJump()
+                            navigateLater(target, NavigatorPositionEvent.LOCAL_JUMP)
+                            true
                         },
                         onGoToPage = {
                             if (onProgressAction.goToPagePrompt() != null) goToPage = true
