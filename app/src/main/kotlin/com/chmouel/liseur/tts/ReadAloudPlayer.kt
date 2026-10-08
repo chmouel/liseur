@@ -113,7 +113,7 @@ internal fun ReadAloudPlayer(
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
-        val waitShown = rememberWaitShown(here?.preparing == true)
+        val waitShown = rememberWaitShown(here?.preparing != false)
         service?.AccessPrompt(theme)
         AnimatedVisibility(
             visible = notice != null,
@@ -223,18 +223,30 @@ private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: 
                     progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
                 },
         ) {
-            VoiceWait(color = theme.background)
+            AnimatedVisibility(
+                visible = waitShown,
+                enter = if (eInk) EnterTransition.None else fadeIn(),
+                exit = ExitTransition.None,
+            ) {
+                VoiceWait(color = theme.background)
+            }
         }
-        here.playing -> FilledIconButton(
-            feature::pause,
-            Modifier.size(PLAY_SIZE).semantics { if (waitShown) stateDescription = preparing },
-            colors = colors,
-        ) {
-            Crossfade(waitShown, animationSpec = if (eInk) snap() else tween(), label = "play-wait") { waiting ->
-                if (waiting) {
-                    VoiceWait(color = theme.background)
-                } else {
-                    Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause), Modifier.size(32.dp))
+        here.playing -> {
+            val pause = stringResource(R.string.read_aloud_pause)
+            FilledIconButton(
+                feature::pause,
+                Modifier.size(PLAY_SIZE).semantics {
+                    contentDescription = pause
+                    if (waitShown) stateDescription = preparing
+                },
+                colors = colors,
+            ) {
+                Crossfade(waitShown, animationSpec = if (eInk) snap() else tween(), label = "play-wait") { waiting ->
+                    if (waiting) {
+                        VoiceWait(color = theme.background)
+                    } else {
+                        Icon(Icons.Filled.Pause, null, Modifier.size(32.dp))
+                    }
                 }
             }
         }
