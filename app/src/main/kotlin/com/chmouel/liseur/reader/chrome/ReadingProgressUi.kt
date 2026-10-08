@@ -807,8 +807,9 @@ fun ReadingScrubber(
             onValueChangeFinished = {
                 drag.release()?.let { to ->
                     val target = positionAtProgression(to)
-                    // A jump to the page already shown reports nothing back.
-                    if (onSeek(target) && target != progress.position) {
+                    // Dropped on the page already shown: there is nowhere
+                    // to go, and a jump would only leave a way-back chip.
+                    if (target != progress.position && onSeek(target)) {
                         drag.hold(from = progress.totalProgression, to = to)
                     }
                 }
