@@ -164,7 +164,11 @@ class OpenAiSpeechServiceTest {
 
     private suspend fun saveUrl(service: OpenAiSpeechService, url: String) {
         service.commitUrl(url)
-        withTimeout(WAIT) { settings.settings.first { it.speechServerUrl == url } }
+        // Not settings.first { url }: a DataStore read racing the write can
+        // start that collector past the write's version, and it then never
+        // sees the new value. Once the save has landed, a plain read does.
+        withTimeout(WAIT) { service.savingUrls.first { it == 0 } }
+        assertEquals(url, settings.settings.first().speechServerUrl)
     }
 
     private suspend fun saveKey(service: OpenAiSpeechService, url: String, key: String) {
