@@ -11,12 +11,13 @@ NonFreeNet anti-feature. The OpenAI-compatible provider
 ([0043](0043-openai-compatible-read-aloud.md)) stayed in the same flavor
 so there was one boundary to check.
 
-That provider has no built-in address. It reads with whatever server the
-reader enters, most usefully one they host themselves, such as Kokoro.
+That provider has no default address. It reads with whatever server the
+reader sets, most usefully one they host themselves, such as Kokoro.
 That is the same position as the online dictionary lookup, which F-Droid
-accepts: the app talks to a service the reader chose, and nothing in the
-APK points at a non-free one. Keeping it out of the F-Droid build denied
-F-Droid readers a feature with no policy reason behind it.
+accepts: the app talks to a service the reader chose, and nothing works
+through a non-free service unless the reader picks one. Keeping it out of
+the F-Droid build denied F-Droid readers a feature with no policy reason
+behind it.
 
 ## Decision
 
@@ -25,10 +26,10 @@ provider move to `main`, so both builds have them. Only Gemini stays in
 `play`: its client, its voices, its settings rows and its key.
 
 Each provider is a `SpeechService`. The flavor's `ReadAloudFeatureFactory`
-passes the list it offers to `SpeechReadAloud`, and the first one is the
-choice of a reader who never made one. Play offers Gemini first, so a
-reader who set it up in v0.21.0 keeps it. The F-Droid build offers
-device voices first, since they work with no setup, then the speech
+passes the list it offers to `SpeechReadAloud`. A reader who never made a
+choice gets device voices, since they work with no setup and send
+nothing; a saved choice is kept. Play offers device voices, Gemini and
+the speech server; the F-Droid build offers device voices and the speech
 server. The provider picker hides itself when there is only one choice.
 
 Device voices are a third provider, in both builds: the voices of
@@ -69,5 +70,15 @@ service and its two permissions move to the main manifest.
   so; the reader can install voices or pick another provider. The
   engine is released after a minute without a request.
 - F-Droid readers can send book text to a hosted speech service if they
-  enter its address. That is their choice, made the same way as with the
+  set its address. That is their choice, made the same way as with the
   dictionary site, and the privacy policy says so.
+- To save typing, the address field offers OpenAI, DeepInfra, OpenRouter,
+  Mistral and Groq by name, next to an example address for a self-hosted
+  Kokoro server. These are in both builds. They are interchangeable
+  shortcuts that fill in the address: none is the default, the app
+  contacts none of them until the reader picks one, playback needs the
+  reader's own key, and read aloud works fully without them. So the
+  F-Droid build
+  neither depends on nor defaults to a non-free service. If F-Droid review
+  disagrees, the hosted entries can move to `play` and leave the Kokoro
+  example in `main`.

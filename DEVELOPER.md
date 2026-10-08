@@ -1366,10 +1366,13 @@ reader behavior.
   feature only through the `ReadAloudFeature` interface and
   `OpenBookHandle`. Nothing in `main` may name Gemini; see
   `docs/adr/0044-read-aloud-in-the-f-droid-build.md`.
-- A listening session owns the reading place only while it plays. Any page
-  move the reader makes pauses it and saves the reader's place, so two
-  owners never write the same row. Auto-scroll and the voice exclude each
-  other: starting one pauses or disarms the other.
+- A listening session owns the reading place while it plays. A page move
+  the reader makes leaves the voice playing and is not saved: the page
+  stops following the voice until the spoken sentence is on screen again
+  or the voice is paused and resumed, and pausing brings the page back to
+  the sentence heard. Only the voice writes the place while it plays, so
+  two owners never write the same row. Auto-scroll and the voice exclude
+  each other: starting one pauses or disarms the other.
 - Checkpoints go through the handle's `prepareLocator`, so a heard sentence
   stores the same `total_progression` a page turn to it would. Checkpoints
   while playing are local (`signalSync = false`); the one written on pause
@@ -2175,9 +2178,12 @@ what lets it sync a book that came off an SD card.
 - Gemini read-aloud, which sends book text to Google, is in the `play`
   flavor only. F-Droid builds `foss`, which has none of its code, strings
   or endpoint, so the NonFreeNet anti-feature does not apply. Device
-  voices are in both and stay on the device. Read aloud
-  with a speech server is in both: like the dictionary site, it has no
-  built-in address and talks only to the server the user enters. Before
+  voices are in both and stay on the device, and they are the default.
+  Read aloud with a speech server is in both and talks only to the server
+  the user sets. The address field offers a menu of hosted services
+  (`SpeechServerPresets`) next to a self-hosted example; none is selected
+  or contacted until the user picks it, and the app works
+  without any of them. Before
   changing that boundary, check the `foss` release dex for
   `generativelanguage` and `Gemini` strings.
 - No non-free assets. The bundled fonts (Literata, Vollkorn, Atkinson

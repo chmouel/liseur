@@ -59,9 +59,9 @@ enum class ReadAloudNotice {
 data class ReadAloudBookNotice(val bookId: String, val notice: ReadAloudNotice)
 
 /**
- * Reading aloud, as the flavor-neutral reader sees it. The Play build
- * provides Gemini and OpenAI-compatible voices; the F-Droid build provides [None],
- * which is never available and draws nothing.
+ * Reading aloud, as the flavor-neutral reader sees it. Both builds provide
+ * device voices and a speech server; the Play build adds Gemini. [None] is
+ * never available and draws nothing, for callers given no feature.
  */
 interface ReadAloudFeature {
     val isAvailable: Boolean
