@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.library.ReadingPositionBackupRepository
 import com.chmouel.liseur.data.library.SettingsBackupRepository
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.openableUri
+import com.chmouel.liseur.data.library.permissionSafeAssetRetriever
 import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
@@ -80,7 +81,6 @@ import com.chmouel.liseur.ui.widget.WidgetUpdater
 import com.chmouel.liseur.ui.widget.widgetInputs
 import com.chmouel.liseur.sync.SyncScope
 import android.util.Log
-import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
@@ -109,7 +109,7 @@ class AppContainer(context: Context) {
     private val httpClient = DefaultHttpClient()
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
+    val assetRetriever = permissionSafeAssetRetriever(context.contentResolver, httpClient)
 
     val publicationOpener = PublicationOpener(
         publicationParser = DefaultPublicationParser(

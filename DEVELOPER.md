@@ -1595,6 +1595,11 @@ reader behavior.
 - All dependencies and bundled fonts must remain FOSS and reproducible.
   `readium-lcp` is prohibited. Never remove the reproducibility-specific
   dependency metadata or JNI debug-symbol settings from the build.
+- Build Readium's `AssetRetriever` with `permissionSafeAssetRetriever`, not
+  its default constructor. Readium 3.4.0 lets a `SecurityException` escape
+  when a content:// book has lost its grant, and that crashed the library on
+  launch. The wrapper turns it into an ordinary read failure; drop it once a
+  Readium release catches it in `ContentResource.stream()`.
 
 ### Home-screen widgets
 
