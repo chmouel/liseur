@@ -23,8 +23,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.chmouel.liseur.ui.theme.SystemBarIcons
 import com.chmouel.liseur.ui.theme.isDarkSurface
@@ -91,8 +96,12 @@ fun LiseurModalBottomSheet(
     // the insets a ModalBottomSheet gets for free are applied here by hand:
     // the top, or a full-height sheet runs under the status bar, and the
     // sides, or a landscape cutout sits over the controls.
+    //
+    // A popup's alignment is relative to the layout it is called from,
+    // not the window. Called from inside scrolling content, the bottom of
+    // that content is usually below the screen, and the sheet with it.
     Popup(
-        alignment = Alignment.BottomCenter,
+        popupPositionProvider = WindowBottomPosition,
         onDismissRequest = onDismissRequest,
         properties = PopupProperties(focusable = true, clippingEnabled = false),
     ) {
@@ -120,4 +129,20 @@ fun LiseurModalBottomSheet(
             }
         }
     }
+}
+
+/**
+ * Bottom centre of the window, wherever the sheet was called from. With
+ * clipping off, [windowSize] is the whole window, as Material's sheet is.
+ */
+internal object WindowBottomPosition : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset(
+        x = (windowSize.width - popupContentSize.width) / 2,
+        y = windowSize.height - popupContentSize.height,
+    )
 }
