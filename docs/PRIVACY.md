@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 6 October 2026
+**Last updated:** 8 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers, and it collects nothing about you. Its
@@ -92,8 +92,9 @@ that model's voices, without your key or any text. Tapping a voice there, or
 typing one, sends a fixed sample sentence so you can hear it; it is not
 text from a book. "Test connection" asks for the same lists and sends
 the single word "Hello." with the model and voice you picked. Once you press play it sends
-the text being read, one sentence at a time and a few sentences ahead of
-the voice, to that address together with the model and voice you picked
+the text being read, one sentence at a time by default or up to five
+together if you raise that in the read-aloud settings, a few sentences
+ahead of the voice, to that address together with the model and voice you picked
 and, if you entered one for that server, your API key. No book title, file, identifier
 or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
@@ -108,7 +109,9 @@ at all.
 
 It does nothing until you choose Gemini in Settings, Read aloud, and
 paste a Gemini API key of your own from Google AI Studio. Once you press play, Liseur sends the text being
-read, one sentence or short passage at a time and a few sentences ahead
+read, one sentence or short passage at a time (up to five sentences
+together if you raise that in the read-aloud settings) and a few
+sentences ahead
 of the voice, to `generativelanguage.googleapis.com` over HTTPS,
 together with your key and the voice you picked. Nothing else goes with
 it: no book title, no file, no identifier, no reading position. Requests

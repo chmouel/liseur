@@ -84,7 +84,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Rows a build flavor adds to Reading: read aloud, in the Play build. */
+    /** Rows a build flavor adds to Reading: read aloud, in both builds. */
     flavorReadingRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
