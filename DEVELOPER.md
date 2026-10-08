@@ -1390,9 +1390,11 @@ reader behavior.
   rows, its voice catalogue and labels, and the `SessionVoice` a session
   reads with. The flavor's
   `ReadAloudFeatureFactory` passes the list to `SpeechReadAloud`; the
-  first is the default for a reader who never chose (Gemini in Play,
-  device voices in F-Droid), and the picker hides itself when there is
-  only one.
+  device voices are the default in both builds for a reader who never
+  chose; Gemini is an alternative in Play. Saved choices stay selected.
+  If Android has no installed offline voice, read-aloud stays unavailable
+  until the reader chooses another provider; it never switches to a network
+  provider on its own. The picker hides itself when there is only one.
   Device voices list the default engine's installed voices that need no
   network (`DeviceVoices.offline`), numbered per language; the choice is
   `read_aloud_device_voice`, blank is the engine's default. A sentence

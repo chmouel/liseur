@@ -58,8 +58,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -76,14 +77,18 @@ internal class DeviceSpeechService(
     private val settings: AppSettingsRepository,
     private val control: SessionControl,
 ) : SpeechService {
-    override val id = "device"
+    override val id = DEVICE_SPEECH_PROVIDER_ID
     override val label = R.string.read_aloud_provider_device
     override val summary = R.string.read_aloud_provider_device_summary
     override val icon = Icons.Outlined.PhoneAndroid
 
     private val engine = DeviceTts(context.applicationContext)
+    private val mutableConfigured = MutableStateFlow(false)
 
-    override val configured: Flow<Boolean> = flowOf(true)
+    override val configured: Flow<Boolean> = flow {
+        voices()
+        emitAll(mutableConfigured)
+    }
 
     val voice: Flow<String> = settings.settings.map { it.deviceVoice.orEmpty() }.distinctUntilChanged()
 
@@ -97,13 +102,17 @@ internal class DeviceSpeechService(
     private val used = MutableStateFlow<String?>(null)
 
     /** The engine's offline voices, or a failure when there is no engine. */
-    suspend fun voices(): Result<List<DeviceVoice>> = try {
-        val voices = engine.voices()
-        defaultVoice.value = engine.defaultVoice()
-        listed.value = voices
-        Result.success(voices)
-    } catch (e: SpeechError) {
-        Result.failure(e)
+    suspend fun voices(): Result<List<DeviceVoice>> {
+        val result = try {
+            val voices = engine.voices()
+            defaultVoice.value = engine.defaultVoice()
+            listed.value = voices
+            Result.success(voices)
+        } catch (e: SpeechError) {
+            Result.failure(e)
+        }
+        mutableConfigured.value = deviceSpeechConfigured(result)
+        return result
     }
 
     override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? {
@@ -173,6 +182,9 @@ internal class DeviceSpeechService(
     @Composable
     override fun SettingsRows(feature: SpeechReadAloud) = DeviceRows(feature, this)
 }
+
+internal fun deviceSpeechConfigured(voices: Result<List<DeviceVoice>>): Boolean =
+    voices.getOrNull()?.isNotEmpty() == true
 
 @Composable
 private fun deviceVoiceLabel(voice: DeviceVoice): String =

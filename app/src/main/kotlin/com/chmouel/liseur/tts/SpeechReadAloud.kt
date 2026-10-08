@@ -51,7 +51,7 @@ import org.readium.r2.shared.publication.Locator
  * once, and a new server or model from the next session. Main thread only.
  *
  * @param offered The services offered, given the control they have over
- *   the session; the first is the default.
+ *   the session; device speech is the default when offered.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class SpeechReadAloud(
@@ -98,6 +98,7 @@ internal class SpeechReadAloud(
     val pendingChoice: StateFlow<PendingChoice?> = mutablePending.asStateFlow()
 
     val services: List<SpeechService> = offered(control)
+    private val providerIds: List<String> = services.map { it.id }
 
     init {
         require(services.isNotEmpty()) { "Read aloud needs a speech service" }
@@ -105,7 +106,7 @@ internal class SpeechReadAloud(
 
     /** The stored choice, or the default for none or one this build does not offer. */
     private fun serviceOf(s: AppSettings): SpeechService =
-        services.firstOrNull { it.id == s.readAloudProvider } ?: services.first()
+        services.first { it.id == speechProviderId(providerIds, s.readAloudProvider) }
 
     val service: Flow<SpeechService> = settings.settings.map(::serviceOf).distinctUntilChanged()
 
@@ -417,6 +418,16 @@ internal class SpeechReadAloud(
 }
 
 private const val SLEEP_CHECK_MS = 30_000L
+
+internal const val DEVICE_SPEECH_PROVIDER_ID = "device"
+
+/** A saved choice wins; otherwise prefer on-device speech over network services. */
+internal fun speechProviderId(available: List<String>, saved: String?): String {
+    require(available.isNotEmpty()) { "Read aloud needs a speech service" }
+    return saved?.takeIf(available::contains)
+        ?: DEVICE_SPEECH_PROVIDER_ID.takeIf(available::contains)
+        ?: available.first()
+}
 
 /**
  * A start waiting for the reader to say which language [bookId] is read in,

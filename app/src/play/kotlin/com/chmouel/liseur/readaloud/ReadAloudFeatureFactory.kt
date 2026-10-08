@@ -13,8 +13,8 @@ import com.chmouel.liseur.tts.gemini
 
 /**
  * The Play build reads aloud with a Gemini voice on the reader's own key,
- * a speech server of their choice, or the device's own voices. Gemini
- * comes first, so it stays the choice of a reader who never made one.
+ * a speech server of their choice, or the device's own voices. Device
+ * voices are the default; network providers are selected explicitly.
  */
 object ReadAloudFeatureFactory {
     fun create(context: Context, container: AppContainer): ReadAloudFeature = SpeechReadAloud(
@@ -23,9 +23,9 @@ object ReadAloudFeatureFactory {
         checkpoints = container.listeningCheckpoints,
     ) { control ->
         listOf(
+            DeviceSpeechService(context, container.appSettings, control),
             GeminiSpeechService(ApiKeyStore.gemini(context), container.appSettings, control),
             OpenAiSpeechService(ServerKeys(context), container.appSettings, control, localNetwork = container.localNetwork),
-            DeviceSpeechService(context, container.appSettings, control),
         )
     }
 }

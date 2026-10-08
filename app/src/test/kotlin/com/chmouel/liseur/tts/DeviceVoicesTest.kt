@@ -6,7 +6,9 @@ import java.nio.ByteOrder
 import java.util.Locale
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeviceVoicesTest {
@@ -33,6 +35,13 @@ class DeviceVoicesTest {
             ),
             voices,
         )
+    }
+
+    @Test
+    fun deviceSpeechNeedsAtLeastOneUsableOfflineVoice() {
+        assertTrue(deviceSpeechConfigured(Result.success(listOf(DeviceVoice("en", "en-US", 1)))))
+        assertFalse(deviceSpeechConfigured(Result.success(emptyList())))
+        assertFalse(deviceSpeechConfigured(Result.failure(SpeechError.InvalidResponse("no speech engine"))))
     }
 
     @Test
