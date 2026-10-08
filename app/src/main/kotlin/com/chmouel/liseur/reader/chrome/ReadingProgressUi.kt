@@ -213,8 +213,9 @@ fun ReadingFooter(
             figure = footerFigure(startField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(startSlot.cycleLabel),
-            onClick = { if (!onLockFooter)onCycleField(startSlot, noteForField) },
-            onLongClick = { if (!onLockFooter) onPickSlot(startSlot.pickTarget) },
+            enabled = !onLockFooter,
+            onClick = { onCycleField(startSlot, noteForField) },
+            onLongClick = { onPickSlot(startSlot.pickTarget) },
             padding = PaddingValues(
                 start = FOOTER_MARGIN,
                 end = FOOTER_GAP,
@@ -227,8 +228,9 @@ fun ReadingFooter(
         val middle = middleText(progress, mode, reflowable, screens)
         FooterSlotBox(
             clickLabel = stringResource(R.string.footer_cycle_middle),
-            onClick = { if (!onLockFooter) onCycleMode(noteForMode) },
-            onLongClick = { if (!onLockFooter) onPickSlot(FooterPickTarget.MIDDLE) },
+            enabled = !onLockFooter,
+            onClick = { onCycleMode(noteForMode) },
+            onLongClick = { onPickSlot(FooterPickTarget.MIDDLE) },
             padding = PaddingValues(horizontal = FOOTER_GAP, vertical = slotPadding),
             alignment = Alignment.Center,
             modifier = Modifier
@@ -257,8 +259,9 @@ fun ReadingFooter(
             figure = footerFigure(endField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(endSlot.cycleLabel),
-            onClick = { if (!onLockFooter) onCycleField(endSlot, noteForField) },
-            onLongClick = { if (!onLockFooter) onPickSlot(endSlot.pickTarget)},
+            enabled = !onLockFooter,
+            onClick = { onCycleField(endSlot, noteForField) },
+            onLongClick = { onPickSlot(endSlot.pickTarget) },
             padding = PaddingValues(
                 start = FOOTER_GAP,
                 end = FOOTER_MARGIN,
@@ -330,6 +333,7 @@ private fun FooterEdge(
     figure: FooterFigure?,
     color: Color,
     clickLabel: String,
+    enabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     padding: PaddingValues,
@@ -339,6 +343,7 @@ private fun FooterEdge(
     val text = figureText(figure)
     FooterSlotBox(
         clickLabel = clickLabel,
+        enabled = enabled,
         onClick = onClick,
         onLongClick = onLongClick,
         padding = padding,
@@ -418,6 +423,7 @@ private fun FooterEdgeText(text: FooterText, color: Color) {
 @Composable
 private fun FooterSlotBox(
     clickLabel: String,
+    enabled: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     padding: PaddingValues,
@@ -442,11 +448,17 @@ private fun FooterSlotBox(
                     Modifier.semantics { contentDescription = blankDescription }
                 },
             )
-            .combinedClickableWithoutRipple(
-                onClick = onClick,
-                onLongClick = onLongClick,
-                onClickLabel = clickLabel,
-                onLongClickLabel = stringResource(R.string.footer_pick_action),
+            .then(
+                if (enabled) {
+                    Modifier.combinedClickableWithoutRipple(
+                        onClick = onClick,
+                        onLongClick = onLongClick,
+                        onClickLabel = clickLabel,
+                        onLongClickLabel = stringResource(R.string.footer_pick_action),
+                    )
+                } else {
+                    Modifier
+                },
             )
             .padding(padding)
             .then(
