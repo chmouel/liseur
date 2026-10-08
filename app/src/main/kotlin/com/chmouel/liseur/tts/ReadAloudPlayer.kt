@@ -113,7 +113,7 @@ internal fun ReadAloudPlayer(
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
-        val waitShown = rememberWaitShown(here?.preparing != false)
+        val waitShown = rememberWaitShown(here?.preparing == true)
         service?.AccessPrompt(theme)
         AnimatedVisibility(
             visible = notice != null,
