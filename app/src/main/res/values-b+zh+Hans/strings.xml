@@ -1026,6 +1026,7 @@
     <string name="read_aloud_resume">继续朗读</string>
     <string name="read_aloud_stop">停止朗读</string>
     <string name="read_aloud_notice_network">无法连接 %1$s。已暂停；按播放重试。</string>
+    <string name="read_aloud_preparing">正在准备语音</string>
     <string name="read_aloud_notice_rate_limited">%1$s 暂时不接受更多请求。已暂停；请稍后再试。</string>
     <string name="read_aloud_notice_service">%1$s 无法朗读这一句。已暂停；按播放重试。</string>
     <string name="read_aloud_notice_output">此设备无法播放语音。已暂停。</string>

@@ -1580,6 +1580,13 @@ reader behavior.
   voice), and Stop on the right. The second holds speed, previous,
   play/pause as a filled circle, next and the sleep timer. The speed is
   left out of the chip because the speed button already shows it.
+- While the voice waits for audio (`ReadAloudUi.preparing`: the session is
+  starting, or the engine is in `SpeechCache.take` for the playing
+  sentence, reported through `SpeechObserver.onWaiting`), a five-bar
+  `VoiceWait` mark replaces the play/pause icon, and a "Preparing the
+  voice" pill shows when the controls are hidden. It appears only after
+  400 ms and lingers 150 ms, so a fast voice never flashes it, and holds
+  still on e-ink or with animations removed.
 
 ### Covers, UI, and dependencies
 

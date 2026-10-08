@@ -1153,6 +1153,7 @@
     <string name="read_aloud_resume">Продолжить чтение вслух</string>
     <string name="read_aloud_stop">Остановить чтение вслух</string>
     <string name="read_aloud_notice_network">Не удалось связаться с %1$s. Пауза; нажмите воспроизведение, чтобы повторить.</string>
+    <string name="read_aloud_preparing">Подготовка голоса</string>
     <string name="read_aloud_notice_rate_limited">%1$s пока не принимает новые запросы. Пауза; повторите позже.</string>
     <string name="read_aloud_notice_service">Сервису %1$s не удалось прочитать это предложение. Пауза; нажмите воспроизведение, чтобы повторить.</string>
     <string name="read_aloud_notice_output">Это устройство не смогло воспроизвести голос. Пауза.</string>

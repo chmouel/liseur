@@ -20,6 +20,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.readium.navigator.media.tts.TtsEngine
 import org.readium.navigator.media.tts.TtsNavigatorFactory
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
@@ -79,6 +80,9 @@ class ReadAloudPlaybackTest {
     private val failures = ConcurrentHashMap<String, Int>()
     private val chapterStops = AtomicInteger()
 
+    /** Holds back the audio for a sentence until released. */
+    private val holds = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
     private lateinit var publication: Publication
     private lateinit var playback: ReadAloudPlayback
     private var beforeOpen: suspend () -> Unit = {}
@@ -99,6 +103,7 @@ class ReadAloudPlaybackTest {
             val nth = requested.getOrPut(text) { AtomicInteger() }.incrementAndGet()
             // A late answer, as from a slow network.
             delay(30)
+            holds[text]?.await()
             if (failures[text] == nth) {
                 failures.remove(text)
                 throw SpeechError.Service(503)
@@ -168,6 +173,40 @@ class ReadAloudPlaybackTest {
             check(System.currentTimeMillis() < deadline) { "never stopped at chapter end after $played" }
             Thread.sleep(10)
         }
+    }
+
+    private fun awaitWaiting(expected: Boolean) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (playback.waiting.value != expected) {
+            check(System.currentTimeMillis() < deadline) { "waiting never became $expected after $played" }
+            Thread.sleep(10)
+        }
+    }
+
+    @Test
+    fun aSentenceWhoseAudioIsLateIsWaitingUntilPaused() {
+        holds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        awaitWaiting(true)
+        runBlocking(main) { playback.pause() }
+        awaitWaiting(false)
+        assertEquals(listOf(FIRST), played.toList())
+    }
+
+    @Test
+    fun closingClearsTheWait() {
+        holds[FIRST] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitWaiting(true)
+        runBlocking(main) { playback.close() }
+        assertFalse(playback.waiting.value)
+    }
+
+    @Test
+    fun aRequestThisNavigatorDidNotSpeakIsNotWaitedOn() {
+        runBlocking(main) { playback.onWaiting(TtsEngine.RequestId("elsewhere"), true) }
+        assertFalse(playback.waiting.value)
     }
 
     @Test

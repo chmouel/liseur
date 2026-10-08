@@ -1081,6 +1081,7 @@
     <string name="read_aloud_resume">Vorlesen fortsetzen</string>
     <string name="read_aloud_stop">Vorlesen beenden</string>
     <string name="read_aloud_notice_network">%1$s ist nicht erreichbar. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
+    <string name="read_aloud_preparing">Stimme wird vorbereitet</string>
     <string name="read_aloud_notice_rate_limited">%1$s nimmt vorerst keine weiteren Anfragen an. Pausiert; versuche es später erneut.</string>
     <string name="read_aloud_notice_service">%1$s konnte diesen Satz nicht vorlesen. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen.</string>
     <string name="read_aloud_notice_output">Dieses Gerät konnte die Stimme nicht abspielen. Pausiert.</string>

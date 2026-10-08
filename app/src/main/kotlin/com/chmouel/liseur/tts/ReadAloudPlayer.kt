@@ -2,9 +2,12 @@ package com.chmouel.liseur.tts
 
 import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -53,9 +56,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,7 +73,6 @@ import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.chrome.ChromeCard
 import com.chmouel.liseur.reader.chrome.ChromePill
-import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -106,6 +113,7 @@ internal fun ReadAloudPlayer(
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
+        val waitShown = rememberWaitShown(here?.preparing == true)
         service?.AccessPrompt(theme)
         AnimatedVisibility(
             visible = notice != null,
@@ -123,6 +131,31 @@ internal fun ReadAloudPlayer(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
                 )
+            }
+        }
+        // With the controls hidden, the wait for the voice still shows.
+        AnimatedVisibility(
+            visible = here != null && !controls && waitShown && notice == null,
+            enter = if (eInk) EnterTransition.None else fadeIn(),
+            exit = if (eInk) ExitTransition.None else fadeOut(),
+        ) {
+            ChromePill(theme = theme) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                        .semantics(mergeDescendants = true) {
+                            liveRegion = LiveRegionMode.Polite
+                            progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                        },
+                ) {
+                    VoiceWait(color = LocalContentColor.current, barWidth = 2.5.dp, height = 16.dp)
+                    Text(
+                        text = stringResource(R.string.read_aloud_preparing),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
         AnimatedVisibility(
@@ -151,7 +184,7 @@ internal fun ReadAloudPlayer(
                         ControlButton(feature::skipBackward) {
                             Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
                         }
-                        PlayButton(feature, here, theme)
+                        PlayButton(feature, here, waitShown, theme)
                         ControlButton(feature::skipForward) {
                             Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                         }
@@ -164,30 +197,66 @@ internal fun ReadAloudPlayer(
 }
 
 /**
- * Play, pause, or the wait for the first sentence, filled in the page's
- * ink so the one control that matters most is found without looking.
+ * Play, pause, or the wait for the voice, filled in the page's ink so the
+ * one control that matters most is found without looking. While audio is
+ * on its way the voice mark takes the icon's place; once playing, the
+ * button still pauses.
  */
 @Composable
-private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, theme: ReaderTheme) {
+private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: Boolean, theme: ReaderTheme) {
     val colors = IconButtonDefaults.filledIconButtonColors(
         containerColor = theme.foreground,
         contentColor = theme.background,
     )
+    val eInk = LocalEInk.current
+    val preparing = stringResource(R.string.read_aloud_preparing)
     when {
         // Nothing heard yet: the first sentence is still on its way.
-        here?.utterance == null -> Box(
+        here == null || (here.preparing && !here.playing) -> Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.size(PLAY_SIZE).clip(CircleShape).background(theme.foreground),
+            modifier = Modifier
+                .size(PLAY_SIZE)
+                .clip(CircleShape)
+                .background(theme.foreground)
+                .semantics {
+                    contentDescription = preparing
+                    progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                },
         ) {
-            BusyIndicator(modifier = Modifier.size(24.dp), color = theme.background, strokeWidth = 2.dp)
+            VoiceWait(color = theme.background)
         }
-        here.playing -> FilledIconButton(feature::pause, Modifier.size(PLAY_SIZE), colors = colors) {
-            Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause), Modifier.size(32.dp))
+        here.playing -> FilledIconButton(
+            feature::pause,
+            Modifier.size(PLAY_SIZE).semantics { if (waitShown) stateDescription = preparing },
+            colors = colors,
+        ) {
+            Crossfade(waitShown, animationSpec = if (eInk) snap() else tween(), label = "play-wait") { waiting ->
+                if (waiting) {
+                    VoiceWait(color = theme.background)
+                } else {
+                    Icon(Icons.Filled.Pause, stringResource(R.string.read_aloud_pause), Modifier.size(32.dp))
+                }
+            }
         }
         else -> FilledIconButton(feature::resume, Modifier.size(PLAY_SIZE), colors = colors) {
             Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume), Modifier.size(32.dp))
         }
     }
+}
+
+/**
+ * Whether to show the wait for the voice: only once it has lasted, so a
+ * quick voice never flashes it, and kept a moment after, so the hand-off
+ * from one wait to the next does not blink.
+ */
+@Composable
+private fun rememberWaitShown(preparing: Boolean): Boolean {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(preparing) {
+        delay(if (preparing) WAIT_SHOW_MS else WAIT_HIDE_MS)
+        shown = preparing
+    }
+    return shown
 }
 
 /**
@@ -382,6 +451,10 @@ private fun ReadAloudNotice.message(): Int = when (this) {
 }
 
 private const val NOTICE_MS = 5_000L
+
+private const val WAIT_SHOW_MS = 400L
+
+private const val WAIT_HIDE_MS = 150L
 
 private val PLAY_SIZE = 56.dp
 

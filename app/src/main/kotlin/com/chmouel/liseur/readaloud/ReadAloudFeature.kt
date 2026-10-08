@@ -20,6 +20,8 @@ data class ReadAloudUi(
     val playing: Boolean,
     /** The sentence being read, for highlighting and following the voice. */
     val utterance: Locator?,
+    /** Waiting for the voice: the first sentence, or audio that has not arrived yet. */
+    val preparing: Boolean = false,
 )
 
 /** Something the reader should tell the listener about, once. */

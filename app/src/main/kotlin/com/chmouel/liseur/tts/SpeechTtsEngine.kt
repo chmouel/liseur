@@ -54,6 +54,9 @@ interface SpeechObserver {
 
     fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {}
 
+    /** True while the request waits for its audio, false once it arrives, fails, or is dropped. */
+    fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) {}
+
     companion object None : SpeechObserver
 }
 
@@ -144,6 +147,7 @@ class SpeechTtsEngine(
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
+            observer.onWaiting(requestId, true)
             val audio = try {
                 cache.take(text)
             } catch (e: CancellationException) {
@@ -151,6 +155,8 @@ class SpeechTtsEngine(
             } catch (e: SpeechError) {
                 fail(request, Error.of(e))
                 return@launch
+            } finally {
+                observer.onWaiting(requestId, false)
             }
             if (request.finished) return@launch
             listener?.onStart(requestId)

@@ -1113,6 +1113,7 @@
     <string name="read_aloud_resume">Resume reading aloud</string>
     <string name="read_aloud_stop">Stop reading aloud</string>
     <string name="read_aloud_notice_network">%1$s could not be reached. Paused; press play to try again.</string>
+    <string name="read_aloud_preparing">Preparing the voice</string>
     <string name="read_aloud_notice_rate_limited">%1$s is not taking more requests for now. Paused; try again later.</string>
     <string name="read_aloud_notice_service">%1$s could not read this sentence. Paused; press play to try again.</string>
     <string name="read_aloud_notice_output">This device could not play the voice. Paused.</string>

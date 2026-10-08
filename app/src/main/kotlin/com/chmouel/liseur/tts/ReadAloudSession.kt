@@ -118,16 +118,24 @@ internal class ReadAloudSession(
         .flatMapLatest { it?.playback?.map { p -> p.playWhenReady } ?: flowOf(false) }
         .distinctUntilChanged()
 
-    val ui: StateFlow<ReadAloudUi> = combine(
-        playWhenReady,
-        location.map { it.utteranceLocator }.distinctUntilChanged(),
-    ) { playing, utterance -> ReadAloudUi(handle.bookId, playing, utterance) }
-        .stateIn(scope, SharingStarted.Eagerly, ReadAloudUi(handle.bookId, playing = false, utterance = null))
-
     private val mutableStarting = MutableStateFlow(true)
 
     /** True until the first landing settles, so the reader can show it is on its way. */
     val starting: StateFlow<Boolean> = mutableStarting.asStateFlow()
+
+    val ui: StateFlow<ReadAloudUi> = combine(
+        playWhenReady,
+        location.map { it.utteranceLocator }.distinctUntilChanged(),
+        starting,
+        playback.waiting,
+    ) { playing, utterance, starting, waiting ->
+        ReadAloudUi(handle.bookId, playing, utterance, preparing = starting || (playing && waiting))
+    }
+        .stateIn(
+            scope,
+            SharingStarted.Eagerly,
+            ReadAloudUi(handle.bookId, playing = false, utterance = null, preparing = true),
+        )
 
     init {
         scope.launch {

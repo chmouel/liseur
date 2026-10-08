@@ -1069,6 +1069,7 @@
     <string name="read_aloud_resume">Reprendre la lecture à voix haute</string>
     <string name="read_aloud_stop">Arrêter la lecture à voix haute</string>
     <string name="read_aloud_notice_network">Impossible de joindre %1$s. En pause ; appuyez sur lecture pour réessayer.</string>
+    <string name="read_aloud_preparing">Préparation de la voix</string>
     <string name="read_aloud_notice_rate_limited">%1$s n\'accepte plus de requêtes pour le moment. En pause ; réessayez plus tard.</string>
     <string name="read_aloud_notice_service">%1$s n\'a pas pu lire cette phrase. En pause ; appuyez sur lecture pour réessayer.</string>
     <string name="read_aloud_notice_output">Cet appareil n\'a pas pu jouer la voix. En pause.</string>

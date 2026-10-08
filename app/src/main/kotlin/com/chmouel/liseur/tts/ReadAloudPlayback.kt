@@ -72,6 +72,17 @@ class ReadAloudPlayback(
     private val mutableFailure = MutableStateFlow<Failure?>(null)
     val failure: StateFlow<Failure?> = mutableFailure.asStateFlow()
 
+    private var waitingFor: TtsEngine.RequestId? = null
+    private val mutableWaiting = MutableStateFlow(false)
+
+    /** Whether the live navigator's sentence is waiting for its audio. */
+    val waiting: StateFlow<Boolean> = mutableWaiting.asStateFlow()
+
+    private fun waitFor(requestId: TtsEngine.RequestId?) {
+        waitingFor = requestId
+        mutableWaiting.value = requestId != null
+    }
+
     private val spoken = LinkedHashMap<TtsEngine.RequestId, String>()
     private var closed = false
     private var playRequested = false
@@ -203,6 +214,7 @@ class ReadAloudPlayback(
         mutableNavigator.value?.close()
         mutableNavigator.value = null
         spoken.clear()
+        waitFor(null)
     }
 
     private suspend fun land(
@@ -247,6 +259,7 @@ class ReadAloudPlayback(
         }
         val previous = mutableNavigator.value
         spoken.clear()
+        waitFor(null)
         mutableNavigator.value = fresh
         previous?.close()
         return fresh
@@ -279,6 +292,15 @@ class ReadAloudPlayback(
         // one before: replaying it repeats a sentence rather than skipping one.
         mutableFailure.value = Failure(error, UtteranceAnchor.of(navigator.location.value))
         pause()
+    }
+
+    override fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) {
+        if (waiting) {
+            // Only this navigator's requests, as for failures.
+            if (requestId in spoken) waitFor(requestId)
+        } else if (waitingFor == requestId) {
+            waitFor(null)
+        }
     }
 
     companion object {

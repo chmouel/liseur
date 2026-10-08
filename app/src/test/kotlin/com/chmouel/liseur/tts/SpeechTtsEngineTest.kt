@@ -59,6 +59,7 @@ class SpeechTtsEngineTest {
     }
 
     private val events = LinkedBlockingQueue<String>()
+    private val waits = LinkedBlockingQueue<String>()
     private val engine = SpeechTtsEngine(
         scope = scope,
         cache = cache,
@@ -66,6 +67,10 @@ class SpeechTtsEngineTest {
         voices = emptySet(),
         publicationLanguage = null,
         initialPreferences = SpeechTtsPreferences(),
+        observer = object : SpeechObserver {
+            override fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) =
+                waits.put("${if (waiting) "waiting" else "done waiting"} ${requestId.value}")
+        },
     ).apply {
         setListener(object : TtsEngine.Listener<SpeechTtsEngine.Error> {
             fun record(event: String) = events.put("$event@${Thread.currentThread().name.substringBefore(" @")}")
@@ -177,5 +182,35 @@ class SpeechTtsEngineTest {
         }
         assertEquals("interrupted 1@main", nextEvent())
         noMoreEvents()
+    }
+
+    private fun nextWait(): String? = waits.poll(2, TimeUnit.SECONDS)
+
+    @Test
+    fun waitsOnlyUntilTheAudioArrives() {
+        speak("1", "Hello.")
+        val reply = nextRequest().second
+        assertEquals("waiting 1", nextWait())
+        assertTrue(waits.isEmpty())
+        reply.complete(SpeechAudio(ByteArray(8)))
+        assertEquals("done waiting 1", nextWait())
+        assertEquals("start 1@main", nextEvent())
+        nextPlay().complete(Unit)
+        assertEquals("done 1@main", nextEvent())
+        assertNull(waits.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun stoppingOrFailingEndsTheWait() {
+        speak("1", "One.")
+        nextRequest()
+        assertEquals("waiting 1", nextWait())
+        onMain { engine.stop() }
+        assertEquals("done waiting 1", nextWait())
+
+        speak("2", "Two.")
+        nextRequest().second.completeExceptionally(SpeechError.Service(500))
+        assertEquals("waiting 2", nextWait())
+        assertEquals("done waiting 2", nextWait())
     }
 }
