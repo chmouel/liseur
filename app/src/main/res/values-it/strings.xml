@@ -741,6 +741,8 @@
     <string name="settings_keep_screen_on_detail">Lo schermo resta acceso mentre un libro è aperto, qualunque sia l\'impostazione di sospensione del dispositivo. Consuma batteria, e un singolo libro può essere impostato a parte dall\'interruttore del lettore.</string>
     <string name="settings_scroll_mode">Lettura a scorrimento</string>
     <string name="settings_scroll_mode_detail">Il capitolo scorre come una pagina lunga invece di essere spezzato in pagine da girare. Un singolo libro può essere impostato a parte dall\'interruttore del lettore.</string>
+    <string name="settings_lock_footer">Blocca il piè di pagina</string>
+    <string name="settings_lock_footer_detail">Impedisce modifiche accidentali alla configurazione del piè di pagina durante la lettura.</string>
     <string name="settings_eink">Schermo e-ink</string>
     <string name="settings_eink_detail">Toglie le animazioni, che la carta elettronica sbava piuttosto che disegnare. Rilevato automaticamente; impostalo tu se l\'ipotesi è sbagliata.</string>
     <string name="settings_color_eink">E-ink a colori</string>

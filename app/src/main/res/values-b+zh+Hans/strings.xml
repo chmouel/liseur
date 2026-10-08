@@ -768,6 +768,8 @@
     <string name="settings_keep_screen_on_detail">打开书本时屏幕保持唤醒，不受设备睡眠设置影响。会增加耗电，单本书也可设为与阅读器开关不同。</string>
     <string name="settings_scroll_mode">滚动阅读</string>
     <string name="settings_scroll_mode_detail">章节作为一整页连续滚动，而不再分成可翻动的页面。单本书也可设为与阅读器开关不同。</string>
+    <string name="settings_lock_footer">锁定页脚</string>
+    <string name="settings_lock_footer_detail">防止阅读时意外更改页脚配置。</string>
     <string name="settings_eink">墨水屏</string>
     <string name="settings_eink_detail">关闭动画，因为电子纸只会拖影而无法流畅绘制。可自动检测；若判断有误可手动设置。</string>
     <string name="settings_color_eink">彩色墨水屏</string>

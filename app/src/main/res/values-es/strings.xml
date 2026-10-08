@@ -741,6 +741,8 @@
     <string name="settings_keep_screen_on_detail">La pantalla se mantiene despierta mientras hay un libro abierto, diga lo que diga el dispositivo sobre el sueño. Gasta batería, y un solo libro se puede apartar del interruptor propio del lector.</string>
     <string name="settings_scroll_mode">Leer desplazando</string>
     <string name="settings_scroll_mode_detail">El capítulo sigue como una página larga en lugar de partirse en páginas que pasas. Un solo libro se puede apartar del interruptor propio del lector.</string>
+    <string name="settings_lock_footer">Bloquear el pie de página</string>
+    <string name="settings_lock_footer_detail">Evita cambios accidentales en la configuración del pie de página durante la lectura.</string>
     <string name="settings_eink">Pantalla de tinta electrónica</string>
     <string name="settings_eink_detail">Quita la animación, que el papel electrónico emborrona en vez de dibujar. Se detecta automáticamente; ajústalo tú si la detección falla.</string>
     <string name="settings_color_eink">Tinta electrónica en color</string>

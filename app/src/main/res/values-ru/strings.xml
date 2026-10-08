@@ -791,6 +791,8 @@
     <string name="settings_keep_screen_on_detail">Экран не засыпает, пока открыта книга, независимо от настроек устройства. Расходует батарею; для одной книги можно задать отдельно в меню читалки.</string>
     <string name="settings_scroll_mode">Читать прокруткой</string>
     <string name="settings_scroll_mode_detail">Глава идёт одной длинной страницей, а не разбивается на листы. Для одной книги можно задать отдельно в меню читалки.</string>
+    <string name="settings_lock_footer">Заблокировать нижнюю строку</string>
+    <string name="settings_lock_footer_detail">Предотвращает случайные изменения настроек нижней строки во время чтения.</string>
     <string name="settings_eink">Экран электронных чернил</string>
     <string name="settings_eink_detail">Отключает анимацию, которую электронная бумага размазывает, а не рисует. Определяется автоматически; задайте сами, если угадка неверна.</string>
     <string name="settings_color_eink">Цветные электронные чернила</string>

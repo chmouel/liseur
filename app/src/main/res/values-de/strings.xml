@@ -752,6 +752,8 @@
     <string name="settings_keep_screen_on_detail">Der Bildschirm bleibt wach, solange ein Buch offen ist, egal wie dein Gerät den Schlaf einstellt. Kostet Akku, und ein einzelnes Buch lässt sich vom eigenen Schalter des Lesers getrennt einstellen.</string>
     <string name="settings_scroll_mode">Durch Scrollen lesen</string>
     <string name="settings_scroll_mode_detail">Das Kapitel läuft als eine lange Seite weiter, statt in umblätterbare Seiten zerlegt zu werden. Ein einzelnes Buch lässt sich vom eigenen Schalter des Lesers getrennt einstellen.</string>
+    <string name="settings_lock_footer">Fußzeile sperren</string>
+    <string name="settings_lock_footer_detail">Verhindert versehentliche Änderungen an der Konfiguration der Fußzeile beim Lesen.</string>
     <string name="settings_eink">E-Ink-Bildschirm</string>
     <string name="settings_eink_detail">Lässt Animationen weg, die elektronisches Papier eher verschmiert als zeichnet. Wird automatisch erkannt; stelle es selbst ein, wenn die Vermutung falsch ist.</string>
     <string name="settings_color_eink">Farb-E-Ink</string>
