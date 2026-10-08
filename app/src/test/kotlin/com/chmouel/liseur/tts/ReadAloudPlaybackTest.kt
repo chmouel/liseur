@@ -77,6 +77,7 @@ class ReadAloudPlaybackTest {
 
     /** Fails the nth request for a sentence, once. */
     private val failures = ConcurrentHashMap<String, Int>()
+    private val chapterStops = AtomicInteger()
 
     private lateinit var publication: Publication
     private lateinit var playback: ReadAloudPlayback
@@ -129,6 +130,7 @@ class ReadAloudPlaybackTest {
                         ?.createNavigator(listener, initial)
                         ?.getOrNull()
                 },
+                onChapterEnded = { chapterStops.incrementAndGet() },
             )
         }
     }
@@ -158,6 +160,60 @@ class ReadAloudPlaybackTest {
             check(System.currentTimeMillis() < deadline) { "no failure after $played" }
             Thread.sleep(10)
         }
+    }
+
+    private fun awaitChapterStop() {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (chapterStops.get() == 0 || playback.navigator.value!!.playback.value.playWhenReady) {
+            check(System.currentTimeMillis() < deadline) { "never stopped at chapter end after $played" }
+            Thread.sleep(10)
+        }
+    }
+
+    @Test
+    fun chapterTimerPausesBeforeTheNextChapterAndResumeContinuesThere() {
+        runBlocking(main) {
+            playback.start(chapterStart, target = { it.utterance == TAIL.last() })
+            playback.stopAtChapterEnd(true)
+        }
+        awaitChapterStop()
+        assertEquals(listOf(TAIL.last()), played.toList())
+        assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+        assertEquals(null, requested[NEXT_CHAPTER])
+
+        runBlocking(main) { playback.resume() }
+        awaitPlayed(2)
+        assertEquals(NEXT_CHAPTER, played[1])
+        assertEquals(1, chapterStops.get())
+    }
+
+    @Test
+    fun chapterTimerArmedBeforeOpeningSurvivesAPausedVoiceReplay() {
+        runBlocking(main) {
+            playback.stopAtChapterEnd(true)
+            playback.start(chapterStart, target = {
+                playback.pause()
+                it.utterance == TAIL.last()
+            })
+            playback.replay()
+            assertTrue(played.isEmpty())
+            playback.resume()
+        }
+        awaitChapterStop()
+        assertEquals(listOf(TAIL.last()), played.toList())
+        assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
+    }
+
+    @Test
+    fun cancellingTheChapterTimerAllowsPlaybackIntoTheNextChapter() {
+        runBlocking(main) {
+            playback.stopAtChapterEnd(true)
+            playback.start(chapterStart, target = { it.utterance == TAIL.last() })
+            playback.stopAtChapterEnd(false)
+        }
+        awaitPlayed(2)
+        assertEquals(listOf(TAIL.last(), NEXT_CHAPTER), played.take(2))
+        assertEquals(0, chapterStops.get())
     }
 
     /** Readium's player steps past a failed sentence unless it is paused first; make sure it has. */
@@ -467,9 +523,11 @@ class ReadAloudPlaybackTest {
                   </metadata>
                   <manifest>
                     <item id="c1" href="one.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="c2" href="two.xhtml" media-type="application/xhtml+xml"/>
                   </manifest>
                   <spine>
                     <itemref idref="c1"/>
+                    <itemref idref="c2"/>
                   </spine>
                 </package>""",
             )
@@ -483,6 +541,14 @@ class ReadAloudPlaybackTest {
                   </body>
                 </html>""",
             )
+            put(
+                "OEBPS/two.xhtml",
+                """<?xml version="1.0" encoding="UTF-8"?>
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <head><title>Two</title></head>
+                  <body><p>$NEXT_CHAPTER</p></body>
+                </html>""",
+            )
         }
     }
 
@@ -494,6 +560,7 @@ class ReadAloudPlaybackTest {
         const val FOURTH = "The fourth sentence comes after it and closes the opening."
         const val REPEATED = "The same line is repeated here, word for word, twice."
         const val LAST = "And these last words of the paragraph close it all."
+        const val NEXT_CHAPTER = "The next chapter starts with a sentence that should wait for play."
         val TAIL = (1..30).map { "Sentence number $it carries this long paragraph further along." }
     }
 }

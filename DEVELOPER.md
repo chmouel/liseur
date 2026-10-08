@@ -1460,11 +1460,15 @@ reader behavior.
   write and poll: it keeps the pitch, applies mid-sentence, works for both
   providers and leaves cached audio valid. The output's stall deadline
   allows for the slowest speed.
-- The sleep timer (`SpeechReadAloud.setSleepTimer`, 5 to 60 minutes) lives
+- The sleep timer (5 to 60 minutes or "Stop at end of chapter") lives
   with the session rather than the reader, so it runs with the screen
   off. It counts on `SystemClock.elapsedRealtime`, which keeps time while
   the device sleeps, pauses the session when it fires, and is dropped
   when the session ends.
+  The chapter option pauses before the next EPUB reading section is spoken,
+  clears itself, and leaves that section ready to resume. It uses reading-order
+  resources as chapter boundaries, like the reader's chapter matching; chapters
+  sharing a single resource are not distinguished.
 - A status line under the player controls names the voice reading (and,
   for an OpenAI-compatible voice whose id carries one, its language). The
   speed is left out because the speed button already shows it.

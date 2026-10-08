@@ -122,6 +122,7 @@ internal class SpeechReadAloud(
                     checkpoints = checkpoints,
                     onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
+                    onChapterEnded = { setSleepTimer(null) },
                 )
                 held = false
                 mutableCurrent.value = session
@@ -161,10 +162,16 @@ internal class SpeechReadAloud(
 
     /** Pauses reading aloud in [minutes], or never when null. */
     fun setSleepTimer(minutes: Int?) {
+        applySleepTimer(minutes?.let { SleepTimer.starting(it, SystemClock.elapsedRealtime()) })
+    }
+
+    fun setSleepTimerToChapterEnd() = applySleepTimer(SleepTimer.EndOfChapter)
+
+    private fun applySleepTimer(timer: SleepTimer?) {
         sleeping?.cancel()
-        val timer = minutes?.let { SleepTimer.starting(it, SystemClock.elapsedRealtime()) }
         mutableSleepTimer.value = timer
-        if (timer == null) return
+        mutableCurrent.value?.playback?.stopAtChapterEnd(timer == SleepTimer.EndOfChapter)
+        if (timer !is SleepTimer.Timed) return
         sleeping = scope.launch {
             // Measured on the clock that counts deep sleep, which a delay alone does not.
             while (true) {

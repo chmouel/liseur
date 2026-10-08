@@ -1161,6 +1161,8 @@
     <string name="read_aloud_speed">Lesegeschwindigkeit</string>
     <string name="read_aloud_sleep_timer">Schlaftimer</string>
     <string name="read_aloud_sleep_off">Aus</string>
+    <string name="read_aloud_sleep_end_of_chapter">Am Kapitelende stoppen</string>
+    <string name="read_aloud_sleep_chapter_end">Kapitelende</string>
     <string name="read_aloud_sleep_left">%1$d Min.</string>
     <plurals name="read_aloud_sleep_minutes">
         <item quantity="one">%d Minute</item>

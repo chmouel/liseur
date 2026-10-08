@@ -1149,6 +1149,8 @@
     <string name="read_aloud_speed">Velocità di lettura</string>
     <string name="read_aloud_sleep_timer">Timer di spegnimento</string>
     <string name="read_aloud_sleep_off">Disattivato</string>
+    <string name="read_aloud_sleep_end_of_chapter">Interrompi alla fine del capitolo</string>
+    <string name="read_aloud_sleep_chapter_end">Fine capitolo</string>
     <string name="read_aloud_sleep_left">%1$d min</string>
     <plurals name="read_aloud_sleep_minutes">
         <item quantity="one">%d minuto</item>

@@ -59,6 +59,7 @@ internal class ReadAloudSession(
     private val checkpoints: ListeningCheckpoints,
     private val onNotice: (ReadAloudNotice) -> Unit,
     private val onEnded: (ReadAloudSession) -> Unit,
+    private val onChapterEnded: () -> Unit,
     private val checkpointMillis: Long = CHECKPOINT_MILLIS,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -88,6 +89,10 @@ internal class ReadAloudSession(
         },
         prefetcher = prefetcher,
         onStopRequested = { stop() },
+        onChapterEnded = {
+            settle()
+            onChapterEnded()
+        },
     )
 
     private var generation: Long? = null

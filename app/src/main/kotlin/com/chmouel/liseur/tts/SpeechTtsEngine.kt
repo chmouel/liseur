@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.yield
 import org.readium.navigator.media.tts.TtsEngine
 import org.readium.navigator.media.tts.TtsEngineProvider
 import org.readium.r2.navigator.preferences.PreferencesEditor
@@ -48,7 +49,8 @@ class SpeechTtsPreferencesEditor(initial: SpeechTtsPreferences) : PreferencesEdi
  * that failed, rather than reading it from the player's state.
  */
 interface SpeechObserver {
-    fun onSpeak(requestId: TtsEngine.RequestId, text: String) {}
+    /** False interrupts this request before any audio is fetched or played. */
+    fun onSpeak(requestId: TtsEngine.RequestId, text: String): Boolean = true
 
     fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {}
 
@@ -135,8 +137,13 @@ class SpeechTtsEngine(
         current?.let { interrupt(it) }
         val request = Request(requestId)
         current = request
-        observer.onSpeak(requestId, text)
         request.job = scope.launch {
+            // Readium maps the new utterance to its public location asynchronously.
+            yield()
+            if (!observer.onSpeak(requestId, text)) {
+                finish(request) { onInterrupted(requestId) }
+                return@launch
+            }
             val audio = try {
                 cache.take(text)
             } catch (e: CancellationException) {

@@ -1237,6 +1237,8 @@
     <string name="read_aloud_speed">Скорость чтения</string>
     <string name="read_aloud_sleep_timer">Таймер сна</string>
     <string name="read_aloud_sleep_off">Выключен</string>
+    <string name="read_aloud_sleep_end_of_chapter">Остановить в конце главы</string>
+    <string name="read_aloud_sleep_chapter_end">Конец главы</string>
     <string name="read_aloud_sleep_left">%1$d мин</string>
     <plurals name="read_aloud_sleep_minutes">
         <item quantity="one">%d минута</item>

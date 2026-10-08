@@ -217,7 +217,7 @@ private fun SleepButton(feature: SpeechReadAloud) {
     val timer by feature.sleepTimer.collectAsStateWithLifecycle()
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(timer) {
-        while (timer != null) {
+        while (timer is SleepTimer.Timed) {
             now = SystemClock.elapsedRealtime()
             delay(1_000)
         }
@@ -227,7 +227,12 @@ private fun SleepButton(feature: SpeechReadAloud) {
         TextControlButton(stringResource(R.string.read_aloud_sleep_timer), { open = true }) {
             when (val set = timer) {
                 null -> Icon(Icons.Outlined.Bedtime, contentDescription = null)
-                else -> Text(
+                SleepTimer.EndOfChapter -> Text(
+                    stringResource(R.string.read_aloud_sleep_chapter_end),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                )
+                is SleepTimer.Timed -> Text(
                     stringResource(R.string.read_aloud_sleep_left, set.minutesLeft(now)),
                     style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
@@ -239,8 +244,12 @@ private fun SleepButton(feature: SpeechReadAloud) {
                 open = false
                 feature.setSleepTimer(null)
             }
+            MenuItem(stringResource(R.string.read_aloud_sleep_end_of_chapter), timer == SleepTimer.EndOfChapter) {
+                open = false
+                feature.setSleepTimerToChapterEnd()
+            }
             SleepTimer.CHOICES.forEach { minutes ->
-                MenuItem(pluralStringResource(R.plurals.read_aloud_sleep_minutes, minutes, minutes), timer?.minutes == minutes) {
+                MenuItem(pluralStringResource(R.plurals.read_aloud_sleep_minutes, minutes, minutes), (timer as? SleepTimer.Timed)?.minutes == minutes) {
                     open = false
                     feature.setSleepTimer(minutes)
                 }

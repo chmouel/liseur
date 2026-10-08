@@ -17,6 +17,7 @@ import org.readium.navigator.media.tts.TtsEngine
 import org.readium.navigator.media.tts.TtsNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.util.Url
 
 @OptIn(ExperimentalReadiumApi::class)
 typealias SpeechNavigator =
@@ -45,6 +46,7 @@ class ReadAloudPlayback(
     private val opener: NavigatorOpener,
     private val prefetcher: UtterancePrefetcher<Locator>? = null,
     private val onStopRequested: () -> Unit = {},
+    private val onChapterEnded: () -> Unit = {},
     private val stepTimeoutMillis: Long = 2_000,
 ) : SpeechObserver {
 
@@ -73,6 +75,8 @@ class ReadAloudPlayback(
     private val spoken = LinkedHashMap<TtsEngine.RequestId, String>()
     private var closed = false
     private var playRequested = false
+    private var chapterEndArmed = false
+    private var chapterHref: Url? = null
     private val landing = Mutex()
 
     private val listener = object : TtsNavigator.Listener {
@@ -127,6 +131,12 @@ class ReadAloudPlayback(
     fun pause() {
         playRequested = false
         mutableNavigator.value?.pause()
+    }
+
+    /** Pauses before leaving the current EPUB reading section, including with the screen off. */
+    fun stopAtChapterEnd(enabled: Boolean) {
+        chapterEndArmed = enabled
+        chapterHref = if (enabled) mutableNavigator.value?.location?.value?.href else null
     }
 
     /**
@@ -234,9 +244,21 @@ class ReadAloudPlayback(
         return fresh
     }
 
-    override fun onSpeak(requestId: TtsEngine.RequestId, text: String) {
+    override fun onSpeak(requestId: TtsEngine.RequestId, text: String): Boolean {
+        if (chapterEndArmed) {
+            val href = mutableNavigator.value?.location?.value?.href
+            if (chapterHref == null) {
+                chapterHref = href
+            } else if (href != chapterHref) {
+                stopAtChapterEnd(false)
+                pause()
+                onChapterEnded()
+                return false
+            }
+        }
         spoken[requestId] = text
         if (spoken.size > SPOKEN_KEPT) spoken.remove(spoken.keys.first())
+        return true
     }
 
     override fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {
