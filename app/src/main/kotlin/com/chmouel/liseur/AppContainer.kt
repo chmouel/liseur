@@ -95,8 +95,10 @@ import org.readium.r2.streamer.parser.DefaultPublicationParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
@@ -156,11 +158,6 @@ class AppContainer(context: Context) {
         bookOrbitBindings = database.bookOrbitBindingDao(),
         remoteStatsDao = database.remoteStatsDao(),
         onReadingHistoryRemoved = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
-        // Launched on its own: the sweep must not run inside a caller's
-        // transaction. Not opened yet, it sweeps when it opens.
-        onBooksRemoved = {
-            if (savedTranslationsOpening.isInitialized()) applicationScope.launch { savedTranslations.sweep() }
-        },
     )
 
     private val savedTranslationsOpening = lazy {
@@ -175,6 +172,18 @@ class AppContainer(context: Context) {
 
     /** Sentences page translation translated, kept apart from the library and its backups. */
     val savedTranslations: SavedTranslations by savedTranslationsOpening
+
+    init {
+        // Once at start, then after each change to the library once it has
+        // committed: a removal inside a caller's transaction only shows then.
+        val saved = context.getDatabasePath(TranslationCacheDatabase.NAME)
+        applicationScope.launch {
+            database.invalidationTracker.createFlow("books").conflate().collect {
+                if (savedTranslationsOpening.isInitialized() || saved.exists()) savedTranslations.sweep()
+                delay(SWEEP_SPACING_MS)
+            }
+        }
+    }
 
     /** [bookUrl]'s saved page translations, the store opened only once a page is translated. */
     fun pageTranslations(bookUrl: String): PageTranslationCache = object : PageTranslationCache {
@@ -784,6 +793,9 @@ class AppContainer(context: Context) {
         networkAvailability = networkAvailability,
     )
 }
+
+// Between sweeps of saved translations while the library keeps changing, as through a scan.
+private const val SWEEP_SPACING_MS = 1_000L
 
 val Context.container: AppContainer
     get() = (applicationContext as LiseurApplication).container

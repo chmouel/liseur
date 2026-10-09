@@ -29,6 +29,9 @@ fun interface PageSentences {
 /** A sentence's translation, to put in the page where the sentence was. [id] counts them in the run. */
 data class PageSwap(val id: Int, val sentence: PageSentence, val translation: String)
 
+/** A sentence's translation and the [SentenceTranslator.answering] name of what gave it. */
+data class Translated(val text: String, val by: String)
+
 /**
  * One service translating sentences between two languages for as long as
  * a page is translated, from [TranslateFeature.openPage].
@@ -47,8 +50,11 @@ interface SentenceTranslator {
     /** Where the text goes now, for "Translated by %s."; null for the device. */
     val destination: String?
 
-    /** [sentence] translated, with [context] as the sentence before it. Throws [TranslationError]. */
-    suspend fun translate(sentence: String, context: String?): String
+    /**
+     * [sentence] translated, with [context] as the sentence before it, and
+     * the [answering] name of what translated it. Throws [TranslationError].
+     */
+    suspend fun translate(sentence: String, context: String?): Translated
 
     /** Lets go of what the service held for the run, such as the device's translator. */
     fun close()
@@ -370,13 +376,14 @@ internal class PageTranslation<P>(
         }
         lookup.translation?.let { return it }
         // Settings changed while it was asked may have sent it to another service.
-        return translator.translate(sentence.text, context).also {
-            // Far longer than the sentence is not its translation, and it would be held for the whole session.
-            if (it.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
-                throw TranslationError.Malformed("the translation is far longer than the sentence")
-            }
-            if (translator.answering() == identity) cache.put(keyOf(identity), it, lookup.stamp)
+        val answer = translator.translate(sentence.text, context)
+        // Far longer than the sentence is not its translation, and it would be held for the whole session.
+        if (answer.text.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
+            throw TranslationError.Malformed("the translation is far longer than the sentence")
         }
+        // Filed under what answered, and only while that is still what the settings choose.
+        if (translator.answering() == answer.by) cache.put(keyOf(answer.by), answer.text, lookup.stamp)
+        return answer.text
     }
 
     private val TranslationError.halts: Boolean

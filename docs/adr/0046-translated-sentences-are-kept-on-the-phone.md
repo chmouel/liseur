@@ -22,8 +22,9 @@ a Room database separate from `liseur.db`.
 - The store holds at most 50,000 sentences and 20 million characters,
   dropping the least recently read first.
 - Removing a book deletes its sentences, by sweeping rows whose book the
-  library no longer holds, since a removal may still be inside a caller's
-  transaction when it returns.
+  library no longer holds. The sweep runs at start and after each
+  committed change to the library, since a removal may still be inside a
+  caller's transaction when it returns.
 - Translation settings show the count and size and can clear them all. A
   reply asked before a clear, or before its book was removed, is shown
   but not saved.
