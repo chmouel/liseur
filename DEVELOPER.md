@@ -1706,7 +1706,10 @@ reader behavior.
 - `reader/PageSwaps.kt` injects the script that applies swaps: it finds
   each sentence by selector, text before and text, keeps the original of
   every text node it changes, and redraws from the originals, so `restore`
-  gives the page back byte for byte. `reader/TranslatedPages.kt` resends
+  gives the page back byte for byte. A sentence's translation goes into
+  its own text rather than an emphasised word; note references keep
+  their number and link, and a sentence holding any other link stays
+  untranslated. `reader/TranslatedPages.kt` resends
   swaps to every attached WebView on each layout pass, since Readium
   reloads and recycles them, and keeps restoring recycled views after
   Stop. While translated, positions save without quoted text, BookOrbit is

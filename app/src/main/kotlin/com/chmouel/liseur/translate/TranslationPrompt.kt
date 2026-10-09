@@ -43,11 +43,21 @@ internal object TranslationPrompt {
 
     private fun safe(text: String) = text.replace(MARKER, "<\u200B$1")
 
-    /** The translation in [reply]: trimmed, without markers a model may have kept. */
+    /**
+     * The translation in [reply]: trimmed, without markers a model may have
+     * kept, nor the context it was told never to repeat, and only what is
+     * between the passage markers when it kept them.
+     */
     fun clean(reply: String): String {
         var text = reply.trim()
-        if (text.startsWith(OPEN, ignoreCase = true)) text = text.substring(OPEN.length)
-        if (text.endsWith(CLOSE, ignoreCase = true)) text = text.dropLast(CLOSE.length)
+        if (text.startsWith(CONTEXT_OPEN, ignoreCase = true)) {
+            val end = text.indexOf(CONTEXT_CLOSE, ignoreCase = true)
+            if (end >= 0) text = text.substring(end + CONTEXT_CLOSE.length)
+        }
+        val open = text.indexOf(OPEN, ignoreCase = true)
+        if (open >= 0) text = text.substring(open + OPEN.length)
+        val close = text.lastIndexOf(CLOSE, ignoreCase = true)
+        if (close >= 0) text = text.substring(0, close)
         return text.trim()
     }
 
