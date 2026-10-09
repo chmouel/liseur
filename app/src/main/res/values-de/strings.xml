@@ -1211,6 +1211,7 @@
     <string name="services_server_used_both">%1$s, für Vorlesen und Übersetzung verwendet</string>
     <string name="services_delete_translation">Übersetzung verwendet %1$s. Sie wechselt zum Übersetzer dieses Telefons.</string>
     <string name="services_delete_translation_off">Übersetzung verwendet %1$s. Sie ist aus, bis du einen anderen Dienst wählst.</string>
+    <string name="services_delete_translation_unsure">Übersetzung verwendet %1$s. Sie wechselt zum Übersetzer dieses Telefons, falls es einen hat.</string>
     <string name="translation_settings_title">Übersetzung</string>
     <string name="translation_settings_entry_summary">%1$s, nach %2$s</string>
     <string name="translation_settings_provider">Übersetzungsdienst</string>

@@ -1199,6 +1199,7 @@
     <string name="services_server_used_both">%1$s, usado para leer en voz alta y traducir</string>
     <string name="services_delete_translation">Traducir usa %1$s. Pasará al traductor de este teléfono.</string>
     <string name="services_delete_translation_off">Traducir usa %1$s. Quedará desactivado hasta que elijas otro servicio.</string>
+    <string name="services_delete_translation_unsure">Traducir usa %1$s. Pasará al traductor de este teléfono, si tiene uno.</string>
     <string name="translation_settings_title">Traducción</string>
     <string name="translation_settings_entry_summary">%1$s, hacia %2$s</string>
     <string name="translation_settings_provider">Servicio de traducción</string>

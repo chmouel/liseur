@@ -258,8 +258,11 @@ internal class DeviceTranslationService(private val context: Context) : Translat
         private const val QUERY_TIMEOUT_MS = 5_000L
         private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-        /** Whether this phone has a translator apps can use, whether or not a language is downloaded. */
-        suspend fun available(context: Context): Boolean = query(context).orEmpty().isNotEmpty()
+        /**
+         * Whether this phone has a translator apps can use, whether or not a
+         * language is downloaded; null when the system did not answer.
+         */
+        suspend fun available(context: Context): Boolean? = query(context)?.isNotEmpty()
 
         /** The device's pairs; null when the system did not answer in time or failed. */
         private suspend fun query(context: Context): List<DevicePair>? {
