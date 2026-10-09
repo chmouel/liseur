@@ -147,6 +147,12 @@ class SyncableSettingsTest {
             "app.read_aloud_server",
             "app.read_aloud_server_state",
             "app.read_aloud_unsettled_servers",
+            // So is which service translates, as the device's own may not exist elsewhere.
+            "app.translation_provider",
+            "app.translation_server",
+            "app.translation_server_state",
+            "app.translation_gemini_model",
+            "app.translation_target",
         )) {
             assertFalse("$local should not travel", local in keys)
         }

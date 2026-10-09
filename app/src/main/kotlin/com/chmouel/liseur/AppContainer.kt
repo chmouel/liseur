@@ -67,6 +67,8 @@ import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.translate.TranslateFeature
+import com.chmouel.liseur.translate.TranslateFeatureFactory
 import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.reader.OpenBookHandles
 import com.chmouel.liseur.reader.ReaderPresence
@@ -657,6 +659,11 @@ class AppContainer(context: Context) {
     /** Reading aloud: a Gemini voice in the Play build, nothing in the F-Droid one. */
     val readAloud: ReadAloudFeature by lazy {
         ReadAloudFeatureFactory.create(context.applicationContext, this)
+    }
+
+    /** Translating a selected passage: the phone's translator, or a service from the Services page. */
+    val translate: TranslateFeature by lazy {
+        TranslateFeatureFactory.create(context.applicationContext, this)
     }
 
     /** Reading added up across every device, when a server keeps it. */

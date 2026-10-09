@@ -23,9 +23,9 @@ internal class ServiceAccounts(context: Context, connections: ServerConnections)
         val failure by gemini.keyFailure.collectAsState()
         SettingsGroup(stringResource(R.string.read_aloud_provider_gemini)) {
             KeyRow(
-                title = stringResource(R.string.read_aloud_settings_key),
-                missing = stringResource(R.string.read_aloud_settings_key_missing),
-                privacy = stringResource(R.string.read_aloud_settings_privacy),
+                title = stringResource(R.string.services_gemini_key),
+                missing = stringResource(R.string.services_gemini_key_missing),
+                privacy = stringResource(R.string.services_gemini_privacy),
                 owner = GeminiAccount.OWNER,
                 configured = configured,
                 failed = failure == GeminiAccount.OWNER,
