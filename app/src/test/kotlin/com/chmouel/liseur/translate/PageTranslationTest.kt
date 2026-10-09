@@ -244,5 +244,9 @@ class PageTranslationTest {
         assertEquals("s3", page.original("ch1.xhtml", "rains", "No. It ")?.text)
         assertEquals(null, page.original("ch1.xhtml", "Oui", "No. "))
         assertEquals(null, page.original("ch2.xhtml", "rains", ""))
+
+        // A selection running from one translation into the next starts in the first.
+        assertEquals("s1", page.original("ch1.xhtml", "rains. No", "It rains. Yes, it ")?.text)
+        assertEquals("s0", page.original("ch1.xhtml", "rains. Yes", "It ")?.text)
     }
 }
