@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.tts.GeminiAccount
 import com.chmouel.liseur.tts.ListedField
@@ -49,6 +50,8 @@ internal class GeminiTranslationService(
 
     private val model: Flow<String> =
         settings.settings.map { GeminiTranslation.modelOf(it.translationGeminiModel) }.distinctUntilChanged()
+
+    override fun model(s: AppSettings) = GeminiTranslation.modelOf(s.translationGeminiModel)
 
     override suspend fun destination(): String = "Gemini"
 

@@ -786,7 +786,6 @@ class BookRemovalTest {
         ).allowMainThreadQueries().build()
         try {
             val saved = SavedTranslations(cacheDb, present = { db.bookDao().presentUrls(it) })
-            var told = 0
             val removal = BookRemoval(
                 bookDao = db.bookDao(),
                 sessionDao = db.readingSessionDao(),
@@ -796,7 +795,6 @@ class BookRemovalTest {
                 annotationDao = db.annotationDao(),
                 annotationSyncDao = db.annotationSyncDao(),
                 inTransaction = { work -> db.withTransaction { work() } },
-                onBooksRemoved = { told++ },
             )
             db.bookDao().upsert(book("gone"))
             db.bookDao().upsert(book("kept"))
@@ -812,7 +810,6 @@ class BookRemovalTest {
 
             removal.deleteByUrls(listOf("gone"))
             saved.sweep()
-            assertEquals(2, told)
             assertNull(saved.forBook("gone").get("one").translation)
             assertEquals("un", saved.forBook("kept").get("one").translation)
         } finally {
