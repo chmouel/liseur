@@ -1711,7 +1711,9 @@ reader behavior.
   and the sentence. Bump `TranslationPrompt.VERSION` when the prompt
   changes. A run is opened with the settings its identity was read from
   and asks with those, never the settings of the moment, so an answer
-  always belongs to its identity. `PageTranslation` looks up before
+  always belongs to its identity. Its retries are judged by that binding
+  too: a settings change while a sentence is out binds the run again
+  and asks the sentence anew. `PageTranslation` looks up before
   asking, looks up again if the service changed during the lookup, and
   saves only under the service that answered. The store keeps 50,000 sentences and 20 million
   characters, least recently used first, trimming at start and every
