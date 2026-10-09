@@ -126,7 +126,7 @@ internal object TranslatedPages {
         // in this chapter too; the turn is measured again when it arrives.
         fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown
         val walked = run.walkedIn(href)
-        val reached = if (walked.isEmpty()) -1 else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
+        val reached = if (walked.isEmpty()) PageSwaps.UNSEEN else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
         if (moved()) return
         if (reached >= 0) {
             run.onReader(PageReader.Within(walked[reached]))
@@ -144,7 +144,7 @@ internal object TranslatedPages {
             null
         } ?: return
         if (moved() || ResourceAddress.canonicalPath(place.href.toString()) != href) return
-        run.onReader(PageReader.Elsewhere(place, key(place)))
+        run.onReader(PageReader.Elsewhere(place, key(place), before = reached == PageSwaps.BEFORE))
     }
 
     /** Whether the reader has gone past [sentence] on the page shown now; false when it is not there. */

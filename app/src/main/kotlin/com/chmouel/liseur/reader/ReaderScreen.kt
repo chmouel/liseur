@@ -226,6 +226,7 @@ import kotlinx.coroutines.CancellationException
 import java.io.IOException
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import org.w3c.dom.Document
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -667,6 +668,8 @@ fun ReaderScreen(
     var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
     // The page translated sentence by sentence, while it is; see [TranslatedPages].
     var pageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
+    // Up on every start and stop, so a start that waited across another gives way to it.
+    val pageTranslationStarts = remember { AtomicInteger() }
     // Up from the start of a run until the page shows the book's own
     // words again: positions saved meanwhile carry none of the page's.
     var pageTranslated by remember { mutableStateOf(false) }
@@ -2062,6 +2065,7 @@ fun ReaderScreen(
 
     // The book's words go back on the page in the effect below.
     fun stopTranslatingPage() {
+        pageTranslationStarts.incrementAndGet()
         pageTranslation?.stop()
         pageTranslation = null
     }
@@ -2076,8 +2080,14 @@ fun ReaderScreen(
         effectScope.launch {
             readAloudFeature.stop()
             stopTranslatingPage()
+            val attempt = pageTranslationStarts.get()
             val translator = translate.openPage(source, target) ?: return@launch
             val start = SpokenPassage.startingPoint(nav, selection)
+            // Another start, a stop or read aloud came while this one waited: it is theirs now.
+            if (attempt != pageTranslationStarts.get()) {
+                translator.close()
+                return@launch
+            }
             val run = PageTranslation<Locator>(effectScope, translator, pageTranslations, { place ->
                 TranslatedPages.sentences(publication, place, source)
             }, behind = { sentence -> navigatorNow?.let { TranslatedPages.behind(it, sentence) } ?: false })
