@@ -1386,8 +1386,9 @@ reader behavior.
   page, which Readium has not scrolled yet.
 - Providers are chosen on the Read aloud screen reached from its row on
   the main Settings list, under Reading & navigation: Gemini (Play only),
-  device voices, and a speech server speaking OpenAI's API (OpenAI, a
-  hosted service, or a self-hosted server such as Kokoro). Each is a
+  device voices, and any server listed on the Services page speaking
+  OpenAI's API (OpenAI, a hosted service, or a self-hosted server such as
+  Kokoro). Each is a
   `SpeechService` (`GeminiSpeechService`, `DeviceSpeechService`,
   `OpenAiSpeechService`) that owns its settings
   rows, its voice catalogue and labels, and the `SessionVoice` a session
@@ -1453,24 +1454,54 @@ reader behavior.
   `GeminiTts.DEFAULT_MODEL`, Flash-Lite TTS) is picked from the key's
   `v1beta/models` ids containing `tts`, or typed. "Choose voices"
   narrows the chips to a ticked set
-  (`speech_server_voices`, empty offers all; `VoiceLabel.offered` always
+  (the server's `voices`, empty offers all; `VoiceLabel.offered` always
   keeps the voice in use). "Test connection" (`OpenAiSpeechService.test`)
   fetches both lists and, when a model and voice are set, synthesizes one
   fixed word, so a wrong key, model or voice shows before a book is
   opened. All providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
+  Servers and keys live on the Services page (`ServicesScreen`, reached
+  from Settings and from "Manage services" in the voice service picker);
+  `ServerConnections` owns adding, editing and deleting them, their keys
+  and the per-origin generation that drops replies from before a change.
+  A server is `ServerConnection(id, name, url)` in `ai_servers`; its id
+  is the normalised base URL (`OpenAiTts.baseUrl`), so a duplicate URL is
+  refused and an edited URL rewrites the id, the read-aloud reference and
+  that server's state in one DataStore edit. Saved servers that do not
+  parse, or state and a read-aloud reference naming a server that is not
+  listed, are kept byte for byte, block edits, and read aloud falls back
+  to device voices without rewriting its reference. A restored archive
+  must leave every reference pointing at a listed server, otherwise the
+  whole restore fails and nothing changes. A connection or key change
+  stops only the playback, previews and requests on that origin (or
+  Gemini). Deleting a server
+  points read aloud at device voices and drops a key only when no other
+  server shares its origin. Read aloud's choice is `read_aloud_provider`
+  (`openai` for a server) plus `read_aloud_server`; each server's model,
+  voice, offered voices and per-language voices are kept apart in
+  `read_aloud_server_state`, so switching servers and back restores them.
+  The legacy `speech_server_*` keys are migrated into one server in a
+  single edit on upgrade, and an older backup's legacy keys are merged by
+  URL on restore (`ServerSettings`).
   The address field's menu (`SpeechServerPresets`) fills in a hosted
   service's root, saving it and focusing the key field, or a Kokoro
-  example address with its host selected. The key, address and a typed
-  model save on Done, on focus loss (`Modifier.onLeaving`) and on
+  example address with its host selected. The key, address, name and a
+  typed model save on Done, on focus loss (`Modifier.onLeaving`) and on
   dispose; key saves go through `KeyCommits` in submission order and a
-  `KeyDraft` belongs to the server shown when it was started. Address and
+  `KeyDraft` belongs to the server shown when it was started. Server and
   model commits run in the service's scope under one lock with a
   generation counter, so a superseded model choice or one for a previous
-  address never writes. A new address is `speech_server_unsettled_url`
-  (local, not backed up) until its lists chose a model and voice; until
-  then a refresh replaces the old server's model. Groq's
+  server never writes; the write itself runs in
+  `ServerConnections.unlessChanged`, so a key or address change cannot
+  land between its check and its write. The editor's saves go through
+  `ServerConnections.save` with a token per opening, so an editor
+  recreated or closed mid-save follows the server it was adding or
+  moving. A new or edited server is listed in
+  `read_aloud_unsettled_servers` (local, not backed up) until its lists
+  chose a model and voice; until then a refresh replaces the old model.
+  The Services page's "Test connection" only checks that the server
+  answers with the key; read aloud's own test stays on its page. Groq's
   `model_terms_required` error is `SpeechError.TermsRequired`, which
   stops the session like a refused key.
   The OpenAI-compatible provider runs one request at a time with long
@@ -1491,8 +1522,8 @@ reader behavior.
   Speech server keys are kept per server origin (`ServerKeys`, file
   `openai-key-<hash>`); each request reads the key of the origin it
   calls, and the old single `openai-key` file is deleted unused;
-  neither are request bodies or audio. The provider and the speech
-  server's URL, model, voice and offered voices, and the voices
+  neither are request bodies or audio. The provider, the listed servers,
+  each server's model, voice and offered voices, and the voices
   remembered per language, are app settings in the settings backup but
   not in liseur-sync settings sync, since a server address and the
   installed voices are per device. Listening is not counted as reading time.

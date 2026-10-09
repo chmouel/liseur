@@ -181,7 +181,7 @@ internal class DeviceSpeechService(
     override fun voiceName(): String = current()?.let { deviceVoiceLabel(it) }.orEmpty()
 
     @Composable
-    override fun SettingsRows(feature: SpeechReadAloud) = DeviceRows(feature, this)
+    override fun SettingsRows(feature: SpeechReadAloud, onManageServices: () -> Unit) = DeviceRows(feature, this)
 }
 
 internal fun deviceSpeechConfigured(voices: Result<List<DeviceVoice>>): Boolean =

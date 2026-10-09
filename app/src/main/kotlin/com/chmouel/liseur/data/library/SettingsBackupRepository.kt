@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.settings.BackupValueType
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.READER_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontImport
 import com.chmouel.liseur.data.settings.UserFontRepository
@@ -707,6 +708,7 @@ class SettingsBackupRepository(
             ?: throw IllegalArgumentException("Missing reader settings")
         app.validateBackupJson(APP_BACKUP_TYPES)
         reader.validateBackupJson(READER_BACKUP_TYPES)
+        ServerSettings.validateBackup(app)
         if (app.has("library_filters")) {
             val filters = app.getString("library_filters")
             if (LibraryFilters(options = LibraryFilters.parse(filters)).serialise() != filters) {

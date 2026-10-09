@@ -5,7 +5,6 @@ import android.content.Context
 import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.tts.DeviceSpeechService
 import com.chmouel.liseur.tts.OpenAiSpeechService
-import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.tts.SpeechReadAloud
 
 /**
@@ -18,10 +17,12 @@ object ReadAloudFeatureFactory {
         application = context.applicationContext as Application,
         settings = container.appSettings,
         checkpoints = container.listeningCheckpoints,
+        connections = container.serverConnections,
+        accounts = container.serviceAccounts,
     ) { control ->
         listOf(
             DeviceSpeechService(context, container.appSettings, control),
-            OpenAiSpeechService(ServerKeys(context), container.appSettings, control, localNetwork = container.localNetwork),
+            OpenAiSpeechService(container.serverConnections, container.appSettings, control),
         )
     }
 }
