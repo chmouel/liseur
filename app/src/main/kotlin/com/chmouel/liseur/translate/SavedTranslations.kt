@@ -222,7 +222,8 @@ class SavedTranslations(
             if (cleared.get() != stamp || (epochs[bookUrl] ?: 0L) != epoch) return
             if (!inLibrary()) return
             dao.put(TranslatedSentence(bookUrl, hash(key), translation, now()))
-            if (++puts % TRIM_EVERY == 0) trim()
+            // Counting is cheap, so the sentence cap holds after every save; summing the characters waits.
+            if (++puts % TRIM_EVERY == 0 || dao.count() > maxSentences) trim()
         }
     }
 
@@ -282,7 +283,7 @@ class SavedTranslations(
         /** About 20 MB of Latin text, 60 MB at most for scripts that take three bytes a character. */
         const val MAX_CHARACTERS = 20_000_000L
 
-        // Enough puts between trims that saving stays one insert, few enough that the overshoot is small.
+        // Enough puts between character checks that saving stays cheap, few enough that the overshoot is small.
         private const val TRIM_EVERY = 100
 
         // Below SQLite's 999-variable limit on older Android versions.
