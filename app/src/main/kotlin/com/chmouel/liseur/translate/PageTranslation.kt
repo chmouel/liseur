@@ -77,8 +77,13 @@ sealed interface PageReader<out P> {
     /** The reader has gone past all of the walk: what lies between is passed over without being asked. */
     data object Beyond : PageReader<Nothing>
 
-    /** None of the walk is on screen: the walk starts again from [place], which [key] names. */
-    data class Elsewhere<P>(val place: P, val key: String) : PageReader<P>
+    /**
+     * None of the walk is on screen: the walk starts again from [place],
+     * which [key] names. [before] says the page found the walk's sentences
+     * still to come, so the reader went back, even within the element
+     * [key] names.
+     */
+    data class Elsewhere<P>(val place: P, val key: String, val before: Boolean = false) : PageReader<P>
 }
 
 /**
@@ -229,7 +234,8 @@ internal class PageTranslation<P>(
             PageReader.Beyond -> catchingUp = true
             is PageReader.Elsewhere -> {
                 // The page answers the same way until the walk reaches it, which is no reason to start over.
-                if (reader.key == startedAt) return
+                // A reader back before what the walk has done is: a restart clears the walk, so this happens once.
+                if (reader.key == startedAt && !(reader.before && walked.isNotEmpty())) return
                 startedAt = reader.key
                 restart = reader
                 // The sentence on its way is for the place the reader left, and a slow service would hold the jump up.
