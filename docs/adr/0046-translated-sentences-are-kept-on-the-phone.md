@@ -19,8 +19,9 @@ a Room database separate from `liseur.db`.
   sentence and the sentence. A different service, model or language pair
   misses by design. Renaming a server does not.
 - Device translations are saved as well as network ones.
-- The store holds at most 50,000 sentences and 20 million characters,
-  dropping the least recently read first.
+- The store holds at most 50,000 sentences and about 20 million
+  characters, dropping the least recently read first. The sentence cap
+  holds after every save; the characters are checked every 100 saves.
 - Removing a book deletes its sentences, by sweeping rows whose book the
   library no longer holds. The sweep runs at start and after each
   committed change to the library, since a removal may still be inside a

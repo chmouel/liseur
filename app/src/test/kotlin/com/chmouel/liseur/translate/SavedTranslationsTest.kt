@@ -160,6 +160,18 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a save past the cap trims at once`() = runTest {
+        val store = saved(maxSentences = 3)
+        store.forBook(BOOK).apply {
+            for (i in 0 until 5) keep("s$i", "t$i")
+        }
+
+        assertEquals(3, store.stats.first().sentences)
+        assertNull(store.forBook(BOOK).get("s0").translation)
+        assertEquals("t4", store.forBook(BOOK).get("s4").translation)
+    }
+
+    @Test
     fun `long translations are trimmed to the character budget`() = runTest {
         saved().forBook(BOOK).apply {
             keep("a", "x".repeat(400))

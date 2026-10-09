@@ -1716,8 +1716,9 @@ reader behavior.
   and asks the sentence anew. `PageTranslation` looks up before
   asking, looks up again if the service changed during the lookup, and
   saves only under the service that answered. The store keeps 50,000 sentences and 20 million
-  characters, least recently used first, trimming at start and every
-  100 saves. A lookup's stamp fences Clear: a reply asked before it is
+  characters, least recently used first. It trims at start and after
+  any save that goes past 50,000 sentences; the characters, which take
+  a sum over the table, are checked every 100 saves. A lookup's stamp fences Clear: a reply asked before it is
   shown but not saved. Book removal is a sweep, not a delete by URL,
   because `BookRemoval` can run inside a caller's transaction. Room's
   invalidation tracker on `books` reports changes once they commit;
