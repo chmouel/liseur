@@ -89,8 +89,9 @@ internal object GeminiTranslation {
         val finish = candidate.optString("finishReason")
         if (finish in BLOCKED) throw TranslationError.Refused()
         if (finish == "MAX_TOKENS") throw TranslationError.Truncated()
-        // Anything else that is not a normal stop, such as OTHER or LANGUAGE, may come with partial text.
-        if (finish.isNotEmpty() && finish != "STOP") throw TranslationError.Malformed("finished with $finish")
+        // Anything else that is not a normal stop, such as OTHER or LANGUAGE, may come with partial text;
+        // no reason at all means the model had not finished.
+        if (finish != "STOP") throw TranslationError.Malformed("finished with ${finish.ifEmpty { "no reason" }}")
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts")
         val content = (0 until (parts?.length() ?: 0)).mapNotNull { i ->
             // A thinking model's thoughts come as parts of their own.
