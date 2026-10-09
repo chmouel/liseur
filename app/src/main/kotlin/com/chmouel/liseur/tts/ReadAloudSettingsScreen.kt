@@ -853,7 +853,9 @@ internal fun Result<List<String>>.toListing(
  * field to paste a new one, and a way to remove it. A key typed is saved
  * on Done or when the field is left, the screen included, and always to
  * the [owner] shown when it was typed: one key per server. With no
- * [owner] (no server address yet) there is nowhere to save one.
+ * [owner] (no server address yet) there is nowhere to save one. A
+ * screen that can make the [draft] moot, as by deleting its server,
+ * holds it to drop it first.
  */
 @Composable
 internal fun KeyRow(
@@ -866,11 +868,11 @@ internal fun KeyRow(
     onKey: (owner: String, key: String, done: (Boolean) -> Unit) -> Unit,
     onClear: (owner: String) -> Unit,
     focusRequester: FocusRequester = remember { FocusRequester() },
-) {
-    val focus = LocalFocusManager.current
     // Plain remember on purpose: a key half pasted must not outlive the
     // screen in saved instance state.
-    val draft = remember { KeyDraft() }
+    draft: KeyDraft = remember { KeyDraft() },
+) {
+    val focus = LocalFocusManager.current
     val save by rememberUpdatedState(onKey)
     LaunchedEffect(owner) { draft.follow(owner, save) }
     DisposableEffect(Unit) { onDispose { draft.commit(save) } }
