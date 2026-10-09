@@ -64,6 +64,16 @@ object ExactLocatorAnchor {
         return exact.takeIf(::fitsSyncLimit) ?: locator
     }
 
+    /**
+     * [locator] without the words it was found by, for a page showing a
+     * translation: those words are not the book's. The resource, the
+     * progressions and the element stay.
+     */
+    fun coarse(locator: Locator): Locator = locator.copy(
+        locations = locator.locations.copy(otherLocations = locator.locations.otherLocations - MARKER),
+        text = Locator.Text(),
+    )
+
     fun withStableProgression(locator: Locator, progression: Double): Locator =
         locator.copy(
             locations = locator.locations.copy(

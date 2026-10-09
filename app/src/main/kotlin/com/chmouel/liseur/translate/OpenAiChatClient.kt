@@ -17,16 +17,28 @@ import org.json.JSONObject
  * and its list of models that answer in text.
  */
 class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client()) {
-    /** [passage] translated by [model]. Throws [TranslationError]; cancelling the caller cancels the request. */
-    suspend fun translate(base: HttpUrl, apiKey: String?, model: String, source: String?, target: String, passage: String): String {
+    /**
+     * [passage] translated by [model], with [context] as the text before it
+     * when there is one. Throws [TranslationError]; cancelling the caller
+     * cancels the request.
+     */
+    suspend fun translate(
+        base: HttpUrl,
+        apiKey: String?,
+        model: String,
+        source: String?,
+        target: String,
+        passage: String,
+        context: String? = null,
+    ): String {
         val body = JSONObject()
             .put("model", model)
             .put("stream", false)
             .put(
                 "messages",
                 JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target)))
-                    .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage))),
+                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null)))
+                    .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context))),
             )
             .toString()
         val request = request(base, "chat/completions", apiKey).post(body.toRequestBody(JSON)).build()

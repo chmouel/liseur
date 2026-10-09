@@ -50,6 +50,23 @@ class ExactLocatorAnchorTest {
     }
 
     @Test
+    fun `a coarse place keeps where it is and drops the words`() {
+        val exact = ExactLocatorAnchor.mark(
+            locator(),
+            ViewportTextAnchor("#chapter", "avant ", "visible", " après"),
+        ).let { ExactLocatorAnchor.withStableProgression(it, 0.42) }
+
+        val coarse = ExactLocatorAnchor.coarse(exact)
+
+        assertFalse(ExactLocatorAnchor.isExact(coarse))
+        assertEquals(null, coarse.text.highlight)
+        assertEquals(null, coarse.text.before)
+        assertEquals("#chapter", coarse.locations.otherLocations[ExactLocatorAnchor.CSS_SELECTOR])
+        assertEquals(0.42, coarse.locations.totalProgression ?: 0.0, 0.0)
+        assertEquals(exact.href, coarse.href)
+    }
+
+    @Test
     fun `legacy text locator is approximate`() {
         val legacy = locator().copy(
             text = Locator.Text(before = "before", highlight = "next", after = "after"),

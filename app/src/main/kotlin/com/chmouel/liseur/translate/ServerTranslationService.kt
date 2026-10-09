@@ -64,13 +64,13 @@ internal class ServerTranslationService(
 
     override suspend fun sources(): Set<String>? = null
 
-    override suspend fun translate(passage: String, source: String?, target: String): String {
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
         val s = settings.settings.first()
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
         if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()
-        return client.translate(base, connections.key(ServerKeys.origin(base)), model, source, target, passage)
+        return client.translate(base, connections.key(ServerKeys.origin(base)), model, source, target, passage, context)
     }
 
     /** Saves in the service's scope, so a model typed as the screen closes is still saved. */

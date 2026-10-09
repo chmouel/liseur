@@ -18,14 +18,25 @@ class GeminiTranslationClient(
     private val client: OkHttpClient = TranslationHttp.client(),
     private val base: HttpUrl = GeminiTranslation.ENDPOINT.toHttpUrl(),
 ) {
-    /** [passage] translated by [model]. Throws [TranslationError]; cancelling the caller cancels the request. */
-    suspend fun translate(apiKey: String, model: String, source: String?, target: String, passage: String): String {
+    /**
+     * [passage] translated by [model], with [context] as the text before it
+     * when there is one. Throws [TranslationError]; cancelling the caller
+     * cancels the request.
+     */
+    suspend fun translate(
+        apiKey: String,
+        model: String,
+        source: String?,
+        target: String,
+        passage: String,
+        context: String? = null,
+    ): String {
         val body = JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target)))))
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null)))))
             .put(
                 "contents",
                 JSONArray().put(
-                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage)))),
+                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage, context)))),
                 ),
             )
             .toString()

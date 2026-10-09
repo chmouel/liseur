@@ -1266,4 +1266,9 @@
     <string name="translation_picker_search">Sprachen suchen</string>
     <string name="translation_picker_needs_download">Download nötig</string>
     <string name="translation_picker_none">Keine Sprache passt.</string>
+    <string name="translation_page_start">Seite ab hier übersetzen</string>
+    <string name="translation_page_languages">%1$s nach %2$s</string>
+    <string name="translation_page_ended">Bis zum Ende des Buchs übersetzt.</string>
+    <string name="translation_page_stop">Übersetzung beenden</string>
+    <string name="translation_page_bookmarks_off">Lesezeichen sind aus, solange die Seite übersetzt ist.</string>
 </resources>

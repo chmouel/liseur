@@ -1307,4 +1307,9 @@
     <string name="translation_picker_search">Search languages</string>
     <string name="translation_picker_needs_download">Needs download</string>
     <string name="translation_picker_none">No language matches.</string>
+    <string name="translation_page_start">Translate the page from here</string>
+    <string name="translation_page_languages">%1$s to %2$s</string>
+    <string name="translation_page_ended">Translated to the end of the book.</string>
+    <string name="translation_page_stop">Stop translating</string>
+    <string name="translation_page_bookmarks_off">Bookmarks are off while the page is translated.</string>
 </resources>

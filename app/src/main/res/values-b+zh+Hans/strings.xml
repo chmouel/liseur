@@ -1207,4 +1207,9 @@
     <string name="translation_picker_search">搜索语言</string>
     <string name="translation_picker_needs_download">需要下载</string>
     <string name="translation_picker_none">没有匹配的语言。</string>
+    <string name="translation_page_start">从这里开始翻译页面</string>
+    <string name="translation_page_languages">%1$s 译为 %2$s</string>
+    <string name="translation_page_ended">已翻译到本书末尾。</string>
+    <string name="translation_page_stop">停止翻译</string>
+    <string name="translation_page_bookmarks_off">页面翻译期间无法添加书签。</string>
 </resources>
