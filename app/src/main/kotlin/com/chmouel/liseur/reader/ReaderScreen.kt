@@ -785,9 +785,10 @@ fun ReaderScreen(
 
     suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator {
         val turns = pageTranslatedTurns
+        val translated = pageTranslated
         val captured = onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
-        // Started on one page and answered on the other: its words may be the translation's (ADR 45).
-        return if (turns != pageTranslatedTurns) ExactLocatorAnchor.coarse(captured) else captured
+        // Taken on a translated page, or across a switch: its words may be the translation's (ADR 45).
+        return if (translated || pageTranslated || turns != pageTranslatedTurns) ExactLocatorAnchor.coarse(captured) else captured
     }
 
     fun publishUnverified(locator: Locator, event: NavigatorPositionEvent) {
