@@ -51,6 +51,7 @@ class AudioTrackPcmOutput(
     private var applied = 1f
 
     /** The clip of the current turn: where its frames start on the track's head, and its bounds. Under [lock]. */
+    // Retain it through completion: a pause can precede the handoff back to the engine.
     private var clip: Clip? = null
 
     /** The speed the track plays at, set to [speed] first. Under [lock]. */
@@ -146,7 +147,6 @@ class AudioTrackPcmOutput(
             val (head, rate) = synchronized(lock) {
                 if (turn != myTurn) return@withContext
                 val head = track.playbackHeadPosition.toLong() and 0xffffffffL
-                if (head >= target && clip === playing) clip = null
                 head to speedLocked(track)
             }
             if (head >= target) return@withContext
