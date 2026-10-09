@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
@@ -30,6 +31,9 @@ import org.readium.r2.shared.util.Language
  */
 internal object TranslatedPages {
     private const val CSS_SELECTOR = "cssSelector"
+
+    // A view set aside after it was picked may not answer until shown again; the next layout pass retries.
+    private const val ANSWER_MS = 2_000L
 
     // Names each following of a run to the page, which starts clean for a new one.
     private var follows = 0
@@ -159,12 +163,14 @@ internal object TranslatedPages {
     private suspend fun restoreAttached(touched: MutableSet<WebView>) {
         for (web in touched.toList()) {
             if (!web.isAttachedToWindow) continue
-            web.evaluate(PageSwaps.RESTORE)
-            touched -= web
+            if (web.evaluate(PageSwaps.RESTORE) != null) touched -= web
         }
     }
 
-    private suspend fun WebView.evaluate(script: String): String? = suspendCancellableCoroutine { continuation ->
-        evaluateJavascript(script) { if (continuation.isActive) continuation.resume(it) { _, _, _ -> } }
+    /** What [script] gives back, or null when the view does not answer in time. */
+    private suspend fun WebView.evaluate(script: String): String? = withTimeoutOrNull(ANSWER_MS) {
+        suspendCancellableCoroutine { continuation ->
+            evaluateJavascript(script) { if (continuation.isActive) continuation.resume(it) { _, _, _ -> } }
+        }
     }
 }
