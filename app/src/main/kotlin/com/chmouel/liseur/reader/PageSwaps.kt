@@ -16,9 +16,11 @@ import org.json.JSONObject
  * and emphasis, stay where they are. A sentence that runs over several
  * nodes gets its translation in the first that is the sentence's own
  * text rather than an emphasised part of it, and empties the rest. A
- * note's number keeps its text and its link. Any other link inside the
- * sentence leaves it untranslated: one translation cannot be cut to fit
- * the link's words, and emptying the link would lose it.
+ * note's number keeps its text and its link. Any other link that shares
+ * the sentence with text outside it leaves the sentence untranslated: one
+ * translation cannot be cut to fit the link's words, and emptying the
+ * link would lose it. A sentence wholly inside one link, such as an
+ * entry in a table of contents, is translated in the link.
  *
  * Sentences are found the way [SpokenPassage] finds the one being read:
  * in their element, by the text before them and their own, over the
@@ -188,8 +190,12 @@ internal object PageSwaps {
             const rects = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0);
             if (rects.length === 0) return -1;
             const rtl = getComputedStyle(document.documentElement).direction === "rtl";
+            // Lines set down the page run right to left in vertical-rl, whatever the direction says.
+            const style = getComputedStyle(document.body || document.documentElement);
+            const mode = style.writingMode || style.webkitWritingMode || "";
+            const pastRight = /^(vertical|sideways)-rl/.test(mode) || (!/^(vertical|sideways)/.test(mode) && rtl);
             if (rects.some(r => r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight)) return 1;
-            return rects.every(r => r.bottom <= 0 || (rtl ? r.left >= window.innerWidth : r.right <= 0)) ? 0 : -1;
+            return rects.every(r => r.bottom <= 0 || (pastRight ? r.left >= window.innerWidth : r.right <= 0)) ? 0 : -1;
           };
           window.__liseurPage = {
             run: null,

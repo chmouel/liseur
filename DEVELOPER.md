@@ -1708,7 +1708,8 @@ reader behavior.
   every text node it changes, and redraws from the originals, so `restore`
   gives the page back byte for byte. A sentence's translation goes into
   its own text rather than an emphasised word; note references keep
-  their number and link, and a sentence holding any other link stays
+  their number and link, a sentence wholly inside one link is translated
+  in that link, and a sentence mixing any other link with its text stays
   untranslated. `reader/TranslatedPages.kt` resends
   swaps to every attached WebView on each layout pass, since Readium
   reloads and recycles them, and keeps restoring recycled views after
