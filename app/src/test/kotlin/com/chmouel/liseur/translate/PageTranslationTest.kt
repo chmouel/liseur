@@ -335,6 +335,8 @@ class PageTranslationTest {
 
         assertEquals("Il pleut fort.", page.original("ch1.xhtml", "pours", "It rains. Il fait très froid ici. It ")?.text)
         assertEquals("Il pleut.", page.original("ch1.xhtml", "rains", "It ")?.text)
+        // In the sentence left untranslated, after a translated one: found by its own words.
+        assertEquals("Il fait très froid ici.", page.original("ch1.xhtml", "froid", "It rains. Il fait très ")?.text)
     }
 
     @Test

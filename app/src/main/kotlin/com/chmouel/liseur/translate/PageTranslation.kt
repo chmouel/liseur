@@ -174,7 +174,9 @@ internal class PageTranslation<P>(
     /**
      * The book's sentence whose translation shows [selected] in [href], so
      * read aloud can start from the words the book has; when the selection
-     * runs on into the next translation, the one it starts in. [before] is
+     * runs on into the next translation, the one it starts in. A sentence
+     * the walk left in the original is found by its own words, since the
+     * text before it may still be translated. [before] is
      * the page's text before the selection; it picks between translations
      * that both contain the selected words, and rules out one that only
      * happens to contain words selected elsewhere.
@@ -183,7 +185,9 @@ internal class PageTranslation<P>(
         val key = squash(selected).take(MATCHED)
         if (key.isEmpty()) return null
         val leading = squash(before.orEmpty())
-        val swaps = mutableSwaps.value[href].orEmpty()
+        // After the translations, so a sentence's own words are only ever a fallback for it.
+        val untranslated = walked.filter { it.href == href && it !in placed }.map { PageSwap(-1, it, it.text) }
+        val swaps = mutableSwaps.value[href].orEmpty() + untranslated
         return swaps
             .mapIndexedNotNull { i, swap ->
                 val shown = squash(swap.translation)
