@@ -13,6 +13,7 @@ object TranslateFeatureFactory {
         settings = container.appSettings,
         connections = container.serverConnections,
         accounts = container.serviceAccounts,
+        saved = lazy { container.savedTranslations },
         services = listOf(
             DeviceTranslationService(context.applicationContext),
             ServerTranslationService(container.serverConnections, container.appSettings),

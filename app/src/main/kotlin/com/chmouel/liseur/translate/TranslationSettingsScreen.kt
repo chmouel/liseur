@@ -1,5 +1,6 @@
 package com.chmouel.liseur.translate
 
+import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -46,6 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -66,6 +71,8 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
+import java.text.NumberFormat
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.launch
 
 /** Translation's row on the main settings screen: which service, and into what. */
@@ -186,6 +193,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, configured)
                 }
+                feature.saved?.let { SavedTranslationsGroup(it.value) }
             }
         }
     }
@@ -362,6 +370,90 @@ private fun TestRow(feature: ServiceTranslate, service: TranslationService, conf
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+    }
+}
+
+/**
+ * How many translated sentences are kept on this phone and the room they
+ * take, with the way to forget them all.
+ */
+@Composable
+private fun SavedTranslationsGroup(saved: SavedTranslations) {
+    val context = LocalContext.current
+    val stats by saved.stats.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
+    var confirming by remember { mutableStateOf(false) }
+    var clearing by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    SettingsGroup(stringResource(R.string.translation_settings_saved)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val count = stats?.sentences ?: 0
+            stats?.let {
+                Text(
+                    text = if (count == 0) {
+                        stringResource(R.string.translation_settings_saved_none)
+                    } else {
+                        pluralStringResource(
+                            R.plurals.translation_settings_saved_count,
+                            count,
+                            NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0]).format(count),
+                            Formatter.formatShortFileSize(context, it.bytes),
+                        )
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = { confirming = true }, enabled = count > 0 && !clearing) {
+                    Text(stringResource(R.string.translation_settings_saved_clear))
+                }
+                if (clearing) BusyIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
+            if (failed) {
+                Text(
+                    text = stringResource(R.string.translation_settings_saved_clear_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            }
+            Text(
+                text = stringResource(R.string.translation_settings_saved_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.translation_settings_saved_clear_title)) },
+            text = { Text(stringResource(R.string.translation_settings_saved_clear_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        clearing = true
+                        failed = false
+                        scope.launch {
+                            failed = try {
+                                saved.clear()
+                                false
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                true
+                            } finally {
+                                clearing = false
+                            }
+                        }
+                    },
+                ) { Text(stringResource(R.string.translation_settings_saved_clear_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 }
 

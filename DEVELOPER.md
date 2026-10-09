@@ -1701,8 +1701,27 @@ reader behavior.
   next sentence, and a reply is only cached under the service that
   answered it. Errors that
   concern one sentence skip it; key, quota, pair and pack errors halt the
-  run with an action on `PageTranslationBar`. Replies are cached in
-  memory by service, model, languages, sentence and context.
+  run with an action on `PageTranslationBar`.
+- Page translation replies are saved in `translations.db`
+  (`translate/SavedTranslations.kt`), a Room database of its own so the
+  backup allowlists, which name `liseur.db`, leave it out. A row is keyed
+  by the local book URL and a SHA-256 of `pageIdentity` (a versioned
+  service id, server id, model, languages and
+  `TranslationPrompt.VERSION`; never a display name or key), the context
+  and the sentence. Bump `TranslationPrompt.VERSION` when the prompt
+  changes. `PageTranslation` looks up before asking, looks up again if
+  the service changed during the lookup, and saves only under the
+  service that answered. The store keeps 50,000 sentences and 20 million
+  characters, least recently used first, trimming at start and every
+  100 saves. A lookup's stamp fences Clear: a reply asked before it is
+  shown but not saved. Book removal is a sweep, not a delete by URL,
+  because `BookRemoval` can run inside a caller's transaction: after
+  every removal route, and at start, `sweep()` drops rows whose book is
+  absent from committed `books` and bumps that book's epoch so a reader
+  still open on it stops saving. `contentReplaced` keeps the rows, since
+  the key holds the exact text. Every storage failure is a miss or a
+  skipped save, logged by exception class only; only Clear reports one.
+  See `docs/adr/0046-translated-sentences-are-kept-on-the-phone.md`.
 - `reader/PageSwaps.kt` injects the script that applies swaps: it finds
   each sentence by selector, text before and text, keeps the original of
   every text node it changes, and redraws from the originals, so `restore`

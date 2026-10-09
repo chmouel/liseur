@@ -1228,6 +1228,18 @@
     <string name="translation_settings_model_price">%1$s $ Eingabe, %2$s $ Ausgabe pro Million Tokens</string>
     <string name="translation_settings_model_free">Kostenlos</string>
     <string name="translation_settings_test">Testsatz übersetzen</string>
+    <string name="translation_settings_saved">Gespeicherte Übersetzungen</string>
+    <plurals name="translation_settings_saved_count">
+        <item quantity="one">%1$s Satz, %2$s</item>
+        <item quantity="other">%1$s Sätze, %2$s</item>
+    </plurals>
+    <string name="translation_settings_saved_none">Noch keine gespeichert</string>
+    <string name="translation_settings_saved_clear">Gespeicherte Übersetzungen löschen</string>
+    <string name="translation_settings_saved_clear_title">Gespeicherte Übersetzungen löschen?</string>
+    <string name="translation_settings_saved_clear_body">Seiten werden beim nächsten Lesen erneut übersetzt. Ein gerade geöffnetes Buch behält die angezeigte Übersetzung, bis du es wieder öffnest.</string>
+    <string name="translation_settings_saved_clear_confirm">Löschen</string>
+    <string name="translation_settings_saved_clear_failed">Die gespeicherten Übersetzungen konnten nicht gelöscht werden. Versuche es erneut.</string>
+    <string name="translation_settings_saved_note">Übersetzte Seiten bleiben auf diesem Telefon, damit du sofort zu ihnen zurückkehren kannst. Sie werden nicht gesichert.</string>
     <string name="translation_settings_test_passed">Es funktioniert: %1$s</string>
     <string name="translation_settings_device_unavailable">Dieses Telefon hat keinen Übersetzer, den Apps nutzen können. Wähle einen anderen Dienst.</string>
     <string name="translation_settings_device_downloads_detail">Eine Sprache wird übersetzt, sobald sie in den Systemeinstellungen heruntergeladen ist.</string>

@@ -83,7 +83,7 @@ internal object DevicePairs {
  * main thread, and never for long.
  */
 internal class DeviceTranslationService(private val context: Context) : TranslationService {
-    override val id = "device"
+    override val id = ID
     override val label = R.string.translation_provider_device
     override val summary = R.string.translation_provider_device_summary
     override val icon = Icons.Outlined.PhoneAndroid
@@ -310,6 +310,8 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     override fun SettingsRows(onManageServices: () -> Unit) = DeviceTranslationRows(this)
 
     companion object {
+        const val ID = "device"
+
         private const val QUERY_TIMEOUT_MS = 5_000L
         // One question at a time: a stuck system call cannot pile up threads, and answers arrive in order.
         private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))

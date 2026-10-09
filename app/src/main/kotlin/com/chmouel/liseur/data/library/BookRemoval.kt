@@ -33,6 +33,12 @@ class BookRemoval(
     private val bookOrbitBindings: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
     private val remoteStatsDao: RemoteStatsDao? = null,
     private val onReadingHistoryRemoved: suspend () -> Unit = {},
+    /**
+     * Told after each route that can drop books, for what is kept outside
+     * this database. It may run while a caller's transaction is still
+     * open, so it must look at the library later rather than trust it.
+     */
+    private val onBooksRemoved: () -> Unit = {},
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
@@ -41,6 +47,7 @@ class BookRemoval(
             removedSessions = forget(bookUrls)
         }
         if (removedSessions) onReadingHistoryRemoved()
+        onBooksRemoved()
     }
 
     /** Removes a watched folder and the books that only came from it. */
@@ -97,6 +104,7 @@ class BookRemoval(
             )
         }
         if (removedSessions) onReadingHistoryRemoved()
+        onBooksRemoved()
     }
 
     suspend fun deleteRemoteNotDownloaded() {
@@ -107,6 +115,7 @@ class BookRemoval(
             removedSessions = forget(bookUrls)
         }
         if (removedSessions) onReadingHistoryRemoved()
+        onBooksRemoved()
     }
 
     /**
@@ -198,6 +207,7 @@ class BookRemoval(
             if (removable.isNotEmpty()) removedSessions = forget(removable)
         }
         if (removedSessions) onReadingHistoryRemoved()
+        onBooksRemoved()
         return removable
     }
 
@@ -243,6 +253,7 @@ class BookRemoval(
             clear = true
         }
         if (removedSessions) onReadingHistoryRemoved()
+        onBooksRemoved()
         return clear
     }
 

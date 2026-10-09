@@ -89,16 +89,27 @@ sealed interface PageReader<out P> {
 /**
  * Translations of sentences already asked, by service, model, languages,
  * sentence and the sentence before it, so walking back over a page or
- * starting again costs nothing. Kept while the book is open.
+ * opening the book again costs nothing. One book's, for one opening of it.
  */
-class PageTranslationCache(private val capacity: Int = CAPACITY) {
+interface PageTranslationCache {
+    /** What [key] was translated into, if kept, and the [Lookup.stamp] to keep a new answer under. */
+    suspend fun get(key: String): Lookup
+
+    /** Keeps [value] for [key], unless what [stamp] was read under has been cleared since. */
+    suspend fun put(key: String, value: String, stamp: Long)
+
+    data class Lookup(val translation: String?, val stamp: Long)
+}
+
+/** Kept only while the book is open: the reader's when nothing is saved. */
+class MemoryPageTranslationCache(private val capacity: Int = CAPACITY) : PageTranslationCache {
     private val entries = object : LinkedHashMap<String, String>(CAPACITY_HINT, LOAD, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > capacity
     }
 
-    operator fun get(key: String): String? = entries[key]
+    override suspend fun get(key: String) = PageTranslationCache.Lookup(entries[key], 0L)
 
-    operator fun set(key: String, value: String) {
+    override suspend fun put(key: String, value: String, stamp: Long) {
         entries[key] = value
     }
 
@@ -347,16 +358,24 @@ internal class PageTranslation<P>(
     }
 
     private suspend fun translated(sentence: PageSentence, context: String?): String {
-        val identity = translator.answering()
-        val key = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
-        cache[key]?.let { return it }
+        fun keyOf(identity: String) = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
+        var identity = translator.answering()
+        var lookup = cache.get(keyOf(identity))
+        // Settings changed during the lookup: what was found answers for the service before.
+        while (true) {
+            val current = translator.answering()
+            if (current == identity) break
+            identity = current
+            lookup = cache.get(keyOf(identity))
+        }
+        lookup.translation?.let { return it }
         // Settings changed while it was asked may have sent it to another service.
         return translator.translate(sentence.text, context).also {
             // Far longer than the sentence is not its translation, and it would be held for the whole session.
             if (it.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
                 throw TranslationError.Malformed("the translation is far longer than the sentence")
             }
-            if (translator.answering() == identity) cache[key] = it
+            if (translator.answering() == identity) cache.put(keyOf(identity), it, lookup.stamp)
         }
     }
 

@@ -614,6 +614,9 @@ class ReaderActivity : FragmentActivity() {
                                         )
                                     },
                                     translate = container.translate,
+                                    pageTranslations = remember(target?.id) {
+                                        container.pageTranslations(checkNotNull(target).id)
+                                    },
                                 )
                             }
                         }
