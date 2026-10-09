@@ -14,7 +14,11 @@ import org.json.JSONObject
  * drawn again from its original with the changes applied from the end,
  * so offsets never drift and the elements around the text, such as links
  * and emphasis, stay where they are. A sentence that runs over several
- * nodes gets its translation in the first and empties the rest.
+ * nodes gets its translation in the first that is the sentence's own
+ * text rather than an emphasised part of it, and empties the rest. A
+ * note's number keeps its text and its link. Any other link inside the
+ * sentence leaves it untranslated: one translation cannot be cut to fit
+ * the link's words, and emptying the link would lose it.
  *
  * Sentences are found the way [SpokenPassage] finds the one being read:
  * in their element, by the text before them and their own, over the
@@ -127,6 +131,11 @@ internal object PageSwaps {
             if (start < 0) return null;
             return { nodes, offsets, start, end: start + quote.length - 1 };
           };
+          const linkOf = node => node.parentElement ? node.parentElement.closest("a") : null;
+          const noteRef = a => {
+            const kind = ((a.getAttribute("epub:type") || "") + " " + (a.getAttribute("role") || "")).toLowerCase();
+            return kind.includes("noteref") || !!a.closest("sup") || !!a.querySelector("sup") || a.textContent.trim().length <= 3;
+          };
           const apply = swap => {
             const at = locate(swap.selector, swap.before, swap.text);
             if (!at) return;
@@ -136,13 +145,24 @@ internal object PageSwaps {
             for (let i = at.start; i <= at.end; i++) {
               const node = at.nodes[i];
               if (planned.length > 0 && planned[planned.length - 1].node === node) continue;
+              const link = linkOf(node);
+              // A note's number stays as it is, and stays a link.
+              if (link && noteRef(link)) continue;
               planned.push({
                 node,
+                link,
                 from: node === first ? at.offsets[at.start] : 0,
                 to: node === last ? at.offsets[at.end] + 1 : original(node).length,
-                text: node === first ? swap.translation.trim() : "",
+                text: "",
               });
             }
+            if (planned.length === 0) return;
+            const links = new Set(planned.map(p => p.link));
+            if (links.size > 1 && Array.from(links).some(a => a)) return;
+            // The sentence's own text, not an emphasised word that opens it.
+            let common = planned[0].node.parentNode;
+            while (common && !planned.every(p => common.contains(p.node))) common = common.parentNode;
+            (planned.find(p => p.node.parentNode === common) || planned[0]).text = swap.translation.trim();
             // A sentence found over one already changed would garble both.
             for (const p of planned) {
               for (const e of (edits.get(p.node) || [])) if (p.from < e.to && e.from < p.to) return;

@@ -149,9 +149,10 @@ internal class PageTranslation<P>(
 
     /**
      * The book's sentence whose translation shows [selected] in [href], so
-     * read aloud can start from the words the book has. [before] is the
-     * page's text before the selection; it picks between translations that
-     * both contain the selected words.
+     * read aloud can start from the words the book has; when the selection
+     * runs on into the next translation, the one it starts in. [before] is
+     * the page's text before the selection; it picks between translations
+     * that both contain the selected words.
      */
     fun original(href: String, selected: String, before: String?): PageSentence? {
         val key = squash(selected).take(MATCHED)
@@ -161,8 +162,9 @@ internal class PageTranslation<P>(
         return swaps
             .mapIndexedNotNull { i, swap ->
                 val shown = squash(swap.translation)
-                val at = shown.indexOf(key)
-                if (at < 0) return@mapIndexedNotNull null
+                val at = shown.indexOf(key).takeIf { it >= 0 }
+                    ?: runsOn(shown, key, swaps.getOrNull(i + 1)?.let { squash(it.translation) })
+                    ?: return@mapIndexedNotNull null
                 // The sentence before it in the same element is on the page just before it.
                 val earlier = swaps.getOrNull(i - 1)
                     ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
@@ -299,5 +301,15 @@ internal class PageTranslation<P>(
 
         // The page and the translation differ in line breaks and collapsed spaces.
         private fun squash(text: String) = text.filterNot(Char::isWhitespace)
+
+        /** Where in [shown] a [key] starts that goes on into [next], the translation after it on the page. */
+        private fun runsOn(shown: String, key: String, next: String?): Int? {
+            if (next.isNullOrEmpty()) return null
+            return (maxOf(0, shown.length - key.length + 1) until shown.length).firstOrNull { at ->
+                val head = shown.substring(at)
+                val rest = key.substring(head.length)
+                key.startsWith(head) && (next.startsWith(rest) || rest.startsWith(next))
+            }
+        }
     }
 }

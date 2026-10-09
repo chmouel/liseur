@@ -45,4 +45,11 @@ class TranslationPromptTest {
         assertEquals("Bonjour", TranslationPrompt.clean("  <passage>\nBonjour\n</passage> "))
         assertEquals("Line one\nLine two", TranslationPrompt.clean("Line one\nLine two"))
     }
+
+    @Test
+    fun `context a model echoes back is not taken for the translation`() {
+        val echoed = "<context>\nIl pleut.\n</context>\n<passage>\nIt is cold.\n</passage>"
+        assertEquals("It is cold.", TranslationPrompt.clean(echoed))
+        assertEquals("It is cold.", TranslationPrompt.clean("<context>Il pleut.</context>\nIt is cold."))
+    }
 }
