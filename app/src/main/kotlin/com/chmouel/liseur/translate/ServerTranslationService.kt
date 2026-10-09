@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
@@ -21,6 +22,7 @@ import com.chmouel.liseur.tts.ListedField
 import com.chmouel.liseur.tts.Listing
 import com.chmouel.liseur.tts.OpenAiTts
 import com.chmouel.liseur.tts.SpeechLocalNetworkPrompt
+import com.chmouel.liseur.tts.priceText
 import com.chmouel.liseur.tts.ServerKeys
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -88,13 +90,19 @@ internal class ServerTranslationService(
         // Moves on when the server's address or key changes on the Services page.
         val generation by remember(origin) { connections.generation(origin.orEmpty()) }.collectAsState()
         var listing by remember(url, generation) { mutableStateOf<Listing?>(null) }
+        var prices by remember(url, generation) { mutableStateOf(emptyMap<String, TextPrice>()) }
         var asked by remember(url, generation) { mutableIntStateOf(0) }
         LaunchedEffect(url, generation, asked, allowed) {
             if (!allowed) return@LaunchedEffect
             listing = Listing.Loading(url)
             listing = models(url).fold(
-                onSuccess = {
-                    if (it.isEmpty()) Listing.Failed(url, R.string.read_aloud_settings_server_models_none) else Listing.Loaded(url, it)
+                onSuccess = { models ->
+                    prices = models.mapNotNull { m -> m.price?.let { m.id to it } }.toMap()
+                    if (models.isEmpty()) {
+                        Listing.Failed(url, R.string.read_aloud_settings_server_models_none)
+                    } else {
+                        Listing.Loaded(url, models.map { it.id })
+                    }
                 },
                 onFailure = { Listing.Failed(url, listingMessage(it)) },
             )
@@ -108,10 +116,20 @@ internal class ServerTranslationService(
             listing = listing?.takeIf { it.url == url },
             onSave = { model -> commit { settings.setTranslationServerModel(url, model) } },
             onRetry = { asked++ },
+            detail = { id ->
+                prices[id]?.let {
+                    val locale = LocalConfiguration.current.locales[0]
+                    if (it.input == 0.0 && it.output == 0.0) {
+                        stringResource(R.string.translation_settings_model_free)
+                    } else {
+                        stringResource(R.string.translation_settings_model_price, priceText(it.input, locale), priceText(it.output, locale))
+                    }
+                }
+            },
         )
     }
 
-    private suspend fun models(url: String): Result<List<String>> {
+    private suspend fun models(url: String): Result<List<TextModel>> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(TranslationError.NotSetUp())
         return try {
             if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()

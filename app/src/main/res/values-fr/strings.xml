@@ -1213,6 +1213,8 @@
     <string name="translation_settings_target">Traduire vers</string>
     <string name="translation_settings_target_app">%1$s, la langue de l\'application</string>
     <string name="translation_settings_target_follow">Suivre la langue de l\'application</string>
+    <string name="translation_settings_model_price">%1$s $ en entrée, %2$s $ en sortie par million de jetons</string>
+    <string name="translation_settings_model_free">Gratuit</string>
     <string name="translation_settings_test">Traduire une phrase de test</string>
     <string name="translation_settings_test_passed">Ça marche : %1$s</string>
     <string name="translation_settings_device_unavailable">Ce téléphone n\'a pas de traducteur utilisable par les applications. Choisissez un autre service.</string>

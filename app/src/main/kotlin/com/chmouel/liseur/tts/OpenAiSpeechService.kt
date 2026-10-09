@@ -420,7 +420,7 @@ private class Requests {
     }
 }
 
-private fun priceText(price: Double, locale: Locale): String =
+internal fun priceText(price: Double, locale: Locale): String =
     NumberFormat.getNumberInstance(locale).apply {
         minimumFractionDigits = 0
         maximumFractionDigits = 2

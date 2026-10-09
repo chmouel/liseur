@@ -1266,6 +1266,8 @@
     <string name="translation_settings_target">Translate into</string>
     <string name="translation_settings_target_app">%1$s, the app\'s language</string>
     <string name="translation_settings_target_follow">Follow the app\'s language</string>
+    <string name="translation_settings_model_price">$%1$s in, $%2$s out per million tokens</string>
+    <string name="translation_settings_model_free">Free</string>
     <string name="translation_settings_test">Translate a test sentence</string>
     <string name="translation_settings_test_passed">It works: %1$s</string>
     <string name="translation_settings_device_unavailable">This phone has no translator that apps can use. Choose another service.</string>

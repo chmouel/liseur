@@ -1166,6 +1166,8 @@
     <string name="translation_settings_target">译为</string>
     <string name="translation_settings_target_app">%1$s（应用语言）</string>
     <string name="translation_settings_target_follow">跟随应用语言</string>
+    <string name="translation_settings_model_price">每百万词元：输入 $%1$s，输出 $%2$s</string>
+    <string name="translation_settings_model_free">免费</string>
     <string name="translation_settings_test">翻译一句测试文字</string>
     <string name="translation_settings_test_passed">可以使用：%1$s</string>
     <string name="translation_settings_device_unavailable">本机没有可供应用使用的翻译功能。请选择其他服务。</string>
