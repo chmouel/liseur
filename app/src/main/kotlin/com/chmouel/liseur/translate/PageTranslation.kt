@@ -1,8 +1,13 @@
 package com.chmouel.liseur.translate
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -137,6 +142,7 @@ internal class PageTranslation<P>(
     private var halted: TranslationError? = null
     private var nextId = 0
     private var job: Job? = null
+    private var asking: Job? = null
 
     fun start(place: P, key: String) {
         check(job == null) { "Already started" }
@@ -226,6 +232,8 @@ internal class PageTranslation<P>(
                 if (reader.key == startedAt) return
                 startedAt = reader.key
                 restart = reader
+                // The sentence on its way is for the place the reader left, and a slow service would hold the jump up.
+                asking?.cancel()
             }
         }
         wake.trySend(Unit)
@@ -290,7 +298,16 @@ internal class PageTranslation<P>(
             pending = sentence
             mutableState.value = PageTranslationState.Translating
             val translation = try {
-                translated(sentence, previous)
+                coroutineScope {
+                    val asked = async { translated(sentence, previous) }
+                    asking = asked
+                    asked.await()
+                }
+            } catch (e: CancellationException) {
+                // Dropped for a jump: the walk starts again where the reader went. A stopped run ends here.
+                currentCoroutineContext().ensureActive()
+                if (restart == null) throw e
+                continue
             } catch (e: TranslationError) {
                 if (e.halts) {
                     halted = e
@@ -299,6 +316,7 @@ internal class PageTranslation<P>(
                 // This sentence only: it stays in the original and the walk goes on.
                 null
             }
+            asking = null
             pending = null
             walked += sentence
             previous = sentence.text
@@ -314,7 +332,13 @@ internal class PageTranslation<P>(
         val key = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
         cache[key]?.let { return it }
         // Settings changed while it was asked may have sent it to another service.
-        return translator.translate(sentence.text, context).also { if (translator.answering() == identity) cache[key] = it }
+        return translator.translate(sentence.text, context).also {
+            // Far longer than the sentence is not its translation, and it would be held for the whole session.
+            if (it.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
+                throw TranslationError.Malformed("the translation is far longer than the sentence")
+            }
+            if (translator.answering() == identity) cache[key] = it
+        }
     }
 
     private val TranslationError.halts: Boolean
@@ -334,6 +358,10 @@ internal class PageTranslation<P>(
 
         // Enough of a selection, and of the text before it, to tell sentences apart.
         private const val MATCHED = 40
+
+        // A translation can run longer than its sentence, but not by this much.
+        private const val LONGEST = 2_000
+        private const val GROWTH = 8
 
         // Enough of the book's words before a sentence left untranslated to see they are on the page.
         private const val BOOK_TAIL = 8

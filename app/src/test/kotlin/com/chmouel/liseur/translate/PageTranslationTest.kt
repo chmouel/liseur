@@ -155,6 +155,32 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `a jump does not wait for the sentence on its way`() = runTest {
+        val run = FakeRun()
+        run.gate = CompletableDeferred()
+        val page = translation(run)
+        page.start(0, "start")
+        runCurrent()
+        // s0 is still with the service when the reader jumps; the jump goes ahead without its answer.
+        run.gate = null
+        page.onReader(PageReader.Elsewhere(20, "ch1.xhtml#p10"))
+        runCurrent()
+        assertEquals(listOf("S20", "S21", "S22", "S23"), page.texts())
+        assertEquals("s20" to null, run.asked[1])
+    }
+
+    @Test
+    fun `a reply far longer than its sentence is not put in the page`() = runTest {
+        val run = FakeRun()
+        run.answer = { if (it == "s1") "x".repeat(5_000) else it.uppercase() }
+        val page = translation(run)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(listOf("S0", "S2", "S3"), page.texts())
+        assertEquals(PageTranslationState.Ahead, page.state.value)
+    }
+
+    @Test
     fun `a sentence already translated is not asked again`() = runTest {
         val cache = PageTranslationCache()
         val first = FakeRun()
