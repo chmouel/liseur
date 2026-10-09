@@ -1291,6 +1291,7 @@
     <string name="services_server_used_both">%1$s, используется для чтения вслух и перевода</string>
     <string name="services_delete_translation">Перевод использует %1$s. Он переключится на переводчик этого телефона.</string>
     <string name="services_delete_translation_off">Перевод использует %1$s. Он будет отключён, пока вы не выберете другую службу.</string>
+    <string name="services_delete_translation_unsure">Перевод использует %1$s. Он переключится на переводчик этого телефона, если он есть.</string>
     <string name="translation_settings_title">Перевод</string>
     <string name="translation_settings_entry_summary">%1$s → %2$s</string>
     <string name="translation_settings_provider">Служба перевода</string>

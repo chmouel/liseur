@@ -1152,6 +1152,7 @@
     <string name="services_server_used_both">%1$s，用于朗读和翻译</string>
     <string name="services_delete_translation">翻译正在使用 %1$s。删除后将改用本机翻译。</string>
     <string name="services_delete_translation_off">翻译正在使用 %1$s。删除后翻译将关闭，直到你选择其他服务。</string>
+    <string name="services_delete_translation_unsure">翻译正在使用 %1$s。删除后将改用本机翻译（如果本机支持）。</string>
     <string name="translation_settings_title">翻译</string>
     <string name="translation_settings_entry_summary">%1$s，译为%2$s</string>
     <string name="translation_settings_provider">翻译服务</string>
