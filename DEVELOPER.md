@@ -1684,6 +1684,9 @@ reader behavior.
   updates them in the same DataStore edit, and a deleted server's
   translation falls back to the device. Like read aloud's, these are in
   the settings backup but not in liseur-sync settings sync.
+- Model lists are sorted by name. A server list that prices its models
+  (OpenRouter's `pricing`, dollars per token) shows the input and output
+  price per million tokens under each one.
 
 ### Covers, UI, and dependencies
 

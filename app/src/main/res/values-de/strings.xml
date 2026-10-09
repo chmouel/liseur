@@ -1225,6 +1225,8 @@
     <string name="translation_settings_target">Übersetzen nach</string>
     <string name="translation_settings_target_app">%1$s, die Sprache der App</string>
     <string name="translation_settings_target_follow">Sprache der App folgen</string>
+    <string name="translation_settings_model_price">%1$s $ Eingabe, %2$s $ Ausgabe pro Million Tokens</string>
+    <string name="translation_settings_model_free">Kostenlos</string>
     <string name="translation_settings_test">Testsatz übersetzen</string>
     <string name="translation_settings_test_passed">Es funktioniert: %1$s</string>
     <string name="translation_settings_device_unavailable">Dieses Telefon hat keinen Übersetzer, den Apps nutzen können. Wähle einen anderen Dienst.</string>
