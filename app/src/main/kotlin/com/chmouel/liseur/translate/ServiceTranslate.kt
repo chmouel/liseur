@@ -71,7 +71,7 @@ internal class ServiceTranslate(
      * key changed while it was asked. Throws [TranslationError].
      */
     suspend fun translate(service: TranslationService, passage: String, source: String?, target: String): String =
-        requests.run(service.owner()) { service.translate(passage, source, target) }
+        requests.run(service::owner) { service.translate(passage, source, target) }
 
     private fun resolve(s: AppSettings): TranslationService {
         val wanted = when (val provider = s.translationProvider) {

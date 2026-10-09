@@ -1671,7 +1671,9 @@ reader behavior.
   empty, quota, malformed, refused key and unreachable are told apart
   (`TranslationError`). Each request runs under the connection's
   generation (`TranslationRequests`): a key or address change while it
-  is out discards the reply and asks again, and the sheet drops a reply
+  is out discards the reply and asks again. Each attempt checks the
+  server it actually used, since a retry may be on another one after a
+  move, and the sheet drops a reply
   for a passage, language, service or model it no longer shows.
 - `translation_provider` and `translation_server` reference a listed
   server like read aloud's choice; each server's translation model is in
