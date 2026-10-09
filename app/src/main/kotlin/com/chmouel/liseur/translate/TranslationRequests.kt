@@ -14,19 +14,28 @@ internal class TranslationRequests(private val generation: (owner: String) -> In
      * is, before and after, since an attempt may land on another server
      * than the one before it.
      */
-    suspend fun run(owner: suspend () -> String?, block: suspend () -> String): String {
+    suspend fun run(owner: suspend () -> String?, block: suspend () -> String): String =
+        run(owner, { it }) { block() }.second
+
+    /**
+     * [block]'s reply or failure with what it was asked under, asked again
+     * while that changed during it: [bind] gives it before and after each
+     * attempt, and [owner] names the connection it uses.
+     */
+    suspend fun <B> run(bind: suspend () -> B, owner: (B) -> String?, block: suspend (B) -> String): Pair<B, String> {
         repeat(ATTEMPTS) {
-            val asked = owner()
+            val bound = bind()
+            val asked = owner(bound)
             val before = asked?.let(generation)
             // A failure is the old connection's as much as a reply is, so it is judged the same way.
             val outcome = try {
-                Result.success(block())
+                Result.success(block(bound))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Result.failure(e)
             }
-            if (owner() == asked && (asked == null || generation(asked) == before)) return outcome.getOrThrow()
+            if (bind() == bound && (asked == null || generation(asked) == before)) return bound to outcome.getOrThrow()
         }
         throw TranslationError.Changed()
     }

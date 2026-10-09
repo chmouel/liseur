@@ -117,7 +117,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
 
     override suspend fun destination(): String? = null
 
-    override suspend fun owner(): String? = null
+    override fun owner(s: AppSettings): String? = null
 
     override suspend fun targets(source: String?): Map<String, PairState> = DevicePairs.targets(load(), source)
 

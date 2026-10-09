@@ -43,8 +43,8 @@ internal interface TranslationService {
     /** Where the text goes, for "Translated by %s."; null for the device. */
     suspend fun destination(): String?
 
-    /** Whose address or key a reply depends on (see `ServerConnections`); null for the device. */
-    suspend fun owner(): String?
+    /** Whose address or key a reply depends on under [s] (see `ServerConnections`); null for the device. */
+    fun owner(s: AppSettings): String?
 
     /** The model it sends a translation to under [s], as it resolves it; null when it has none. */
     fun model(s: AppSettings): String? = null

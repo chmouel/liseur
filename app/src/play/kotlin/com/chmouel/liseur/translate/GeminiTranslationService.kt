@@ -55,7 +55,7 @@ internal class GeminiTranslationService(
 
     override suspend fun destination(): String = "Gemini"
 
-    override suspend fun owner(): String = GeminiAccount.OWNER
+    override fun owner(s: AppSettings): String = GeminiAccount.OWNER
 
     override suspend fun targets(source: String?): Map<String, PairState>? = null
 
