@@ -42,7 +42,7 @@ class PageTranslationTest {
         }
     }
 
-    private fun TestScope.translation(run: FakeRun, cache: PageTranslationCache = PageTranslationCache(), ahead: Int = 4) =
+    private fun TestScope.translation(run: FakeRun, cache: PageTranslationCache = MemoryPageTranslationCache(), ahead: Int = 4) =
         PageTranslation(backgroundScope, run, cache, ::sentencesFrom, ahead)
 
     private fun PageTranslation<Int>.texts() = swaps.value["ch1.xhtml"].orEmpty().map { it.translation }
@@ -66,7 +66,7 @@ class PageTranslationTest {
     fun `a reader still in a long element does not pull the walk through it`() = runTest {
         val long = (0 until 40).map { PageSentence("s$it", "ch1.xhtml", "#p0", null) }
         val run = FakeRun()
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = long.getOrNull(i++)
@@ -84,7 +84,7 @@ class PageTranslationTest {
 
     @Test
     fun `a service changed mid-sentence does not file its answer under the old one`() = runTest {
-        val cache = PageTranslationCache()
+        val cache = MemoryPageTranslationCache()
         val run = object : SentenceTranslator {
             override val source = "fr"
             override val target = "en"
@@ -100,14 +100,62 @@ class PageTranslationTest {
         val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 2)
         page.start(0, "start")
         runCurrent()
-        assertEquals(null, cache["old\u0000\u0000s0"])
-        assertEquals("S1", cache["new\u0000s0\u0000s1"])
+        assertEquals(null, cache.get("old\u0000\u0000s0").translation)
+        assertEquals("S1", cache.get("new\u0000s0\u0000s1").translation)
+    }
+
+    @Test
+    fun `a service changed during a slow lookup is looked up again under its own name`() = runTest {
+        val run = FakeRun().apply { identity = "old" }
+        val lookedUp = CompletableDeferred<Unit>()
+        val cache = object : PageTranslationCache {
+            val saved = mutableMapOf("new\u0000\u0000s0" to "kept")
+
+            override suspend fun get(key: String): PageTranslationCache.Lookup {
+                if (key.startsWith("old")) {
+                    run.identity = "new"
+                    lookedUp.await()
+                    return PageTranslationCache.Lookup("stale", 0L)
+                }
+                return PageTranslationCache.Lookup(saved[key], 0L)
+            }
+
+            override suspend fun put(key: String, value: String, stamp: Long) {
+                saved[key] = value
+            }
+        }
+        val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 1)
+        page.start(0, "start")
+        runCurrent()
+        lookedUp.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("kept"), page.texts())
+        assertEquals(emptyList<String>(), run.asked.map { it.first })
+    }
+
+    @Test
+    fun `a reply the cache will not keep is still shown`() = runTest {
+        val run = FakeRun()
+        val stamps = mutableListOf<Long>()
+        val cache = object : PageTranslationCache {
+            override suspend fun get(key: String) = PageTranslationCache.Lookup(null, 7L)
+
+            // Cleared since the lookup: nothing is kept.
+            override suspend fun put(key: String, value: String, stamp: Long) {
+                stamps += stamp
+            }
+        }
+        val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 1)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(listOf("S0"), page.texts())
+        assertEquals(listOf(7L), stamps)
     }
 
     @Test
     fun `a reader past the walk is caught up with, without asking for what they passed`() = runTest {
         val run = FakeRun()
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), ::sentencesFrom, 4, behind = { it.text.drop(1).toInt() < 30 })
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), ::sentencesFrom, 4, behind = { it.text.drop(1).toInt() < 30 })
         page.start(0, "start")
         runCurrent()
         // In one long element, as far as the page can tell: no restart would land there.
@@ -121,7 +169,7 @@ class PageTranslationTest {
     @Test
     fun `a service chosen since is asked again for what the old one translated`() = runTest {
         val run = FakeRun()
-        val cache = PageTranslationCache()
+        val cache = MemoryPageTranslationCache()
         translation(run, cache).start(0, "start")
         runCurrent()
         run.identity = "other"
@@ -202,7 +250,7 @@ class PageTranslationTest {
 
     @Test
     fun `a sentence already translated is not asked again`() = runTest {
-        val cache = PageTranslationCache()
+        val cache = MemoryPageTranslationCache()
         val first = FakeRun()
         translation(first, cache).start(0, "start")
         runCurrent()
@@ -279,7 +327,7 @@ class PageTranslationTest {
     @Test
     fun `the walked sentences of each resource stay apart once the walk crosses into the next`() = runTest {
         val two = (0 until 6).map { PageSentence("s$it", if (it < 3) "ch1.xhtml" else "ch2.xhtml", "#p$it", null) }
-        val page = PageTranslation(backgroundScope, FakeRun(), PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, FakeRun(), MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = two.getOrNull(i++)
@@ -325,7 +373,7 @@ class PageTranslationTest {
         val shown = mapOf("Il pleut." to "It rains.", "Il pleut fort." to "It pours.")
         run.answer = { shown.getValue(it) }
         run.failWith = { if (it !in shown) TranslationError.Refused() else null }
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = element.getOrNull(i++)
@@ -350,7 +398,7 @@ class PageTranslationTest {
         val run = FakeRun()
         val shown = mapOf("Non." to "No.", "Il pleut." to "It rains.")
         run.answer = { shown.getValue(it) }
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = paragraphs.getOrNull(i++)
@@ -374,7 +422,7 @@ class PageTranslationTest {
         val run = FakeRun()
         val shown = mapOf("Non." to "No.", "Il neige." to "It snows.")
         run.answer = { shown.getValue(it) }
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = paragraphs.getOrNull(i++)
@@ -394,7 +442,7 @@ class PageTranslationTest {
         val element = listOf(PageSentence("Il pleut, puis il pleut.", "ch1.xhtml", "#p0", null))
         val run = FakeRun()
         run.answer = { "It rains, then it rains." }
-        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { at: Int ->
             object : PageSentences {
                 var i = at
                 override suspend fun next() = element.getOrNull(i++)

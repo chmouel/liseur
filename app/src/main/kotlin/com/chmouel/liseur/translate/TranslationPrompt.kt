@@ -7,6 +7,12 @@ package com.chmouel.liseur.translate
  * translated.
  */
 internal object TranslationPrompt {
+    /**
+     * Raised whenever what is asked changes, so page translations saved
+     * under the old wording are asked for again.
+     */
+    const val VERSION = 1
+
     /** Longer passages are refused before anything is sent. */
     const val MAX_CHARACTERS = 2_000
 

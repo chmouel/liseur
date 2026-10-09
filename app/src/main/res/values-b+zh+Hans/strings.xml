@@ -1169,6 +1169,17 @@
     <string name="translation_settings_model_price">每百万词元：输入 $%1$s，输出 $%2$s</string>
     <string name="translation_settings_model_free">免费</string>
     <string name="translation_settings_test">翻译一句测试文字</string>
+    <string name="translation_settings_saved">已保存的翻译</string>
+    <plurals name="translation_settings_saved_count">
+        <item quantity="other">%1$s 句，%2$s</item>
+    </plurals>
+    <string name="translation_settings_saved_none">尚未保存任何翻译</string>
+    <string name="translation_settings_saved_clear">清除已保存的翻译</string>
+    <string name="translation_settings_saved_clear_title">清除已保存的翻译？</string>
+    <string name="translation_settings_saved_clear_body">下次阅读时会重新翻译这些页面。当前打开的书会保留页面上已有的翻译，直到你重新打开它。</string>
+    <string name="translation_settings_saved_clear_confirm">清除</string>
+    <string name="translation_settings_saved_clear_failed">无法清除已保存的翻译，请重试。</string>
+    <string name="translation_settings_saved_note">翻译过的页面会保存在这部手机上，回看时无需等待。它们不会被备份。</string>
     <string name="translation_settings_test_passed">可以使用：%1$s</string>
     <string name="translation_settings_device_unavailable">本机没有可供应用使用的翻译功能。请选择其他服务。</string>
     <string name="translation_settings_device_downloads_detail">在系统设置中下载语言后即可翻译。</string>

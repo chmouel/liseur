@@ -1216,6 +1216,18 @@
     <string name="translation_settings_model_price">%1$s $ en entrée, %2$s $ en sortie par million de jetons</string>
     <string name="translation_settings_model_free">Gratuit</string>
     <string name="translation_settings_test">Traduire une phrase de test</string>
+    <string name="translation_settings_saved">Traductions enregistrées</string>
+    <plurals name="translation_settings_saved_count">
+        <item quantity="one">%1$s phrase, %2$s</item>
+        <item quantity="other">%1$s phrases, %2$s</item>
+    </plurals>
+    <string name="translation_settings_saved_none">Aucune pour l\'instant</string>
+    <string name="translation_settings_saved_clear">Effacer les traductions enregistrées</string>
+    <string name="translation_settings_saved_clear_title">Effacer les traductions enregistrées ?</string>
+    <string name="translation_settings_saved_clear_body">Les pages seront traduites à nouveau la prochaine fois que vous les lirez. Un livre ouvert en ce moment garde la traduction déjà affichée jusqu\'à ce que vous le rouvriez.</string>
+    <string name="translation_settings_saved_clear_confirm">Effacer</string>
+    <string name="translation_settings_saved_clear_failed">Impossible d\'effacer les traductions enregistrées. Réessayez.</string>
+    <string name="translation_settings_saved_note">Les pages traduites sont gardées sur ce téléphone pour y revenir sans attendre. Elles ne sont pas sauvegardées.</string>
     <string name="translation_settings_test_passed">Ça marche : %1$s</string>
     <string name="translation_settings_device_unavailable">Ce téléphone n\'a pas de traducteur utilisable par les applications. Choisissez un autre service.</string>
     <string name="translation_settings_device_downloads_detail">Une langue est traduite une fois téléchargée dans les paramètres du système.</string>

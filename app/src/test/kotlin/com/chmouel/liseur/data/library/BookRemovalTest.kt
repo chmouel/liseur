@@ -23,6 +23,8 @@ import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.translate.SavedTranslations
+import com.chmouel.liseur.translate.TranslationCacheDatabase
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.readium.r2.shared.util.asset.AssetRetriever
@@ -774,6 +776,48 @@ class BookRemovalTest {
             LibraryFilters(setOf(LibraryFilterOption.ARCHIVED)).accepts(hidden),
         )
         assertEquals(true, LibraryFilters().accepts(hidden.copy(hiddenAt = null)))
+    }
+
+    @Test
+    fun `a removed book's saved translations go, and a rolled back removal keeps them`() = runTest {
+        val cacheDb = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            TranslationCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        try {
+            val saved = SavedTranslations(cacheDb, present = { db.bookDao().presentUrls(it) })
+            var told = 0
+            val removal = BookRemoval(
+                bookDao = db.bookDao(),
+                sessionDao = db.readingSessionDao(),
+                peerStateDao = db.syncPeerStateDao(),
+                identityDao = db.workIdentityDao(),
+                progressDao = db.readingProgressDao(),
+                annotationDao = db.annotationDao(),
+                annotationSyncDao = db.annotationSyncDao(),
+                inTransaction = { work -> db.withTransaction { work() } },
+                onBooksRemoved = { told++ },
+            )
+            db.bookDao().upsert(book("gone"))
+            db.bookDao().upsert(book("kept"))
+            for (url in listOf("gone", "kept")) {
+                val cache = saved.forBook(url)
+                cache.put("one", "un", cache.get("one").stamp)
+            }
+
+            runCatching { db.withTransaction { removal.deleteByUrls(listOf("kept")); error("the account change failed") } }
+            saved.sweep()
+            assertNotNull(db.bookDao().getByUrl("kept"))
+            assertEquals("un", saved.forBook("kept").get("one").translation)
+
+            removal.deleteByUrls(listOf("gone"))
+            saved.sweep()
+            assertEquals(2, told)
+            assertNull(saved.forBook("gone").get("one").translation)
+            assertEquals("un", saved.forBook("kept").get("one").translation)
+        } finally {
+            cacheDb.close()
+        }
     }
 
     @Test

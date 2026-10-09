@@ -25,6 +25,9 @@ JavaScript keeps each changed text node's original and redraws from it,
 so Stop and read aloud put the book back exactly. Translations stay in
 memory for the session; nothing is written to disk.
 
+> Amended by [ADR-0046](0046-translated-sentences-are-kept-on-the-phone.md):
+> translated sentences are now saved on the phone, outside backups.
+
 While a page shows a translation:
 
 - Positions keep saving, without quoted text: href, progression and the

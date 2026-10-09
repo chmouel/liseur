@@ -292,6 +292,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE url IN (:urls)")
     suspend fun getByUrls(urls: List<String>): List<Book>
 
+    @Query("SELECT url FROM books WHERE url IN (:urls)")
+    suspend fun presentUrls(urls: List<String>): List<String>
+
     /** Puts a book away, or brings it back to the shelf. */
     @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")
     suspend fun setArchived(url: String, archivedAt: Long?)

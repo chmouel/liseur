@@ -1,0 +1,153 @@
+package com.chmouel.liseur.translate
+
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@Config(sdk = [35], application = android.app.Application::class)
+@RunWith(RobolectricTestRunner::class)
+class SavedTranslationsTest {
+    private lateinit var db: TranslationCacheDatabase
+    private val library = mutableSetOf(BOOK, OTHER)
+    private var clock = 1_000L
+
+    @Before
+    fun open() {
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), TranslationCacheDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+    }
+
+    @After
+    fun close() = db.close()
+
+    private fun saved(maxSentences: Int = 100, maxCharacters: Long = 1_000_000) = SavedTranslations(
+        database = db,
+        present = { urls -> urls.filter { it in library } },
+        now = { clock++ },
+        maxSentences = maxSentences,
+        maxCharacters = maxCharacters,
+    )
+
+    private suspend fun PageTranslationCache.keep(key: String, value: String) = put(key, value, get(key).stamp)
+
+    @Test
+    fun `a book opened again finds what it translated`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+        assertNull(store.forBook(OTHER).get("one").translation)
+        assertEquals(1, store.stats.first().sentences)
+    }
+
+    @Test
+    fun `a reply asked before a clear is not kept after it`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        val asked = book.get("one")
+
+        store.clear()
+        book.put("one", "un", asked.stamp)
+
+        assertNull(book.get("one").translation)
+        book.keep("two", "deux")
+        assertEquals("deux", book.get("two").translation)
+    }
+
+    @Test
+    fun `a removed book's sentences go and its open handle keeps nothing more`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        book.keep("one", "un")
+        store.forBook(OTHER).keep("one", "un")
+
+        library -= BOOK
+        store.sweep()
+
+        assertNull(book.get("one").translation)
+        book.keep("two", "deux")
+        assertNull(book.get("two").translation)
+        assertEquals("un", store.forBook(OTHER).get("one").translation)
+
+        // Added back, it is a new opening and keeps again.
+        library += BOOK
+        store.forBook(BOOK).keep("two", "deux")
+        assertEquals("deux", store.forBook(BOOK).get("two").translation)
+    }
+
+    @Test
+    fun `a sweep while the book is still there keeps it`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        book.keep("one", "un")
+
+        // As when a removal's transaction has not committed, or rolled back.
+        store.sweep()
+
+        assertEquals("un", book.get("one").translation)
+        book.keep("two", "deux")
+        assertEquals("deux", book.get("two").translation)
+    }
+
+    @Test
+    fun `the least recently read go first past the cap, also across restarts`() = runTest {
+        saved(maxSentences = 1_000).forBook(BOOK).apply {
+            for (i in 0 until 5) keep("s$i", "t$i")
+        }
+        val book = saved(maxSentences = 3).forBook(BOOK)
+        // Read again, so newer than the others.
+        book.get("s0")
+
+        val store = saved(maxSentences = 3)
+        store.tidy()
+
+        assertEquals(3, store.stats.first().sentences)
+        assertEquals("t0", book.get("s0").translation)
+        assertNull(book.get("s1").translation)
+        assertNull(book.get("s2").translation)
+        assertEquals("t4", book.get("s4").translation)
+    }
+
+    @Test
+    fun `long translations are trimmed to the character budget`() = runTest {
+        saved().forBook(BOOK).apply {
+            keep("a", "x".repeat(400))
+            keep("b", "y".repeat(400))
+            keep("c", "z".repeat(400))
+        }
+
+        val store = saved(maxCharacters = 900)
+        store.tidy()
+
+        val book = store.forBook(BOOK)
+        assertNull(book.get("a").translation)
+        assertEquals(400, book.get("b").translation?.length)
+        assertEquals(400, book.get("c").translation?.length)
+    }
+
+    @Test
+    fun `clearing forgets everything`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.forBook(OTHER).keep("two", "deux")
+
+        store.clear()
+
+        assertEquals(0, store.stats.first().sentences)
+    }
+
+    private companion object {
+        const val BOOK = "file:///books/one.epub"
+        const val OTHER = "file:///books/two.epub"
+    }
+}
