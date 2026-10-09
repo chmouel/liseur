@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.data.security.SecretCipher
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerChange
+import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.tts.ServerKeys
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
@@ -19,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,13 +40,14 @@ class ServerConnectionsTest {
     val folder = TemporaryFolder()
 
     private lateinit var scope: CoroutineScope
+    private lateinit var settings: AppSettingsRepository
     private lateinit var connections: ServerConnections
     private val told = CopyOnWriteArrayList<String>()
 
     @Before
     fun setUp() {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val settings = AppSettingsRepository(PreferenceDataStoreFactory.create { File(folder.root, "app.preferences_pb") })
+        settings = AppSettingsRepository(PreferenceDataStoreFactory.create { File(folder.root, "app.preferences_pb") })
         val cipher = SecretCipher("test").apply {
             keyForTesting = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         }
@@ -76,7 +79,7 @@ class ServerConnectionsTest {
 
     private suspend fun delete(id: String) {
         val done = CompletableDeferred<Boolean>()
-        connections.delete(id) { done.complete(it) }
+        connections.delete(id, done = { done.complete(it) })
         assertTrue(withTimeout(WAIT) { done.await() })
     }
 
@@ -110,6 +113,32 @@ class ServerConnectionsTest {
 
         delete(chat)
         assertEquals(null, connections.key(origin(SPEECH)))
+    }
+
+    private suspend fun restore(values: JSONObject) =
+        withTimeout(WAIT) { connections.restore(values) { settings.restoreBackupValues(values) } }
+
+    @Test
+    fun aRestoreThatReplacesTheServersEndsWhatUsedTheOldOnes(): Unit = runBlocking {
+        add("Speech", SPEECH)
+        val before = connections.generation(origin(SPEECH)).value
+        told.clear()
+
+        restore(JSONObject().put(ServerSettings.SERVERS_NAME, "[]"))
+
+        assertEquals(listOf(origin(SPEECH)), told.toList())
+        assertTrue(connections.generation(origin(SPEECH)).value > before)
+        assertEquals(emptyList<Any>(), settings.settings.first().servers.readable)
+    }
+
+    @Test
+    fun aRestoreWithoutServersEndsNothing(): Unit = runBlocking {
+        add("Speech", SPEECH)
+        told.clear()
+
+        restore(JSONObject().put("theme_mode", "dark"))
+
+        assertTrue(told.isEmpty())
     }
 
     @Test

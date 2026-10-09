@@ -209,6 +209,7 @@ class AppContainer(context: Context) {
             finishedState = finishedState,
             inTransaction = { work -> database.withTransaction { work() } },
         ),
+        restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
     )
 
     val bookExport = BookExportRepository(context.applicationContext, database.bookDao())
