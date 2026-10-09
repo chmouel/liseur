@@ -67,8 +67,11 @@ import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.translate.PageTranslationCache
+import com.chmouel.liseur.translate.SavedTranslations
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.translate.TranslateFeatureFactory
+import com.chmouel.liseur.translate.TranslationCacheDatabase
 import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.reader.OpenBookHandles
 import com.chmouel.liseur.reader.ReaderPresence
@@ -95,6 +98,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.io.File
 
 /**
  * Manual composition root: shared Readium services and app-wide
@@ -152,7 +156,34 @@ class AppContainer(context: Context) {
         bookOrbitBindings = database.bookOrbitBindingDao(),
         remoteStatsDao = database.remoteStatsDao(),
         onReadingHistoryRemoved = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
+        // Launched on its own: the sweep must not run inside a caller's
+        // transaction. Not opened yet, it sweeps when it opens.
+        onBooksRemoved = {
+            if (savedTranslationsOpening.isInitialized()) applicationScope.launch { savedTranslations.sweep() }
+        },
     )
+
+    private val savedTranslationsOpening = lazy {
+        val name = TranslationCacheDatabase.NAME
+        val path = context.getDatabasePath(name)
+        SavedTranslations(
+            database = Room.databaseBuilder(context, TranslationCacheDatabase::class.java, name).build(),
+            present = { urls -> database.bookDao().presentUrls(urls) },
+            files = { listOf(path, File("$path-wal"), File("$path-shm")) },
+        ).also { saved -> applicationScope.launch { saved.tidy() } }
+    }
+
+    /** Sentences page translation translated, kept apart from the library and its backups. */
+    val savedTranslations: SavedTranslations by savedTranslationsOpening
+
+    /** [bookUrl]'s saved page translations, the store opened only once a page is translated. */
+    fun pageTranslations(bookUrl: String): PageTranslationCache = object : PageTranslationCache {
+        private val book by lazy { savedTranslations.forBook(bookUrl) }
+
+        override suspend fun get(key: String) = book.get(key)
+
+        override suspend fun put(key: String, value: String, stamp: Long) = book.put(key, value, stamp)
+    }
 
     /**
      * What a book's file hashes to, worked out on demand.

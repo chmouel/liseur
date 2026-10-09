@@ -37,6 +37,12 @@ All of this stays in the app's own private storage:
   reading aloud or translation, encrypted the same way. A server key is
   kept for the server you pasted it for, and is sent only to that
   server.
+- When you translate a book in the page, the translated sentences, so a
+  page you read again does not have to be translated again. They are
+  kept for the book they came from, at most 50,000 of them, the least
+  recently read going first. Removing the book deletes them, and Settings,
+  Translation has a button to clear them all. They are not backed up.
+  A passage translated in the sheet is not saved.
 
 Uninstalling the app removes all of it.
 
@@ -171,8 +177,10 @@ passage, up to 2,000 characters, with its language and the language you
 want, to the same address over HTTPS, together with your key and the
 model you picked. No book title, file, identifier or reading position
 goes with it. Requests are billed to your key under Google's terms, and
-Google's retention policy for the Gemini API applies to them. The
-translation is shown on screen and is never written to storage.
+Google's retention policy for the Gemini API applies to them. A
+passage's translation is shown on screen and is never written to
+storage; sentences translated in the page are saved on your device as
+described above, whichever service translated them.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
@@ -184,7 +192,8 @@ Liseur takes part in Android's standard backup, so your library, reading
 positions, highlights, notes and settings can follow you to a new device.
 That backup is handled by Android and stored in your own Google account,
 under Google's terms, not the developer's. Liseur has no access to it.
-Downloaded book files and generated covers are deliberately excluded.
+Downloaded book files, generated covers and saved translations are
+deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
 this and asks you to sign in again. A server or Gemini API key

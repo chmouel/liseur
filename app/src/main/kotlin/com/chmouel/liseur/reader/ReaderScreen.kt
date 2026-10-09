@@ -115,6 +115,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageTranslation
+import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.readaloud.ReadAloudFeature
@@ -457,6 +458,8 @@ fun ReaderScreen(
     onBack: () -> Unit,
     readAloud: ReaderReadAloud? = null,
     translate: TranslateFeature = TranslateFeature.None,
+    // Where page translation keeps what it translated: this book's saved ones, or for this screen only.
+    pageTranslations: PageTranslationCache = remember { MemoryPageTranslationCache() },
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -677,7 +680,6 @@ fun ReaderScreen(
     var pageTranslated by remember { mutableStateOf(false) }
     // Counts the times [pageTranslated] turned, so a place measured across a turn is known.
     var pageTranslatedTurns by remember { mutableIntStateOf(0) }
-    val pageTranslations = remember { PageTranslationCache() }
     val translatedViews = remember { Collections.newSetFromMap(WeakHashMap<WebView, Boolean>()) }
     val view = LocalView.current
     val context = LocalContext.current

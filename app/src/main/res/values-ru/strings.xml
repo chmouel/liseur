@@ -1308,6 +1308,20 @@
     <string name="translation_settings_model_price">%1$s $ за ввод, %2$s $ за вывод на миллион токенов</string>
     <string name="translation_settings_model_free">Бесплатно</string>
     <string name="translation_settings_test">Перевести тестовую фразу</string>
+    <string name="translation_settings_saved">Сохранённые переводы</string>
+    <plurals name="translation_settings_saved_count">
+        <item quantity="one">%1$s предложение, %2$s</item>
+        <item quantity="few">%1$s предложения, %2$s</item>
+        <item quantity="many">%1$s предложений, %2$s</item>
+        <item quantity="other">%1$s предложения, %2$s</item>
+    </plurals>
+    <string name="translation_settings_saved_none">Пока ничего не сохранено</string>
+    <string name="translation_settings_saved_clear">Очистить сохранённые переводы</string>
+    <string name="translation_settings_saved_clear_title">Очистить сохранённые переводы?</string>
+    <string name="translation_settings_saved_clear_body">Страницы будут переведены заново, когда вы снова их откроете. Уже открытая книга сохранит перевод на странице, пока вы не откроете её снова.</string>
+    <string name="translation_settings_saved_clear_confirm">Очистить</string>
+    <string name="translation_settings_saved_clear_failed">Не удалось очистить сохранённые переводы. Попробуйте ещё раз.</string>
+    <string name="translation_settings_saved_note">Переведённые страницы хранятся на этом телефоне, чтобы к ним можно было сразу вернуться. В резервную копию они не попадают.</string>
     <string name="translation_settings_test_passed">Работает: %1$s</string>
     <string name="translation_settings_device_unavailable">На этом телефоне нет переводчика, доступного приложениям. Выберите другую службу.</string>
     <string name="translation_settings_device_downloads_detail">Язык переводится после загрузки в системных настройках.</string>

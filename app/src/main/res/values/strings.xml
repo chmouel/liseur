@@ -1269,6 +1269,18 @@
     <string name="translation_settings_model_price">$%1$s in, $%2$s out per million tokens</string>
     <string name="translation_settings_model_free">Free</string>
     <string name="translation_settings_test">Translate a test sentence</string>
+    <string name="translation_settings_saved">Saved translations</string>
+    <plurals name="translation_settings_saved_count">
+        <item quantity="one">%1$s sentence, %2$s</item>
+        <item quantity="other">%1$s sentences, %2$s</item>
+    </plurals>
+    <string name="translation_settings_saved_none">None saved yet</string>
+    <string name="translation_settings_saved_clear">Clear saved translations</string>
+    <string name="translation_settings_saved_clear_title">Clear saved translations?</string>
+    <string name="translation_settings_saved_clear_body">Pages will be translated again the next time you read them. A book open right now keeps the translation already on its page until you reopen it.</string>
+    <string name="translation_settings_saved_clear_confirm">Clear</string>
+    <string name="translation_settings_saved_clear_failed">Could not clear saved translations. Try again.</string>
+    <string name="translation_settings_saved_note">Translated pages are kept on this phone so going back to them is instant. They are not backed up.</string>
     <string name="translation_settings_test_passed">It works: %1$s</string>
     <string name="translation_settings_device_unavailable">This phone has no translator that apps can use. Choose another service.</string>
     <string name="translation_settings_device_downloads_detail">A language is translated once it is downloaded in the system\'s settings.</string>
