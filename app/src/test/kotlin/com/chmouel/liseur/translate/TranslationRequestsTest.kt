@@ -103,4 +103,21 @@ class TranslationRequestsTest {
         }
         assertEquals("reply 2", reply)
     }
+
+    @Test
+    fun `a bound request is asked again under the binding chosen while it was out`() = runTest {
+        data class Binding(val server: String)
+        val requests = TranslationRequests { 0 }
+        var chosen = Binding("https://a.example")
+        val asked = mutableListOf<String>()
+        val (bound, reply) = requests.run({ chosen }, Binding::server) { binding ->
+            asked += binding.server
+            // B is picked while A is answering.
+            if (asked.size == 1) chosen = Binding("https://b.example")
+            "from ${binding.server}"
+        }
+        assertEquals(listOf("https://a.example", "https://b.example"), asked)
+        assertEquals("https://b.example", bound.server)
+        assertEquals("from https://b.example", reply)
+    }
 }

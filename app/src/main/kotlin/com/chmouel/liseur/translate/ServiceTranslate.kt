@@ -80,7 +80,7 @@ internal class ServiceTranslate(
      * key changed while it was asked. Throws [TranslationError].
      */
     suspend fun translate(service: TranslationService, passage: String, source: String?, target: String): String =
-        requests.run(service::owner) { service.translate(passage, source, target) }
+        requests.run({ service.owner(settings.settings.first()) }) { service.translate(passage, source, target) }
 
     /**
      * A translator that follows the settings: each sentence goes to the
@@ -88,7 +88,13 @@ internal class ServiceTranslate(
      * bar after a refusal takes over the run.
      */
     override suspend fun openPage(source: String?, target: String): SentenceTranslator {
-        class Bound(val identity: String, val service: TranslationService, val run: TranslationRun, val destination: String?)
+        class Bound(
+            val identity: String,
+            val service: TranslationService,
+            val run: TranslationRun,
+            val destination: String?,
+            val owner: String?,
+        )
 
         suspend fun wanted(): Triple<TranslationService, String, AppSettings> {
             // One read, so the service and the identity it is known by come from the same settings.
@@ -101,7 +107,7 @@ internal class ServiceTranslate(
         suspend fun bind(): Bound {
             val (service, identity, s) = wanted()
             val destination = service.destination()
-            return Bound(identity, service, service.open(source, target, s), destination)
+            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s))
         }
 
         var bound by mutableStateOf(bind())
@@ -123,8 +129,9 @@ internal class ServiceTranslate(
             override suspend fun answering() = rebound().identity
 
             override suspend fun translate(sentence: String, context: String?): Translated {
-                val current = rebound()
-                return Translated(requests.run(current.service::owner) { current.run.translate(sentence, context) }, current.identity)
+                // Judged by the settings the run asks with: a change while it is out binds again and asks the new one.
+                val (current, text) = requests.run(::rebound, Bound::owner) { it.run.translate(sentence, context) }
+                return Translated(text, current.identity)
             }
 
             override fun close() = bound.run.close()

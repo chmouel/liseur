@@ -57,8 +57,8 @@ internal class ServerTranslationService(
 
     override suspend fun destination(): String? = settings.settings.first().translationServerConnection?.name
 
-    override suspend fun owner(): String? =
-        settings.settings.first().translationServerConnection?.let { ServerConnections.originOf(it.url) }
+    override fun owner(s: AppSettings): String? =
+        s.translationServerConnection?.let { ServerConnections.originOf(it.url) }
 
     override suspend fun targets(source: String?): Map<String, PairState>? = null
 
