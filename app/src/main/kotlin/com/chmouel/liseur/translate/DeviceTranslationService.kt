@@ -256,7 +256,8 @@ internal class DeviceTranslationService(private val context: Context) : Translat
 
     companion object {
         private const val QUERY_TIMEOUT_MS = 5_000L
-        private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // One question at a time: a stuck system call cannot pile up threads, and answers arrive in order.
+        private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
         /**
          * Whether this phone has a translator apps can use, whether or not a
