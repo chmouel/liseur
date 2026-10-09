@@ -495,16 +495,17 @@ private fun ServerScreen(
     }
 
     if (confirmDelete && server != null) {
-        // Whether translation has the phone's translator to fall back on.
+        // Whether translation has the phone's translator to fall back on; null until the system says.
         val deviceTranslates by produceState<Boolean?>(null, usedByTranslation) {
-            value = if (usedByTranslation) DeviceTranslationService.available(context) else true
+            if (usedByTranslation) value = DeviceTranslationService.available(context)
         }
         val consequences = listOfNotNull(
             stringResource(R.string.services_delete_read_aloud, server.name).takeIf { usedByReadAloud },
             when {
                 !usedByTranslation -> null
+                deviceTranslates == true -> stringResource(R.string.services_delete_translation, server.name)
                 deviceTranslates == false -> stringResource(R.string.services_delete_translation_off, server.name)
-                else -> stringResource(R.string.services_delete_translation, server.name)
+                else -> stringResource(R.string.services_delete_translation_unsure, server.name)
             },
         )
         AlertDialog(

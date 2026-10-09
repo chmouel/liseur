@@ -1252,6 +1252,7 @@
     <string name="services_server_used_both">%1$s, used for read aloud and translation</string>
     <string name="services_delete_translation">Translation uses %1$s. It will switch to this phone\'s translator.</string>
     <string name="services_delete_translation_off">Translation uses %1$s. It will be off until you choose another service.</string>
+    <string name="services_delete_translation_unsure">Translation uses %1$s. It will switch to this phone\'s translator, if the phone has one.</string>
     <string name="translation_settings_title">Translation</string>
     <string name="translation_settings_entry_summary">%1$s, into %2$s</string>
     <string name="translation_settings_provider">Translation service</string>

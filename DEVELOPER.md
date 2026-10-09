@@ -1637,7 +1637,9 @@ reader behavior.
   sheet, never as a second sheet. The feature lives in
   `app/src/main/kotlin/.../translate/`; the reader sees only
   `TranslateFeature` (`None` when nothing is wired), built by the flavor's
-  `TranslateFeatureFactory`. Nothing in `main` may name Gemini.
+  `TranslateFeatureFactory`. Code that talks to Gemini, its client,
+  address and model list, lives only in `app/src/play/`; `main` knows
+  Gemini only as a service id and the settings that store its choice.
 - Services: this phone (`DeviceTranslationService`, Android 12+
   `TranslationManager`, no library and no Google Play services), any
   server on the Services page speaking OpenAI's chat completions
