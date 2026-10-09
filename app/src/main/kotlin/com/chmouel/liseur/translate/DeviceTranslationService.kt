@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.runtime.Composable
 import androidx.core.util.isNotEmpty
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.AppSettings
 import java.util.concurrent.Executors
 import java.util.function.Consumer
 import kotlin.coroutines.resume
@@ -136,7 +137,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     }
 
     /** One translator for the whole run, made at the first sentence and destroyed on [TranslationRun.close]. */
-    override fun open(source: String?, target: String): TranslationRun = object : TranslationRun {
+    override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
         private val lock = Mutex()
         private var held: Any? = null
         private var closed = false

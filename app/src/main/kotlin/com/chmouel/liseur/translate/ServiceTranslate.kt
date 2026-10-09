@@ -90,18 +90,18 @@ internal class ServiceTranslate(
     override suspend fun openPage(source: String?, target: String): SentenceTranslator {
         class Bound(val identity: String, val service: TranslationService, val run: TranslationRun, val destination: String?)
 
-        suspend fun wanted(): Pair<TranslationService, String> {
+        suspend fun wanted(): Triple<TranslationService, String, AppSettings> {
             // One read, so the service and the identity it is known by come from the same settings.
             val s = settings.settings.first()
             val service = resolve(s)
-            return service to pageIdentity(s, service.id, service.model(s), source, target)
+            return Triple(service, pageIdentity(s, service.id, service.model(s), source, target), s)
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
         suspend fun bind(): Bound {
-            val (service, identity) = wanted()
+            val (service, identity, s) = wanted()
             val destination = service.destination()
-            return Bound(identity, service, service.open(source, target), destination)
+            return Bound(identity, service, service.open(source, target, s), destination)
         }
 
         var bound by mutableStateOf(bind())

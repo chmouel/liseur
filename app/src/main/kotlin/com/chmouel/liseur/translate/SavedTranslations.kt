@@ -210,9 +210,17 @@ class SavedTranslations(
         return PageTranslationCache.Lookup(found, stamp)
     }
 
-    internal suspend fun save(bookUrl: String, epoch: Long, key: String, translation: String, stamp: Long) {
+    internal suspend fun save(
+        bookUrl: String,
+        epoch: Long,
+        key: String,
+        translation: String,
+        stamp: Long,
+        inLibrary: suspend () -> Boolean = { true },
+    ) {
         writes.withLock {
             if (cleared.get() != stamp || (epochs[bookUrl] ?: 0L) != epoch) return
+            if (!inLibrary()) return
             dao.put(TranslatedSentence(bookUrl, hash(key), translation, now()))
             if (++puts % TRIM_EVERY == 0) trim()
         }
@@ -240,6 +248,12 @@ class SavedTranslations(
     }
 
     private inner class BookCache(private val bookUrl: String, private val epoch: Long) : PageTranslationCache {
+        // Made after a sweep already took its book away, nothing would fence it: so the book
+        // is looked for once, under the lock, and a later removal is the epoch's to catch.
+        @Volatile private var found = false
+
+        private suspend fun inLibrary() = found || present(listOf(bookUrl)).isNotEmpty().also { found = it }
+
         // A saved sentence that cannot be read or written is one asked again: never a failed page.
         override suspend fun get(key: String): PageTranslationCache.Lookup = try {
             lookup(bookUrl, key)
@@ -253,7 +267,7 @@ class SavedTranslations(
         override suspend fun put(key: String, value: String, stamp: Long) {
             if (stamp == MISSED) return
             try {
-                save(bookUrl, epoch, key, value, stamp)
+                save(bookUrl, epoch, key, value, stamp, ::inLibrary)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
