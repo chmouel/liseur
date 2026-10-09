@@ -165,8 +165,9 @@ locale:
 # The side-by-side build. Everything above installs over whatever carries
 # the production package name, which on a phone is somebody's library; the
 # targets below carry their own package name and cannot reach it. The
-# device is chosen with PHONE=, which falls back to SERIAL= like
-# everywhere else, and so defaults to the emulator.
+# device is chosen with PHONE=, which defaults to the first attached
+# physical device and falls back to SERIAL= (the emulator) when there is
+# none.
 dev:
 	$(GRADLE) assemble$(FLAVOR_TASK)Dev
 
