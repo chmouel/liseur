@@ -55,10 +55,12 @@ internal class ServiceTranslate(
     val servers = connections.servers
 
     /** What a translation depends on besides its passage and languages: a change asks again. */
-    val choice: Flow<List<Any?>> = settings.settings.map { s ->
+    val choice: Flow<List<Any?>> = settings.settings.map(::chosen).distinctUntilChanged()
+
+    private fun chosen(s: AppSettings): List<Any?> {
         val server = s.translationServerConnection
-        listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, s.translationGeminiModel)
-    }.distinctUntilChanged()
+        return listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, s.translationGeminiModel)
+    }
 
     /** The language the reader picked to translate into; null follows the app's. */
     val target: Flow<String?> = settings.settings.map { it.translationTarget }.distinctUntilChanged()
@@ -87,8 +89,10 @@ internal class ServiceTranslate(
         class Bound(val identity: String, val service: TranslationService, val run: TranslationRun, val destination: String?)
 
         suspend fun wanted(): Pair<TranslationService, String> {
-            val service = resolve(settings.settings.first())
-            return service to listOf(service.id, choice.first(), source, target).joinToString("\u0000")
+            // One read, so the service and the identity it is known by come from the same settings.
+            val s = settings.settings.first()
+            val service = resolve(s)
+            return service to listOf(service.id, chosen(s), source, target).joinToString("\u0000")
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
