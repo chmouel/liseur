@@ -64,8 +64,14 @@ internal class ServerTranslationService(
 
     override suspend fun sources(): Set<String>? = null
 
-    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
-        val s = settings.settings.first()
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String =
+        ask(settings.settings.first(), passage, source, target, context)
+
+    override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
+        override suspend fun translate(sentence: String, context: String?) = ask(s, sentence, source, target, context)
+    }
+
+    private suspend fun ask(s: AppSettings, passage: String, source: String?, target: String, context: String?): String {
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()

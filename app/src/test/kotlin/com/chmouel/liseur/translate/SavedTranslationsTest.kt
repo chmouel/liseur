@@ -99,6 +99,18 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a handle made after its book was swept away keeps nothing`() = runTest {
+        val store = saved()
+        library -= BOOK
+        store.sweep()
+
+        val late = store.forBook(BOOK)
+        late.keep("one", "un")
+
+        assertEquals(0, store.stats.first().sentences)
+    }
+
+    @Test
     fun `a book brought back after its removal saves again through later sweeps`() = runTest {
         val store = saved()
         store.forBook(BOOK).keep("one", "un")
