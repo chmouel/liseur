@@ -231,6 +231,21 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `the walked sentences of each resource stay apart once the walk crosses into the next`() = runTest {
+        val two = (0 until 6).map { PageSentence("s$it", if (it < 3) "ch1.xhtml" else "ch2.xhtml", "#p$it", null) }
+        val page = PageTranslation(backgroundScope, FakeRun(), PageTranslationCache(), { at: Int ->
+            object : PageSentences {
+                var i = at
+                override suspend fun next() = two.getOrNull(i++)
+            }
+        }, 10)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(two.take(3), page.walkedIn("ch1.xhtml"))
+        assertEquals(two.drop(3), page.walkedIn("ch2.xhtml"))
+    }
+
+    @Test
     fun `a selection on translated words finds the sentence they translate`() = runTest {
         val run = FakeRun()
         val shown = mapOf("s0" to "It rains.", "s1" to "Yes, it rains.", "s2" to "No.", "s3" to "It rains.")
@@ -248,5 +263,8 @@ class PageTranslationTest {
         // A selection running from one translation into the next starts in the first.
         assertEquals("s1", page.original("ch1.xhtml", "rains. No", "It rains. Yes, it ")?.text)
         assertEquals("s0", page.original("ch1.xhtml", "rains. Yes", "It ")?.text)
+
+        // Words selected in text left untranslated, which a translation happens to contain.
+        assertEquals(null, page.original("ch1.xhtml", "rains", "Elsewhere it "))
     }
 }

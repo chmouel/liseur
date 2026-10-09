@@ -145,14 +145,28 @@ internal class PageTranslation<P>(
     }
 
     /** The latest sentences of the walk in [href], in reading order, for asking the page where the reader is. */
-    fun walkedIn(href: String): List<PageSentence> = walked.filter { it.href == href }.takeLast(LOOKBACK)
+    fun walkedIn(href: String): List<PageSentence> {
+        // The walk goes in reading order, so a resource's sentences are together, near the end.
+        val found = ArrayDeque<PageSentence>()
+        for (i in walked.indices.reversed()) {
+            val sentence = walked[i]
+            if (sentence.href == href) {
+                found.addFirst(sentence)
+                if (found.size == LOOKBACK) break
+            } else if (found.isNotEmpty()) {
+                break
+            }
+        }
+        return found.toList()
+    }
 
     /**
      * The book's sentence whose translation shows [selected] in [href], so
      * read aloud can start from the words the book has; when the selection
      * runs on into the next translation, the one it starts in. [before] is
      * the page's text before the selection; it picks between translations
-     * that both contain the selected words.
+     * that both contain the selected words, and rules out one that only
+     * happens to contain words selected elsewhere.
      */
     fun original(href: String, selected: String, before: String?): PageSentence? {
         val key = squash(selected).take(MATCHED)
@@ -171,7 +185,9 @@ internal class PageTranslation<P>(
                     ?.let { squash(it.translation) }
                     .orEmpty()
                 val lead = (earlier + shown.substring(0, at)).takeLast(MATCHED)
-                swap.sentence to if (leading.endsWith(lead)) lead.length else -1
+                // Words that only happen to be in a translation are not on the page after it.
+                if (!leading.endsWith(lead)) return@mapIndexedNotNull null
+                swap.sentence to lead.length
             }
             .maxByOrNull { it.second }
             ?.first
