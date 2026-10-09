@@ -97,6 +97,8 @@ class SettingsBackupRepository(
     private val userFonts: UserFontRepository,
     private val annotations: AnnotationBackupRepository,
     private val positions: ReadingPositionBackupRepository,
+    /** Writes the app settings of an archive; the app also ends what used a server the archive replaces. */
+    private val restoreAppSettings: suspend (JSONObject) -> Unit = appSettings::restoreBackupValues,
 ) {
     private val operationMutex = Mutex()
 
@@ -312,7 +314,7 @@ class SettingsBackupRepository(
 
             var appSettingsRestored = false
             try {
-                appSettings.restoreBackupValues(settings.getJSONObject("app"))
+                restoreAppSettings(settings.getJSONObject("app"))
                 appSettingsRestored = true
                 readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
             } catch (e: CancellationException) {

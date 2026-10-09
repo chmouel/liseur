@@ -259,12 +259,17 @@ private fun ServerScreen(
     var duplicate by rememberSaveable { mutableStateOf(false) }
     // The address the key belongs to: the saved one, or the one being saved.
     var committedUrl by rememberSaveable { mutableStateOf(server?.url) }
+    // The address last saved, which a refused save falls back to.
+    var persistedUrl by rememberSaveable { mutableStateOf(server?.url) }
+    // Only the newest save's answer updates the fields; saves land in order.
+    var saves by remember { mutableIntStateOf(0) }
     // Opened before the list loaded: fill the fields once it has.
     var filled by rememberSaveable { mutableStateOf(server != null || id == null) }
     if (!filled && server != null) {
         address = TextFieldValue(server.url)
         name = server.name
         committedUrl = server.url
+        persistedUrl = server.url
         filled = true
     }
     var presetsOpen by remember { mutableStateOf(false) }
@@ -275,18 +280,20 @@ private fun ServerScreen(
     var keyFocusWanted by remember { mutableIntStateOf(0) }
     val invalid = address.text.isNotBlank() && OpenAiTts.baseUrl(address.text) == null
     val currentId by rememberUpdatedState(id)
-    val currentServer by rememberUpdatedState(server)
 
     val commit = {
         val url = address.text.trim()
         val typedName = name.trim()
-        val saved = currentServer
         // Always sent, even when it looks unchanged: an earlier save still being written may change it.
         if (OpenAiTts.baseUrl(url) != null) {
             committedUrl = url
+            val save = ++saves
             connections.save(draft, currentId, typedName, url, newName = typedName.ifEmpty { suggestedName(url, context) }) { change ->
-                duplicate = change == ServerChange.Duplicate
-                if (change !is ServerChange.Saved) committedUrl = saved?.url
+                if (change is ServerChange.Saved) persistedUrl = url
+                if (save == saves) {
+                    duplicate = change == ServerChange.Duplicate
+                    committedUrl = if (change is ServerChange.Saved) url else persistedUrl
+                }
             }
         }
     }
@@ -494,8 +501,7 @@ private fun ServerScreen(
                 TextButton(
                     onClick = {
                         confirmDelete = false
-                        connections.delete(server.id)
-                        onBack()
+                        connections.delete(server.id, draft) { deleted -> if (deleted) onBack() }
                     },
                 ) {
                     Text(stringResource(R.string.delete))
