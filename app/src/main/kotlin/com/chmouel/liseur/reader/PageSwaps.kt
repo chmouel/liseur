@@ -49,8 +49,9 @@ internal object PageSwaps {
     /**
      * The index in [sentences] of the last one on screen, or, when none
      * is, of the last one the reader has gone past with a later one still
-     * to come; [PAST] when the reader has gone past them all, -1 when the
-     * reader is before them all, null when the document is not at [url].
+     * to come; [PAST] when the reader has gone past them all, [BEFORE] when
+     * the reader is before them all, [UNSEEN] when none is found, null when
+     * the document is not at [url].
      */
     fun reached(url: String, sentences: List<PageSentence>): String {
         val list = JSONArray()
@@ -62,6 +63,8 @@ internal object PageSwaps {
     fun behind(url: String, sentence: PageSentence): String = call("behind(${JSONObject.quote(url)}, ${sentence.json()})")
 
     const val PAST = -2
+    const val BEFORE = -1
+    const val UNSEEN = -3
 
     private fun PageSentence.json() = JSONObject()
         .put("selector", selector ?: JSONObject.NULL)
@@ -229,7 +232,7 @@ internal object PageSwaps {
                 if (w === 0) return ahead ? i : $PAST;
                 ahead = true;
               }
-              return -1;
+              return ahead ? $BEFORE : $UNSEEN;
             },
             behind(url, s) {
               if (!here(url)) return false;

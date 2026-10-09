@@ -155,6 +155,25 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `a reader back before the walk in the element it started from starts it again`() = runTest {
+        val run = FakeRun()
+        val page = translation(run)
+        page.start(20, "ch1.xhtml#p10")
+        runCurrent()
+        // Same element, nothing new from the page: no restart.
+        page.onReader(PageReader.Elsewhere(18, "ch1.xhtml#p10"))
+        runCurrent()
+        assertEquals(4, run.asked.size)
+
+        // The page found the walk still to come: the reader went back within the element.
+        page.onReader(PageReader.Elsewhere(18, "ch1.xhtml#p10", before = true))
+        runCurrent()
+        assertEquals("s18" to null, run.asked[4])
+        // S20 and S21 are on the page already.
+        assertEquals(listOf("S20", "S21", "S22", "S23", "S18", "S19"), page.texts())
+    }
+
+    @Test
     fun `a jump does not wait for the sentence on its way`() = runTest {
         val run = FakeRun()
         run.gate = CompletableDeferred()
