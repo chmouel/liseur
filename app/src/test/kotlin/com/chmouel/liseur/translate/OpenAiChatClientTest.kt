@@ -104,7 +104,7 @@ class OpenAiChatClientTest {
     @Test
     fun `a server that cannot list models is not an error`(): Unit = runBlocking {
         server.enqueue(json("", 404))
-        assertEquals(emptyList<String>(), client.textModels(base, null))
+        assertEquals(emptyList<TextModel>(), client.textModels(base, null))
         assertEquals("/v1/models", server.takeRequest().url.encodedPath)
     }
 
@@ -161,9 +161,31 @@ class OpenAiChatClientTest {
             {"id":"text-embedding-3-small"},
             {"id":"llama-3"}
         ]}"""
-        assertEquals(listOf("gpt-4o-mini", "tts-is-in-the-name-but-writes-text", "llama-3"), OpenAiChat.textModels(list))
-        assertEquals(listOf("a", "b"), OpenAiChat.textModels("""["a", {"name":"b"}]"""))
+        assertEquals(
+            listOf("gpt-4o-mini", "llama-3", "tts-is-in-the-name-but-writes-text"),
+            OpenAiChat.textModels(list).map { it.id },
+        )
+        assertEquals(listOf("A", "b"), OpenAiChat.textModels("""[{"name":"b"}, "A"]""").map { it.id })
         expect<TranslationError.Malformed> { OpenAiChat.textModels("nope") }
+    }
+
+    @Test
+    fun `a listed price is kept per million tokens, and a partial or varying one is dropped`() {
+        val list = """{"data":[
+            {"id":"paid","pricing":{"prompt":"0.00000015","completion":"0.0000006"}},
+            {"id":"free","pricing":{"prompt":"0","completion":"0"}},
+            {"id":"router","pricing":{"prompt":"-1","completion":"-1"}},
+            {"id":"half","pricing":{"prompt":"0.000001"}},
+            {"id":"plain"}
+        ]}"""
+        val prices = OpenAiChat.textModels(list).associate { it.id to it.price }
+        val paid = prices.getValue("paid")!!
+        assertEquals(0.15, paid.input, 1e-9)
+        assertEquals(0.6, paid.output, 1e-9)
+        assertEquals(TextPrice(0.0, 0.0), prices["free"])
+        assertEquals(null, prices["router"])
+        assertEquals(null, prices["half"])
+        assertEquals(null, prices["plain"])
     }
 
     @Test

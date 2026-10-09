@@ -97,13 +97,13 @@ class GeminiTranslationTest {
     }
 
     @Test
-    fun `only models that write text are offered`() {
+    fun `only models that write text are offered, sorted`() {
         val list = """{"models":[
+            {"name":"models/gemini-flash-lite-latest","supportedGenerationMethods":["generateContent"]},
             {"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent","countTokens"]},
             {"name":"models/gemini-2.5-flash-preview-tts","supportedGenerationMethods":["generateContent"]},
             {"name":"models/text-embedding-004","supportedGenerationMethods":["embedContent"]},
-            {"name":"models/imagen-3","supportedGenerationMethods":["generateContent"]},
-            {"name":"models/gemini-flash-lite-latest","supportedGenerationMethods":["generateContent"]}
+            {"name":"models/imagen-3","supportedGenerationMethods":["generateContent"]}
         ]}"""
         assertEquals(listOf("gemini-2.5-flash", "gemini-flash-lite-latest"), GeminiTranslation.textModels(list))
     }

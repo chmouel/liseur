@@ -1305,6 +1305,8 @@
     <string name="translation_settings_target">Переводить на</string>
     <string name="translation_settings_target_app">%1$s, язык приложения</string>
     <string name="translation_settings_target_follow">Как язык приложения</string>
+    <string name="translation_settings_model_price">%1$s $ за ввод, %2$s $ за вывод на миллион токенов</string>
+    <string name="translation_settings_model_free">Бесплатно</string>
     <string name="translation_settings_test">Перевести тестовую фразу</string>
     <string name="translation_settings_test_passed">Работает: %1$s</string>
     <string name="translation_settings_device_unavailable">На этом телефоне нет переводчика, доступного приложениям. Выберите другую службу.</string>

@@ -34,10 +34,10 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
     }
 
     /**
-     * The models the server lists that answer in text, in its order; empty
-     * when it lists none. Throws [TranslationError].
+     * The models the server lists that answer in text, by name; empty when
+     * it lists none. Throws [TranslationError].
      */
-    suspend fun textModels(base: HttpUrl, apiKey: String?): List<String> =
+    suspend fun textModels(base: HttpUrl, apiKey: String?): List<TextModel> =
         TranslationHttp.execute(client, request(base, "models", apiKey).get().build(), ::models)
 
     private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
@@ -52,7 +52,7 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
         return OpenAiChat.translation(text)
     }
 
-    private fun models(response: Response): List<String> {
+    private fun models(response: Response): List<TextModel> {
         if (response.code == 404 || response.code == 405) return emptyList()
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_LIST_BYTES)
         if (!response.isSuccessful) throw errorFor(response.code, text.orEmpty())
@@ -68,6 +68,12 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
             OpenAiChat.errorFor(code, body.take(TranslationHttp.MAX_ERROR_BYTES.toInt()))
     }
 }
+
+/** A model a server lists that writes text, with its [price] when the list gives one. */
+data class TextModel(val id: String, val price: TextPrice? = null)
+
+/** Dollars per million tokens sent to a model and written by it. */
+data class TextPrice(val input: Double, val output: Double)
 
 /** Reading what an OpenAI-compatible server answers, apart from the network for testing. */
 internal object OpenAiChat {
@@ -102,11 +108,12 @@ internal object OpenAiChat {
     }
 
     /**
-     * The ids in a model list that answer in text: those that say their
-     * output includes text, or say nothing and are not named for speech,
-     * images or embeddings.
+     * The models in a list that answer in text, sorted by name: those that
+     * say their output includes text, or say nothing and are not named for
+     * speech, images or embeddings. Each keeps its price when the list has
+     * one, as OpenRouter's does.
      */
-    fun textModels(text: String): List<String> {
+    fun textModels(text: String): List<TextModel> {
         val items = try {
             val trimmed = text.trimStart()
             if (trimmed.startsWith("[")) JSONArray(trimmed) else JSONObject(trimmed).optJSONArray("data")
@@ -116,8 +123,15 @@ internal object OpenAiChat {
         return (0 until items.length()).mapNotNull { i ->
             val item = items.optJSONObject(i)
             val id = item?.let { (it.opt("id") as? String) ?: (it.opt("name") as? String) } ?: items.opt(i) as? String
-            id?.takeIf { it.isNotBlank() && writesText(item, it) }
-        }.distinct()
+            id?.takeIf { it.isNotBlank() && writesText(item, it) }?.let { TextModel(it, price(item)) }
+        }.distinctBy { it.id }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.id })
+    }
+
+    // OpenRouter gives dollars per token, as text; a negative one means the price varies.
+    private fun price(item: JSONObject?): TextPrice? {
+        val pricing = item?.optJSONObject("pricing") ?: return null
+        fun perMillion(key: String) = pricing.optString(key).toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }?.times(1_000_000)
+        return TextPrice(perMillion("prompt") ?: return null, perMillion("completion") ?: return null)
     }
 
     private fun writesText(item: JSONObject?, id: String): Boolean {

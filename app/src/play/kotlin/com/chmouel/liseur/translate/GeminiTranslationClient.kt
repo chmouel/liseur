@@ -33,7 +33,7 @@ class GeminiTranslationClient(
         return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::reply)
     }
 
-    /** The models the key can use that write text, by id, in the API's order. Throws [TranslationError]. */
+    /** The models the key can use that write text, by id, sorted. Throws [TranslationError]. */
     suspend fun models(apiKey: String): List<String> {
         val url = base.newBuilder().addQueryParameter("pageSize", "1000").build()
         return TranslationHttp.execute(client, request(url, apiKey).get().build(), ::models)
@@ -99,7 +99,7 @@ internal object GeminiTranslation {
         return TranslationPrompt.clean(content).ifEmpty { throw TranslationError.Empty() }
     }
 
-    /** The models in a list that generate content and are not for speech, images, music or embeddings. */
+    /** The models in a list that generate content and are not for speech, images, music or embeddings, sorted by id. */
     fun textModels(text: String): List<String> {
         val models = try {
             JSONObject(text).optJSONArray("models")
@@ -112,7 +112,7 @@ internal object GeminiTranslation {
             if ((0 until methods.length()).none { methods.optString(it) == "generateContent" }) return@mapNotNull null
             val id = model.optString("name").removePrefix("models/")
             id.takeIf { it.isNotEmpty() && NOT_TEXT.none { word -> word in it.lowercase() } }
-        }.distinct()
+        }.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
 
     private val NOT_TEXT = listOf(
