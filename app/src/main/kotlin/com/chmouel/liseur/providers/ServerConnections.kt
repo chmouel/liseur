@@ -56,6 +56,11 @@ internal class ServerConnections(
         s.readAloudServerConnection?.id?.takeIf { s.readAloudProvider == ServerSettings.SERVER_PROVIDER }
     }.distinctUntilChanged()
 
+    /** The server translation uses, when it uses one. */
+    val translationServer: Flow<String?> = settings.settings.map { s ->
+        s.translationServerConnection?.id?.takeIf { s.translationProvider == ServerSettings.SERVER_PROVIDER }
+    }.distinctUntilChanged()
+
     private val lock = Mutex()
     private val keyCommits = KeyCommits(scope)
 

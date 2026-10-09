@@ -24,4 +24,10 @@
     <string name="read_aloud_settings_gemini_models_failed">Gemini did not list its models.</string>
     <string name="read_aloud_settings_voice_hear">Hear this voice</string>
     <string name="read_aloud_provider_gemini_summary">Google\'s online voices, billed to your Gemini API key.</string>
+    <string name="translation_provider_gemini_summary">Google\'s Gemini, on your API key. Passages are sent to Google.</string>
+    <string name="translation_gemini_key_refused">Google refused the Gemini API key.</string>
+    <string name="translation_gemini_key_missing">Add your Gemini API key on the Services page to translate with Gemini.</string>
+    <string name="services_gemini_key">Gemini API key</string>
+    <string name="services_gemini_key_missing">Paste a key from Google AI Studio to read aloud or translate with Gemini. Requests are billed to that key.</string>
+    <string name="services_gemini_privacy">Text read aloud or translated with Gemini is sent to Google.</string>
 </resources>

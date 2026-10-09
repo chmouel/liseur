@@ -21,4 +21,10 @@
     <string name="read_aloud_settings_gemini_models_failed">Gemini no dio la lista de sus modelos.</string>
     <string name="read_aloud_settings_voice_hear">Escuchar esta voz</string>
     <string name="read_aloud_provider_gemini_summary">Las voces en línea de Google, facturadas a tu clave de API de Gemini.</string>
+    <string name="services_gemini_key">Clave de API de Gemini</string>
+    <string name="services_gemini_key_missing">Pega una clave de Google AI Studio para leer en voz alta o traducir con Gemini. Las solicitudes se cobran a esa clave.</string>
+    <string name="services_gemini_privacy">El texto que se lee en voz alta o se traduce con Gemini se envía a Google.</string>
+    <string name="translation_provider_gemini_summary">Gemini de Google, con tu clave de API. Los pasajes se envían a Google.</string>
+    <string name="translation_gemini_key_refused">Google rechazó la clave de API de Gemini.</string>
+    <string name="translation_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios para traducir con Gemini.</string>
 </resources>

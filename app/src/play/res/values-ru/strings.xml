@@ -21,4 +21,10 @@
     <string name="read_aloud_settings_gemini_models_failed">Gemini не прислал список моделей.</string>
     <string name="read_aloud_settings_voice_hear">Прослушать голос</string>
     <string name="read_aloud_provider_gemini_summary">Онлайн-голоса Google, оплата по вашему ключу API Gemini.</string>
+    <string name="services_gemini_key">Ключ API Gemini</string>
+    <string name="services_gemini_key_missing">Вставьте ключ из Google AI Studio, чтобы читать вслух или переводить с помощью Gemini. Запросы оплачиваются с этого ключа.</string>
+    <string name="services_gemini_privacy">Текст, который читается вслух или переводится с помощью Gemini, отправляется в Google.</string>
+    <string name="translation_provider_gemini_summary">Gemini от Google с вашим ключом API. Отрывки отправляются в Google.</string>
+    <string name="translation_gemini_key_refused">Google отклонил ключ API Gemini.</string>
+    <string name="translation_gemini_key_missing">Добавьте ключ API Gemini на странице «Службы», чтобы переводить с помощью Gemini.</string>
 </resources>

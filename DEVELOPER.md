@@ -13,19 +13,19 @@ enough; `compileSdk`/`targetSdk` 37 requires a reasonably recent SDK
 Manager package list).
 
 ```bash
-./gradlew assemblePlayDebug    # debug APK with Gemini read-aloud
+./gradlew assemblePlayDebug    # debug APK with Gemini read-aloud and translation
 ./gradlew assembleFossDebug    # debug APK of the F-Droid build
 ./gradlew assembleFossRelease  # minified release APK (F-Droid, GitHub)
 ./gradlew bundlePlayRelease    # minified release AAB, for Google Play only
 ```
 
 There are two product flavors. `foss` is the build F-Droid reproduces
-and the GitHub release carries. `play` adds Gemini's read-aloud voices,
-which send book text to a non-free Google service, and ships only on
-Google Play. Gemini's code lives under `app/src/play/` and
-`app/src/testPlay/`; the `foss` APK has none of its code, strings or
-endpoint. Read aloud itself, with the device's offline voices or a
-speech server the reader enters, is in both. Both flavors share the application id, version and signing
+and the GitHub release carries. `play` adds Gemini's read-aloud voices
+and Gemini translation, which send book text to a non-free Google
+service, and ships only on Google Play. Gemini's code lives under
+`app/src/play/` and `app/src/testPlay/`; the `foss` APK has none of its
+code, strings or endpoint. Read aloud and translation themselves, on the
+device or with a server the reader enters, are in both. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
 
 Output APKs land in `app/build/outputs/apk/{foss,play}/{debug,dev,release}/`,
@@ -1627,6 +1627,60 @@ reader behavior.
   400 ms and lingers 150 ms, so a fast voice never flashes it, and holds
   still on e-ink or with animations removed.
 
+### Translation
+
+- Selecting text in the reader offers Translate next to Search and Share
+  when the chosen service can translate at all. The result opens in
+  `TranslationSheet`: the original, quiet and italic, above the
+  translation, then the two languages as buttons, Copy, and a line naming
+  where the text went. The language lists open in place inside the same
+  sheet, never as a second sheet. The feature lives in
+  `app/src/main/kotlin/.../translate/`; the reader sees only
+  `TranslateFeature` (`None` when nothing is wired), built by the flavor's
+  `TranslateFeatureFactory`. Nothing in `main` may name Gemini.
+- Services: this phone (`DeviceTranslationService`, Android 12+
+  `TranslationManager`, no library and no Google Play services), any
+  server on the Services page speaking OpenAI's chat completions
+  (`ServerTranslationService`), and Gemini in Play only
+  (`GeminiTranslationService`, sharing the read-aloud key). The device is
+  the default; a network service is used only once chosen. The Services
+  page holds every key and server; the Translation page in Settings
+  holds the service, its model and the target language.
+- The device service is decided at runtime on each phone. Every
+  `TranslationManager` call runs off the main thread with a bounded wait
+  (a stuck system service reads as no pairs), translators are destroyed
+  when a request ends or is cancelled, and the language pairs are asked
+  again when the sheet or settings resume, so a pack downloaded in the
+  system settings shows at once. A pair that needs a download offers
+  "Download languages" when the system has a settings screen for it, and
+  says where to go when it does not.
+- Languages keep the script and the Portuguese region
+  (`TranslationLanguages`: zh-Hans and zh-Hant, pt-BR and pt-PT) and drop
+  other regions. The source is the book's language when it declares
+  exactly one; otherwise the sheet asks, unless the service detects it.
+  The target follows the app's language until the reader picks one
+  (`translation_target`). A passage already in the target, or longer than
+  `TranslationPrompt.MAX_CHARACTERS`, is never sent. `TranslationStep`
+  decides which of these the sheet shows, as a pure function.
+- Network requests follow the read-aloud clients: the key of the origin
+  called, no redirects, the local-network check at request time, bounded
+  reply sizes (`TranslationHttp`), cancellable calls on `Dispatchers.IO`,
+  and no logging of keys, passages or translations. The system message
+  fixes the task and the passage goes as data between markers it cannot
+  close (`TranslationPrompt`); the reply is shown as plain text. Refusal,
+  empty, quota, malformed, refused key and unreachable are told apart
+  (`TranslationError`). Each request runs under the connection's
+  generation (`TranslationRequests`): a key or address change while it
+  is out discards the reply and asks again, and the sheet drops a reply
+  for a passage, language, service or model it no longer shows.
+- `translation_provider` and `translation_server` reference a listed
+  server like read aloud's choice; each server's translation model is in
+  `translation_server_state`, apart from its read-aloud model, and
+  Gemini's is `translation_gemini_model`. Deleting or moving a server
+  updates them in the same DataStore edit, and a deleted server's
+  translation falls back to the device. Like read aloud's, these are in
+  the settings backup but not in liseur-sync settings sync.
+
 ### Covers, UI, and dependencies
 
 - Resolve a local cover once at import in this order: publication cover,
@@ -2226,12 +2280,13 @@ what lets it sync a book that came off an SD card.
   TetheredNet anti-feature. Together those justify `INTERNET`;
   `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
   constraint on the sync workers.
-- Gemini read-aloud, which sends book text to Google, is in the `play`
-  flavor only. F-Droid builds `foss`, which has none of its code, strings
+- Gemini read-aloud and Gemini translation, which send book text to
+  Google, are in the `play` flavor only. F-Droid builds `foss`, which has none of its code, strings
   or endpoint, so the NonFreeNet anti-feature does not apply. Device
   voices are in both and stay on the device, and they are the default.
-  Read aloud with a speech server is in both and talks only to the server
-  the user sets. The address field offers a menu of hosted services
+  Read aloud and translation with a server are in both and talk only to
+  the server the user sets. Device translation uses Android's own
+  `TranslationManager`, not ML Kit, so it needs no Google Play services. The address field offers a menu of hosted services
   (`SpeechServerPresets`) next to a self-hosted example; none is selected
   or contacted until the user picks it, and the app works
   without any of them. Before

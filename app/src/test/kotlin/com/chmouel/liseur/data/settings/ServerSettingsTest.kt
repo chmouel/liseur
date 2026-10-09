@@ -400,6 +400,119 @@ class ServerSettingsTest {
         assertEquals(listOf(KOKORO_ID), repo.settings.first().servers.readable!!.map { it.id })
     }
 
+    // -- Translation ------------------------------------------------------
+
+    @Test
+    fun `translation keeps its own model on a server read aloud also uses`() = runTest {
+        val repo = repo()
+        val id = repo.add("OpenRouter", OPENROUTER)
+        repo.selectReadAloudServer(id)
+        repo.selectTranslationServer(id)
+        repo.setSpeechServerModelAndVoice(OPENROUTER, "gpt-4o-mini-tts", "alloy")
+        repo.setTranslationServerModel(OPENROUTER, " gpt-4o-mini ")
+
+        val s = repo.settings.first()
+        assertEquals("gpt-4o-mini", s.translationModels[id])
+        assertEquals("gpt-4o-mini-tts", s.speechServerModel)
+        assertEquals(id, s.translationServerConnection?.id)
+    }
+
+    @Test
+    fun `a new address takes translation and its model with it`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.selectTranslationServer(id)
+        repo.setTranslationServerModel(KOKORO, "llama")
+
+        repo.updateServer(id, "Kokoro", MOVED)
+
+        val s = repo.settings.first()
+        assertEquals(MOVED_ID, s.translationServer)
+        assertEquals(mapOf(MOVED_ID to "llama"), s.translationModels)
+        assertEquals(ServerSettings.SERVER_PROVIDER, s.translationProvider)
+    }
+
+    @Test
+    fun `deleting the server translation uses sends it back to the device`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        val other = repo.add("OpenRouter", OPENROUTER)
+        repo.selectTranslationServer(id)
+        repo.setTranslationServerModel(KOKORO, "llama")
+        repo.setTranslationServerModel(OPENROUTER, "gpt-4o-mini")
+
+        assertTrue(repo.deleteServer(id))
+
+        val s = repo.settings.first()
+        assertNull(s.translationProvider)
+        assertNull(s.translationServer)
+        assertEquals(mapOf(other to "gpt-4o-mini"), s.translationModels)
+    }
+
+    @Test
+    fun `deleting a server translation does not use leaves Gemini chosen`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.selectTranslationServer(id)
+        repo.setTranslationProvider("gemini")
+
+        repo.deleteServer(id)
+
+        assertEquals("gemini", repo.settings.first().translationProvider)
+    }
+
+    @Test
+    fun `a translation model for an address the server no longer has is not saved`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.updateServer(id, "Kokoro", MOVED)
+
+        repo.setTranslationServerModel(KOKORO, "llama")
+
+        assertTrue(repo.settings.first().translationModels.isEmpty())
+    }
+
+    @Test
+    fun `an archive keeps translation's server and model`() = runTest {
+        val source = repo()
+        val id = source.add("OpenRouter", OPENROUTER)
+        source.selectTranslationServer(id)
+        source.setTranslationServerModel(OPENROUTER, "gpt-4o-mini")
+        source.setTranslationTarget("pt-BR")
+        val archive = source.backupValues()
+
+        val destination = AppSettingsRepository(PreferenceDataStoreFactory.create { folder.newFile("other.preferences_pb") })
+        destination.restoreBackupValues(archive)
+
+        val s = destination.settings.first()
+        assertEquals(ServerSettings.SERVER_PROVIDER, s.translationProvider)
+        assertEquals(OPENROUTER_ID, s.translationServerConnection?.id)
+        assertEquals(mapOf(OPENROUTER_ID to "gpt-4o-mini"), s.translationModels)
+        assertEquals("pt-BR", s.translationTarget)
+    }
+
+    @Test
+    fun `an archive whose translation refers to an unlisted server changes nothing`() = runTest {
+        val repo = repo()
+        repo.add("Kokoro", KOKORO)
+        val before = repo.settings.first()
+
+        val broken = listOf(
+            JSONObject().put(ServerSettings.TRANSLATION_SERVER_NAME, OPENROUTER_ID),
+            JSONObject().put(ServerSettings.TRANSLATION_STATE_NAME, """{"$OPENROUTER_ID":{"model":"x"}}"""),
+            JSONObject().put(ServerSettings.TRANSLATION_STATE_NAME, "{"),
+            JSONObject().put(ServerSettings.SERVERS_NAME, "[]").put(ServerSettings.TRANSLATION_SERVER_NAME, KOKORO_ID),
+        )
+        for (archive in broken) {
+            try {
+                repo.restoreBackupValues(archive.put("theme_mode", "dark"))
+                fail("Restored $archive")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        assertEquals(before, repo.settings.first())
+    }
+
     private fun legacyArchive() = JSONObject()
         .put("speech_server_url", KOKORO)
         .put("speech_server_model", "kokoro")

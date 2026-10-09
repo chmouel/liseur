@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 8 October 2026
+**Last updated:** 9 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers, and it collects nothing about you. Its
@@ -33,9 +33,10 @@ All of this stays in the app's own private storage:
 - If you connect a book server, its address and the credentials or token
   it issued. Those are encrypted with a key held in the Android Keystore,
   which cannot be exported from the device.
-- The speech server or Gemini API keys you paste for reading aloud,
-  encrypted the same way. A speech server key is kept for the server
-  you pasted it for, and is sent only to that server.
+- The server or Gemini API keys you paste on the Services page, for
+  reading aloud or translation, encrypted the same way. A server key is
+  kept for the server you pasted it for, and is sent only to that
+  server.
 
 Uninstalling the app removes all of it.
 
@@ -45,8 +46,9 @@ not copy your books anywhere.
 
 ## Network access
 
-Liseur talks only to addresses you choose. Every build knows three
-kinds; the Google Play build adds a fourth, used only if you set it up.
+Liseur talks only to addresses you choose. Every build knows the kinds
+below; the Google Play build adds Google Gemini, used only if you set it
+up.
 
 ### Your book server
 
@@ -80,17 +82,18 @@ terms, chosen in Android's settings.
 
 Liseur can read aloud with any speech server that speaks OpenAI's API:
 a server of your own running a model such as Kokoro, OpenAI itself, or
-another hosted service. Nothing is sent until you choose Speech server
-in Settings, Read aloud, and enter that server's address, typed or
-picked from the services listed on that field (picking one only fills
-in its address). Liseur then
+another hosted service. Nothing is sent until you add that server in Settings, Services,
+typing its address or picking it from the services listed on that field
+(picking one only fills in its address), and choose it in Settings, Read
+aloud. Liseur then
 asks it for its lists of models and voices, with your API key if you entered one, when you save the address
 or the key and when you open that screen. When the address is
 DeepInfra's, `https://api.deepinfra.com/v1/openai`, it also asks
 `https://api.deepinfra.com/models/` followed by the model's name for
 that model's voices, without your key or any text. Tapping a voice there, or
 typing one, sends a fixed sample sentence so you can hear it; it is not
-text from a book. "Test connection" asks for the same lists and sends
+text from a book. "Test connection" on the Services page asks only for
+the list of models; on the Read aloud screen it asks for the same lists and sends
 the single word "Hello." with the model and voice you picked. Once you press play it sends
 the text being read, one sentence at a time by default or up to five
 together if you raise that in the read-aloud settings, a few sentences
@@ -100,6 +103,29 @@ or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
 `http://` address is not encrypted. With a hosted service, the text goes
 to that service under its own terms and privacy policy.
+
+### This phone's translator, for translation
+
+Translating a passage with This phone uses the translator built into
+Android 12 and later. The passage goes to that system service and
+nowhere else; Liseur sends nothing over the network for it. Android may
+download language packs for it, which you manage in the system's
+settings.
+
+### A server, for translation
+
+Liseur can translate a selected passage with any server on the Services
+page that speaks OpenAI's chat API, such as OpenRouter or a server of
+your own. Nothing is sent until you choose that server in Settings,
+Translation. Liseur then asks it for its list of models, with your API
+key if you entered one for that server, so you can pick one. "Translate
+a test sentence" sends one fixed English sentence, not text from a book.
+When you tap Translate on a passage, it sends that passage, up to 2,000
+characters, with its language and the language you want, the model you
+picked and, if you entered one, your API key. No book title, file,
+identifier or reading position goes with it. Who else can see that text
+depends on the server and the network you chose; with a hosted service,
+the passage goes to that service under its own terms and privacy policy.
 
 ### Google Gemini, for reading aloud (Google Play build only)
 
@@ -133,6 +159,21 @@ only your key.
 Stopping the voice stops the requests. Remove the key in Settings and no
 more are made.
 
+### Google Gemini, for translation (Google Play build only)
+
+The Google Play build can also translate a selected passage with Gemini,
+using the same key as reading aloud. It does nothing until you choose
+Gemini in Settings, Translation. Opening the model list on that screen
+asks `generativelanguage.googleapis.com` which text models the key can
+use, carrying only your key. "Translate a test sentence" sends one fixed
+English sentence. When you tap Translate on a passage, Liseur sends that
+passage, up to 2,000 characters, with its language and the language you
+want, to the same address over HTTPS, together with your key and the
+model you picked. No book title, file, identifier or reading position
+goes with it. Requests are billed to your key under Google's terms, and
+Google's retention policy for the Gemini API applies to them. The
+translation is shown on screen and is never written to storage.
+
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else.
@@ -146,9 +187,10 @@ under Google's terms, not the developer's. Liseur has no access to it.
 Downloaded book files and generated covers are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
-this and asks you to sign in again. A speech server or Gemini API key
-is not backed up at all; you paste it again on a new device. The speech
-server's address, model and voice are backed up with your other settings.
+this and asks you to sign in again. A server or Gemini API key
+is not backed up at all; you paste it again on a new device. The servers'
+addresses, and the models, voices and languages you chose for reading
+aloud and translation, are backed up with your other settings.
 
 You can turn this off in your device's backup settings.
 

@@ -113,6 +113,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
@@ -445,6 +446,7 @@ fun ReaderScreen(
     onBookSyncAction: ReaderBookSyncActions,
     onBack: () -> Unit,
     readAloud: ReaderReadAloud? = null,
+    translate: TranslateFeature = TranslateFeature.None,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -528,6 +530,7 @@ fun ReaderScreen(
     val listeningPlaying = listening?.playing == true
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
+    val translateReady by translate.ready.collectAsStateWithLifecycle()
     // When the page last went after the voice. Readium can report a move
     // more than once, and only the first report carries the marker, so
     // the rest are recognised by arriving just after it: taken for the
@@ -652,9 +655,14 @@ fun ReaderScreen(
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
+    var translatePassage by remember { mutableStateOf<String?>(null) }
     val view = LocalView.current
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // The device's languages may have been downloaded while the reader was away.
+    LaunchedEffect(translate, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { translate.refresh() }
+    }
     val effectScope = rememberCoroutineScope()
     var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
 
@@ -3714,7 +3722,7 @@ fun ReaderScreen(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                actions = remember(active, dictionary) {
+                actions = remember(active, dictionary, translateReady) {
                     SelectionActions(
                         onHighlight = { tint ->
                             onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -3746,6 +3754,16 @@ fun ReaderScreen(
                                 onAnnotationAction.remove(existing)
                                 dismissSelection()
                             }
+                        },
+                        translateButton = if (translate.isAvailable && translateReady) {
+                            {
+                                translate.SelectionButton {
+                                    translatePassage = active.text
+                                    dismissSelection()
+                                }
+                            }
+                        } else {
+                            null
                         },
                         readAloudButton = readAloud
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
@@ -3796,6 +3814,14 @@ fun ReaderScreen(
                 defineWord = null
             },
             onDismiss = { defineWord = null },
+        )
+    }
+
+    translatePassage?.let { passage ->
+        translate.Sheet(
+            passage = passage,
+            declared = publication.metadata.languages,
+            onDismiss = { translatePassage = null },
         )
     }
 

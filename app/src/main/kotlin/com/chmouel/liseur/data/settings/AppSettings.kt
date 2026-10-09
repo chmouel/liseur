@@ -206,6 +206,15 @@ enum class DefinitionTarget(val id: String) {
  * @param deviceVoice The voice of the device's own speech engine reading
  *   aloud uses, by the engine's name for it, or null to pick one
  *   automatically; see `DeviceVoices.pick`.
+ * @param translationProvider Which service translates passages, by id, or
+ *   null for the device's own.
+ * @param translationServer The id of the server translation uses when its
+ *   provider is a server.
+ * @param translationModels Translation's model on each server, by server id.
+ * @param translationGeminiModel The Gemini model translation uses, or null
+ *   for the default.
+ * @param translationTarget The language passages are translated into, as a
+ *   BCP 47 tag, or null to follow the app's language.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -241,7 +250,16 @@ data class AppSettings(
     val deviceVoice: String? = null,
     /** The voice chosen for each language, per speech service; see [VoicePreference]. */
     val voicePreferences: List<VoicePreference> = emptyList(),
+    val translationProvider: String? = null,
+    val translationServer: String? = null,
+    val translationModels: Map<String, String> = emptyMap(),
+    val translationGeminiModel: String? = null,
+    val translationTarget: String? = null,
 ) {
+    /** The server translation is set to use, when it is listed. */
+    val translationServerConnection: ServerConnection?
+        get() = servers.readable?.firstOrNull { it.id == translationServer }
+
     /** The server read aloud is set to use, when it is listed. */
     val readAloudServerConnection: ServerConnection?
         get() = servers.readable?.firstOrNull { it.id == readAloudServer }
@@ -351,6 +369,8 @@ class AppSettingsRepository(
         val READ_ALOUD_SENTENCES_PER_REQUEST = intPreferencesKey("read_aloud_sentences_per_request")
         val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
         val READ_ALOUD_VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
+        val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
+        val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
     }
 
     /**
@@ -431,6 +451,11 @@ class AppSettingsRepository(
                 .coerceIn(AppSettings.SENTENCES_PER_REQUEST),
             deviceVoice = p[Keys.READ_ALOUD_DEVICE_VOICE],
             voicePreferences = VoicePreferences.decode(p[Keys.READ_ALOUD_VOICE_PREFERENCES]),
+            translationProvider = p[ServerSettings.TRANSLATION_PROVIDER],
+            translationServer = p[ServerSettings.TRANSLATION_SERVER],
+            translationModels = ServerSettings.translationStates(p),
+            translationGeminiModel = p[Keys.TRANSLATION_GEMINI_MODEL],
+            translationTarget = p[Keys.TRANSLATION_TARGET],
         )
     }
 
@@ -653,10 +678,7 @@ class AppSettingsRepository(
             }
             edit.servers[index] = ServerConnection(newId, name.trim().ifEmpty { edit.servers[index].name }, trimmed)
             if (newId != id) {
-                edit.states.remove(id)?.let { edit.states[newId] = it }
-                edit.unsettled -= id
-                edit.unsettled += newId
-                if (p[ServerSettings.READ_ALOUD_SERVER] == id) p[ServerSettings.READ_ALOUD_SERVER] = newId
+                edit.move(id, newId)
                 val preferences = VoicePreferences.decode(p[ServerSettings.VOICE_PREFERENCES])
                 if (preferences.any { it.ownedBy(id) }) {
                     p[ServerSettings.VOICE_PREFERENCES] = VoicePreferences.encode(
@@ -671,9 +693,9 @@ class AppSettingsRepository(
     }
 
     /**
-     * Forgets the server [id] and read aloud's state on it; read aloud
-     * goes back to the device when it used it. False when nothing was
-     * deleted.
+     * Forgets the server [id] and each feature's state on it; read aloud
+     * and translation go back to the device when they used it. False when
+     * nothing was deleted.
      */
     suspend fun deleteServer(id: String): Boolean {
         var deleted = false
@@ -701,6 +723,41 @@ class AppSettingsRepository(
         }
         return selected
     }
+
+    /** Has translation use the device's own translator, or Gemini; see [selectTranslationServer] for a server. */
+    suspend fun setTranslationProvider(id: String) {
+        store.edit { it[ServerSettings.TRANSLATION_PROVIDER] = id }
+    }
+
+    /** Has translation use the listed server [id]; false when it is not listed. */
+    suspend fun selectTranslationServer(id: String): Boolean {
+        var selected = false
+        store.edit { p ->
+            if (ServerSettings.servers(p).readable?.any { it.id == id } != true) return@edit
+            p[ServerSettings.TRANSLATION_PROVIDER] = ServerSettings.SERVER_PROVIDER
+            p[ServerSettings.TRANSLATION_SERVER] = id
+            selected = true
+        }
+        return selected
+    }
+
+    /** Stores translation's model on the server at [url], if it is still listed there; blank forgets it. */
+    suspend fun setTranslationServerModel(url: String, model: String) {
+        val id = ServerConnection.idOf(url) ?: return
+        val trimmed = model.trim()
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.none { it.id == id && it.url == url }) return@edit
+            if (trimmed.isEmpty()) edit.translationModels.remove(id) else edit.translationModels[id] = trimmed
+            edit.save()
+        }
+    }
+
+    /** Stores the Gemini model translation uses; blank goes back to the default. */
+    suspend fun setTranslationGeminiModel(name: String) = setOrRemove(Keys.TRANSLATION_GEMINI_MODEL, name)
+
+    /** Stores the language passages are translated into; null follows the app's language again. */
+    suspend fun setTranslationTarget(tag: String?) = setOrRemove(Keys.TRANSLATION_TARGET, tag.orEmpty())
 
     /** Changes read aloud's state on the server at [url], if it is still listed there. */
     private suspend fun editSpeechServer(url: String, change: (ServerSpeechState) -> ServerSpeechState) {
@@ -861,4 +918,12 @@ internal val APP_BACKUP_TYPES = mapOf(
     "read_aloud_sentences_per_request" to BackupValueType.INT,
     "read_aloud_device_voice" to BackupValueType.STRING,
     "read_aloud_voice_preferences" to BackupValueType.STRING,
+    ServerSettings.TRANSLATION_PROVIDER_NAME to BackupValueType.STRING,
+    ServerSettings.TRANSLATION_SERVER_NAME to BackupValueType.STRING,
+    ServerSettings.TRANSLATION_STATE_NAME to BackupValueType.STRING,
+    TRANSLATION_GEMINI_MODEL_NAME to BackupValueType.STRING,
+    TRANSLATION_TARGET_NAME to BackupValueType.STRING,
 )
+
+private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
+private const val TRANSLATION_TARGET_NAME = "translation_target"
