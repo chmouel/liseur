@@ -13,6 +13,8 @@ import com.chmouel.liseur.tts.BoundedSentenceTokenizer
 import com.chmouel.liseur.tts.PublicationUtteranceCursor
 import java.util.WeakHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.takeWhile
@@ -96,7 +98,11 @@ internal object TranslatedPages {
                     val url = web.url ?: continue
                     val href = ResourceAddress.canonicalPath(url) ?: continue
                     val swaps = run.swaps.value[href].orEmpty()
-                    if (swaps.isEmpty()) continue
+                    if (swaps.isEmpty()) {
+                        // Changed by an earlier run and set aside before it could be put back.
+                        if (web in touched && web.evaluate(PageSwaps.RESTORE) != null) touched -= web
+                        continue
+                    }
                     val from = sent[web]?.takeIf { it.first == href }?.second ?: 0
                     // Before the script goes: Stop cannot call back one already sent.
                     touched += web
@@ -117,6 +123,8 @@ internal object TranslatedPages {
         val href = ResourceAddress.canonicalPath(url) ?: return
         val walked = run.walkedIn(href)
         val reached = if (walked.isEmpty()) -1 else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
+        // The reader may have turned to another page while the view answered.
+        if (!stillShows(nav, web, url)) return
         if (reached >= 0) {
             run.onReader(PageReader.Within(walked[reached]))
             return
@@ -141,23 +149,40 @@ internal object TranslatedPages {
         val web = visibleWebView(nav.publicationView) ?: return false
         val url = web.url ?: return false
         if (ResourceAddress.canonicalPath(url) != sentence.href) return false
-        return web.evaluate(PageSwaps.behind(url, sentence)) == "true"
+        val answer = web.evaluate(PageSwaps.behind(url, sentence))
+        return answer == "true" && stillShows(nav, web, url)
     }
+
+    private fun stillShows(nav: EpubNavigatorFragment, web: WebView, url: String) =
+        visibleWebView(nav.publicationView) === web && web.url == url
 
     /**
      * Puts the book's own words back in every view in [touched], then
-     * [onRestored]. Views Readium has set aside are told too, without
-     * waiting on an answer they may not give until shown again, and are
-     * told once more when they come back.
+     * [onRestored] once every view on screen or beside it has answered.
+     * Views Readium has set aside are told too, without waiting on an
+     * answer they may not give until shown again, and are told once more
+     * when they come back.
      */
     suspend fun restore(nav: EpubNavigatorFragment, touched: MutableSet<WebView>, onRestored: () -> Unit) {
         touched.filterNot { it.isAttachedToWindow }.forEach { it.evaluateJavascript(PageSwaps.RESTORE, null) }
-        restoreAttached(touched)
-        onRestored()
-        layoutPasses(nav.publicationView).takeWhile {
+        var restored = false
+        suspend fun settle(): Boolean {
             restoreAttached(touched)
-            touched.isNotEmpty()
-        }.collect {}
+            if (!restored && touched.none { it.isAttachedToWindow }) {
+                restored = true
+                onRestored()
+            }
+            return touched.isNotEmpty()
+        }
+        if (!settle()) return
+        // A view that did not answer is asked again, even when nothing is laid out meanwhile.
+        val retries = flow {
+            while (!restored) {
+                delay(ANSWER_MS)
+                emit(Unit)
+            }
+        }
+        merge(layoutPasses(nav.publicationView), retries).takeWhile { settle() }.collect {}
     }
 
     private suspend fun restoreAttached(touched: MutableSet<WebView>) {
