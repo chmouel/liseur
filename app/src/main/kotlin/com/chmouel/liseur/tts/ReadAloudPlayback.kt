@@ -86,6 +86,10 @@ class ReadAloudPlayback(
     private val spoken = LinkedHashMap<TtsEngine.RequestId, String>()
     private var closed = false
     private var playRequested = false
+
+    /** Skips so far, which tell the engine a stopped sentence is no longer the one to play on. */
+    override var skips = 0
+        private set
     private var chapterEndArmed = false
     private var chapterHref: Url? = null
     private val landing = Mutex()
@@ -104,7 +108,7 @@ class ReadAloudPlayback(
                             prefetcher.resume()
                             mutableNavigator.value?.location?.value?.let(::prefetchFrom)
                         } else {
-                            prefetcher.suspend()
+                            prefetcher.pause()
                         }
                     }
             }
@@ -199,11 +203,13 @@ class ReadAloudPlayback(
     /** The reader's own skips: playing on starts from where they lead, not from a failed sentence. */
     fun skipToNext() {
         mutableFailure.value = null
+        skips++
         mutableNavigator.value?.skipToNextUtterance()
     }
 
     fun skipToPrevious() {
         mutableFailure.value = null
+        skips++
         mutableNavigator.value?.skipToPreviousUtterance()
     }
 

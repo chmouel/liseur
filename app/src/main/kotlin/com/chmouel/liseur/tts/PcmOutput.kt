@@ -13,13 +13,18 @@ import kotlin.coroutines.coroutineContext
 /** Where decoded speech is heard. */
 interface PcmOutput {
     /**
-     * Plays [pcm] (16-bit mono at [SpeechAudio.SAMPLE_RATE]) and returns once
-     * the last frame has been heard, not merely written. Cancellable.
+     * Plays [pcm] (16-bit mono at [SpeechAudio.SAMPLE_RATE]) from frame
+     * [fromFrame] and returns once the last frame has been heard, not merely
+     * written. Cancellable.
      */
-    suspend fun play(pcm: ByteArray)
+    suspend fun play(pcm: ByteArray, fromFrame: Int = 0)
 
-    /** Silences at once and drops anything queued. Synchronous, idempotent, safe on the main thread. */
-    fun halt()
+    /**
+     * Silences at once and drops anything queued. Synchronous, idempotent,
+     * safe on the main thread. Returns the frame of the clip being played
+     * that had been heard, or null when none was playing.
+     */
+    fun halt(): Int?
 
     fun release()
 }
@@ -44,6 +49,9 @@ class AudioTrackPcmOutput(
     private var track: AudioTrack? = null
     private var turn = 0L
     private var applied = 1f
+
+    /** The clip of the current turn: where its frames start on the track's head, and its bounds. Under [lock]. */
+    private var clip: Clip? = null
 
     /** The speed the track plays at, set to [speed] first. Under [lock]. */
     private fun speedLocked(track: AudioTrack): Float {
@@ -91,16 +99,22 @@ class AudioTrackPcmOutput(
                 }
         }
 
-    override suspend fun play(pcm: ByteArray) = withContext(writer) {
-        val (myTurn, track, base, padded) = synchronized(lock) {
+    override suspend fun play(pcm: ByteArray, fromFrame: Int) = withContext(writer) {
+        val (myTurn, track, playing, padded) = synchronized(lock) {
             val track = trackLocked()
+            val frames = pcm.size / 2
+            val from = fromFrame.coerceIn(0, frames)
+            val rest = if (from == 0) pcm else pcm.copyOfRange(from * 2, pcm.size)
             // A stream track waits for a full buffer before it starts, so a
             // clip shorter than that is padded with silence to get heard.
             val bufferBytes = track.bufferSizeInFrames * 2
-            val padded = if (pcm.size < bufferBytes) pcm.copyOf(bufferBytes) else pcm
+            val padded = if (rest.size < bufferBytes) rest.copyOf(bufferBytes) else rest
             speedLocked(track)
             if (track.playState != AudioTrack.PLAYSTATE_PLAYING) track.play()
-            Quad(turn, track, track.playbackHeadPosition.toLong() and 0xffffffffL, padded)
+            val base = track.playbackHeadPosition.toLong() and 0xffffffffL
+            val playing = Clip(turn, base, from, frames)
+            clip = playing
+            Quad(turn, track, playing, padded)
         }
         val frameMs = 1000.0 / SpeechAudio.SAMPLE_RATE
         // How long a track that stops moving is given: its whole buffer, at
@@ -125,13 +139,15 @@ class AudioTrackPcmOutput(
                 delay(WRITE_WAIT_MS)
             }
         }
-        val target = base + padded.size / 2
+        val target = playing.base + padded.size / 2
         val deadline = System.nanoTime() + stallNanos
         while (true) {
             coroutineContext.ensureActive()
             val (head, rate) = synchronized(lock) {
                 if (turn != myTurn) return@withContext
-                (track.playbackHeadPosition.toLong() and 0xffffffffL) to speedLocked(track)
+                val head = track.playbackHeadPosition.toLong() and 0xffffffffL
+                if (head >= target && clip === playing) clip = null
+                head to speedLocked(track)
             }
             if (head >= target) return@withContext
             // Not heard to the end: the sentence fails rather than being skipped.
@@ -140,25 +156,34 @@ class AudioTrackPcmOutput(
         }
     }
 
-    override fun halt() {
-        synchronized(lock) {
-            turn++
-            track?.run {
-                if (playState == AudioTrack.PLAYSTATE_PLAYING) pause()
-                flush()
+    override fun halt(): Int? = synchronized(lock) {
+        val playing = clip?.takeIf { it.turn == turn }
+        clip = null
+        turn++
+        track?.run {
+            // Read before the flush, which may move the head.
+            val heard = playing?.let { c ->
+                val head = playbackHeadPosition.toLong() and 0xffffffffL
+                (c.from + (head - c.base).coerceAtLeast(0)).coerceAtMost(c.frames.toLong()).toInt()
             }
+            if (playState == AudioTrack.PLAYSTATE_PLAYING) pause()
+            flush()
+            heard
         }
     }
 
     override fun release() {
         synchronized(lock) {
             turn++
+            clip = null
             track?.release()
             track = null
         }
     }
 
-    private data class Quad(val turn: Long, val track: AudioTrack, val base: Long, val pcm: ByteArray)
+    private class Clip(val turn: Long, val base: Long, val from: Int, val frames: Int)
+
+    private data class Quad(val turn: Long, val track: AudioTrack, val clip: Clip, val pcm: ByteArray)
 
     private companion object {
         const val WRITE_WAIT_MS = 10L

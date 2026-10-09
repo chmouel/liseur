@@ -43,16 +43,23 @@ class SpeechTtsEngineTest {
     })
 
     private val plays = LinkedBlockingQueue<CompletableDeferred<Unit>>()
+    private val playedFrom = LinkedBlockingQueue<Int>()
     private val output = object : PcmOutput {
         @Volatile var halts = 0
-        override suspend fun play(pcm: ByteArray) {
+
+        /** What a halt reports heard of the clip playing. */
+        @Volatile var heard: Int? = null
+
+        override suspend fun play(pcm: ByteArray, fromFrame: Int) {
+            playedFrom.put(fromFrame)
             val done = CompletableDeferred<Unit>()
             plays.put(done)
             done.await()
         }
 
-        override fun halt() {
+        override fun halt(): Int? {
             halts++
+            return heard.also { heard = null }
         }
 
         override fun release() {}
@@ -60,6 +67,8 @@ class SpeechTtsEngineTest {
 
     private val events = LinkedBlockingQueue<String>()
     private val waits = LinkedBlockingQueue<String>()
+
+    @Volatile private var skipCount = 0
     private val engine = SpeechTtsEngine(
         scope = scope,
         cache = cache,
@@ -70,6 +79,8 @@ class SpeechTtsEngineTest {
         observer = object : SpeechObserver {
             override fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) =
                 waits.put("${if (waiting) "waiting" else "done waiting"} ${requestId.value}")
+
+            override val skips get() = skipCount
         },
     ).apply {
         setListener(object : TtsEngine.Listener<SpeechTtsEngine.Error> {
@@ -115,15 +126,140 @@ class SpeechTtsEngineTest {
     }
 
     @Test
-    fun stopWhileFetchingInterruptsOnceAndCancelsTheRequest() {
+    fun stopWhileFetchingInterruptsOnceAndKeepsTheRequestUntilClosed() {
+        speak("1", "Hello.")
+        nextRequest()
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+        assertNull(cancelledRequests.poll(200, TimeUnit.MILLISECONDS))
+        onMain { engine.close() }
+        assertEquals("Hello.", cancelledRequests.poll(2, TimeUnit.SECONDS))
+        noMoreEvents()
+        assertTrue(plays.isEmpty())
+    }
+
+    @Test
+    fun speakingAStoppedSentenceAgainPlaysOnASecondBackWithoutFetchingIt() {
+        speak("1", "Hello.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 1@main", nextEvent())
+        nextPlay()
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        output.heard = 2 * SpeechAudio.SAMPLE_RATE
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+
+        speak("2", "Hello.")
+        assertEquals("start 2@main", nextEvent())
+        nextPlay()
+        assertEquals(SpeechAudio.SAMPLE_RATE, playedFrom.poll(2, TimeUnit.SECONDS))
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+
+        // Stopped again at once: it does not keep walking back.
+        output.heard = SpeechAudio.SAMPLE_RATE + 100
+        onMain { engine.stop() }
+        assertEquals("interrupted 2@main", nextEvent())
+        speak("3", "Hello.")
+        assertEquals("start 3@main", nextEvent())
+        nextPlay().complete(Unit)
+        assertEquals(SpeechAudio.SAMPLE_RATE, playedFrom.poll(2, TimeUnit.SECONDS))
+        assertEquals("done 3@main", nextEvent())
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun speakingASentenceStoppedWhileFetchingWaitsForTheSameRequest() {
         speak("1", "Hello.")
         val (_, reply) = nextRequest()
         onMain { engine.stop() }
         assertEquals("interrupted 1@main", nextEvent())
-        assertEquals("Hello.", cancelledRequests.poll(2, TimeUnit.SECONDS))
+        speak("2", "Hello.")
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
         reply.complete(SpeechAudio(ByteArray(8)))
-        noMoreEvents()
-        assertTrue(plays.isEmpty())
+        assertEquals("start 2@main", nextEvent())
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        nextPlay().complete(Unit)
+        assertEquals("done 2@main", nextEvent())
+        assertTrue(cancelledRequests.isEmpty())
+    }
+
+    @Test
+    fun aStopBeforeTheResumedSentenceGetsGoingStillKeepsItsRequest() {
+        speak("1", "Hello.")
+        val (_, reply) = nextRequest()
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+        onMain {
+            engine.speak(TtsEngine.RequestId("2"), "Hello.", null)
+            engine.stop()
+        }
+        assertEquals("interrupted 2@main", nextEvent())
+        speak("3", "Hello.")
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+        reply.complete(SpeechAudio(ByteArray(8)))
+        assertEquals("start 3@main", nextEvent())
+        assertTrue(cancelledRequests.isEmpty())
+    }
+
+    @Test
+    fun closingBeforeTheResumedSentenceGetsGoingCancelsItsRequest() {
+        speak("1", "Hello.")
+        nextRequest()
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+        onMain {
+            engine.speak(TtsEngine.RequestId("2"), "Hello.", null)
+            engine.close()
+        }
+        assertEquals("Hello.", cancelledRequests.poll(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun anotherSentenceDropsTheStoppedOne() {
+        speak("1", "Hello.")
+        nextRequest()
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+        speak("2", "Other.")
+        assertEquals("Hello.", cancelledRequests.poll(2, TimeUnit.SECONDS))
+        assertEquals("Other.", nextRequest().first)
+    }
+
+    @Test
+    fun theSameTextAfterASkipStartsOverAndIsFetchedAgain() {
+        speak("1", "Yes.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 1@main", nextEvent())
+        nextPlay()
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        output.heard = 2 * SpeechAudio.SAMPLE_RATE
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+
+        skipCount++
+        speak("2", "Yes.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 2@main", nextEvent())
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun aSkipWhilePlayingStartsTheSameTextOver() {
+        speak("1", "Yes.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 1@main", nextEvent())
+        nextPlay()
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        output.heard = 2 * SpeechAudio.SAMPLE_RATE
+        // The skip is counted before Readium stops the engine for it.
+        skipCount++
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+
+        speak("2", "Yes.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 2@main", nextEvent())
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
     }
 
     @Test
@@ -212,5 +348,9 @@ class SpeechTtsEngineTest {
         nextRequest().second.completeExceptionally(SpeechError.Service(500))
         assertEquals("waiting 2", nextWait())
         assertEquals("done waiting 2", nextWait())
+    }
+
+    private companion object {
+        const val SECONDS_3 = 3 * SpeechAudio.SAMPLE_RATE * 2
     }
 }

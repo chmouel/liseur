@@ -99,7 +99,7 @@ class ReadAloudPlaybackTest {
         publication = PublicationOpener(DefaultPublicationParser(context, http, assets, pdfFactory = null))
             .open(asset, allowUserInteraction = false).getOrNull()!!
 
-        val cache = SpeechCache(scope, { text ->
+        cache = SpeechCache(scope, { text ->
             val nth = requested.getOrPut(text) { AtomicInteger() }.incrementAndGet()
             // A late answer, as from a slow network.
             delay(30)
@@ -110,18 +110,27 @@ class ReadAloudPlaybackTest {
             }
             SpeechAudio(text.toByteArray())
         })
-        val output = object : PcmOutput {
-            override suspend fun play(pcm: ByteArray) {
-                delay(5)
-                played += String(pcm)
-            }
+        playback = newPlayback()
+    }
 
-            override fun halt() {}
-            override fun release() {}
+    private lateinit var cache: SpeechCache
+
+    private val output = object : PcmOutput {
+        override suspend fun play(pcm: ByteArray, fromFrame: Int) {
+            delay(5)
+            played += String(pcm)
         }
-        playback = withContext(main) {
+
+        override fun halt(): Int? = null
+        override fun release() {}
+    }
+
+    private fun newPlayback(prefetcher: UtterancePrefetcher<Locator>? = null): ReadAloudPlayback {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        return runBlocking(main) {
             ReadAloudPlayback(
                 scope = scope,
+                prefetcher = prefetcher,
                 opener = { initial, observer, listener ->
                     beforeOpen()
                     val provider = SpeechTtsEngineProvider(
@@ -292,6 +301,46 @@ class ReadAloudPlaybackTest {
         assertEquals(ReadAloudPlayback.Landing.Sentence, runBlocking(main) { playback.resume() })
         awaitPlayed(7)
         assertEquals(listOf(REPEATED, LAST), played.drop(5).take(2))
+    }
+
+    @Test
+    fun pausingWhileASentenceLoadsAndPlayingOnFetchesNothingTwice() {
+        runBlocking(main) { playback.close() }
+        playback = newPlayback(
+            UtterancePrefetcher(scope, cache, { locator ->
+                PublicationUtteranceCursor(publication, locator, tokenizerFactory, Language("en"), false)
+            }),
+        )
+        holds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        awaitWaiting(true)
+        // Read ahead past the sentence waited on.
+        val deadline = System.currentTimeMillis() + 10_000
+        while (requested[FOURTH] == null) {
+            check(System.currentTimeMillis() < deadline) { "never read ahead: $requested" }
+            Thread.sleep(10)
+        }
+        runBlocking(main) { playback.pause() }
+        awaitWaiting(false)
+        holds.remove(SECOND)!!.complete(Unit)
+
+        runBlocking(main) { playback.resume() }
+        awaitPlayed(4)
+        assertEquals(listOf(FIRST, SECOND, THIRD, FOURTH), played.take(4))
+        listOf(FIRST, SECOND, THIRD, FOURTH).forEach { assertEquals(it, 1, requested[it]?.get()) }
+    }
+
+    @Test
+    fun aPauseAfterASkipDoesNotForgetIt() {
+        runBlocking(main) {
+            val before = playback.skips
+            playback.pause()
+            playback.skipToNext()
+            // The sleep timer pausing again while already paused.
+            playback.pause()
+            assertEquals(before + 1, playback.skips)
+        }
     }
 
     @Test

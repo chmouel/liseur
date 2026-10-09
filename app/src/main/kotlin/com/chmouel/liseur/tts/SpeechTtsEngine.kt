@@ -5,6 +5,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,6 +53,13 @@ interface SpeechObserver {
     /** False interrupts this request before any audio is fetched or played. */
     fun onSpeak(requestId: TtsEngine.RequestId, text: String): Boolean = true
 
+    /**
+     * Counts the listener's skips. A stopped sentence plays on from where it
+     * stopped only if none came since: a skip may land on an identical
+     * sentence, which starts from its beginning.
+     */
+    val skips: Int get() = 0
+
     fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {}
 
     /** True while the request waits for its audio, false once it arrives, fails, or is dropped. */
@@ -69,6 +77,12 @@ interface SpeechObserver {
  * main thread, which [scope] must run on, and each request gets exactly one
  * terminal call: Readium's facade replaces its pending task from these
  * callbacks without any locking.
+ *
+ * Readium pauses by stopping the engine and plays on by speaking the same
+ * sentence again, so a stop keeps the sentence's audio, or its request
+ * still on its way, and how much of it was heard. Speaking that sentence
+ * next plays on from [REWIND_FRAMES] before where it stopped, with nothing
+ * fetched again; any other sentence drops it.
  */
 @OptIn(ExperimentalReadiumApi::class)
 class SpeechTtsEngine(
@@ -112,13 +126,20 @@ class SpeechTtsEngine(
         }
     }
 
-    private class Request(val id: TtsEngine.RequestId) {
+    /** [skips] is the observer's count when the request was made: a skip after it makes its audio stale. */
+    private class Request(val id: TtsEngine.RequestId, val text: String, val from: Int, val skips: Int) {
         var job: Job? = null
+        var audio: Deferred<SpeechAudio>? = null
+        var playing = false
         var finished = false
     }
 
+    /** A stopped sentence: its audio, possibly still on its way, the frame to play on from, and its request's skips. */
+    private class Held(val text: String, val audio: Deferred<SpeechAudio>, val from: Int, val skips: Int)
+
     private var listener: TtsEngine.Listener<Error>? = null
     private var current: Request? = null
+    private var held: Held? = null
 
     private val mutableSettings = MutableStateFlow(settingsFor(initialPreferences))
     override val settings: StateFlow<SpeechTtsSettings> = mutableSettings.asStateFlow()
@@ -138,18 +159,25 @@ class SpeechTtsEngine(
 
     override fun speak(requestId: TtsEngine.RequestId, text: String, language: Language?) {
         current?.let { interrupt(it) }
-        val request = Request(requestId)
+        val resumed = held?.takeIf { it.text == text && it.skips == observer.skips }
+        held?.takeIf { it !== resumed }?.audio?.cancel()
+        held = null
+        val request = Request(requestId, text, resumed?.from ?: 0, observer.skips)
+        // Owned at once, so a stop or close before the job runs keeps or cancels it.
+        request.audio = resumed?.audio
         current = request
         request.job = scope.launch {
             // Readium maps the new utterance to its public location asynchronously.
             yield()
             if (!observer.onSpeak(requestId, text)) {
+                request.audio?.cancel()
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
+            val audio = request.audio ?: cache.claim(text).also { request.audio = it }
             observer.onWaiting(requestId, true)
-            val audio = try {
-                cache.take(text)
+            val speech = try {
+                audio.await()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SpeechError) {
@@ -160,8 +188,9 @@ class SpeechTtsEngine(
             }
             if (request.finished) return@launch
             listener?.onStart(requestId)
+            request.playing = true
             try {
-                output.play(audio.pcm)
+                output.play(speech.pcm, request.from)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -174,19 +203,29 @@ class SpeechTtsEngine(
     }
 
     override fun stop() {
-        output.halt()
-        current?.let { interrupt(it) }
+        val heard = output.halt()
+        val request = current ?: return
+        val audio = request.audio
+        if (audio != null) {
+            val from = if (request.playing && heard != null) maxOf(request.from, heard - REWIND_FRAMES) else request.from
+            held = Held(request.text, audio, from, request.skips)
+        }
+        interrupt(request, keepAudio = audio != null)
     }
 
     override fun close() {
         listener = null
         current?.job?.cancel()
+        current?.audio?.cancel()
         current = null
+        held?.audio?.cancel()
+        held = null
         output.release()
     }
 
-    private fun interrupt(request: Request) {
+    private fun interrupt(request: Request, keepAudio: Boolean = false) {
         request.job?.cancel()
+        if (!keepAudio) request.audio?.cancel()
         output.halt()
         finish(request) { onInterrupted(request.id) }
     }
@@ -202,6 +241,11 @@ class SpeechTtsEngine(
         request.finished = true
         if (current === request) current = null
         listener?.report()
+    }
+
+    companion object {
+        /** How far before the place it stopped a sentence plays on: a second, to pick up the thread. */
+        const val REWIND_FRAMES = SpeechAudio.SAMPLE_RATE
     }
 }
 
