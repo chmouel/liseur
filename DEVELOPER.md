@@ -1687,6 +1687,32 @@ reader behavior.
 - Model lists are sorted by name. A server list that prices its models
   (OpenRouter's `pricing`, dollars per token) shows the input and output
   price per million tokens under each one.
+- "Translate the page from here" in the sheet translates the book in
+  place (reflowable books only). `PageTranslation` walks sentences from
+  the selection with `PublicationUtteranceCursor`, keeps a bounded number
+  ahead of the last walked sentence on screen or already passed, restarts
+  the walk when the reader jumps elsewhere, and asks one sentence at a
+  time through a `TranslationRun` (one device `Translator` per run;
+  network services get the previous sentence as context they must not
+  translate). A reader who goes past everything walked in the same
+  chapter is caught up with: the walk passes over the sentences the page
+  says are behind the screen without asking for them. Changing the
+  service in settings rebinds the run at the
+  next sentence, and a reply is only cached under the service that
+  answered it. Errors that
+  concern one sentence skip it; key, quota, pair and pack errors halt the
+  run with an action on `PageTranslationBar`. Replies are cached in
+  memory by service, model, languages, sentence and context.
+- `reader/PageSwaps.kt` injects the script that applies swaps: it finds
+  each sentence by selector, text before and text, keeps the original of
+  every text node it changes, and redraws from the originals, so `restore`
+  gives the page back byte for byte. `reader/TranslatedPages.kt` resends
+  swaps to every attached WebView on each layout pass, since Readium
+  reloads and recycles them, and keeps restoring recycled views after
+  Stop. While translated, positions save without quoted text, BookOrbit is
+  not pushed, highlights are hidden, and highlights, notes and bookmarks
+  are off; read aloud stops the run and restores first. See
+  `docs/adr/0045-translated-pages-save-coarse-positions.md`.
 
 ### Covers, UI, and dependencies
 

@@ -51,7 +51,8 @@ notebook. Marking a passage offers three colours, and you tick which of
 the six you want along with the colour new marks use. Footnotes open as a
 card over the page rather than sending you to the back of the book. A
 selected passage can be translated by Android's own translator on the
-phone, or by a server you add.
+phone, or by a server you add, and from there the page itself can be
+translated sentence by sentence as you read.
 
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, BookOrbit, liseur-sync, or any OPDS catalog. Series are grouped into stacks tracking

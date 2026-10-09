@@ -48,6 +48,8 @@ class SelectionActions(
     val translateButton: (@Composable () -> Unit)? = null,
     /** Reads aloud from here, where the build can. */
     val readAloudButton: (@Composable () -> Unit)? = null,
+    /** False while the page shows a translation, whose words a highlight or note could not keep. */
+    val annotate: Boolean = true,
 )
 
 /**
@@ -108,7 +110,7 @@ fun SelectionPopup(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                val chips = palette.chipsFor(activeTint)
+                val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
                 chips.forEach { tint ->
                     TintChip(
                         tint = tint,
@@ -125,16 +127,18 @@ fun SelectionPopup(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    if (palette.isEmpty) {
+                    if (actions.annotate) {
+                        if (palette.isEmpty) {
+                            PopupAction(
+                                label = stringResource(R.string.annotation_highlight),
+                                onClick = { actions.onHighlight(palette.default) },
+                            )
+                        }
                         PopupAction(
-                            label = stringResource(R.string.annotation_highlight),
-                            onClick = { actions.onHighlight(palette.default) },
+                            label = stringResource(R.string.annotation_note),
+                            onClick = actions.onNote,
                         )
                     }
-                    PopupAction(
-                        label = stringResource(R.string.annotation_note),
-                        onClick = actions.onNote,
-                    )
                     PopupAction(
                         label = stringResource(R.string.annotation_look_up),
                         onClick = actions.onLookUp,

@@ -1346,4 +1346,9 @@
     <string name="translation_picker_search">Поиск языка</string>
     <string name="translation_picker_needs_download">Нужна загрузка</string>
     <string name="translation_picker_none">Языки не найдены.</string>
+    <string name="translation_page_start">Переводить страницу отсюда</string>
+    <string name="translation_page_languages">%1$s → %2$s</string>
+    <string name="translation_page_ended">Переведено до конца книги.</string>
+    <string name="translation_page_stop">Остановить перевод</string>
+    <string name="translation_page_bookmarks_off">Закладки недоступны, пока страница переведена.</string>
 </resources>

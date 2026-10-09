@@ -34,6 +34,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -119,22 +122,72 @@ internal class DeviceTranslationService(private val context: Context) : Translat
 
     override suspend fun sources(): Set<String> = DevicePairs.sources(load())
 
-    override suspend fun translate(passage: String, source: String?, target: String): String {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || source == null) throw TranslationError.Unsupported()
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) throw TranslationError.Unsupported()
+        val pair = ready(source, target)
+        return withContext(Dispatchers.IO) {
+            val translator = create(pair)
+            try {
+                translateWith(translator, passage)
+            } finally {
+                release(translator)
+            }
+        }
+    }
+
+    /** One translator for the whole run, made at the first sentence and destroyed on [TranslationRun.close]. */
+    override fun open(source: String?, target: String): TranslationRun = object : TranslationRun {
+        private val lock = Mutex()
+        private var held: Any? = null
+        private var closed = false
+
+        override suspend fun translate(sentence: String, context: String?): String = lock.withLock {
+            if (closed) throw CancellationException("closed")
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) throw TranslationError.Unsupported()
+            val pair = ready(source, target)
+            withContext(Dispatchers.IO) {
+                val translator = held as? Translator ?: create(pair).also { held = it }
+                try {
+                    translateWith(translator, sentence)
+                } catch (e: TranslationError) {
+                    // A failing translator is not trusted with the next sentence.
+                    held = null
+                    release(translator)
+                    throw e
+                }
+            }
+        }
+
+        override fun close() {
+            closed = true
+            // Destroyed once a sentence still being translated lets go of it.
+            background.launch {
+                lock.withLock {
+                    @Suppress("NewApi")
+                    (held as? Translator)?.let(::release)
+                    held = null
+                }
+            }
+        }
+    }
+
+    /** The pair from [source] into [target], once it is downloaded. */
+    private suspend fun ready(source: String?, target: String): DevicePair {
+        if (source == null) throw TranslationError.Unsupported()
         val pair = DevicePairs.find(load(), source, target) ?: throw TranslationError.Unsupported()
         if (pair.state != PairState.Ready) throw TranslationError.NotDownloaded()
-        return withContext(Dispatchers.IO) { translateOnDevice(pair, passage) }
+        return pair
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
-    private suspend fun translateOnDevice(pair: DevicePair, passage: String): String {
+    private suspend fun create(pair: DevicePair): Translator {
         val manager = context.getSystemService(TranslationManager::class.java)
             ?: throw TranslationError.DeviceFailed("no translation service")
         val translationContext = TranslationContext.Builder(
             TranslationSpec(ULocale.forLanguageTag(pair.systemSource), TranslationSpec.DATA_FORMAT_TEXT),
             TranslationSpec(ULocale.forLanguageTag(pair.systemTarget), TranslationSpec.DATA_FORMAT_TEXT),
         ).build()
-        val translator = try {
+        return try {
             withTimeout(CREATE_TIMEOUT_MS) {
                 suspendCancellableCoroutine<Translator?> { continuation ->
                     manager.createOnDeviceTranslator(
@@ -155,6 +208,10 @@ internal class DeviceTranslationService(private val context: Context) : Translat
             // A system service that is missing or dying answers with an exception.
             throw TranslationError.DeviceFailed(e.javaClass.simpleName)
         } ?: throw TranslationError.DeviceFailed("no translator")
+    }
+
+    @RequiresApi(Build.VERSION_CODES.S)
+    private suspend fun translateWith(translator: Translator, passage: String): String {
         try {
             val request = TranslationRequest.Builder()
                 .setTranslationRequestValues(listOf(TranslationRequestValue.forText(passage)))
@@ -187,8 +244,6 @@ internal class DeviceTranslationService(private val context: Context) : Translat
         } catch (e: RuntimeException) {
             // A system service that is missing or dying answers with an exception.
             throw TranslationError.DeviceFailed(e.javaClass.simpleName)
-        } finally {
-            release(translator)
         }
     }
 

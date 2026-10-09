@@ -73,6 +73,23 @@ internal fun visibleWebViewCache(root: View): CachedLookup<WebView> {
     )
 }
 
+/**
+ * Every web view in the reader, on screen or not: Readium keeps the
+ * neighbouring chapters laid out, and what the page shows has to be in
+ * them before the reader turns to them.
+ */
+internal fun attachedWebViews(root: View): List<WebView> {
+    val found = mutableListOf<WebView>()
+    fun collect(view: View) {
+        when (view) {
+            is WebView -> if (view.isAttachedToWindow) found += view
+            is ViewGroup -> for (i in 0 until view.childCount) collect(view.getChildAt(i))
+        }
+    }
+    collect(root)
+    return found
+}
+
 private fun collectVisibleWebViews(view: View, into: MutableList<Pair<WebView, Rect>>) {
     when {
         view is WebView -> {

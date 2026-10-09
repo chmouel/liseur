@@ -34,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Search
@@ -45,6 +46,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -129,7 +131,13 @@ private data class StoredTarget(val tag: String?)
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun TranslationSheet(feature: ServiceTranslate, passage: String, declared: List<String>, onDismiss: () -> Unit) {
+internal fun TranslationSheet(
+    feature: ServiceTranslate,
+    passage: String,
+    declared: List<String>,
+    onDismiss: () -> Unit,
+    onTranslatePage: ((source: String?, target: String) -> Unit)? = null,
+) {
     val ui = LocalConfiguration.current.locales[0]
     val scope = rememberCoroutineScope()
     val service by feature.service.collectAsState(initial = null)
@@ -224,6 +232,14 @@ internal fun TranslationSheet(feature: ServiceTranslate, passage: String, declar
                     onRetry = { attempt++ },
                     onSettings = { settings = it },
                     onDownload = { scope.launch { (current as? DeviceTranslationService)?.openDownloads() } },
+                    onTranslatePage = onTranslatePage?.let { start ->
+                        target?.let {
+                            {
+                                start(source, it)
+                                onDismiss()
+                            }
+                        }
+                    },
                 )
             }
         }
@@ -252,6 +268,7 @@ private fun Translation(
     onRetry: () -> Unit,
     onSettings: (services: Boolean) -> Unit,
     onDownload: () -> Unit,
+    onTranslatePage: (() -> Unit)?,
 ) {
     val device = service as? DeviceTranslationService
     val hasDownloads by produceState(false, device) { value = device?.hasDownloads() == true }
@@ -310,6 +327,13 @@ private fun Translation(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            onTranslatePage?.let {
+                OutlinedButton(onClick = it, modifier = Modifier.padding(top = 16.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.translation_page_start))
+                }
+            }
         }
     }
 }

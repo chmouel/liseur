@@ -107,12 +107,15 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.reader.progress.BookOrbitViewportCfi
 import android.os.SystemClock
 import android.webkit.WebView
+import android.widget.Toast
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.translate.PageTranslation
+import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.data.db.AnnotationKind
@@ -221,6 +224,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
+import java.util.Collections
+import java.util.WeakHashMap
 import org.w3c.dom.Document
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -284,6 +289,10 @@ private const val CHAPTER_ARRIVAL_MS = 5_000L
 // normally over in a frame or two; it is bounded because a fit is worth
 // applying even when the position it would restore never arrives.
 private const val ANCHOR_ARRIVAL_MS = 2_000L
+
+// How long read aloud waits for a translated page to show the book's
+// words again before it starts anyway.
+private const val RESTORE_WAIT_MS = 2_000L
 
 // The look the last lines of a chapter get before the page moves on,
 // however fast or slow the reader has it set.
@@ -655,7 +664,16 @@ fun ReaderScreen(
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<String?>(null) }
-    var translatePassage by remember { mutableStateOf<String?>(null) }
+    var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
+    // The page translated sentence by sentence, while it is; see [TranslatedPages].
+    var pageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
+    // Up from the start of a run until the page shows the book's own
+    // words again: positions saved meanwhile carry none of the page's.
+    var pageTranslated by remember { mutableStateOf(false) }
+    // Counts the times [pageTranslated] turned, so a place measured across a turn is known.
+    var pageTranslatedTurns by remember { mutableIntStateOf(0) }
+    val pageTranslations = remember { PageTranslationCache() }
+    val translatedViews = remember { Collections.newSetFromMap(WeakHashMap<WebView, Boolean>()) }
     val view = LocalView.current
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -765,12 +783,17 @@ fun ReaderScreen(
         mutableStateOf<BookOrbitLocalCandidate?>(null)
     }
 
-    suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator =
-        onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
+    suspend fun capture(nav: EpubNavigatorFragment, locator: Locator): Locator {
+        val turns = pageTranslatedTurns
+        val captured = onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
+        // Started on one page and answered on the other: its words may be the translation's (ADR 45).
+        return if (turns != pageTranslatedTurns) ExactLocatorAnchor.coarse(captured) else captured
+    }
 
     fun publishUnverified(locator: Locator, event: NavigatorPositionEvent) {
         cachedBookOrbitCfi = null
-        onLocatorChanged(locator, event)
+        // The words on a translated page are not the book's (ADR 45).
+        onLocatorChanged(if (pageTranslated) ExactLocatorAnchor.coarse(locator) else locator, event)
     }
 
     suspend fun candidateFor(
@@ -778,6 +801,8 @@ fun ReaderScreen(
         locator: Locator,
         expectedNative: Locator? = null,
     ): BookOrbitLocalCandidate? {
+        // BookOrbit is only told a place it can find in the book's own text.
+        if (pageTranslated) return null
         val opened = openedBookOrbit ?: return null
         suspend fun attempt(): BookOrbitViewportCfi.Candidate? = try {
             BookOrbitViewportCfi.capture(
@@ -2031,10 +2056,67 @@ fun ReaderScreen(
         }
     }
 
-    // Draw the marks the reader has made over the page.
-    LaunchedEffect(navigator, annotations) {
+    // The book's words go back on the page in the effect below.
+    fun stopTranslatingPage() {
+        pageTranslation?.stop()
+        pageTranslation = null
+    }
+
+    /**
+     * Translates the page sentence by sentence from [selection] on, the
+     * way read aloud reads it, in place of the book's words. Read aloud
+     * goes quiet first: it would be reading words no longer shown.
+     */
+    fun translatePage(selection: Locator, source: String?, target: String) {
+        val nav = navigatorNow ?: return
+        effectScope.launch {
+            readAloudFeature.stop()
+            stopTranslatingPage()
+            val translator = translate.openPage(source, target) ?: return@launch
+            val start = SpokenPassage.startingPoint(nav, selection)
+            val run = PageTranslation<Locator>(effectScope, translator, pageTranslations, { place ->
+                TranslatedPages.sentences(publication, place, source)
+            }, behind = { sentence -> navigatorNow?.let { TranslatedPages.behind(it, sentence) } ?: false })
+            cachedBookOrbitCfi = null
+            // A place measured on the book's words is no longer the page's, nor will one measured from now on be.
+            heldPlace.retire()
+            pageTranslated = true
+            pageTranslatedTurns++
+            // The page's length changes under the footer's screen count.
+            layoutGeneration++
+            pageTranslation = run
+            run.start(start, TranslatedPages.key(start))
+        }
+    }
+
+    // Read aloud speaks the book's own words, so a translated page gives them back.
+    LaunchedEffect(listening != null) {
+        if (listening != null) stopTranslatingPage()
+    }
+
+    val eInkPage = LocalEInk.current
+    LaunchedEffect(navigator, pageTranslation) {
         val nav = navigator ?: return@LaunchedEffect
-        nav.applyDecorations(annotations.toDecorations(), DECORATION_GROUP)
+        val run = pageTranslation
+        if (run != null) {
+            TranslatedPages.follow(nav, run, translatedViews, eInkPage)
+        } else if (pageTranslated) {
+            TranslatedPages.restore(nav, translatedViews) {
+                // Measured on translated words, and maybe still in flight.
+                heldPlace.retire()
+                pageTranslated = false
+                pageTranslatedTurns++
+                layoutGeneration++
+            }
+        }
+    }
+    DisposableEffect(Unit) { onDispose { pageTranslation?.stop() } }
+
+    // Draw the marks the reader has made over the page.
+    // Off while the page is translated: they mark the book's words.
+    LaunchedEffect(navigator, annotations, pageTranslated) {
+        val nav = navigator ?: return@LaunchedEffect
+        nav.applyDecorations(if (pageTranslated) emptyList() else annotations.toDecorations(), DECORATION_GROUP)
         tappedSelection = tappedSelection?.let { active ->
             annotations.firstOrNull { it.id == active.existing?.id }?.let {
                 active.copy(existing = it)
@@ -2639,6 +2721,10 @@ fun ReaderScreen(
      * caller guards on the same flag.
      */
     fun toggleBookmarkHere() {
+        if (pageTranslated) {
+            Toast.makeText(context, R.string.translation_page_bookmarks_off, Toast.LENGTH_SHORT).show()
+            return
+        }
         view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         effectScope.launch {
             if (effectiveScrollingNow) {
@@ -3254,6 +3340,18 @@ fun ReaderScreen(
                         )
                     }
                 }
+                pageTranslation?.let { run ->
+                    val state by run.state.collectAsStateWithLifecycle()
+                    translate.PageBar(
+                        translator = run.translator,
+                        state = state,
+                        theme = readingTheme,
+                        controls = chromeVisible,
+                        onRetry = run::retry,
+                        onStop = ::stopTranslatingPage,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
                 readAloud?.let {
                     readAloudFeature.Player(
                         bookId = it.bookId,
@@ -3722,7 +3820,7 @@ fun ReaderScreen(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                actions = remember(active, dictionary, translateReady) {
+                actions = remember(active, dictionary, translateReady, pageTranslated) {
                     SelectionActions(
                         onHighlight = { tint ->
                             onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -3755,10 +3853,10 @@ fun ReaderScreen(
                                 dismissSelection()
                             }
                         },
-                        translateButton = if (translate.isAvailable && translateReady) {
+                        translateButton = if (translate.isAvailable && translateReady && !pageTranslated) {
                             {
                                 translate.SelectionButton {
-                                    translatePassage = active.text
+                                    translatePassage = active
                                     dismissSelection()
                                 }
                             }
@@ -3772,15 +3870,30 @@ fun ReaderScreen(
                                     readAloudFeature.SelectionButton {
                                         dismissSelection()
                                         val nav = navigator
+                                        // Translated words are not in the book; read from the sentence they translate.
+                                        val original = pageTranslation?.let { TranslatedPages.original(it, active.locator) }
                                         effectScope.launch {
+                                            // Its marks go on the book's words, so those come back first.
+                                            if (pageTranslated) {
+                                                stopTranslatingPage()
+                                                val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
+                                                    snapshotFlow { pageTranslated }.first { !it }
+                                                }
+                                                if (restored == null) {
+                                                    Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
+                                                    return@launch
+                                                }
+                                            }
                                             reading.start(
-                                                nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                                original
+                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
                                                     ?: active.locator,
                                             )
                                         }
                                     }
                                 }
                             },
+                        annotate = !pageTranslated,
                     )
                 },
                 onDismiss = {
@@ -3819,9 +3932,15 @@ fun ReaderScreen(
 
     translatePassage?.let { passage ->
         translate.Sheet(
-            passage = passage,
+            passage = passage.text,
             declared = publication.metadata.languages,
             onDismiss = { translatePassage = null },
+            // A fixed-layout page's text sits where its picture put it.
+            onTranslatePage = if (reflowableText) {
+                { source, target -> translatePage(passage.locator, source, target) }
+            } else {
+                null
+            },
         )
     }
 

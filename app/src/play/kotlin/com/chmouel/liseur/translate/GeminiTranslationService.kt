@@ -58,9 +58,9 @@ internal class GeminiTranslationService(
 
     override suspend fun sources(): Set<String>? = null
 
-    override suspend fun translate(passage: String, source: String?, target: String): String {
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
         val key = account.key() ?: throw TranslationError.NotSetUp()
-        return client.translate(key, model.first(), source, target, passage)
+        return client.translate(key, model.first(), source, target, passage, context)
     }
 
     /** Saves in the service's scope, so a model typed as the screen closes is still saved. */

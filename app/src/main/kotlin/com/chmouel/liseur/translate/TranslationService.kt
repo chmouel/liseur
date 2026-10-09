@@ -54,10 +54,27 @@ internal interface TranslationService {
     /** The languages it translates from; null when it takes any. */
     suspend fun sources(): Set<String>?
 
-    /** [passage] in [target]. Throws [TranslationError]; cancelling the caller cancels the request. */
-    suspend fun translate(passage: String, source: String?, target: String): String
+    /**
+     * [passage] in [target]; [context] is the text before it, sent along
+     * when the service can use it and never translated. Throws
+     * [TranslationError]; cancelling the caller cancels the request.
+     */
+    suspend fun translate(passage: String, source: String?, target: String, context: String? = null): String
+
+    /** Sentences one after another from [source] into [target], for as long as a page is translated. */
+    fun open(source: String?, target: String): TranslationRun = object : TranslationRun {
+        override suspend fun translate(sentence: String, context: String?) = translate(sentence, source, target, context)
+    }
 
     /** Its own rows on the Translation page, under the service picker. */
     @Composable
     fun SettingsRows(onManageServices: () -> Unit)
+}
+
+/** A run of translations between two languages, closed when the page goes back to the original. */
+internal interface TranslationRun {
+    /** [sentence] translated, with [context] as the sentence before it. Throws [TranslationError]. */
+    suspend fun translate(sentence: String, context: String?): String
+
+    fun close() = Unit
 }

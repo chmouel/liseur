@@ -1,8 +1,13 @@
 package com.chmouel.liseur.translate
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
@@ -73,6 +78,53 @@ internal class ServiceTranslate(
     suspend fun translate(service: TranslationService, passage: String, source: String?, target: String): String =
         requests.run(service::owner) { service.translate(passage, source, target) }
 
+    /**
+     * A translator that follows the settings: each sentence goes to the
+     * service and model chosen when it is asked, so one picked from the
+     * bar after a refusal takes over the run.
+     */
+    override suspend fun openPage(source: String?, target: String): SentenceTranslator {
+        class Bound(val identity: String, val service: TranslationService, val run: TranslationRun, val destination: String?)
+
+        suspend fun wanted(): Pair<TranslationService, String> {
+            val service = resolve(settings.settings.first())
+            return service to listOf(service.id, choice.first(), source, target).joinToString("\u0000")
+        }
+
+        // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
+        suspend fun bind(): Bound {
+            val (service, identity) = wanted()
+            val destination = service.destination()
+            return Bound(identity, service, service.open(source, target), destination)
+        }
+
+        var bound by mutableStateOf(bind())
+
+        suspend fun rebound(): Bound {
+            if (wanted().second != bound.identity) {
+                val next = bind()
+                bound.run.close()
+                bound = next
+            }
+            return bound
+        }
+
+        return object : SentenceTranslator {
+            override val source = source
+            override val target = target
+            override val destination get() = bound.destination
+
+            override suspend fun answering() = rebound().identity
+
+            override suspend fun translate(sentence: String, context: String?): String {
+                val current = rebound()
+                return requests.run(current.service::owner) { current.run.translate(sentence, context) }
+            }
+
+            override fun close() = bound.run.close()
+        }
+    }
+
     private fun resolve(s: AppSettings): TranslationService {
         val wanted = when (val provider = s.translationProvider) {
             ServerSettings.SERVER_PROVIDER -> provider.takeIf { s.translationServerConnection != null }
@@ -91,8 +143,23 @@ internal class ServiceTranslate(
     override fun SettingsScreen(onBack: () -> Unit, services: Boolean) = TranslationSettingsScreen(this, onBack, services)
 
     @Composable
-    override fun Sheet(passage: String, declared: List<String>, onDismiss: () -> Unit) =
-        TranslationSheet(this, passage, declared, onDismiss)
+    override fun Sheet(
+        passage: String,
+        declared: List<String>,
+        onDismiss: () -> Unit,
+        onTranslatePage: ((source: String?, target: String) -> Unit)?,
+    ) = TranslationSheet(this, passage, declared, onDismiss, onTranslatePage)
+
+    @Composable
+    override fun PageBar(
+        translator: SentenceTranslator,
+        state: PageTranslationState,
+        theme: ReaderTheme,
+        controls: Boolean,
+        onRetry: () -> Unit,
+        onStop: () -> Unit,
+        modifier: Modifier,
+    ) = PageTranslationBar(this, translator, state, theme, controls, onRetry, onStop, modifier)
 
     @Composable
     override fun SelectionButton(onClick: () -> Unit) = TranslationSelectionButton(onClick)

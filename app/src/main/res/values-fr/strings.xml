@@ -1254,4 +1254,9 @@
     <string name="translation_picker_search">Rechercher une langue</string>
     <string name="translation_picker_needs_download">À télécharger</string>
     <string name="translation_picker_none">Aucune langue ne correspond.</string>
+    <string name="translation_page_start">Traduire la page à partir d\'ici</string>
+    <string name="translation_page_languages">%1$s vers %2$s</string>
+    <string name="translation_page_ended">Traduit jusqu\'à la fin du livre.</string>
+    <string name="translation_page_stop">Arrêter la traduction</string>
+    <string name="translation_page_bookmarks_off">Les signets sont désactivés pendant la traduction de la page.</string>
 </resources>
