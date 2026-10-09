@@ -176,21 +176,38 @@ internal class PageTranslation<P>(
         return swaps
             .mapIndexedNotNull { i, swap ->
                 val shown = squash(swap.translation)
+                // Swaps come in the order they were made, which a jump or a refused sentence breaks; the text says what follows what.
+                val next = swaps.firstOrNull { follows(swap.sentence, it.sentence) } ?: swaps.getOrNull(i + 1)
                 val at = shown.indexOf(key).takeIf { it >= 0 }
-                    ?: runsOn(shown, key, swaps.getOrNull(i + 1)?.let { squash(it.translation) })
+                    ?: runsOn(shown, key, next?.let { squash(it.translation) })
                     ?: return@mapIndexedNotNull null
-                // The sentence before it in the same element is on the page just before it.
-                val earlier = swaps.getOrNull(i - 1)
-                    ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
-                    ?.let { squash(it.translation) }
-                    .orEmpty()
-                val lead = (earlier + shown.substring(0, at)).takeLast(MATCHED)
+                val prefix = shown.substring(0, at)
+                // Just before it on the page: the translation of the sentence before it, or the book's own words when that one was left alone.
+                val book = squash(swap.sentence.before.orEmpty())
+                val leads = listOfNotNull(
+                    swaps.firstOrNull { follows(it.sentence, swap.sentence) }?.let { squash(it.translation) + prefix },
+                    swaps.getOrNull(i - 1)
+                        ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
+                        ?.let { squash(it.translation) + prefix },
+                    book.takeLast(BOOK_TAIL) + prefix,
+                )
                 // Words that only happen to be in a translation are not on the page after it.
-                if (!leading.endsWith(lead)) return@mapIndexedNotNull null
+                val lead = leads.map { it.takeLast(MATCHED) }.filter(leading::endsWith).maxByOrNull { it.length }
+                    ?: return@mapIndexedNotNull null
                 swap.sentence to lead.length
             }
             .maxByOrNull { it.second }
             ?.first
+    }
+
+    /** Whether [sentence] comes straight after [previous] in the same element, as the text before it says. */
+    private fun follows(previous: PageSentence, sentence: PageSentence): Boolean {
+        if (previous === sentence || previous.href != sentence.href || previous.selector != sentence.selector) return false
+        val before = squash(sentence.before.orEmpty())
+        val text = squash(previous.text)
+        if (before.isEmpty() || text.isEmpty()) return false
+        // The text before a sentence can stop partway into a long one.
+        return before.endsWith(text) || (before.length >= MATCHED && text.endsWith(before))
     }
 
     fun onReader(reader: PageReader<P>) {
@@ -314,6 +331,9 @@ internal class PageTranslation<P>(
 
         // Enough of a selection, and of the text before it, to tell sentences apart.
         private const val MATCHED = 40
+
+        // Enough of the book's words before a sentence left untranslated to see they are on the page.
+        private const val BOOK_TAIL = 8
 
         // The page and the translation differ in line breaks and collapsed spaces.
         private fun squash(text: String) = text.filterNot(Char::isWhitespace)

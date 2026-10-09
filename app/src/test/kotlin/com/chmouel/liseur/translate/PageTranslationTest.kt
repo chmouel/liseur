@@ -267,4 +267,28 @@ class PageTranslationTest {
         // Words selected in text left untranslated, which a translation happens to contain.
         assertEquals(null, page.original("ch1.xhtml", "rains", "Elsewhere it "))
     }
+
+    @Test
+    fun `a selection after a sentence left untranslated still finds its sentence`() = runTest {
+        val element = listOf(
+            PageSentence("Il pleut.", "ch1.xhtml", "#p0", null),
+            PageSentence("Il fait très froid ici.", "ch1.xhtml", "#p0", "Il pleut."),
+            PageSentence("Il pleut fort.", "ch1.xhtml", "#p0", "Il pleut. Il fait très froid ici."),
+        )
+        val run = FakeRun()
+        val shown = mapOf("Il pleut." to "It rains.", "Il pleut fort." to "It pours.")
+        run.answer = { shown.getValue(it) }
+        run.failWith = { if (it !in shown) TranslationError.Refused() else null }
+        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+            object : PageSentences {
+                var i = at
+                override suspend fun next() = element.getOrNull(i++)
+            }
+        }, 10)
+        page.start(0, "start")
+        runCurrent()
+
+        assertEquals("Il pleut fort.", page.original("ch1.xhtml", "pours", "It rains. Il fait très froid ici. It ")?.text)
+        assertEquals("Il pleut.", page.original("ch1.xhtml", "rains", "It ")?.text)
+    }
 }
