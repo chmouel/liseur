@@ -39,6 +39,9 @@ data class TranslatedSentence(
     @ColumnInfo(name = "used_at") val usedAt: Long,
 )
 
+/** A saved row and the length of its translation, oldest first, for trimming to the character budget. */
+data class SavedLength(val id: Long, val length: Long)
+
 @Dao
 interface TranslatedSentenceDao {
     @Query("SELECT translation FROM translated_sentences WHERE book_url = :bookUrl AND `key` = :key")
@@ -59,8 +62,14 @@ interface TranslatedSentenceDao {
     @Query("SELECT COALESCE(SUM(LENGTH(translation)), 0) FROM translated_sentences")
     suspend fun characters(): Long
 
-    @Query("SELECT LENGTH(translation) FROM translated_sentences ORDER BY used_at, rowid LIMIT :limit")
-    suspend fun oldestLengths(limit: Int): List<Long>
+    @Query(
+        "SELECT rowid AS id, LENGTH(translation) AS length FROM translated_sentences " +
+            "ORDER BY used_at, rowid LIMIT :limit",
+    )
+    suspend fun oldest(limit: Int): List<SavedLength>
+
+    @Query("DELETE FROM translated_sentences WHERE rowid IN (:ids)")
+    suspend fun drop(ids: List<Long>)
 
     @Query(
         "DELETE FROM translated_sentences WHERE rowid IN " +
@@ -127,8 +136,11 @@ class SavedTranslations(
         Log.w(TAG, "Could not count saved translations: ${e.javaClass.simpleName}")
     }
 
-    /** The book at [bookUrl]'s saved sentences, for one opening of it. */
-    fun forBook(bookUrl: String): PageTranslationCache = BookCache(bookUrl, epochs[bookUrl] ?: 0L)
+    /**
+     * The book at [bookUrl]'s saved sentences, for one opening of it. The
+     * book is registered so a sweep fences it even before it has a row.
+     */
+    fun forBook(bookUrl: String): PageTranslationCache = BookCache(bookUrl, epochs.computeIfAbsent(bookUrl) { 0L })
 
     /** Keeps within the limits and drops the books gone from the library: once at start. */
     suspend fun tidy() {
@@ -137,18 +149,19 @@ class SavedTranslations(
     }
 
     /**
-     * Drops what was saved for books the library no longer has. Asked
-     * outside any transaction of the caller's, it sees only removals
-     * already committed: one rolled back leaves its book, and its
-     * sentences, where they were.
+     * Drops what was saved for books the library no longer has, and
+     * fences every open handle on them, saved rows or not. Asked outside
+     * any transaction of the caller's, it sees only removals already
+     * committed: one rolled back leaves its book, and its sentences, where
+     * they were. Whole under the lock, so an older sweep never acts on
+     * what a newer one has already settled.
      */
     suspend fun sweep() = quietly("sweep") {
-        val books = dao.books()
-        if (books.isEmpty()) return@quietly
-        val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
-        val gone = books.filterNot { it in kept }
-        if (gone.isEmpty()) return@quietly
         writes.withLock {
+            val books = (dao.books() + epochs.keys).distinct()
+            if (books.isEmpty()) return@withLock
+            val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
+            val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
             gone.chunked(BATCH).forEach { dao.forget(it) }
         }
@@ -211,16 +224,17 @@ class SavedTranslations(
         if (over > 0) dao.dropOldest(over)
         var excess = dao.characters() - maxCharacters
         while (excess > 0) {
-            val lengths = dao.oldestLengths(BATCH)
-            if (lengths.isEmpty()) break
-            var dropped = 0
+            val oldest = dao.oldest(BATCH)
+            if (oldest.isEmpty()) break
+            // The exact rows measured: a lookup may reorder them meanwhile.
+            val dropped = mutableListOf<Long>()
             var freed = 0L
-            for (length in lengths) {
-                dropped++
-                freed += length
+            for (row in oldest) {
+                dropped += row.id
+                freed += row.length
                 if (freed >= excess) break
             }
-            dao.dropOldest(dropped)
+            dao.drop(dropped)
             excess -= freed
         }
     }
