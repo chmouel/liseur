@@ -91,6 +91,7 @@ class GeminiTranslationTest {
         expect<TranslationError.Truncated> { GeminiTranslation.translation(reply("The sun was", finish = "MAX_TOKENS")) }
         expect<TranslationError.Malformed> { GeminiTranslation.translation(reply("The sun", finish = "OTHER")) }
         expect<TranslationError.Malformed> { GeminiTranslation.translation(reply("The sun", finish = "LANGUAGE")) }
+        expect<TranslationError.Malformed> { GeminiTranslation.translation(reply("The sun", finish = "")) }
         expect<TranslationError.Empty> { GeminiTranslation.translation(reply(" ")) }
         expect<TranslationError.Malformed> { GeminiTranslation.translation("""{"candidates":[]}""") }
         expect<TranslationError.Malformed> { GeminiTranslation.translation("nope") }
