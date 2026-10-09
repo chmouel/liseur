@@ -121,10 +121,13 @@ internal object TranslatedPages {
         val web = visibleWebView(nav.publicationView) ?: return
         val url = web.url ?: return
         val href = ResourceAddress.canonicalPath(url) ?: return
+        val shown = nav.currentLocator.value
+        // The reader may have turned to another page while the view answered,
+        // in this chapter too; the turn is measured again when it arrives.
+        fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown
         val walked = run.walkedIn(href)
         val reached = if (walked.isEmpty()) -1 else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
-        // The reader may have turned to another page while the view answered.
-        if (!stillShows(nav, web, url)) return
+        if (moved()) return
         if (reached >= 0) {
             run.onReader(PageReader.Within(walked[reached]))
             return
@@ -140,7 +143,7 @@ internal object TranslatedPages {
         } catch (_: Exception) {
             null
         } ?: return
-        if (ResourceAddress.canonicalPath(place.href.toString()) != href) return
+        if (moved() || ResourceAddress.canonicalPath(place.href.toString()) != href) return
         run.onReader(PageReader.Elsewhere(place, key(place)))
     }
 
