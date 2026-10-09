@@ -134,7 +134,9 @@ internal object PageSwaps {
           const linkOf = node => node.parentElement ? node.parentElement.closest("a") : null;
           const noteRef = a => {
             const kind = ((a.getAttribute("epub:type") || "") + " " + (a.getAttribute("role") || "")).toLowerCase();
-            return kind.includes("noteref") || !!a.closest("sup") || !!a.querySelector("sup") || a.textContent.trim().length <= 3;
+            // A bare note mark: a number, a footnote sign, a roman numeral or one letter, maybe bracketed. A short word is a link.
+            const mark = /^[\[(]?(\d+|[*\u2020\u2021\u00a7]+|[ivxlc]+|[a-z])[\])]?$/i.test(a.textContent.trim());
+            return kind.includes("noteref") || !!a.closest("sup") || !!a.querySelector("sup") || mark;
           };
           const apply = swap => {
             const at = locate(swap.selector, swap.before, swap.text);
