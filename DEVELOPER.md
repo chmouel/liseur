@@ -1475,12 +1475,14 @@ reader behavior.
   must leave every reference pointing at a listed server, otherwise the
   whole restore fails and nothing changes. A connection or key change
   stops only the playback, previews and requests on that origin (or
-  Gemini). Deleting a server
+  Gemini); a restore that carries servers or read aloud's choice counts
+  as a change to every origin listed before it. Deleting a server
   points read aloud at device voices and drops a key only when no other
   server shares its origin. Read aloud's choice is `read_aloud_provider`
   (`openai` for a server) plus `read_aloud_server`; each server's model,
-  voice, offered voices and per-language voices are kept apart in
-  `read_aloud_server_state`, so switching servers and back restores them.
+  voice and offered voices are kept apart in `read_aloud_server_state`,
+  and its per-language voices in `read_aloud_voice_preferences` under the
+  server's API root, so switching servers and back restores them.
   The legacy `speech_server_*` keys are migrated into one server in a
   single edit on upgrade, and an older backup's legacy keys are merged by
   URL on restore (`ServerSettings`).

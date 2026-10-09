@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.json.JSONObject
 
 /**
  * The servers and keys on the Services page, shared by every feature that
@@ -160,15 +162,17 @@ internal class ServerConnections(
 
     /**
      * Forgets the server [id], and its key when no other server is on its
-     * origin. A feature using it goes back to the device.
+     * origin. A feature using it goes back to the device. With the
+     * editor's [draft], the server its last save landed on is the one
+     * forgotten, so a new address still being written is not missed.
      */
-    fun delete(id: String, done: (Boolean) -> Unit = {}) {
+    fun delete(id: String, draft: String? = null, done: (Boolean) -> Unit = {}) {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             val deleted = lock.withLock {
-                val server = listed(id) ?: return@withLock false
+                val server = listed(draft?.let { savedDrafts.value[it] } ?: id) ?: return@withLock false
                 val origin = originOf(server.url)
                 changing(setOfNotNull(origin)) {
-                    val deleted = settings.deleteServer(id)
+                    val deleted = settings.deleteServer(server.id)
                     val shared = settings.settings.first().servers.readable.orEmpty().any { originOf(it.url) == origin }
                     if (deleted && origin != null && !shared) forgetKey(origin)
                     deleted
@@ -192,6 +196,24 @@ internal class ServerConnections(
         settings.settings.first().servers.readable?.firstOrNull { it.id == id }
 
     /**
+     * Writes a backup's settings [values] through [restore]. When they hold
+     * servers or read aloud's choice, it is a change to every origin listed
+     * before, so what used a server the archive replaces ends first. An
+     * archive that is refused anyway stops nothing.
+     */
+    suspend fun restore(values: JSONObject, restore: suspend () -> Unit) {
+        if (!ServerSettings.touchesServers(values)) return restore()
+        ServerSettings.validateBackup(values)
+        // On the scope's thread, where the features hear of changes.
+        scope.async {
+            lock.withLock {
+                val owners = settings.settings.first().servers.readable.orEmpty().mapNotNullTo(mutableSetOf()) { originOf(it.url) }
+                changing(owners) { restore() }
+            }
+        }.await()
+    }
+
+    /**
      * How many models the server at [url] lists, asked with its key: that
      * it answers and takes the key, whatever it is used for.
      */
@@ -200,7 +222,10 @@ internal class ServerConnections(
         return try {
             if (localNetwork.blocks(base.toString())) throw SpeechError.LocalNetworkBlocked()
             Result.success(client.allModels(base, keys.get(ServerKeys.origin(base))).size)
-        } catch (e: SpeechError) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Includes a key that cannot be read back, which the test reports like any other failure.
             Result.failure(e)
         }
     }

@@ -262,6 +262,12 @@ internal object ServerSettings {
         edit.save()
     }
 
+    /** Whether restoring [values] can change the servers, what each keeps, or which one read aloud uses. */
+    fun touchesServers(values: JSONObject): Boolean =
+        (SERVER_KEYS + PROVIDER.name).any(values::has)
+
+    private val SERVER_KEYS = listOf(SERVERS_NAME, READ_ALOUD_STATE_NAME, READ_ALOUD_SERVER_NAME, LEGACY_URL_NAME)
+
     /**
      * Run in the restore's write once the archive is applied. An archive
      * with its own server list replaces the device's: what the device kept
@@ -272,7 +278,7 @@ internal object ServerSettings {
      * restore is written.
      */
     fun settleRestore(p: MutablePreferences, values: JSONObject) {
-        if (listOf(SERVERS_NAME, READ_ALOUD_STATE_NAME, READ_ALOUD_SERVER_NAME, LEGACY_URL_NAME).none(values::has)) return
+        if (SERVER_KEYS.none(values::has)) return
         val ids = decodeServers(p[SERVERS]).map { it.id }.toSet()
         val replaced = values.has(SERVERS_NAME)
         val states = try {
