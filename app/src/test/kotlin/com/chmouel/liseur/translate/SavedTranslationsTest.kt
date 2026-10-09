@@ -86,6 +86,35 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a book removed during its first translation keeps nothing`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        val asked = book.get("one")
+
+        library -= BOOK
+        store.sweep()
+        book.put("one", "un", asked.stamp)
+
+        assertEquals(0, store.stats.first().sentences)
+    }
+
+    @Test
+    fun `a book brought back after its removal saves again through later sweeps`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        library -= BOOK
+        store.sweep()
+
+        library += BOOK
+        val back = store.forBook(BOOK)
+        store.sweep()
+        back.keep("two", "deux")
+
+        assertEquals("deux", back.get("two").translation)
+        assertNull(back.get("one").translation)
+    }
+
+    @Test
     fun `a sweep while the book is still there keeps it`() = runTest {
         val store = saved()
         val book = store.forBook(BOOK)
