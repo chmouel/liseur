@@ -8,10 +8,16 @@ import kotlinx.coroutines.CancellationException
  * the old connection's, even for the very same passage.
  */
 internal class TranslationRequests(private val generation: (owner: String) -> Int) {
-    /** [block]'s reply or failure, asked again while [owner]'s generation moved on during it. */
-    suspend fun run(owner: String?, block: suspend () -> String): String {
+    /**
+     * [block]'s reply or failure, asked again while the connection it used
+     * changed during it. Each attempt asks [owner] whose connection that
+     * is, before and after, since an attempt may land on another server
+     * than the one before it.
+     */
+    suspend fun run(owner: suspend () -> String?, block: suspend () -> String): String {
         repeat(ATTEMPTS) {
-            val before = owner?.let(generation)
+            val asked = owner()
+            val before = asked?.let(generation)
             // A failure is the old connection's as much as a reply is, so it is judged the same way.
             val outcome = try {
                 Result.success(block())
@@ -20,7 +26,7 @@ internal class TranslationRequests(private val generation: (owner: String) -> In
             } catch (e: Exception) {
                 Result.failure(e)
             }
-            if (owner == null || generation(owner) == before) return outcome.getOrThrow()
+            if (owner() == asked && (asked == null || generation(asked) == before)) return outcome.getOrThrow()
         }
         throw TranslationError.Changed()
     }
