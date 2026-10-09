@@ -226,6 +226,7 @@ private enum class Screen {
     READING_APPEARANCE,
     READING_NAVIGATION,
     READ_ALOUD,
+    TRANSLATION,
     SERVICES,
     HIDDEN_BOOKS,
     SERVER_ACCOUNT,
@@ -407,6 +408,7 @@ private fun LiseurApp(
                 onBack = { screen = Screen.LIBRARY },
                 flavorReadingRows = {
                     context.container.readAloud.SettingsEntry(onClick = { screen = Screen.READ_ALOUD })
+                    context.container.translate.SettingsEntry(onClick = { screen = Screen.TRANSLATION })
                     ServicesEntry(onClick = { screen = Screen.SERVICES })
                 },
             )
@@ -416,6 +418,12 @@ private fun LiseurApp(
             val back = { screen = Screen.SETTINGS }
             BackHandler { back() }
             context.container.readAloud.SettingsScreen(onBack = back)
+        }
+
+        Screen.TRANSLATION -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            context.container.translate.SettingsScreen(onBack = back)
         }
 
         Screen.SERVICES -> {

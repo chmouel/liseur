@@ -49,6 +49,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -74,6 +75,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.translate.DeviceTranslationService
 import com.chmouel.liseur.data.settings.ServerChange
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
@@ -119,6 +121,7 @@ private const val NEW_SERVER = ""
 internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAccounts, onBack: () -> Unit) {
     val servers by connections.servers.collectAsState(initial = ServerList.Empty)
     val readAloud by connections.readAloudServer.collectAsState(initial = null)
+    val translation by connections.translationServer.collectAsState(initial = null)
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
     // Names this opening of the editor, so its saves find it again after a recreation.
     var draft by rememberSaveable { mutableStateOf("") }
@@ -137,6 +140,7 @@ internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAcc
                 id = id,
                 server = servers.readable?.firstOrNull { it.id == id },
                 usedByReadAloud = id != null && id == readAloud,
+                usedByTranslation = id != null && id == translation,
                 onBack = { editing = null },
             )
         }
@@ -161,10 +165,12 @@ internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAcc
                             headlineContent = { Text(server.name) },
                             supportingContent = {
                                 Text(
-                                    if (server.id == readAloud) {
-                                        stringResource(R.string.services_server_used_read_aloud, server.host)
-                                    } else {
-                                        server.host
+                                    when {
+                                        server.id == readAloud && server.id == translation ->
+                                            stringResource(R.string.services_server_used_both, server.host)
+                                        server.id == readAloud -> stringResource(R.string.services_server_used_read_aloud, server.host)
+                                        server.id == translation -> stringResource(R.string.services_server_used_translation, server.host)
+                                        else -> server.host
                                     },
                                 )
                             },
@@ -249,6 +255,7 @@ private fun ServerScreen(
     id: String?,
     server: ServerConnection?,
     usedByReadAloud: Boolean,
+    usedByTranslation: Boolean,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -320,7 +327,7 @@ private fun ServerScreen(
         }
     }
     val inUse = SpeechServerPresets.matching(address.text)
-    val presetsLabel = stringResource(R.string.read_aloud_settings_server_presets)
+    val presetsLabel = stringResource(R.string.services_server_presets)
     val title = server?.name ?: stringResource(R.string.services_add)
 
     SettingsPage(
@@ -488,17 +495,23 @@ private fun ServerScreen(
     }
 
     if (confirmDelete && server != null) {
+        // Whether translation has the phone's translator to fall back on.
+        val deviceTranslates by produceState<Boolean?>(null, usedByTranslation) {
+            value = if (usedByTranslation) DeviceTranslationService.available(context) else true
+        }
+        val consequences = listOfNotNull(
+            stringResource(R.string.services_delete_read_aloud, server.name).takeIf { usedByReadAloud },
+            when {
+                !usedByTranslation -> null
+                deviceTranslates == false -> stringResource(R.string.services_delete_translation_off, server.name)
+                else -> stringResource(R.string.services_delete_translation, server.name)
+            },
+        )
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(stringResource(R.string.services_delete_title, server.name)) },
             text = {
-                Text(
-                    if (usedByReadAloud) {
-                        stringResource(R.string.services_delete_read_aloud, server.name)
-                    } else {
-                        stringResource(R.string.services_delete_unused)
-                    },
-                )
+                Text(consequences.ifEmpty { listOf(stringResource(R.string.services_delete_unused)) }.joinToString("\n\n"))
             },
             confirmButton = {
                 TextButton(

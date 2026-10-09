@@ -92,6 +92,9 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.providers.ServiceOption
+import com.chmouel.liseur.providers.ServiceRow
+import com.chmouel.liseur.providers.ServiceSheet
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
@@ -234,52 +237,24 @@ private fun SentencesPerRequestRow(feature: SpeechReadAloud) {
     }
 }
 
-/**
- * The service in use, as one row that opens a sheet of them all, like
- * the server kind on the account screen. Choosing a service is rare and
- * choosing a voice is not, so the choice takes one row's height and the
- * service's own settings follow it. Chips in a row could not hold three
- * names as long as "Speech server (OpenAI-compatible)" on a phone.
- */
 @Composable
 private fun ServiceRow(service: SpeechService, server: ServerConnection?, onClick: () -> Unit) {
     val configured by service.configured.collectAsState(initial = true)
-    OutlinedCard(
+    ServiceRow(
+        icon = service.icon,
+        overline = stringResource(R.string.read_aloud_settings_provider),
+        headline = server?.name ?: stringResource(service.label),
+        supporting = when {
+            !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
+            server != null -> server.host
+            else -> stringResource(service.summary)
+        },
+        changeLabel = stringResource(R.string.read_aloud_settings_provider_change),
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp),
-    ) {
-        ListItem(
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            leadingContent = { Icon(service.icon, contentDescription = null) },
-            overlineContent = { Text(stringResource(R.string.read_aloud_settings_provider)) },
-            headlineContent = { Text(server?.name ?: stringResource(service.label)) },
-            supportingContent = {
-                Text(
-                    when {
-                        !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
-                        server != null -> server.host
-                        else -> stringResource(service.summary)
-                    },
-                )
-            },
-            trailingContent = {
-                Icon(
-                    imageVector = Icons.Outlined.ExpandMore,
-                    contentDescription = stringResource(R.string.read_aloud_settings_provider_change),
-                )
-            },
-        )
-    }
+    )
 }
 
-/**
- * Every service with what it is and where the text goes, each listed
- * server by name in place of the server kind, then the way to the
- * Services page; picking one closes it.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+/** Every service, each listed server by name in place of the server kind, then the way to the Services page. */
 @Composable
 private fun ServiceSheet(
     services: List<SpeechService>,
@@ -291,75 +266,35 @@ private fun ServiceSheet(
     onManage: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    LiseurModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        Column(
-            Modifier
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .selectableGroup(),
-        ) {
-            Text(
-                stringResource(R.string.read_aloud_settings_provider),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
-            )
-            services.forEach { service ->
-                if (service.id == ServerSettings.SERVER_PROVIDER) {
-                    servers.forEach { server ->
-                        ServiceChoice(
-                            selected = server.id == selectedServer,
-                            icon = service.icon,
-                            headline = server.name,
-                            supporting = server.host,
-                            onClick = { onPickServer(server) },
-                        )
-                    }
-                } else {
-                    ServiceChoice(
-                        selected = service == selected,
-                        icon = service.icon,
-                        headline = stringResource(service.label),
-                        supporting = stringResource(service.summary),
-                        onClick = { onPick(service) },
-                    )
-                }
+    val options = services.flatMap { service ->
+        if (service.id == ServerSettings.SERVER_PROVIDER) {
+            servers.map { server ->
+                ServiceOption(
+                    selected = server.id == selectedServer,
+                    icon = service.icon,
+                    headline = server.name,
+                    supporting = server.host,
+                    onClick = { onPickServer(server) },
+                )
             }
-            ListItem(
-                modifier = Modifier.clickable(role = Role.Button, onClick = onManage),
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
-                headlineContent = { Text(stringResource(R.string.services_manage)) },
-                supportingContent = if (servers.isEmpty()) {
-                    { Text(stringResource(R.string.read_aloud_provider_openai_summary)) }
-                } else {
-                    null
-                },
+        } else {
+            listOf(
+                ServiceOption(
+                    selected = service == selected,
+                    icon = service.icon,
+                    headline = stringResource(service.label),
+                    supporting = stringResource(service.summary),
+                    onClick = { onPick(service) },
+                ),
             )
         }
     }
-}
-
-@Composable
-private fun ServiceChoice(
-    selected: Boolean,
-    icon: ImageVector,
-    headline: String,
-    supporting: String,
-    onClick: () -> Unit,
-) {
-    ListItem(
-        modifier = Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        leadingContent = { Icon(icon, contentDescription = null) },
-        headlineContent = { Text(headline) },
-        supportingContent = { Text(supporting) },
-        trailingContent = {
-            // Null, not a second handler: the row carries the click.
-            RadioButton(selected = selected, onClick = null)
-        },
+    ServiceSheet(
+        title = stringResource(R.string.read_aloud_settings_provider),
+        options = options,
+        manageDetail = if (servers.isEmpty()) stringResource(R.string.read_aloud_provider_openai_summary) else null,
+        onManage = onManage,
+        onDismiss = onDismiss,
     )
 }
 

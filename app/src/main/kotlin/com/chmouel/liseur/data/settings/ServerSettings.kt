@@ -62,7 +62,7 @@ sealed interface ServerChange {
 }
 
 /**
- * The saved servers and read aloud's state on each, stored as JSON in
+ * The saved servers and each feature's state on them, stored as JSON in
  * the app settings. Backed up with the settings archive, never synced:
  * which servers a device reaches is that device's business.
  */
@@ -75,13 +75,23 @@ internal object ServerSettings {
     val READ_ALOUD_SERVER = stringPreferencesKey(READ_ALOUD_SERVER_NAME)
     val READ_ALOUD_STATE = stringPreferencesKey(READ_ALOUD_STATE_NAME)
 
+    const val TRANSLATION_PROVIDER_NAME = "translation_provider"
+    const val TRANSLATION_SERVER_NAME = "translation_server"
+    const val TRANSLATION_STATE_NAME = "translation_server_state"
+
+    val TRANSLATION_PROVIDER = stringPreferencesKey(TRANSLATION_PROVIDER_NAME)
+    val TRANSLATION_SERVER = stringPreferencesKey(TRANSLATION_SERVER_NAME)
+
+    /** Translation's model on each server, by server id. */
+    val TRANSLATION_STATE = stringPreferencesKey(TRANSLATION_STATE_NAME)
+
     /** Servers whose read-aloud model and voice are still to be chosen from their lists; never backed up. */
     val READ_ALOUD_UNSETTLED = stringSetPreferencesKey("read_aloud_unsettled_servers")
 
     val PROVIDER = stringPreferencesKey("read_aloud_provider")
     val VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
 
-    /** The read-aloud provider id of a listed server. */
+    /** The provider id of a listed server, for read aloud and translation alike. */
     const val SERVER_PROVIDER = "openai"
 
     // The single server read aloud had before servers were listed.
@@ -99,7 +109,9 @@ internal object ServerSettings {
     /** The saved servers; unreadable when they or anything referring to them do not hold together. */
     fun servers(p: Preferences): ServerList = try {
         val servers = decodeServers(p[SERVERS])
-        requireListed(servers.map { it.id }.toSet(), decodeStates(p[READ_ALOUD_STATE]).keys, p[READ_ALOUD_SERVER])
+        val ids = servers.map { it.id }.toSet()
+        requireListed(ids, decodeStates(p[READ_ALOUD_STATE]).keys, p[READ_ALOUD_SERVER])
+        requireTranslationListed(ids, decodeTranslationStates(p[TRANSLATION_STATE]).keys, p[TRANSLATION_SERVER])
         ServerList.Readable(servers)
     } catch (_: IllegalArgumentException) {
         ServerList.Unreadable
@@ -108,6 +120,11 @@ internal object ServerSettings {
     private fun requireListed(ids: Set<String>, states: Set<String>, readAloud: String?) {
         if (!ids.containsAll(states)) invalid("State for an unlisted server")
         if (readAloud != null && readAloud !in ids) invalid("Read aloud uses an unlisted server")
+    }
+
+    private fun requireTranslationListed(ids: Set<String>, states: Set<String>, translation: String?) {
+        if (!ids.containsAll(states)) invalid("Translation state for an unlisted server")
+        if (translation != null && translation !in ids) invalid("Translation uses an unlisted server")
     }
 
     /** Read aloud's state per server; empty when the servers cannot be read. */
@@ -161,6 +178,34 @@ internal object ServerSettings {
                 put(id, ServerSpeechState(entry.optionalString("model"), entry.optionalString("voice"), voices))
             }
         }
+    }
+
+    /** Translation's model per server in [json]; throws [IllegalArgumentException] for anything malformed. */
+    fun decodeTranslationStates(json: String?): Map<String, String> {
+        if (json == null) return emptyMap()
+        val root = try {
+            JSONObject(json)
+        } catch (e: JSONException) {
+            throw IllegalArgumentException("Malformed translation state", e)
+        }
+        return buildMap {
+            root.keys().forEach { id ->
+                if (ServerConnection.idOf(id) != id) invalid("Invalid translation state id")
+                val entry = root.opt(id) as? JSONObject ?: invalid("Malformed translation state")
+                entry.optionalString("model")?.let { put(id, it) }
+            }
+        }
+    }
+
+    fun encodeTranslationStates(models: Map<String, String>): String = JSONObject().apply {
+        models.toSortedMap().forEach { (id, model) -> put(id, JSONObject().put("model", model)) }
+    }.toString()
+
+    /** Translation's model per server; empty when the servers cannot be read. */
+    fun translationStates(p: Preferences): Map<String, String> = try {
+        decodeTranslationStates(p[TRANSLATION_STATE])
+    } catch (_: IllegalArgumentException) {
+        emptyMap()
     }
 
     fun encodeStates(states: Map<String, ServerSpeechState>): String = JSONObject().apply {
@@ -228,6 +273,15 @@ internal object ServerSettings {
             if (ServerConnection.idOf(id) != id) invalid("Invalid read-aloud server")
             if (ids != null && id !in ids) invalid("Read aloud uses an unlisted server")
         }
+        if (values.has(TRANSLATION_STATE_NAME)) {
+            val states = decodeTranslationStates(values.get(TRANSLATION_STATE_NAME) as? String ?: invalid("Malformed translation state"))
+            if (ids != null && !ids.containsAll(states.keys)) invalid("Translation state for an unlisted server")
+        }
+        if (values.has(TRANSLATION_SERVER_NAME)) {
+            val id = values.get(TRANSLATION_SERVER_NAME) as? String ?: invalid("Malformed translation server")
+            if (ServerConnection.idOf(id) != id) invalid("Invalid translation server")
+            if (ids != null && id !in ids) invalid("Translation uses an unlisted server")
+        }
         // An archive with a server list ignores the older single server's keys.
         if (servers != null) return
         for (key in listOf(LEGACY_URL_NAME, LEGACY_MODEL_NAME, LEGACY_VOICE_NAME)) {
@@ -262,17 +316,20 @@ internal object ServerSettings {
         edit.save()
     }
 
-    /** Whether restoring [values] can change the servers, what each keeps, or which one read aloud uses. */
+    /** Whether restoring [values] can change the servers, what each keeps, or which one a feature uses. */
     fun touchesServers(values: JSONObject): Boolean =
-        (SERVER_KEYS + PROVIDER.name).any(values::has)
+        (SERVER_KEYS + PROVIDER.name + TRANSLATION_PROVIDER_NAME).any(values::has)
 
-    private val SERVER_KEYS = listOf(SERVERS_NAME, READ_ALOUD_STATE_NAME, READ_ALOUD_SERVER_NAME, LEGACY_URL_NAME)
+    private val SERVER_KEYS = listOf(
+        SERVERS_NAME, READ_ALOUD_STATE_NAME, READ_ALOUD_SERVER_NAME, TRANSLATION_STATE_NAME, TRANSLATION_SERVER_NAME,
+        LEGACY_URL_NAME,
+    )
 
     /**
      * Run in the restore's write once the archive is applied. An archive
      * with its own server list replaces the device's: what the device kept
-     * for servers no longer listed goes, and read aloud goes back to the
-     * device if its server went. An archive without one must refer only
+     * for servers no longer listed goes, and read aloud and translation go
+     * back to the device if their server went. An archive without one must refer only
      * to servers the device lists. Throws [IllegalArgumentException] when
      * that fails or the device's servers cannot be read, so nothing of the
      * restore is written.
@@ -287,15 +344,27 @@ internal object ServerSettings {
             // Unreadable state the device kept goes with the list it belonged to.
             if (replaced) emptyMap() else throw e
         }.toMutableMap()
+        val translationStates = try {
+            decodeTranslationStates(p[TRANSLATION_STATE])
+        } catch (e: IllegalArgumentException) {
+            if (replaced) emptyMap() else throw e
+        }.toMutableMap()
         if (replaced) {
             states.keys.retainAll(ids)
+            translationStates.keys.retainAll(ids)
             if (p[READ_ALOUD_SERVER]?.let { it !in ids } == true) {
                 p.remove(READ_ALOUD_SERVER)
                 if (p[PROVIDER] == SERVER_PROVIDER) p.remove(PROVIDER)
             }
+            if (p[TRANSLATION_SERVER]?.let { it !in ids } == true) {
+                p.remove(TRANSLATION_SERVER)
+                if (p[TRANSLATION_PROVIDER] == SERVER_PROVIDER) p.remove(TRANSLATION_PROVIDER)
+            }
         }
         requireListed(ids, states.keys, p[READ_ALOUD_SERVER])
+        requireTranslationListed(ids, translationStates.keys, p[TRANSLATION_SERVER])
         p[READ_ALOUD_STATE] = encodeStates(states)
+        if (translationStates.isEmpty()) p.remove(TRANSLATION_STATE) else p[TRANSLATION_STATE] = encodeTranslationStates(translationStates)
         val unsettled = p[READ_ALOUD_UNSETTLED].orEmpty().intersect(ids)
         if (unsettled.isEmpty()) p.remove(READ_ALOUD_UNSETTLED) else p[READ_ALOUD_UNSETTLED] = unsettled
     }
@@ -324,8 +393,8 @@ internal object ServerSettings {
 }
 
 /**
- * The servers and read aloud's state on them, read from [p] to be changed
- * and written back together by [save]. There is none when what is saved
+ * The servers and each feature's state on them, read from [p] to be
+ * changed and written back together by [save]. There is none when what is saved
  * cannot be read: nothing may write over it.
  */
 internal class ServerEdit private constructor(
@@ -333,23 +402,44 @@ internal class ServerEdit private constructor(
     val servers: MutableList<ServerConnection>,
     val states: MutableMap<String, ServerSpeechState>,
     val unsettled: MutableSet<String>,
+    val translationModels: MutableMap<String, String>,
 ) {
-    /** Drops the server [id], what read aloud kept on it, and read aloud's use of it. */
+    /** Drops the server [id], what each feature kept on it, and their use of it. */
     fun forget(id: String): Boolean {
         if (!servers.removeAll { it.id == id }) return false
         states.remove(id)
         unsettled.remove(id)
+        translationModels.remove(id)
         if (p[ServerSettings.READ_ALOUD_SERVER] == id) {
             p.remove(ServerSettings.READ_ALOUD_SERVER)
             if (p[ServerSettings.PROVIDER] == ServerSettings.SERVER_PROVIDER) p.remove(ServerSettings.PROVIDER)
         }
+        if (p[ServerSettings.TRANSLATION_SERVER] == id) {
+            p.remove(ServerSettings.TRANSLATION_SERVER)
+            if (p[ServerSettings.TRANSLATION_PROVIDER] == ServerSettings.SERVER_PROVIDER) p.remove(ServerSettings.TRANSLATION_PROVIDER)
+        }
         return true
+    }
+
+    /** Moves what each feature kept on the server [id], and their use of it, to [newId]. */
+    fun move(id: String, newId: String) {
+        states.remove(id)?.let { states[newId] = it }
+        unsettled -= id
+        unsettled += newId
+        translationModels.remove(id)?.let { translationModels[newId] = it }
+        if (p[ServerSettings.READ_ALOUD_SERVER] == id) p[ServerSettings.READ_ALOUD_SERVER] = newId
+        if (p[ServerSettings.TRANSLATION_SERVER] == id) p[ServerSettings.TRANSLATION_SERVER] = newId
     }
 
     fun save() {
         p[ServerSettings.SERVERS] = ServerSettings.encodeServers(servers)
         p[ServerSettings.READ_ALOUD_STATE] = ServerSettings.encodeStates(states)
         if (unsettled.isEmpty()) p.remove(ServerSettings.READ_ALOUD_UNSETTLED) else p[ServerSettings.READ_ALOUD_UNSETTLED] = unsettled.toSet()
+        if (translationModels.isEmpty()) {
+            p.remove(ServerSettings.TRANSLATION_STATE)
+        } else {
+            p[ServerSettings.TRANSLATION_STATE] = ServerSettings.encodeTranslationStates(translationModels)
+        }
     }
 
     companion object {
@@ -360,6 +450,7 @@ internal class ServerEdit private constructor(
                 servers.toMutableList(),
                 ServerSettings.states(p).toMutableMap(),
                 p[ServerSettings.READ_ALOUD_UNSETTLED].orEmpty().toMutableSet(),
+                ServerSettings.translationStates(p).toMutableMap(),
             )
         }
     }

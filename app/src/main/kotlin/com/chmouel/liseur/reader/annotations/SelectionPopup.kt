@@ -4,10 +4,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -42,6 +44,8 @@ class SelectionActions(
     val onLookUp: () -> Unit,
     val onShare: () -> Unit,
     val onDelete: (() -> Unit)? = null,
+    /** Translates the passage, when a service can. */
+    val translateButton: (@Composable () -> Unit)? = null,
     /** Reads aloud from here, where the build can. */
     val readAloudButton: (@Composable () -> Unit)? = null,
 )
@@ -112,39 +116,50 @@ fun SelectionPopup(
                         onClick = { actions.onHighlight(tint) },
                     )
                 }
-                if (palette.isEmpty) {
-                    PopupAction(
-                        label = stringResource(R.string.annotation_highlight),
-                        onClick = { actions.onHighlight(palette.default) },
-                    )
-                }
-                PopupAction(
-                    label = stringResource(R.string.annotation_note),
-                    onClick = actions.onNote,
-                )
-                PopupAction(
-                    label = stringResource(R.string.annotation_look_up),
-                    onClick = actions.onLookUp,
-                )
-                IconButton(onClick = actions.onSearch, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Outlined.Search,
-                        contentDescription = stringResource(R.string.annotation_search),
-                    )
-                }
-                IconButton(onClick = actions.onShare, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Outlined.Share,
-                        contentDescription = stringResource(R.string.annotation_share),
-                    )
-                }
-                actions.readAloudButton?.invoke()
-                actions.onDelete?.let { delete ->
-                    IconButton(onClick = delete, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Outlined.Delete,
-                            contentDescription = stringResource(R.string.annotation_delete),
+                // On a narrow phone with large text the actions outgrow the
+                // bar; they scroll behind the chips rather than fall off it.
+                Row(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (palette.isEmpty) {
+                        PopupAction(
+                            label = stringResource(R.string.annotation_highlight),
+                            onClick = { actions.onHighlight(palette.default) },
                         )
+                    }
+                    PopupAction(
+                        label = stringResource(R.string.annotation_note),
+                        onClick = actions.onNote,
+                    )
+                    PopupAction(
+                        label = stringResource(R.string.annotation_look_up),
+                        onClick = actions.onLookUp,
+                    )
+                    IconButton(onClick = actions.onSearch, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Outlined.Search,
+                            contentDescription = stringResource(R.string.annotation_search),
+                        )
+                    }
+                    IconButton(onClick = actions.onShare, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Outlined.Share,
+                            contentDescription = stringResource(R.string.annotation_share),
+                        )
+                    }
+                    actions.readAloudButton?.invoke()
+                    actions.translateButton?.invoke()
+                    actions.onDelete?.let { delete ->
+                        IconButton(onClick = delete, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Outlined.Delete,
+                                contentDescription = stringResource(R.string.annotation_delete),
+                            )
+                        }
                     }
                 }
             }

@@ -49,7 +49,9 @@ time remaining. Highlights, margin notes,
 bookmarks, and dictionary lookups are inline; book-level notes live in the
 notebook. Marking a passage offers three colours, and you tick which of
 the six you want along with the colour new marks use. Footnotes open as a
-card over the page rather than sending you to the back of the book.
+card over the page rather than sending you to the back of the book. A
+selected passage can be translated by Android's own translator on the
+phone, or by a server you add.
 
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, BookOrbit, liseur-sync, or any OPDS catalog. Series are grouped into stacks tracking

@@ -613,6 +613,7 @@ class ReaderActivity : FragmentActivity() {
                                             awaitingCapture = viewModel::listenedPlaceAwaitingCapture,
                                         )
                                     },
+                                    translate = container.translate,
                                 )
                             }
                         }
