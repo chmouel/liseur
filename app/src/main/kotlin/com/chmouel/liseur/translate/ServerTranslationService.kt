@@ -52,7 +52,7 @@ internal class ServerTranslationService(
 
     override val configured: Flow<Boolean> = settings.settings.map { model(it) != null }.distinctUntilChanged()
 
-    private fun model(s: AppSettings): String? =
+    override fun model(s: AppSettings): String? =
         s.translationServerConnection?.let { s.translationModels[it.id] }?.takeIf { it.isNotBlank() }
 
     override suspend fun destination(): String? = settings.settings.first().translationServerConnection?.name

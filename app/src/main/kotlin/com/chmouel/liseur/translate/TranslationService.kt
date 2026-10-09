@@ -3,6 +3,7 @@ package com.chmouel.liseur.translate
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.chmouel.liseur.data.settings.AppSettings
 import kotlinx.coroutines.flow.Flow
 
 /** Whether a service translates one pair of languages as things stand. */
@@ -44,6 +45,9 @@ internal interface TranslationService {
 
     /** Whose address or key a reply depends on (see `ServerConnections`); null for the device. */
     suspend fun owner(): String?
+
+    /** The model it sends a translation to under [s], as it resolves it; null when it has none. */
+    fun model(s: AppSettings): String? = null
 
     /**
      * The languages it translates [source] into, with their state; null

@@ -94,7 +94,7 @@ internal class ServiceTranslate(
             // One read, so the service and the identity it is known by come from the same settings.
             val s = settings.settings.first()
             val service = resolve(s)
-            return service to pageIdentity(s, service.id, source, target)
+            return service to pageIdentity(s, service.id, service.model(s), source, target)
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
@@ -122,9 +122,9 @@ internal class ServiceTranslate(
 
             override suspend fun answering() = rebound().identity
 
-            override suspend fun translate(sentence: String, context: String?): String {
+            override suspend fun translate(sentence: String, context: String?): Translated {
                 val current = rebound()
-                return requests.run(current.service::owner) { current.run.translate(sentence, context) }
+                return Translated(requests.run(current.service::owner) { current.run.translate(sentence, context) }, current.identity)
             }
 
             override fun close() = bound.run.close()
@@ -176,17 +176,12 @@ internal class ServiceTranslate(
 }
 
 /**
- * What a page translation by [service] depends on, written to be kept
- * across versions: the server by its address and the model it uses,
- * never its name, its key, or a model another service would use.
+ * What a page translation by [service] with [model] depends on, written to
+ * be kept across versions: the server by its address, never its name, its
+ * key, or a model another service would use.
  */
-internal fun pageIdentity(s: AppSettings, service: String, source: String?, target: String): String {
+internal fun pageIdentity(s: AppSettings, service: String, model: String?, source: String?, target: String): String {
     val server = s.translationServerConnection?.takeIf { service == ServerSettings.SERVER_PROVIDER }
-    val model = when {
-        server != null -> s.translationModels[server.id]
-        service == DeviceTranslationService.ID -> null
-        else -> s.translationGeminiModel
-    }
     return listOf(IDENTITY_VERSION, TranslationPrompt.VERSION, service, server?.id, model, source, target)
         .joinToString("\u0000") { it?.toString().orEmpty() }
 }
