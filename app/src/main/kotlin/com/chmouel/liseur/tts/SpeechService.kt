@@ -45,6 +45,13 @@ internal interface SpeechService {
     @Composable
     fun voiceName(): String
 
+    /**
+     * Whose address or key on the Services page it reads with, as
+     * [com.chmouel.liseur.providers.ServerConnections] names them; null
+     * for none.
+     */
+    fun owner(s: AppSettings): String? = null
+
     /** What names it in a notice instead of [label], such as a server's host; null for the label. */
     fun noticeName(s: AppSettings): String? = null
 
@@ -72,7 +79,7 @@ internal interface SpeechService {
     @Composable
     fun AccessPrompt(theme: ReaderTheme) = Unit
 
-    /** Its rows on the Read aloud screen. */
+    /** Its rows on the Read aloud screen; [onManageServices] opens the Services page where keys and servers are set up. */
     @Composable
-    fun SettingsRows(feature: SpeechReadAloud)
+    fun SettingsRows(feature: SpeechReadAloud, onManageServices: () -> Unit)
 }

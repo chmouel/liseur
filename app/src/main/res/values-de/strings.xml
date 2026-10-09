@@ -1187,4 +1187,24 @@
         <item quantity="one">%d Minute</item>
         <item quantity="other">%d Minuten</item>
     </plurals>
+    <string name="services_title">Dienste</string>
+    <string name="services_entry_summary">Server und API-Schlüssel</string>
+    <string name="services_manage">Dienste verwalten</string>
+    <string name="services_servers">Server</string>
+    <string name="services_server">Server</string>
+    <string name="services_server_address">Adresse</string>
+    <string name="services_server_name">Name</string>
+    <string name="services_add">Server hinzufügen</string>
+    <string name="services_add_detail">Ein OpenAI-kompatibler Server, gehostet oder im eigenen Netzwerk.</string>
+    <string name="services_server_used_read_aloud">%1$s, für Vorlesen verwendet</string>
+    <string name="services_server_duplicate">Dieser Server ist bereits aufgeführt.</string>
+    <string name="services_unreadable">Gespeicherte Server konnten nicht gelesen werden.</string>
+    <string name="services_delete">Server löschen</string>
+    <string name="services_delete_title">%1$s löschen?</string>
+    <string name="services_delete_read_aloud">Vorlesen verwendet %1$s. Es wechselt zu den Gerätestimmen.</string>
+    <string name="services_delete_unused">Nichts verwendet diesen Server.</string>
+    <plurals name="services_test_passed">
+        <item quantity="one">Verbunden. %d Modell verfügbar.</item>
+        <item quantity="other">Verbunden. %d Modelle verfügbar.</item>
+    </plurals>
 </resources>

@@ -18,6 +18,7 @@ import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.tts.SpeechServerPresets
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -191,14 +192,13 @@ enum class DefinitionTarget(val id: String) {
  *   or null for the engine's default.
  * @param readAloudProvider Which speech service reads aloud, by id, or null
  *   for the build's default.
- * @param speechServerUrl The OpenAI-compatible speech service reading aloud
- *   uses, as typed, or null for none.
- * @param speechServerVoice The voice asked of that service, by name, or null
- *   for none chosen yet.
- * @param speechServerModel The model asked of that service, by name, or null
- *   for none chosen yet.
- * @param speechServerVoices The voices of that service the reader wants
- *   offered, by name; empty offers every voice it lists.
+ * @param servers The OpenAI-compatible servers listed on the Services page.
+ * @param readAloudServer The id of the server reading aloud uses when its
+ *   provider is a server, or null for none chosen.
+ * @param readAloudServerStates Read aloud's model and voices on each server,
+ *   by server id.
+ * @param unsettledReadAloudServers The servers whose read-aloud model and
+ *   voice are still to be chosen from their own lists.
  * @param readAloudSpeed How fast reading aloud plays, 1 being as the voice
  *   speaks.
  * @param readAloudSentencesPerRequest How many sentences reading aloud asks
@@ -232,17 +232,39 @@ data class AppSettings(
     val readAloudVoice: String? = null,
     val readAloudModel: String? = null,
     val readAloudProvider: String? = null,
-    val speechServerUrl: String? = null,
-    val speechServerVoice: String? = null,
-    val speechServerModel: String? = null,
-    val speechServerVoices: Set<String> = emptySet(),
-    val speechServerUnsettledUrl: String? = null,
+    val servers: ServerList = ServerList.Empty,
+    val readAloudServer: String? = null,
+    val readAloudServerStates: Map<String, ServerSpeechState> = emptyMap(),
+    val unsettledReadAloudServers: Set<String> = emptySet(),
     val readAloudSpeed: Float = 1f,
     val readAloudSentencesPerRequest: Int = 1,
     val deviceVoice: String? = null,
     /** The voice chosen for each language, per speech service; see [VoicePreference]. */
     val voicePreferences: List<VoicePreference> = emptyList(),
 ) {
+    /** The server read aloud is set to use, when it is listed. */
+    val readAloudServerConnection: ServerConnection?
+        get() = servers.readable?.firstOrNull { it.id == readAloudServer }
+
+    private val speechServerState: ServerSpeechState?
+        get() = readAloudServerConnection?.let { readAloudServerStates[it.id] }
+
+    /** The address of the server read aloud uses, as typed, or null for none. */
+    val speechServerUrl: String? get() = readAloudServerConnection?.url
+
+    /** The voice asked of that server, by name, or null for none chosen yet. */
+    val speechServerVoice: String? get() = speechServerState?.voice
+
+    /** The model asked of that server, by name, or null for none chosen yet. */
+    val speechServerModel: String? get() = speechServerState?.model
+
+    /** The voices of that server the reader wants offered; empty offers every voice it lists. */
+    val speechServerVoices: Set<String> get() = speechServerState?.voices.orEmpty()
+
+    /** That server's address while its model and voice are still to be chosen from its lists. */
+    val speechServerUnsettledUrl: String?
+        get() = readAloudServerConnection?.takeIf { it.id in unsettledReadAloudServers }?.url
+
     companion object {
         /** The sentences per read-aloud request on offer; a stored value outside is brought within. */
         val SENTENCES_PER_REQUEST = 1..5
@@ -272,12 +294,29 @@ enum class UploadPolicy(val id: String) {
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
+    produceMigrations = { context -> listOf(LegacySpeechServerMigration(serverNamer(context))) },
 )
 
-/** Persists [AppSettings]. */
-class AppSettingsRepository(private val store: DataStore<Preferences>) {
+/** A new server's name: the hosted service it is on, or its host. */
+internal fun serverNamer(context: Context): (String) -> String = { url ->
+    SpeechServerPresets.matching(url)?.let { context.getString(it.name) } ?: defaultServerName(url)
+}
 
-    constructor(context: Context) : this(context.appSettingsStore)
+internal fun defaultServerName(url: String): String =
+    ServerConnection.idOf(url)?.let { ServerConnection(it, "", url).host } ?: url.trim()
+
+/**
+ * Persists [AppSettings].
+ *
+ * @param serverName Names a server brought in from an archive of an older
+ *   version, which knew a single unnamed one.
+ */
+class AppSettingsRepository(
+    private val store: DataStore<Preferences>,
+    private val serverName: (String) -> String = ::defaultServerName,
+) {
+
+    constructor(context: Context) : this(context.appSettingsStore, serverNamer(context))
 
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
@@ -308,13 +347,6 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         val READ_ALOUD_VOICE = stringPreferencesKey("read_aloud_voice")
         val READ_ALOUD_MODEL = stringPreferencesKey("read_aloud_model")
         val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
-        val SPEECH_SERVER_URL = stringPreferencesKey("speech_server_url")
-        val SPEECH_SERVER_VOICE = stringPreferencesKey("speech_server_voice")
-        val SPEECH_SERVER_MODEL = stringPreferencesKey("speech_server_model")
-        val SPEECH_SERVER_VOICES = stringSetPreferencesKey("speech_server_voices")
-
-        /** A server address saved whose model and voice are not yet chosen from its lists; never backed up. */
-        val SPEECH_SERVER_UNSETTLED_URL = stringPreferencesKey("speech_server_unsettled_url")
         val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
         val READ_ALOUD_SENTENCES_PER_REQUEST = intPreferencesKey("read_aloud_sentences_per_request")
         val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
@@ -390,11 +422,10 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
             readAloudVoice = p[Keys.READ_ALOUD_VOICE],
             readAloudModel = p[Keys.READ_ALOUD_MODEL],
             readAloudProvider = p[Keys.READ_ALOUD_PROVIDER],
-            speechServerUrl = p[Keys.SPEECH_SERVER_URL],
-            speechServerVoice = p[Keys.SPEECH_SERVER_VOICE],
-            speechServerModel = p[Keys.SPEECH_SERVER_MODEL],
-            speechServerVoices = p[Keys.SPEECH_SERVER_VOICES].orEmpty(),
-            speechServerUnsettledUrl = p[Keys.SPEECH_SERVER_UNSETTLED_URL],
+            servers = ServerSettings.servers(p),
+            readAloudServer = p[ServerSettings.READ_ALOUD_SERVER],
+            readAloudServerStates = ServerSettings.states(p),
+            unsettledReadAloudServers = p[ServerSettings.READ_ALOUD_UNSETTLED].orEmpty(),
             readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
             readAloudSentencesPerRequest = (p[Keys.READ_ALOUD_SENTENCES_PER_REQUEST] ?: 1)
                 .coerceIn(AppSettings.SENTENCES_PER_REQUEST),
@@ -408,9 +439,19 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     /** Stored, user-facing preferences only; account and transient state stay private. */
     suspend fun backupValues(): JSONObject = store.data.first().backupJson(APP_BACKUP_TYPES.keys)
 
-    /** Applies validated allowlisted values in one DataStore edit. */
+    /**
+     * Applies validated allowlisted values in one DataStore edit. An
+     * archive whose servers do not hold together, alone or with the
+     * device's, is rejected with nothing changed; one from before servers
+     * were listed has its single server brought into the list.
+     */
     suspend fun restoreBackupValues(values: JSONObject) {
-        store.edit { values.applyBackupJson(it, APP_BACKUP_TYPES) }
+        ServerSettings.validateBackup(values)
+        store.edit {
+            values.applyBackupJson(it, APP_BACKUP_TYPES)
+            ServerSettings.restoreLegacy(it, values, serverName)
+            ServerSettings.settleRestore(it, values)
+        }
     }
 
     suspend fun setThemeMode(mode: ThemeMode) {
@@ -567,58 +608,138 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
         store.edit { it[Keys.READ_ALOUD_PROVIDER] = id }
     }
 
-    /** Stores the speech service's address as typed, or forgets it when [url] is blank. */
-    suspend fun setSpeechServerUrl(url: String) = setOrRemove(Keys.SPEECH_SERVER_URL, url)
+    /**
+     * Lists a new server named [name] at [url], with its read-aloud model
+     * and voice still to be chosen from its lists.
+     */
+    suspend fun addServer(name: String, url: String): ServerChange {
+        val trimmed = url.trim()
+        val id = ServerConnection.idOf(trimmed) ?: return ServerChange.Invalid
+        var change: ServerChange = ServerChange.Unreadable
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.any { it.id == id }) {
+                change = ServerChange.Duplicate
+                return@edit
+            }
+            edit.servers += ServerConnection(id, name.trim().ifEmpty { defaultServerName(trimmed) }, trimmed)
+            edit.unsettled += id
+            edit.save()
+            change = ServerChange.Saved(id)
+        }
+        return change
+    }
 
     /**
-     * Stores a new speech service address together with the mark that
-     * its model and voice are still to be chosen from its own lists, so
-     * that choice survives leaving the screen or the app.
+     * Renames the server [id] and moves it to [url]. A new address is a new
+     * id: every reference to the old one moves with it in the same write,
+     * and its read-aloud model and voice are to be chosen again from the
+     * new server's lists.
      */
-    suspend fun setSpeechServerUrlUnsettled(url: String) {
+    suspend fun updateServer(id: String, name: String, url: String): ServerChange {
         val trimmed = url.trim()
+        val newId = ServerConnection.idOf(trimmed) ?: return ServerChange.Invalid
+        var change: ServerChange = ServerChange.Unreadable
         store.edit { p ->
-            if (trimmed.isEmpty()) {
-                p.remove(Keys.SPEECH_SERVER_URL)
-                p.remove(Keys.SPEECH_SERVER_UNSETTLED_URL)
-            } else {
-                p[Keys.SPEECH_SERVER_URL] = trimmed
-                p[Keys.SPEECH_SERVER_UNSETTLED_URL] = trimmed
+            val edit = ServerEdit.of(p) ?: return@edit
+            val index = edit.servers.indexOfFirst { it.id == id }
+            if (index < 0) {
+                change = ServerChange.Invalid
+                return@edit
             }
+            if (newId != id && edit.servers.any { it.id == newId }) {
+                change = ServerChange.Duplicate
+                return@edit
+            }
+            edit.servers[index] = ServerConnection(newId, name.trim().ifEmpty { edit.servers[index].name }, trimmed)
+            if (newId != id) {
+                edit.states.remove(id)?.let { edit.states[newId] = it }
+                edit.unsettled -= id
+                edit.unsettled += newId
+                if (p[ServerSettings.READ_ALOUD_SERVER] == id) p[ServerSettings.READ_ALOUD_SERVER] = newId
+                val preferences = VoicePreferences.decode(p[ServerSettings.VOICE_PREFERENCES])
+                if (preferences.any { it.ownedBy(id) }) {
+                    p[ServerSettings.VOICE_PREFERENCES] = VoicePreferences.encode(
+                        preferences.map { if (it.ownedBy(id)) it.copy(context = newId) else it },
+                    )
+                }
+            }
+            edit.save()
+            change = ServerChange.Saved(newId)
+        }
+        return change
+    }
+
+    /**
+     * Forgets the server [id] and read aloud's state on it; read aloud
+     * goes back to the device when it used it. False when nothing was
+     * deleted.
+     */
+    suspend fun deleteServer(id: String): Boolean {
+        var deleted = false
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (!edit.forget(id)) return@edit
+            val preferences = VoicePreferences.decode(p[ServerSettings.VOICE_PREFERENCES])
+            if (preferences.any { it.ownedBy(id) }) {
+                p[ServerSettings.VOICE_PREFERENCES] = VoicePreferences.encode(preferences.filterNot { it.ownedBy(id) })
+            }
+            edit.save()
+            deleted = true
+        }
+        return deleted
+    }
+
+    /** Has read aloud use the listed server [id]; false when it is not listed. */
+    suspend fun selectReadAloudServer(id: String): Boolean {
+        var selected = false
+        store.edit { p ->
+            if (ServerSettings.servers(p).readable?.any { it.id == id } != true) return@edit
+            p[Keys.READ_ALOUD_PROVIDER] = ServerSettings.SERVER_PROVIDER
+            p[ServerSettings.READ_ALOUD_SERVER] = id
+            selected = true
+        }
+        return selected
+    }
+
+    /** Changes read aloud's state on the server at [url], if it is still listed there. */
+    private suspend fun editSpeechServer(url: String, change: (ServerSpeechState) -> ServerSpeechState) {
+        val id = ServerConnection.idOf(url) ?: return
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.none { it.id == id && it.url == url }) return@edit
+            edit.states[id] = change(edit.states[id] ?: ServerSpeechState())
+            edit.save()
         }
     }
 
-    /** Clears the mark left by [setSpeechServerUrlUnsettled], if it is still [url]'s. */
+    /** Clears the mark left by [addServer] or [updateServer] on the server at [url]. */
     suspend fun settleSpeechServer(url: String) {
-        store.edit { p -> if (p[Keys.SPEECH_SERVER_UNSETTLED_URL] == url) p.remove(Keys.SPEECH_SERVER_UNSETTLED_URL) }
+        val id = ServerConnection.idOf(url) ?: return
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.none { it.id == id && it.url == url }) return@edit
+            if (edit.unsettled.remove(id)) edit.save()
+        }
     }
 
-    /** Stores the speech service's voice, or forgets it when [name] is blank. */
-    suspend fun setSpeechServerVoice(name: String) = setOrRemove(Keys.SPEECH_SERVER_VOICE, name)
+    /** Stores the voice read aloud asks of the server at [url], or forgets it when [name] is blank. */
+    suspend fun setSpeechServerVoice(url: String, name: String) =
+        editSpeechServer(url) { it.copy(voice = name.trim().ifEmpty { null }) }
 
     /** Stores the device's voice, or goes back to the engine's default when [name] is blank. */
     suspend fun setDeviceVoice(name: String) = setOrRemove(Keys.READ_ALOUD_DEVICE_VOICE, name)
 
-    /** Stores the speech service's model, or forgets it when [name] is blank. */
-    suspend fun setSpeechServerModel(name: String) = setOrRemove(Keys.SPEECH_SERVER_MODEL, name)
-
     /**
-     * Stores the speech service's model and voice in one write, so nothing
-     * ever reads the new model with the old model's voice.
+     * Stores read aloud's model and voice on the server at [url] in one
+     * write, so nothing ever reads the new model with the old model's voice.
      */
-    suspend fun setSpeechServerModelAndVoice(model: String, voice: String) {
-        val m = model.trim()
-        val v = voice.trim()
-        store.edit { p ->
-            if (m.isEmpty()) p.remove(Keys.SPEECH_SERVER_MODEL) else p[Keys.SPEECH_SERVER_MODEL] = m
-            if (v.isEmpty()) p.remove(Keys.SPEECH_SERVER_VOICE) else p[Keys.SPEECH_SERVER_VOICE] = v
-        }
-    }
+    suspend fun setSpeechServerModelAndVoice(url: String, model: String, voice: String) =
+        editSpeechServer(url) { it.copy(model = model.trim().ifEmpty { null }, voice = voice.trim().ifEmpty { null }) }
 
-    /** Stores the speech service's voices to offer, or offers them all again when [names] is empty. */
-    suspend fun setSpeechServerVoices(names: Set<String>) {
-        store.edit { p -> if (names.isEmpty()) p.remove(Keys.SPEECH_SERVER_VOICES) else p[Keys.SPEECH_SERVER_VOICES] = names }
-    }
+    /** Stores the server's voices to offer, or offers them all again when [names] is empty. */
+    suspend fun setSpeechServerVoices(url: String, names: Set<String>) =
+        editSpeechServer(url) { it.copy(voices = names) }
 
     /**
      * One write of a read-aloud voice: what [block] reads is what is
@@ -638,14 +759,24 @@ class AppSettingsRepository(private val store: DataStore<Preferences>) {
     /** The stored read-aloud values a voice write checks, and the changes it makes. */
     class ReadAloudVoiceEdit internal constructor(private val p: MutablePreferences) {
         val geminiModel: String? get() = p[Keys.READ_ALOUD_MODEL]
-        val serverUrl: String? get() = p[Keys.SPEECH_SERVER_URL]
-        val serverModel: String? get() = p[Keys.SPEECH_SERVER_MODEL]
+        private val server: ServerConnection? = ServerSettings.readAloudServer(p)
+        val serverUrl: String? get() = server?.url
+        val serverModel: String? get() = server?.let { ServerSettings.states(p)[it.id]?.model }
 
         private val changes = mutableListOf<(MutablePreferences) -> Unit>()
 
         fun setGeminiVoice(name: String) = set(Keys.READ_ALOUD_VOICE, name)
 
-        fun setServerVoice(name: String) = set(Keys.SPEECH_SERVER_VOICE, name)
+        fun setServerVoice(name: String) {
+            val id = server?.id ?: return
+            val trimmed = name.trim().ifEmpty { null }
+            changes += { p ->
+                ServerEdit.of(p)?.let { edit ->
+                    edit.states[id] = (edit.states[id] ?: ServerSpeechState()).copy(voice = trimmed)
+                    edit.save()
+                }
+            }
+        }
 
         fun setDeviceVoice(name: String) = set(Keys.READ_ALOUD_DEVICE_VOICE, name)
 
@@ -723,9 +854,9 @@ internal val APP_BACKUP_TYPES = mapOf(
     "highlight_tint_default" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING, "read_aloud_model" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,
-    "speech_server_url" to BackupValueType.STRING, "speech_server_voice" to BackupValueType.STRING,
-    "speech_server_model" to BackupValueType.STRING,
-    "speech_server_voices" to BackupValueType.STRING_SET,
+    ServerSettings.SERVERS_NAME to BackupValueType.STRING,
+    ServerSettings.READ_ALOUD_SERVER_NAME to BackupValueType.STRING,
+    ServerSettings.READ_ALOUD_STATE_NAME to BackupValueType.STRING,
     "read_aloud_speed" to BackupValueType.FLOAT,
     "read_aloud_sentences_per_request" to BackupValueType.INT,
     "read_aloud_device_voice" to BackupValueType.STRING,

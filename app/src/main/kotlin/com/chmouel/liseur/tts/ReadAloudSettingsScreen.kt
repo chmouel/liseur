@@ -2,6 +2,8 @@ package com.chmouel.liseur.tts
 
 import android.content.res.Configuration
 import androidx.annotation.StringRes
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
@@ -66,10 +69,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -84,6 +89,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ServerConnection
+import com.chmouel.liseur.data.settings.ServerList
+import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
@@ -100,14 +108,17 @@ import java.util.Locale
 internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Unit) {
     val configured by feature.configured.collectAsState()
     val service by feature.service.collectAsState(initial = feature.services.first())
+    val servers by feature.servers.collectAsState(initial = ServerList.Empty)
+    val selectedServer by feature.selectedServer.collectAsState(initial = null)
     val voice = service.voiceName()
+    val label = servers.readable?.firstOrNull { it.id == selectedServer }?.name ?: stringResource(service.label)
     ConnectionRow(
         icon = { Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null) },
         title = stringResource(R.string.read_aloud_settings_title),
         subtitle = if (configured && voice.isBlank()) {
-            stringResource(service.label)
+            label
         } else if (configured) {
-            stringResource(R.string.read_aloud_settings_entry_summary, stringResource(service.label), voice)
+            stringResource(R.string.read_aloud_settings_entry_summary, label, voice)
         } else {
             stringResource(R.string.read_aloud_settings_entry_missing)
         },
@@ -122,8 +133,18 @@ internal fun ReadAloudSettingsEntry(feature: SpeechReadAloud, onClick: () -> Uni
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Unit) {
+    // Opened in place, so it works the same from the reader's settings.
+    var managing by rememberSaveable { mutableStateOf(false) }
+    if (managing) {
+        BackHandler { managing = false }
+        feature.ServicesPage(onBack = { managing = false })
+        return
+    }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val service by feature.service.collectAsState(initial = feature.services.first())
+    val servers by feature.servers.collectAsState(initial = ServerList.Empty)
+    val selectedServer by feature.selectedServer.collectAsState(initial = null)
+    val server = servers.readable?.firstOrNull { it.id == selectedServer }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -149,23 +170,31 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
             ) {
-                if (feature.services.size > 1) {
-                    var picking by remember { mutableStateOf(false) }
-                    ServiceRow(service, onClick = { picking = true })
-                    if (picking) {
-                        ServiceSheet(
-                            services = feature.services,
-                            selected = service,
-                            onPick = {
-                                picking = false
-                                scope.launch { feature.setService(it) }
-                            },
-                            onDismiss = { picking = false },
-                        )
-                    }
+                var picking by remember { mutableStateOf(false) }
+                ServiceRow(service, server, onClick = { picking = true })
+                if (picking) {
+                    ServiceSheet(
+                        services = feature.services,
+                        servers = servers.readable.orEmpty(),
+                        selected = service,
+                        selectedServer = selectedServer,
+                        onPick = {
+                            picking = false
+                            scope.launch { feature.setService(it) }
+                        },
+                        onPickServer = {
+                            picking = false
+                            feature.selectServer(it.id)
+                        },
+                        onManage = {
+                            picking = false
+                            managing = true
+                        },
+                        onDismiss = { picking = false },
+                    )
                 }
-                SettingsGroup(stringResource(service.label)) {
-                    service.SettingsRows(feature)
+                SettingsGroup(server?.name ?: stringResource(service.label)) {
+                    service.SettingsRows(feature, onManageServices = { managing = true })
                 }
                 SettingsGroup(stringResource(R.string.read_aloud_settings_playback)) {
                     SentencesPerRequestRow(feature)
@@ -213,7 +242,7 @@ private fun SentencesPerRequestRow(feature: SpeechReadAloud) {
  * names as long as "Speech server (OpenAI-compatible)" on a phone.
  */
 @Composable
-private fun ServiceRow(service: SpeechService, onClick: () -> Unit) {
+private fun ServiceRow(service: SpeechService, server: ServerConnection?, onClick: () -> Unit) {
     val configured by service.configured.collectAsState(initial = true)
     OutlinedCard(
         onClick = onClick,
@@ -225,12 +254,14 @@ private fun ServiceRow(service: SpeechService, onClick: () -> Unit) {
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Icon(service.icon, contentDescription = null) },
             overlineContent = { Text(stringResource(R.string.read_aloud_settings_provider)) },
-            headlineContent = { Text(stringResource(service.label)) },
+            headlineContent = { Text(server?.name ?: stringResource(service.label)) },
             supportingContent = {
                 Text(
-                    stringResource(
-                        if (configured) service.summary else R.string.read_aloud_settings_entry_missing,
-                    ),
+                    when {
+                        !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
+                        server != null -> server.host
+                        else -> stringResource(service.summary)
+                    },
                 )
             },
             trailingContent = {
@@ -243,13 +274,21 @@ private fun ServiceRow(service: SpeechService, onClick: () -> Unit) {
     }
 }
 
-/** Every service with what it is and where the text goes; picking one closes it. */
+/**
+ * Every service with what it is and where the text goes, each listed
+ * server by name in place of the server kind, then the way to the
+ * Services page; picking one closes it.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServiceSheet(
     services: List<SpeechService>,
+    servers: List<ServerConnection>,
     selected: SpeechService,
+    selectedServer: String?,
     onPick: (SpeechService) -> Unit,
+    onPickServer: (ServerConnection) -> Unit,
+    onManage: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(
@@ -268,24 +307,60 @@ private fun ServiceSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
             )
             services.forEach { service ->
-                ListItem(
-                    modifier = Modifier.selectable(
+                if (service.id == ServerSettings.SERVER_PROVIDER) {
+                    servers.forEach { server ->
+                        ServiceChoice(
+                            selected = server.id == selectedServer,
+                            icon = service.icon,
+                            headline = server.name,
+                            supporting = server.host,
+                            onClick = { onPickServer(server) },
+                        )
+                    }
+                } else {
+                    ServiceChoice(
                         selected = service == selected,
-                        role = Role.RadioButton,
+                        icon = service.icon,
+                        headline = stringResource(service.label),
+                        supporting = stringResource(service.summary),
                         onClick = { onPick(service) },
-                    ),
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    leadingContent = { Icon(service.icon, contentDescription = null) },
-                    headlineContent = { Text(stringResource(service.label)) },
-                    supportingContent = { Text(stringResource(service.summary)) },
-                    trailingContent = {
-                        // Null, not a second handler: the row carries the click.
-                        RadioButton(selected = service == selected, onClick = null)
-                    },
-                )
+                    )
+                }
             }
+            ListItem(
+                modifier = Modifier.clickable(role = Role.Button, onClick = onManage),
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.services_manage)) },
+                supportingContent = if (servers.isEmpty()) {
+                    { Text(stringResource(R.string.read_aloud_provider_openai_summary)) }
+                } else {
+                    null
+                },
+            )
         }
     }
+}
+
+@Composable
+private fun ServiceChoice(
+    selected: Boolean,
+    icon: ImageVector,
+    headline: String,
+    supporting: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        modifier = Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = { Icon(icon, contentDescription = null) },
+        headlineContent = { Text(headline) },
+        supportingContent = { Text(supporting) },
+        trailingContent = {
+            // Null, not a second handler: the row carries the click.
+            RadioButton(selected = selected, onClick = null)
+        },
+    )
 }
 
 /** What a menu knows of one of the service's lists, for [url]. */

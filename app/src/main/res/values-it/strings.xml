@@ -1175,4 +1175,24 @@
         <item quantity="one">%d minuto</item>
         <item quantity="other">%d minuti</item>
     </plurals>
+    <string name="services_title">Servizi</string>
+    <string name="services_entry_summary">Server e chiavi API</string>
+    <string name="services_manage">Gestisci servizi</string>
+    <string name="services_servers">Server</string>
+    <string name="services_server">Server</string>
+    <string name="services_server_address">Indirizzo</string>
+    <string name="services_server_name">Nome</string>
+    <string name="services_add">Aggiungi server</string>
+    <string name="services_add_detail">Un server compatibile con OpenAI, ospitato o sulla tua rete.</string>
+    <string name="services_server_used_read_aloud">%1$s, usato per la lettura ad alta voce</string>
+    <string name="services_server_duplicate">Questo server è già nell\'elenco.</string>
+    <string name="services_unreadable">Impossibile leggere i server salvati.</string>
+    <string name="services_delete">Elimina server</string>
+    <string name="services_delete_title">Eliminare %1$s?</string>
+    <string name="services_delete_read_aloud">La lettura ad alta voce usa %1$s. Passerà alle voci del dispositivo.</string>
+    <string name="services_delete_unused">Niente usa questo server.</string>
+    <plurals name="services_test_passed">
+        <item quantity="one">Connesso. %d modello disponibile.</item>
+        <item quantity="other">Connesso. %d modelli disponibili.</item>
+    </plurals>
 </resources>

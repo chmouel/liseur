@@ -41,6 +41,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
+import com.chmouel.liseur.providers.ServicesEntry
+import com.chmouel.liseur.providers.ServicesScreen
 import com.chmouel.liseur.reader.ReaderActivity
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.saveable.listSaver
@@ -224,6 +226,7 @@ private enum class Screen {
     READING_APPEARANCE,
     READING_NAVIGATION,
     READ_ALOUD,
+    SERVICES,
     HIDDEN_BOOKS,
     SERVER_ACCOUNT,
     BROWSE_LIBRARIES,
@@ -404,6 +407,7 @@ private fun LiseurApp(
                 onBack = { screen = Screen.LIBRARY },
                 flavorReadingRows = {
                     context.container.readAloud.SettingsEntry(onClick = { screen = Screen.READ_ALOUD })
+                    ServicesEntry(onClick = { screen = Screen.SERVICES })
                 },
             )
         }
@@ -412,6 +416,16 @@ private fun LiseurApp(
             val back = { screen = Screen.SETTINGS }
             BackHandler { back() }
             context.container.readAloud.SettingsScreen(onBack = back)
+        }
+
+        Screen.SERVICES -> {
+            val back = { screen = Screen.SETTINGS }
+            BackHandler { back() }
+            ServicesScreen(
+                connections = context.container.serverConnections,
+                accounts = context.container.serviceAccounts,
+                onBack = back,
+            )
         }
 
         Screen.SETTINGS_BACKUP -> {

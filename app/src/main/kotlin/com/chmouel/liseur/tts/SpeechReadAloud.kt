@@ -9,6 +9,11 @@ import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ServerList
+import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.providers.ServerConnections
+import com.chmouel.liseur.providers.ServiceAccounts
+import com.chmouel.liseur.providers.ServicesScreen
 import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.readaloud.ReadAloudBookNotice
@@ -22,6 +27,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,6 +43,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import org.readium.r2.shared.publication.Locator
 
@@ -46,10 +53,12 @@ import org.readium.r2.shared.publication.Locator
  *
  * Holds the session in progress and keeps [ReadAloudService] running for
  * it, so playback carries on with the reader gone and the screen off.
- * Changing the service or a key ends the session; a new voice is heard
+ * Changing the service, a server or a key ends the session; a new voice is heard
  * at once, from the start of the sentence being read, a new speed at
  * once, and a new server or model from the next session. Main thread only.
  *
+ * @param connections The servers and keys of the Services page.
+ * @param accounts The build's own accounts on that page, such as Gemini.
  * @param offered The services offered, given the control they have over
  *   the session; device speech is the default when offered.
  */
@@ -58,6 +67,8 @@ internal class SpeechReadAloud(
     private val application: Application,
     private val settings: AppSettingsRepository,
     private val checkpoints: ListeningCheckpoints,
+    private val connections: ServerConnections,
+    private val accounts: ServiceAccounts,
     offered: (SessionControl) -> List<SpeechService>,
 ) : ReadAloudFeature {
 
@@ -80,8 +91,8 @@ internal class SpeechReadAloud(
             reading()?.takeIf { it.service == service }?.session?.choice?.value?.language
     }
 
-    /** The session in progress, with the service it reads with and the language its book declares. */
-    private class Reading(val session: ReadAloudSession, val service: SpeechService, val book: BookLanguage)
+    /** The session in progress, with the service it reads with, the language its book declares and whose address or key it holds. */
+    private class Reading(val session: ReadAloudSession, val service: SpeechService, val book: BookLanguage, val owner: String?)
 
     private var reading: Reading? = null
 
@@ -102,11 +113,45 @@ internal class SpeechReadAloud(
 
     init {
         require(services.isNotEmpty()) { "Read aloud needs a speech service" }
+        // A session, a start and a preview hold the address and key they began with.
+        connections.addListener(::connectionChanging)
     }
 
-    /** The stored choice, or the default for none or one this build does not offer. */
-    private fun serviceOf(s: AppSettings): SpeechService =
-        services.first { it.id == speechProviderId(providerIds, s.readAloudProvider) }
+    /** Whose address or key the start in progress reads with: [UNKNOWN] until its settings are read. */
+    private var startingOwner: Any? = null
+
+    /** The previews playing, by whose address or key each reads with, [UNKNOWN] until known. */
+    private val previews = mutableMapOf<Job, Any?>()
+
+    private fun connectionChanging(owner: String) {
+        if (startingOwner === UNKNOWN || startingOwner == owner) starting?.cancel()
+        reading()?.takeIf { it.owner == owner }?.session?.stop()
+        previews.filterValues { it === UNKNOWN || it == owner }.keys.forEach { it.cancel() }
+    }
+
+    /**
+     * The stored choice, or the default for none, one this build does not
+     * offer, or a server no longer listed.
+     */
+    private fun serviceOf(s: AppSettings): SpeechService {
+        val saved = s.readAloudProvider.takeUnless {
+            it == ServerSettings.SERVER_PROVIDER && s.readAloudServerConnection == null
+        }
+        return services.first { it.id == speechProviderId(providerIds, saved) }
+    }
+
+    /** The servers listed on the Services page. */
+    val servers: Flow<ServerList> = connections.servers
+
+    /** The listed server read aloud uses, when it uses one. */
+    val selectedServer: Flow<String?> = settings.settings.map { s ->
+        s.readAloudServerConnection?.id?.takeIf { serviceOf(s).id == ServerSettings.SERVER_PROVIDER }
+    }.distinctUntilChanged()
+
+    /** Reads with the listed server [id], ending a session read with anything else. */
+    fun selectServer(id: String) {
+        services.filterIsInstance<OpenAiSpeechService>().firstOrNull()?.commitServer(id)
+    }
 
     val service: Flow<SpeechService> = settings.settings.map(::serviceOf).distinctUntilChanged()
 
@@ -141,6 +186,7 @@ internal class SpeechReadAloud(
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
+        startingOwner = UNKNOWN
         starting = scope.launch {
             // Taken here rather than before launching: a start cancelled
             // before it runs never reaches the finally that gives it back.
@@ -149,6 +195,7 @@ internal class SpeechReadAloud(
             try {
                 val s = settings.settings.first()
                 val service = serviceOf(s)
+                startingOwner = service.owner(s)
                 noticeLabel = service.label
                 noticeHost = service.noticeName(s)
                 val book = SpeechLanguage.ofBook(handle.publication.metadata.languages)
@@ -158,6 +205,8 @@ internal class SpeechReadAloud(
                     is VoiceResolution.NeedsChoice -> ask(PendingChoice(handle.bookId, service, book, resolved.reason))
                 }
                 val current = settings.settings.first()
+                val owner = service.owner(current)
+                startingOwner = owner
                 val voice = service.voice(current, pick.voice) ?: return@launch notSetUp(handle.bookId)
                 val session = ReadAloudSession(
                     application = application,
@@ -173,7 +222,7 @@ internal class SpeechReadAloud(
                     onChapterEnded = { setSleepTimer(null) },
                 )
                 held = false
-                reading = Reading(session, service, book)
+                reading = Reading(session, service, book, owner)
                 mutableCurrent.value = session
                 // The reads above suspend, so the reader may have left the
                 // foreground and Android may refuse the start.
@@ -192,6 +241,7 @@ internal class SpeechReadAloud(
                 if (startingToken === startToken) {
                     startingToken = null
                     startingBookId = null
+                    startingOwner = null
                 }
             }
         }
@@ -354,20 +404,28 @@ internal class SpeechReadAloud(
      */
     suspend fun preview(sample: String, voice: String? = null): Result<Unit> {
         pause()
-        val s = settings.settings.first()
-        val chosen = serviceOf(s).voice(s, voice)
-            ?: return Result.failure(IllegalStateException("Read aloud is not set up"))
-        val output = AudioTrackPcmOutput({ speed.value })
-        return try {
-            output.play(chosen.synthesizer.synthesize(sample).pcm)
-            Result.success(Unit)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // AudioTrack throws its own exceptions besides ours.
-            Result.failure(e)
+        val job = currentCoroutineContext().job
+        previews[job] = UNKNOWN
+        try {
+            val s = settings.settings.first()
+            val service = serviceOf(s)
+            previews[job] = service.owner(s)
+            val chosen = service.voice(s, voice)
+                ?: return Result.failure(IllegalStateException("Read aloud is not set up"))
+            val output = AudioTrackPcmOutput({ speed.value })
+            return try {
+                output.play(chosen.synthesizer.synthesize(sample).pcm)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // AudioTrack throws its own exceptions besides ours.
+                Result.failure(e)
+            } finally {
+                output.release()
+            }
         } finally {
-            output.release()
+            previews.remove(job)
         }
     }
 
@@ -419,6 +477,10 @@ internal class SpeechReadAloud(
     @Composable
     override fun SettingsScreen(onBack: () -> Unit) = ReadAloudSettingsScreen(this, onBack)
 
+    /** The Services page, opened from read aloud's own settings. */
+    @Composable
+    fun ServicesPage(onBack: () -> Unit) = ServicesScreen(connections, accounts, onBack)
+
     @Composable
     override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) =
         ReadAloudPlayer(this, bookId, theme, controls, modifier)
@@ -428,6 +490,9 @@ internal class SpeechReadAloud(
 }
 
 private const val SLEEP_CHECK_MS = 30_000L
+
+// Whose address or key a start or preview reads with, before its settings are read.
+private val UNKNOWN = Any()
 
 internal const val DEVICE_SPEECH_PROVIDER_ID = "device"
 

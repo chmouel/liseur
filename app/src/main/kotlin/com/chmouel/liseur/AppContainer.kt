@@ -64,7 +64,10 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.providers.ServerConnections
+import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.reader.OpenBookHandles
 import com.chmouel.liseur.reader.ReaderPresence
 import com.chmouel.liseur.data.settings.SettingsSyncRepository
@@ -639,6 +642,16 @@ class AppContainer(context: Context) {
     )
 
     val listeningCheckpoints = ListeningCheckpoints(readingPositions)
+
+    /** The servers and keys on the Services page, shared by every feature that reaches one. */
+    internal val serverConnections: ServerConnections by lazy {
+        ServerConnections(appSettings, ServerKeys(context.applicationContext), localNetwork)
+    }
+
+    /** The build's own accounts on the Services page, such as the Play build's Gemini key. */
+    internal val serviceAccounts: ServiceAccounts by lazy {
+        ServiceAccounts(context.applicationContext, serverConnections)
+    }
 
     /** Reading aloud: a Gemini voice in the Play build, nothing in the F-Droid one. */
     val readAloud: ReadAloudFeature by lazy {

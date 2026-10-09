@@ -3,13 +3,10 @@ package com.chmouel.liseur.readaloud
 import android.app.Application
 import android.content.Context
 import com.chmouel.liseur.AppContainer
-import com.chmouel.liseur.tts.ApiKeyStore
 import com.chmouel.liseur.tts.DeviceSpeechService
 import com.chmouel.liseur.tts.GeminiSpeechService
 import com.chmouel.liseur.tts.OpenAiSpeechService
-import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.tts.SpeechReadAloud
-import com.chmouel.liseur.tts.gemini
 
 /**
  * The Play build reads aloud with a Gemini voice on the reader's own key,
@@ -21,11 +18,13 @@ object ReadAloudFeatureFactory {
         application = context.applicationContext as Application,
         settings = container.appSettings,
         checkpoints = container.listeningCheckpoints,
+        connections = container.serverConnections,
+        accounts = container.serviceAccounts,
     ) { control ->
         listOf(
             DeviceSpeechService(context, container.appSettings, control),
-            GeminiSpeechService(ApiKeyStore.gemini(context), container.appSettings, control),
-            OpenAiSpeechService(ServerKeys(context), container.appSettings, control, localNetwork = container.localNetwork),
+            GeminiSpeechService(container.serviceAccounts.gemini, container.appSettings, control),
+            OpenAiSpeechService(container.serverConnections, container.appSettings, control),
         )
     }
 }

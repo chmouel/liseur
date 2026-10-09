@@ -85,12 +85,14 @@ class AppSettingsRepositoryTest {
     @Test
     fun `a speech model and its voice are saved together`() = runTest {
         val repo = AppSettingsRepository(store())
-        repo.setSpeechServerModelAndVoice(" hexgrad/Kokoro-82M ", "af_bella")
+        val url = "http://192.168.1.10:8880/v1"
+        repo.selectReadAloudServer((repo.addServer("Kokoro", url) as ServerChange.Saved).id)
+        repo.setSpeechServerModelAndVoice(url, " hexgrad/Kokoro-82M ", "af_bella")
         val saved = repo.settings.first()
         assertEquals("hexgrad/Kokoro-82M", saved.speechServerModel)
         assertEquals("af_bella", saved.speechServerVoice)
 
-        repo.setSpeechServerModelAndVoice("Qwen/Qwen3-TTS-VoiceDesign", " ")
+        repo.setSpeechServerModelAndVoice(url, "Qwen/Qwen3-TTS-VoiceDesign", " ")
         val typed = repo.settings.first()
         assertEquals("Qwen/Qwen3-TTS-VoiceDesign", typed.speechServerModel)
         assertEquals(null, typed.speechServerVoice)

@@ -1129,4 +1129,23 @@
     <plurals name="read_aloud_sleep_minutes">
         <item quantity="other">%d 分钟</item>
     </plurals>
+    <string name="services_title">服务</string>
+    <string name="services_entry_summary">服务器和 API 密钥</string>
+    <string name="services_manage">管理服务</string>
+    <string name="services_servers">服务器</string>
+    <string name="services_server">服务器</string>
+    <string name="services_server_address">地址</string>
+    <string name="services_server_name">名称</string>
+    <string name="services_add">添加服务器</string>
+    <string name="services_add_detail">兼容 OpenAI 的服务器，可以是托管服务，也可以在你自己的网络中。</string>
+    <string name="services_server_used_read_aloud">%1$s，用于朗读</string>
+    <string name="services_server_duplicate">此服务器已在列表中。</string>
+    <string name="services_unreadable">无法读取已保存的服务器。</string>
+    <string name="services_delete">删除服务器</string>
+    <string name="services_delete_title">删除 %1$s？</string>
+    <string name="services_delete_read_aloud">朗读正在使用 %1$s。删除后将改用设备语音。</string>
+    <string name="services_delete_unused">没有功能使用此服务器。</string>
+    <plurals name="services_test_passed">
+        <item quantity="other">已连接。有 %d 个模型可用。</item>
+    </plurals>
 </resources>
