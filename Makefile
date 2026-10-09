@@ -7,7 +7,7 @@ EMULATOR ?= $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/em
 SCRCPY ?= scrcpy
 AVD ?= liseur_phone_api36
 SERIAL ?= emulator-5554
-PHONE ?= $(or $(shell $(ADB) devices 2>/dev/null | awk 'NR>1 && $$2=="device" {print $$1; exit}'),$(SERIAL))
+PHONE ?= $(or $(shell $(ADB) devices 2>/dev/null | grep -v emulator | awk 'NR>1 && $$2=="device" {print $$1; exit}'),$(SERIAL))
 LOCALE ?=
 ADB_TARGET := -s $(SERIAL)
 ADB_PHONE_TARGET := -s $(PHONE)
