@@ -804,6 +804,9 @@ fun ReaderScreen(
     ): BookOrbitLocalCandidate? {
         // BookOrbit is only told a place it can find in the book's own text.
         if (pageTranslated) return null
+        val turns = pageTranslatedTurns
+        // Asked again while the page may be turning to its translation, and taken only if it never did.
+        fun untranslated() = !pageTranslated && turns == pageTranslatedTurns
         val opened = openedBookOrbit ?: return null
         suspend fun attempt(): BookOrbitViewportCfi.Candidate? = try {
             BookOrbitViewportCfi.capture(
@@ -833,11 +836,11 @@ fun ReaderScreen(
         val candidate = BookOrbitViewportCfi.firstMatching(
             attempts = if (expectedNative == null) 1 else CFI_CAPTURE_ATTEMPTS,
             retryDelayMs = CFI_CAPTURE_RETRY_MS,
-            stillWanted = { expectedNative == null || nav.currentLocator.value == expectedNative },
+            stillWanted = { untranslated() && (expectedNative == null || nav.currentLocator.value == expectedNative) },
             capture = { attempt() },
             matches = { it.href == locator.href.toString() && BookOrbitViewportCfi.startsAt(it, anchor) },
         )
-        return candidate?.let {
+        return candidate?.takeIf { untranslated() }?.let {
             BookOrbitLocalCandidate(
                 opened.context, it.href, locator.toJSON().toString(), it.raw,
             )
