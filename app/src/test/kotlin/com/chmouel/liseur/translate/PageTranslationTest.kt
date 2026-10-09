@@ -291,4 +291,22 @@ class PageTranslationTest {
         assertEquals("Il pleut fort.", page.original("ch1.xhtml", "pours", "It rains. Il fait très froid ici. It ")?.text)
         assertEquals("Il pleut.", page.original("ch1.xhtml", "rains", "It ")?.text)
     }
+
+    @Test
+    fun `a word said twice in one translation is found where it was selected`() = runTest {
+        val element = listOf(PageSentence("Il pleut, puis il pleut.", "ch1.xhtml", "#p0", null))
+        val run = FakeRun()
+        run.answer = { "It rains, then it rains." }
+        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+            object : PageSentences {
+                var i = at
+                override suspend fun next() = element.getOrNull(i++)
+            }
+        }, 10)
+        page.start(0, "start")
+        runCurrent()
+
+        assertEquals("Il pleut, puis il pleut.", page.original("ch1.xhtml", "rains", "It rains, then it ")?.text)
+        assertEquals("Il pleut, puis il pleut.", page.original("ch1.xhtml", "rains", "It ")?.text)
+    }
 }

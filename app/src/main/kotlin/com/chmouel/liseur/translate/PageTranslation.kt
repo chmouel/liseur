@@ -178,21 +178,24 @@ internal class PageTranslation<P>(
                 val shown = squash(swap.translation)
                 // Swaps come in the order they were made, which a jump or a refused sentence breaks; the text says what follows what.
                 val next = swaps.firstOrNull { follows(swap.sentence, it.sentence) } ?: swaps.getOrNull(i + 1)
-                val at = shown.indexOf(key).takeIf { it >= 0 }
-                    ?: runsOn(shown, key, next?.let { squash(it.translation) })
-                    ?: return@mapIndexedNotNull null
-                val prefix = shown.substring(0, at)
+                // Every place the words are in it, since a translation can say them twice.
+                val places = generateSequence(shown.indexOf(key).takeIf { it >= 0 }) { from ->
+                    shown.indexOf(key, from + 1).takeIf { it >= 0 }
+                }.toList().ifEmpty { listOfNotNull(runsOn(shown, key, next?.let { squash(it.translation) })) }
                 // Just before it on the page: the translation of the sentence before it, or the book's own words when that one was left alone.
                 val book = squash(swap.sentence.before.orEmpty())
-                val leads = listOfNotNull(
-                    swaps.firstOrNull { follows(it.sentence, swap.sentence) }?.let { squash(it.translation) + prefix },
+                val earlier = listOfNotNull(
+                    swaps.firstOrNull { follows(it.sentence, swap.sentence) }?.let { squash(it.translation) },
                     swaps.getOrNull(i - 1)
                         ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
-                        ?.let { squash(it.translation) + prefix },
-                    book.takeLast(BOOK_TAIL) + prefix,
+                        ?.let { squash(it.translation) },
+                    book.takeLast(BOOK_TAIL),
                 )
                 // Words that only happen to be in a translation are not on the page after it.
-                val lead = leads.map { it.takeLast(MATCHED) }.filter(leading::endsWith).maxByOrNull { it.length }
+                val lead = places
+                    .flatMap { at -> earlier.map { (it + shown.substring(0, at)).takeLast(MATCHED) } }
+                    .filter(leading::endsWith)
+                    .maxByOrNull { it.length }
                     ?: return@mapIndexedNotNull null
                 swap.sentence to lead.length
             }
