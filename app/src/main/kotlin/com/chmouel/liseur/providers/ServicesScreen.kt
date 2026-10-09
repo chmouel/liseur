@@ -78,6 +78,7 @@ import com.chmouel.liseur.data.settings.ServerChange
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.defaultServerName
+import com.chmouel.liseur.tts.KeyDraft
 import com.chmouel.liseur.tts.KeyRow
 import com.chmouel.liseur.tts.OpenAiTts
 import com.chmouel.liseur.tts.SpeechError
@@ -277,6 +278,7 @@ private fun ServerScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     val urlFocus = remember { FocusRequester() }
     val keyFocus = remember { FocusRequester() }
+    val keyDraft = remember { KeyDraft() }
     var keyFocusWanted by remember { mutableIntStateOf(0) }
     val invalid = address.text.isNotBlank() && OpenAiTts.baseUrl(address.text) == null
     val currentId by rememberUpdatedState(id)
@@ -478,6 +480,7 @@ private fun ServerScreen(
                 onKey = { origin, key, done -> connections.commitKey(origin, key, done) },
                 onClear = { origin -> connections.commitKeyRemoval(origin) },
                 focusRequester = keyFocus,
+                draft = keyDraft,
             )
             RowDivider()
             ServerTestRow(connections, server?.url, owner)
@@ -501,6 +504,8 @@ private fun ServerScreen(
                 TextButton(
                     onClick = {
                         confirmDelete = false
+                        // A key still being typed would otherwise be saved as the editor closes, after its server is gone.
+                        keyDraft.clear()
                         connections.delete(server.id, draft) { deleted -> if (deleted) onBack() }
                     },
                 ) {
