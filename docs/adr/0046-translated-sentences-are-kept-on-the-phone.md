@@ -24,7 +24,9 @@ a Room database separate from `liseur.db`.
 - Removing a book deletes its sentences, by sweeping rows whose book the
   library no longer holds. The sweep runs at start and after each
   committed change to the library, since a removal may still be inside a
-  caller's transaction when it returns.
+  caller's transaction when it returns. A book removed and added back
+  under the same URL before the sweep looks keeps its sentences: they
+  are keyed by the exact text, so they still translate it.
 - Translation settings show the count and size and can clear them all. A
   reply asked before a clear, or before its book was removed, is shown
   but not saved.

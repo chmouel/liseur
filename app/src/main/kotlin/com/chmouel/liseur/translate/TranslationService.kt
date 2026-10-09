@@ -65,8 +65,13 @@ internal interface TranslationService {
      */
     suspend fun translate(passage: String, source: String?, target: String, context: String? = null): String
 
-    /** Sentences one after another from [source] into [target], for as long as a page is translated. */
-    fun open(source: String?, target: String): TranslationRun = object : TranslationRun {
+    /**
+     * Sentences one after another from [source] into [target], for as long
+     * as a page is translated. A service whose answer depends on settings
+     * asks with [s], the ones the page's identity was read from, so what
+     * it answers is what the identity names.
+     */
+    fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
         override suspend fun translate(sentence: String, context: String?) = translate(sentence, source, target, context)
     }
 
