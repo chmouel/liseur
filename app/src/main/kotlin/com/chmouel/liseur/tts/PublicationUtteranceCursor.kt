@@ -24,9 +24,12 @@ class PublicationUtteranceCursor(
     private val overrideContentLanguage: Boolean,
 ) : UtteranceCursor {
     private val elements = checkNotNull(publication.content(locator)) { "No content service" }.iterator()
-    private val pending = ArrayDeque<UtteranceText>()
+    private val pending = ArrayDeque<Pair<UtteranceText, Locator>>()
 
-    override suspend fun next(): UtteranceText? {
+    override suspend fun next(): UtteranceText? = nextLocated()?.first
+
+    /** The next sentence with the locator Readium gave it, which names its element and the text before it. */
+    suspend fun nextLocated(): Pair<UtteranceText, Locator>? {
         while (pending.isEmpty()) {
             val element = elements.nextOrNull() ?: return null
             TextContentTokenizer(
@@ -38,12 +41,12 @@ class PublicationUtteranceCursor(
         return pending.removeFirst()
     }
 
-    private fun Content.Element.utterances(): List<UtteranceText> = when (this) {
+    private fun Content.Element.utterances(): List<Pair<UtteranceText, Locator>> = when (this) {
         is Content.TextElement -> segments.mapNotNull { utterance(it.text, it.locator) }
         is Content.TextualElement -> listOfNotNull(text?.takeIf { it.isNotBlank() }?.let { utterance(it, locator) })
         else -> emptyList()
     }
 
-    private fun utterance(text: String, locator: Locator): UtteranceText? =
-        if (text.any { it.isLetterOrDigit() }) UtteranceText(text, locator.text.before) else null
+    private fun utterance(text: String, locator: Locator): Pair<UtteranceText, Locator>? =
+        if (text.any { it.isLetterOrDigit() }) UtteranceText(text, locator.text.before) to locator else null
 }
