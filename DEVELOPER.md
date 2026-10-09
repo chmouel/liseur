@@ -1480,6 +1480,12 @@ reader behavior.
 - Engine callbacks arrive on the main thread. A failed sentence pauses on
   that sentence with a notice; play retries it. Nothing is ever skipped.
   A refused key or a voice the server does not have stops the session.
+- Pausing keeps the paused sentence's audio (or its request still on its
+  way) in `SpeechTtsEngine` and the sentences read ahead in the cache;
+  `UtterancePrefetcher.pause` only stops reading further. Playing on
+  resumes that sentence a second (`REWIND_FRAMES`) before where it was
+  heard, fetching nothing again. A skip since the pause, a jump, a voice
+  change or a retry after a failure starts the sentence over.
 - Keys (Gemini, optional OpenAI-compatible) live in `noBackupFilesDir`,
   encrypted by `SecretCipher`, each in its own file, and are never logged.
   Speech server keys are kept per server origin (`ServerKeys`, file

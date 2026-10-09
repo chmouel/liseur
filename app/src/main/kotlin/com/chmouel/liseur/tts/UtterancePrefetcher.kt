@@ -15,7 +15,7 @@ import kotlinx.coroutines.sync.withPermit
  *
  * Readium hands the engine one sentence at a time and says nothing about
  * what comes next, so [UtterancePrefetcher] walks the book alongside it and
- * fills this cache; the engine only ever [take]s from it. A miss is just a
+ * fills this cache; the engine only ever [claim]s from it. A miss is just a
  * request made then. Used from the main thread; only the requests
  * themselves run elsewhere.
  */
@@ -57,7 +57,7 @@ class SpeechCache(
                 if (generation == this.generation && entries[text] === entry) {
                     val bytes = audio.pcm.size.toLong()
                     // Requests in flight weigh nothing until they arrive, so
-                    // the budget is held here; [take] asks again if needed.
+                    // the budget is held here; [claim] asks again if needed.
                     if (cachedBytes + bytes > maxBytes) entries.remove(text) else entry.bytes = bytes
                 }
             },
@@ -67,20 +67,13 @@ class SpeechCache(
     }
 
     /**
-     * The audio for [text], waiting for a request already on its way or
-     * making one. A taken entry leaves the cache: a sentence is spoken
-     * once, and a restart cannot cancel what is being waited for.
+     * The audio for [text]: a request already on its way, or one made now.
+     * A claimed entry leaves the cache: a sentence is spoken once, and a
+     * restart cannot cancel what is being waited for. The caller owns the
+     * request and cancels it once it no longer wants it.
      */
-    suspend fun take(text: String): SpeechAudio {
-        val audio = entries.remove(text)?.audio?.takeUnless { it.isCancelled } ?: request(text, CoroutineStart.UNDISPATCHED) {}
-        try {
-            return audio.await()
-        } catch (e: CancellationException) {
-            // Nobody else can be waiting for a taken entry.
-            audio.cancel()
-            throw e
-        }
-    }
+    fun claim(text: String): Deferred<SpeechAudio> =
+        entries.remove(text)?.audio?.takeUnless { it.isCancelled } ?: request(text, CoroutineStart.UNDISPATCHED) {}
 
     /** Forgets everything speculative: the reading jumped somewhere else. */
     fun restart() {
@@ -156,6 +149,7 @@ class UtterancePrefetcher<L>(
 ) {
     private var cursor: UtteranceCursor? = null
     private val window = ArrayDeque<UtteranceText>()
+    private var current: Pair<UtteranceText, L>? = null
     private var suspended = false
     private var job: Job? = null
 
@@ -166,18 +160,31 @@ class UtterancePrefetcher<L>(
     /** The voice moved on to [text], found in the element at [locator] with [before] leading up to it. */
     fun onUtterance(text: String, before: String?, locator: L) {
         if (suspended) return
+        // Playing on after a pause: the window still runs from here. Its
+        // element tells it from the same sentence somewhere else.
+        val resuming = current?.let { (sentence, at) -> sentence.isSentence(text, before) && at == locator } == true
+        if (resuming && (cursor != null || job?.isActive == true)) {
+            refill()
+            return
+        }
         // The text before a sentence tells a repeated one apart, so a skip
         // back to an earlier occurrence is not taken for reading on.
         val index = window.indexOfFirst { it.isSentence(text, before) }
         if (index >= 0 && cursor != null) {
             repeat(index + 1) { window.removeFirst() }
             refill()
-            return
+        } else {
+            restartFrom(text, before, locator)
         }
-        restartFrom(text, before, locator)
+        current = UtteranceText(text, before) to locator
     }
 
-    /** Stops reading ahead while the session settles a jump. */
+    /** Stops reading ahead while the voice is paused, keeping what was fetched for when it plays on. */
+    fun pause() {
+        suspended = true
+    }
+
+    /** Stops reading ahead while the session settles a jump, dropping what was fetched. */
     fun suspend() {
         suspended = true
         reset()
@@ -193,6 +200,7 @@ class UtterancePrefetcher<L>(
         job?.cancel()
         job = null
         cursor = null
+        current = null
         window.clear()
         cache.restart()
     }
@@ -228,7 +236,7 @@ class UtterancePrefetcher<L>(
     }
 
     private suspend fun fill(cursor: UtteranceCursor) {
-        while (window.size < ahead && cache.hasRoom) {
+        while (!suspended && window.size < ahead && cache.hasRoom) {
             val next = try {
                 cursor.next()
             } catch (e: CancellationException) {

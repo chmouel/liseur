@@ -81,7 +81,7 @@ class UtterancePrefetcherTest {
         assertEquals(listOf("B", "C", "D"), synth.calls)
 
         prefetcher.onUtterance("B", null, "p1")
-        assertEquals(audio().pcm.size, cache.take("B").pcm.size)
+        assertEquals(audio().pcm.size, cache.claim("B").await().pcm.size)
         synth.reply("C").complete(audio())
         advanceUntilIdle()
         assertEquals(listOf("B", "C", "D", "E"), synth.calls)
@@ -100,7 +100,7 @@ class UtterancePrefetcherTest {
         advanceUntilIdle()
 
         cache.swap(new::synthesize)
-        val taken = CoroutineScope(StandardTestDispatcher(testScheduler)).launch { cache.take("B") }
+        val taken = CoroutineScope(StandardTestDispatcher(testScheduler)).launch { cache.claim("B").await() }
         advanceUntilIdle()
         assertEquals(listOf("C"), old.cancelled)
         assertEquals(listOf("B"), new.calls)
@@ -164,7 +164,7 @@ class UtterancePrefetcherTest {
         cache.prefetch("A")
         advanceUntilIdle()
         assertEquals(4L, cache.cachedBytes)
-        cache.take("A")
+        cache.claim("A").await()
         assertEquals(1, cache.requestsMade)
     }
 
@@ -175,7 +175,7 @@ class UtterancePrefetcherTest {
         prefetcher.onUtterance("A", null, "p")
         advanceUntilIdle()
         synth.reply("B").complete(audio())
-        cache.take("B")
+        cache.claim("B").await()
         assertEquals(listOf("B"), synth.calls)
         assertEquals(1, cache.requestsMade)
     }
@@ -193,17 +193,20 @@ class UtterancePrefetcherTest {
         advanceUntilIdle()
         assertEquals(4L, cache.cachedBytes)
 
-        cache.take("B")
+        cache.claim("B").await()
         assertEquals(listOf("A", "B", "B"), synth.calls)
     }
 
     @Test
-    fun abandoningATakeCancelsItsRequest() = runTest {
+    fun aClaimIsTheCallersToCancel() = runTest {
         val synth = FakeSynth()
         val (cache, _) = setUp(synth, emptyMap())
-        val waiting = launch { cache.take("Z") }
+        val claimed = cache.claim("Z")
         advanceUntilIdle()
-        waiting.cancel()
+        cache.restart()
+        advanceUntilIdle()
+        assertTrue(synth.cancelled.isEmpty())
+        claimed.cancel()
         advanceUntilIdle()
         assertEquals(listOf("Z"), synth.cancelled)
     }
@@ -255,5 +258,48 @@ class UtterancePrefetcherTest {
         advanceUntilIdle()
         assertEquals(listOf("B", "C"), synth.cancelled)
         assertEquals(listOf("B", "C"), synth.calls)
+    }
+
+    @Test
+    fun pausingKeepsWhatWasFetchedAndPlayingOnReadsAheadFromThere() = runTest {
+        val synth = FakeSynth()
+        val (cache, prefetcher) = setUp(synth, mapOf("p" to { cursor("A", "B", "C", "D", "E") }))
+        prefetcher.onUtterance("A", null, "p")
+        advanceUntilIdle()
+        synth.reply("B").complete(audio())
+        advanceUntilIdle()
+        assertEquals(listOf("B", "C", "D"), synth.calls)
+
+        prefetcher.pause()
+        prefetcher.onUtterance("B", null, "p")
+        advanceUntilIdle()
+        prefetcher.resume()
+        prefetcher.onUtterance("A", null, "p")
+        advanceUntilIdle()
+        assertTrue(synth.cancelled.isEmpty())
+        assertEquals(listOf("B", "C", "D"), synth.calls)
+        assertEquals(1, prefetcher.restarts)
+
+        prefetcher.onUtterance("B", null, "p")
+        assertEquals(audio().pcm.size, cache.claim("B").await().pcm.size)
+        synth.reply("C").complete(audio())
+        advanceUntilIdle()
+        assertEquals(listOf("B", "C", "D", "E"), synth.calls)
+        assertEquals(1, prefetcher.restarts)
+    }
+
+    @Test
+    fun theSameSentenceInAnotherElementIsAJumpNotPlayingOn() = runTest {
+        val synth = FakeSynth()
+        val (_, prefetcher) = setUp(
+            synth,
+            mapOf("p" to { cursor("Chapter.", "B") }, "q" to { cursor("Chapter.", "Y") }),
+        )
+        prefetcher.onUtterance("Chapter.", null, "p")
+        advanceUntilIdle()
+        prefetcher.onUtterance("Chapter.", null, "q")
+        advanceUntilIdle()
+        assertEquals(2, prefetcher.restarts)
+        assertEquals("Y", synth.calls.last())
     }
 }
