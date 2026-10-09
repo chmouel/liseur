@@ -1265,4 +1265,26 @@
         <item quantity="many">%d минут</item>
         <item quantity="other">%d минуты</item>
     </plurals>
+    <string name="services_title">Сервисы</string>
+    <string name="services_entry_summary">Серверы и API-ключи</string>
+    <string name="services_manage">Управление сервисами</string>
+    <string name="services_servers">Серверы</string>
+    <string name="services_server">Сервер</string>
+    <string name="services_server_address">Адрес</string>
+    <string name="services_server_name">Название</string>
+    <string name="services_add">Добавить сервер</string>
+    <string name="services_add_detail">Сервер, совместимый с OpenAI, в интернете или в вашей сети.</string>
+    <string name="services_server_used_read_aloud">%1$s, используется для чтения вслух</string>
+    <string name="services_server_duplicate">Этот сервер уже есть в списке.</string>
+    <string name="services_unreadable">Не удалось прочитать сохранённые серверы.</string>
+    <string name="services_delete">Удалить сервер</string>
+    <string name="services_delete_title">Удалить %1$s?</string>
+    <string name="services_delete_read_aloud">Чтение вслух использует %1$s. Оно переключится на голоса устройства.</string>
+    <string name="services_delete_unused">Этот сервер ничем не используется.</string>
+    <plurals name="services_test_passed">
+        <item quantity="one">Подключено. Доступна %d модель.</item>
+        <item quantity="few">Подключено. Доступно %d модели.</item>
+        <item quantity="many">Подключено. Доступно %d моделей.</item>
+        <item quantity="other">Подключено. Доступно %d модели.</item>
+    </plurals>
 </resources>

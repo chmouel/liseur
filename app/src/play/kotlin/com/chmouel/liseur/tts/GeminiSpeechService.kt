@@ -36,6 +36,7 @@ import com.chmouel.liseur.ui.settings.RowDivider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -44,15 +45,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** Gemini has one key, whatever the server: the owner of every key typed for it. */
-private const val KEY_OWNER = "gemini"
-
 /** Where the reader's Gemini key is kept. */
 internal fun ApiKeyStore.Companion.gemini(context: Context) = ApiKeyStore(context, "gemini-key", "liseur.gemini.key")
 
 /** Gemini's voices on the reader's own key. */
 internal class GeminiSpeechService(
-    private val keys: ApiKeyStore,
+    private val account: GeminiAccount,
     private val settings: AppSettingsRepository,
     private val control: SessionControl,
     private val client: GeminiTtsClient = GeminiTtsClient(),
@@ -64,14 +62,14 @@ internal class GeminiSpeechService(
     override val summary = R.string.read_aloud_provider_gemini_summary
     override val icon = Icons.Outlined.Cloud
 
-    val keyConfigured: StateFlow<Boolean> = keys.configured
+    val keyConfigured: StateFlow<Boolean> = account.configured
 
-    private val keyCommits = KeyCommits(scope)
+    /** Moves on with every key change on the Services page. */
+    val keyGeneration: StateFlow<Int> = account.generation
 
-    /** [KEY_OWNER] when the last key save or removal failed. */
-    val keyFailure: StateFlow<String?> = keyCommits.failure
+    override val configured: Flow<Boolean> = account.configured
 
-    override val configured: Flow<Boolean> = keys.configured
+    override fun owner(s: AppSettings): String = GeminiAccount.OWNER
 
     val voiceChoice: Flow<GeminiVoice> =
         settings.settings.map { GeminiVoice.of(it.readAloudVoice) }.distinctUntilChanged()
@@ -84,22 +82,11 @@ internal class GeminiSpeechService(
         settings.settings.map { GeminiTts.modelOf(it.readAloudModel) }.distinctUntilChanged()
 
     override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? {
-        val key = keys.get() ?: return null
+        val key = account.key() ?: return null
         val name = GeminiVoice.of(voice ?: s.readAloudVoice).id
         val model = GeminiTts.modelOf(s.readAloudModel)
         return SessionVoice(name, SpeechCache.MAX_CONCURRENT) { text -> client.synthesize(key, text, name, model) }
     }
-
-    /** Saves the [key], ending the session read with the old one. */
-    fun commitKey(key: String, done: (Boolean) -> Unit) = keyCommits.submit(KEY_OWNER, {
-        control.stop()
-        keys.set(key)
-    }, done)
-
-    fun commitKeyRemoval() = keyCommits.submit(KEY_OWNER, {
-        control.stop()
-        keys.clear()
-    })
 
     /** Saves [voice], also as the one for the language being read when there is a session. */
     suspend fun setVoice(voice: GeminiVoice) {
@@ -113,7 +100,7 @@ internal class GeminiSpeechService(
     private fun scopeOf(model: String) = VoiceScope(id, "", model)
 
     override suspend fun catalogue(s: AppSettings): VoiceCatalogue? {
-        if (keys.get() == null) return null
+        if (account.key() == null) return null
         val model = GeminiTts.modelOf(s.readAloudModel)
         val languages = GeminiLanguages.of(model)
         return VoiceCatalogue(
@@ -148,7 +135,7 @@ internal class GeminiSpeechService(
 
     /** The speech models the saved key can use. */
     suspend fun models(): Result<List<String>> {
-        val key = keys.get() ?: return Result.failure(IllegalStateException("No Gemini key"))
+        val key = account.key() ?: return Result.failure(IllegalStateException("No Gemini key"))
         return try {
             Result.success(client.models(key))
         } catch (e: SpeechError) {
@@ -157,49 +144,73 @@ internal class GeminiSpeechService(
     }
 
     @Composable
-    override fun SettingsRows(feature: SpeechReadAloud) = GeminiRows(feature, this)
+    override fun SettingsRows(feature: SpeechReadAloud, onManageServices: () -> Unit) =
+        GeminiRows(feature, this, onManageServices)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GeminiRows(feature: SpeechReadAloud, service: GeminiSpeechService) {
+private fun GeminiRows(feature: SpeechReadAloud, service: GeminiSpeechService, onManageServices: () -> Unit) {
     val configured by service.keyConfigured.collectAsState()
+    val keyGeneration by service.keyGeneration.collectAsState()
     val voice by service.voiceChoice.collectAsState(initial = GeminiVoice.Default)
     val model by service.model.collectAsState(initial = GeminiTts.DEFAULT_MODEL)
     val scope = rememberCoroutineScope()
     var voicesOpen by remember { mutableStateOf(false) }
     var models by remember { mutableStateOf<Listing?>(null) }
+    var listing by remember { mutableStateOf<Job?>(null) }
     val preview = rememberVoicePreview(feature)
 
+    // A listing asked with a key since replaced or removed is cancelled, and dropped if it answers anyway.
     val loadModels = {
+        listing?.cancel()
+        val asked = service.keyGeneration.value
         models = Listing.Loading(GEMINI_LISTING)
-        scope.launch {
-            models = service.models().toListing(
+        listing = scope.launch {
+            val listed = service.models().toListing(
                 GEMINI_LISTING,
                 none = R.string.read_aloud_settings_gemini_models_none,
                 failed = R.string.read_aloud_settings_gemini_models_failed,
             )
+            if (service.keyGeneration.value == asked) models = listed
         }
     }
-    LaunchedEffect(configured) {
-        if (configured) loadModels() else models = null
+    LaunchedEffect(configured, keyGeneration) {
+        if (configured) {
+            loadModels()
+        } else {
+            listing?.cancel()
+            models = null
+        }
     }
 
-    val keyFailure by service.keyFailure.collectAsState()
-    KeyRow(
-        title = stringResource(R.string.read_aloud_settings_key),
-        missing = stringResource(R.string.read_aloud_settings_key_missing),
-        privacy = stringResource(R.string.read_aloud_settings_privacy),
-        owner = KEY_OWNER,
-        configured = configured,
-        failed = keyFailure == KEY_OWNER,
-        onKey = { _, key, done ->
-            service.commitKey(key) { ok ->
-                done(ok)
-                if (ok) loadModels()
-            }
-        },
-        onClear = { service.commitKeyRemoval() },
+    // The key itself is set on the Services page, shared with every feature using Gemini.
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.read_aloud_settings_key),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text(
+                text = if (configured) {
+                    stringResource(R.string.read_aloud_settings_key_saved)
+                } else {
+                    stringResource(R.string.read_aloud_settings_key_missing)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onManageServices) { Text(stringResource(R.string.services_manage)) }
+    }
+    Text(
+        text = stringResource(R.string.read_aloud_settings_privacy),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
     )
     RowDivider()
     ListedField(

@@ -142,6 +142,11 @@ class SyncableSettingsTest {
             "app.dynamic_color",
             // Which voices are installed or served differs from one device to the next.
             "app.read_aloud_voice_preferences",
+            // Servers, and what read aloud uses on them, are this device's.
+            "app.ai_servers",
+            "app.read_aloud_server",
+            "app.read_aloud_server_state",
+            "app.read_aloud_unsettled_servers",
         )) {
             assertFalse("$local should not travel", local in keys)
         }

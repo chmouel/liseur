@@ -5,27 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -33,19 +21,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
@@ -53,6 +31,8 @@ import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ServerConnection
+import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.ui.settings.RowDivider
 import okhttp3.HttpUrl
 import java.text.NumberFormat
@@ -70,7 +50,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -81,32 +60,28 @@ import kotlinx.coroutines.sync.withLock
  * being optional.
  */
 internal class OpenAiSpeechService(
-    private val keys: ServerKeys,
+    private val connections: ServerConnections,
     private val settings: AppSettingsRepository,
     private val control: SessionControl,
     private val client: OpenAiTtsClient = OpenAiTtsClient(),
     // Saves outlive the settings screen: one made as it closes still completes.
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
-    val localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
 ) : SpeechService {
     override val id = "openai"
     override val label = R.string.read_aloud_provider_openai
     override val summary = R.string.read_aloud_provider_openai_summary
     override val icon = Icons.Outlined.Dns
 
-    /** Whether a key is saved for the server at [origin]. */
-    fun keyConfigured(origin: String): StateFlow<Boolean> = keys.configured(origin)
+    val localNetwork: LocalNetworkAccess get() = connections.localNetwork
 
-    private val keyCommits = KeyCommits(scope)
+    /** Moves on with every change to the address or key of the server at [url]. */
+    fun generation(url: String): StateFlow<Int> = connections.generation(ServerConnections.originOf(url).orEmpty())
 
-    /** The server whose key could not be saved or removed, if any. */
-    val keyFailure: StateFlow<String?> = keyCommits.failure
-
-    // Address saves and model choices take turns with it, so a slow choice
+    // Server choices and model choices take turns with it, so a slow choice
     // never writes over a newer one or onto another server.
     private val settingsLock = Mutex()
 
-    /** Bumped by every address save and model choice; a model choice is saved only if none came after it. */
+    /** Bumped by every server and model choice; a model choice is saved only if none came after it. */
     private val generation = AtomicInteger()
 
     /** The model choice still asking for its voices, if any; a reopened screen shows it and leaves it be. */
@@ -115,18 +90,33 @@ internal class OpenAiSpeechService(
     private val pending = MutableStateFlow<PendingModel?>(null)
     val pendingModel: StateFlow<PendingModel?> = pending.asStateFlow()
 
-    private val urlWrites = MutableStateFlow(0)
+    /** A choice made, and the server's address and key as they were when it was made. */
+    data class Choice(val made: Int, val connection: Int)
 
-    /** How many address saves have not landed yet. */
-    val savingUrls: StateFlow<Int> = urlWrites.asStateFlow()
+    /** The current choice on the server at [url]; an automatic voice change taken at an older one is dropped. */
+    fun choice(url: String): Choice = Choice(generation.get(), generation(url).value)
 
-    /** The current choice; an automatic voice change taken at an older one is dropped. */
-    fun choice(): Int = generation.get()
+    /**
+     * Runs [save] if [choice] is still the current one on the server at
+     * [url]; a change to its address or key waits for it to finish.
+     */
+    private suspend fun <T> ifCurrent(url: String, choice: Choice, save: suspend () -> T): T? {
+        if (generation.get() != choice.made) return null
+        // Checked again once admitted: a newer choice may have come while it waited.
+        return connections.unlessChanged(ServerConnections.originOf(url).orEmpty(), choice.connection) {
+            if (generation.get() == choice.made) save() else null
+        }
+    }
+
+    override fun owner(s: AppSettings): String? = ServerConnections.originOf(s.speechServerUrl.orEmpty())
 
     override val configured: Flow<Boolean> = settings.settings.map { s ->
         OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) != null &&
             !s.speechServerModel.isNullOrBlank() && !s.speechServerVoice.isNullOrBlank()
     }.distinctUntilChanged()
+
+    /** The listed server read aloud uses, if any. */
+    val server: Flow<ServerConnection?> = settings.settings.map { it.readAloudServerConnection }.distinctUntilChanged()
 
     val url: Flow<String> = settings.settings.map { it.speechServerUrl.orEmpty() }.distinctUntilChanged()
 
@@ -147,7 +137,7 @@ internal class OpenAiSpeechService(
         val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) ?: return null
         val model = s.speechServerModel?.takeIf { it.isNotBlank() } ?: return null
         val name = (voice ?: s.speechServerVoice)?.takeIf { it.isNotBlank() } ?: return null
-        val key = keys.get(ServerKeys.origin(base))
+        val key = connections.key(ServerKeys.origin(base))
         // One sentence at a time: a small self-hosted server only slows down with more.
         return SessionVoice(name, 1) { text ->
             requireAccess(base.toString())
@@ -156,24 +146,19 @@ internal class OpenAiSpeechService(
     }
 
     /**
-     * Saves the server's address, ending the session read from the old
-     * one. A new address is marked unsettled until its own lists have
-     * chosen its model and voice, see [settled].
+     * Has read aloud use the listed server [id], ending the session read
+     * from another. One just added is unsettled until its own lists have
+     * chosen its model and voice, see [unsettled].
      */
-    fun commitUrl(url: String) {
+    fun commitServer(serverId: String) {
         blockedUrl.value = null
         generation.incrementAndGet()
-        urlWrites.update { it + 1 }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            try {
-                settingsLock.withLock {
-                    if (settings.settings.first().speechServerUrl.orEmpty() != url.trim()) {
-                        control.stop()
-                        settings.setSpeechServerUrlUnsettled(url)
-                    }
-                }
-            } finally {
-                urlWrites.update { it - 1 }
+            settingsLock.withLock {
+                val s = settings.settings.first()
+                if (s.readAloudProvider == id && s.readAloudServerConnection?.id == serverId) return@withLock
+                control.stop()
+                settings.selectReadAloudServer(serverId)
             }
         }
     }
@@ -188,8 +173,9 @@ internal class OpenAiSpeechService(
     /**
      * Picks [model] on the server at [url]: asks for its voices, then saves
      * the model with one of them, in the service's scope. Saved only if the
-     * address and the model choice are still the ones made here, and then
-     * a new server counts as settled when [settle] (its model list loaded).
+     * address, its key and the model choice are still the ones made here,
+     * and then a new server counts as settled when [settle] (its model
+     * list loaded).
      */
     fun commitModel(
         url: String,
@@ -198,7 +184,8 @@ internal class OpenAiSpeechService(
         settle: Boolean,
         done: (Result<List<String>>) -> Unit,
     ) {
-        val choice = generation.incrementAndGet()
+        generation.incrementAndGet()
+        val choice = choice(url)
         val mine = PendingModel(url, model, settle)
         pending.value = mine
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -206,13 +193,18 @@ internal class OpenAiSpeechService(
                 val before = voice.first()
                 val result = voices(url, model)
                 settingsLock.withLock {
-                    val s = settings.settings.first()
-                    if (s.speechServerUrl.orEmpty() != url || generation.get() != choice) return@withLock
-                    val now = s.speechServerVoice.orEmpty()
-                    // A voice tapped or typed meanwhile is the reader's choice.
-                    val chosen = if (now != before) now else VoiceChoice.after(now, result.getOrNull(), changed)
-                    setModelAndVoice(model, chosen)
-                    if (settle && result.isSuccess) settings.settleSpeechServer(url)
+                    val switch = ifCurrent(url, choice) {
+                        val s = settings.settings.first()
+                        if (s.speechServerUrl.orEmpty() != url) return@ifCurrent false
+                        val now = s.speechServerVoice.orEmpty()
+                        // A voice tapped or typed meanwhile is the reader's choice.
+                        val chosen = if (now != before) now else VoiceChoice.after(now, result.getOrNull(), changed)
+                        saveModelAndVoice(s, url, model, chosen).also {
+                            if (settle && result.isSuccess) settings.settleSpeechServer(url)
+                        }
+                    }
+                    // After the write: switching may list voices, which a key change must not wait for.
+                    if (switch == true) control.switchVoice()
                 }
                 result
             } finally {
@@ -225,30 +217,32 @@ internal class OpenAiSpeechService(
     /**
      * Saves the [voice] the server's list kept for the saved model, and
      * when [settle], marks the new server at [url] settled, unless the
-     * address, the model, or the [choice] it was asked at changed meanwhile.
+     * address, the model, or the [choice] it was asked at, key included,
+     * changed meanwhile.
      */
-    suspend fun keepVoice(url: String, model: String, voice: String, choice: Int, settle: Boolean) {
+    suspend fun keepVoice(url: String, model: String, voice: String, choice: Choice, settle: Boolean) {
         settingsLock.withLock {
-            val s = settings.settings.first()
-            if (s.speechServerUrl.orEmpty() != url || s.speechServerModel.orEmpty() != model) return
-            if (generation.get() != choice) return
-            if (s.speechServerVoice.orEmpty() != voice) {
-                settings.setSpeechServerVoice(voice)
-                control.switchVoice()
+            val switch = ifCurrent(url, choice) {
+                val s = settings.settings.first()
+                if (s.speechServerUrl.orEmpty() != url || s.speechServerModel.orEmpty() != model) return@ifCurrent false
+                val changed = s.speechServerVoice.orEmpty() != voice
+                if (changed) settings.setSpeechServerVoice(url, voice)
+                if (settle) settings.settleSpeechServer(url)
+                changed
             }
-            if (settle) settings.settleSpeechServer(url)
+            if (switch == true) control.switchVoice()
         }
     }
 
     /**
-     * Saves [model] with [voice] in one write, then reads on with both, so
-     * a session never asks the new model for the old model's voice.
+     * Saves [model] with [voice] in one write, so a session never asks the
+     * new model for the old model's voice. True when the session should
+     * switch to them.
      */
-    suspend fun setModelAndVoice(model: String, voice: String) {
-        val s = settings.settings.first()
+    private suspend fun saveModelAndVoice(s: AppSettings, url: String, model: String, voice: String): Boolean {
         val changed = s.speechServerModel.orEmpty() != model.trim() || s.speechServerVoice.orEmpty() != voice.trim()
-        settings.setSpeechServerModelAndVoice(model, voice)
-        if (changed) control.switchVoice()
+        settings.setSpeechServerModelAndVoice(url, model, voice)
+        return changed
     }
 
     /**
@@ -259,7 +253,9 @@ internal class OpenAiSpeechService(
         val before = settings.settings.first()
         val scope = scopeOf(before)
         val language = VoiceResolver.settingsLanguage(languagesOf(voice), control.sessionLanguage(this))
-        if (scope == null || !remember(scope, language, voice)) settings.setSpeechServerVoice(voice)
+        if (scope == null || !remember(scope, language, voice)) {
+            before.speechServerUrl?.let { settings.setSpeechServerVoice(it, voice) }
+        }
         if (settings.settings.first() != before) control.switchVoice()
     }
 
@@ -282,7 +278,8 @@ internal class OpenAiSpeechService(
         val url = s.speechServerUrl.orEmpty()
         val stored = s.speechServerVoice.orEmpty()
         // The server is slow to answer while it reads, so the last list it gave is kept.
-        val listing = listedVoices?.takeIf { it.first == url to s.speechServerModel.orEmpty() }?.second?.let { Result.success(it) }
+        val listing = listedVoices?.takeIf { it.first == VoicesAsked(url, s.speechServerModel.orEmpty(), generation(url).value) }
+            ?.second?.let { Result.success(it) }
             ?: voices(url, s.speechServerModel.orEmpty())
         val listed = listing.getOrNull().orEmpty()
         val ids = if (listed.isNotEmpty()) {
@@ -310,33 +307,30 @@ internal class OpenAiSpeechService(
     @Composable
     override fun voiceLabel(voice: String): String = voiceChipLabel(VoiceLabel.of(voice))
 
-    suspend fun setChosenVoices(voices: Set<String>) = settings.setSpeechServerVoices(voices)
-
-    /** Saves [key] for the server at [origin], ending the session read with the old one. */
-    fun commitKey(origin: String, key: String, done: (Boolean) -> Unit) = keyCommits.submit(origin, {
-        control.stop()
-        keys.set(origin, key)
-    }, done)
-
-    /** Removes the key of the server at [origin]; other servers keep theirs. */
-    fun commitKeyRemoval(origin: String, done: (Boolean) -> Unit) = keyCommits.submit(origin, {
-        control.stop()
-        keys.clear(origin)
-    }, done)
+    suspend fun setChosenVoices(voices: Set<String>) {
+        settings.settings.first().speechServerUrl?.let { settings.setSpeechServerVoices(it, voices) }
+    }
 
     /** The speech models the server at [url] lists, asked with the saved key. */
     suspend fun models(url: String): Result<List<SpeechModel>> =
         ask(url) { base, key -> OpenAiTts.speechModels(client.models(base, key)) }
 
     /** The voices [model] has on the server at [url], asked with the saved key. */
-    suspend fun voices(url: String, model: String): Result<List<String>> =
-        ask(url) { base, key -> client.voices(base, key, model) }.onSuccess { listedVoices = (url to model) to it }
+    suspend fun voices(url: String, model: String): Result<List<String>> {
+        val asked = VoicesAsked(url, model, generation(url).value)
+        return ask(url) { base, key -> client.voices(base, key, model) }.onSuccess {
+            // A list asked with an address or key since changed is not kept.
+            if (generation(url).value == asked.connection) listedVoices = asked to it
+        }
+    }
+
+    private data class VoicesAsked(val url: String, val model: String, val connection: Int)
 
     /**
-     * The last voices a server listed, by its address and model, so the
-     * player's menu need not wait on a busy server.
+     * The last voices a server listed, by its address, model and key, so
+     * the player's menu need not wait on a busy server.
      */
-    private var listedVoices: Pair<Pair<String, String>, List<String>>? = null
+    private var listedVoices: Pair<VoicesAsked, List<String>>? = null
 
     /** What the server answered when tested: its speech models, and the voices of the [model] tested. */
     class ServerCheck(val models: List<SpeechModel>, val model: String, val voices: List<String>)
@@ -361,7 +355,7 @@ internal class OpenAiSpeechService(
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(IllegalArgumentException("Not a server address"))
         return try {
             requireAccess(base.toString())
-            Result.success(block(base, keys.get(ServerKeys.origin(base))))
+            Result.success(block(base, connections.key(ServerKeys.origin(base))))
         } catch (e: SpeechError) {
             Result.failure(e)
         }
@@ -383,7 +377,8 @@ internal class OpenAiSpeechService(
     }
 
     @Composable
-    override fun SettingsRows(feature: SpeechReadAloud) = OpenAiRows(feature, this)
+    override fun SettingsRows(feature: SpeechReadAloud, onManageServices: () -> Unit) =
+        OpenAiRows(feature, this, onManageServices)
 }
 
 /** Said, not played, by a connection test: the shortest request that proves the model and voice work. */
@@ -431,29 +426,17 @@ private fun priceText(price: Double, locale: Locale): String =
         maximumFractionDigits = 2
     }.format(price)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
-    val storedUrl by service.url.collectAsState(initial = "")
+private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService, onManageServices: () -> Unit) {
+    val server by service.server.collectAsState(initial = null)
+    val storedUrl = server?.url.orEmpty()
     val accessAllowed = SpeechLocalNetworkPrompt(service.localNetwork, storedUrl)
     val storedModel by service.model.collectAsState(initial = "")
     val storedVoice by service.voice.collectAsState(initial = "")
     val chosenVoices by service.chosenVoices.collectAsState(initial = emptySet())
-    val keyFailure by service.keyFailure.collectAsState()
     val scope = rememberCoroutineScope()
-    val focus = LocalFocusManager.current
-    var typed by remember { mutableStateOf(TextFieldValue(storedUrl)) }
-    // The saved address the field last showed. A newer one replaces it there
-    // unless the reader has typed or saved another since, so an earlier save
-    // landing late never overwrites the field.
-    var synced by remember { mutableStateOf(storedUrl) }
-    val invalid = typed.text.isNotBlank() && OpenAiTts.baseUrl(typed.text) == null
-    // An address saved here whose save has not landed yet: a key typed now is already its.
-    var pendingUrl by remember { mutableStateOf<String?>(null) }
-    val savingUrls by service.savingUrls.collectAsState()
-    val shownUrl = pendingUrl ?: storedUrl
-    val owner = OpenAiTts.baseUrl(shownUrl)?.let(ServerKeys::origin)
-    val keyConfigured by remember(owner) { owner?.let(service::keyConfigured) ?: MutableStateFlow(false) }.collectAsState()
+    // Moves on when the server's address or key changes on the Services page.
+    val keyGeneration by remember(storedUrl) { service.generation(storedUrl) }.collectAsState()
     val reachable = accessAllowed && OpenAiTts.baseUrl(storedUrl) != null
     var models by remember { mutableStateOf<Listing?>(null) }
     var prices by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
@@ -463,15 +446,9 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
     // reopened screen still sees it.
     val pendingChoice by service.pendingModel.collectAsState()
     val pendingModel = pendingChoice?.takeIf { it.url == storedUrl }?.model
-    // Bumped when the key is saved or removed, which the screen cannot otherwise see.
-    var keyGeneration by remember { mutableIntStateOf(0) }
     val requests = remember { Requests() }
     val preview = rememberVoicePreview(feature)
     val shownModel = pendingModel ?: storedModel
-    var presetsOpen by remember { mutableStateOf(false) }
-    val urlFocus = remember { FocusRequester() }
-    val keyFocus = remember { FocusRequester() }
-    var keyFocusWanted by remember { mutableIntStateOf(0) }
 
     // Each list is fetched for one address (and voices for one model); a
     // reply to an older request is dropped. A fresh setup takes the first
@@ -484,7 +461,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
         requests.voicesJob?.cancel()
         voices = Listing.Loading(key)
         requests.voicesJob = scope.launch {
-            val choice = service.choice()
+            val choice = service.choice(url)
             val before = service.voice.first()
             val result = service.voices(url, model)
             val now = service.voice.first()
@@ -523,7 +500,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
     }
     val loadModels = { url: String, changed: Boolean ->
         val id = ++requests.models
-        val choice = service.choice()
+        val choice = service.choice(url)
         requests.modelsJob?.cancel()
         models = Listing.Loading(url)
         requests.modelsJob = scope.launch {
@@ -538,7 +515,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
             prices = listed.orEmpty().mapNotNull { m -> m.pricePerMillionChars?.let { m.id to it } }.toMap()
             val current = service.model.first()
             // A model picked meanwhile is the reader's, whether still waiting for its voices or saved.
-            if (requests.models != id || service.choice() != choice || service.pendingModel.value != null) return@launch
+            if (requests.models != id || service.choice(url) != choice || service.pendingModel.value != null) return@launch
             val first = listed?.firstOrNull()?.id
             when {
                 first != null && (current.isBlank() || (changed && listed.none { it.id == current })) ->
@@ -561,173 +538,13 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
             }
         }
     }
-    // Lists asked with the old key are dropped and asked again with the new one.
-    val keySaved = { origin: String ->
-        if (origin == OpenAiTts.baseUrl(storedUrl)?.let(ServerKeys::origin)) {
-            requests.invalidate()
-            keyGeneration++
-            scope.launch { refresh(storedUrl, service.unsettled(storedUrl)) }
-        }
-    }
-    LaunchedEffect(storedUrl, accessAllowed) {
+    // Lists asked with an old address or key are dropped and asked again.
+    LaunchedEffect(storedUrl, accessAllowed, keyGeneration) {
         requests.invalidate()
         refresh(storedUrl, service.unsettled(storedUrl))
     }
-    LaunchedEffect(storedUrl) {
-        if (TypedField.follows(typed.text, synced, storedUrl, newer = pendingUrl != null)) {
-            if (typed.text != storedUrl) typed = TextFieldValue(storedUrl)
-            synced = storedUrl
-        }
-    }
-    // Kept until every address save has landed, so an earlier one landing
-    // first never hands the key field to a server no longer shown.
-    LaunchedEffect(storedUrl, pendingUrl, savingUrls) {
-        if (savingUrls == 0 && pendingUrl == storedUrl) pendingUrl = null
-    }
-    LaunchedEffect(keyFocusWanted) {
-        if (keyFocusWanted > 0) runCatching { keyFocus.requestFocus() }
-    }
 
-    // Typing an address saves it on Done or when the field is left; an invalid one keeps its error.
-    val saveUrl = { url: String ->
-        if (url != (pendingUrl ?: storedUrl)) {
-            pendingUrl = url
-            requests.invalidate()
-            service.commitUrl(url)
-        }
-    }
-    val commitTyped = { if (!invalid) saveUrl(typed.text.trim()) }
-    val latestCommitTyped by rememberUpdatedState(commitTyped)
-    DisposableEffect(Unit) { onDispose { latestCommitTyped() } }
-    val pick = { preset: SpeechServerPreset ->
-        presetsOpen = false
-        if (preset.example) {
-            // Only an example: its host is selected for the reader's own, saved like a typed address.
-            typed = TextFieldValue(preset.url, TextRange(preset.host.first, preset.host.last + 1))
-            runCatching { urlFocus.requestFocus() }
-        } else {
-            // Leaving the fields first saves what they hold for the server they belong to.
-            focus.clearFocus()
-            typed = TextFieldValue(preset.url)
-            saveUrl(preset.url)
-            if (!service.keyConfigured(preset.origin).value) keyFocusWanted++
-        }
-    }
-    val inUse = SpeechServerPresets.matching(shownUrl)?.takeIf { typed.text.trim() == shownUrl }
-    val presetsLabel = stringResource(R.string.read_aloud_settings_server_presets)
-
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(
-            text = stringResource(R.string.read_aloud_settings_server_url),
-            style = MaterialTheme.typography.bodyLarge,
-        )
-        Text(
-            text = stringResource(R.string.read_aloud_settings_server_url_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        ExposedDropdownMenuBox(
-            expanded = presetsOpen,
-            onExpandedChange = { presetsOpen = it },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        ) {
-            OutlinedTextField(
-                value = typed,
-                onValueChange = { typed = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Typing in the field leaves the list closed: only its arrow opens it.
-                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = false)
-                    .focusRequester(urlFocus)
-                    .onLeaving { commitTyped() },
-                singleLine = true,
-                isError = invalid,
-                placeholder = { Text(stringResource(R.string.read_aloud_settings_server_url_hint)) },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(
-                        expanded = presetsOpen,
-                        // Before the anchor, whose own generic label would win.
-                        modifier = Modifier
-                            .semantics { contentDescription = presetsLabel }
-                            .menuAnchor(MenuAnchorType.SecondaryEditable),
-                    )
-                },
-                supportingText = when {
-                    invalid -> {
-                        { Text(stringResource(R.string.read_aloud_settings_server_url_invalid)) }
-                    }
-                    inUse != null -> {
-                        { Text(stringResource(inUse.name)) }
-                    }
-                    else -> null
-                },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        if (!invalid) {
-                            commitTyped()
-                            focus.clearFocus()
-                        }
-                    },
-                ),
-            )
-            ExposedDropdownMenu(expanded = presetsOpen, onDismissRequest = { presetsOpen = false }) {
-                SpeechServerPresets.all.forEach { preset ->
-                    val selected = preset === inUse
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(stringResource(preset.name))
-                                Text(
-                                    text = if (preset.example) {
-                                        stringResource(R.string.read_aloud_settings_server_preset_own)
-                                    } else {
-                                        preset.url
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        },
-                        trailingIcon = if (selected) {
-                            {
-                                Icon(
-                                    Icons.Outlined.Check,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        } else {
-                            null
-                        },
-                        onClick = { pick(preset) },
-                        modifier = Modifier.semantics { this.selected = selected },
-                    )
-                }
-            }
-        }
-    }
-    RowDivider()
-    KeyRow(
-        title = stringResource(R.string.read_aloud_settings_server_key),
-        missing = stringResource(R.string.read_aloud_settings_server_key_missing),
-        privacy = null,
-        owner = owner,
-        configured = keyConfigured,
-        failed = owner != null && keyFailure == owner,
-        onKey = { origin, key, done ->
-            service.commitKey(origin, key) { ok ->
-                done(ok)
-                if (ok) keySaved(origin)
-            }
-        },
-        onClear = { origin -> service.commitKeyRemoval(origin) { keySaved(origin) } },
-        focusRequester = keyFocus,
-    )
+    ServerLine(server, onManageServices)
     RowDivider()
     ListedField(
         title = stringResource(R.string.read_aloud_settings_server_model),
@@ -792,6 +609,30 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
     )
+}
+
+/** The server in use, with the way to the Services page where it is set up. */
+@Composable
+private fun ServerLine(server: ServerConnection?, onManageServices: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.read_aloud_settings_server_url),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            server?.let {
+                Text(
+                    text = it.host,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        TextButton(onClick = onManageServices) { Text(stringResource(R.string.services_manage)) }
+    }
 }
 
 private sealed interface ConnectionTest {

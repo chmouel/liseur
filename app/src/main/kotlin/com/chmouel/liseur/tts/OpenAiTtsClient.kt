@@ -246,6 +246,13 @@ class OpenAiTtsClient(
     }
 
     /**
+     * Every model the server lists, whatever it outputs, in its order: a
+     * check that the server answers and takes the key. Throws [SpeechError].
+     */
+    suspend fun allModels(base: HttpUrl, apiKey: String?): List<SpeechModel> =
+        execute(request(base, "models", apiKey).get().build()) { modelList(it, base) }
+
+    /**
      * The server's own voice list, every page of it, or null when it has
      * none. A list that says its total is read to the end (Mistral's comes
      * ten at a time); one that stops short is an error, never taken as

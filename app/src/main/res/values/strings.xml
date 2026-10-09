@@ -1228,4 +1228,24 @@
         <item quantity="other">%d minutes</item>
     </plurals>
     <string name="read_aloud_speed_value" translatable="false">%1$s×</string>
+    <string name="services_title">Services</string>
+    <string name="services_entry_summary">Servers and API keys</string>
+    <string name="services_manage">Manage services</string>
+    <string name="services_servers">Servers</string>
+    <string name="services_server">Server</string>
+    <string name="services_server_address">Address</string>
+    <string name="services_server_name">Name</string>
+    <string name="services_add">Add server</string>
+    <string name="services_add_detail">An OpenAI-compatible server, hosted or on your own network.</string>
+    <string name="services_server_used_read_aloud">%1$s, used for read aloud</string>
+    <string name="services_server_duplicate">This server is already listed.</string>
+    <string name="services_unreadable">Saved servers couldn\'t be read.</string>
+    <string name="services_delete">Delete server</string>
+    <string name="services_delete_title">Delete %1$s?</string>
+    <string name="services_delete_read_aloud">Read aloud uses %1$s. It will switch to device voices.</string>
+    <string name="services_delete_unused">Nothing uses this server.</string>
+    <plurals name="services_test_passed">
+        <item quantity="one">Connected. %d model available.</item>
+        <item quantity="other">Connected. %d models available.</item>
+    </plurals>
 </resources>

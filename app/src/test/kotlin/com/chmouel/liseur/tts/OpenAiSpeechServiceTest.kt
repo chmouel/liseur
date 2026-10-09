@@ -5,6 +5,8 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.data.security.SecretCipher
 import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.ServerChange
+import com.chmouel.liseur.providers.ServerConnections
 import java.io.File
 import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
@@ -79,6 +81,7 @@ class OpenAiSpeechServiceTest {
     private lateinit var scope: CoroutineScope
     private lateinit var settings: AppSettingsRepository
     private lateinit var keys: ServerKeys
+    private lateinit var connections: ServerConnections
     private val stops = CopyOnWriteArrayList<Unit>()
 
     private val control = object : SessionControl {
@@ -101,6 +104,7 @@ class OpenAiSpeechServiceTest {
             keyForTesting = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         }
         keys = ServerKeys(folder.newFolder("keys"), cipher)
+        connections = ServerConnections(settings, keys, client = OpenAiTtsClient(), scope = scope)
     }
 
     @After
@@ -112,7 +116,7 @@ class OpenAiSpeechServiceTest {
 
     private fun server() = Server().also { servers += it }
 
-    private fun service() = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope)
+    private fun service() = OpenAiSpeechService(connections, settings, control, OpenAiTtsClient(), scope)
 
     @Test
     fun blockedLocalServerReceivesNoListsTestsOrSpeechUntilAccessIsGranted(): Unit = runBlocking {
@@ -123,9 +127,9 @@ class OpenAiSpeechServiceTest {
             override val granted get() = allowed
             override suspend fun blocks(url: String?) = !granted && OpenAiTts.baseUrl(url.orEmpty()) == OpenAiTts.baseUrl(server.url)
         }
-        val service = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope, access)
+        val service = OpenAiSpeechService(ServerConnections(settings, keys, access, OpenAiTtsClient(), scope), settings, control, OpenAiTtsClient(), scope)
         saveUrl(service, server.url)
-        settings.setSpeechServerModelAndVoice("tts", "tts-1")
+        settings.setSpeechServerModelAndVoice(server.url, "tts", "tts-1")
         val voice = service.voice(settings.settings.first())!!
 
         assertTrue(service.models(server.url).exceptionOrNull() is SpeechError.LocalNetworkBlocked)
@@ -154,7 +158,7 @@ class OpenAiSpeechServiceTest {
             override val granted = false
             override suspend fun blocks(url: String?) = OpenAiTts.baseUrl(url.orEmpty()) == OpenAiTts.baseUrl(local.url)
         }
-        val service = OpenAiSpeechService(keys, settings, control, OpenAiTtsClient(), scope, access)
+        val service = OpenAiSpeechService(ServerConnections(settings, keys, access, OpenAiTtsClient(), scope), settings, control, OpenAiTtsClient(), scope)
 
         assertTrue(service.models(local.url).exceptionOrNull() is SpeechError.LocalNetworkBlocked)
         assertTrue(service.models(public.url).isSuccess)
@@ -162,18 +166,19 @@ class OpenAiSpeechServiceTest {
         assertTrue(public.keys.isNotEmpty())
     }
 
+    /** Lists the server at [url], as the Services page does, and has read aloud use it. */
     private suspend fun saveUrl(service: OpenAiSpeechService, url: String) {
-        service.commitUrl(url)
+        val id = (settings.addServer("", url) as ServerChange.Saved).id
+        service.commitServer(id)
         // Not settings.first { url }: a DataStore read racing the write can
         // start that collector past the write's version, and it then never
-        // sees the new value. Once the save has landed, a plain read does.
-        withTimeout(WAIT) { service.savingUrls.first { it == 0 } }
-        assertEquals(url, settings.settings.first().speechServerUrl)
+        // sees the new value. Polling plain reads does.
+        withTimeout(WAIT) { while (settings.settings.first().speechServerUrl != url) delay(10) }
     }
 
-    private suspend fun saveKey(service: OpenAiSpeechService, url: String, key: String) {
+    private suspend fun saveKey(url: String, key: String) {
         val done = CompletableDeferred<Boolean>()
-        service.commitKey(ServerKeys.origin(OpenAiTts.baseUrl(url)!!), key) { done.complete(it) }
+        connections.commitKey(ServerKeys.origin(OpenAiTts.baseUrl(url)!!), key) { done.complete(it) }
         assertTrue(withTimeout(WAIT) { done.await() })
     }
 
@@ -188,12 +193,12 @@ class OpenAiSpeechServiceTest {
         val b = server()
         val service = service()
         saveUrl(service, a.url)
-        saveKey(service, a.url, "key-a")
+        saveKey(a.url, "key-a")
         service.models(a.url).getOrThrow()
 
         saveUrl(service, b.url)
         service.models(b.url).getOrThrow()
-        saveKey(service, b.url, "key-b")
+        saveKey(b.url, "key-b")
         service.models(b.url).getOrThrow()
         service.models(a.url).getOrThrow()
 
@@ -280,14 +285,48 @@ class OpenAiSpeechServiceTest {
         val service = service()
         saveUrl(service, a.url)
         withTimeout(WAIT) { chooseModel(service, a.url, "tts").await() }
-        val asked = service.choice()
+        val asked = service.choice(a.url)
 
         withTimeout(WAIT) { chooseModel(service, a.url, "tts", settle = false).await() }
         service.keepVoice(a.url, "tts", "tts-2", asked, settle = false)
         assertEquals("tts-1", settings.settings.first().speechServerVoice)
 
-        service.keepVoice(a.url, "tts", "tts-2", service.choice(), settle = false)
+        service.keepVoice(a.url, "tts", "tts-2", service.choice(a.url), settle = false)
         assertEquals("tts-2", settings.settings.first().speechServerVoice)
+    }
+
+    @Test
+    fun aModelChoiceAnsweredAfterTheKeyChangedIsNotSaved(): Unit = runBlocking {
+        val a = server()
+        val service = service()
+        saveUrl(service, a.url)
+        val gate = CountDownLatch(1).also { a.gate = it }
+        val choice = chooseModel(service, a.url, "tts")
+
+        saveKey(a.url, "key-a")
+        gate.countDown()
+        withTimeout(WAIT) { choice.await() }
+
+        val s = settings.settings.first()
+        assertTrue(s.speechServerModel.isNullOrEmpty())
+        assertTrue(s.speechServerVoice.isNullOrEmpty())
+        // Its lists, asked again with the new key, still have to choose.
+        assertTrue(service.unsettled(a.url))
+    }
+
+    @Test
+    fun aVoiceListedBeforeTheKeyChangedIsNotKept(): Unit = runBlocking {
+        val a = server()
+        val service = service()
+        saveUrl(service, a.url)
+        settings.setSpeechServerModelAndVoice(a.url, "tts", "tts-1")
+        val asked = service.choice(a.url)
+
+        saveKey(a.url, "key-a")
+        service.keepVoice(a.url, "tts", "tts-2", asked, settle = true)
+
+        assertEquals("tts-1", settings.settings.first().speechServerVoice)
+        assertTrue(service.unsettled(a.url))
     }
 
     @Test
@@ -295,7 +334,7 @@ class OpenAiSpeechServiceTest {
         val a = server()
         val service = service()
         saveUrl(service, a.url)
-        settings.setSpeechServerModelAndVoice("custom", "af_bella")
+        settings.setSpeechServerModelAndVoice(a.url, "custom", "af_bella")
 
         val catalogue = service.catalogue(settings.settings.first())!!
 
@@ -310,10 +349,10 @@ class OpenAiSpeechServiceTest {
         val a = server()
         val service = service()
         saveUrl(service, a.url)
-        settings.setSpeechServerModelAndVoice("tts", "narrator")
+        settings.setSpeechServerModelAndVoice(a.url, "tts", "narrator")
         val scope = service.catalogue(settings.settings.first())!!.scope
         assertTrue(service.remember(scope, "fr-FR", "conteur"))
-        settings.setSpeechServerModelAndVoice("tts", "narrator")
+        settings.setSpeechServerModelAndVoice(a.url, "tts", "narrator")
 
         a.status = 500
         val catalogue = service().catalogue(settings.settings.first())!!
@@ -328,10 +367,10 @@ class OpenAiSpeechServiceTest {
         val a = server()
         val service = service()
         saveUrl(service, a.url)
-        settings.setSpeechServerModelAndVoice("tts", "tts-1")
+        settings.setSpeechServerModelAndVoice(a.url, "tts", "tts-1")
         val scope = service.catalogue(settings.settings.first())!!.scope
 
-        settings.setSpeechServerModelAndVoice("older", "older-1")
+        settings.setSpeechServerModelAndVoice(a.url, "older", "older-1")
         assertFalse(service.remember(scope, "en", "tts-2"))
 
         val s = settings.settings.first()
