@@ -183,7 +183,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     }
                 }
                 SettingsGroup(stringResource(R.string.translation_settings_target)) {
-                    TargetRow(feature, service)
+                    TargetRow(feature, service, configured)
                     TestRow(feature, service, configured)
                 }
             }
@@ -235,18 +235,30 @@ private fun TranslationServiceSheet(
     )
 }
 
-/** The language passages go into: the app's until one is picked. */
+/**
+ * The language passages go into: the app's until one is picked. Shut
+ * while [service] cannot translate, such as the phone with no languages
+ * installed, since it would offer nothing to pick.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TargetRow(feature: ServiceTranslate, service: TranslationService) {
+private fun TargetRow(feature: ServiceTranslate, service: TranslationService, enabled: Boolean) {
     val ui = LocalConfiguration.current.locales[0]
     val stored by feature.target.collectAsState(initial = null)
     val app = TranslationLanguages.of(ui.toLanguageTag()) ?: TranslationLanguages.target(null, ui)
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     ListItem(
-        modifier = Modifier.clickable { picking = true },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(enabled = enabled) { picking = true },
+        colors = if (enabled) {
+            ListItemDefaults.colors(containerColor = Color.Transparent)
+        } else {
+            ListItemDefaults.colors(
+                containerColor = Color.Transparent,
+                headlineColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                supportingColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            )
+        },
         headlineContent = { Text(stringResource(R.string.translation_settings_target)) },
         supportingContent = {
             Text(
@@ -255,7 +267,7 @@ private fun TargetRow(feature: ServiceTranslate, service: TranslationService) {
             )
         },
     )
-    if (!picking) return
+    if (!picking || !enabled) return
     val offered by produceState<Map<String, PairState>?>(null, service) {
         value = service.targets(null) ?: TranslationLanguages.all().associateWith { PairState.Ready }
     }
