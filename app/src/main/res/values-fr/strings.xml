@@ -719,6 +719,7 @@
     <string name="footer_field_empty">Rien ici</string>
     <string name="settings_reading">Lecture</string>
     <string name="settings_reading_navigation">Lecture et navigation</string>
+    <string name="settings_page_placeholder">Choisissez un réglage pour l\'ouvrir ici.</string>
     <string name="settings_reading_navigation_paged">Paginé. Côtés pour tourner la page : %1$s</string>
     <string name="settings_reading_navigation_scrolling">Lecture par défilement.</string>
     <string name="settings_screen">Écran</string>

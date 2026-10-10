@@ -16,13 +16,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -69,6 +67,8 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.NestedPage
+import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import java.text.NumberFormat
@@ -110,7 +110,13 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
         // Opened straight onto the Services page, back leaves altogether.
         val leave = if (services) onBack else ({ managing = false })
         BackHandler(onBack = leave)
-        feature.ServicesPage(onBack = leave)
+        // Opened from this screen, the page needs its own way back to it;
+        // opened straight onto it, leaving it leaves the screen.
+        if (services) {
+            feature.ServicesPage(onBack = leave)
+        } else {
+            NestedPage { feature.ServicesPage(onBack = leave) }
+        }
         return
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -126,11 +132,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
         topBar = {
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.translation_settings_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
+                navigationIcon = { PaneBackButton(onBack) },
                 scrollBehavior = scrollBehavior,
             )
         },

@@ -719,6 +719,7 @@
     <string name="footer_field_empty">Niente qui</string>
     <string name="settings_reading">Lettura</string>
     <string name="settings_reading_navigation">Lettura e navigazione</string>
+    <string name="settings_page_placeholder">Scegli un\'impostazione per aprirla qui.</string>
     <string name="settings_reading_navigation_paged">A pagine. Lati di svolta: %1$s</string>
     <string name="settings_reading_navigation_scrolling">Lettura a scorrimento.</string>
     <string name="settings_screen">Schermo</string>

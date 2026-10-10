@@ -25,7 +25,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
@@ -100,6 +99,8 @@ import com.chmouel.liseur.providers.ServiceSheet
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.NestedPage
+import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.CoroutineScope
@@ -142,7 +143,7 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
     var managing by rememberSaveable { mutableStateOf(false) }
     if (managing) {
         BackHandler { managing = false }
-        feature.ServicesPage(onBack = { managing = false })
+        NestedPage { feature.ServicesPage(onBack = { managing = false }) }
         return
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -157,11 +158,7 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
         topBar = {
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.read_aloud_settings_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
+                navigationIcon = { PaneBackButton(onBack) },
                 scrollBehavior = scrollBehavior,
             )
         },

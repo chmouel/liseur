@@ -719,6 +719,7 @@
     <string name="footer_field_empty">Nada aquí</string>
     <string name="settings_reading">Lectura</string>
     <string name="settings_reading_navigation">Lectura y navegación</string>
+    <string name="settings_page_placeholder">Elige un ajuste para abrirlo aquí.</string>
     <string name="settings_reading_navigation_paged">Por páginas. Lados de paso: %1$s</string>
     <string name="settings_reading_navigation_scrolling">Leer desplazando.</string>
     <string name="settings_screen">Pantalla</string>

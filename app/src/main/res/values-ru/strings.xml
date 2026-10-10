@@ -769,6 +769,7 @@
     <string name="footer_field_empty">Ничего</string>
     <string name="settings_reading">Чтение</string>
     <string name="settings_reading_navigation">Чтение и навигация</string>
+    <string name="settings_page_placeholder">Выберите настройку, чтобы открыть её здесь.</string>
     <string name="settings_reading_navigation_paged">Постранично. Стороны перелистывания: %1$s</string>
     <string name="settings_reading_navigation_scrolling">Чтение прокруткой.</string>
     <string name="settings_screen">Экран</string>

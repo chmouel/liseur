@@ -77,4 +77,35 @@ class RoutesTest {
         assertNotEquals(a.contentKey, b.contentKey)
         assertEquals("Settings", Route.Settings.contentKey)
     }
+
+    @Test
+    fun anotherSettingsPageReplacesTheOpenOne() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.Licences)
+        stack.openDetail(Route.HiddenBooks)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.HiddenBooks), stack)
+    }
+
+    @Test
+    fun theOpenSettingsPageIsLeftAlone() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.Licences)
+        stack.openDetail(Route.Licences)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.About, Route.Licences), stack)
+    }
+
+    @Test
+    fun withoutSettingsAPageIsSimplyPushed() {
+        val stack = mutableListOf<Route>(Route.Library)
+        stack.openDetail(Route.ServerAccount)
+        assertEquals(listOf(Route.Library, Route.ServerAccount), stack)
+    }
+
+    @Test
+    fun closingSettingsClosesThePageBesideIt() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.Licences)
+        stack.closeSettings()
+        assertEquals(listOf(Route.Library), stack)
+        val alone = mutableListOf(Route.Library, Route.Settings)
+        alone.closeSettings()
+        assertEquals(listOf(Route.Library), alone)
+    }
 }
