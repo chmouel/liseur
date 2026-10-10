@@ -754,6 +754,7 @@
 
     <string name="settings_reading">Reading</string>
     <string name="settings_reading_navigation">Reading &amp; navigation</string>
+    <string name="settings_page_placeholder">Choose a setting to open it here.</string>
     <string name="settings_reading_navigation_paged">Paged. Page-turn sides: %1$s</string>
     <string name="settings_reading_navigation_scrolling">Read by scrolling.</string>
     <string name="settings_screen">Screen</string>

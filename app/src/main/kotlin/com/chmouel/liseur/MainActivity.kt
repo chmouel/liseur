@@ -16,6 +16,10 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.adaptive.ExperimentalMaterial3AdaptiveApi
+import androidx.compose.material3.adaptive.navigation.BackNavigationBehavior
+import androidx.compose.material3.adaptive.navigation3.ListDetailSceneStrategy
+import androidx.compose.material3.adaptive.navigation3.rememberListDetailSceneStrategy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +70,7 @@ import com.chmouel.liseur.ui.settings.ServerAccountViewModel
 import com.chmouel.liseur.ui.settings.AboutScreen
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.ui.settings.LicencesScreen
+import com.chmouel.liseur.ui.settings.SettingsPagePlaceholder
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.SettingsBackupScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
@@ -95,6 +100,7 @@ import kotlinx.coroutines.Job
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateListOf
@@ -111,8 +117,11 @@ import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import com.chmouel.liseur.ui.navigation.LaunchStack
 import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.navigation.RouteBackStackSaver
+import com.chmouel.liseur.ui.navigation.closeSettings
 import com.chmouel.liseur.ui.navigation.contentKey
+import com.chmouel.liseur.ui.navigation.isSettingsPage
 import com.chmouel.liseur.ui.navigation.launchStack
+import com.chmouel.liseur.ui.navigation.openDetail
 import com.chmouel.liseur.ui.navigation.pop
 import com.chmouel.liseur.ui.navigation.push
 
@@ -244,6 +253,7 @@ class MainActivity : ComponentActivity() {
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 
+@OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 private fun LiseurApp(
     settings: AppSettings,
@@ -295,11 +305,41 @@ private fun LiseurApp(
         if (backStack.lastOrNull() == Route.SettingsBackup) settingsZipBackup.close()
         backStack.pop()
     }
+    // A page chosen from Settings takes the place of the one open beside it.
+    val openPage: (Route) -> Unit = { page ->
+        if (backStack.lastOrNull() == Route.SettingsBackup && page != Route.SettingsBackup) {
+            settingsZipBackup.close()
+        }
+        backStack.openDetail(page)
+    }
+    // Settings' own arrow leaves Settings, page beside it and all.
+    val closeSettings: () -> Unit = {
+        if (Route.SettingsBackup in backStack) settingsZipBackup.close()
+        backStack.closeSettings()
+    }
     val eInk = LocalEInk.current
+    // Settings beside its pages on a wide window. Back pops one route at a
+    // time: the default would skip Settings, whose list-and-placeholder
+    // layout looks the same to the scaffold as list-and-page.
+    val listDetail = rememberListDetailSceneStrategy<Route>(
+        backNavigationBehavior = BackNavigationBehavior.PopLatest,
+    )
+    // NavDisplay's transitions do not reach the panes, which animate on
+    // their own; on e-paper they are told not to.
+    val paneMotion = if (eInk) {
+        ListDetailSceneStrategy.paneAnimation(
+            enterTransition = EnterTransition.None,
+            exitTransition = ExitTransition.None,
+            boundsAnimationSpec = snap(),
+        )
+    } else {
+        emptyMap()
+    }
 
     NavDisplay(
         backStack = backStack,
         onBack = back,
+        sceneStrategies = listOf(listDetail),
         entryDecorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator(),
             rememberTopEntryBackDecorator(backStack),
@@ -322,7 +362,19 @@ private fun LiseurApp(
             defaultPredictivePopTransitionSpec()
         },
         entryProvider = { route ->
-            NavEntry(route, contentKey = route.contentKey) {
+            val below = backStack.getOrNull(backStack.indexOf(route) - 1)
+            val pane = when {
+                route == Route.Settings -> ListDetailSceneStrategy.listPane(
+                    detailPlaceholder = { SettingsPagePlaceholder() },
+                ) + paneMotion
+                // The server screen is also opened from the library, and
+                // there it is a screen of its own.
+                route.isSettingsPage &&
+                    (route != Route.ServerAccount || below == Route.Settings) ->
+                    ListDetailSceneStrategy.detailPane() + paneMotion
+                else -> emptyMap()
+            }
+            NavEntry(route, contentKey = route.contentKey, metadata = pane) {
                 when (route) {
                     Route.Library -> androidx.compose.runtime.key(libraryLaunchId) {
                         LibraryRoute(
@@ -411,20 +463,20 @@ private fun LiseurApp(
                             dynamicColorAvailable = dynamicColorAvailable,
                             onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                             onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
-                            onOpenAccount = { backStack.push(Route.ServerAccount) },
-                            onOpenReadingAppearance = { backStack.push(Route.ReadingAppearance) },
-                            onOpenReadingNavigation = { backStack.push(Route.ReadingNavigation) },
-                            onOpenSettingsBackup = { backStack.push(Route.SettingsBackup) },
-                            onOpenHiddenBooks = { backStack.push(Route.HiddenBooks) },
+                            onOpenAccount = { openPage(Route.ServerAccount) },
+                            onOpenReadingAppearance = { openPage(Route.ReadingAppearance) },
+                            onOpenReadingNavigation = { openPage(Route.ReadingNavigation) },
+                            onOpenSettingsBackup = { openPage(Route.SettingsBackup) },
+                            onOpenHiddenBooks = { openPage(Route.HiddenBooks) },
                             libraryFolders = library.libraryFolders,
                             onRemoveFolder = { library.removeFolder(it) },
                             server = context.container.remoteAccount.server,
-                            onOpenAbout = { backStack.push(Route.About) },
-                            onBack = back,
+                            onOpenAbout = { openPage(Route.About) },
+                            onBack = closeSettings,
                             flavorReadingRows = {
-                                context.container.readAloud.SettingsEntry(onClick = { backStack.push(Route.ReadAloud) })
-                                context.container.translate.SettingsEntry(onClick = { backStack.push(Route.Translation) })
-                                ServicesEntry(onClick = { backStack.push(Route.Services) })
+                                context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
+                                context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
+                                ServicesEntry(onClick = { openPage(Route.Services) })
                             },
                         )
                     }

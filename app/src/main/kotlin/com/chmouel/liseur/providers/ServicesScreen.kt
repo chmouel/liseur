@@ -19,7 +19,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Dns
@@ -92,6 +91,8 @@ import com.chmouel.liseur.tts.SpeechServerPresets
 import com.chmouel.liseur.tts.onLeaving
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.NestedPage
+import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
@@ -135,16 +136,19 @@ internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAcc
     editing?.let { opened ->
         val id = drafts[draft] ?: opened.takeIf { it != NEW_SERVER }
         BackHandler { editing = null }
-        key(draft) {
-            ServerScreen(
-                connections = connections,
-                draft = draft,
-                id = id,
-                server = servers.readable?.firstOrNull { it.id == id },
-                usedByReadAloud = id != null && id == readAloud,
-                usedByTranslation = id != null && id == translation,
-                onBack = { editing = null },
-            )
+        // A page inside this one: its arrow is the only way back out.
+        NestedPage {
+            key(draft) {
+                ServerScreen(
+                    connections = connections,
+                    draft = draft,
+                    id = id,
+                    server = servers.readable?.firstOrNull { it.id == id },
+                    usedByReadAloud = id != null && id == readAloud,
+                    usedByTranslation = id != null && id == translation,
+                    onBack = { editing = null },
+                )
+            }
         }
         return
     }
@@ -214,11 +218,7 @@ private fun SettingsPage(
         topBar = {
             LargeTopAppBar(
                 title = { Text(title) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
+                navigationIcon = { PaneBackButton(onBack) },
                 actions = { actions() },
                 scrollBehavior = scrollBehavior,
             )

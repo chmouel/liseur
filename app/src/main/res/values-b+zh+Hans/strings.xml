@@ -746,6 +746,7 @@
     <string name="footer_field_empty">留空</string>
     <string name="settings_reading">阅读</string>
     <string name="settings_reading_navigation">阅读与导航</string>
+    <string name="settings_page_placeholder">选择一项设置，在这里打开。</string>
     <string name="settings_reading_navigation_paged">分页模式。翻页区域：%1$s</string>
     <string name="settings_reading_navigation_scrolling">滚动阅读。</string>
     <string name="settings_screen">屏幕</string>

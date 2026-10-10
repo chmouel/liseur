@@ -1156,6 +1156,13 @@ Key decisions:
   previewed. ViewModels stay activity-scoped and shared between screens;
   there is deliberately no per-entry ViewModel decorator. The reader is a
   separate activity and does not use it.
+- On a wide window Settings is a list pane and the page chosen from it a
+  detail pane, through Material's `ListDetailSceneStrategy` (Navigation 3
+  scenes, not `ListDetailPaneScaffold`). Back pops one route at a time
+  (`PopLatest`); choosing another row replaces the open page
+  (`openDetail`). Pages use `PaneBackButton`, which hides the arrow while
+  the list is beside them; a page nested inside one wraps itself in
+  `NestedPage` to keep its arrow. On e-paper the panes get no motion.
 
 ## Implementation invariants
 

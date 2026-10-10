@@ -113,6 +113,43 @@ fun MutableList<Route>.pop() {
     if (size > 1) removeAt(lastIndex)
 }
 
+/** Pages opened from Settings, shown beside it on a wide window. */
+val Route.isSettingsPage: Boolean
+    get() = when (this) {
+        Route.ReadingAppearance, Route.ReadingNavigation, Route.ReadAloud,
+        Route.Translation, Route.Services, Route.SettingsBackup,
+        Route.HiddenBooks, Route.About, Route.ServerAccount,
+        -> true
+        else -> false
+    }
+
+/**
+ * Opens a Settings page in place of whatever page is open beside Settings.
+ *
+ * Choosing another row on a wide window swaps the page rather than piling
+ * it on top of the last one, so Back still returns to Settings in one step.
+ * Choosing the row already open does nothing, keeping its place. Without
+ * Settings on the stack, it is an ordinary [push].
+ */
+fun MutableList<Route>.openDetail(route: Route) {
+    if (lastOrNull() == route) return
+    val settings = lastIndexOf(Route.Settings)
+    if (settings >= 0) {
+        while (size > settings + 1) removeAt(lastIndex)
+    }
+    add(route)
+}
+
+/** Closes Settings and any page open beside it. */
+fun MutableList<Route>.closeSettings() {
+    val settings = lastIndexOf(Route.Settings)
+    if (settings <= 0) {
+        pop()
+        return
+    }
+    while (size > settings) removeAt(lastIndex)
+}
+
 /** The stack a widget or shortcut launch starts from. */
 fun launchStack(target: LaunchStack): List<Route> = when (target) {
     LaunchStack.LIBRARY -> listOf(Route.Library)
