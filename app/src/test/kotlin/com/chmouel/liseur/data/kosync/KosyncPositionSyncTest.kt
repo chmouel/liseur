@@ -186,6 +186,79 @@ class KosyncPositionSyncTest {
     // -- The wire ----------------------------------------------------------
 
     @Test
+    fun `every kosync endpoint negotiates v1 without changing credentials or bodies`() = runTest {
+        val client = KosyncClient()
+        val root = "http://127.0.0.1:${server.port}/koreader"
+        val credentials = KosyncCredentials("ada", KosyncCredentials.keyFor("pw"))
+        val document = "a".repeat(32)
+        repeat(4) { server.enqueue(json("{}")) }
+
+        assertEquals(RemoteResult.Ok(Unit), client.authorize(root, credentials))
+        assertEquals(RemoteResult.Ok(Unit), client.register(root, "ada", "pw"))
+        assertEquals(RemoteResult.Ok(null), client.getProgress(root, credentials, document))
+        assertEquals(
+            RemoteResult.Ok(Unit),
+            client.putProgress(root, credentials, document, 0.4, "Test Phone", "dev-1", NOW),
+        )
+
+        val sent = requests()
+        assertEquals(
+            listOf(
+                "GET" to "/koreader/users/auth",
+                "POST" to "/koreader/users/create",
+                "GET" to "/koreader/syncs/progress/$document",
+                "PUT" to "/koreader/syncs/progress",
+            ),
+            sent.map { it.method to it.target },
+        )
+        sent.forEach {
+            assertEquals("application/vnd.koreader.v1+json", it.headers["Accept"])
+        }
+        listOf(sent[0], sent[2], sent[3]).forEach {
+            assertEquals("ada", it.headers["x-auth-user"])
+            assertEquals(credentials.key, it.headers["x-auth-key"])
+        }
+        val create = sent[1]
+        assertNull(create.headers["x-auth-user"])
+        assertNull(create.headers["x-auth-key"])
+        assertEquals("application/json; charset=utf-8", create.headers["Content-Type"])
+        val registration = JSONObject(create.body!!.utf8())
+        assertEquals(2, registration.length())
+        assertEquals("ada", registration.getString("username"))
+        assertEquals("pw", registration.getString("password"))
+        assertEquals(0L, sent[0].bodySize)
+        assertEquals(0L, sent[2].bodySize)
+        assertEquals("application/json; charset=utf-8", sent[3].headers["Content-Type"])
+        val progress = JSONObject(sent[3].body!!.utf8())
+        assertEquals(6, progress.length())
+        assertEquals(document, progress.getString("document"))
+        assertEquals(0.4, progress.getDouble("percentage"), 0.0)
+        assertEquals("0.4", progress.getString("progress"))
+        assertEquals("Test Phone", progress.getString("device"))
+        assertEquals("dev-1", progress.getString("device_id"))
+        assertEquals(NOW / 1000, progress.getLong("timestamp"))
+    }
+
+    @Test
+    fun `kosync version negotiation does not leak into the shared remote client`() = runTest {
+        server.enqueue(json("{}"))
+        KosyncClient().authorize(
+            "http://127.0.0.1:${server.port}",
+            KosyncCredentials("ada", KosyncCredentials.keyFor("pw")),
+        )
+        server.enqueue(json("{}"))
+        val shared = RemoteHttp()
+        shared.get("http://127.0.0.1:${server.port}/catalog", null).use {
+            assertEquals(200, it.code)
+        }
+
+        assertEquals("application/vnd.koreader.v1+json", requests()[0].headers["Accept"])
+        assertNull(requests()[1].headers["Accept"])
+        assertTrue(shared.client.followRedirects)
+        assertTrue(shared.client.followSslRedirects)
+    }
+
+    @Test
     fun `every request carries the kosync auth headers`() = runTest {
         pair()
         db.bookDao().upsert(book())

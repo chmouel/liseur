@@ -72,6 +72,14 @@ data class KosyncProgress(
 class KosyncClient(
     private val http: RemoteHttp = RemoteHttp(
         RemoteHttp.default().newBuilder()
+            .addInterceptor { chain ->
+                // koreader-sync-server/config/routes.lua registers every endpoint under v1;
+                // gin/core/router.lua rejects missing Accept headers before routing (HTTP 412).
+                val request = chain.request().newBuilder()
+                    .header("Accept", "application/vnd.koreader.v1+json")
+                    .build()
+                chain.proceed(request)
+            }
             .followRedirects(false)
             .followSslRedirects(false)
             .build(),
