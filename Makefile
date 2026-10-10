@@ -7,7 +7,7 @@ EMULATOR ?= $(if $(wildcard $(SDK_DIR)/emulator/emulator),$(SDK_DIR)/emulator/em
 SCRCPY ?= scrcpy
 AVD ?= liseur_phone_api36
 SERIAL ?= emulator-5554
-PHONE ?= $(or $(shell $(ADB) devices 2>/dev/null | grep -v emulator | awk 'NR>1 && $$2=="device" {print $$1; exit}'),$(SERIAL))
+PHONE ?= $(shell $(ADB) devices 2>/dev/null | grep -v emulator | awk 'NR>1 && $$2=="device" {print $$1; exit}')
 LOCALE ?=
 ADB_TARGET := -s $(SERIAL)
 ADB_PHONE_TARGET := -s $(PHONE)
@@ -28,7 +28,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -166,12 +166,18 @@ locale:
 # the production package name, which on a phone is somebody's library; the
 # targets below carry their own package name and cannot reach it. The
 # device is chosen with PHONE=, which defaults to the first attached
-# physical device and falls back to SERIAL= (the emulator) when there is
-# none.
+# physical device. They run only on a physical device: with none attached,
+# or with PHONE= naming an emulator, they fail rather than fall back.
 dev:
 	$(GRADLE) assemble$(FLAVOR_TASK)Dev
 
-dev-install: dev
+dev-phone:
+	@case '$(PHONE)' in \
+		'') printf 'error: no physical device attached; the dev targets do not run on an emulator\n' >&2; exit 1 ;; \
+		emulator-*) printf 'error: PHONE=%s is an emulator; the dev targets run only on a physical device\n' '$(PHONE)' >&2; exit 1 ;; \
+	esac
+
+dev-install: dev-phone dev
 	$(ADB) $(ADB_PHONE_TARGET) install -r '$(DEV_APK)'
 
 dev-run: dev-install
@@ -180,10 +186,10 @@ dev-run: dev-install
 	fi
 	$(ADB) $(ADB_PHONE_TARGET) shell am start -n '$(DEV_ACTIVITY)'
 
-dev-uninstall:
+dev-uninstall: dev-phone
 	$(ADB) $(ADB_PHONE_TARGET) uninstall '$(DEV_PACKAGE)'
 
-dev-locale:
+dev-locale: dev-phone
 	@loc='$(LOCALE)'; \
 	code=''; \
 	if [ -z "$$loc" ] && command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then \
@@ -211,7 +217,7 @@ dev-locale:
 # the adb shell does not have on every build. A package that is not there
 # is nothing to remove; one that is there and refuses to go is a failure,
 # since reinstalling over it would keep the data this target exists to drop.
-dev-reset:
+dev-reset: dev-phone
 	@if $(ADB) $(ADB_PHONE_TARGET) shell pm list packages '$(DEV_PACKAGE)' \
 		| tr -d '\r' | grep -qx 'package:$(DEV_PACKAGE)'; then \
 		$(ADB) $(ADB_PHONE_TARGET) uninstall '$(DEV_PACKAGE)'; \
@@ -221,7 +227,7 @@ dev-reset:
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".
-dev-logcat:
+dev-logcat: dev-phone
 	@pid=$$($(ADB) $(ADB_PHONE_TARGET) shell pidof '$(DEV_PACKAGE)' 2>/dev/null | tr -d '\r' | awk '{print $$1}'); \
 	if [ -z "$$pid" ]; then \
 		printf 'error: %s is not running; start it with make dev-run\n' '$(DEV_PACKAGE)' >&2; \
