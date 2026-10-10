@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
     # `labeled` so adding the full-ci label starts the full build at once.
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
@@ -46,7 +47,10 @@ jobs:
         id: full
         if: >-
           steps.changes.outputs.android == 'true' ||
-          contains(github.event.pull_request.labels.*.name, 'full-ci')
+          (
+            contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+            (github.event.action != 'labeled' || github.event.label.name == 'full-ci')
+          )
         run: echo "run=true" >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17

@@ -29,7 +29,8 @@ calls Gemini belongs only in `app/src/play/`; see
 See [DEVELOPER.md](DEVELOPER.md#testing) for emulator and end-to-end checks.
 
 Pull request CI runs only quick policy checks; the full Gradle build (tests,
-lint, debug and release APKs) runs on `main` and in the pre-push hook. When a
+lint, debug and release APKs) runs on `main` when Android or Gradle files
+change, and in the pre-push hook. When a
 pull request needs it in CI, for example a change the local checks could not
 cover or a release-build (R8) risk, add the `full-ci` label:
 
