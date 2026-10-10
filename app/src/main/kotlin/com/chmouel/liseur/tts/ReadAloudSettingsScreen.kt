@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -164,11 +166,15 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+        Box(
+            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
             Column(
                 Modifier
                     .widthIn(max = contentWidthCap(windowWidth()))
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),

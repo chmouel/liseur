@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -619,7 +620,10 @@ internal fun LanguagePicker(
     }
     val windowHeight = LocalWindowInfo.current.containerSize.height
     val height = with(LocalDensity.current) { windowHeight.toDp() } * PICKER_HEIGHT
-    Column(Modifier.padding(bottom = 16.dp)) {
+    // The e-paper sheet is a popup the keyboard does not resize, so the
+    // search field has to lift itself; Material's sheet has already consumed
+    // the keyboard inset, which makes this a no-op there.
+    Column(Modifier.imePadding().padding(bottom = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))

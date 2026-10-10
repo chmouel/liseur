@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -185,7 +187,10 @@ fun ServerAccountScreen(
             )
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
+        Box(
+            Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
+            contentAlignment = Alignment.TopCenter,
+        ) {
             Column(
                 Modifier
                     // widthIn must come before fillMaxWidth: fillMaxSize would
@@ -193,6 +198,7 @@ fun ServerAccountScreen(
                     // fixed constraint it cannot narrow.
                     .widthIn(max = contentWidthCap(windowWidth()))
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     // An address and a password are short things to type, and a
                     // field the width of a tablet makes them look like neither.

@@ -54,6 +54,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.Liseur.Starting">
@@ -68,6 +69,7 @@
 
         <activity
             android:name=".reader.ReaderActivity"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:theme="@style/Theme.Liseur">
