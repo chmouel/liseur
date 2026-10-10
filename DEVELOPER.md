@@ -1777,55 +1777,18 @@ reader behavior.
 
 ### Home-screen widgets
 
-The two Glance widgets in `ui/widget/` show the current cover or reading
-stats. Rendering reads Room and
-cached cover files; it never waits on a network request.
+The Glance widget in `ui/widget/` shows the current cover. Rendering reads
+Room and cached cover files; it never waits on a network request.
 
-- `RemoteStatsRefresh` saves proven liseur-sync snapshots through
-  `RemoteStatsCache`, keeping only the other-device residual after exact
-  local overlap is subtracted (ADR-0039). The dashboard and background
-  worker share this refresher. A successful position sync, live insights
-  update, or widget placement queues one network-constrained refresh.
-  A request while a refresh waits is covered by it; a request while one
-  runs queues a single trailing run. The hourly redraw also requests a
-  refresh. The worker checks
-  that a stats widget is still placed and respects local-network access.
-  Failed requests retain the last proven data.
-  Week, month and year are fetched without comparison data (an already
-  accepted dashboard range is skipped). Every cache write retains 366
-  days, including explicit zeros. Year snapshots add daily residuals only,
-  not unused session/book/streak windows.
-- The widget computes local sessions in the cached account timezone, so
-  a different phone timezone does not drop other devices or mix calendar
-  days. Without a cache it uses the phone timezone. Rows remain keyed by
-  account and are rekeyed/cleared by `RemoteAccountRepository`.
-- Each cached day records its refresh time. The stats widget has no footer
-  when every day in all three displayed periods has proven coverage from
-  within the last hour. Otherwise it says “Last synced reading” if remote
-  activity contributes. With only local activity, it shows no source footer.
-  Missing days are distinct from explicitly covered zero-activity days.
-- Stats shows the most recently opened title and real progress, plus
-  all-book calendar week/month/year time together. Hours never become
-  days; zero is explicit and sub-minute reading uses the compact duration
-  translation. Unknown progress says “Not available”; without a current
-  book, “No book opened yet” leaves the totals visible. There is no cover,
-  chart, streak, period selector or configuration activity. Narrow layouts
-  stack the totals rather than dropping a period.
-  The provider minimum is 220 by 220 dp; new placements request 4 by 4
-  cells. Use a taller placement at large font scales. Application
-  configuration changes schedule a redraw so font-scale changes also
-  switch the row/column layout, not just Android's text size.
-- Dashboard, library and remote-book taps go through the unexported
-  `WidgetLaunchActivity`, which hands the request to `MainActivity` in
-  process via `LaunchRequests`. `MainActivity` is exported, so it never
-  reads widget targets from intent extras. In stats, the book
-  side opens the book and the figures open the dashboard.
-- One trigger redraws them: `AppContainer` collects
+- Taps on the cover go through the unexported `WidgetLaunchActivity`, which
+  hands the request to `MainActivity` in process via `LaunchRequests`.
+  `MainActivity` is exported, so it never reads widget targets from intent
+  extras.
+- One trigger redraws the cover: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
-  `WIDGET_TABLES` (`books`, `reading_progress`, `reading_sessions`,
-  `remote_stats_day`, `remote_stats_window`, `work_alias`, `remote_server`). A new table that changes
-  what a widget shows goes into that list. Do not add refresh callbacks
-  to repositories or view models.
+  `WIDGET_TABLES` (`books`, `reading_progress`, `work_alias`,
+  `remote_server`). A new table that changes what the widget shows goes into
+  that list. Do not add refresh callbacks to repositories or view models.
 - `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
   of quiet or 15 s after the first unserved request, whichever comes first.
   A page turn writes progress, so this is what bounds the cost while
@@ -1834,21 +1797,17 @@ cached cover files; it never waits on a network request.
   `provideGlance` again, so anything loaded there would go stale.
   `LiveSnapshot` reloads the snapshot whenever the updater's generation
   changes. Each placed widget loads its own snapshot;
-  there is no shared cache. `WidgetContent` limits a load to what the
-  widget draws: the cover widget reads no session history, and the stats
-  widget decodes no cover.
-- `CoverOnlyWidgetReceiver` and `WeekStatsWidgetReceiver` keep their
-  component identities across upgrades. Old period preferences are ignored.
-  Library and combined-cover providers were removed outright, including
-  their paging/configuration state helpers; their placements disappear.
+  there is no shared cache.
+- `CoverOnlyWidgetReceiver` keeps its component identity across upgrades.
+  Library, combined-cover, and stats providers were removed outright,
+  including their paging, period, and configuration state helpers; their
+  placements disappear.
 - The hourly `WidgetRefreshWorker` exists only while a widget is placed.
-  `reconcilePeriodic` enqueues or cancels it from app start, the receivers'
-  `onEnabled`/`onDisabled`, and the worker itself. The stats receiver handles
-  `MY_PACKAGE_REPLACED` even when no widget from a retired provider remains.
-  Manifest receivers do not
+  `reconcilePeriodic` enqueues or cancels it from app start, the receiver's
+  `onEnabled`/`onDisabled`, and the worker itself. Manifest receivers do not
   get `DATE_CHANGED` on Android 8 and later, so this job is what rolls the
-  day and week over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED`
-  redraw at once, since the labels and the week start are drawn in.
+  day over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED` redraw at
+  once, since the labels are drawn in the local time.
 - Any of these broadcasts may be what started the process, and Android
   can kill it once the receiver returns. The receiver holds the broadcast
   with `goAsync()` until its work is safe: the reconcile finishes, or the

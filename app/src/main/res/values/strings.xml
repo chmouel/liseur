@@ -1007,15 +1007,6 @@
     <string name="duration_none">None</string>
     <string name="widget_cover_label">Current cover</string>
     <string name="widget_cover_description">The cover of the book you are reading</string>
-    <string name="widget_stats_label">Reading stats</string>
-    <string name="widget_stats_description">Your current book and reading time this week, month and year</string>
-    <string name="widget_currently_reading">Currently reading</string>
-    <string name="widget_no_book">No book opened yet</string>
-    <string name="widget_progress_unavailable">Not available</string>
-    <string name="widget_duration_under_minute">&lt;1m</string>
-    <string name="widget_duration_minutes">%1$dm</string>
-    <string name="widget_duration_hours">%1$dh</string>
-    <string name="widget_duration_hours_minutes">%1$dh%2$02d</string>
     <string name="widget_empty_title">Nothing on the shelf yet</string>
     <string name="widget_empty_detail">Open a book in Liseur and its cover will appear here.</string>
     <string name="more_options">More</string>
@@ -1086,7 +1077,6 @@
     <string name="browse_load_more">Load more</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_scope_last_sync">Last synced reading</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d reading position. Restoring replaces current positions with the saved positions.</item>
         <item quantity="other">%1$d reading positions. Restoring replaces current positions with the saved positions.</item>

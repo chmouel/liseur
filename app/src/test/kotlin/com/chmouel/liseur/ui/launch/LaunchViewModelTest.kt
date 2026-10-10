@@ -141,7 +141,7 @@ class LaunchViewModelTest {
     @Test
     fun `a newer live widget wins over a restored pending shortcut`() = runTest {
         saved[LaunchViewModel.PENDING_ACTION] = LaunchTarget.CONTINUE.action
-        val widget = requests.widget(stats = true, bookUrl = null)
+        val widget = requests.widget(bookUrl = null)
         val model = model(candidate = { error("Stale shortcut") })
         runCurrent()
         assertEquals(widget, model.ready.value?.request)
@@ -151,7 +151,7 @@ class LaunchViewModelTest {
     @Test
     fun `newer shortcut cancels a suspended widget request and cannot be cleared by the old tap`() = runTest {
         val model = model()
-        val widget = requests.widget(stats = false, bookUrl = "remote")
+        val widget = requests.widget(bookUrl = "remote")
         runCurrent()
         assertEquals(widget, model.ready.value?.request)
         val shortcut = requests.shortcut(LaunchTarget.STATS)
@@ -169,7 +169,7 @@ class LaunchViewModelTest {
             val model = model(flush = { held.await() }, candidate = { queries++; book })
             requests.shortcut(LaunchTarget.CONTINUE)
             runCurrent()
-            val newest = if (widget) requests.widget(stats = true, bookUrl = null)
+            val newest = if (widget) requests.widget(bookUrl = null)
                 else requests.shortcut(LaunchTarget.LIBRARY)
             runCurrent()
             held.complete(true)
@@ -312,7 +312,7 @@ class LaunchViewModelTest {
         val model = model(flush = publisher::flushLastReader, candidate = { error("Superseded") })
         requests.shortcut(LaunchTarget.CONTINUE)
         runCurrent()
-        val widget = requests.widget(stats = true, bookUrl = null)
+        val widget = requests.widget(bookUrl = null)
         runCurrent()
         held.complete(Unit)
         runCurrent()

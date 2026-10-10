@@ -128,21 +128,12 @@ guessed about reading you did before Liseur arrived.
 
 ## Home-screen widgets
 
-Two widgets remain: the current cover and reading stats. Stats shows the
-current title and progress, with calendar week, month and year hours together.
-The title opens the book; the totals open the dashboard. There is no setup
-screen, cover, chart or streak in the stats card. Library and combined-cover
-widgets were removed.
+One widget remains: the current cover. The library, combined-cover, and
+reading stats widgets were removed.
 
 | Light | Dark |
 | --- | --- |
 | ![Widgets in light mode](screenshots/22-widgets-light.png) | ![Widgets in dark mode](screenshots/23-widgets-dark.png) |
-
-These stats screenshots were captured in the Pixel launcher on the disposable
-`liseur_phone_api36` emulator, with local demo reading. The retained 4-by-2
-placement shows the horizontal layout; new placements default to 4-by-4 for
-more room at large font sizes. The PNG picker fallback is a crop of the actual
-light widget. The cover widget is unchanged.
 
 ## On a tablet
 

@@ -13,9 +13,8 @@ import kotlinx.coroutines.launch
 /**
  * What the Liseur receivers share: the hourly refresh follows
  * whether any widget is placed, and a clock or time zone change redraws,
- * since "today" and "this week" may now be different days. A language
- * change redraws too: the labels and the week start were baked in when
- * the widget was last drawn.
+ * since "today" may now be a different day. A language change redraws
+ * too: the labels were baked in when the widget was last drawn.
  *
  * Any of these broadcasts may have started the process on its own, and
  * Android can kill it as soon as the receiver is done, so each one holds

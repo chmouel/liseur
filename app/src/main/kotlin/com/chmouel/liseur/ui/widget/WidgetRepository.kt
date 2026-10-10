@@ -5,49 +5,21 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.core.graphics.scale
-import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
-import com.chmouel.liseur.data.db.ReadingSessionDao
-import com.chmouel.liseur.data.db.RemoteServerDao
-import com.chmouel.liseur.data.db.RemoteStatsDao
-import com.chmouel.liseur.data.db.RemoteStatsDay
 import com.chmouel.liseur.data.library.openableUri
-import com.chmouel.liseur.data.remote.ServerKind
-import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
-import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.reader.ReaderActivity
-import java.time.DayOfWeek
-import java.time.DateTimeException
-import java.time.LocalDate
-import java.time.ZoneId
-import java.time.format.DateTimeParseException
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/**
- * What a homescreen widget draws, read once per update.
- *
- * Read from the offline cache: the widget never waits on the network. [stats] is
- * null when the widget did not ask for it.
- */
+/** What the homescreen cover widget draws, read once per update from the local library. */
 data class WidgetSnapshot(
     val book: WidgetBook?,
-    val stats: WidgetStats?,
 )
-
-/**
- * What a widget draws, so a load reads only that: the cover alone needs no
- * session history, and the stats alone need no cover bitmap.
- */
-enum class WidgetContent(val cover: Boolean, val stats: Boolean) {
-    COVER(cover = true, stats = false),
-    STATS(cover = false, stats = true),
-}
 
 data class WidgetBook(
     val url: String,
@@ -66,66 +38,17 @@ data class WidgetBook(
 class WidgetRepository(
     private val bookDao: BookDao,
     private val progressDao: ReadingProgressDao,
-    private val sessionDao: ReadingSessionDao,
-    private val zone: () -> ZoneId = ZoneId::systemDefault,
-    private val today: (ZoneId) -> LocalDate = { LocalDate.now(it) },
-    private val weekStart: () -> DayOfWeek = { localeWeekStart(Locale.getDefault()) },
     private val decodeCover: (String) -> Bitmap? = ::decodeCoverBitmap,
-    private val serverDao: RemoteServerDao? = null,
-    private val remoteStatsDao: RemoteStatsDao? = null,
 ) {
-    suspend fun load(
-        context: Context,
-        content: WidgetContent = WidgetContent.STATS,
-    ): WidgetSnapshot = withContext(Dispatchers.IO) {
+    suspend fun load(context: Context): WidgetSnapshot = withContext(Dispatchers.IO) {
         val book = bookDao.mostRecentlyOpened()
         val progress = book?.let { progressDao.get(it.url)?.totalProgression }
         WidgetSnapshot(
-            book = book?.toWidgetBook(context, progress, withCover = content.cover),
-            stats = if (content.stats) loadStats() else null,
+            book = book?.toWidgetBook(context, progress),
         )
     }
 
-    private suspend fun loadStats(): WidgetStats {
-        val remote = loadRemote()
-        val zone = remote?.zone ?: zone()
-        val spans = sessionDao.allOnce().map { session ->
-            SessionSpan(
-                bookUrl = session.bookUrl,
-                startedAt = session.startedAt,
-                durationMs = session.durationMs,
-                lastReadAt = session.endedAt ?: session.lastCheckpointAt,
-                uploaded = session.uploadedAt != null,
-                startProgression = session.startProgression,
-                endProgression = session.endProgression,
-            )
-        }
-        return widgetStats(
-            sessions = spans,
-            zone = zone,
-            today = today(zone),
-            weekStart = weekStart(),
-            remote = remote,
-        )
-    }
-
-    /** Other devices' reading, as the stats screen last proved it; null without a sync account. */
-    private suspend fun loadRemote(): WidgetRemote? {
-        val stats = remoteStatsDao ?: return null
-        val account = serverDao?.get()?.takeIf { it.kind == ServerKind.LISEUR_SYNC } ?: return null
-        val key = account.accountKey
-        val zone = try {
-            stats.zone(key)?.let(ZoneId::of) ?: return null
-        } catch (_: DateTimeException) {
-            return null
-        }
-        val days = stats.days(key, zone.id)
-        if (days.isEmpty()) return null
-        if (serverDao.get()?.accountKey != key) return null
-        return widgetRemote(days).copy(zone = zone)
-    }
-
-    internal fun Book.toWidgetBook(context: Context, progression: Double?, withCover: Boolean): WidgetBook {
+    internal fun Book.toWidgetBook(context: Context, progression: Double?): WidgetBook {
         val fileUrl = openableUri()
         val open = if (fileUrl != null) {
             ReaderActivity.intent(context, fileUrl, url)
@@ -138,34 +61,10 @@ class WidgetRepository(
             title = displayTitle,
             author = displayAuthor,
             progression = progression,
-            cover = if (withCover) coverPath?.let(decodeCover) else null,
+            cover = coverPath?.let(decodeCover),
             initials = coverInitials(displayTitle),
             openIntent = open,
         )
-    }
-}
-
-/** Maps proven daily residuals; a row that no longer parses is skipped. */
-internal fun widgetRemote(
-    days: List<RemoteStatsDay>,
-): WidgetRemote = WidgetRemote(
-    days = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.residualMs } }.toMap(),
-    refreshedAtByDay = days.mapNotNull { row -> row.date.toDateOrNull()?.let { it to row.refreshedAt } }.toMap(),
-)
-
-private fun String.toDateOrNull(): LocalDate? = try {
-    LocalDate.parse(this)
-} catch (_: DateTimeParseException) {
-    null
-}
-
-fun formatCompactDuration(context: Context, millis: Long): String = when (val parts = compactDuration(millis)) {
-    CompactDuration.UnderMinute -> context.getString(R.string.widget_duration_under_minute)
-    is CompactDuration.Minutes -> context.getString(R.string.widget_duration_minutes, parts.minutes)
-    is CompactDuration.Hours -> if (parts.minutes == 0) {
-        context.getString(R.string.widget_duration_hours, parts.hours)
-    } else {
-        context.getString(R.string.widget_duration_hours_minutes, parts.hours, parts.minutes)
     }
 }
 

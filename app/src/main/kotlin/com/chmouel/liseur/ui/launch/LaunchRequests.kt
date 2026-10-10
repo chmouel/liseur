@@ -34,8 +34,8 @@ class LaunchRequests {
         post(target, shortcut = true)
 
     @Synchronized
-    internal fun widget(stats: Boolean, bookUrl: String?): LaunchRequest =
-        post(if (stats) LaunchTarget.STATS else LaunchTarget.LIBRARY, shortcut = false, bookUrl)
+    internal fun widget(bookUrl: String?): LaunchRequest =
+        post(LaunchTarget.LIBRARY, shortcut = false, bookUrl)
 
     private fun post(target: LaunchTarget, shortcut: Boolean, bookUrl: String? = null): LaunchRequest {
         val request = LaunchRequest(++generation, target, shortcut, bookUrl)

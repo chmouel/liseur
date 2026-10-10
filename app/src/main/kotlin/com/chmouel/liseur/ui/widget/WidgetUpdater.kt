@@ -8,20 +8,14 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
-import androidx.work.Constraints
-import androidx.work.NetworkType
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
-import com.chmouel.liseur.container
-import com.chmouel.liseur.domain.localeWeekStart
 import java.util.concurrent.TimeUnit
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,11 +23,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /** What the hourly refresh should be doing, given how many widgets are placed. */
 enum class PeriodicRefresh { Enqueue, Cancel }
@@ -64,44 +55,7 @@ object WidgetUpdater {
      */
     val generation: StateFlow<Long> = refreshes.asStateFlow()
 
-    private fun widgets(): List<GlanceAppWidget> =
-        listOf(CoverOnlyWidget(), WeekStatsWidget())
-
-    private val statsRequests = Mutex()
-
-    suspend fun requestStatsRefresh(context: Context) {
-        if (!supportsWidgets(context)) return
-        val work = WorkManager.getInstance(context)
-        statsRequests.withLock {
-            val states = work.getWorkInfosForUniqueWorkFlow(STATS_REFRESH).first().map { it.state }
-            val policy = statsRefreshPolicy(states) ?: return
-            work.enqueueUniqueWork(
-                STATS_REFRESH,
-                policy,
-                OneTimeWorkRequestBuilder<WidgetStatsRefreshWorker>()
-                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                    .setInitialDelay(3, TimeUnit.SECONDS)
-                    .build(),
-            ).await()
-        }
-    }
-
-    /**
-     * A waiting refresh has not fetched yet, so it already covers this
-     * request. A running one may have fetched before the event that asked
-     * for this one, so a single trailing run is queued behind it.
-     */
-    internal fun statsRefreshPolicy(states: List<WorkInfo.State>): ExistingWorkPolicy? = when {
-        states.any { it == WorkInfo.State.ENQUEUED || it == WorkInfo.State.BLOCKED } -> null
-        states.any { it == WorkInfo.State.RUNNING } -> ExistingWorkPolicy.APPEND_OR_REPLACE
-        else -> ExistingWorkPolicy.KEEP
-    }
-
-    internal suspend fun hasStatsWidgets(context: Context): Boolean {
-        if (!supportsWidgets(context)) return false
-        val manager = GlanceAppWidgetManager(context)
-        return manager.getGlanceIds(WeekStatsWidget::class.java).isNotEmpty()
-    }
+    private fun widgets(): List<GlanceAppWidget> = listOf(CoverOnlyWidget())
 
     fun schedule(context: Context) {
         val app = context.applicationContext
@@ -182,7 +136,6 @@ object WidgetUpdater {
             PeriodicRefresh.Cancel -> work.cancelUniqueWork(PERIODIC_REFRESH)
         }
         operation.await()
-        if (hasStatsWidgets(context)) requestStatsRefresh(context) else work.cancelUniqueWork(STATS_REFRESH).await()
     }
 
     private const val TAG = "WidgetUpdater"
@@ -190,21 +143,10 @@ object WidgetUpdater {
     private const val MAX_WAIT_MS = 15_000L
     private const val PERIODIC_REFRESH = "liseur-widget-refresh"
     private const val ONE_OFF_REDRAW = "liseur-widget-redraw"
-    private const val STATS_REFRESH = "liseur-widget-stats"
-}
-
-/** Network work is separate from rendering, so offline widgets still redraw and roll over. */
-class WidgetStatsRefreshWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result {
-        if (WidgetUpdater.hasStatsWidgets(applicationContext)) {
-            applicationContext.container.remoteStatsRefresh.refresh(localeWeekStart(Locale.getDefault()))
-        }
-        return Result.success()
-    }
 }
 
 /**
- * Hourly redraw, so the day and week roll over on the homescreen
+ * Hourly redraw, so the day rolls over on the homescreen
  * without the app being opened. Manifest receivers no longer hear
  * `DATE_CHANGED`, so this is what moves the widget past midnight. It
  * also runs once for [WidgetUpdater.requestRedraw].

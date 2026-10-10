@@ -964,15 +964,6 @@
     <string name="duration_none">Aucun</string>
     <string name="widget_cover_label">Couverture en cours</string>
     <string name="widget_cover_description">La couverture du livre que vous lisez</string>
-    <string name="widget_stats_label">Statistiques de lecture</string>
-    <string name="widget_stats_description">Votre livre en cours et votre temps de lecture cette semaine, ce mois-ci et cette année</string>
-    <string name="widget_currently_reading">Lecture en cours</string>
-    <string name="widget_no_book">Aucun livre ouvert pour le moment</string>
-    <string name="widget_progress_unavailable">Non disponible</string>
-    <string name="widget_duration_under_minute">&lt;1 min</string>
-    <string name="widget_duration_minutes">%1$d min</string>
-    <string name="widget_duration_hours">%1$d h</string>
-    <string name="widget_duration_hours_minutes">%1$d h %2$02d</string>
     <string name="widget_empty_title">Rien sur l’étagère pour l’instant</string>
     <string name="widget_empty_detail">Ouvrez un livre dans Liseur et sa couverture apparaîtra ici.</string>
     <string name="more_options">Plus</string>
@@ -1042,7 +1033,6 @@
     <string name="browse_load_more">Charger plus</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_scope_last_sync">Dernière lecture synchronisée</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d position de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>
         <item quantity="other">%1$d positions de lecture. La restauration remplace les positions actuelles par les positions sauvegardées.</item>

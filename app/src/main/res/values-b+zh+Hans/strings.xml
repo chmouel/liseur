@@ -951,15 +951,6 @@
     <string name="duration_none">无</string>
     <string name="widget_cover_label">当前封面</string>
     <string name="widget_cover_description">您正在阅读的图书封面</string>
-    <string name="widget_stats_label">阅读统计</string>
-    <string name="widget_stats_description">当前书籍及本周、本月和本年的阅读时长</string>
-    <string name="widget_currently_reading">正在阅读</string>
-    <string name="widget_no_book">尚未打开任何书籍</string>
-    <string name="widget_progress_unavailable">暂无数据</string>
-    <string name="widget_duration_under_minute">&lt;1m</string>
-    <string name="widget_duration_minutes">%1$dm</string>
-    <string name="widget_duration_hours">%1$dh</string>
-    <string name="widget_duration_hours_minutes">%1$dh%2$02d</string>
     <string name="widget_empty_title">书架上还没有书</string>
     <string name="widget_empty_detail">在 Liseur 中打开一本书，其封面就会显示在这里。</string>
     <string name="more_options">更多</string>
@@ -1011,7 +1002,6 @@
     <string name="browse_open_library">打开书库</string>
     <string name="browse_nothing_to_add">这里的内容都已在您书库中。</string>
     <string name="browse_load_more">加载更多</string>
-    <string name="widget_scope_last_sync">最近同步的阅读</string>
     <string name="shortcut_library">书库</string>
     <string name="shortcut_continue">继续阅读</string>
     <string name="shortcut_stats">统计</string>
