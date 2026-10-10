@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontFamily
@@ -779,7 +780,7 @@ private fun BookStatCard(book: BookReadingStats, onClick: (() -> Unit)?) {
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         modifier = Modifier
             .fillMaxWidth()
-            .let { if (onClick == null) it else it.clickable(onClick = onClick) },
+            .let { if (onClick == null) it else it.clickable(role = Role.Button, onClick = onClick) },
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

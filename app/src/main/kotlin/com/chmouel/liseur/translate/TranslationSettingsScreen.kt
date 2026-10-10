@@ -257,7 +257,7 @@ private fun TargetRow(feature: ServiceTranslate, service: TranslationService, en
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     ListItem(
-        modifier = Modifier.clickable(enabled = enabled) { picking = true },
+        modifier = Modifier.clickable(enabled = enabled, role = Role.Button) { picking = true },
         colors = if (enabled) {
             ListItemDefaults.colors(containerColor = Color.Transparent)
         } else {

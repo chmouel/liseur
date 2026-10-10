@@ -153,7 +153,7 @@ private fun AdvancedRow(onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
     ) {
         Text(
             text = stringResource(R.string.reader_advanced),
