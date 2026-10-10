@@ -292,7 +292,7 @@ private const val CHAPTER_ARRIVAL_MS = 5_000L
 private const val ANCHOR_ARRIVAL_MS = 2_000L
 
 // How long read aloud waits for a translated page to show the book's
-// words again before it starts anyway.
+// words again; past it, it says it cannot start and does not read.
 private const val RESTORE_WAIT_MS = 2_000L
 
 // The look the last lines of a chapter get before the page moves on,
