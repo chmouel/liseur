@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -122,6 +123,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.os.ConfigurationCompat
@@ -156,6 +158,7 @@ import com.chmouel.liseur.ui.settings.linkRes
 import com.chmouel.liseur.ui.settings.messageRes
 import com.chmouel.liseur.ui.settings.toUiError
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 
 @Composable
 fun BrowseLibrariesRoute(
@@ -302,8 +305,18 @@ private fun SavedCatalogsScreen(
                 modifier = Modifier.padding(padding),
             )
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding.withoutBottom())
+                    .consumeWindowInsets(padding),
+                // The bottom inset is the list's, so cards scroll on under
+                // the navigation bar; 96dp keeps the last one clear of the FAB.
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = 8.dp,
+                    bottom = 96.dp + padding.calculateBottomPadding(),
+                ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(state.saved, key = { it.id }) { server ->
@@ -715,9 +728,14 @@ private fun CatalogScreen(
         PullToRefreshBox(
             isRefreshing = state.loading && hasContent,
             onRefresh = model::reload,
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding),
         ) {
-            CatalogGrid(state, model, catalogName, hasContent)
+            // The bottom inset, which includes the selection bar while it
+            // shows, is the grid's own so covers scroll on under it.
+            CatalogGrid(state, model, catalogName, hasContent, padding.calculateBottomPadding())
         }
     }
 }
@@ -790,6 +808,7 @@ private fun CatalogGrid(
     model: BrowseLibrariesViewModel,
     catalogName: String,
     hasContent: Boolean,
+    bottomInset: Dp,
 ) {
     val gridState = rememberLazyGridState()
     LaunchedEffect(state.serverId, state.path.map(BrowseCategory::id)) {
@@ -809,7 +828,7 @@ private fun CatalogGrid(
         columns = GridCells.Adaptive(minSize = coverMinSize(windowWidth())),
         state = gridState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp + bottomInset),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (state.path.isNotEmpty()) {
