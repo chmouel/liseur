@@ -28,6 +28,19 @@ calls Gemini belongs only in `app/src/play/`; see
 [DEVELOPER.md](DEVELOPER.md#building).
 See [DEVELOPER.md](DEVELOPER.md#testing) for emulator and end-to-end checks.
 
+Pull request CI runs only quick policy checks; the full Gradle build (tests,
+lint, debug and release APKs) runs on `main` and in the pre-push hook. When a
+pull request needs it in CI, for example a change the local checks could not
+cover or a release-build (R8) risk, add the `full-ci` label:
+
+```bash
+gh pr edit <number> --add-label full-ci
+```
+
+Every later push to that pull request builds in full until the label is
+removed (`gh pr edit <number> --remove-label full-ci`). Do not add it by
+default.
+
 The project uses JDK 17, AGP 9.x, compile/target SDK 37, and min SDK 26.
 Dependencies are managed in `gradle/libs.versions.toml`. AGP supplies Kotlin
 support; do not add `org.jetbrains.kotlin.android`.

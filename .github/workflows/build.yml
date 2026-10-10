@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # `labeled` so adding the full-ci label starts the full build at once.
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
@@ -24,7 +25,8 @@ jobs:
       # Tests, lint and builds run locally and in the pre-push hook, so
       # pull requests only get the quick checks above: skipping this step
       # skips every Gradle step, and the required `build` check still
-      # reports. The full build runs on push to main.
+      # reports. The full build runs on push to main, and on a pull
+      # request that carries the full-ci label.
       - name: Check for Android/Gradle changes
         id: changes
         if: github.event_name != 'pull_request'
@@ -40,27 +42,34 @@ jobs:
               - 'gradle.properties'
               - '.github/workflows/build.yml'
 
+      - name: Decide on the full build
+        id: full
+        if: >-
+          steps.changes.outputs.android == 'true' ||
+          contains(github.event.pull_request.labels.*.name, 'full-ci')
+        run: echo "run=true" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK 17
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v5
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       - name: Unit tests
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         run: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain
 
       - name: Lint
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         run: ./gradlew lintFossDebug lintPlayDebug --console=plain
 
       - name: Assemble debug APKs
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         run: ./gradlew assembleFossDebug assemblePlayDebug --console=plain
 
       # The release build is the one people install, and it is the only
@@ -69,18 +78,18 @@ jobs:
       # is cut. Unsigned without a keystore, which is fine: the point is
       # that it builds and shrinks.
       - name: Assemble release APKs
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         run: ./gradlew assembleFossRelease assemblePlayRelease --console=plain
 
       - name: Upload debug APK
-        if: steps.changes.outputs.android == 'true'
+        if: steps.full.outputs.run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: liseur-debug-apk
           path: app/build/outputs/apk/*/debug/*.apk
 
       - name: Upload test/lint reports
-        if: always() && steps.changes.outputs.android == 'true'
+        if: always() && steps.full.outputs.run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: reports
