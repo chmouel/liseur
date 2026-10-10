@@ -364,6 +364,32 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `a paragraph translated before a jump keeps the one above it`() = runTest {
+        val paragraphs = listOf(
+            PageSentence("Il neige.", "ch1.xhtml", "#p0", null),
+            PageSentence("Non.", "ch1.xhtml", "#p1", null),
+            PageSentence("Il pleut.", "ch1.xhtml", "#p2", null),
+            PageSentence("Non.", "ch1.xhtml", "#p3", null),
+        )
+        val run = FakeRun()
+        val shown = mapOf("Non." to "No.", "Il neige." to "It snows.")
+        run.answer = { shown.getValue(it) }
+        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+            object : PageSentences {
+                var i = at
+                override suspend fun next() = paragraphs.getOrNull(i++)
+            }
+        }, 2)
+        page.start(0, "start")
+        runCurrent()
+        page.onReader(PageReader.Elsewhere(3, "ch1.xhtml#p3"))
+        runCurrent()
+
+        assertSame(paragraphs[3], page.original("ch1.xhtml", "No", "Il pleut. "))
+        assertSame(paragraphs[1], page.original("ch1.xhtml", "No", "It snows. "))
+    }
+
+    @Test
     fun `a word said twice in one translation is found where it was selected`() = runTest {
         val element = listOf(PageSentence("Il pleut, puis il pleut.", "ch1.xhtml", "#p0", null))
         val run = FakeRun()
