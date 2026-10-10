@@ -92,9 +92,12 @@ internal class ServiceTranslate(
             val identity: String,
             val service: TranslationService,
             val run: TranslationRun,
-            val destination: String?,
+            destination: String?,
             val owner: String?,
-        )
+            var choice: List<Any?>,
+        ) {
+            var destination by mutableStateOf(destination)
+        }
 
         suspend fun wanted(): Triple<TranslationService, String, AppSettings> {
             // One read, so the service and the identity it is known by come from the same settings.
@@ -107,16 +110,21 @@ internal class ServiceTranslate(
         suspend fun bind(): Bound {
             val (service, identity, s) = wanted()
             val destination = service.destination()
-            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s))
+            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s), chosen(s))
         }
 
         var bound by mutableStateOf(bind())
 
         suspend fun rebound(): Bound {
-            if (wanted().second != bound.identity) {
+            val (service, identity, s) = wanted()
+            if (identity != bound.identity) {
                 val next = bind()
                 bound.run.close()
                 bound = next
+            } else if (chosen(s) != bound.choice) {
+                // Only what the bar shows changed, such as the server's name: the same run goes on.
+                bound.choice = chosen(s)
+                bound.destination = service.destination()
             }
             return bound
         }
