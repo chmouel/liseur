@@ -157,14 +157,17 @@ class SavedTranslations(
      * what a newer one has already settled.
      */
     suspend fun sweep() = quietly("sweep") {
-        writes.withLock {
+        val emptied = writes.withLock {
             val books = (dao.books() + epochs.keys).distinct()
-            if (books.isEmpty()) return@withLock
+            if (books.isEmpty()) return@withLock false
             val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
             val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
             gone.chunked(BATCH).forEach { dao.forget(it) }
+            gone.isNotEmpty() && dao.count() == 0
         }
+        // Settings offer no Clear once nothing is saved, so the room the last book took is given back here.
+        if (emptied) compact()
     }
 
     /**
@@ -176,6 +179,10 @@ class SavedTranslations(
             cleared.incrementAndGet()
             dao.clear()
         }
+        compact()
+    }
+
+    private suspend fun compact() {
         try {
             withContext(Dispatchers.IO) {
                 // Outside any transaction: VACUUM refuses to run in one.
