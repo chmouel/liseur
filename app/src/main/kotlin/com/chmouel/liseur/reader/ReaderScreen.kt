@@ -668,6 +668,8 @@ fun ReaderScreen(
     var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
     // The page translated sentence by sentence, while it is; see [TranslatedPages].
     var pageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
+    // A stopped run, until the book's words are back: a selection made meanwhile still shows its translations.
+    var restoringPageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
     // Up on every start and stop, so a start that waited across another gives way to it.
     val pageTranslationStarts = remember { AtomicInteger() }
     // Up from the start of a run until the page shows the book's own
@@ -2066,7 +2068,10 @@ fun ReaderScreen(
     // The book's words go back on the page in the effect below.
     fun stopTranslatingPage() {
         pageTranslationStarts.incrementAndGet()
-        pageTranslation?.stop()
+        pageTranslation?.let {
+            it.stop()
+            restoringPageTranslation = it
+        }
         pageTranslation = null
     }
 
@@ -2118,6 +2123,7 @@ fun ReaderScreen(
             TranslatedPages.restore(nav, translatedViews) {
                 // Measured on translated words, and maybe still in flight.
                 heldPlace.retire()
+                restoringPageTranslation = null
                 pageTranslated = false
                 pageTranslatedTurns++
                 layoutGeneration++
@@ -3885,7 +3891,8 @@ fun ReaderScreen(
                                         dismissSelection()
                                         val nav = navigator
                                         // Translated words are not in the book; read from the sentence they translate.
-                                        val original = pageTranslation?.let { TranslatedPages.original(it, active.locator) }
+                                        val original = (pageTranslation ?: restoringPageTranslation)
+                                            ?.let { TranslatedPages.original(it, active.locator) }
                                         effectScope.launch {
                                             // Its marks go on the book's words, so those come back first.
                                             if (pageTranslated) {

@@ -140,6 +140,9 @@ internal class PageTranslation<P>(
     private val wake = Channel<Unit>(Channel.CONFLATED)
     private val walked = mutableListOf<PageSentence>()
     private val placed = mutableSetOf<PageSentence>()
+
+    // The sentence the walk read before each one it translated, kept when a jump starts the walk over.
+    private val predecessors = mutableMapOf<PageSentence, PageSentence>()
     private var seen = -1
     private var restart: PageReader.Elsewhere<P>? = null
     private var catchingUp = false
@@ -199,16 +202,17 @@ internal class PageTranslation<P>(
                 }.toList().ifEmpty { listOfNotNull(runsOn(shown, key, next?.let { squash(it.translation) })) }
                 // Just before it on the page: the translation of the sentence before it, or the book's own words when that one was left alone.
                 val book = squash(swap.sentence.before.orEmpty())
+                // At the start of an element nothing in it comes before; the walk knows what the page shows above it.
+                val above = (predecessors[swap.sentence] ?: walked.getOrNull(walked.indexOf(swap.sentence) - 1))
+                    ?.takeIf { it.href == swap.sentence.href }
                 val earlier = listOfNotNull(
                     swaps.firstOrNull { follows(it.sentence, swap.sentence) }?.let { squash(it.translation) },
                     swaps.getOrNull(i - 1)
                         ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
                         ?.let { squash(it.translation) },
-                    // At the start of an element nothing in it comes before; the walk knows what the page shows above it.
-                    walked.getOrNull(walked.indexOfFirst { it === swap.sentence } - 1)
-                        ?.takeIf { it.href == swap.sentence.href }
-                        ?.let { previous -> squash(swaps.firstOrNull { it.sentence === previous }?.translation ?: previous.text) },
-                    book.takeLast(BOOK_TAIL),
+                    above?.let { previous -> squash(swaps.firstOrNull { it.sentence == previous }?.translation ?: previous.text) },
+                    // Nothing before it on the page only when nothing is above it.
+                    book.takeLast(BOOK_TAIL).takeUnless { it.isEmpty() && above != null },
                 )
                 // Words that only happen to be in a translation are not on the page after it.
                 val lead = places
@@ -335,6 +339,7 @@ internal class PageTranslation<P>(
             walked += sentence
             previous = sentence.text
             if (translation != null && placed.add(sentence)) {
+                walked.getOrNull(walked.size - 2)?.let { predecessors[sentence] = it }
                 val swap = PageSwap(nextId++, sentence, translation)
                 mutableSwaps.value += sentence.href to (mutableSwaps.value[sentence.href].orEmpty() + swap)
             }
