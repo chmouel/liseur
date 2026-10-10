@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.library
 
 import android.text.format.Formatter
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -92,6 +93,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -176,7 +178,16 @@ fun BrowseLibrariesRoute(
         }
     }
     val back = { if (!model.back()) onExit() }
-    BackHandler(onBack = back)
+    // Back is the browser's only while it has a step of its own to undo.
+    // At the list of saved catalogs it falls through to the app's
+    // navigation, which closes the browser with the predictive preview.
+    BackHandler(enabled = state.canGoBack) { model.back() }
+    // However the browser is closed, a catalog still being connected to is
+    // dropped; a rotation is not closing it.
+    val activity = LocalActivity.current
+    DisposableEffect(model) {
+        onDispose { if (activity?.isChangingConfigurations != true) model.leave() }
+    }
     val snackbar = remember { SnackbarHostState() }
     val resources = LocalResources.current
     val openLibrary by rememberUpdatedState(onExit)
