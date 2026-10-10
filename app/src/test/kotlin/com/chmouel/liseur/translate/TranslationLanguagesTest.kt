@@ -63,6 +63,15 @@ class TranslationLanguagesTest {
     }
 
     @Test
+    fun `the targets leave out the passage's own language, and only it`() {
+        val tags = listOf("en", "fr", "zh-Hans", "zh-Hant", "pt-BR", "pt-PT")
+        assertEquals(listOf("fr", "zh-Hans", "zh-Hant", "pt-BR", "pt-PT"), TranslationLanguages.targets(tags, "en"))
+        assertEquals(listOf("en", "fr", "zh-Hans", "pt-BR", "pt-PT"), TranslationLanguages.targets(tags, "zh-Hant"))
+        assertEquals(listOf("en", "fr", "zh-Hans", "zh-Hant"), TranslationLanguages.targets(tags, "pt"))
+        assertEquals(tags, TranslationLanguages.targets(tags, null))
+    }
+
+    @Test
     fun `names are in the reader's language and start with a capital`() {
         assertEquals("Français", TranslationLanguages.name("fr", Locale.FRENCH))
         assertEquals("French", TranslationLanguages.name("fr", Locale.ENGLISH))

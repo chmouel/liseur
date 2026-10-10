@@ -1307,6 +1307,7 @@
     <string name="translation_device_failed">This phone\'s translator couldn\'t translate this passage.</string>
     <string name="translation_too_long">Select a shorter passage to translate.</string>
     <string name="translation_same">The passage is already in %1$s.</string>
+    <string name="translation_same_choose">This passage is already in %1$s. Choose a language to translate it into.</string>
     <string name="translation_picker_source">Source language</string>
     <string name="translation_picker_search">Search languages</string>
     <string name="translation_picker_needs_download">Needs download</string>

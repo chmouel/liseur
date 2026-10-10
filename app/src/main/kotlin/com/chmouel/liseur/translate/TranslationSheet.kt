@@ -161,6 +161,14 @@ internal fun TranslationSheet(
     } else {
         TranslationStep.of(passage, configured == true, current.detectsLanguage, source, target, offered)
     }
+    // A passage already in the target asks for another one, once; backing out leaves a button to ask again.
+    var askedTarget by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(step) {
+        if (step == TranslationStep.Same && !askedTarget && picking == null) {
+            askedTarget = true
+            picking = Picking.Target
+        }
+    }
     var outcome by remember { mutableStateOf<Outcome?>(null) }
     LaunchedEffect(step, passage, source, target, choice, attempt) {
         outcome = null
@@ -200,6 +208,11 @@ internal fun TranslationSheet(
                     source = source,
                     selected = target,
                     pinned = listOfNotNull(stored?.tag?.let(TranslationLanguages::of), TranslationLanguages.of(ui.toLanguageTag())),
+                    prompt = if (step == TranslationStep.Same && source != null) {
+                        stringResource(R.string.translation_same_choose, TranslationLanguages.name(source, ui))
+                    } else {
+                        null
+                    },
                     onPick = {
                         scope.launch { feature.setTarget(it) }
                         picking = null
@@ -283,7 +296,11 @@ private fun Translation(
                 stringResource(R.string.translation_choose_language),
                 onAction = onPickSource,
             )
-            TranslationStep.Same -> Body.Message(stringResource(R.string.translation_same, targetName))
+            TranslationStep.Same -> Body.Message(
+                stringResource(R.string.translation_same, targetName),
+                stringResource(R.string.translation_choose_language),
+                onAction = onPickTarget,
+            )
             TranslationStep.NotDownloaded -> notDownloaded(sourceName.orEmpty(), targetName, hasDownloads, onDownload)
             TranslationStep.Unsupported -> unsupported(sourceName.orEmpty(), targetName, onSettings)
             TranslationStep.Translate -> when (outcome) {
@@ -550,6 +567,7 @@ private fun TargetPicker(
     source: String?,
     selected: String?,
     pinned: List<String>,
+    prompt: String?,
     onPick: (String) -> Unit,
     onBack: () -> Unit,
 ) {
@@ -558,12 +576,21 @@ private fun TargetPicker(
     }
     LanguagePicker(
         title = stringResource(R.string.translation_settings_target),
-        languages = offered?.keys,
+        languages = offered?.keys?.let { TranslationLanguages.targets(it, source) },
         pinned = pinned,
         selected = selected,
         needsDownload = offered.orEmpty().filterValues { it == PairState.NeedsDownload }.keys,
         onPick = onPick,
         onBack = onBack,
+        header = {
+            prompt?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+            }
+        },
     )
 }
 

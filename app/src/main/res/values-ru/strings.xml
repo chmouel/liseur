@@ -1348,6 +1348,7 @@
     <string name="translation_device_failed">Переводчик этого телефона не смог перевести этот отрывок.</string>
     <string name="translation_too_long">Выделите отрывок покороче.</string>
     <string name="translation_same">Этот отрывок уже на этом языке: %1$s.</string>
+    <string name="translation_same_choose">Этот отрывок уже на этом языке: %1$s. Выберите язык, на который его перевести.</string>
     <string name="translation_picker_source">Исходный язык</string>
     <string name="translation_picker_search">Поиск языка</string>
     <string name="translation_picker_needs_download">Нужна загрузка</string>

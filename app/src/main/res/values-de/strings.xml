@@ -1266,6 +1266,7 @@
     <string name="translation_device_failed">Der Übersetzer dieses Telefons konnte diesen Abschnitt nicht übersetzen.</string>
     <string name="translation_too_long">Wähle einen kürzeren Abschnitt zum Übersetzen.</string>
     <string name="translation_same">Der Abschnitt ist bereits auf %1$s.</string>
+    <string name="translation_same_choose">Der Abschnitt ist bereits auf %1$s. Wähle eine Sprache, in die er übersetzt werden soll.</string>
     <string name="translation_picker_source">Ausgangssprache</string>
     <string name="translation_picker_search">Sprachen suchen</string>
     <string name="translation_picker_needs_download">Download nötig</string>

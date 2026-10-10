@@ -1671,7 +1671,9 @@ reader behavior.
   exactly one; otherwise the sheet asks, unless the service detects it.
   The target follows the app's language until the reader picks one
   (`translation_target`). A passage already in the target, or longer than
-  `TranslationPrompt.MAX_CHARACTERS`, is never sent. `TranslationStep`
+  `TranslationPrompt.MAX_CHARACTERS`, is never sent. A passage already in
+  the target opens the target list once, without the source language in
+  it, and the pick is saved as `translation_target`. `TranslationStep`
   decides which of these the sheet shows, as a pure function.
 - Network requests follow the read-aloud clients: the key of the origin
   called, no redirects, the local-network check at request time, bounded

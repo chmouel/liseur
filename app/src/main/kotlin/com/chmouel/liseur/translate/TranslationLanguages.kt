@@ -61,6 +61,10 @@ internal object TranslationLanguages {
         return subA == null || subB == null || subA == subB
     }
 
+    /** [tags] a passage in [source] can go into: all but [source] itself, or all when it is unknown. */
+    fun targets(tags: Collection<String>, source: String?): List<String> =
+        if (source == null) tags.toList() else tags.filterNot { same(source, it) }
+
     /** [tag]'s name in [ui], as a list or button shows it on its own: "Chinese (Traditional)". */
     fun name(tag: String, ui: Locale): String {
         val locale = Locale.forLanguageTag(tag)

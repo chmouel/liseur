@@ -1206,6 +1206,7 @@
     <string name="translation_device_failed">本机翻译无法翻译这段文字。</string>
     <string name="translation_too_long">请选择较短的文字进行翻译。</string>
     <string name="translation_same">这段文字已经是%1$s。</string>
+    <string name="translation_same_choose">这段文字已经是%1$s。请选择要翻译成的语言。</string>
     <string name="translation_picker_source">源语言</string>
     <string name="translation_picker_search">搜索语言</string>
     <string name="translation_picker_needs_download">需要下载</string>
