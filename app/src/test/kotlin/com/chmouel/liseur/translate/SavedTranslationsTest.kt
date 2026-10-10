@@ -7,11 +7,13 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
@@ -197,6 +199,31 @@ class SavedTranslationsTest {
         store.clear()
 
         assertEquals(0, store.stats.first().sentences)
+    }
+
+    @Test
+    fun `a sweep that empties the store gives the room back`() = runTest {
+        val file = File.createTempFile("translations", ".db").also { it.delete() }
+        val onDisk = Room.databaseBuilder(ApplicationProvider.getApplicationContext(), TranslationCacheDatabase::class.java, file.path)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val files = { listOf(file, File("${file.path}-wal"), File("${file.path}-shm")) }
+            val store = SavedTranslations(onDisk, { urls -> urls.filter { it in library } }, files, now = { clock++ })
+            val book = store.forBook(BOOK)
+            repeat(300) { book.keep("sentence $it", "x".repeat(2_000)) }
+            val full = store.stats.first().bytes
+
+            library.clear()
+            store.sweep()
+
+            val after = store.stats.first()
+            assertEquals(0, after.sentences)
+            assertTrue("${after.bytes} of $full", after.bytes < full / 4)
+        } finally {
+            onDisk.close()
+            listOf("", "-wal", "-shm", "-journal").forEach { File("${file.path}$it").delete() }
+        }
     }
 
     private companion object {
