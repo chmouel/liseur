@@ -1147,6 +1147,15 @@ Key decisions:
   [BookOrbit protocol](#bookorbit-protocol).
 - Single `:app` module, manual DI composition root, `ViewModel` +
   `StateFlow`, Room + DataStore for persistence.
+- The main activity's screens are a Navigation 3 back stack of
+  `ui/navigation/Route`s shown by `NavDisplay`, saved with our own
+  `Saver` rather than kotlinx-serialization. Back pops the stack, with
+  predictive back except on e-paper, where every transition is off. Only
+  the entry on top gets an enabled navigation-event dispatcher, so a
+  screen's own `BackHandler` never fires while it is animating out or
+  previewed. ViewModels stay activity-scoped and shared between screens;
+  there is deliberately no per-entry ViewModel decorator. The reader is a
+  separate activity and does not use it.
 
 ## Implementation invariants
 
