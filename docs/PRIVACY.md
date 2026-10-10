@@ -37,8 +37,8 @@ All of this stays in the app's own private storage:
   reading aloud or translation, encrypted the same way. A server key is
   kept for the server you pasted it for, and is sent only to that
   server.
-- When you translate a book in the page, the translated sentences, so a
-  page you read again does not have to be translated again. They are
+- The translated sentences of every page you translate in the reader,
+  so a page you read again does not have to be translated again. They are
   kept for the book they came from, at most 50,000 of them, the least
   recently read going first. Deleting the book deletes them, and Settings,
   Translation has a button to clear them all. They are not backed up.
