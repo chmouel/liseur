@@ -122,16 +122,10 @@ internal object TranslatedPages {
         val url = web.url ?: return
         val href = ResourceAddress.canonicalPath(url) ?: return
         val shown = nav.currentLocator.value
-        val origin = IntArray(2)
-        // Where the view is now: a scrolled page moves before its debounced locator says so.
-        fun position(): List<Int> {
-            web.getLocationOnScreen(origin)
-            return listOf(web.scrollX, web.scrollY, origin[0], origin[1])
-        }
-        val at = position()
+        val at = web.position()
         // The reader may have turned to another page while the view answered,
         // in this chapter too; the turn is measured again when it arrives.
-        fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown || position() != at
+        fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown || web.position() != at
         val walked = run.walkedIn(href)
         val reached = if (walked.isEmpty()) PageSwaps.UNSEEN else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
         if (moved()) return
@@ -159,12 +153,22 @@ internal object TranslatedPages {
         val web = visibleWebView(nav.publicationView) ?: return false
         val url = web.url ?: return false
         if (ResourceAddress.canonicalPath(url) != sentence.href) return false
+        val shown = nav.currentLocator.value
+        val at = web.position()
         val answer = web.evaluate(PageSwaps.behind(url, sentence))
-        return answer == "true" && stillShows(nav, web, url)
+        // Scrolled back while the view answered, the reader may no longer be past it.
+        return answer == "true" && stillShows(nav, web, url) && nav.currentLocator.value == shown && web.position() == at
     }
 
     private fun stillShows(nav: EpubNavigatorFragment, web: WebView, url: String) =
         visibleWebView(nav.publicationView) === web && web.url == url
+
+    // Where the view is now: a scrolled page moves before its debounced locator says so.
+    private fun WebView.position(): List<Int> {
+        val origin = IntArray(2)
+        getLocationOnScreen(origin)
+        return listOf(scrollX, scrollY, origin[0], origin[1])
+    }
 
     /**
      * Puts the book's own words back in every view in [touched], then

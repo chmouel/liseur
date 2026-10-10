@@ -47,6 +47,12 @@ class TranslationPromptTest {
     }
 
     @Test
+    fun `a marker that is part of the translation is kept`() {
+        assertEquals("Use the <passage> element", TranslationPrompt.clean("Use the <passage> element"))
+        assertEquals("Close it with </passage>.", TranslationPrompt.clean("Close it with </passage>."))
+    }
+
+    @Test
     fun `context a model echoes back is not taken for the translation`() {
         val echoed = "<context>\nIl pleut.\n</context>\n<passage>\nIt is cold.\n</passage>"
         assertEquals("It is cold.", TranslationPrompt.clean(echoed))
