@@ -2,6 +2,8 @@ package com.chmouel.liseur.translate
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -32,9 +34,15 @@ class SavedTranslationsTest {
     @After
     fun close() = db.close()
 
+    // A book whose presence is asked waits here: what the queue does after it waits too.
+    private var held: CompletableDeferred<Unit>? = null
+
     private fun saved(maxSentences: Int = 100, maxCharacters: Long = 1_000_000) = SavedTranslations(
         database = db,
-        present = { urls -> urls.filter { it in library } },
+        present = { urls ->
+            if (HELD in urls) held?.await()
+            urls.filter { it in library }
+        },
         now = { clock++ },
         maxSentences = maxSentences,
         maxCharacters = maxCharacters,
@@ -226,8 +234,109 @@ class SavedTranslationsTest {
         }
     }
 
+    @Test
+    fun `a book left translated opens translated until stopped`() = runTest {
+        val store = saved()
+        val book = store.modeFor(BOOK)
+        assertNull(book.saved())
+
+        book.remember(PageTranslationModes.Mode(null, "en"))
+        assertEquals(PageTranslationModes.Mode(null, "en"), store.modeFor(BOOK).saved())
+        assertNull(store.modeFor(OTHER).saved())
+
+        book.remember(PageTranslationModes.Mode("fr", "de"))
+        assertEquals(PageTranslationModes.Mode("fr", "de"), store.modeFor(BOOK).saved())
+
+        book.forget {}
+        assertNull(store.modeFor(BOOK).saved())
+    }
+
+    @Test
+    fun `a removed book stops opening translated and its open handle cannot bring that back`() = runTest {
+        val store = saved()
+        val book = store.modeFor(BOOK)
+        book.remember(PageTranslationModes.Mode("fr", "en"))
+        store.modeFor(OTHER).remember(PageTranslationModes.Mode("fr", "en"))
+        assertEquals(PageTranslationModes.Mode("fr", "en"), book.saved())
+
+        library -= BOOK
+        store.sweep()
+        book.remember(PageTranslationModes.Mode("fr", "en"))
+
+        assertNull(store.modeFor(BOOK).saved())
+        assertEquals(PageTranslationModes.Mode("fr", "en"), store.modeFor(OTHER).saved())
+    }
+
+    @Test
+    fun `clearing the sentences leaves books translated`() = runTest {
+        val store = saved()
+        store.modeFor(BOOK).remember(PageTranslationModes.Mode("fr", "en"))
+        store.forBook(BOOK).keep("one", "un")
+
+        store.clear()
+
+        assertEquals(0, store.stats.first().sentences)
+        assertEquals(PageTranslationModes.Mode("fr", "en"), store.modeFor(BOOK).saved())
+    }
+
+    @Test
+    fun `a book reopened right after Stop does not read the mode Stop is removing`() = runTest {
+        val store = saved()
+        val closing = store.modeFor(BOOK)
+        closing.remember(PageTranslationModes.Mode("fr", "en"))
+        assertEquals(PageTranslationModes.Mode("fr", "en"), closing.saved())
+
+        holdQueue(store)
+        closing.forget {}
+        val reopened = async { store.modeFor(BOOK).saved() }
+        held!!.complete(Unit)
+
+        assertNull(reopened.await())
+    }
+
+    @Test
+    fun `changes from two openings of a book land in the order they were made`() = runTest {
+        val store = saved()
+        val closing = store.modeFor(BOOK)
+        val reopened = store.modeFor(BOOK)
+
+        holdQueue(store)
+        closing.remember(PageTranslationModes.Mode("fr", "en"))
+        closing.forget {}
+        reopened.remember(PageTranslationModes.Mode("de", "en"))
+        held!!.complete(Unit)
+        assertEquals(PageTranslationModes.Mode("de", "en"), reopened.saved())
+
+        holdQueue(store)
+        reopened.remember(PageTranslationModes.Mode("it", "en"))
+        closing.forget {}
+        held!!.complete(Unit)
+        assertNull(reopened.saved())
+    }
+
+    @Test
+    fun `a Stop that could not be saved says so`() = runTest {
+        val store = saved()
+        store.modeFor(BOOK).remember(PageTranslationModes.Mode("fr", "en"))
+        assertEquals(PageTranslationModes.Mode("fr", "en"), store.modeFor(BOOK).saved())
+        db.openHelper.writableDatabase.execSQL("DROP TABLE page_translation_modes")
+
+        val failed = CompletableDeferred<Unit>()
+        store.modeFor(BOOK).forget { failed.complete(Unit) }
+
+        failed.await()
+    }
+
+    // Blocks the shared queue behind a change for another book until [held] completes.
+    private fun holdQueue(store: SavedTranslations) {
+        library += HELD
+        held = CompletableDeferred()
+        store.modeFor(HELD).remember(PageTranslationModes.Mode(null, "en"))
+    }
+
     private companion object {
         const val BOOK = "file:///books/one.epub"
         const val OTHER = "file:///books/two.epub"
+        const val HELD = "file:///books/held.epub"
     }
 }

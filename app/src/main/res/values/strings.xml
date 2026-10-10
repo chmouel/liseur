@@ -1317,4 +1317,6 @@
     <string name="translation_page_ended">Translated to the end of the book.</string>
     <string name="translation_page_stop">Stop translating</string>
     <string name="translation_page_bookmarks_off">Bookmarks are off while the page is translated.</string>
+    <string name="translation_page_indicator">Page translated from %1$s to %2$s. Show translation controls</string>
+    <string name="translation_page_forget_failed">Could not turn translation off for this book. It may turn back on when you reopen it.</string>
 </resources>

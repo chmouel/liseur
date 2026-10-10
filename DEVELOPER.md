@@ -1742,6 +1742,18 @@ reader behavior.
   under the same URL before the sweep looks. Every storage failure is a miss or a
   skipped save, logged by exception class only; only Clear reports one.
   See `docs/adr/0046-translated-sentences-are-kept-on-the-phone.md`.
+- A book left translated stays so until Stop or read aloud
+  (`PageTranslationModes`, a `page_translation_modes` row in
+  `translations.db` swept with the book, kept by Clear). Its changes and
+  reads go through one queue in `SavedTranslations` on the application
+  scope, so a Stop, then Back and reopen, reads the Stop. A failed Stop
+  shows a toast. `ReaderScreen` resumes on a navigator only while
+  nothing has started or stopped a run on that screen, after the opening
+  gate, with the page at rest and no reflow, from `scrolledPlace()` when
+  scrolled. `startPageTranslation` owns the translator until the run is
+  installed. A resumed run shows the bar for a moment, and
+  `TranslatedPageMark` marks a translated page with the controls down.
+  See `docs/adr/0048-page-translation-stays-on-for-the-book.md`.
 - `reader/PageSwaps.kt` injects the script that applies swaps: it finds
   each sentence by selector, text before and text, keeps the original of
   every text node it changes, and redraws from the originals, so `restore`

@@ -1264,4 +1264,6 @@
     <string name="translation_page_ended">Traduit jusqu\'à la fin du livre.</string>
     <string name="translation_page_stop">Arrêter la traduction</string>
     <string name="translation_page_bookmarks_off">Les signets sont désactivés pendant la traduction de la page.</string>
+    <string name="translation_page_indicator">Page traduite de %1$s vers %2$s. Afficher les commandes de traduction</string>
+    <string name="translation_page_forget_failed">Impossible de désactiver la traduction pour ce livre. Elle pourrait se réactiver à sa prochaine ouverture.</string>
 </resources>

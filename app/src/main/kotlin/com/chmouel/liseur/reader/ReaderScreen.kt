@@ -108,6 +108,7 @@ import com.chmouel.liseur.reader.progress.BookOrbitViewportCfi
 import android.os.SystemClock
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
@@ -116,8 +117,11 @@ import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageTranslation
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
+import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
+import com.chmouel.liseur.translate.PageTranslationModes
 import com.chmouel.liseur.translate.TranslateFeature
+import com.chmouel.liseur.translate.startPageTranslation
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
@@ -172,6 +176,7 @@ import com.chmouel.liseur.reader.chrome.PageTurnOverlay
 import com.chmouel.liseur.reader.chrome.PageTurner
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReadingFooter
+import com.chmouel.liseur.reader.chrome.TranslatedPageMark
 import com.chmouel.liseur.reader.chrome.FooterMetrics
 import com.chmouel.liseur.reader.chrome.footerNoteBottom
 import com.chmouel.liseur.reader.chrome.FooterNote
@@ -460,6 +465,8 @@ fun ReaderScreen(
     translate: TranslateFeature = TranslateFeature.None,
     // Where page translation keeps what it translated: this book's saved ones, or for this screen only.
     pageTranslations: PageTranslationCache = remember { MemoryPageTranslationCache() },
+    // Whether the book is left translated, so it opens translated again until the reader stops it.
+    pageTranslationModes: PageTranslationModes = remember { MemoryPageTranslationModes() },
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -540,6 +547,7 @@ fun ReaderScreen(
     val readAloudFeature = readAloud?.feature ?: ReadAloudFeature.None
     val readAloudSession by readAloudFeature.session.collectAsStateWithLifecycle()
     val listening = readAloudSession?.takeIf { it.bookId == readAloud?.bookId }
+    val listeningNow by rememberUpdatedState(listening != null)
     val listeningPlaying = listening?.playing == true
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
@@ -2077,24 +2085,37 @@ fun ReaderScreen(
         pageTranslation = null
     }
 
+    // Shown for a moment when a book reopens translated, so the reader sees why.
+    var translationResumedCue by remember { mutableStateOf(false) }
+
+    // The reader turned translation off for this book: it opens in its own words from now on.
+    fun stopTranslatingBook() {
+        stopTranslatingPage()
+        translationResumedCue = false
+        val appContext = context.applicationContext
+        pageTranslationModes.forget {
+            ContextCompat.getMainExecutor(appContext).execute {
+                Toast.makeText(appContext, R.string.translation_page_forget_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     /**
      * Translates the page sentence by sentence from [selection] on, the
      * way read aloud reads it, in place of the book's words. Read aloud
-     * goes quiet first: it would be reading words no longer shown.
+     * goes quiet first: it would be reading words no longer shown. True
+     * once the run is on the page; any start, stop or read aloud coming
+     * meanwhile, or another navigator, makes it give up.
      */
-    fun translatePage(selection: Locator, source: String?, target: String) {
-        val nav = navigatorNow ?: return
-        effectScope.launch {
-            readAloudFeature.stop()
-            stopTranslatingPage()
-            val attempt = pageTranslationStarts.get()
-            val translator = translate.openPage(source, target) ?: return@launch
-            val start = SpokenPassage.startingPoint(nav, selection)
-            // Another start, a stop or read aloud came while this one waited: it is theirs now.
-            if (attempt != pageTranslationStarts.get()) {
-                translator.close()
-                return@launch
-            }
+    suspend fun startTranslatingPage(nav: EpubNavigatorFragment, selection: Locator, source: String?, target: String): Boolean {
+        readAloudFeature.stop()
+        stopTranslatingPage()
+        val attempt = pageTranslationStarts.get()
+        return startPageTranslation(
+            open = { translate.openPage(source, target) },
+            prepare = { SpokenPassage.startingPoint(nav, selection) },
+            wanted = { attempt == pageTranslationStarts.get() && navigatorNow === nav },
+        ) { translator, start ->
             val run = PageTranslation<Locator>(effectScope, translator, pageTranslations, { place ->
                 TranslatedPages.sentences(publication, place, source)
             }, behind = { sentence -> navigatorNow?.let { TranslatedPages.behind(it, sentence) } ?: false })
@@ -2107,12 +2128,54 @@ fun ReaderScreen(
             layoutGeneration++
             pageTranslation = run
             run.start(start, TranslatedPages.key(start))
+            pageTranslationModes.remember(PageTranslationModes.Mode(source, target))
         }
     }
 
-    // Read aloud speaks the book's own words, so a translated page gives them back.
+    fun translatePage(selection: Locator, source: String?, target: String) {
+        val nav = navigatorNow ?: return
+        effectScope.launch { startTranslatingPage(nav, selection, source, target) }
+    }
+
+    // A book left translated opens translated, once its page is where the
+    // reader left it. Only until something else starts or stops a run on
+    // this screen: from then on that is what the reader asked for.
+    LaunchedEffect(navigator) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (!reflowableText || pageTranslationStarts.get() != 0) return@LaunchedEffect
+        val mode = pageTranslationModes.saved() ?: return@LaunchedEffect
+        fun wanted() = pageTranslationStarts.get() == 0 && navigatorNow === nav && !listeningNow
+        // The gate opening means the restore may go on, not that the page is ready.
+        while (gate.isGated) settleLayout()
+        val start = withTimeoutOrNull<Locator?>(TRANSLATION_RESUME_WAIT_MS) {
+            awaitPageAtRest(nav)
+            var place: Locator? = null
+            while (place == null) {
+                while (reflow.active) settleLayout()
+                if (!wanted()) return@withTimeoutOrNull null
+                // Scrolled, the navigator's own locator lags behind the page.
+                place = if (effectiveScrollingNow) scrolledPlace(nav) else nav.currentLocator.value
+                if (place == null) settleLayout()
+            }
+            place
+        } ?: return@LaunchedEffect
+        if (!wanted()) return@LaunchedEffect
+        if (startTranslatingPage(nav, start, mode.source, mode.target)) translationResumedCue = true
+    }
+
+    LaunchedEffect(translationResumedCue) {
+        if (!translationResumedCue) return@LaunchedEffect
+        val shown = chromeVisible
+        withTimeoutOrNull(TRANSLATION_RESUMED_CUE_MS) { snapshotFlow { chromeVisible }.first { it != shown } }
+        translationResumedCue = false
+    }
+
+    // Read aloud speaks the book's own words, so a translated page gives
+    // them back, and the book no longer opens translated. A start still
+    // on its way is called off either way.
     LaunchedEffect(listening != null) {
-        if (listening != null) stopTranslatingPage()
+        if (listening == null) return@LaunchedEffect
+        if (pageTranslation != null || pageTranslated) stopTranslatingBook() else stopTranslatingPage()
     }
 
     val eInkPage = LocalEInk.current
@@ -3305,6 +3368,21 @@ fun ReaderScreen(
                     .padding(end = 12.dp),
             )
         }
+        if (!showingEnd && !chromeVisible) {
+            pageTranslation?.let { run ->
+                TranslatedPageMark(
+                    source = run.translator.source,
+                    target = run.translator.target,
+                    theme = readingTheme,
+                    onClick = { chromeVisible = true },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .then(behindViewer)
+                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                        .padding(start = 12.dp),
+                )
+            }
+        }
 
         // The bars come and go with the chrome, so this corner takes the
         // live navigation-bar inset: it lifts the pills clear of a bar
@@ -3368,9 +3446,9 @@ fun ReaderScreen(
                         translator = run.translator,
                         state = state,
                         theme = readingTheme,
-                        controls = chromeVisible,
+                        controls = chromeVisible || translationResumedCue,
                         onRetry = run::retry,
-                        onStop = ::stopTranslatingPage,
+                        onStop = ::stopTranslatingBook,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -3480,7 +3558,7 @@ fun ReaderScreen(
         // left drawn there prints itself over the text. The figures are
         // one tap away with the rest of the chrome.
         val footerDrawn = footerShowing && !showingEnd && !chromeVisible &&
-            !effectiveScrolling && jumpBack == null && catchUp == null
+            !effectiveScrolling && jumpBack == null && catchUp == null && !translationResumedCue
         // The clock and the battery are read when the footer is drawn,
         // and on electronic paper nothing else nudges them, so a page
         // turn has to. A turn usually shows up as a new position in
@@ -3896,7 +3974,7 @@ fun ReaderScreen(
                                     effectScope.launch {
                                         // Its marks go on the book's words, so those come back first.
                                         if (pageTranslated) {
-                                            stopTranslatingPage()
+                                            stopTranslatingBook()
                                             val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
                                                 snapshotFlow { pageTranslated }.first { !it }
                                             }
@@ -4251,6 +4329,12 @@ private const val DRAG_QUIET_MS = 300L
 
 /** How often a moving page is looked at to see whether it has stopped. */
 private const val PAGE_REST_POLL_MS = 150L
+
+/** How long a book reopened translated waits for a still page before giving up until the next one. */
+private const val TRANSLATION_RESUME_WAIT_MS = 10_000L
+
+/** How long the translation bar stays up on its own when a book reopens translated. */
+private const val TRANSLATION_RESUMED_CUE_MS = 3_500L
 private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
 
 private const val POPUP_HEIGHT_PX = 160f

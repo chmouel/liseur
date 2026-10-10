@@ -69,6 +69,7 @@ import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.SavedTranslations
+import com.chmouel.liseur.translate.PageTranslationModes
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.translate.TranslateFeatureFactory
 import com.chmouel.liseur.translate.TranslationCacheDatabase
@@ -159,13 +160,18 @@ class AppContainer(context: Context) {
         remoteStatsDao = database.remoteStatsDao(),
     )
 
+    private val savedTranslationsFile = context.getDatabasePath(TranslationCacheDatabase.NAME)
+
     private val savedTranslationsOpening = lazy {
         val name = TranslationCacheDatabase.NAME
         val path = context.getDatabasePath(name)
         SavedTranslations(
-            database = Room.databaseBuilder(context, TranslationCacheDatabase::class.java, name).build(),
+            database = Room.databaseBuilder(context, TranslationCacheDatabase::class.java, name)
+                .addMigrations(*TranslationCacheDatabase.MIGRATIONS)
+                .build(),
             present = { urls -> database.bookDao().presentUrls(urls) },
             files = { listOf(path, File("$path-wal"), File("$path-shm")) },
+            scope = applicationScope,
         ).also { saved -> applicationScope.launch { saved.tidy() } }
     }
 
@@ -191,6 +197,29 @@ class AppContainer(context: Context) {
         override suspend fun get(key: String) = book.get(key)
 
         override suspend fun put(key: String, value: String, stamp: Long) = book.put(key, value, stamp)
+    }
+
+    /**
+     * Whether [bookUrl] is left translated. A phone that never translated
+     * a page has no store to look in, and none is made just to say so.
+     */
+    fun pageTranslationMode(bookUrl: String): PageTranslationModes {
+        val stored = savedTranslationsFile
+        return object : PageTranslationModes {
+            private val book by lazy { savedTranslations.modeFor(bookUrl) }
+
+            // Every change goes through the store, so one not yet opened has none pending.
+            override suspend fun saved() =
+                if (savedTranslationsOpening.isInitialized() || stored.exists()) {
+                    book.saved()
+                } else {
+                    null
+                }
+
+            override fun remember(mode: PageTranslationModes.Mode) = book.remember(mode)
+
+            override fun forget(onFailed: () -> Unit) = book.forget(onFailed)
+        }
     }
 
     /**
