@@ -533,6 +533,8 @@
     <string name="annotation_export">Экспорт в Markdown</string>
     <string name="annotation_show_more">Показать больше</string>
     <string name="annotation_show_less">Показать меньше</string>
+    <string name="selection_more_actions">Другие действия</string>
+    <string name="selection_read_aloud">Читать вслух</string>
     <string name="reader_search">Поиск в книге</string>
     <string name="search_hint">Поиск в этой книге</string>
     <string name="search_prompt">Введите слово или фразу, чтобы найти их в книге.</string>

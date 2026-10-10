@@ -2,6 +2,9 @@
 
 Status: accepted
 
+Amended by [ADR-0047](0047-the-selection-bar-keeps-one-colour-and-a-more.md):
+the bar now offers one colour until the reader ticks more.
+
 ## Context
 
 Selecting a passage put eleven things over it: six colour chips, Note,

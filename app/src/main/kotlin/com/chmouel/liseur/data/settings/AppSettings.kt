@@ -871,8 +871,8 @@ class AppSettingsRepository(
      * never chose one.
      *
      * [AppSettings.highlightPalette] cannot answer this: it resolves an
-     * absent set to the default three, so through it a reader who never
-     * chose looks identical to one who chose exactly those three.
+     * absent set to the default, so through it a reader who never
+     * chose looks identical to one who chose exactly that.
      * The settings backup has to tell them apart, or "never chose" is
      * stored as a choice and comes back as one on a restore.
      */
