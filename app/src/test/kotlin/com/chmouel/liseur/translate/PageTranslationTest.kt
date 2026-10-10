@@ -5,6 +5,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -337,6 +338,29 @@ class PageTranslationTest {
         assertEquals("Il pleut.", page.original("ch1.xhtml", "rains", "It ")?.text)
         // In the sentence left untranslated, after a translated one: found by its own words.
         assertEquals("Il fait très froid ici.", page.original("ch1.xhtml", "froid", "It rains. Il fait très ")?.text)
+    }
+
+    @Test
+    fun `paragraphs that open with the same translation are told apart by the one above`() = runTest {
+        val paragraphs = listOf(
+            PageSentence("Non.", "ch1.xhtml", "#p0", null),
+            PageSentence("Il pleut.", "ch1.xhtml", "#p1", null),
+            PageSentence("Non.", "ch1.xhtml", "#p2", null),
+        )
+        val run = FakeRun()
+        val shown = mapOf("Non." to "No.", "Il pleut." to "It rains.")
+        run.answer = { shown.getValue(it) }
+        val page = PageTranslation(backgroundScope, run, PageTranslationCache(), { at: Int ->
+            object : PageSentences {
+                var i = at
+                override suspend fun next() = paragraphs.getOrNull(i++)
+            }
+        }, 10)
+        page.start(0, "start")
+        runCurrent()
+
+        assertSame(paragraphs[2], page.original("ch1.xhtml", "No", "No. It rains. "))
+        assertSame(paragraphs[0], page.original("ch1.xhtml", "No", ""))
     }
 
     @Test
