@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -139,12 +141,21 @@ fun SelectionPopup(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
-                chips.forEach { tint ->
-                    TintChip(
-                        tint = tint,
-                        selected = tint == activeTint,
-                        onClick = { actions.onHighlight(tint) },
-                    )
+                // The colours are one choice among themselves, not among the
+                // actions beside them, so they are grouped on their own.
+                if (chips.isNotEmpty()) {
+                    Row(
+                        Modifier.selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        chips.forEach { tint ->
+                            TintChip(
+                                tint = tint,
+                                selected = tint == activeTint,
+                                onClick = { actions.onHighlight(tint) },
+                            )
+                        }
+                    }
                 }
                 // On a narrow phone with large text the actions outgrow the
                 // bar; they scroll behind the chips rather than fall off it.
@@ -266,7 +277,9 @@ internal fun TintChip(
                 color = if (selected) ringColor else Color.Transparent,
                 shape = CircleShape,
             )
-            .clickable(onClick = onClick),
+            // Selectable rather than clickable, so a screen reader says
+            // which colour is the current one, not only what each is.
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
     ) {}
 }
 

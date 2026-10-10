@@ -46,6 +46,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -378,7 +379,7 @@ private fun PlainRow(title: String, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(title) },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
     )
 }
 
@@ -404,7 +405,7 @@ internal fun BackupActionRow(
                 leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
         },
-        modifier = Modifier.clickable(enabled = enabled, onClick = onClick),
+        modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick),
     )
 }
 
@@ -429,6 +430,6 @@ internal fun ConnectionRow(
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
     )
 }

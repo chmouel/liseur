@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -431,7 +433,7 @@ private fun AnnotationRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -565,7 +567,10 @@ private fun ContentsRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            // The bar and the weight show sighted readers where they are;
+            // selected says the same to a screen reader.
+            .semantics { selected = current }
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(
                 start = 20.dp + (entry.depth * 16).dp,
                 end = 20.dp,

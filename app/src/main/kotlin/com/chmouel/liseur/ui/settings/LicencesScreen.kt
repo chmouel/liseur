@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import kotlinx.coroutines.Dispatchers
@@ -194,7 +195,7 @@ private fun ComponentRow(component: Component, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
-            .then(if (readable) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (readable) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(bottom = 12.dp),
     ) {
         Text(component.name, style = MaterialTheme.typography.bodyLarge)
