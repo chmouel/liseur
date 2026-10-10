@@ -2088,10 +2088,14 @@ fun ReaderScreen(
     // Shown for a moment when a book reopens translated, so the reader sees why.
     var translationResumedCue by remember { mutableStateOf(false) }
 
+    // The book is saved as translated, whether or not this opening has put a translation on the page yet.
+    var translationMarked by remember { mutableStateOf(false) }
+
     // The reader turned translation off for this book: it opens in its own words from now on.
     fun stopTranslatingBook() {
         stopTranslatingPage()
         translationResumedCue = false
+        translationMarked = false
         val appContext = context.applicationContext
         pageTranslationModes.forget {
             ContextCompat.getMainExecutor(appContext).execute {
@@ -2129,6 +2133,7 @@ fun ReaderScreen(
             pageTranslation = run
             run.start(start, TranslatedPages.key(start))
             pageTranslationModes.remember(PageTranslationModes.Mode(source, target))
+            translationMarked = true
         }
     }
 
@@ -2144,6 +2149,12 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         if (!reflowableText || pageTranslationStarts.get() != 0) return@LaunchedEffect
         val mode = pageTranslationModes.saved() ?: return@LaunchedEffect
+        translationMarked = true
+        // Read aloud, already on, asked for the book's own words.
+        if (listeningNow) {
+            stopTranslatingBook()
+            return@LaunchedEffect
+        }
         fun wanted() = pageTranslationStarts.get() == 0 && navigatorNow === nav && !listeningNow
         // The gate opening means the restore may go on, not that the page is ready.
         while (gate.isGated) settleLayout()
@@ -2175,7 +2186,7 @@ fun ReaderScreen(
     // on its way is called off either way.
     LaunchedEffect(listening != null) {
         if (listening == null) return@LaunchedEffect
-        if (pageTranslation != null || pageTranslated) stopTranslatingBook() else stopTranslatingPage()
+        if (pageTranslation != null || pageTranslated || translationMarked) stopTranslatingBook() else stopTranslatingPage()
     }
 
     val eInkPage = LocalEInk.current
