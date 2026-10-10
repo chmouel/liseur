@@ -40,8 +40,8 @@ internal interface TranslationService {
     /** Asks again what [configured] and [targets] depend on, as after the system's settings. */
     suspend fun refresh() = Unit
 
-    /** Where the text goes, for "Translated by %s."; null for the device. */
-    suspend fun destination(): String?
+    /** Where the text goes under [s], for "Translated by %s."; null for the device. */
+    fun destination(s: AppSettings): String?
 
     /** Whose address or key a reply depends on under [s] (see `ServerConnections`); null for the device. */
     fun owner(s: AppSettings): String?

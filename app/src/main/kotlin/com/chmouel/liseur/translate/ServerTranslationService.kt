@@ -55,7 +55,7 @@ internal class ServerTranslationService(
     override fun model(s: AppSettings): String? =
         s.translationServerConnection?.let { s.translationModels[it.id] }?.takeIf { it.isNotBlank() }
 
-    override suspend fun destination(): String? = settings.settings.first().translationServerConnection?.name
+    override fun destination(s: AppSettings): String? = s.translationServerConnection?.name
 
     override fun owner(s: AppSettings): String? =
         s.translationServerConnection?.let { ServerConnections.originOf(it.url) }

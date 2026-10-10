@@ -73,6 +73,9 @@ internal class ServiceTranslate(
 
     suspend fun chooseServer(id: String) = settings.selectTranslationServer(id)
 
+    /** Where [service] sends the text under the current settings, for "Translated by %s.". */
+    suspend fun destination(service: TranslationService) = service.destination(settings.settings.first())
+
     private val requests = TranslationRequests { owner -> connections.generation(owner).value }
 
     /**
@@ -109,7 +112,7 @@ internal class ServiceTranslate(
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
         suspend fun bind(): Bound {
             val (service, identity, s) = wanted()
-            val destination = service.destination()
+            val destination = service.destination(s)
             return Bound(identity, service, service.open(source, target, s), destination, service.owner(s), chosen(s))
         }
 
@@ -124,7 +127,7 @@ internal class ServiceTranslate(
             } else if (chosen(s) != bound.choice) {
                 // Only what the bar shows changed, such as the server's name: the same run goes on.
                 bound.choice = chosen(s)
-                bound.destination = service.destination()
+                bound.destination = service.destination(s)
             }
             return bound
         }

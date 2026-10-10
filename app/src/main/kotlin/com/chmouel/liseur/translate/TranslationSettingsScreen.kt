@@ -118,7 +118,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
     val server by feature.server.collectAsState(initial = null)
     val servers by feature.servers.collectAsState(initial = ServerList.Empty)
     val configured by remember(service) { service.configured }.collectAsState(initial = true)
-    val destination by produceState<String?>(null, service, server) { value = service.destination() }
+    val destination by produceState<String?>(null, service, server) { value = feature.destination(service) }
     val scope = rememberCoroutineScope()
 
     Scaffold(
@@ -348,7 +348,7 @@ private fun TestRow(feature: ServiceTranslate, service: TranslationService, conf
             Test.Failed(e)
         }
     }
-    val name = produceState<String?>(null, service, choice) { value = service.destination() }.value
+    val name = produceState<String?>(null, service, choice) { value = feature.destination(service) }.value
         ?: stringResource(R.string.translation_provider_device)
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
