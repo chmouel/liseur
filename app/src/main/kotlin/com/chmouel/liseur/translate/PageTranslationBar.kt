@@ -80,7 +80,15 @@ internal fun PageTranslationBar(
     var settings by remember { mutableStateOf<Boolean?>(null) }
     val halted = state as? PageTranslationState.Halted
     // Back from the system's language downloads, or anything else that may have fixed it.
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { if (halted != null) onRetry() }
+    // The service looks again first: it remembers the languages it found missing.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (halted != null) {
+            scope.launch {
+                feature.refresh()
+                onRetry()
+            }
+        }
+    }
 
     val sourceName = translator.source?.let { TranslationLanguages.name(it, ui) }
     val targetName = TranslationLanguages.name(translator.target, ui)
