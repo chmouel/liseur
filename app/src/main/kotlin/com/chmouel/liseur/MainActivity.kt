@@ -45,7 +45,6 @@ import com.chmouel.liseur.providers.ServicesEntry
 import com.chmouel.liseur.providers.ServicesScreen
 import com.chmouel.liseur.reader.ReaderActivity
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.saveable.listSaver
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.reading.FineTypographyActions
@@ -93,6 +92,29 @@ import com.chmouel.liseur.ui.launch.LaunchRequest
 import com.chmouel.liseur.ui.launch.LaunchViewModel
 import androidx.activity.viewModels
 import kotlinx.coroutines.Job
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.togetherWith
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavEntryDecorator
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.navigation3.ui.NavDisplay
+import androidx.navigation3.ui.defaultPopTransitionSpec
+import androidx.navigation3.ui.defaultPredictivePopTransitionSpec
+import androidx.navigation3.ui.defaultTransitionSpec
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import com.chmouel.liseur.ui.navigation.LaunchStack
+import com.chmouel.liseur.ui.navigation.Route
+import com.chmouel.liseur.ui.navigation.RouteBackStackSaver
+import com.chmouel.liseur.ui.navigation.contentKey
+import com.chmouel.liseur.ui.navigation.launchStack
+import com.chmouel.liseur.ui.navigation.pop
+import com.chmouel.liseur.ui.navigation.push
 
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
@@ -219,33 +241,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen {
-    LIBRARY,
-    SETTINGS,
-    SETTINGS_BACKUP,
-    READING_APPEARANCE,
-    READING_NAVIGATION,
-    READ_ALOUD,
-    TRANSLATION,
-    SERVICES,
-    HIDDEN_BOOKS,
-    SERVER_ACCOUNT,
-    BROWSE_LIBRARIES,
-    LICENCES,
-    ABOUT,
-    STATS,
-    BOOK_STATS,
-}
-
-/**
- * Which book the per-book statistics are about.
- *
- * A second piece of state beside [Screen] because the enum carries no
- * arguments, and the alternative — a navigation library, routes, a
- * back stack — is a lot of machinery for this small set of screens.
- */
-private data class StatsTarget(val bookUrl: String, val title: String)
-
 private const val SOURCE_URL = "https://github.com/chmouel/liseur"
 private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 
@@ -255,24 +250,28 @@ private fun LiseurApp(
     launch: LaunchResolution? = null,
     onLaunchHandled: (LaunchRequest) -> Unit = {},
 ) {
-    var screen by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
-    var libraryLaunchId by rememberSaveable { mutableStateOf(0L) }
-    // The server screen is reached from two places now, and Back has to
-    // go back to whichever one it was, not to the one it usually is.
-    var accountReturnsTo by rememberSaveable { mutableStateOf(Screen.SETTINGS) }
-    var statsBook by rememberSaveable(stateSaver = StatsTargetSaver) {
-        mutableStateOf<StatsTarget?>(null)
+    // The screens open, library at the bottom. Back closes the top one, so
+    // the server screen returns to whichever screen opened it, and book
+    // statistics to the shelf, the series or the overall statistics.
+    val backStack = rememberSaveable(saver = RouteBackStackSaver) {
+        mutableStateListOf<Route>(Route.Library)
     }
-    var bookStatsReturnsTo by rememberSaveable { mutableStateOf(Screen.LIBRARY) }
+    var libraryLaunchId by rememberSaveable { mutableStateOf(0L) }
     var openGutenberg by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     LaunchedEffect(launch?.request?.id) {
         val resolved = launch ?: return@LaunchedEffect
         val request = resolved.request
         if (!LaunchRequests.shared.owns(request)) return@LaunchedEffect
-        screen = if (request.target == LaunchTarget.STATS) Screen.STATS else Screen.LIBRARY
+        val stack = launchStack(
+            if (request.target == LaunchTarget.STATS) LaunchStack.STATS else LaunchStack.LIBRARY,
+        )
+        // In one step, so the display never sees an empty stack.
+        Snapshot.withMutableSnapshot {
+            backStack.clear()
+            backStack.addAll(stack)
+        }
         libraryLaunchId++
-        statsBook = null
         openGutenberg = false
         if (resolved.error != null) {
             android.widget.Toast.makeText(context, resolved.error, android.widget.Toast.LENGTH_LONG).show()
@@ -287,274 +286,299 @@ private fun LiseurApp(
     val readerPreferences = remember(context) { context.container.readerPreferences }
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
-    val settingsZipBackup = rememberSettingsZipBackup(active = screen == Screen.SETTINGS_BACKUP)
+    val settingsZipBackup = rememberSettingsZipBackup(
+        active = backStack.lastOrNull() == Route.SettingsBackup,
+    )
+    // Closing the backup screen first cancels whatever it was doing, the
+    // same whether it is closed by its arrow or by Back.
+    val back: () -> Unit = {
+        if (backStack.lastOrNull() == Route.SettingsBackup) settingsZipBackup.close()
+        backStack.pop()
+    }
+    val eInk = LocalEInk.current
 
-    when (screen) {
-        Screen.LIBRARY -> androidx.compose.runtime.key(libraryLaunchId) {
-            LibraryRoute(
-                widgetRequest = launch?.request?.takeIf { !it.shortcut && it.bookUrl != null },
-                onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
-                onOpenSettings = { screen = Screen.SETTINGS },
-                onOpenStats = { screen = Screen.STATS },
-                onOpenBookStats = { book ->
-                    statsBook = StatsTarget(book.url, book.displayTitle)
-                    bookStatsReturnsTo = Screen.LIBRARY
-                    screen = Screen.BOOK_STATS
-                },
-                onConnectServer = {
-                    accountReturnsTo = Screen.LIBRARY
-                    screen = Screen.SERVER_ACCOUNT
-                },
-                onBrowseLibraries = { screen = Screen.BROWSE_LIBRARIES },
-                onStartWithFreeBooks = {
-                    openGutenberg = true
-                    screen = Screen.BROWSE_LIBRARIES
-                },
-            )
-        }
-
-        Screen.BROWSE_LIBRARIES -> BrowseLibrariesRoute(
-            onExit = { screen = Screen.LIBRARY },
-            openGutenberg = openGutenberg,
-            onGutenbergOpened = { openGutenberg = false },
-        )
-
-        Screen.STATS -> {
-            BackHandler { screen = Screen.LIBRARY }
-            val model: ReadingStatsViewModel = viewModel(
-                factory = ReadingStatsViewModel.factory(),
-            )
-            // The view model outlives the configuration change that a
-            // language switch is, so the week's first day is pushed in
-            // from here, where the locale is observable state.
-            val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
-            LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
-            LiveStatsEffect(model)
-            val statsState by model.state.collectAsStateWithLifecycle()
-            ReadingStatsScreen(
-                state = statsState,
-                onOpenBook = { book ->
-                    // Only a book this device has can be opened. A row
-                    // the server counted and this library has no file
-                    // for carries no tap target at all (ADR-0021), so
-                    // this is belt and braces rather than a path taken.
-                    book.bookUrl?.let { url ->
-                        statsBook = StatsTarget(url, book.title)
-                        bookStatsReturnsTo = Screen.STATS
-                        screen = Screen.BOOK_STATS
+    NavDisplay(
+        backStack = backStack,
+        onBack = back,
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),
+            rememberTopEntryBackDecorator(backStack),
+        ),
+        // E-paper repaints every frame of an animation; screens there
+        // change in one step, as they always have.
+        transitionSpec = if (eInk) {
+            { NoTransition }
+        } else {
+            defaultTransitionSpec()
+        },
+        popTransitionSpec = if (eInk) {
+            { NoTransition }
+        } else {
+            defaultPopTransitionSpec()
+        },
+        predictivePopTransitionSpec = if (eInk) {
+            { _ -> NoTransition }
+        } else {
+            defaultPredictivePopTransitionSpec()
+        },
+        entryProvider = { route ->
+            NavEntry(route, contentKey = route.contentKey) {
+                when (route) {
+                    Route.Library -> androidx.compose.runtime.key(libraryLaunchId) {
+                        LibraryRoute(
+                            widgetRequest = launch?.request?.takeIf { !it.shortcut && it.bookUrl != null },
+                            onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
+                            onOpenSettings = { backStack.push(Route.Settings) },
+                            onOpenStats = { backStack.push(Route.Stats) },
+                            onOpenBookStats = { book ->
+                                backStack.push(Route.BookStats(book.url, book.displayTitle))
+                            },
+                            onConnectServer = { backStack.push(Route.ServerAccount) },
+                            onBrowseLibraries = { backStack.push(Route.BrowseLibraries) },
+                            onStartWithFreeBooks = {
+                                openGutenberg = true
+                                backStack.push(Route.BrowseLibraries)
+                            },
+                        )
                     }
-                },
-                onBack = { screen = Screen.LIBRARY },
-                onSelectRange = model::selectRange,
-            )
-        }
 
-        Screen.BOOK_STATS -> {
-            val target = statsBook
-            // Nothing to show a book's reading for. Only reachable if the
-            // saved state came back without the book, which Android is
-            // allowed to do; going home beats an empty screen.
-            if (target == null) {
-                LaunchedEffect(Unit) { screen = Screen.LIBRARY }
-            } else {
-                val back = { screen = bookStatsReturnsTo }
-                BackHandler { back() }
-                val model: ReadingStatsViewModel = viewModel(
-                    factory = ReadingStatsViewModel.factory(),
-                )
-                val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
-                LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
-                LiveStatsEffect(model)
-                val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
-                    .collectAsStateWithLifecycle()
-                val serverInsights by remember(model, target.bookUrl) {
-                    model.serverEstimateFor(target.bookUrl)
-                }.collectAsStateWithLifecycle()
-                val statsRange by model.range.collectAsStateWithLifecycle()
-                BookReadingStatsScreen(
-                    title = target.title,
-                    state = bookStatsState,
-                    onBack = back,
-                    serverInsights = serverInsights,
-                    range = statsRange,
-                )
+                    Route.BrowseLibraries -> BrowseLibrariesRoute(
+                        onExit = back,
+                        openGutenberg = openGutenberg,
+                        onGutenbergOpened = { openGutenberg = false },
+                    )
+
+                    Route.Stats -> {
+                        val model: ReadingStatsViewModel = viewModel(
+                            factory = ReadingStatsViewModel.factory(),
+                        )
+                        // The view model outlives the configuration change that a
+                        // language switch is, so the week's first day is pushed in
+                        // from here, where the locale is observable state.
+                        val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
+                        LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
+                        LiveStatsEffect(model)
+                        val statsState by model.state.collectAsStateWithLifecycle()
+                        ReadingStatsScreen(
+                            state = statsState,
+                            onOpenBook = { book ->
+                                // Only a book this device has can be opened. A row
+                                // the server counted and this library has no file
+                                // for carries no tap target at all (ADR-0021), so
+                                // this is belt and braces rather than a path taken.
+                                book.bookUrl?.let { url ->
+                                    backStack.push(Route.BookStats(url, book.title))
+                                }
+                            },
+                            onBack = back,
+                            onSelectRange = model::selectRange,
+                        )
+                    }
+
+                    is Route.BookStats -> {
+                        run {
+                            val target = route
+                            val model: ReadingStatsViewModel = viewModel(
+                                factory = ReadingStatsViewModel.factory(),
+                            )
+                            val weekStart = localeWeekStart(LocalLocale.current.platformLocale)
+                            LaunchedEffect(model, weekStart) { model.setWeekStart(weekStart) }
+                            LiveStatsEffect(model)
+                            val bookStatsState by remember(model, target.bookUrl) { model.forBook(target.bookUrl) }
+                                .collectAsStateWithLifecycle()
+                            val serverInsights by remember(model, target.bookUrl) {
+                                model.serverEstimateFor(target.bookUrl)
+                            }.collectAsStateWithLifecycle()
+                            val statsRange by model.range.collectAsStateWithLifecycle()
+                            BookReadingStatsScreen(
+                                title = target.title,
+                                state = bookStatsState,
+                                onBack = back,
+                                serverInsights = serverInsights,
+                                range = statsRange,
+                            )
+                        }
+                    }
+
+                    Route.Settings -> {
+                        // Through the ViewModel so that removing a folder, which
+                        // walks SAF and can take a while, is not cancelled by a
+                        // rotation part-way through.
+                        val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+                        SettingsScreen(
+                            settings = settings,
+                            readingThemeChoice = readerPrefs.themeChoice,
+                            dynamicColorAvailable = dynamicColorAvailable,
+                            onThemeMode = { scope.launch { repository.setThemeMode(it) } },
+                            onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
+                            onOpenAccount = { backStack.push(Route.ServerAccount) },
+                            onOpenReadingAppearance = { backStack.push(Route.ReadingAppearance) },
+                            onOpenReadingNavigation = { backStack.push(Route.ReadingNavigation) },
+                            onOpenSettingsBackup = { backStack.push(Route.SettingsBackup) },
+                            onOpenHiddenBooks = { backStack.push(Route.HiddenBooks) },
+                            libraryFolders = library.libraryFolders,
+                            onRemoveFolder = { library.removeFolder(it) },
+                            server = context.container.remoteAccount.server,
+                            onOpenAbout = { backStack.push(Route.About) },
+                            onBack = back,
+                            flavorReadingRows = {
+                                context.container.readAloud.SettingsEntry(onClick = { backStack.push(Route.ReadAloud) })
+                                context.container.translate.SettingsEntry(onClick = { backStack.push(Route.Translation) })
+                                ServicesEntry(onClick = { backStack.push(Route.Services) })
+                            },
+                        )
+                    }
+
+                    Route.ReadAloud -> {
+                        context.container.readAloud.SettingsScreen(onBack = back)
+                    }
+
+                    Route.Translation -> {
+                        context.container.translate.SettingsScreen(onBack = back)
+                    }
+
+                    Route.Services -> {
+                        ServicesScreen(
+                            connections = context.container.serverConnections,
+                            accounts = context.container.serviceAccounts,
+                            onBack = back,
+                        )
+                    }
+
+                    Route.SettingsBackup -> {
+                        SettingsBackupScreen(
+                            backup = settingsZipBackup,
+                            onBack = back,
+                        )
+                    }
+
+                    Route.HiddenBooks -> {
+                        val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+                        val hidden by library.hidden.collectAsStateWithLifecycle(emptyList())
+                        HiddenBooksScreen(
+                            hidden = hidden,
+                            onUnhide = { library.unhide(it.url) },
+                            onBack = back,
+                        )
+                    }
+
+                    Route.ReadingNavigation -> {
+                        ReadingNavigationScreen(
+                            settings = settings,
+                            pageTurnStyle = readerPrefs.pageTurnStyle,
+                            vendorName = context.container.eInkDisplay.vendor,
+                            onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
+                            onTapZones = { scope.launch { repository.setTapZones(it) } },
+                            onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
+                            onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
+                            onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
+                            onScrollMode = { scope.launch { repository.setScrollMode(it) } },
+                            onLockFooter = { scope.launch { repository.setLockFooterOn(it) } },
+                            onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
+                            onEInkMode = { scope.launch { repository.setEInkMode(it) } },
+                            onColorEInk = { scope.launch { repository.setColorEInk(it) } },
+                            onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
+                            onDefinitionTarget = {
+                                scope.launch { repository.setDefinitionTarget(it) }
+                            },
+                            onDictionaryLookup = {
+                                scope.launch { repository.setDictionaryLookupEnabled(it) }
+                            },
+                            onDictionaryBaseUrl = {
+                                scope.launch { repository.setDictionaryBaseUrl(it) }
+                            },
+                            onBack = back,
+                        )
+                    }
+
+                    Route.ReadingAppearance -> {
+                        val activity = LocalActivity.current
+                        ReadingAppearanceScreen(
+                            prefs = readerPrefs,
+                            appIsDark = appIsDark,
+                            onTheme = { scope.launch { readerPreferences.setTheme(it) } },
+                            onFont = { scope.launch { readerPreferences.setFont(it) } },
+                            onFontSize = { scope.launch { readerPreferences.setFontSize(it) } },
+                            onLineHeight = { scope.launch { readerPreferences.setLineHeight(it) } },
+                            onPageMargins = { scope.launch { readerPreferences.setPageMargins(it) } },
+                            onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
+                            onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
+                            onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
+                            onFooterField = { slot, field ->
+                                scope.launch { readerPreferences.setFooterField(slot, field) }
+                            },
+                            highlightPalette = settings.highlightPalette,
+                            onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
+                            onHighlightDefaultTint = {
+                                scope.launch { repository.setHighlightDefaultTint(it) }
+                            },
+                            fineTypography = FineTypographyActions(
+                                onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
+                                onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },
+                                onFontWeightChanged = { scope.launch { readerPreferences.setFontWeight(it) } },
+                                onLetterSpacingChanged = {
+                                    scope.launch { readerPreferences.setLetterSpacing(it) }
+                                },
+                                onWordSpacingChanged = {
+                                    scope.launch { readerPreferences.setWordSpacing(it) }
+                                },
+                                onParagraphSpacingChanged = {
+                                    scope.launch { readerPreferences.setParagraphSpacing(it) }
+                                },
+                            ),
+                            appLanguage = remember { AppLocales.current(context) },
+                            onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
+                            onBack = back,
+                        )
+                    }
+
+                    Route.ServerAccount -> {
+                        ServerAccountRoute(onBack = back)
+                    }
+
+                    Route.About -> {
+                        AboutScreen(
+                            onBack = back,
+                            onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
+                            onOpenSponsor = { context.openLink(SPONSOR_URL.toUri()) },
+                            onOpenLicences = { backStack.push(Route.Licences) },
+                        )
+                    }
+
+                    Route.Licences -> {
+                        LicencesScreen(onBack = back)
+                    }
+                }
             }
-        }
+        },
+    )
+}
 
-        Screen.SETTINGS -> {
-            BackHandler { screen = Screen.LIBRARY }
-            // Through the ViewModel so that removing a folder, which
-            // walks SAF and can take a while, is not cancelled by a
-            // rotation part-way through.
-            val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
-            SettingsScreen(
-                settings = settings,
-                readingThemeChoice = readerPrefs.themeChoice,
-                dynamicColorAvailable = dynamicColorAvailable,
-                onThemeMode = { scope.launch { repository.setThemeMode(it) } },
-                onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
-                onOpenAccount = {
-                    accountReturnsTo = Screen.SETTINGS
-                    screen = Screen.SERVER_ACCOUNT
-                },
-                onOpenReadingAppearance = { screen = Screen.READING_APPEARANCE },
-                onOpenReadingNavigation = { screen = Screen.READING_NAVIGATION },
-                onOpenSettingsBackup = { screen = Screen.SETTINGS_BACKUP },
-                onOpenHiddenBooks = { screen = Screen.HIDDEN_BOOKS },
-                libraryFolders = library.libraryFolders,
-                onRemoveFolder = { library.removeFolder(it) },
-                server = context.container.remoteAccount.server,
-                onOpenAbout = { screen = Screen.ABOUT },
-                onBack = { screen = Screen.LIBRARY },
-                flavorReadingRows = {
-                    context.container.readAloud.SettingsEntry(onClick = { screen = Screen.READ_ALOUD })
-                    context.container.translate.SettingsEntry(onClick = { screen = Screen.TRANSLATION })
-                    ServicesEntry(onClick = { screen = Screen.SERVICES })
-                },
-            )
-        }
+/** A screen change with no animation, for e-paper. */
+private val NoTransition: ContentTransform = EnterTransition.None togetherWith ExitTransition.None
 
-        Screen.READ_ALOUD -> {
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            context.container.readAloud.SettingsScreen(onBack = back)
-        }
-
-        Screen.TRANSLATION -> {
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            context.container.translate.SettingsScreen(onBack = back)
-        }
-
-        Screen.SERVICES -> {
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            ServicesScreen(
-                connections = context.container.serverConnections,
-                accounts = context.container.serviceAccounts,
-                onBack = back,
-            )
-        }
-
-        Screen.SETTINGS_BACKUP -> {
-            val back = {
-                settingsZipBackup.close()
-                screen = Screen.SETTINGS
+/**
+ * Lets only the screen on top answer Back.
+ *
+ * Screens below the top one are still composed while a transition or a
+ * predictive-back preview runs, and their own Back handlers — the library's
+ * search, a series in reorder mode, the catalog browser's folders — would
+ * otherwise still be listening. Each entry gets a child dispatcher that is
+ * switched off unless that entry is the top of the stack, and `BackHandler`
+ * finds its dispatcher through the same composition local.
+ */
+@Composable
+private fun rememberTopEntryBackDecorator(backStack: List<Route>): NavEntryDecorator<Route> =
+    remember(backStack) {
+        NavEntryDecorator { entry ->
+            val onTop = entry.contentKey == backStack.lastOrNull()?.contentKey
+            val owner = rememberNavigationEventDispatcherOwner(enabled = onTop)
+            CompositionLocalProvider(LocalNavigationEventDispatcherOwner provides owner) {
+                entry.Content()
             }
-            BackHandler { back() }
-            SettingsBackupScreen(
-                backup = settingsZipBackup,
-                onBack = back,
-            )
-        }
-
-        Screen.HIDDEN_BOOKS -> {
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
-            val hidden by library.hidden.collectAsStateWithLifecycle(emptyList())
-            HiddenBooksScreen(
-                hidden = hidden,
-                onUnhide = { library.unhide(it.url) },
-                onBack = back,
-            )
-        }
-
-        Screen.READING_NAVIGATION -> {
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            ReadingNavigationScreen(
-                settings = settings,
-                pageTurnStyle = readerPrefs.pageTurnStyle,
-                vendorName = context.container.eInkDisplay.vendor,
-                onVolumeKeys = { scope.launch { repository.setVolumeKeysTurnPages(it) } },
-                onTapZones = { scope.launch { repository.setTapZones(it) } },
-                onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
-                onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
-                onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
-                onScrollMode = { scope.launch { repository.setScrollMode(it) } },
-                onLockFooter = { scope.launch { repository.setLockFooterOn(it) } },
-                onKeepScreenOn = { scope.launch { repository.setKeepScreenOn(it) } },
-                onEInkMode = { scope.launch { repository.setEInkMode(it) } },
-                onColorEInk = { scope.launch { repository.setColorEInk(it) } },
-                onVendorRefresh = { scope.launch { repository.setVendorRefresh(it) } },
-                onDefinitionTarget = {
-                    scope.launch { repository.setDefinitionTarget(it) }
-                },
-                onDictionaryLookup = {
-                    scope.launch { repository.setDictionaryLookupEnabled(it) }
-                },
-                onDictionaryBaseUrl = {
-                    scope.launch { repository.setDictionaryBaseUrl(it) }
-                },
-                onBack = back,
-            )
-        }
-
-        Screen.READING_APPEARANCE -> {
-            val activity = LocalActivity.current
-            val back = { screen = Screen.SETTINGS }
-            BackHandler { back() }
-            ReadingAppearanceScreen(
-                prefs = readerPrefs,
-                appIsDark = appIsDark,
-                onTheme = { scope.launch { readerPreferences.setTheme(it) } },
-                onFont = { scope.launch { readerPreferences.setFont(it) } },
-                onFontSize = { scope.launch { readerPreferences.setFontSize(it) } },
-                onLineHeight = { scope.launch { readerPreferences.setLineHeight(it) } },
-                onPageMargins = { scope.launch { readerPreferences.setPageMargins(it) } },
-                onBrightness = { scope.launch { readerPreferences.setBrightness(it) } },
-                onColumnMode = { scope.launch { readerPreferences.setColumnMode(it) } },
-                onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
-                onFooterField = { slot, field ->
-                    scope.launch { readerPreferences.setFooterField(slot, field) }
-                },
-                highlightPalette = settings.highlightPalette,
-                onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
-                onHighlightDefaultTint = {
-                    scope.launch { repository.setHighlightDefaultTint(it) }
-                },
-                fineTypography = FineTypographyActions(
-                    onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
-                    onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },
-                    onFontWeightChanged = { scope.launch { readerPreferences.setFontWeight(it) } },
-                    onLetterSpacingChanged = {
-                        scope.launch { readerPreferences.setLetterSpacing(it) }
-                    },
-                    onWordSpacingChanged = {
-                        scope.launch { readerPreferences.setWordSpacing(it) }
-                    },
-                    onParagraphSpacingChanged = {
-                        scope.launch { readerPreferences.setParagraphSpacing(it) }
-                    },
-                ),
-                appLanguage = remember { AppLocales.current(context) },
-                onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
-                onBack = back,
-            )
-        }
-
-        Screen.SERVER_ACCOUNT -> {
-            BackHandler { screen = accountReturnsTo }
-            ServerAccountRoute(onBack = { screen = accountReturnsTo })
-        }
-
-        Screen.ABOUT -> {
-            BackHandler { screen = Screen.SETTINGS }
-            AboutScreen(
-                onBack = { screen = Screen.SETTINGS },
-                onOpenSource = { context.openLink(SOURCE_URL.toUri()) },
-                onOpenSponsor = { context.openLink(SPONSOR_URL.toUri()) },
-                onOpenLicences = { screen = Screen.LICENCES },
-            )
-        }
-
-        Screen.LICENCES -> {
-            BackHandler { screen = Screen.ABOUT }
-            LicencesScreen(onBack = { screen = Screen.ABOUT })
         }
     }
-}
+
 
 /** Opening a link must never take the app down with it. */
 private fun android.content.Context.openLink(uri: Uri) {
@@ -742,19 +766,24 @@ private fun LibraryRoute(
 
     // A book tapped while it was still on the server opens by itself once
     // the download lands; walking away from the library calls it off.
-    LaunchedEffect(viewModel) {
-        viewModel.openRequests.collect { book ->
-            viewModel.forgetPendingOpen()
-            if (LaunchRequests.shared.latestId != navigationGeneration) return@collect
-            // A reader opened from a widget while the library waited covers it; don't open over it.
-            if (LaunchRequests.shared.readerStarts != readerStartsSeen) return@collect
-            book.openableUri()?.let {
-                context.startActivity(ReaderActivity.intent(context, it, book.url))
+    // Only while the library is the screen in front: under Navigation 3 it
+    // stays composed while it animates out or is previewed behind a Back
+    // gesture, and neither of those is a moment to open a book.
+    LaunchedEffect(viewModel, lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            viewModel.openRequests.collect { book ->
+                viewModel.forgetPendingOpen()
+                if (LaunchRequests.shared.latestId != navigationGeneration) return@collect
+                // A reader opened from a widget while the library waited covers it; don't open over it.
+                if (LaunchRequests.shared.readerStarts != readerStartsSeen) return@collect
+                book.openableUri()?.let {
+                    context.startActivity(ReaderActivity.intent(context, it, book.url))
+                }
             }
         }
     }
-    // Which series is open, if any. Kept here rather than in the screen
-    // enum because it is a step inside the library rather than away from
+    // Which series is open, if any. Kept here rather than on the back
+    // stack because it is a step inside the library rather than away from
     // it: the same view model, the same books, one level down.
     var openSeriesKey by rememberSaveable { mutableStateOf<String?>(null) }
     val liveSeries = openSeriesKey?.let { key -> state.series.firstOrNull { it.key == key } }
@@ -1013,15 +1042,3 @@ private fun LibraryRoute(
         },
     )
 }
-
-/**
- * Keeps the book the statistics are about across a process death.
- *
- * Two strings, saved as a list, because a `data class` is not something
- * a Bundle can hold on its own and a parcelable for two fields would be
- * more ceremony than the fields are worth.
- */
-private val StatsTargetSaver = listSaver<StatsTarget?, String>(
-    save = { target -> target?.let { listOf(it.bookUrl, it.title) } ?: emptyList() },
-    restore = { saved -> saved.takeIf { it.size == 2 }?.let { StatsTarget(it[0], it[1]) } },
-)

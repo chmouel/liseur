@@ -24,6 +24,7 @@ json = "20260814"
 jsoup = "1.23.2"
 coroutines = "1.11.0"
 reorderable = "3.1.0"
+navigation3 = "1.2.0"
 robolectric = "4.17"
 junit = "4.13.2"
 
@@ -44,6 +45,8 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
+androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3" }
+androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "navigation3" }
 readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
 readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
 readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", version.ref = "readium" }
