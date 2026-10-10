@@ -160,7 +160,12 @@ private fun haltAction(
     onDownload: () -> Unit,
 ): HaltAction? = when (error) {
     is TranslationError.NotDownloaded ->
-        if (hasDownloads) HaltAction(stringResource(R.string.translation_download), onDownload) else null
+        if (hasDownloads) {
+            HaltAction(stringResource(R.string.translation_download), onDownload)
+        } else {
+            // Nowhere on this phone to get the language from, but another service can still translate.
+            HaltAction(stringResource(R.string.translation_choose_service)) { onSettings(false) }
+        }
     is TranslationError.Unsupported -> HaltAction(stringResource(R.string.translation_choose_service)) { onSettings(false) }
     is TranslationError.NotSetUp, is TranslationError.LocalNetworkBlocked ->
         HaltAction(stringResource(R.string.translation_open_settings)) { onSettings(false) }
