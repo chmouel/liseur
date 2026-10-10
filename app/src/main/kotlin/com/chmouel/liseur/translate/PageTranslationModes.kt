@@ -15,7 +15,7 @@ interface PageTranslationModes {
 
     fun remember(mode: Mode)
 
-    /** [onFailed] is called, off the main thread, when the book could be left translated. */
+    /** [onFailed] is called, off the main thread, when the saved mode could not be removed: the book may open translated again. */
     fun forget(onFailed: () -> Unit)
 }
 
