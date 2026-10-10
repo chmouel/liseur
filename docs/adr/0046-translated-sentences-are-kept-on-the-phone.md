@@ -43,3 +43,5 @@ a Room database separate from `liseur.db`.
   translation is still shown.
 - Changing the prompt needs a `TranslationPrompt.VERSION` bump, or old
   answers to the old prompt would keep being served.
+- Since ADR-0048 the same database also records which books are left
+  translated. Clear leaves those.

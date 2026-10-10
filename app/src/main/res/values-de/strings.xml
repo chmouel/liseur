@@ -1276,4 +1276,6 @@
     <string name="translation_page_ended">Bis zum Ende des Buchs übersetzt.</string>
     <string name="translation_page_stop">Übersetzung beenden</string>
     <string name="translation_page_bookmarks_off">Lesezeichen sind aus, solange die Seite übersetzt ist.</string>
+    <string name="translation_page_indicator">Seite übersetzt von %1$s nach %2$s. Übersetzungssteuerung anzeigen</string>
+    <string name="translation_page_forget_failed">Die Übersetzung für dieses Buch konnte nicht ausgeschaltet werden. Sie kann beim nächsten Öffnen wieder an sein.</string>
 </resources>

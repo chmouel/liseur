@@ -43,6 +43,8 @@ All of this stays in the app's own private storage:
   recently read going first. Deleting the book deletes them, and Settings,
   Translation has a button to clear them all. They are not backed up.
   A passage translated in the sheet is not saved.
+- Which books you left translated, and between which two languages, so
+  they open translated. Tapping Stop or deleting the book removes it.
 
 Uninstalling the app removes all of it.
 

@@ -1358,4 +1358,6 @@
     <string name="translation_page_ended">Переведено до конца книги.</string>
     <string name="translation_page_stop">Остановить перевод</string>
     <string name="translation_page_bookmarks_off">Закладки недоступны, пока страница переведена.</string>
+    <string name="translation_page_indicator">Страница переведена: %1$s → %2$s. Показать управление переводом</string>
+    <string name="translation_page_forget_failed">Не удалось выключить перевод для этой книги. Он может снова включиться при следующем открытии.</string>
 </resources>

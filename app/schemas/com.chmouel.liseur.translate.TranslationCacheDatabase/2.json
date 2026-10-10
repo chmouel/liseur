@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "e45e72dc0cb7ac10387e70679139d84d",
+    "entities": [
+      {
+        "tableName": "translated_sentences",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `key` TEXT NOT NULL, `translation` TEXT NOT NULL, `used_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`, `key`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "translation",
+            "columnName": "translation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usedAt",
+            "columnName": "used_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url",
+            "key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_translated_sentences_used_at",
+            "unique": false,
+            "columnNames": [
+              "used_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_translated_sentences_used_at` ON `${TABLE_NAME}` (`used_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "page_translation_modes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `source` TEXT, `target` TEXT NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "target",
+            "columnName": "target",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e45e72dc0cb7ac10387e70679139d84d')"
+    ]
+  }
+}

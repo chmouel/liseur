@@ -8,20 +8,28 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -88,16 +96,57 @@ interface TranslatedSentenceDao {
     suspend fun clear()
 }
 
+/** A book left translated, and the languages, so it opens translated again. */
+@Entity(tableName = "page_translation_modes")
+data class PageTranslationModeRow(
+    @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
+    /** Null when the service works the language out. */
+    val source: String?,
+    val target: String,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
+@Dao
+interface PageTranslationModeDao {
+    @Query("SELECT * FROM page_translation_modes WHERE book_url = :bookUrl")
+    suspend fun find(bookUrl: String): PageTranslationModeRow?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(row: PageTranslationModeRow)
+
+    @Query("DELETE FROM page_translation_modes WHERE book_url = :bookUrl")
+    suspend fun forget(bookUrl: String)
+
+    @Query("SELECT book_url FROM page_translation_modes")
+    suspend fun books(): List<String>
+
+    @Query("DELETE FROM page_translation_modes WHERE book_url IN (:bookUrls)")
+    suspend fun forget(bookUrls: List<String>): Int
+}
+
 /**
  * Kept apart from `liseur.db`: the backup rules name that file only, so
  * a cache that can always be asked for again stays out of backups.
  */
-@Database(entities = [TranslatedSentence::class], version = 1, exportSchema = true)
+@Database(entities = [TranslatedSentence::class, PageTranslationModeRow::class], version = 2, exportSchema = true)
 abstract class TranslationCacheDatabase : RoomDatabase() {
     abstract fun sentences(): TranslatedSentenceDao
 
+    abstract fun modes(): PageTranslationModeDao
+
     companion object {
         const val NAME = "translations.db"
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `page_translation_modes` (`book_url` TEXT NOT NULL, " +
+                        "`source` TEXT, `target` TEXT NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2)
     }
 }
 
@@ -105,6 +154,7 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
  * The sentences page translation has translated, saved on this phone so
  * a page read again is not asked for again. At most [maxSentences], and
  * [maxCharacters] of translated text, the least recently read going first.
+ * Also the books left translated ([modeFor]).
  *
  * A clear, and the removal of a book, are fenced: a reply asked before
  * either is not saved after it. Reads take no lock; every write goes
@@ -119,15 +169,36 @@ class SavedTranslations(
     private val now: () -> Long = System::currentTimeMillis,
     private val maxSentences: Int = MAX_SENTENCES,
     private val maxCharacters: Long = MAX_CHARACTERS,
+    /** Where the books' modes are written, one after the other; it outlives any reader. */
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     data class Stats(val sentences: Int, val bytes: Long)
 
     private val dao = database.sentences()
+    private val modes = database.modes()
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
     private var puts = 0
     private val resized = MutableStateFlow(0)
+
+    // One queue for every book and every handle: a reader closed after Stop
+    // and the same book opened again see its changes in the order they came.
+    private val modeChanges = Channel<ModeChange>(Channel.UNLIMITED)
+
+    init {
+        scope.launch {
+            for (change in modeChanges) {
+                try {
+                    change.apply()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    change.failed(e)
+                }
+            }
+        }
+    }
 
     /** How many sentences are saved and the room they take, again after each clear. Silent if unreadable. */
     val stats: Flow<Stats> = combine(dao.counted(), resized) { count, _ ->
@@ -142,6 +213,9 @@ class SavedTranslations(
      * book is registered so a sweep fences it even before it has a row.
      */
     fun forBook(bookUrl: String): PageTranslationCache = BookCache(bookUrl, epochs.computeIfAbsent(bookUrl) { 0L })
+
+    /** Whether the book at [bookUrl] is left translated, for one opening of it; fenced like [forBook]. */
+    fun modeFor(bookUrl: String): PageTranslationModes = BookMode(bookUrl, epochs.computeIfAbsent(bookUrl) { 0L })
 
     /** Keeps within the limits and drops the books gone from the library: once at start. */
     suspend fun tidy() {
@@ -159,11 +233,12 @@ class SavedTranslations(
      */
     suspend fun sweep() = quietly("sweep") {
         val emptied = writes.withLock {
-            val books = (dao.books() + epochs.keys).distinct()
+            val books = (dao.books() + modes.books() + epochs.keys).distinct()
             if (books.isEmpty()) return@withLock false
             val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
             val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
+            gone.chunked(BATCH).forEach { modes.forget(it) }
             // Removed books stay fenced, so they are gone again on every later sweep with nothing left to delete.
             val removed = gone.chunked(BATCH).sumOf { dao.forget(it) }
             removed > 0 && dao.count() == 0
@@ -174,7 +249,8 @@ class SavedTranslations(
 
     /**
      * Forgets every saved sentence. Fails when they could not be deleted;
-     * the space is then given back as well as it can be.
+     * the space is then given back as well as it can be. The books left
+     * translated stay so: that is the reader's choice, not a cache.
      */
     suspend fun clear() {
         writes.withLock {
@@ -255,6 +331,64 @@ class SavedTranslations(
             }
             dao.drop(dropped)
             excess -= freed
+        }
+    }
+
+    private interface ModeChange {
+        suspend fun apply()
+
+        fun failed(e: Exception)
+    }
+
+    private inner class BookMode(private val bookUrl: String, private val epoch: Long) : PageTranslationModes {
+        @Volatile private var found = false
+
+        private suspend fun inLibrary() = found || present(listOf(bookUrl)).isNotEmpty().also { found = it }
+
+        // Through the queue, so a Stop asked just before is already applied.
+        override suspend fun saved(): PageTranslationModes.Mode? {
+            val answer = CompletableDeferred<PageTranslationModes.Mode?>()
+            modeChanges.trySend(
+                object : ModeChange {
+                    override suspend fun apply() {
+                        answer.complete(modes.find(bookUrl)?.let { PageTranslationModes.Mode(it.source, it.target) })
+                    }
+
+                    override fun failed(e: Exception) {
+                        Log.w(TAG, "Could not read a translated book: ${e.javaClass.simpleName}")
+                        answer.complete(null)
+                    }
+                },
+            )
+            return answer.await()
+        }
+
+        override fun remember(mode: PageTranslationModes.Mode) {
+            modeChanges.trySend(
+                object : ModeChange {
+                    override suspend fun apply() = writes.withLock {
+                        if ((epochs[bookUrl] ?: 0L) != epoch || !inLibrary()) return@withLock
+                        modes.put(PageTranslationModeRow(bookUrl, mode.source, mode.target, now()))
+                    }
+
+                    override fun failed(e: Exception) {
+                        Log.w(TAG, "Could not keep a book translated: ${e.javaClass.simpleName}")
+                    }
+                },
+            )
+        }
+
+        override fun forget(onFailed: () -> Unit) {
+            modeChanges.trySend(
+                object : ModeChange {
+                    override suspend fun apply() = writes.withLock { modes.forget(bookUrl) }
+
+                    override fun failed(e: Exception) {
+                        Log.w(TAG, "Could not stop a book translating: ${e.javaClass.simpleName}")
+                        onFailed()
+                    }
+                },
+            )
         }
     }
 
