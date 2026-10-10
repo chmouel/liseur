@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -410,17 +409,6 @@ internal fun MenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
             null
         },
     )
-}
-
-/** The selection bar's way into reading aloud. */
-@Composable
-internal fun ReadAloudSelectionButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            Icons.AutoMirrored.Outlined.VolumeUp,
-            contentDescription = stringResource(R.string.read_aloud_from_here),
-        )
-    }
 }
 
 /** A control showing text, which an icon-sized button would clip. */

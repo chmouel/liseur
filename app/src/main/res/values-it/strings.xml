@@ -487,6 +487,8 @@
     <string name="annotation_export">Esporta come Markdown</string>
     <string name="annotation_show_more">Mostra di più</string>
     <string name="annotation_show_less">Mostra di meno</string>
+    <string name="selection_more_actions">Altre azioni</string>
+    <string name="selection_read_aloud">Leggi ad alta voce</string>
     <string name="reader_search">Cerca nel libro</string>
     <string name="search_hint">Cerca in questo libro</string>
     <string name="search_prompt">Digita una parola o una frase per trovarla ovunque nel libro.</string>

@@ -3842,6 +3842,7 @@ fun ReaderScreen(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
+                selectionKey = active,
                 actions = remember(active, dictionary, translateReady, pageTranslated) {
                     SelectionActions(
                         onHighlight = { tint ->
@@ -3875,44 +3876,40 @@ fun ReaderScreen(
                                 dismissSelection()
                             }
                         },
-                        translateButton = if (translate.isAvailable && translateReady && !pageTranslated) {
+                        onTranslate = if (translate.isAvailable && translateReady && !pageTranslated) {
                             {
-                                translate.SelectionButton {
-                                    translatePassage = active
-                                    dismissSelection()
-                                }
+                                translatePassage = active
+                                dismissSelection()
                             }
                         } else {
                             null
                         },
-                        readAloudButton = readAloud
+                        onReadAloud = readAloud
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
                                 {
-                                    readAloudFeature.SelectionButton {
-                                        dismissSelection()
-                                        val nav = navigator
-                                        // Translated words are not in the book; read from the sentence they translate.
-                                        val original = (pageTranslation ?: restoringPageTranslation)
-                                            ?.let { TranslatedPages.original(it, active.locator) }
-                                        effectScope.launch {
-                                            // Its marks go on the book's words, so those come back first.
-                                            if (pageTranslated) {
-                                                stopTranslatingPage()
-                                                val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
-                                                    snapshotFlow { pageTranslated }.first { !it }
-                                                }
-                                                if (restored == null) {
-                                                    Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
-                                                    return@launch
-                                                }
+                                    dismissSelection()
+                                    val nav = navigator
+                                    // Translated words are not in the book; read from the sentence they translate.
+                                    val original = (pageTranslation ?: restoringPageTranslation)
+                                        ?.let { TranslatedPages.original(it, active.locator) }
+                                    effectScope.launch {
+                                        // Its marks go on the book's words, so those come back first.
+                                        if (pageTranslated) {
+                                            stopTranslatingPage()
+                                            val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
+                                                snapshotFlow { pageTranslated }.first { !it }
                                             }
-                                            reading.start(
-                                                original
-                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
-                                                    ?: active.locator,
-                                            )
+                                            if (restored == null) {
+                                                Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
+                                                return@launch
+                                            }
                                         }
+                                        reading.start(
+                                            original
+                                                ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                                ?: active.locator,
+                                        )
                                     }
                                 }
                             },

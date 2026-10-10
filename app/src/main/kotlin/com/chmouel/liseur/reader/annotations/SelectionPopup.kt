@@ -13,21 +13,34 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -45,12 +58,15 @@ class SelectionActions(
     val onShare: () -> Unit,
     val onDelete: (() -> Unit)? = null,
     /** Translates the passage, when a service can. */
-    val translateButton: (@Composable () -> Unit)? = null,
+    val onTranslate: (() -> Unit)? = null,
     /** Reads aloud from here, where the build can. */
-    val readAloudButton: (@Composable () -> Unit)? = null,
+    val onReadAloud: (() -> Unit)? = null,
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
     val annotate: Boolean = true,
-)
+) {
+    /** Whether there is anything behind More; with nothing there, it is not drawn. */
+    val hasMore: Boolean get() = onTranslate != null || onReadAloud != null
+}
 
 /**
  * The bar of things to do with a selected passage.
@@ -65,6 +81,12 @@ class SelectionActions(
  * none, a plain Highlight takes their place: a bar with no way to mark
  * a passage would be a regression wearing a setting's clothes.
  *
+ * Read aloud and Translate wait behind More, which swaps the row for
+ * theirs at the same height. A menu would be a second window, whose taps
+ * the bar could take for a touch outside it; a taller bar would cover
+ * the selection its placement keeps clear. [selectionKey] puts the main
+ * row back whenever the passage changes.
+ *
  * [dismissOnOutsideTouch] must be off while the web view holds a live
  * selection. Its handles are windows of their own, so grabbing one is a
  * touch outside this bar, and dismissing then clears the selection out
@@ -77,9 +99,11 @@ fun SelectionPopup(
     actions: SelectionActions,
     activeTint: HighlightTint?,
     palette: HighlightPalette,
+    selectionKey: Any,
     onDismiss: () -> Unit,
     dismissOnOutsideTouch: Boolean = true,
 ) {
+    var more by remember(selectionKey) { mutableStateOf(false) }
     Popup(
         alignment = Alignment.TopCenter,
         offset = offset,
@@ -105,6 +129,10 @@ fun SelectionPopup(
             },
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
+            if (more) {
+                MoreRow(actions, onBack = { more = false })
+                return@Surface
+            }
             Row(
                 Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -155,8 +183,6 @@ fun SelectionPopup(
                             contentDescription = stringResource(R.string.annotation_share),
                         )
                     }
-                    actions.readAloudButton?.invoke()
-                    actions.translateButton?.invoke()
                     actions.onDelete?.let { delete ->
                         IconButton(onClick = delete, modifier = Modifier.size(36.dp)) {
                             Icon(
@@ -166,6 +192,56 @@ fun SelectionPopup(
                         }
                     }
                 }
+                if (actions.hasMore) {
+                    IconButton(onClick = { more = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Outlined.MoreVert,
+                            contentDescription = stringResource(R.string.selection_more_actions),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** What More opens: the actions that are not about marking the passage. */
+@Composable
+private fun MoreRow(actions: SelectionActions, onBack: () -> Unit) {
+    Row(
+        Modifier
+            .padding(horizontal = 4.dp, vertical = 8.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+            )
+        }
+        Row(
+            Modifier
+                .weight(1f, fill = false)
+                .horizontalScroll(rememberScrollState())
+                .padding(end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            actions.onReadAloud?.let {
+                PopupAction(
+                    label = stringResource(R.string.selection_read_aloud),
+                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
+                    description = stringResource(R.string.read_aloud_from_here),
+                    onClick = it,
+                )
+            }
+            actions.onTranslate?.let {
+                PopupAction(
+                    label = stringResource(R.string.translation_action),
+                    icon = Icons.Outlined.Translate,
+                    onClick = it,
+                )
             }
         }
     }
@@ -195,13 +271,22 @@ internal fun TintChip(
 }
 
 @Composable
-private fun PopupAction(label: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier
+private fun PopupAction(
+    label: String,
+    onClick: () -> Unit,
+    icon: ImageVector? = null,
+    description: String? = null,
+) {
+    Row(
+        Modifier
             .clip(RoundedCornerShape(50))
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick, role = Role.Button)
+            .then(if (description != null) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier)
             .padding(horizontal = 10.dp, vertical = 8.dp),
-    )
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        icon?.let { Icon(it, contentDescription = null, modifier = Modifier.size(20.dp)) }
+        Text(text = label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+    }
 }

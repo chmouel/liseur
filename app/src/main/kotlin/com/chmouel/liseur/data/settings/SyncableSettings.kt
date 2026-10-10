@@ -252,7 +252,7 @@ fun syncableSettings(
     SyncableSetting(
         key = "app.highlight_tints",
         // The stored set, not HighlightPalette.offered: that resolves an
-        // absent set to the default three, so a reader who never chose
+        // absent set to the default, so a reader who never chose
         // would be indistinguishable from one who chose exactly those,
         // and "never chose" would travel as a choice and win.
         read = {

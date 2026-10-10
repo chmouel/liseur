@@ -120,10 +120,6 @@ interface ReadAloudFeature {
     @Composable
     fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier)
 
-    /** The selection bar's button that reads aloud from the selected passage. */
-    @Composable
-    fun SelectionButton(onClick: () -> Unit)
-
     object None : ReadAloudFeature {
         override val isAvailable = false
         override val configured: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -145,8 +141,5 @@ interface ReadAloudFeature {
 
         @Composable
         override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) = Unit
-
-        @Composable
-        override fun SelectionButton(onClick: () -> Unit) = Unit
     }
 }

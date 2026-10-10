@@ -16,13 +16,10 @@ import org.junit.Test
 class HighlightPaletteTest {
 
     @Test
-    fun `three colours by default`() {
+    fun `one colour by default`() {
         val palette = HighlightPalette()
 
-        assertEquals(
-            listOf(HighlightTint.YELLOW, HighlightTint.GREEN, HighlightTint.BLUE),
-            palette.shown,
-        )
+        assertEquals(listOf(HighlightTint.YELLOW), palette.shown)
     }
 
     @Test
@@ -73,7 +70,7 @@ class HighlightPaletteTest {
 
     @Test
     fun `adding a colour leaves the others where they were`() {
-        val three = HighlightPalette()
+        val three = HighlightPalette(offered = setOf(HighlightTint.YELLOW, HighlightTint.GREEN, HighlightTint.BLUE))
         val four = three.toggled(HighlightTint.PINK)
 
         assertEquals(three.shown, four.shown.take(3))

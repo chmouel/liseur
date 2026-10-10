@@ -70,15 +70,13 @@ data class HighlightPalette(
         val MAX_COUNT = HighlightTint.entries.size
 
         /**
-         * Three, which is what the bar offers until it is asked for
-         * more.
+         * One, which is what the bar offers until it is asked for more.
          *
-         * Enough to separate a quotation from a doubt from a word to
-         * look up later, and few enough that the bar still fits beside
-         * the actions next to it.
+         * Most readers mark a passage without sorting it, and every chip
+         * is room taken from the actions beside it. A reader who sorts
+         * by colour ticks the others once.
          */
-        val DEFAULT_OFFERED: Set<HighlightTint> =
-            setOf(HighlightTint.YELLOW, HighlightTint.GREEN, HighlightTint.BLUE)
+        val DEFAULT_OFFERED: Set<HighlightTint> = setOf(HighlightTint.YELLOW)
 
         /**
          * A palette read back from storage, made safe to use.
