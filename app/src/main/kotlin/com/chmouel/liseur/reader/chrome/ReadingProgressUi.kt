@@ -26,12 +26,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Redo
+import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.BatteryStd
 import androidx.compose.material.icons.outlined.CloudSync
-import androidx.compose.material.icons.outlined.Redo
-import androidx.compose.material.icons.outlined.Undo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -1036,7 +1036,7 @@ fun JumpBackPill(
                     .clickableWithoutRipple(onJumpBack),
             ) {
                 Icon(
-                    imageVector = if (fromSync) Icons.Outlined.CloudSync else Icons.Outlined.Undo,
+                    imageVector = if (fromSync) Icons.Outlined.CloudSync else Icons.AutoMirrored.Outlined.Undo,
                     contentDescription = null,
                 )
                 Column {
@@ -1069,7 +1069,7 @@ fun JumpBackPill(
                 }
                 if (fromSync) {
                     Icon(
-                        imageVector = Icons.Outlined.Undo,
+                        imageVector = Icons.AutoMirrored.Outlined.Undo,
                         contentDescription = if (position != null) {
                             stringResource(R.string.jump_back_to_page, position)
                         } else {
@@ -1116,7 +1116,7 @@ fun CatchUpPill(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.clickableWithoutRipple(onCatchUp),
             ) {
-                Icon(Icons.Outlined.Redo, contentDescription = null)
+                Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = null)
                 Column {
                     Text(
                         text = if (position != null) {
