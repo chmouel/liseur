@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
@@ -81,7 +82,7 @@ interface TranslatedSentenceDao {
     suspend fun books(): List<String>
 
     @Query("DELETE FROM translated_sentences WHERE book_url IN (:bookUrls)")
-    suspend fun forget(bookUrls: List<String>)
+    suspend fun forget(bookUrls: List<String>): Int
 
     @Query("DELETE FROM translated_sentences")
     suspend fun clear()
@@ -163,8 +164,9 @@ class SavedTranslations(
             val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
             val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
-            gone.chunked(BATCH).forEach { dao.forget(it) }
-            gone.isNotEmpty() && dao.count() == 0
+            // Removed books stay fenced, so they are gone again on every later sweep with nothing left to delete.
+            val removed = gone.chunked(BATCH).sumOf { dao.forget(it) }
+            removed > 0 && dao.count() == 0
         }
         // Settings offer no Clear once nothing is saved, so the room the last book took is given back here.
         if (emptied) compact()
@@ -184,7 +186,8 @@ class SavedTranslations(
 
     private suspend fun compact() {
         try {
-            withContext(Dispatchers.IO) {
+            // Once the rows are gone settings offer no Clear, so a caller leaving does not stop this halfway.
+            withContext(NonCancellable + Dispatchers.IO) {
                 // Outside any transaction: VACUUM refuses to run in one.
                 val db = database.openHelper.writableDatabase
                 db.query("PRAGMA wal_checkpoint(TRUNCATE)").use { it.moveToFirst() }
