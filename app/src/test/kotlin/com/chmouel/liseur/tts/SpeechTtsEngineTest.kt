@@ -1,6 +1,7 @@
 package com.chmouel.liseur.tts
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -28,7 +29,10 @@ import java.util.concurrent.TimeUnit
 class SpeechTtsEngineTest {
     private val mainExecutor = Executors.newSingleThreadExecutor { Thread(it, "main") }
     private val main = mainExecutor.asCoroutineDispatcher()
-    private val scope = CoroutineScope(SupervisorJob() + main)
+    private val uncaught = LinkedBlockingQueue<Throwable>()
+    private val scope = CoroutineScope(
+        SupervisorJob() + main + CoroutineExceptionHandler { _, error -> uncaught.put(error) },
+    )
 
     private val requests = LinkedBlockingQueue<Pair<String, CompletableDeferred<SpeechAudio>>>()
     private val cancelledRequests = LinkedBlockingQueue<String>()
@@ -103,6 +107,7 @@ class SpeechTtsEngineTest {
         runBlocking { scope.coroutineContext.job.cancelAndJoin() }
         mainExecutor.shutdown()
         mainExecutor.awaitTermination(2, TimeUnit.SECONDS)
+        assertNull("uncaught engine exception", uncaught.poll())
     }
 
     private fun onMain(block: () -> Unit) = runBlocking { withContext(main) { block() } }
