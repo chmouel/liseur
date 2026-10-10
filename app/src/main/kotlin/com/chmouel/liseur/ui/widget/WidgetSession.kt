@@ -53,6 +53,5 @@ internal fun widgetRepository(context: Context): WidgetRepository {
     val database = context.container.database
     return WidgetRepository(
         bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
     )
 }
