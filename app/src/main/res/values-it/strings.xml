@@ -1254,6 +1254,7 @@
     <string name="translation_device_failed">Il traduttore di questo telefono non è riuscito a tradurre questo passaggio.</string>
     <string name="translation_too_long">Seleziona un passaggio più breve da tradurre.</string>
     <string name="translation_same">Il passaggio è già in questa lingua: %1$s.</string>
+    <string name="translation_same_choose">Il passaggio è già in questa lingua: %1$s. Scegli una lingua in cui tradurlo.</string>
     <string name="translation_picker_source">Lingua di partenza</string>
     <string name="translation_picker_search">Cerca lingue</string>
     <string name="translation_picker_needs_download">Da scaricare</string>
