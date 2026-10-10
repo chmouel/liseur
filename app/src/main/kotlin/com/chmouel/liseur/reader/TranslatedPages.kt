@@ -122,9 +122,16 @@ internal object TranslatedPages {
         val url = web.url ?: return
         val href = ResourceAddress.canonicalPath(url) ?: return
         val shown = nav.currentLocator.value
+        val origin = IntArray(2)
+        // Where the view is now: a scrolled page moves before its debounced locator says so.
+        fun position(): List<Int> {
+            web.getLocationOnScreen(origin)
+            return listOf(web.scrollX, web.scrollY, origin[0], origin[1])
+        }
+        val at = position()
         // The reader may have turned to another page while the view answered,
         // in this chapter too; the turn is measured again when it arrives.
-        fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown
+        fun moved() = !stillShows(nav, web, url) || nav.currentLocator.value != shown || position() != at
         val walked = run.walkedIn(href)
         val reached = if (walked.isEmpty()) PageSwaps.UNSEEN else web.evaluate(PageSwaps.reached(url, walked))?.toIntOrNull() ?: return
         if (moved()) return
