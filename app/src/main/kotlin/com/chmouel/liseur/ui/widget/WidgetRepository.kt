@@ -7,9 +7,7 @@ import android.graphics.BitmapFactory
 import androidx.core.graphics.scale
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.library.openableUri
-import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.reader.ReaderActivity
 import java.util.Locale
@@ -24,8 +22,6 @@ data class WidgetSnapshot(
 data class WidgetBook(
     val url: String,
     val title: String,
-    val author: String?,
-    val progression: Double?,
     val cover: Bitmap?,
     val initials: String,
     val openIntent: Intent,
@@ -37,18 +33,15 @@ data class WidgetBook(
  */
 class WidgetRepository(
     private val bookDao: BookDao,
-    private val progressDao: ReadingProgressDao,
     private val decodeCover: (String) -> Bitmap? = ::decodeCoverBitmap,
 ) {
     suspend fun load(context: Context): WidgetSnapshot = withContext(Dispatchers.IO) {
-        val book = bookDao.mostRecentlyOpened()
-        val progress = book?.let { progressDao.get(it.url)?.totalProgression }
         WidgetSnapshot(
-            book = book?.toWidgetBook(context, progress),
+            book = bookDao.mostRecentlyOpened()?.toWidgetBook(context),
         )
     }
 
-    internal fun Book.toWidgetBook(context: Context, progression: Double?): WidgetBook {
+    internal fun Book.toWidgetBook(context: Context): WidgetBook {
         val fileUrl = openableUri()
         val open = if (fileUrl != null) {
             ReaderActivity.intent(context, fileUrl, url)
@@ -59,8 +52,6 @@ class WidgetRepository(
         return WidgetBook(
             url = url,
             title = displayTitle,
-            author = displayAuthor,
-            progression = progression,
             cover = coverPath?.let(decodeCover),
             initials = coverInitials(displayTitle),
             openIntent = open,

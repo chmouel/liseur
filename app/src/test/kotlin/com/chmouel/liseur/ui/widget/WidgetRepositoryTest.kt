@@ -54,35 +54,12 @@ class WidgetRepositoryTest {
     fun `most recent book is the widget book`() = runBlocking {
         insertBook("file:///old.epub", "Old", openedAt = 1_000L)
         insertBook("file:///new.epub", "New Title", openedAt = 2_000L)
-        db.readingProgressDao().upsert(
-            ReadingProgress(
-                bookUrl = "file:///new.epub",
-                locatorJson = "{}",
-                totalProgression = 0.42,
-                updatedAt = 2_000L,
-                readAt = 2_000L,
-            ),
-        )
 
         val snapshot = repository().load(context)
         val book = checkNotNull(snapshot.book)
         assertEquals("file:///new.epub", book.url)
         assertEquals("New Title", book.title)
-        assertEquals(0.42, book.progression!!, 0.001)
         assertEquals("NT", book.initials)
-    }
-
-    @Test
-    fun `unknown progress is distinct from a measured zero`() = runBlocking {
-        insertBook("file:///book.epub", "Book", openedAt = 1)
-        assertNull(repository().load(context).book!!.progression)
-        db.readingProgressDao().upsert(
-            ReadingProgress(
-                bookUrl = "file:///book.epub", locatorJson = "{}", totalProgression = 0.0,
-                updatedAt = 1, readAt = 1,
-            ),
-        )
-        assertEquals(0.0, repository().load(context).book!!.progression!!, 0.0)
     }
 
     @Test
@@ -164,7 +141,6 @@ class WidgetRepositoryTest {
 
     private fun repository(decodeCover: (String) -> Bitmap? = { null }) = WidgetRepository(
         bookDao = db.bookDao(),
-        progressDao = db.readingProgressDao(),
         decodeCover = decodeCover,
     )
 
