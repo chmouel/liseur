@@ -55,9 +55,11 @@ internal object TranslationPrompt {
             if (end >= 0) text = text.substring(end + CONTEXT_CLOSE.length)
         }
         val open = text.indexOf(OPEN, ignoreCase = true)
-        if (open >= 0) text = text.substring(open + OPEN.length)
         val close = text.lastIndexOf(CLOSE, ignoreCase = true)
-        if (close >= 0) text = text.substring(0, close)
+        // A lone marker inside the reply can be the translation's own words; only a pair frames it.
+        if (open >= 0 && close > open) return text.substring(open + OPEN.length, close).trim()
+        if (text.startsWith(OPEN, ignoreCase = true)) text = text.substring(OPEN.length)
+        if (text.endsWith(CLOSE, ignoreCase = true)) text = text.dropLast(CLOSE.length)
         return text.trim()
     }
 
