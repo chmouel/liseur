@@ -61,10 +61,6 @@ interface TranslateFeature {
         modifier: Modifier,
     )
 
-    /** The selection bar's button that translates the selected passage. */
-    @Composable
-    fun SelectionButton(onClick: () -> Unit)
-
     object None : TranslateFeature {
         override val isAvailable = false
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -97,8 +93,5 @@ interface TranslateFeature {
             onStop: () -> Unit,
             modifier: Modifier,
         ) = Unit
-
-        @Composable
-        override fun SelectionButton(onClick: () -> Unit) = Unit
     }
 }

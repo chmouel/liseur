@@ -1353,6 +1353,12 @@ reader behavior.
   drag (#257). The web view clears a live selection on a tap elsewhere by
   itself; only a tapped mark, which has no platform selection, relies on the
   outside touch.
+- The selection bar keeps one height. More swaps its row for Read aloud
+  and Translate in place, rather than opening a menu (a second window the
+  bar would read as an outside touch) or growing (the placement assumes a
+  fixed height and would then cover the selection). Labels stay on one
+  line and scroll when long. See
+  `docs/adr/0047-the-selection-bar-keeps-one-colour-and-a-more.md`.
 - A page's CSS `prefers-color-scheme` follows the reading page, not the
   system. WebView reads it from `android:isLightTheme` on the reader
   activity's theme, so `showPagesAs()` forces a `PageColorScheme` style

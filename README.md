@@ -47,7 +47,7 @@ boundaries, with on-page controls to pause it, change the speed or stop.
 A footer shows the page you are on, how much of the chapter is left, and
 time remaining. Highlights, margin notes,
 bookmarks, and dictionary lookups are inline; book-level notes live in the
-notebook. Marking a passage offers three colours, and you tick which of
+notebook. Marking a passage offers one colour, and you tick which of
 the six you want along with the colour new marks use. Footnotes open as a
 card over the page rather than sending you to the back of the book. A
 selected passage can be translated by Android's own translator on the

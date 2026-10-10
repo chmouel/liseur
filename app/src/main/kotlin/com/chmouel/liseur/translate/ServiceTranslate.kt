@@ -189,9 +189,6 @@ internal class ServiceTranslate(
         modifier: Modifier,
     ) = PageTranslationBar(this, translator, state, theme, controls, onRetry, onStop, modifier)
 
-    @Composable
-    override fun SelectionButton(onClick: () -> Unit) = TranslationSelectionButton(onClick)
-
     private companion object {
         const val STOP_AFTER_MS = 5_000L
     }

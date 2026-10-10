@@ -98,18 +98,6 @@ import java.util.Locale
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
-/** The selection bar's Translate icon, the size of its neighbours. */
-@Composable
-internal fun TranslationSelectionButton(onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-        Icon(
-            Icons.Outlined.Translate,
-            contentDescription = stringResource(R.string.translation_action),
-            modifier = Modifier.size(20.dp),
-        )
-    }
-}
-
 /** A language list the sheet shows in place of the translation. */
 private enum class Picking { Source, Target }
 

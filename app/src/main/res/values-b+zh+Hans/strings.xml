@@ -522,6 +522,8 @@
     <string name="annotation_export">导出为 Markdown</string>
     <string name="annotation_show_more">显示更多</string>
     <string name="annotation_show_less">收起</string>
+    <string name="selection_more_actions">更多操作</string>
+    <string name="selection_read_aloud">朗读</string>
     <string name="reader_search">在书中搜索</string>
     <string name="search_hint">在此书中搜索</string>
     <string name="search_prompt">输入单词或短语，即可在全书任意位置查找。</string>

@@ -14,4 +14,4 @@
 
 ## Reader
 
-- [ ] Declutter the text selection bar: three highlight colours, Note, Define, Search, Share, Read aloud and Translate now fill the whole width of a phone screen. Move the less used actions behind a "More" button.
+- [x] Declutter the text selection bar: three highlight colours, Note, Define, Search, Share, Read aloud and Translate now fill the whole width of a phone screen. Move the less used actions behind a "More" button.
