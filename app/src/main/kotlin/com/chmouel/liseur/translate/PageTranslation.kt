@@ -52,9 +52,11 @@ interface SentenceTranslator {
 
     /**
      * [sentence] translated, with [context] as the sentence before it, and
-     * the [answering] name of what translated it. Throws [TranslationError].
+     * the [answering] name of what translated it; null, without asking,
+     * when the settings no longer answer as [identity], whose saved
+     * translations were the ones looked in. Throws [TranslationError].
      */
-    suspend fun translate(sentence: String, context: String?): Translated
+    suspend fun translate(sentence: String, context: String?, identity: String): Translated?
 
     /** Lets go of what the service held for the run, such as the device's translator. */
     fun close()
@@ -367,16 +369,19 @@ internal class PageTranslation<P>(
         fun keyOf(identity: String) = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
         var identity = translator.answering()
         var lookup = cache.get(keyOf(identity))
-        // Settings changed during the lookup: what was found answers for the service before.
-        while (true) {
+        var answer: Translated? = null
+        while (answer == null) {
+            // Settings changed during the lookup: what was found answers for the service before.
             val current = translator.answering()
-            if (current == identity) break
-            identity = current
-            lookup = cache.get(keyOf(identity))
+            if (current != identity) {
+                identity = current
+                lookup = cache.get(keyOf(identity))
+                continue
+            }
+            lookup.translation?.let { return it }
+            // Null when they changed after all, before it was sent: the new service may have it saved.
+            answer = translator.translate(sentence.text, context, identity)
         }
-        lookup.translation?.let { return it }
-        // Settings changed while it was asked may have sent it to another service.
-        val answer = translator.translate(sentence.text, context)
         // Far longer than the sentence is not its translation, and it would be held for the whole session.
         if (answer.text.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
             throw TranslationError.Malformed("the translation is far longer than the sentence")

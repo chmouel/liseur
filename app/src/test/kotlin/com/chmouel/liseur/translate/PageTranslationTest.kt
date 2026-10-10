@@ -30,8 +30,8 @@ class PageTranslationTest {
         var closed = false
         var answer: (String) -> String = String::uppercase
 
-        override suspend fun translate(sentence: String, context: String?): Translated {
-            val by = identity
+        override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+            val by = this.identity
             asked += sentence to context
             gate?.await()
             failWith?.invoke(sentence)?.let { throw it }
@@ -92,9 +92,9 @@ class PageTranslationTest {
             var identity = "old"
             override val destination: String? = null
             override suspend fun answering() = identity
-            override suspend fun translate(sentence: String, context: String?): Translated {
-                val by = identity
-                identity = "new"
+            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+                val by = this.identity
+                this.identity = "new"
                 return Translated(sentence.uppercase(), by)
             }
             override fun close() = Unit
@@ -115,7 +115,7 @@ class PageTranslationTest {
             override val destination: String? = null
             // The settings went from old to new as the sentence was sent, and back to old before it answered.
             override suspend fun answering() = "old"
-            override suspend fun translate(sentence: String, context: String?) = Translated(sentence.uppercase(), "new")
+            override suspend fun translate(sentence: String, context: String?, identity: String) = Translated(sentence.uppercase(), "new")
             override fun close() = Unit
         }
         val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 1)
@@ -124,6 +124,34 @@ class PageTranslationTest {
         assertEquals(listOf("S0"), page.texts())
         assertEquals(null, cache.get("old\u0000\u0000s0").translation)
         assertEquals(null, cache.get("new\u0000\u0000s0").translation)
+    }
+
+    @Test
+    fun `a service changed just before a sentence is sent is looked up under its own name`() = runTest {
+        val cache = MemoryPageTranslationCache()
+        cache.put("new\u0000\u0000s0", "kept", 0L)
+        val asked = mutableListOf<String>()
+        val run = object : SentenceTranslator {
+            override val source = "fr"
+            override val target = "en"
+            override val destination: String? = null
+            var looks = 0
+
+            // The settings move on after the lookup was checked, as the sentence is about to go.
+            override suspend fun answering() = if (++looks <= 2) "old" else "new"
+            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+                if (identity != "new") return null
+                asked += sentence
+                return Translated(sentence.uppercase(), "new")
+            }
+            override fun close() = Unit
+        }
+        val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 1)
+        page.start(0, "start")
+        runCurrent()
+
+        assertEquals(listOf("kept"), page.texts())
+        assertEquals(emptyList<String>(), asked)
     }
 
     @Test
