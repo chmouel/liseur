@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -97,6 +98,7 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
@@ -169,10 +171,13 @@ fun ReadingStatsScreen(
         // Capped and centred, like every other screen in the app. A card
         // stretched the width of a tablet puts its label and its figure
         // a hand apart, and thirty bars across that width are a fence.
+        // The list takes the bottom inset itself so the cards scroll on
+        // under the navigation bar.
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding),
             contentAlignment = Alignment.TopCenter,
         ) {
             LazyColumn(
@@ -182,7 +187,7 @@ fun ReadingStatsScreen(
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
-                    bottom = 36.dp,
+                    bottom = 36.dp + padding.calculateBottomPadding(),
                     top = 8.dp,
                 ),
                 verticalArrangement = Arrangement.spacedBy(20.dp),

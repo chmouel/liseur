@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,6 +56,7 @@ import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
@@ -95,11 +97,16 @@ fun BookReadingStatsScreen(
             )
         },
     ) { padding ->
+        // Only the stats list takes the bottom inset as its own content
+        // padding, so it scrolls on under the navigation bar; the loading
+        // and empty states stay clear of the bar.
+        val ready = state is BookReadingStatsUiState.Ready
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
-            contentAlignment = if (state is BookReadingStatsUiState.Ready) {
+                .padding(if (ready) padding.withoutBottom() else padding)
+                .consumeWindowInsets(padding),
+            contentAlignment = if (ready) {
                 Alignment.TopCenter
             } else {
                 Alignment.Center
@@ -142,7 +149,12 @@ fun BookReadingStatsScreen(
                 modifier = Modifier
                     .widthIn(max = contentWidthCap(windowWidth()))
                     .fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                contentPadding = PaddingValues(
+                    start = 20.dp,
+                    top = 16.dp,
+                    end = 20.dp,
+                    bottom = 16.dp + padding.calculateBottomPadding(),
+                ),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

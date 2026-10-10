@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -48,12 +49,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.ReaderViewModel.SearchState
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 import org.readium.r2.shared.publication.Locator
 
 /**
@@ -134,10 +137,15 @@ fun SearchScreen(
         },
     ) { padding ->
         val hits = state.hits()
+        // The hit list takes the bottom inset, keyboard included, as its own
+        // content padding so hits scroll on under it; the centred messages
+        // keep clear of it as before.
+        val bottomInset = padding.calculateBottomPadding()
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding),
         ) {
             // A search hit is a sentence with its surroundings, and it
             // reads no better for being stretched across a tablet.
@@ -153,17 +161,18 @@ fun SearchScreen(
                         capped = (state as? SearchState.Done)?.truncated == true,
                         theme = theme,
                         onHitSelected = onHitSelected,
+                        bottomInset = bottomInset,
                     )
 
                     state is SearchState.Done ->
-                        Message(theme, stringResource(R.string.search_no_results, state.query))
+                        Message(theme, stringResource(R.string.search_no_results, state.query), bottomInset)
 
                     state is SearchState.Failure ->
-                        Message(theme, stringResource(R.string.search_failed))
+                        Message(theme, stringResource(R.string.search_failed), bottomInset)
 
                     state is SearchState.Running -> Unit
 
-                    else -> Message(theme, stringResource(R.string.search_prompt))
+                    else -> Message(theme, stringResource(R.string.search_prompt), bottomInset)
                 }
             }
         }
@@ -176,6 +185,7 @@ private fun HitList(
     capped: Boolean,
     theme: ReaderTheme,
     onHitSelected: (Locator) -> Unit,
+    bottomInset: Dp,
 ) {
     Column {
         Text(
@@ -191,7 +201,7 @@ private fun HitList(
             color = theme.foreground.copy(alpha = 0.6f),
             modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
         )
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + bottomInset)) {
             items(hits, key = { it.hitKey() }) { hit ->
                 SearchHitRow(hit, theme) { onHitSelected(hit) }
                 HorizontalDivider(color = theme.foreground.copy(alpha = 0.08f))
@@ -235,8 +245,8 @@ private fun SearchHitRow(hit: Locator, theme: ReaderTheme, onClick: () -> Unit) 
 }
 
 @Composable
-private fun Message(theme: ReaderTheme, text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun Message(theme: ReaderTheme, text: String, bottomInset: Dp) {
+    Box(Modifier.fillMaxSize().padding(bottom = bottomInset), contentAlignment = Alignment.Center) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,

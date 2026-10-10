@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -68,6 +69,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
@@ -80,6 +82,7 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesCompletion
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.withoutBottom
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
@@ -316,18 +319,26 @@ fun SeriesScreen(
             )
         },
     ) { padding ->
+        // Both lists take the bottom inset as content padding, so the rows
+        // scroll on under the navigation bar instead of stopping at it.
+        val listModifier = Modifier
+            .fillMaxSize()
+            .padding(padding.withoutBottom())
+            .consumeWindowInsets(padding)
+        val bottomInset = padding.calculateBottomPadding()
         if (reorder != null) {
             ReorderableVolumes(
                 shelf = shelf,
                 order = reorder.order,
                 onMove = onMoveVolume,
-                modifier = Modifier.fillMaxSize().padding(padding),
+                bottomInset = bottomInset,
+                modifier = listModifier,
             )
             return@Scaffold
         }
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            modifier = listModifier,
+            contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
         ) {
             item { SeriesHero(shelf, extras, open) }
             item {
@@ -416,6 +427,7 @@ private fun ReorderableVolumes(
     order: List<String>,
     onMove: (from: Int, to: Int) -> Unit,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     val byUrl = shelf.volumes.associateBy { it.book.url }
     val volumes = order.mapNotNull { byUrl[it] }
@@ -440,7 +452,7 @@ private fun ReorderableVolumes(
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(bottom = 24.dp),
+            contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
         ) {
             itemsIndexed(volumes, key = { _, volume -> volume.book.id }) { index, volume ->
                 ReorderableItem(reorderState, key = volume.book.id) { dragging ->

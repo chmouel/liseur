@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -130,6 +131,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -156,6 +158,7 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.libraryBarHeight
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 import kotlinx.coroutines.launch
 import com.chmouel.liseur.domain.seriesKey
 
@@ -677,12 +680,17 @@ fun LibraryScreen(
             }
         },
     ) { padding ->
+        // The grid takes the bottom inset itself so covers scroll on under
+        // the navigation bar; everything else keeps clear of it as before.
+        val bottomInset = padding.calculateBottomPadding()
+        val fillAboveBar = Modifier.fillMaxSize().padding(bottom = bottomInset)
         PullToRefreshBox(
             isRefreshing = state.refreshing,
             onRefresh = onRefresh,
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding),
         ) {
             Column(Modifier.fillMaxSize()) {
                 // Above every branch below, deliberately. A notice that
@@ -705,7 +713,7 @@ fun LibraryScreen(
                     )
                 }
                 when {
-                    state.loading -> LibrarySkeleton(Modifier.fillMaxSize())
+                    state.loading -> LibrarySkeleton(fillAboveBar)
 
                     // Everything on the shelf has been archived. Not an
                     // empty library, and saying so would be alarming — the
@@ -721,7 +729,7 @@ fun LibraryScreen(
                             onShowArchived = {
                                 onToggleFilter(LibraryFilterOption.ARCHIVED)
                             },
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = fillAboveBar,
                         )
 
                     state.books.isEmpty() && state.libraryIsEmpty -> EmptyLibrary(
@@ -733,7 +741,7 @@ fun LibraryScreen(
                         // empty library with nothing connected.
                         offerFreeBooks = !state.hasServer,
                         onStartWithFreeBooks = onStartWithFreeBooks,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = fillAboveBar,
                     )
 
                     // Every book on the shelf has been read. The rule
@@ -754,7 +762,7 @@ fun LibraryScreen(
                             onShowFinished = {
                                 onToggleFilter(LibraryFilterOption.FINISHED)
                             },
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = fillAboveBar,
                         )
 
                     // Books exist, they are simply all hidden. Offering to
@@ -766,7 +774,7 @@ fun LibraryScreen(
                             onSearchQueryChange("")
                             onClearFilters()
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = fillAboveBar,
                     )
 
                     else -> BookGrid(
@@ -780,6 +788,7 @@ fun LibraryScreen(
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },
                         onSeriesSelected = onSeriesSelected,
+                        bottomInset = bottomInset,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -1304,12 +1313,13 @@ private fun BookGrid(
     onSetGroupBySeries: (Boolean) -> Unit,
     onClearFilters: () -> Unit,
     modifier: Modifier = Modifier,
+    bottomInset: Dp = 0.dp,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = coverMinSize(windowWidth())),
         state = gridState,
         modifier = modifier,
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

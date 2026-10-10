@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -63,6 +64,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.AnnotationKind
@@ -71,6 +73,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import com.chmouel.liseur.ui.withoutBottom
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 
@@ -225,10 +228,15 @@ fun ContentsScreen(
             }
         },
     ) { padding ->
+        // Each list takes the bottom inset as its own content padding so
+        // rows scroll on under the navigation bar; the empty messages keep
+        // clear of it as before.
+        val bottomInset = padding.calculateBottomPadding()
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding),
         ) {
             // A chapter title or a highlight is one line of prose, and a
             // line of prose is only readable so wide. Left to itself the
@@ -246,6 +254,7 @@ fun ContentsScreen(
                         theme = theme,
                         currentHref = currentHref,
                         onEntrySelected = onEntrySelected,
+                        bottomInset = bottomInset,
                     )
 
                     ContentsTab.BOOKMARKS -> AnnotationList(
@@ -258,6 +267,7 @@ fun ContentsScreen(
                         onSelected = onAnnotationSelected,
                         onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
+                        bottomInset = bottomInset,
                     )
 
                     ContentsTab.HIGHLIGHTS -> AnnotationList(
@@ -271,6 +281,7 @@ fun ContentsScreen(
                         onSelected = onAnnotationSelected,
                         onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
+                        bottomInset = bottomInset,
                     )
 
                     ContentsTab.NOTES -> AnnotationList(
@@ -281,6 +292,7 @@ fun ContentsScreen(
                         onSelected = onAnnotationSelected,
                         onToggleExpanded = toggleExpanded,
                         onDeleted = onAnnotationDeleted,
+                        bottomInset = bottomInset,
                     )
                 }
             }
@@ -294,6 +306,7 @@ private fun ContentsList(
     theme: ReaderTheme,
     currentHref: String?,
     onEntrySelected: (Link) -> Unit,
+    bottomInset: Dp,
 ) {
     val entries = remember(publication) { publication.tableOfContents.flatten() }
     // Contents entries point at an anchor inside a chapter file, while the
@@ -315,14 +328,14 @@ private fun ContentsList(
     }
 
     if (entries.isEmpty()) {
-        EmptyMessage(theme, R.string.reader_no_contents)
+        EmptyMessage(theme, R.string.reader_no_contents, bottomInset)
         return
     }
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
     ) {
         itemsIndexed(
             entries,
@@ -348,14 +361,15 @@ private fun AnnotationList(
     onSelected: (BookAnnotation) -> Unit,
     onToggleExpanded: (BookAnnotation) -> Unit,
     onDeleted: (BookAnnotation) -> Unit,
+    bottomInset: Dp,
 ) {
     if (annotations.isEmpty()) {
-        EmptyMessage(theme, emptyRes)
+        EmptyMessage(theme, emptyRes, bottomInset)
         return
     }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 24.dp + bottomInset),
     ) {
         items(annotations, key = { it.id }) { annotation ->
             AnnotationRow(
@@ -530,8 +544,8 @@ private fun AnnotationRow(
 }
 
 @Composable
-private fun EmptyMessage(theme: ReaderTheme, textRes: Int) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+private fun EmptyMessage(theme: ReaderTheme, textRes: Int, bottomInset: Dp) {
+    Box(Modifier.fillMaxSize().padding(bottom = bottomInset), contentAlignment = Alignment.Center) {
         Text(
             text = stringResource(textRes),
             style = MaterialTheme.typography.bodyMedium,
