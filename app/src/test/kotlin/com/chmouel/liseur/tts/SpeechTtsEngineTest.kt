@@ -4,7 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.After
@@ -97,8 +98,11 @@ class SpeechTtsEngineTest {
 
     @After
     fun tearDown() {
-        scope.cancel()
-        mainExecutor.shutdownNow()
+        // Let cancelled coroutines finish their cleanup before the executor goes away:
+        // interrupting one mid-cleanup leaks an exception into the next coroutine test.
+        runBlocking { scope.coroutineContext.job.cancelAndJoin() }
+        mainExecutor.shutdown()
+        mainExecutor.awaitTermination(2, TimeUnit.SECONDS)
     }
 
     private fun onMain(block: () -> Unit) = runBlocking { withContext(main) { block() } }
