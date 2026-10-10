@@ -139,10 +139,14 @@ internal class ServiceTranslate(
 
             override suspend fun answering() = rebound().identity
 
-            override suspend fun translate(sentence: String, context: String?): Translated {
-                // Judged by the settings the run asks with: a change while it is out binds again and asks the new one.
-                val (current, text) = requests.run(::rebound, Bound::owner) { it.run.translate(sentence, context) }
-                return Translated(text, current.identity)
+            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+                var moved = false
+                // Judged by the settings the run asks with: a change while it is out binds again, and the new one is only asked under the identity looked up.
+                val (current, text) = requests.run(::rebound, Bound::owner) {
+                    moved = it.identity != identity
+                    if (moved) "" else it.run.translate(sentence, context)
+                }
+                return if (moved) null else Translated(text, current.identity)
             }
 
             override fun close() = bound.run.close()
