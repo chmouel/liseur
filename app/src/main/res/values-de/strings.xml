@@ -976,15 +976,6 @@
     <string name="duration_none">Keine</string>
     <string name="widget_cover_label">Aktuelles Cover</string>
     <string name="widget_cover_description">Das Cover des Buchs, das du liest</string>
-    <string name="widget_stats_label">Lesestatistik</string>
-    <string name="widget_stats_description">Dein aktuelles Buch und deine Lesezeit diese Woche, diesen Monat und dieses Jahr</string>
-    <string name="widget_currently_reading">Aktuelle Lektüre</string>
-    <string name="widget_no_book">Noch kein Buch geöffnet</string>
-    <string name="widget_progress_unavailable">Nicht verfügbar</string>
-    <string name="widget_duration_under_minute">&lt;1 Min.</string>
-    <string name="widget_duration_minutes">%1$d Min.</string>
-    <string name="widget_duration_hours">%1$d Std.</string>
-    <string name="widget_duration_hours_minutes">%1$d Std. %2$02d</string>
     <string name="widget_empty_title">Noch nichts im Regal</string>
     <string name="widget_empty_detail">Öffne ein Buch in Liseur, dann erscheint sein Cover hier.</string>
     <string name="more_options">Mehr</string>
@@ -1054,7 +1045,6 @@
     <string name="browse_load_more">Mehr laden</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_scope_last_sync">Zuletzt synchronisierte Lesezeit</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d Leseposition. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</item>
         <item quantity="other">%1$d Lesepositionen. Die Wiederherstellung ersetzt aktuelle Positionen durch die gespeicherten Positionen.</item>

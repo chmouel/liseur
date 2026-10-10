@@ -10,9 +10,6 @@ import kotlinx.coroutines.flow.Flow
 internal val WIDGET_TABLES = arrayOf(
     "books",
     "reading_progress",
-    "reading_sessions",
-    "remote_stats_day",
-    "remote_stats_window",
     "work_alias",
     "remote_server",
 )

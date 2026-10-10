@@ -157,7 +157,6 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
         bookOrbitBindings = database.bookOrbitBindingDao(),
         remoteStatsDao = database.remoteStatsDao(),
-        onReadingHistoryRemoved = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
     )
 
     private val savedTranslationsOpening = lazy {
@@ -585,13 +584,6 @@ class AppContainer(context: Context) {
                         database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
                     ) {
                         _insightInvalidations.value += 1
-                        try {
-                            WidgetUpdater.requestStatsRefresh(context.applicationContext)
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            // Best-effort, as after a position sync: the event itself was handled.
-                        }
                         result.copy(completed = result.completed + LiveTopic.INSIGHTS)
                     } else result
                 },
@@ -631,7 +623,6 @@ class AppContainer(context: Context) {
             ),
         ),
         carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
-        onSynced = { WidgetUpdater.requestStatsRefresh(context.applicationContext) },
     )
 
     private val latestPositionSync = LatestPositionSync(

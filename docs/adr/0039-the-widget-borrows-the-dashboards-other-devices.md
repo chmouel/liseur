@@ -96,6 +96,16 @@ has been uploaded since.
   is still the connected one, so a snapshot that arrives after a
   disconnect or a rekey leaves nothing behind.
 
+## Amendment: stats card removed
+
+The stats card and its refresh path were removed. The widget only shows the
+current cover, so it no longer reads reading sessions or remote stats
+caches, and the remote stats tables no longer trigger a widget redraw.
+The Stats screen still uses the remote stats cache. Placements of the
+removed stats widget do not survive an upgrade.
+
+The amendment below describes the stats card as it was before removal.
+
 ## Amendment: independent refresh and account timezone
 
 Opening the dashboard as the only way to refresh left the home-screen

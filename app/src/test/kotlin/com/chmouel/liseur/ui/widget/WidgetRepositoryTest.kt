@@ -1,21 +1,13 @@
 package com.chmouel.liseur.ui.widget
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.appwidget.AppWidgetManager
 import android.graphics.Bitmap
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingProgress
-import com.chmouel.liseur.data.db.ReadingSession
-import java.time.DayOfWeek
-import java.time.LocalDate
-import java.time.ZoneId
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -36,9 +28,6 @@ class WidgetRepositoryTest {
 
     private lateinit var db: LiseurDatabase
     private lateinit var context: Context
-    private val zone = ZoneId.of("UTC")
-    private val today = LocalDate.of(2026, 9, 24) // Thursday
-    private val weekStart = DayOfWeek.MONDAY
 
     @Before
     fun setUp() {
@@ -54,11 +43,8 @@ class WidgetRepositoryTest {
     }
 
     @Test
-    fun `empty shelf has no book and zero week`() = runBlocking {
-        val snapshot = repository().load(context)
-        assertNull(snapshot.book)
-        assertEquals(listOf(0L, 0L, 0L), snapshot.stats!!.periods.map { it.totalMs })
-        assertEquals("0m", formatCompactDuration(context, 0))
+    fun `empty shelf has no book`() = runBlocking {
+        assertNull(repository().load(context).book)
     }
 
     @Test
@@ -97,45 +83,7 @@ class WidgetRepositoryTest {
     }
 
     @Test
-    fun `history without a current book still shows all three totals`() = runBlocking {
-        insertSession("file:///removed.epub", today, 60_000)
-        val snapshot = repository().load(context)
-        assertNull(snapshot.book)
-        assertEquals(listOf(60_000L, 60_000L, 60_000L), snapshot.stats!!.periods.map { it.totalMs })
-    }
-
-    @Test
-    fun `only the original cover and stats receivers are offered without configuration`() {
-        val receivers = context.packageManager.queryBroadcastReceivers(
-            Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).setPackage(context.packageName),
-            PackageManager.GET_META_DATA,
-        )
-        assertEquals(
-            setOf(CoverOnlyWidgetReceiver::class.java.name, WeekStatsWidgetReceiver::class.java.name),
-            receivers.map { it.activityInfo.name }.toSet(),
-        )
-        val stats = receivers.single { it.activityInfo.name == WeekStatsWidgetReceiver::class.java.name }
-        stats.activityInfo.loadXmlMetaData(context.packageManager, AppWidgetManager.META_DATA_APPWIDGET_PROVIDER).use { xml ->
-            while (xml.next() != org.xmlpull.v1.XmlPullParser.START_TAG) { /* provider root */ }
-            assertNull(xml.getAttributeValue("http://schemas.android.com/apk/res/android", "configure"))
-            assertNull(xml.getAttributeValue("http://schemas.android.com/apk/res/android", "widgetFeatures"))
-        }
-    }
-
-    @Test
-    fun `week stats count only this calendar week`() = runBlocking {
-        insertBook("file:///a.epub", "A", openedAt = 1_000L)
-        // Monday this week
-        insertSession("file:///a.epub", today.minusDays(3), TimeUnit.HOURS.toMillis(1))
-        // Previous Sunday — outside Mon–Thu week
-        insertSession("file:///a.epub", today.minusDays(4), TimeUnit.HOURS.toMillis(2))
-
-        val snapshot = repository().load(context)
-        assertEquals(listOf(1L, 3L, 3L).map { TimeUnit.HOURS.toMillis(it) }, snapshot.stats!!.periods.map { it.totalMs })
-    }
-
-    @Test
-    fun `each widget loads only what it draws`() = runBlocking {
+    fun `only the cover is decoded`() = runBlocking {
         db.bookDao().upsert(
             Book(
                 url = "file:///a.epub",
@@ -147,31 +95,13 @@ class WidgetRepositoryTest {
                 lastOpenedAt = 1_000L,
             ),
         )
-        insertSession("file:///a.epub", today, TimeUnit.MINUTES.toMillis(5))
         val decoded = mutableListOf<String>()
-        val repository = repository(decodeCover = { decoded += it; null })
-
-        val cover = repository.load(context, content = WidgetContent.COVER)
-        assertNull(cover.stats)
+        repository(decodeCover = { decoded += it; null }).load(context)
         assertEquals(listOf("/covers/a.jpg"), decoded)
-
-        decoded.clear()
-        val stats = repository.load(context, content = WidgetContent.STATS)
-        assertEquals("file:///a.epub", stats.book?.url)
-        assertEquals(TimeUnit.MINUTES.toMillis(5), stats.stats!!.periods.first().totalMs)
-        assertTrue(decoded.isEmpty())
     }
 
     @Test
-    fun `peak label uses the compact format`() {
-        assertEquals("<1m", formatCompactDuration(context, 30_000L))
-        assertEquals("45m", formatCompactDuration(context, TimeUnit.MINUTES.toMillis(45)))
-        assertEquals("7h", formatCompactDuration(context, TimeUnit.HOURS.toMillis(7)))
-        assertEquals("1h05", formatCompactDuration(context, TimeUnit.MINUTES.toMillis(65)))
-    }
-
-    @Test
-    fun `every table a widget reads wakes the refresh`() = runBlocking {
+    fun `every table the cover reads wakes the refresh`() = runBlocking {
         val seen = Channel<Set<String>>(Channel.UNLIMITED)
         val watching = launch { db.widgetInputs().collect { seen.send(it) } }
         try {
@@ -188,8 +118,6 @@ class WidgetRepositoryTest {
                 ),
             )
             assertTrue("reading_progress" in withTimeout(5_000) { seen.receive() })
-            insertSession("file:///a.epub", today, TimeUnit.MINUTES.toMillis(5))
-            assertTrue("reading_sessions" in withTimeout(5_000) { seen.receive() })
         } finally {
             watching.cancel()
         }
@@ -219,51 +147,9 @@ class WidgetRepositoryTest {
         }
     }
 
-    @Test
-    fun `account timezone cache counts all devices plus new local reading without a dashboard`() = runBlocking {
-        val account = com.chmouel.liseur.data.db.RemoteServer(
-            kind = com.chmouel.liseur.data.remote.ServerKind.LISEUR_SYNC, baseUrl = "https://sync",
-            username = "reader", passwordCipher = null, apiKeyCipher = null, accountId = "device",
-            userId = null, koboTokenCipher = null, canDownload = true, addedAt = 1,
-            catalogSyncedAt = null, positionSyncedAt = null, syncToken = null,
-            liseurTokenCipher = null, liseurAccountId = "account",
-        )
-        db.remoteServerDao().upsert(account)
-        val accountZone = "America/Los_Angeles"
-        val monday = today.minusDays(3)
-        val stamp = 123_000L
-        db.remoteStatsDao().upsertDays((0..3).map { day ->
-            com.chmouel.liseur.data.db.RemoteStatsDay(
-                account.accountKey, monday.plusDays(day.toLong()).toString(), accountZone,
-                if (day == 3) 8 * 3_600_000L else 0L, stamp,
-            )
-        })
-        // Midnight on this phone is yesterday in the account timezone.
-        insertSession("file:///a.epub", today, 30 * 60_000L)
-        val repo = WidgetRepository(
-            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
-            zone = { zone }, today = { today }, weekStart = { weekStart },
-            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
-        )
-        val week = repo.load(context).stats!!.periods.first()
-        assertEquals(8 * 3_600_000L + 30 * 60_000L, week.totalMs)
-        assertTrue(week.remoteCovered)
-        assertEquals(stamp, week.remoteUpdatedAt)
-        insertSession("file:///new.epub", today, 15 * 60_000L)
-        assertEquals(week.totalMs + 15 * 60_000L, repo.load(context).stats!!.periods.first().totalMs)
-        db.remoteServerDao().upsert(account.copy(liseurAccountId = "another-account"))
-        val switched = repo.load(context).stats!!.periods.first()
-        assertEquals(45 * 60_000L, switched.totalMs)
-        assertNull(switched.remoteUpdatedAt)
-    }
-
     private fun repository(decodeCover: (String) -> Bitmap? = { null }) = WidgetRepository(
         bookDao = db.bookDao(),
         progressDao = db.readingProgressDao(),
-        sessionDao = db.readingSessionDao(),
-        zone = { zone },
-        today = { today },
-        weekStart = { weekStart },
         decodeCover = decodeCover,
     )
 
@@ -277,22 +163,6 @@ class WidgetRepositoryTest {
                 source = null,
                 addedAt = openedAt,
                 lastOpenedAt = openedAt,
-            ),
-        )
-    }
-
-    private suspend fun insertSession(bookUrl: String, day: LocalDate, durationMs: Long) {
-        val started = day.atStartOfDay(zone).toInstant().toEpochMilli()
-        val ended = started + durationMs
-        db.readingSessionDao().insert(
-            ReadingSession(
-                bookUrl = bookUrl,
-                startedAt = started,
-                endedAt = ended,
-                lastCheckpointAt = ended,
-                durationMs = durationMs,
-                startProgression = 0.0,
-                endProgression = 0.1,
             ),
         )
     }

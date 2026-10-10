@@ -41,13 +41,7 @@ import com.chmouel.liseur.ui.theme.PaperHighest
 
 internal val CoverSmall = DpSize(110.dp, 165.dp)
 internal val CoverLarge = DpSize(180.dp, 270.dp)
-// Larger breakpoints give the reading total more breathing room.
-internal val StatsCompact = DpSize(220.dp, 220.dp)
-internal val StatsMedium = DpSize(340.dp, 220.dp)
-internal val StatsRoomy = DpSize(340.dp, 360.dp)
-
-/** Glance's ColorProviders stop at surfaceVariant; paper card tint maps there. */
-internal val widgetCard = ColorProvider(day = PaperHighest, night = NightSurfaceHighest)
+/** Glance's ColorProviders stop at surfaceVariant; paper card tint maps there. */internal val widgetCard = ColorProvider(day = PaperHighest, night = NightSurfaceHighest)
 internal val widgetEdge = ColorProvider(
     day = com.chmouel.liseur.ui.theme.Rule,
     night = com.chmouel.liseur.ui.theme.NightRule,
@@ -152,34 +146,3 @@ internal fun BookCoverImage(
         }
     }
 }
-
-@Composable
-internal fun ProgressTrack(
-    progression: Double?,
-    modifier: GlanceModifier = GlanceModifier.fillMaxWidth().height(6.dp),
-) {
-    val fraction = ((progression ?: 0.0).coerceIn(0.0, 1.0)).toFloat()
-    LinearProgressIndicator(
-        progress = fraction,
-        modifier = modifier,
-        color = fillColor,
-        backgroundColor = trackColor,
-    )
-}
-
-@Composable
-internal fun StatsScope(context: Context, stats: WidgetStats, compact: Boolean = false) {
-    val label = stats.scopeLabelResource(System.currentTimeMillis()) ?: return
-    Text(
-        text = context.getString(label),
-        style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = if (compact) 8.sp else 11.sp),
-    )
-}
-
-internal fun WidgetStats.scopeLabelResource(now: Long): Int? = when (scope(now)) {
-    null, WidgetScope.THIS_DEVICE -> null
-    WidgetScope.LAST_SYNC -> R.string.widget_scope_last_sync
-}
-
-private val trackColor = widgetEdge
-private val fillColor = ColorProvider(day = Leather, night = LeatherNight)

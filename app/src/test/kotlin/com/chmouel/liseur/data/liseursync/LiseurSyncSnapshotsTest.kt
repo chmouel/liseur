@@ -921,14 +921,6 @@ class LiseurSyncSnapshotsTest {
         assertEquals(today.withDayOfYear(1).toString(), db.remoteStatsDao().days(account.accountKey, zone.id).first().date)
         assertTrue(requests.size >= 3)
         assertTrue(requests.none { it.has("comparison") })
-        val widget = com.chmouel.liseur.ui.widget.WidgetRepository(
-            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
-            zone = { ZoneId.of("UTC") }, today = { today }, weekStart = { DayOfWeek.MONDAY },
-            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
-        ).load(ApplicationProvider.getApplicationContext())
-        val localMs = db.readingSessionDao().allOnce().sumOf { it.durationMs }
-        assertTrue(widget.stats!!.periods.all { it.totalMs == unionMinutes(90.0, localMs, 10.0) })
-        assertNull(widget.stats!!.scope(System.currentTimeMillis()))
         val before = db.remoteStatsDao().days(account.accountKey, zone.id)
         capabilitiesCode = 503
         refresh.refresh(DayOfWeek.MONDAY)
@@ -947,7 +939,7 @@ class LiseurSyncSnapshotsTest {
     }
 
     @Test
-    fun `failed annual proof never supplies complete widget coverage`() = runTest {
+    fun `failed annual proof keeps the cached days`() = runTest {
         val cached = com.chmouel.liseur.data.db.RemoteStatsDay(
             account.accountKey, "2026-01-01", zone.id, 17 * 60_000L, refreshedAt = 1234,
         )
@@ -964,12 +956,6 @@ class LiseurSyncSnapshotsTest {
         assertTrue(days.any { it.date == "2026-01-01" })
         assertEquals(1234L, days.first { it.date == cached.date }.refreshedAt)
         assertTrue(days.isNotEmpty())
-        val stats = com.chmouel.liseur.ui.widget.WidgetRepository(
-            db.bookDao(), db.readingProgressDao(), db.readingSessionDao(),
-            today = { today }, weekStart = { DayOfWeek.MONDAY },
-            serverDao = db.remoteServerDao(), remoteStatsDao = db.remoteStatsDao(),
-        ).load(ApplicationProvider.getApplicationContext()).stats!!
-        assertEquals(com.chmouel.liseur.ui.widget.WidgetScope.LAST_SYNC, stats.scope(System.currentTimeMillis()))
     }
 
     private fun client() = LiseurSyncSnapshots(

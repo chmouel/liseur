@@ -1034,15 +1034,6 @@
     <string name="duration_none">Нет</string>
     <string name="widget_cover_label">Текущая обложка</string>
     <string name="widget_cover_description">Обложка книги, которую вы читаете</string>
-    <string name="widget_stats_label">Статистика чтения</string>
-    <string name="widget_stats_description">Текущая книга и время чтения за эту неделю, месяц и год</string>
-    <string name="widget_currently_reading">Сейчас читаю</string>
-    <string name="widget_no_book">Вы ещё не открыли ни одной книги</string>
-    <string name="widget_progress_unavailable">Недоступно</string>
-    <string name="widget_duration_under_minute">&lt;1 мин</string>
-    <string name="widget_duration_minutes">%1$d мин</string>
-    <string name="widget_duration_hours">%1$d ч</string>
-    <string name="widget_duration_hours_minutes">%1$d ч %2$02d</string>
     <string name="widget_empty_title">На полке пока пусто</string>
     <string name="widget_empty_detail">Откройте книгу в Liseur — и её обложка появится здесь.</string>
     <string name="more_options">Ещё</string>
@@ -1120,7 +1111,6 @@
     <string name="browse_load_more">Загрузить ещё</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_scope_last_sync">Последнее синхронизированное чтение</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d позиция чтения. Восстановление заменит текущие позиции сохранёнными.</item>
         <item quantity="few">%1$d позиции чтения. Восстановление заменит текущие позиции сохранёнными.</item>

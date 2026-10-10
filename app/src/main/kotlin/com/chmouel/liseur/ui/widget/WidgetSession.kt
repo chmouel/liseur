@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 internal class LiveSnapshot private constructor(
     private val context: Context,
     private val repository: WidgetRepository,
-    private val content: WidgetContent,
     initial: WidgetSnapshot,
     private val initialGeneration: Long,
 ) {
@@ -23,7 +22,7 @@ internal class LiveSnapshot private constructor(
 
     private suspend fun follow() {
         WidgetUpdater.generation.collectLatest { generation ->
-            if (generation != initialGeneration) snapshot.value = repository.load(context, content)
+            if (generation != initialGeneration) snapshot.value = repository.load(context)
         }
     }
 
@@ -39,12 +38,11 @@ internal class LiveSnapshot private constructor(
             context: Context,
             id: GlanceId,
             scope: CoroutineScope,
-            content: WidgetContent,
         ): LiveSnapshot {
             val repository = widgetRepository(context)
             val generation = WidgetUpdater.generation.value
-            val initial = repository.load(context, content)
-            return LiveSnapshot(context, repository, content, initial, generation).also { live ->
+            val initial = repository.load(context)
+            return LiveSnapshot(context, repository, initial, generation).also { live ->
                 scope.launch { live.follow() }
             }
         }
@@ -56,8 +54,5 @@ internal fun widgetRepository(context: Context): WidgetRepository {
     return WidgetRepository(
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
-        sessionDao = database.readingSessionDao(),
-        serverDao = database.remoteServerDao(),
-        remoteStatsDao = database.remoteStatsDao(),
     )
 }

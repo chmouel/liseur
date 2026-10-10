@@ -12,10 +12,7 @@ class WidgetLaunchActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
-            LaunchRequests.shared.widget(
-                stats = intent.getBooleanExtra(EXTRA_STATS, false),
-                bookUrl = intent.getStringExtra(EXTRA_BOOK),
-            )
+            LaunchRequests.shared.widget(bookUrl = intent.getStringExtra(EXTRA_BOOK))
             startActivity(
                 Intent(this, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -25,12 +22,10 @@ class WidgetLaunchActivity : Activity() {
     }
 
     companion object {
-        private const val EXTRA_STATS = "stats"
         private const val EXTRA_BOOK = "book"
 
-        fun intent(context: Context, stats: Boolean = false, bookUrl: String? = null): Intent =
+        fun intent(context: Context, bookUrl: String? = null): Intent =
             Intent(context, WidgetLaunchActivity::class.java)
-                .putExtra(EXTRA_STATS, stats)
                 .putExtra(EXTRA_BOOK, bookUrl)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

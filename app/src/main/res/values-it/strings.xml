@@ -964,15 +964,6 @@
     <string name="duration_none">Nessuno</string>
     <string name="widget_cover_label">Copertina attuale</string>
     <string name="widget_cover_description">La copertina del libro che stai leggendo</string>
-    <string name="widget_stats_label">Statistiche di lettura</string>
-    <string name="widget_stats_description">Il libro attuale e il tempo di lettura di questa settimana, mese e anno</string>
-    <string name="widget_currently_reading">Lettura in corso</string>
-    <string name="widget_no_book">Nessun libro ancora aperto</string>
-    <string name="widget_progress_unavailable">Non disponibile</string>
-    <string name="widget_duration_under_minute">&lt;1 min</string>
-    <string name="widget_duration_minutes">%1$d min</string>
-    <string name="widget_duration_hours">%1$d h</string>
-    <string name="widget_duration_hours_minutes">%1$d h %2$02d</string>
     <string name="widget_empty_title">Ancora niente sullo scaffale</string>
     <string name="widget_empty_detail">Apri un libro in Liseur e la sua copertina apparirà qui.</string>
     <string name="more_options">Altro</string>
@@ -1042,7 +1033,6 @@
     <string name="browse_load_more">Carica altri</string>
 
     <!-- Home-screen library and reading widgets. -->
-    <string name="widget_scope_last_sync">Ultima lettura sincronizzata</string>
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d posizione di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>
         <item quantity="other">%1$d posizioni di lettura. Il ripristino sostituisce le posizioni attuali con quelle salvate.</item>
