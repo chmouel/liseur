@@ -45,8 +45,7 @@ internal object TranslationPrompt {
 
     /**
      * The translation in [reply]: trimmed, without markers a model may have
-     * kept, nor the context it was told never to repeat, and only what is
-     * between the passage markers when it kept them.
+     * kept around it, nor the context it was told never to repeat.
      */
     fun clean(reply: String): String {
         var text = reply.trim()
@@ -54,10 +53,8 @@ internal object TranslationPrompt {
             val end = text.indexOf(CONTEXT_CLOSE, ignoreCase = true)
             if (end >= 0) text = text.substring(end + CONTEXT_CLOSE.length)
         }
-        val open = text.indexOf(OPEN, ignoreCase = true)
-        val close = text.lastIndexOf(CLOSE, ignoreCase = true)
-        // A lone marker inside the reply can be the translation's own words; only a pair frames it.
-        if (open >= 0 && close > open) return text.substring(open + OPEN.length, close).trim()
+        // Markers inside the reply can be the translation's own words; only those around all of it are the frame.
+        text = text.trim()
         if (text.startsWith(OPEN, ignoreCase = true)) text = text.substring(OPEN.length)
         if (text.endsWith(CLOSE, ignoreCase = true)) text = text.dropLast(CLOSE.length)
         return text.trim()

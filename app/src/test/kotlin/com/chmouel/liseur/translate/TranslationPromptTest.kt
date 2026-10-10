@@ -47,9 +47,10 @@ class TranslationPromptTest {
     }
 
     @Test
-    fun `a marker that is part of the translation is kept`() {
+    fun `markers that are part of the translation are kept`() {
         assertEquals("Use the <passage> element", TranslationPrompt.clean("Use the <passage> element"))
         assertEquals("Close it with </passage>.", TranslationPrompt.clean("Close it with </passage>."))
+        assertEquals("Use <passage>this</passage> element", TranslationPrompt.clean("Use <passage>this</passage> element"))
     }
 
     @Test
