@@ -11,10 +11,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
- * What the Liseur receivers share: the hourly refresh follows
- * whether any widget is placed, and a clock or time zone change redraws,
- * since "today" may now be a different day. A language change redraws
- * too: the labels were baked in when the widget was last drawn.
+ * What the Liseur receivers share: a clock, time zone or language change
+ * redraws the widget, since it was drawn with the old setting. A language
+ * change redraws too: the labels were baked in when the widget was last
+ * drawn.
  *
  * Any of these broadcasts may have started the process on its own, and
  * Android can kill it as soon as the receiver is done, so each one holds
@@ -29,7 +29,7 @@ abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
         when (intent.action) {
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 holdingBroadcast {
-                    WidgetUpdater.reconcilePeriodicNow(context)
+                    WidgetUpdater.retireLegacyWorkNow(context)
                     WidgetUpdater.requestRedraw(context)
                 }
                 return
@@ -43,16 +43,6 @@ abstract class LiseurWidgetReceiver : GlanceAppWidgetReceiver() {
             }
         }
         super.onReceive(context, intent)
-    }
-
-    override fun onEnabled(context: Context) {
-        super.onEnabled(context)
-        holdingBroadcast { WidgetUpdater.reconcilePeriodicNow(context) }
-    }
-
-    override fun onDisabled(context: Context) {
-        super.onDisabled(context)
-        holdingBroadcast { WidgetUpdater.reconcilePeriodicNow(context) }
     }
 
     private fun holdingBroadcast(block: suspend () -> Unit) {

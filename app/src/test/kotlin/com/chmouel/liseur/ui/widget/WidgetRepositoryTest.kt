@@ -1,6 +1,9 @@
 package com.chmouel.liseur.ui.widget
 
+import android.appwidget.AppWidgetManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -80,6 +83,18 @@ class WidgetRepositoryTest {
             ),
         )
         assertEquals(0.0, repository().load(context).book!!.progression!!, 0.0)
+    }
+
+    @Test
+    fun `only the cover receiver is offered without configuration`() {
+        val receivers = context.packageManager.queryBroadcastReceivers(
+            Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).setPackage(context.packageName),
+            PackageManager.GET_META_DATA,
+        )
+        assertEquals(
+            setOf(CoverOnlyWidgetReceiver::class.java.name),
+            receivers.map { it.activityInfo.name }.toSet(),
+        )
     }
 
     @Test

@@ -1802,19 +1802,19 @@ Room and cached cover files; it never waits on a network request.
   Library, combined-cover, and stats providers were removed outright,
   including their paging, period, and configuration state helpers; their
   placements disappear.
-- The hourly `WidgetRefreshWorker` exists only while a widget is placed.
-  `reconcilePeriodic` enqueues or cancels it from app start, the receiver's
-  `onEnabled`/`onDisabled`, and the worker itself. Manifest receivers do not
-  get `DATE_CHANGED` on Android 8 and later, so this job is what rolls the
-  day over. `TIME_SET`, `TIMEZONE_CHANGED` and `LOCALE_CHANGED` redraw at
-  once, since the labels are drawn in the local time.
+- There is no periodic widget refresh. The cover widget has no
+  date-dependent content, so nothing runs in the background for it.
+  `retireLegacyWork` cancels the unique work that earlier versions queued
+  for the hourly refresh and the stats widget. It runs from app start and
+  from the receiver on `MY_PACKAGE_REPLACED`. `TIME_SET`, `TIMEZONE_CHANGED`
+  and `LOCALE_CHANGED` redraw at once, since the labels are drawn in the
+  local time.
 - Any of these broadcasts may be what started the process, and Android
   can kill it once the receiver returns. The receiver holds the broadcast
-  with `goAsync()` until its work is safe: the reconcile finishes, or the
+  with `goAsync()` until its work is safe: the legacy work is retired, or the
   redraw is enqueued as unique one-off work (`requestRedraw`, which
   replaces a request still waiting). Do not start receiver work in a
   process-local scope and return.
-- Stats periods expose their labels and values together to TalkBack.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
 - Single covers are decoded at most 256 px on the long edge in `RGB_565`, which

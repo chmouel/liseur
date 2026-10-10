@@ -8,14 +8,11 @@ import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.updateAll
 import androidx.work.CoroutineWorker
-import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.await
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,12 +22,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** What the hourly refresh should be doing, given how many widgets are placed. */
-enum class PeriodicRefresh { Enqueue, Cancel }
-
-fun periodicRefreshFor(placedWidgets: Int): PeriodicRefresh =
-    if (placedWidgets > 0) PeriodicRefresh.Enqueue else PeriodicRefresh.Cancel
 
 /**
  * Asks every Liseur widget to redraw.
@@ -56,6 +47,9 @@ object WidgetUpdater {
     val generation: StateFlow<Long> = refreshes.asStateFlow()
 
     private fun widgets(): List<GlanceAppWidget> = listOf(CoverOnlyWidget())
+
+    private fun supportsWidgets(context: Context): Boolean =
+        context.packageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)
 
     fun schedule(context: Context) {
         val app = context.applicationContext
@@ -96,68 +90,46 @@ object WidgetUpdater {
     }
 
     /**
-     * Keeps the hourly refresh running exactly while a widget is placed.
+     * Cancels the unique work that earlier versions queued for the hourly
+     * refresh and the stats widget. Nothing queues it now, but an upgrade
+     * can leave it behind in WorkManager.
      *
-     * Idempotent, and called from app start, from the receivers when the
-     * first or last instance of a provider comes or goes, and from the job
-     * itself: an upgrade, a restore or a force-stop can each leave the job
-     * out of step with the homescreen, and any one of these puts it back.
+     * Called from app start and from the receiver when the app is updated.
      */
-    fun reconcilePeriodic(context: Context) {
+    fun retireLegacyWork(context: Context) {
         val app = context.applicationContext
-        if (!supportsWidgets(app)) return
         scope.launch {
             try {
-                reconcilePeriodicNow(app)
+                retireLegacyWorkNow(app)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Could not reconcile the widget refresh", e)
+                Log.w(TAG, "Could not retire legacy widget work", e)
             }
         }
     }
 
-    // Without the feature (TV, Automotive, some e-reader builds) there is no
-    // AppWidgetManager, and Glance's id lookup throws on every start.
-    private fun supportsWidgets(context: Context): Boolean =
-        context.packageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)
-
-    suspend fun reconcilePeriodicNow(context: Context) {
-        if (!supportsWidgets(context)) return
-        val manager = GlanceAppWidgetManager(context)
-        val placed = widgets().sumOf { manager.getGlanceIds(it.javaClass).size }
+    suspend fun retireLegacyWorkNow(context: Context) {
         val work = WorkManager.getInstance(context)
-        val operation = when (periodicRefreshFor(placed)) {
-            PeriodicRefresh.Enqueue -> work.enqueueUniquePeriodicWork(
-                PERIODIC_REFRESH,
-                ExistingPeriodicWorkPolicy.KEEP,
-                PeriodicWorkRequestBuilder<WidgetRefreshWorker>(1, TimeUnit.HOURS).build(),
-            )
-            PeriodicRefresh.Cancel -> work.cancelUniqueWork(PERIODIC_REFRESH)
-        }
-        operation.await()
+        work.cancelUniqueWork(LEGACY_PERIODIC_REFRESH).await()
+        work.cancelUniqueWork(LEGACY_STATS_REFRESH).await()
     }
 
     private const val TAG = "WidgetUpdater"
     private const val QUIET_MS = 3_000L
     private const val MAX_WAIT_MS = 15_000L
-    private const val PERIODIC_REFRESH = "liseur-widget-refresh"
     private const val ONE_OFF_REDRAW = "liseur-widget-redraw"
+    private const val LEGACY_PERIODIC_REFRESH = "liseur-widget-refresh"
+    private const val LEGACY_STATS_REFRESH = "liseur-widget-stats"
 }
 
-/**
- * Hourly redraw, so the day rolls over on the homescreen
- * without the app being opened. Manifest receivers no longer hear
- * `DATE_CHANGED`, so this is what moves the widget past midnight. It
- * also runs once for [WidgetUpdater.requestRedraw].
- */
+/** Redraws the widgets once, for [WidgetUpdater.requestRedraw]. */
 class WidgetRefreshWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         WidgetUpdater.updateNow(applicationContext)
-        WidgetUpdater.reconcilePeriodicNow(applicationContext)
         return Result.success()
     }
 }
