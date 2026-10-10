@@ -27,7 +27,10 @@ The protocol is small: `GET /users/auth` proves a credential,
 KOReader's partial MD5 of its file bytes, which
 `BookFingerprint.partialMd5` already reproduces, because liseur-sync
 resolution needed it first. Auth is two headers: `x-auth-user` and
-`x-auth-key`, the hex MD5 of the password.
+`x-auth-key`, the hex MD5 of the password. Every request also carries
+`Accept: application/vnd.koreader.v1+json`, as KOReader sends it: the
+reference server picks its API version from that header and answers 412
+without it.
 
 ## Decision
 
