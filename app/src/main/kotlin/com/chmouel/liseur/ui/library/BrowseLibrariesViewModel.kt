@@ -58,6 +58,11 @@ data class BrowseLibrariesState(
     val addable: List<RemoteBook> get() = listing.books.filter(::canAdd)
 
     val gutenbergSaved: Boolean get() = saved.any(GutenbergBrowse::isRoot)
+
+    /** Back has a step to undo inside the browser before it leaves it. */
+    val canGoBack: Boolean
+        get() = pending != null || detail != null || selecting || formOpen ||
+            path.isNotEmpty() || serverId != null
 }
 
 /** One-off outcomes, told once through a snackbar. */
@@ -267,6 +272,9 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         _state.update { it.copy(path = it.path.take(depth), selecting = false, selected = emptyMap(), pending = null) }
         load(keep = false)
     }
+
+    /** Leaving the browser: a catalog still being connected to is dropped. */
+    fun leave() = abandonConnection()
 
     fun back(): Boolean {
         val current = _state.value

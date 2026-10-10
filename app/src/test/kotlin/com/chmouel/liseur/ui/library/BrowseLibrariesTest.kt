@@ -270,4 +270,12 @@ class BrowseLibrariesTest {
         assertFalse(BrowseLibrariesState(saved = listOf(root.copy(catalogUrl = StarterCatalog.Category.POPULAR.url))).gutenbergSaved)
         assertFalse(BrowseLibrariesState(saved = listOf(server())).gutenbergSaved)
     }
+
+    @Test
+    fun backLeavesTheBrowserOnlyFromTheSavedCatalogs() {
+        assertFalse(BrowseLibrariesState().canGoBack)
+        assertTrue(BrowseLibrariesState(formOpen = true).canGoBack)
+        assertTrue(BrowseLibrariesState(serverId = 1L).canGoBack)
+        assertTrue(BrowseLibrariesState(selecting = true).canGoBack)
+    }
 }
