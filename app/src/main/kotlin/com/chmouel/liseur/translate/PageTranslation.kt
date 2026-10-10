@@ -204,6 +204,10 @@ internal class PageTranslation<P>(
                     swaps.getOrNull(i - 1)
                         ?.takeIf { it.sentence.href == swap.sentence.href && it.sentence.selector == swap.sentence.selector }
                         ?.let { squash(it.translation) },
+                    // At the start of an element nothing in it comes before; the walk knows what the page shows above it.
+                    walked.getOrNull(walked.indexOfFirst { it === swap.sentence } - 1)
+                        ?.takeIf { it.href == swap.sentence.href }
+                        ?.let { previous -> squash(swaps.firstOrNull { it.sentence === previous }?.translation ?: previous.text) },
                     book.takeLast(BOOK_TAIL),
                 )
                 // Words that only happen to be in a translation are not on the page after it.
