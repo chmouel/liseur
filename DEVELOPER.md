@@ -69,7 +69,10 @@ It is the debug build with two differences, both deliberate:
 The APK lands in `app/build/outputs/apk/play/dev/app-play-dev.apk`,
 debug-signed like `app-play-debug.apk`. The device-facing make targets
 (`install`, `run`, `reset`, `dev-*`) and `hack/install*` use the `play`
-flavor unless `FLAVOR=foss` is given.
+flavor unless `FLAVOR=foss` is given. The `dev-*` targets that reach a
+device run only on a physical one: `PHONE=` picks it and defaults to the
+first one attached, and they fail when there is none or `PHONE=` names
+an emulator.
 
 `release` is not involved anywhere in this, which is the point: F-Droid
 rebuilds that build type byte for byte from the tag, and nothing here
