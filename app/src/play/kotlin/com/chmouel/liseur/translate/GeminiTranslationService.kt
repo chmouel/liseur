@@ -53,7 +53,7 @@ internal class GeminiTranslationService(
 
     override fun model(s: AppSettings) = GeminiTranslation.modelOf(s.translationGeminiModel)
 
-    override suspend fun destination(): String = "Gemini"
+    override fun destination(s: AppSettings): String = "Gemini"
 
     override fun owner(s: AppSettings): String = GeminiAccount.OWNER
 

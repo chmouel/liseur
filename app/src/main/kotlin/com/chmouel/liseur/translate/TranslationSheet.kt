@@ -183,7 +183,7 @@ internal fun TranslationSheet(
             Outcome.Failed(e)
         }
     }
-    val destination by produceState<String?>(null, current, choice) { value = current?.destination() }
+    val destination by produceState<String?>(null, current, choice) { value = current?.let { feature.destination(it) } }
 
     LiseurModalBottomSheet(
         onDismissRequest = onDismiss,

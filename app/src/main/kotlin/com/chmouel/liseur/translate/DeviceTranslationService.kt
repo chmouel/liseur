@@ -115,7 +115,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     private suspend fun load(): List<DevicePair> =
         known ?: query(context)?.also { known = it; pairs.value = it } ?: emptyList()
 
-    override suspend fun destination(): String? = null
+    override fun destination(s: AppSettings): String? = null
 
     override fun owner(s: AppSettings): String? = null
 
