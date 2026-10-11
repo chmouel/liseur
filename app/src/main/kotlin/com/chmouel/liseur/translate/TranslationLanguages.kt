@@ -55,11 +55,14 @@ internal object TranslationLanguages {
     fun same(source: String, target: String): Boolean {
         val a = source.split('-')
         val b = target.split('-')
-        if (a.first() != b.first()) return false
+        if (a.first().let { SAME[it] ?: it } != b.first().let { SAME[it] ?: it }) return false
         val subA = a.getOrNull(1)
         val subB = b.getOrNull(1)
         return subA == null || subB == null || subA == subB
     }
+
+    // Codes services use for one written language: Bokmål as Norwegian, Filipino as Tagalog.
+    private val SAME = mapOf("nb" to "no", "fil" to "tl")
 
     /** [tags] a passage in [source] can go into: all but [source] itself, or all when it is unknown. */
     fun targets(tags: Collection<String>, source: String?): List<String> =

@@ -47,4 +47,11 @@ class TranslationStepTest {
     fun `a service that takes any language translates`() {
         assertEquals(TranslationStep.Translate, step(targets = null))
     }
+
+    @Test
+    fun `a target spelled another way by the service still matches`() {
+        assertEquals(TranslationStep.Translate, step(target = "nb", targets = mapOf("no" to PairState.Ready)))
+        assertEquals(TranslationStep.NotDownloaded, step(target = "fil", targets = mapOf("tl" to PairState.NeedsDownload)))
+        assertEquals(TranslationStep.Same, step(source = "no", target = "nb"))
+    }
 }
