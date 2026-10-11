@@ -136,10 +136,13 @@ internal fun layoutPasses(root: View): Flow<Unit> = callbackFlow {
  * Readium can show the next resource before its locator says so; this
  * follows the views themselves, looked at again after every layout pass
  * and scroll, which is what a page turn or a recycled view produces.
+ * Scrolls come every frame, so the view is held by [visibleWebViewCache]
+ * and only its address is read again.
  */
 internal fun shownResource(root: View): Flow<String?> = callbackFlow {
     val observer = root.viewTreeObserver
-    val look = { trySend(visibleWebView(root)?.url?.let(ResourceAddress::canonicalPath)) }
+    val shown = visibleWebViewCache(root)
+    val look = { trySend(shown.current()?.url?.let(ResourceAddress::canonicalPath)) }
     val layout = ViewTreeObserver.OnGlobalLayoutListener { look() }
     val scroll = ViewTreeObserver.OnScrollChangedListener { look() }
     observer.addOnGlobalLayoutListener(layout)

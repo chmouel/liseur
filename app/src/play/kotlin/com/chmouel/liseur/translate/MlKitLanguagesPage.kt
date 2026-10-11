@@ -114,7 +114,8 @@ internal fun MlKitLanguagesPage(service: MlKitTranslationService, target: String
                     )
                 }
                 when {
-                    failed && have == null -> item {
+                    // A change whose confirming listing failed leaves nothing listed either.
+                    have == null && (failed || busy.values.any { it is Change.Failed }) -> item {
                         Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(stringResource(R.string.translation_mlkit_models_failed), color = MaterialTheme.colorScheme.error)
                             TextButton(onClick = { asked++ }) { Text(stringResource(R.string.translation_mlkit_try_again)) }
