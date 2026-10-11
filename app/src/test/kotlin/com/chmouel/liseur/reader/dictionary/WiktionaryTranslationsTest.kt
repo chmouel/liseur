@@ -64,6 +64,20 @@ class WiktionaryTranslationsTest {
     }
 
     @Test
+    fun `moved tables of repeated parts of speech keep page order`() {
+        fun section(part: String, word: String = "") =
+            TranslationSection(part, if (word.isEmpty()) emptyList() else listOf(TranslationGroup("", listOf(word))))
+        val entry = EntryTranslations(listOf(section("Noun"), section("Verb"), section("Noun")), "bank/translations")
+        val moved = EntryTranslations(
+            listOf(section("Noun", "banque"), section("Verb", "déposer"), section("Noun", "rive"), section("Noun", "berge")),
+        )
+        assertEquals(
+            listOf(section("Noun", "banque"), section("Verb", "déposer"), section("Noun", "rive"), section("Noun", "berge")),
+            entry.plus(moved).sections,
+        )
+    }
+
+    @Test
     fun `each etymology's tables stay apart, in page order`() {
         assertEquals(
             listOf(
@@ -165,6 +179,7 @@ class WiktionaryTranslationsTest {
         assertEquals("https://zh.wiktionary.org", translationSite("https://en.wiktionary.org", "zh-Hant"))
         assertNull(translationSite("https://wiktionary.example.org", "fr"))
         assertNull(translationSite("https://en.wiktionary.org", "eo"))
+        assertEquals("https://no.wiktionary.org", translationSite("https://en.wiktionary.org", "nb"))
     }
 
     @Test

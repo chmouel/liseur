@@ -131,7 +131,7 @@ class WiktionaryClient(
      */
     suspend fun translations(term: String, baseUrl: String, target: String): TranslationsState =
         withContext(Dispatchers.IO) {
-            val language = WiktionaryEditions.editionOf(baseUrl)?.code ?: "en"
+            val language = WiktionaryEditions.codeOf(baseUrl) ?: "en"
             val host = DictionaryUrl.hostOf(baseUrl)
             val budget = Expansion(MAX_TRANSLATION_REQUESTS, pages)
             val entry = try {

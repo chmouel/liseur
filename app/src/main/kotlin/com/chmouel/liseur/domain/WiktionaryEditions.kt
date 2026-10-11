@@ -77,4 +77,8 @@ object WiktionaryEditions {
         val code = host.removeSuffix(".wiktionary.org")
         return code != host && code.isNotEmpty() && !code.contains('.')
     }
+
+    /** The language a Wikimedia Wiktionary is written in, listed or not ("eo"), or null for any other site. */
+    fun codeOf(baseUrl: String): String? =
+        if (isWiktionaryHost(baseUrl)) DictionaryUrl.hostOf(baseUrl).removeSuffix(".wiktionary.org").lowercase() else null
 }

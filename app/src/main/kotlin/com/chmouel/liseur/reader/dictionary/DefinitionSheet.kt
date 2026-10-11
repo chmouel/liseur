@@ -99,7 +99,7 @@ fun DefinitionSheet(
 
     val found = state as? DictionaryState.Found
     val entry = found?.term?.ifBlank { null } ?: term
-    val source = WiktionaryEditions.editionOf(baseUrl)?.code ?: "en"
+    val source = WiktionaryEditions.codeOf(baseUrl) ?: "en"
     val target = remember(found, source, altLanguage) {
         found?.let { translationTarget(it.senses, source, altLanguage) }
     }

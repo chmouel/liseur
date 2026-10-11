@@ -40,6 +40,13 @@ class WiktionaryEditionsTest {
     }
 
     @Test
+    fun `any wikimedia-hosted edition names its language, other sites none`() {
+        assertEquals("fr", WiktionaryEditions.codeOf("https://fr.wiktionary.org"))
+        assertEquals("eo", WiktionaryEditions.codeOf("https://eo.wiktionary.org"))
+        assertNull(WiktionaryEditions.codeOf("https://mirror.example"))
+    }
+
+    @Test
     fun `every listed edition is picked out of its own url`() {
         for (edition in WiktionaryEditions.all) {
             assertEquals(edition, WiktionaryEditions.editionOf(edition.baseUrl))
