@@ -1,6 +1,10 @@
 package com.chmouel.liseur.translate
 
 import com.chmouel.liseur.data.settings.AppSettings
+import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.common.MlKitException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,10 +16,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
+import java.util.concurrent.Executor
 
 class MlKitTranslationTest {
 
@@ -153,6 +159,29 @@ class MlKitTranslationTest {
         // The deletion waits for the download rather than running under it.
         service.delete("fr")
         assertEquals(PairState.NeedsDownload, service.targets("fr")["en"])
+    }
+
+    @Test
+    fun `a task ML Kit cancels fails as an ML Kit error, not as the caller's cancellation`() = runBlocking {
+        val direct = Executor { it.run() }
+        try {
+            Tasks.forCanceled<Unit>().await(direct)
+            fail("expected MlKitException")
+        } catch (e: CancellationException) {
+            fail("got a cancellation")
+        } catch (e: MlKitException) {
+            assertEquals(MlKitException.CANCELLED, e.errorCode)
+        }
+    }
+
+    @Test
+    fun `a caller that stops waiting on an ML Kit task is still cancelled`() = runBlocking {
+        val direct = Executor { it.run() }
+        val pending = TaskCompletionSource<Unit>()
+        val waiter = launch(Dispatchers.Default) { pending.task.await(direct) }
+        waiter.cancelAndJoin()
+        assertTrue(waiter.isCancelled)
+        assertFalse(pending.task.isComplete)
     }
 
     private suspend inline fun <reified E : TranslationError> expect(crossinline block: suspend () -> Unit) {

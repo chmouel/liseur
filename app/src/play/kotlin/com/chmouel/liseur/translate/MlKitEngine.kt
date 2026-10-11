@@ -124,15 +124,21 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
 
     private fun model(code: String) = TranslateRemoteModel.Builder(code).build()
 
-    /** The task's result; cancelling stops the wait, not ML Kit's work, which the SDK finishes or drops. */
-    private suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { continuation ->
-        addOnCompleteListener(executor) { task ->
-            val error = task.exception
-            when {
-                error != null -> continuation.resumeWithException(error)
-                task.isCanceled -> continuation.cancel()
-                else -> continuation.resume(task.result)
-            }
+    private suspend fun <T> Task<T>.await(): T = await(executor)
+}
+
+/**
+ * The task's result; cancelling stops the wait, not ML Kit's work, which the SDK finishes or drops.
+ * A task ML Kit cancels itself fails with [MlKitException.CANCELLED], so each call site reports it
+ * as its own error rather than as the caller's cancellation.
+ */
+internal suspend fun <T> Task<T>.await(executor: Executor): T = suspendCancellableCoroutine { continuation ->
+    addOnCompleteListener(executor) { task ->
+        val error = task.exception
+        when {
+            error != null -> continuation.resumeWithException(error)
+            task.isCanceled -> continuation.resumeWithException(MlKitException("ML Kit cancelled the task", MlKitException.CANCELLED))
+            else -> continuation.resume(task.result)
         }
     }
 }
