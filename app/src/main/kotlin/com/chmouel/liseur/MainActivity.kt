@@ -545,6 +545,9 @@ private fun LiseurApp(
                             onDictionaryBaseUrl = {
                                 scope.launch { repository.setDictionaryBaseUrl(it) }
                             },
+                            onDictionaryAltLanguage = {
+                                scope.launch { repository.setDictionaryAltLanguage(it) }
+                            },
                             onBack = back,
                         )
                     }

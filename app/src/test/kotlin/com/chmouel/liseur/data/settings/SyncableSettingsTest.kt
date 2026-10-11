@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -118,6 +119,7 @@ class SyncableSettingsTest {
                 "app.resume_last_book",
                 "app.dictionary_enabled",
                 "app.dictionary_base_url",
+                "app.dictionary_alt_language",
                 "app.definition_target",
                 "app.highlight_tints",
                 "app.highlight_tint_default",
@@ -295,6 +297,25 @@ class SyncableSettingsTest {
         assertFalse(registry.getValue("app.dictionary_base_url").write("http://evil.example.com"))
         assertFalse(registry.getValue("app.dictionary_base_url").write("not a url"))
         assertEquals(before, registry.getValue("app.dictionary_base_url").read())
+    }
+
+    @Test
+    fun `a dictionary alternative language travels as a tag, off, or unset for automatic`() = runTest {
+        val a = app()
+        val setting = syncableSettings(a, reader()).first { it.key == "app.dictionary_alt_language" }
+        assertEquals(SETTING_UNSET, setting.read())
+
+        assertTrue(setting.write("fr"))
+        assertEquals("fr", a.current().dictionaryAltLanguage)
+        assertFalse(setting.write("fr_FR"))
+        assertFalse(setting.write("not a language"))
+        assertEquals("fr", setting.read())
+
+        assertTrue(setting.write(ALT_LANGUAGE_OFF))
+        assertEquals(ALT_LANGUAGE_OFF, setting.read())
+
+        assertTrue(setting.write(SETTING_UNSET))
+        assertNull(a.current().dictionaryAltLanguage)
     }
 
     // -- The palette, where absent and empty are different answers ---------

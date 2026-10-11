@@ -155,6 +155,26 @@ class WiktionaryClientTest {
     }
 
     @Test
+    fun `a strict lookup does not take another language's section`() = runBlocking {
+        server.enqueue(MockResponse(code = 501, body = """{"status":501}"""))
+        server.enqueue(
+            MockResponse(
+                code = 200,
+                body = """
+                    <html><body><section><h2>Français</h2>
+                    <section><h3>Nom commun</h3><ol><li>Un félin.</li></ol></section>
+                    </section></body></html>
+                """.trimIndent(),
+            ),
+        )
+
+        val state = WiktionaryClient().define("chat", listOf("en"), baseUrl(), strict = true)
+
+        assertEquals(DictionaryState.NotFound, state)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
     fun `a probe passes when the site answers, even with nothing found`() = runBlocking {
         server.enqueue(MockResponse(code = 404))
 
@@ -352,5 +372,98 @@ class WiktionaryClientTest {
         assertEquals(1, server.requestCount)
         assertEquals(5, found.senses.single().definitions.size)
         assertTrue(found.senses.single().resolved.isEmpty())
+    }
+
+    // -- Translations ------------------------------------------------------
+
+    private val waterDefinition =
+        """{"en":[{"partOfSpeech":"Noun","definitions":[{"definition":"A clear liquid."}]}]}"""
+
+    @Test
+    fun `the lookup asks nothing about translations and says which entry it found`() = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(body = waterDefinition))
+
+        val found = WiktionaryClient().define("Water", listOf("en"), baseUrl()) as DictionaryState.Found
+
+        assertEquals("water", found.term)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `translations are fetched from the entry page when asked for`() = runBlocking {
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.WATER))
+
+        val state = WiktionaryClient().translations("water", baseUrl(), "fr")
+
+        val page = server.takeRequest()
+        assertEquals("/api/rest_v1/page/html/water", page.target)
+        assertTrue(page.headers["User-Agent"].orEmpty().startsWith("Liseur/"))
+        assertEquals(
+            listOf(TranslationGroup("clear liquid H₂O", listOf("eau"))),
+            (state as TranslationsState.Found).sections.first().groups,
+        )
+    }
+
+    @Test
+    fun `an entry page the lookup already fetched is not fetched again`() = runBlocking {
+        server.enqueue(MockResponse(code = 501))
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.WATER))
+        val client = WiktionaryClient()
+        client.define("water", listOf("en"), baseUrl())
+
+        val state = client.translations("water", baseUrl(), "fr")
+
+        assertEquals(2, server.requestCount)
+        assertTrue(state is TranslationsState.Found)
+    }
+
+    @Test
+    fun `a moved table is fetched from the entry's own subpage`() = runBlocking {
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.HOUSE))
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.HOUSE_TRANSLATIONS))
+
+        val state = WiktionaryClient().translations("house", baseUrl(), "fr") as TranslationsState.Found
+
+        assertEquals("/api/rest_v1/page/html/house", server.takeRequest().target)
+        assertEquals("/api/rest_v1/page/html/house%2Ftranslations", server.takeRequest().target)
+        assertEquals(listOf("maison"), state.sections.single().groups.single().terms)
+    }
+
+    @Test
+    fun `a pointer to another page's translations is not followed`() = runBlocking {
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.HOUSE.replace("house/translations", "home/translations")))
+
+        val state = WiktionaryClient().translations("house", baseUrl(), "fr")
+
+        assertEquals(TranslationsState.Empty, state)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a missing entry has no translations and a failing one says so`() = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        assertEquals(TranslationsState.Empty, WiktionaryClient().translations("water", baseUrl(), "fr"))
+
+        server.enqueue(MockResponse(code = 500))
+        assertEquals(
+            TranslationsState.Failed("HTTP 500", "127.0.0.1:${server.port}"),
+            WiktionaryClient().translations("water", baseUrl(), "fr"),
+        )
+    }
+
+    @Test
+    fun `translation requests cannot be redirected to another origin`() = runBlocking {
+        MockWebServer().use { other ->
+            other.start(InetAddress.getByName("127.0.0.1"), 0)
+            other.enqueue(MockResponse(body = WiktionaryTranslationsTest.WATER))
+            server.enqueue(MockResponse.Builder().code(302)
+                .addHeader("Location", other.url("/leaked-word").toString()).build())
+
+            val state = WiktionaryClient().translations("water", baseUrl(), "fr")
+
+            assertEquals(0, other.requestCount)
+            assertTrue(state is TranslationsState.Failed)
+        }
     }
 }

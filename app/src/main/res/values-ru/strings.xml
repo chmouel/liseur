@@ -564,6 +564,9 @@
     <string name="dictionary_base_unresolved">Некоторые значения «%1$s» требуют ещё одного запроса. Откройте полную статью, чтобы продолжить.</string>
     <string name="dictionary_disabled_explanation">Определения выключены. Если включить их, Liseur отправит выбранное слово и его начальные формы по ссылкам на %1$s для поиска значений. Другой текст книги и данные аккаунта не отправляются. Также можно использовать словарное приложение на телефоне.</string>
     <string name="dictionary_enable">Включить определения</string>
+    <string name="dictionary_translations_in">Перевод (%1$s)</string>
+    <string name="dictionary_translations_button_description">Переводы на %1$s: %2$s</string>
+    <string name="dictionary_translations_empty">В Wiktionary нет переводов «%1$s» на %2$s.</string>
     <string name="download_failed_open">Не удалось скачать «%1$s».</string>
     <string name="mark_read">Отметить как прочитанную</string>
     <string name="mark_unread">Отметить как непрочитанную</string>
@@ -826,6 +829,11 @@
     <string name="settings_dictionary_site_checking">Проверка…</string>
     <string name="settings_dictionary_site_ok">%1$s отвечает.</string>
     <string name="settings_dictionary_site_unreachable">%1$s не ответил: %2$s</string>
+    <string name="settings_dictionary_alt_language">Дополнительный язык</string>
+    <string name="settings_dictionary_alt_language_detail">Добавляет в карточку определения кнопку, которая открывает переводы слова из таблиц переводов Wiktionary. В автоматическом режиме для книг на другом языке используется язык приложения. Они есть только у слов на языке выбранного словаря.</string>
+    <string name="settings_dictionary_alt_language_off">Выключен</string>
+    <string name="settings_dictionary_alt_language_auto">Автоматически</string>
+    <string name="settings_dictionary_alt_language_auto_detail">Язык приложения, для книг на другом языке</string>
     <string name="settings_library">Библиотека</string>
     <string name="settings_remote_library">Удалённые библиотеки</string>
     <string name="settings_export_import">Экспорт и импорт</string>

@@ -81,7 +81,15 @@ sends the selected word to the dictionary site configured in Settings,
 by default the public Wiktionary API, over HTTPS. For plural or conjugated
 forms, it may also look up base words explicitly linked by that dictionary,
 on the same site. It follows these links one step only, with at most four
-additional requests. No identifier, book title
+additional requests. When the book declares a language other than Liseur's,
+the alternative language for translations is Liseur's language unless you
+choose another one or turn it off in Settings. With an alternative language,
+each lookup also fetches that word's full entry page from the
+same site, plus its translations page when the entry keeps them there, with
+at most two additional requests. Opening the translations, or tapping a
+translated word, looks that word up on the public Wiktionary of the
+language, such as fr.wiktionary.org. This only happens when your
+dictionary site is itself a Wikimedia Wiktionary. No identifier, book title
 or account accompanies it. You may point this at any Wiktionary edition or
 mirror, or leave the feature off and hand words to an offline dictionary app
 installed on your device instead. When you pick or type a dictionary site in

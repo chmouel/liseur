@@ -47,6 +47,9 @@ import com.chmouel.liseur.ui.theme.isDarkSurface
  * that sits over the page itself — a note, say — passes the reading
  * theme's instead, for the same reason the footnote card does: a white
  * sheet over a black page at night is a lamp in the face.
+ *
+ * A sheet opened from another sheet passes a transparent [scrimColor], as
+ * the one below already dims the page. E-paper has no scrim to pass.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,6 +59,7 @@ fun LiseurModalBottomSheet(
     sheetState: SheetState = rememberModalBottomSheetState(),
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    scrimColor: Color = BottomSheetDefaults.ScrimColor,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val eInk = LocalEInk.current
@@ -66,6 +70,7 @@ fun LiseurModalBottomSheet(
             sheetState = sheetState,
             containerColor = containerColor,
             contentColor = contentColor,
+            scrimColor = scrimColor,
             dragHandle = {
                 BottomSheetDefaults.DragHandle(color = contentColor.copy(alpha = 0.4f))
             },

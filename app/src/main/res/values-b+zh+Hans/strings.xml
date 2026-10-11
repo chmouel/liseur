@@ -547,6 +547,9 @@
     <string name="dictionary_base_unresolved">“%1$s”的部分释义需要再次查询。请打开完整词条继续查看。</string>
     <string name="dictionary_disabled_explanation">释义功能已关闭。开启后，Liseur 会将所选单词及其链接指向的原形发送至 %1$s，以查找释义。不会发送书籍中的其他文字或账户信息。您也可以使用手机上的词典应用。</string>
     <string name="dictionary_enable">开启释义</string>
+    <string name="dictionary_translations_in">%1$s翻译</string>
+    <string name="dictionary_translations_button_description">%1$s翻译：%2$s</string>
+    <string name="dictionary_translations_empty">维基词典没有“%1$s”的%2$s翻译。</string>
     <string name="download_failed_open">无法下载“%1$s”。</string>
     <string name="mark_read">标记为已读</string>
     <string name="mark_unread">标记为未读</string>
@@ -803,6 +806,11 @@
     <string name="settings_dictionary_site_checking">检查中…</string>
     <string name="settings_dictionary_site_ok">%1$s 有响应。</string>
     <string name="settings_dictionary_site_unreachable">%1$s 无响应：%2$s</string>
+    <string name="settings_dictionary_alt_language">备选语言</string>
+    <string name="settings_dictionary_alt_language_detail">在释义卡片中添加一个按钮，用于打开单词的译法，取自维基词典的翻译表。自动模式下，以其他语言写成的书使用应用的语言。只有词典网站本身语言的单词才有翻译表。</string>
+    <string name="settings_dictionary_alt_language_off">关闭</string>
+    <string name="settings_dictionary_alt_language_auto">自动</string>
+    <string name="settings_dictionary_alt_language_auto_detail">应用的语言，用于以其他语言写成的书</string>
     <string name="settings_library">书库</string>
     <string name="settings_remote_library">远程书库</string>
     <string name="settings_export_import">导出与导入</string>

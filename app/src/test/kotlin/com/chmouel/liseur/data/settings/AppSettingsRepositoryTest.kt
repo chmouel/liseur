@@ -4,10 +4,13 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -139,5 +142,28 @@ class AppSettingsRepositoryTest {
         val s = repo.settings.first()
         assertEquals("kept", s.deviceVoice)
         assertTrue(s.voicePreferences.isEmpty())
+    }
+
+    @Test
+    fun `the dictionary alternative language is automatic until chosen, and can be turned off`() = runTest {
+        val repo = AppSettingsRepository(store())
+        assertNull(repo.settings.first().dictionaryAltLanguage)
+
+        repo.setDictionaryAltLanguage("fr")
+        assertEquals("fr", repo.settings.first().dictionaryAltLanguage)
+
+        repo.setDictionaryAltLanguage(ALT_LANGUAGE_OFF)
+        assertEquals(ALT_LANGUAGE_OFF, repo.settings.first().dictionaryAltLanguage)
+
+        repo.setDictionaryAltLanguage(null)
+        assertNull(repo.settings.first().dictionaryAltLanguage)
+    }
+
+    @Test
+    fun `a stored alternative language that is not one is ignored`() = runTest {
+        val store = store()
+        store.edit { it[stringPreferencesKey("dictionary_alt_language")] = "not a language" }
+
+        assertNull(AppSettingsRepository(store).settings.first().dictionaryAltLanguage)
     }
 }

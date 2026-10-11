@@ -286,11 +286,13 @@ class ReaderViewModel(
      * @param target Where the Define action sends selected text.
      * @param enabled Whether the reader has agreed to online lookups.
      * @param baseUrl The dictionary site they chose.
+     * @param altLanguage The alternative-language setting: a language, [com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF], or null for automatic.
      */
     data class DictionarySettings(
         val target: DefinitionTarget = DefinitionTarget.Default,
         val enabled: Boolean = false,
         val baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
+        val altLanguage: String? = null,
     )
 
     /** The dictionary's opt-in state, watched so the card reacts to it. */
@@ -300,6 +302,7 @@ class ReaderViewModel(
                 it.definitionTarget,
                 it.dictionaryLookupEnabled,
                 it.dictionaryBaseUrl,
+                it.dictionaryAltLanguage,
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DictionarySettings())

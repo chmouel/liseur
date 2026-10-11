@@ -18,6 +18,8 @@ import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
+import com.chmouel.liseur.translate.TranslationLanguages
 import com.chmouel.liseur.tts.SpeechServerPresets
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -182,6 +184,9 @@ enum class DefinitionTarget(val id: String) {
  * @param dictionaryBaseUrl The site definitions are fetched from. Any
  *   Wiktionary works, so a reader can pick their own language's edition or
  *   a mirror instead of the default.
+ * @param dictionaryAltLanguage The language the definition card lists a
+ *   word's Wiktionary translations in, as a BCP 47 tag; [ALT_LANGUAGE_OFF]
+ *   for none; null for automatic, the app's language for a book in another.
  * @param highlightPalette Which colours the bar over a selected passage
  *   offers, and the configured default for a plain highlight. A passage note
  *   uses the first colour in that bar's stable order, or the default when
@@ -235,6 +240,7 @@ data class AppSettings(
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
+    val dictionaryAltLanguage: String? = null,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
@@ -356,6 +362,7 @@ class AppSettingsRepository(
         val DEFINITION_TARGET = stringPreferencesKey("definition_target")
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
+        val DICTIONARY_ALT_LANGUAGE = stringPreferencesKey(DICTIONARY_ALT_LANGUAGE_NAME)
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
         val STATS_RANGE = stringPreferencesKey("stats_range")
@@ -433,6 +440,8 @@ class AppSettingsRepository(
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
+            dictionaryAltLanguage = p[Keys.DICTIONARY_ALT_LANGUAGE]
+                ?.takeIf { it == ALT_LANGUAGE_OFF || TranslationLanguages.of(it) == it },
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
             highlightPalette = HighlightPalette.of(
@@ -594,6 +603,9 @@ class AppSettingsRepository(
         val normalised = DictionaryUrl.normalise(url) ?: DictionaryUrl.DEFAULT_BASE_URL
         store.edit { it[Keys.DICTIONARY_BASE_URL] = normalised }
     }
+
+    /** Stores the language the definition card lists translations in: a tag, [ALT_LANGUAGE_OFF], or null for automatic. */
+    suspend fun setDictionaryAltLanguage(tag: String?) = setOrRemove(Keys.DICTIONARY_ALT_LANGUAGE, tag.orEmpty())
 
     /**
      * Offers [tint] when it was not offered, and stops offering it when
@@ -907,6 +919,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
+    DICTIONARY_ALT_LANGUAGE_NAME to BackupValueType.STRING,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
     "highlight_tints_offered" to BackupValueType.STRING_SET,"lock_footer_on" to BackupValueType.BOOLEAN,
     "highlight_tint_default" to BackupValueType.STRING,
@@ -926,5 +939,6 @@ internal val APP_BACKUP_TYPES = mapOf(
     TRANSLATION_TARGET_NAME to BackupValueType.STRING,
 )
 
+private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"

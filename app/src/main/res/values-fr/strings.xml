@@ -516,6 +516,9 @@
     <string name="dictionary_base_unresolved">Certains sens de « %1$s » nécessitent une autre recherche. Ouvrez son entrée complète pour continuer.</string>
     <string name="dictionary_disabled_explanation">Les définitions sont désactivées. Les activer permet à Liseur d\'envoyer le mot sélectionné et ses formes de base liées à %1$s pour en trouver les sens. Aucun autre texte du livre ni renseignement de compte n\'est envoyé. Vous pouvez aussi utiliser une application dictionnaire sur votre téléphone.</string>
     <string name="dictionary_enable">Activer les définitions</string>
+    <string name="dictionary_translations_in">En %1$s</string>
+    <string name="dictionary_translations_button_description">Traductions en %1$s : %2$s</string>
+    <string name="dictionary_translations_empty">Wiktionary n\'a pas de traductions de « %1$s » en %2$s.</string>
     <string name="download_failed_open">Impossible de télécharger « %1$s ».</string>
     <string name="mark_read">Marquer comme lu</string>
     <string name="mark_unread">Marquer comme non lu</string>
@@ -776,6 +779,11 @@
     <string name="settings_dictionary_site_checking">Vérification…</string>
     <string name="settings_dictionary_site_ok">%1$s répond.</string>
     <string name="settings_dictionary_site_unreachable">%1$s n\'a pas répondu : %2$s</string>
+    <string name="settings_dictionary_alt_language">Langue secondaire</string>
+    <string name="settings_dictionary_alt_language_detail">Ajoute à la fiche de définition un bouton qui ouvre les traductions du mot, tirées des tableaux de traduction de Wiktionary. En mode automatique, la langue de l\'application est utilisée pour les livres écrits dans une autre langue. Seuls les mots dans la langue du site de dictionnaire en ont.</string>
+    <string name="settings_dictionary_alt_language_off">Désactivée</string>
+    <string name="settings_dictionary_alt_language_auto">Automatique</string>
+    <string name="settings_dictionary_alt_language_auto_detail">La langue de l\'application, pour les livres écrits dans une autre langue</string>
     <string name="settings_library">Bibliothèque</string>
     <string name="settings_remote_library">Bibliothèques distantes</string>
     <string name="settings_export_import">Exporter et importer</string>

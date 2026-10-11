@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -145,6 +146,7 @@ import com.chmouel.liseur.reader.annotations.shareText
 import com.chmouel.liseur.reader.annotations.toDecorations
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
+import com.chmouel.liseur.reader.dictionary.altLanguageFor
 import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
@@ -4055,6 +4057,7 @@ fun ReaderScreen(
         }
 
     defineWord?.let { word ->
+        val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
         DefinitionSheet(
             word = word,
             languages = remember(publication) {
@@ -4062,13 +4065,16 @@ fun ReaderScreen(
             },
             enabled = dictionary.enabled,
             baseUrl = dictionary.baseUrl,
+            altLanguage = remember(publication, dictionary.altLanguage, appLanguage) {
+                altLanguageFor(dictionary.altLanguage, publication.metadata.languages.firstOrNull(), appLanguage)
+            },
             onEnable = onEnableDictionary,
             onOpenInDictionaryApp = {
                 context.lookUpExternally(it, dictionary.baseUrl)
                 defineWord = null
             },
-            onOpenInBrowser = {
-                context.openDictionaryEntry(it, dictionary.baseUrl)
+            onOpenInBrowser = { term, site ->
+                context.openDictionaryEntry(term, site)
                 defineWord = null
             },
             onDismiss = { defineWord = null },

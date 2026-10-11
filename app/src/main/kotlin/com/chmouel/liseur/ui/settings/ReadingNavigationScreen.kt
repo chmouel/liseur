@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -9,15 +10,20 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
@@ -25,6 +31,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,8 +40,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -46,7 +56,11 @@ import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
+import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
+import com.chmouel.liseur.translate.LanguagePicker
+import com.chmouel.liseur.translate.TranslationLanguages
+import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
@@ -83,6 +97,7 @@ fun ReadingNavigationScreen(
     onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
+    onDictionaryAltLanguage: (String?) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -208,6 +223,11 @@ fun ReadingNavigationScreen(
                             DictionarySiteRow(
                                 baseUrl = settings.dictionaryBaseUrl,
                                 onBaseUrl = onDictionaryBaseUrl,
+                            )
+                            RowDivider()
+                            DictionaryAltLanguageRow(
+                                selected = settings.dictionaryAltLanguage,
+                                onSelected = onDictionaryAltLanguage,
                             )
                         }
                     }
@@ -434,6 +454,94 @@ private fun DictionarySiteRow(baseUrl: String, onBaseUrl: (String) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * The language the definition card also lists a word's translations in,
+ * from Wiktionary's own translation tables: automatic, off, or a chosen one.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DictionaryAltLanguageRow(selected: String?, onSelected: (String?) -> Unit) {
+    val ui = LocalConfiguration.current.locales[0]
+    var picking by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button) { picking = true }
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.settings_dictionary_alt_language),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = stringResource(R.string.settings_dictionary_alt_language_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = when (selected) {
+                null -> stringResource(R.string.settings_dictionary_alt_language_auto)
+                ALT_LANGUAGE_OFF -> stringResource(R.string.settings_dictionary_alt_language_off)
+                else -> TranslationLanguages.name(selected, ui)
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    if (!picking) return
+    val pick = { tag: String? ->
+        onSelected(tag)
+        picking = false
+    }
+    LiseurModalBottomSheet(
+        onDismissRequest = { picking = false },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        LanguagePicker(
+            title = stringResource(R.string.settings_dictionary_alt_language),
+            languages = remember { TranslationLanguages.all() },
+            pinned = listOfNotNull(TranslationLanguages.of(ui.toLanguageTag())),
+            selected = selected,
+            needsDownload = emptySet(),
+            onPick = pick,
+            onBack = { picking = false },
+            header = {
+                AltLanguageChoice(
+                    label = stringResource(R.string.settings_dictionary_alt_language_auto),
+                    detail = stringResource(R.string.settings_dictionary_alt_language_auto_detail),
+                    selected = selected == null,
+                    onClick = { pick(null) },
+                )
+                AltLanguageChoice(
+                    label = stringResource(R.string.settings_dictionary_alt_language_off),
+                    detail = null,
+                    selected = selected == ALT_LANGUAGE_OFF,
+                    onClick = { pick(ALT_LANGUAGE_OFF) },
+                )
+            },
+        )
+    }
+}
+
+/** One of the alternative-language picker's choices above its languages. */
+@Composable
+private fun AltLanguageChoice(label: String, detail: String?, selected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        modifier = Modifier.selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        headlineContent = {
+            Text(label, color = if (selected) MaterialTheme.colorScheme.primary else Color.Unspecified)
+        },
+        supportingContent = detail?.let { { Text(it) } },
+        trailingContent = if (selected) {
+            { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+        } else {
+            null
+        },
+    )
 }
 
 /** The one-shot check of a committed dictionary site, as the row shows it. */

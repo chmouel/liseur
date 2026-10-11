@@ -516,6 +516,9 @@
     <string name="dictionary_base_unresolved">Algunos significados de «%1$s» necesitan otra consulta. Abre su entrada completa para continuar.</string>
     <string name="dictionary_disabled_explanation">Las definiciones están desactivadas. Activarlas permite que Liseur envíe la palabra seleccionada y sus formas base enlazadas a %1$s para buscar sus significados. No se envía ningún otro texto del libro ni datos de la cuenta. También puedes usar una aplicación de diccionario en tu teléfono.</string>
     <string name="dictionary_enable">Activar definiciones</string>
+    <string name="dictionary_translations_in">En %1$s</string>
+    <string name="dictionary_translations_button_description">Traducciones al %1$s: %2$s</string>
+    <string name="dictionary_translations_empty">Wiktionary no tiene traducciones de «%1$s» al %2$s.</string>
     <string name="download_failed_open">No se pudo descargar “%1$s”.</string>
     <string name="mark_read">Marcar como leído</string>
     <string name="mark_unread">Marcar como no leído</string>
@@ -776,6 +779,11 @@
     <string name="settings_dictionary_site_checking">Comprobando…</string>
     <string name="settings_dictionary_site_ok">%1$s responde.</string>
     <string name="settings_dictionary_site_unreachable">%1$s no respondió: %2$s</string>
+    <string name="settings_dictionary_alt_language">Idioma alternativo</string>
+    <string name="settings_dictionary_alt_language_detail">Añade a la ficha de definición un botón que abre las traducciones de la palabra, tomadas de las tablas de traducción de Wiktionary. En modo automático se usa el idioma de la aplicación para libros escritos en otro idioma. Solo las palabras en el idioma del sitio de diccionario las tienen.</string>
+    <string name="settings_dictionary_alt_language_off">Desactivado</string>
+    <string name="settings_dictionary_alt_language_auto">Automático</string>
+    <string name="settings_dictionary_alt_language_auto_detail">El idioma de la aplicación, para libros escritos en otro idioma</string>
     <string name="settings_library">Biblioteca</string>
     <string name="settings_remote_library">Bibliotecas remotas</string>
     <string name="settings_export_import">Exportar e importar</string>

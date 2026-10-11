@@ -125,6 +125,47 @@ class WiktionaryHtmlTest {
         assertEquals(listOf("libro."), senses.single().definitions)
     }
 
+    private val frenchWithEnglish = """
+        <html><body>
+        <section><h2 id="Vieil_anglais">Vieil anglais</h2>
+          <section><h3 id="Nom_commun">Nom commun</h3><ol><li>Aile, en vieil anglais.</li></ol></section>
+        </section>
+        <section><h2 id="Anglais">Anglais</h2>
+          <section><h3 id="Nom_commun_2">Nom commun</h3>
+            <ol><li>Aile (d’un avion, d’un oiseau, d’un insecte…).</li><li>Formation militaire.</li></ol>
+          </section>
+        </section>
+        </body></html>
+    """.trimIndent()
+
+    @Test
+    fun `strict reads only the section naming the language`() {
+        val senses = parseWiktionaryEntryHtml(frenchWithEnglish, listOf("en"), "fr", strict = true)
+
+        assertEquals("en", senses.single().language)
+        assertEquals(
+            listOf("Aile (d’un avion, d’un oiseau, d’un insecte…).", "Formation militaire."),
+            senses.single().definitions,
+        )
+    }
+
+    @Test
+    fun `strict finds nothing rather than another language`() {
+        assertEquals(emptyList<DictionarySense>(), parseWiktionaryEntryHtml(french, listOf("en"), "fr", strict = true))
+        // Without strict, the French cat stands in for the English word.
+        assertEquals("Nom commun", parseWiktionaryEntryHtml(french, listOf("en"), "fr").first().partOfSpeech)
+    }
+
+    @Test
+    fun `strict knows the language in parentheses after the word`() {
+        val page = german.replace("Buch (Deutsch)", "wing (Englisch)")
+
+        val senses = parseWiktionaryEntryHtml(page, listOf("en"), "de", strict = true)
+
+        assertEquals("en", senses.single().language)
+        assertEquals(emptyList<DictionarySense>(), parseWiktionaryEntryHtml(german, listOf("en"), "de", strict = true))
+    }
+
     @Test
     fun `an empty or unparseable page has no senses`() {
         assertEquals(emptyList<DictionarySense>(), parseWiktionaryEntryHtml(""))

@@ -1352,6 +1352,30 @@ reader behavior.
   `DefinitionSheet` keeps the original text and reports unresolved meanings.
   Keep recognition fixture-backed in `DictionaryInflectionTest`; ordinary
   definition links must not trigger lookups.
+- The alternative language (`AppSettings.dictionaryAltLanguage`) is null
+  for automatic, `ALT_LANGUAGE_OFF` ("none", never a valid tag) for off, or
+  a tag. `altLanguageFor` resolves it: a chosen tag always applies;
+  automatic uses the app's UI locale only when the book declares a language
+  other than it. `translationTarget` then drops a target equal to the
+  edition's language.
+- With an alternative language in effect, Define fetches translations alongside
+  the definition when a sense is in the edition's own language, and shows a
+  pill in its bottom row with a flag (from `ULocale.addLikelySubtags`,
+  inside the composable only) and the first translated word.
+  `WiktionaryClient.translations` reads the found entry's `page/html`
+  (reusing the page `define` already fetched) and follows the subpage only
+  when it is exactly `term/translations`, within two requests and no
+  redirects. `parseWiktionaryTranslations` returns whole-word sections in
+  page order, not per sense: repeated parts of speech across etymologies
+  cannot be mapped onto senses reliably. Tapping the pill looks the word
+  up on the target language's Wikimedia Wiktionary (`translationSite`,
+  never a mirror) with `define(strict = true)`, which keeps only the
+  section naming the source language ("Anglais" on fr.wiktionary), so the
+  sheet reads in the target language. When that site has no such entry,
+  or there is no site, the sheet shows the source edition's table instead,
+  whose words each open their own entry there in a third sheet. Stacked
+  sheets use a transparent scrim, and Back closes only the top one. Keep parsing
+  fixture-backed in `WiktionaryTranslationsTest`.
 - Bookmark identity comes from `samePage()` and the two locators, not from the
   rounded stored page number. Resolve duplicate reading-order entries by
   occurrence; use the stable Readium position for scrolled books.

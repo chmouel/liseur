@@ -18,11 +18,16 @@ import org.jsoup.nodes.Element
  *
  * Pure function on a string, like [parseWiktionaryDefinitions], so the
  * awkward pages become fixtures rather than field reports.
+ *
+ * [languages] only ranks the sections, unless [strict]: then a section
+ * counts only when its heading names one of them, so "chat" asked as
+ * English on fr.wiktionary finds nothing rather than the French cat.
  */
 fun parseWiktionaryEntryHtml(
     html: String,
     languages: List<String> = emptyList(),
     edition: String? = null,
+    strict: Boolean = false,
 ): List<DictionarySense> {
     val document = runCatching { Jsoup.parse(html) }.getOrNull() ?: return emptyList()
     val sections = document.select("section:has(> h2)")
@@ -34,14 +39,52 @@ fun parseWiktionaryEntryHtml(
         wantedNames.count { heading.contains(it) }
     }
 
+    val pageEdition = edition ?: document.selectFirst("html[lang], body[lang]")?.attr("lang")
     for (section in ordered) {
-        val language = dictionaryLanguage(section.selectFirst("> h2")?.text().orEmpty()).orEmpty()
-        val senses = sensesOf(section, edition ?: document.selectFirst("html[lang], body[lang]")?.attr("lang")
-            ?: language, language)
+        val heading = section.selectFirst("> h2")?.text().orEmpty()
+        val named = headingLanguage(heading, pageEdition)
+        val language = if (strict) {
+            languages.firstOrNull { named == it || headingNames(heading, it, pageEdition) } ?: continue
+        } else {
+            named.orEmpty()
+        }
+        val senses = sensesOf(section, pageEdition ?: language, language)
         if (senses.isNotEmpty()) return senses
     }
     return emptyList()
 }
+
+/**
+ * Whether [heading] is [language]'s name as [edition] writes it, alone
+ * ("Anglais") or in parentheses after the word ("wing (Englisch)"). Not
+ * merely containing it: «Vieil anglais» is another language.
+ */
+private fun headingNames(heading: String, language: String, edition: String?): Boolean {
+    val text = heading.trim().lowercase()
+    val name = PARENTHESISED.find(text)?.groupValues?.get(1)?.trim() ?: text
+    val locales = if (edition.isNullOrBlank()) HEADING_LOCALES else listOf(edition)
+    val wanted = Locale.forLanguageTag(language)
+    return locales.any { wanted.getDisplayLanguage(Locale.forLanguageTag(it)).lowercase() == name }
+}
+
+/**
+ * The language a section heading names: one [dictionaryLanguage] knows,
+ * or [edition]'s own, written in it, alone ("Italiano") or in parentheses
+ * after the word ("Haus (Deutsch)", "dom (język polski)").
+ */
+internal fun headingLanguage(heading: String, edition: String?): String? {
+    dictionaryLanguage(heading)?.let { return it }
+    if (edition.isNullOrBlank()) return null
+    val locale = Locale.forLanguageTag(edition)
+    val own = locale.getDisplayLanguage(locale).lowercase(locale)
+    if (own.isBlank() || own == locale.language) return null
+    val text = heading.trim().lowercase(locale)
+    val inParentheses = PARENTHESISED.find(text)?.groupValues?.get(1)?.trim()
+    val named = if (inParentheses != null) inParentheses == own || inParentheses.endsWith(" $own") else text == own
+    return locale.language.takeIf { named }
+}
+
+private val PARENTHESISED = Regex("\\(([^)]*)\\)\\s*$")
 
 /**
  * A language's name as each Wiktionary edition would write it in a
@@ -73,7 +116,7 @@ private fun sensesOf(languageSection: Element, edition: String, language: String
         if (definitions.isEmpty()) continue
         val heading = subsection.selectFirst("> h3, > h4")?.text().orEmpty()
         senses += DictionarySense(
-            partOfSpeech = heading.replace(Regex("\\s*\\d+$"), "").trim(),
+            partOfSpeech = partOfSpeechHeading(heading),
             definitions = definitions,
             language = language,
             references = items.mapIndexedNotNull { index, item ->
@@ -83,6 +126,11 @@ private fun sensesOf(languageSection: Element, edition: String, language: String
     }
     return senses
 }
+
+/** A part-of-speech heading without the number pages give repeats: "Nom commun 1". */
+internal fun partOfSpeechHeading(heading: String): String = heading.replace(TRAILING_NUMBER, "").trim()
+
+private val TRAILING_NUMBER = Regex("\\s*\\d+$")
 
 private fun definitionItemsOf(subsection: Element): List<Element> {
     val fromLists = subsection.select("> ol, > p ~ ol")

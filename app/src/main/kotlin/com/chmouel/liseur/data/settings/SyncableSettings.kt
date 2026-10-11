@@ -2,6 +2,8 @@ package com.chmouel.liseur.data.settings
 
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
+import com.chmouel.liseur.translate.TranslationLanguages
 import kotlinx.coroutines.flow.first
 
 /**
@@ -238,6 +240,19 @@ fun syncableSettings(
                 false
             } else {
                 app.setDictionaryBaseUrl(raw)
+                true
+            }
+        },
+    ),
+    SyncableSetting(
+        key = "app.dictionary_alt_language",
+        read = { app.current().dictionaryAltLanguage ?: SETTING_UNSET },
+        write = { raw ->
+            val tag = raw.takeUnless { it == SETTING_UNSET }
+            if (tag != null && tag != ALT_LANGUAGE_OFF && TranslationLanguages.of(tag) != tag) {
+                false
+            } else {
+                app.setDictionaryAltLanguage(tag)
                 true
             }
         },
