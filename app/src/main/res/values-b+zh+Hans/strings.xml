@@ -545,7 +545,7 @@
     <string name="dictionary_base_failed">无法加载“%1$s”的释义。</string>
     <string name="dictionary_base_limit">尚未加载“%1$s”就已达到查询次数上限。</string>
     <string name="dictionary_base_unresolved">“%1$s”的部分释义需要再次查询。请打开完整词条继续查看。</string>
-    <string name="dictionary_disabled_explanation">释义功能已关闭。开启后，Liseur 会将所选单词及其链接指向的原形发送至 %1$s，以查找释义。不会发送书籍正文或账户信息。您也可以使用手机上的词典应用。</string>
+    <string name="dictionary_disabled_explanation">释义功能已关闭。开启后，Liseur 会将所选单词及其链接指向的原形发送至 %1$s，以查找释义。不会发送书籍中的其他文字或账户信息。您也可以使用手机上的词典应用。</string>
     <string name="dictionary_enable">开启释义</string>
     <string name="download_failed_open">无法下载“%1$s”。</string>
     <string name="mark_read">标记为已读</string>

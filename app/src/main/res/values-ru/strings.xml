@@ -562,7 +562,7 @@
     <string name="dictionary_base_failed">Не удалось загрузить значения «%1$s».</string>
     <string name="dictionary_base_limit">Лимит запросов достигнут до загрузки «%1$s».</string>
     <string name="dictionary_base_unresolved">Некоторые значения «%1$s» требуют ещё одного запроса. Откройте полную статью, чтобы продолжить.</string>
-    <string name="dictionary_disabled_explanation">Определения выключены. Если включить их, Liseur отправит выбранное слово и его начальные формы по ссылкам на %1$s для поиска значений. Текст книги и данные аккаунта не отправляются. Также можно использовать словарное приложение на телефоне.</string>
+    <string name="dictionary_disabled_explanation">Определения выключены. Если включить их, Liseur отправит выбранное слово и его начальные формы по ссылкам на %1$s для поиска значений. Другой текст книги и данные аккаунта не отправляются. Также можно использовать словарное приложение на телефоне.</string>
     <string name="dictionary_enable">Включить определения</string>
     <string name="download_failed_open">Не удалось скачать «%1$s».</string>
     <string name="mark_read">Отметить как прочитанную</string>

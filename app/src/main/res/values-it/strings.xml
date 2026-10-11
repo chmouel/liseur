@@ -514,7 +514,7 @@
     <string name="dictionary_base_failed">Impossibile caricare i significati di «%1$s».</string>
     <string name="dictionary_base_limit">Limite di ricerche raggiunto prima di caricare «%1$s».</string>
     <string name="dictionary_base_unresolved">Alcuni significati di «%1$s» richiedono un\'altra ricerca. Apri la voce completa per continuare.</string>
-    <string name="dictionary_disabled_explanation">Le definizioni sono disattivate. Attivarle permette a Liseur di inviare la parola selezionata e le sue forme base collegate a %1$s per trovarne i significati. Non vengono inviati testo del libro o dati dell\'account. Puoi anche usare un\'app dizionario sul telefono.</string>
+    <string name="dictionary_disabled_explanation">Le definizioni sono disattivate. Attivarle permette a Liseur di inviare la parola selezionata e le sue forme base collegate a %1$s per trovarne i significati. Non vengono inviati altri testi del libro o dati dell\'account. Puoi anche usare un\'app dizionario sul telefono.</string>
     <string name="dictionary_enable">Attiva le definizioni</string>
     <string name="download_failed_open">Impossibile scaricare “%1$s”.</string>
     <string name="mark_read">Segna come letto</string>

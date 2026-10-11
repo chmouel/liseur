@@ -514,7 +514,7 @@
     <string name="dictionary_base_failed">No se pudieron cargar los significados de «%1$s».</string>
     <string name="dictionary_base_limit">Se alcanzó el límite de consultas antes de cargar «%1$s».</string>
     <string name="dictionary_base_unresolved">Algunos significados de «%1$s» necesitan otra consulta. Abre su entrada completa para continuar.</string>
-    <string name="dictionary_disabled_explanation">Las definiciones están desactivadas. Activarlas permite que Liseur envíe la palabra seleccionada y sus formas base enlazadas a %1$s para buscar sus significados. No se envía texto del libro ni datos de la cuenta. También puedes usar una aplicación de diccionario en tu teléfono.</string>
+    <string name="dictionary_disabled_explanation">Las definiciones están desactivadas. Activarlas permite que Liseur envíe la palabra seleccionada y sus formas base enlazadas a %1$s para buscar sus significados. No se envía ningún otro texto del libro ni datos de la cuenta. También puedes usar una aplicación de diccionario en tu teléfono.</string>
     <string name="dictionary_enable">Activar definiciones</string>
     <string name="download_failed_open">No se pudo descargar “%1$s”.</string>
     <string name="mark_read">Marcar como leído</string>

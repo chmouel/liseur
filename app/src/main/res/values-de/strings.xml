@@ -518,7 +518,7 @@
     <string name="dictionary_base_failed">Die Bedeutungen von „%1$s“ konnten nicht geladen werden.</string>
     <string name="dictionary_base_limit">Das Abfragelimit wurde vor dem Laden von „%1$s“ erreicht.</string>
     <string name="dictionary_base_unresolved">Einige Bedeutungen von „%1$s“ benötigen eine weitere Abfrage. Öffne den vollständigen Eintrag, um fortzufahren.</string>
-    <string name="dictionary_disabled_explanation">Definitionen sind aus. Wenn du sie einschaltest, sendet Liseur das ausgewählte Wort und seine verlinkten Grundformen an %1$s, um ihre Bedeutungen zu finden. Buchtext und Kontodaten werden nicht gesendet. Du kannst auch eine Wörterbuch-App auf deinem Handy nutzen.</string>
+    <string name="dictionary_disabled_explanation">Definitionen sind aus. Wenn du sie einschaltest, sendet Liseur das ausgewählte Wort und seine verlinkten Grundformen an %1$s, um ihre Bedeutungen zu finden. Weiterer Buchtext und Kontodaten werden nicht gesendet. Du kannst auch eine Wörterbuch-App auf deinem Handy nutzen.</string>
     <string name="dictionary_enable">Definitionen einschalten</string>
     <string name="download_failed_open">„%1$s“ konnte nicht heruntergeladen werden.</string>
     <string name="mark_read">Als gelesen markieren</string>

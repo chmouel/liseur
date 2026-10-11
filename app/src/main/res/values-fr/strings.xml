@@ -514,7 +514,7 @@
     <string name="dictionary_base_failed">Impossible de charger les sens de « %1$s ».</string>
     <string name="dictionary_base_limit">Limite de recherches atteinte avant le chargement de « %1$s ».</string>
     <string name="dictionary_base_unresolved">Certains sens de « %1$s » nécessitent une autre recherche. Ouvrez son entrée complète pour continuer.</string>
-    <string name="dictionary_disabled_explanation">Les définitions sont désactivées. Les activer permet à Liseur d\'envoyer le mot sélectionné et ses formes de base liées à %1$s pour en trouver les sens. Aucun texte du livre ni renseignement de compte n\'est envoyé. Vous pouvez aussi utiliser une application dictionnaire sur votre téléphone.</string>
+    <string name="dictionary_disabled_explanation">Les définitions sont désactivées. Les activer permet à Liseur d\'envoyer le mot sélectionné et ses formes de base liées à %1$s pour en trouver les sens. Aucun autre texte du livre ni renseignement de compte n\'est envoyé. Vous pouvez aussi utiliser une application dictionnaire sur votre téléphone.</string>
     <string name="dictionary_enable">Activer les définitions</string>
     <string name="download_failed_open">Impossible de télécharger « %1$s ».</string>
     <string name="mark_read">Marquer comme lu</string>
