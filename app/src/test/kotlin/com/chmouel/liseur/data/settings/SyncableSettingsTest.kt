@@ -392,7 +392,7 @@ class SyncableSettingsTest {
         r.setFooterField(FooterSlot.LEFT, FooterField.PAGES_LEFT_CHAPTER)
         r.setFooterField(FooterSlot.RIGHT, FooterField.CLOCK)
         a.setScrollMode(true)
-        a.setLockFooterOn(true)
+        a.setLockFooterOn(false)
         a.setResumeLastBook(false)
         a.setDictionaryLookupEnabled(true)
         a.setOfferedHighlightTints(setOf(HighlightTint.BLUE.name, HighlightTint.GREEN.name))

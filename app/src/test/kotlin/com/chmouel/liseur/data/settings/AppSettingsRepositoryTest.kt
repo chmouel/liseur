@@ -61,6 +61,20 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
+    fun `the footer is locked unless the reader unlocked it`() = runTest {
+        assertTrue(AppSettings().lockFooterOn)
+        assertTrue(AppSettingsRepository(store()).settings.first().lockFooterOn)
+    }
+
+    @Test
+    fun `a footer the reader unlocked stays unlocked`() = runTest {
+        val store = store()
+        store.edit { it[booleanPreferencesKey("lock_footer_on")] = false }
+
+        assertFalse(AppSettingsRepository(store).settings.first().lockFooterOn)
+    }
+
+    @Test
     fun `read aloud asks for one sentence at a time until changed`() = runTest {
         val repo = AppSettingsRepository(store())
         assertEquals(1, repo.settings.first().readAloudSentencesPerRequest)

@@ -714,6 +714,7 @@
     <string name="footer_pick_middle">Was in der Mitte steht</string>
     <string name="footer_pick_right">Was rechts steht</string>
     <string name="footer_pick_hint">Tippen Sie, um die Liste durchzugehen, oder halten Sie gedrückt, um hierher zurückzukehren.</string>
+    <string name="footer_pick_hint_locked">Tippen ist in den Einstellungen gesperrt. Halten Sie ein Feld gedrückt, um hierher zurückzukehren.</string>
     <string name="footer_note_unknown">%1$s, noch nichts anzuzeigen</string>
     <string name="footer_cycle_left">Anzeigen links in der Fußzeile wechseln</string>
     <string name="footer_cycle_middle">Anzeigen in der Mitte der Fußzeile wechseln</string>
@@ -761,7 +762,7 @@
     <string name="settings_scroll_mode">Durch Scrollen lesen</string>
     <string name="settings_scroll_mode_detail">Das Kapitel läuft als eine lange Seite weiter, statt in umblätterbare Seiten zerlegt zu werden. Ein einzelnes Buch lässt sich vom eigenen Schalter des Lesers getrennt einstellen.</string>
     <string name="settings_lock_footer">Fußzeile sperren</string>
-    <string name="settings_lock_footer_detail">Verhindert versehentliche Änderungen an der Konfiguration der Fußzeile beim Lesen.</string>
+    <string name="settings_lock_footer_detail">Tippen auf die Fußzeile ändert sie beim Lesen nicht mehr. Langes Drücken öffnet weiterhin ihre Optionen.</string>
     <string name="settings_eink">E-Ink-Bildschirm</string>
     <string name="settings_eink_detail">Lässt Animationen weg, die elektronisches Papier eher verschmiert als zeichnet. Wird automatisch erkannt; stelle es selbst ein, wenn die Vermutung falsch ist.</string>
     <string name="settings_color_eink">Farb-E-Ink</string>

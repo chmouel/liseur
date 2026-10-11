@@ -54,6 +54,7 @@ fun FooterSlotSheet(
     target: FooterPickTarget,
     field: FooterField,
     mode: FooterMode,
+    locked: Boolean,
     onFieldSelected: (FooterField) -> Unit,
     onModeSelected: (FooterMode) -> Unit,
     onDismiss: () -> Unit,
@@ -79,7 +80,9 @@ fun FooterSlotSheet(
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
             Text(
-                text = stringResource(R.string.footer_pick_hint),
+                text = stringResource(
+                    if (locked) R.string.footer_pick_hint_locked else R.string.footer_pick_hint,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),

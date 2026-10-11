@@ -4172,6 +4172,7 @@ fun ReaderScreen(
                 else -> prefs.footerLeft
             },
             mode = prefs.footerMode,
+            locked = lockFooterOn,
             onFieldSelected = { field ->
                 val slot = when (target) {
                     FooterPickTarget.RIGHT -> FooterSlot.RIGHT

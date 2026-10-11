@@ -737,6 +737,7 @@
     <string name="footer_pick_middle">What the middle shows</string>
     <string name="footer_pick_right">What the right shows</string>
     <string name="footer_pick_hint">Tap to step through the list, or hold to come back here.</string>
+    <string name="footer_pick_hint_locked">Taps are locked in Settings. Hold a slot to come back here.</string>
     <!-- The note a tap on a footer slot raises, naming what the slot now shows. -->
     <string name="footer_note_unknown">%1$s, nothing to show yet</string>
     <string name="footer_cycle_left">Change what the left of the footer shows</string>
@@ -785,7 +786,7 @@
     <string name="settings_scroll_mode">Read by scrolling</string>
     <string name="settings_scroll_mode_detail">The chapter runs on as one long page instead of being broken into pages you turn. A single book can be set apart from the reader\'s own switch.</string>
     <string name="settings_lock_footer">Lock footer</string>
-    <string name="settings_lock_footer_detail">Prevents accidental changes to the footer configuration when reading.</string>
+    <string name="settings_lock_footer_detail">Taps on the footer no longer change it while reading. A long press still opens its options.</string>
     <string name="settings_eink">E-ink screen</string>
     <string name="settings_eink_detail">Drops animation, which electronic paper smears rather than draws. Detected automatically; set it yourself if the guess is wrong.</string>
     <string name="settings_color_eink">Colour E-ink</string>

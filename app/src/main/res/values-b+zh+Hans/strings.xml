@@ -731,6 +731,7 @@
     <string name="footer_pick_middle">中间显示什么</string>
     <string name="footer_pick_right">右侧显示什么</string>
     <string name="footer_pick_hint">点按可依次切换列表，按住则回到这里。</string>
+    <string name="footer_pick_hint_locked">点按已在设置中锁定。按住某一位置可回到这里。</string>
     <string name="footer_note_unknown">%1$s，暂无可显示内容</string>
     <string name="footer_cycle_left">更改页脚左侧显示的内容</string>
     <string name="footer_cycle_middle">更改页脚中间显示的内容</string>
@@ -777,7 +778,7 @@
     <string name="settings_scroll_mode">滚动阅读</string>
     <string name="settings_scroll_mode_detail">章节作为一整页连续滚动，而不再分成可翻动的页面。单本书也可设为与阅读器开关不同。</string>
     <string name="settings_lock_footer">锁定页脚</string>
-    <string name="settings_lock_footer_detail">防止阅读时意外更改页脚配置。</string>
+    <string name="settings_lock_footer_detail">阅读时轻触页脚不再更改它。长按仍可打开页脚选项。</string>
     <string name="settings_eink">墨水屏</string>
     <string name="settings_eink_detail">关闭动画，因为电子纸只会拖影而无法流畅绘制。可自动检测；若判断有误可手动设置。</string>
     <string name="settings_color_eink">彩色墨水屏</string>

@@ -225,7 +225,7 @@ data class AppSettings(
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
-    val lockFooterOn: Boolean = false,
+    val lockFooterOn: Boolean = true,
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
     val libraryFilters: LibraryFilters = LibraryFilters.None,
@@ -419,7 +419,7 @@ class AppSettingsRepository(
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
-            lockFooterOn = p[Keys.LOCK_FOOTER_ON] ?: false,
+            lockFooterOn = p[Keys.LOCK_FOOTER_ON] ?: true,
             librarySort = LibrarySort.fromId(p[Keys.LIBRARY_SORT]),
             librarySortReversed = p[Keys.LIBRARY_SORT_REVERSED] ?: false,
             libraryFilters = LibraryFilters(

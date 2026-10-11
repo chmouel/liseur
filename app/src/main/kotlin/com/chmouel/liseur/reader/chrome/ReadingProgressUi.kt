@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,13 +54,23 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -213,7 +226,7 @@ fun ReadingFooter(
             figure = footerFigure(startField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(startSlot.cycleLabel),
-            enabled = !footerLocked,
+            locked = footerLocked,
             onClick = { onCycleField(startSlot, noteForField) },
             onLongClick = { onPickSlot(startSlot.pickTarget) },
             padding = PaddingValues(
@@ -228,7 +241,7 @@ fun ReadingFooter(
         val middle = middleText(progress, mode, reflowable, screens)
         FooterSlotBox(
             clickLabel = stringResource(R.string.footer_cycle_middle),
-            enabled = !footerLocked,
+            locked = footerLocked,
             onClick = { onCycleMode(noteForMode) },
             onLongClick = { onPickSlot(FooterPickTarget.MIDDLE) },
             padding = PaddingValues(horizontal = FOOTER_GAP, vertical = slotPadding),
@@ -259,7 +272,7 @@ fun ReadingFooter(
             figure = footerFigure(endField, progress, reflowable, screens, bookScreens, device),
             color = color,
             clickLabel = stringResource(endSlot.cycleLabel),
-            enabled = !footerLocked,
+            locked = footerLocked,
             onClick = { onCycleField(endSlot, noteForField) },
             onLongClick = { onPickSlot(endSlot.pickTarget) },
             padding = PaddingValues(
@@ -333,7 +346,7 @@ private fun FooterEdge(
     figure: FooterFigure?,
     color: Color,
     clickLabel: String,
-    enabled: Boolean,
+    locked: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     padding: PaddingValues,
@@ -343,7 +356,7 @@ private fun FooterEdge(
     val text = figureText(figure)
     FooterSlotBox(
         clickLabel = clickLabel,
-        enabled = enabled,
+        locked = locked,
         onClick = onClick,
         onLongClick = onLongClick,
         padding = padding,
@@ -423,7 +436,7 @@ private fun FooterEdgeText(text: FooterText, color: Color) {
 @Composable
 private fun FooterSlotBox(
     clickLabel: String,
-    enabled: Boolean,
+    locked: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     padding: PaddingValues,
@@ -449,15 +462,18 @@ private fun FooterSlotBox(
                 },
             )
             .then(
-                if (enabled) {
+                if (locked) {
+                    Modifier.longClickOnly(
+                        onLongClick = onLongClick,
+                        onLongClickLabel = stringResource(R.string.footer_pick_action),
+                    )
+                } else {
                     Modifier.combinedClickableWithoutRipple(
                         onClick = onClick,
                         onLongClick = onLongClick,
                         onClickLabel = clickLabel,
                         onLongClickLabel = stringResource(R.string.footer_pick_action),
                     )
-                } else {
-                    Modifier
                 },
             )
             .padding(padding)
@@ -916,6 +932,43 @@ private fun Modifier.combinedClickableWithoutRipple(
         onLongClick = onLongClick,
         onClick = onClick,
     )
+
+/**
+ * A locked slot: a tap is ignored, a long press still opens the picker.
+ *
+ * Not a [combinedClickable] with an empty tap, which would have a
+ * screen reader offer a tap that does nothing. A keyboard has no long
+ * press, so Enter or Space on the focused slot opens the picker too.
+ */
+@Composable
+private fun Modifier.longClickOnly(
+    onLongClick: () -> Unit,
+    onLongClickLabel: String,
+): Modifier {
+    val pick by rememberUpdatedState(onLongClick)
+    val haptics = LocalHapticFeedback.current
+    return pointerInput(Unit) {
+        detectTapGestures(
+            onLongPress = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                pick()
+            },
+        )
+    }.semantics(mergeDescendants = true) {
+        role = Role.Button
+        onLongClick(label = onLongClickLabel) {
+            pick()
+            true
+        }
+    }.onKeyEvent { event ->
+        // Down is swallowed too: the reader turns the page on Space.
+        if (event.key !in PICK_KEYS) return@onKeyEvent false
+        if (event.type == KeyEventType.KeyUp) pick()
+        true
+    }.focusable()
+}
+
+private val PICK_KEYS = setOf(Key.Enter, Key.NumPadEnter, Key.DirectionCenter, Key.Spacebar)
 
 /**
  * The rounded bar the reader chrome speaks from: the page's own ink,

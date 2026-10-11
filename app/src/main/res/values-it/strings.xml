@@ -704,6 +704,7 @@
     <string name="footer_pick_middle">Cosa mostra il centro</string>
     <string name="footer_pick_right">Cosa mostra la destra</string>
     <string name="footer_pick_hint">Tocca per scorrere l\'elenco, o tieni premuto per tornare qui.</string>
+    <string name="footer_pick_hint_locked">I tocchi sono bloccati nelle impostazioni. Tieni premuto un riquadro per tornare qui.</string>
     <string name="footer_note_unknown">%1$s, ancora nulla da mostrare</string>
     <string name="footer_cycle_left">Cambia cosa mostra la sinistra del piè di pagina</string>
     <string name="footer_cycle_middle">Cambia cosa mostra il centro del piè di pagina</string>
@@ -750,7 +751,7 @@
     <string name="settings_scroll_mode">Lettura a scorrimento</string>
     <string name="settings_scroll_mode_detail">Il capitolo scorre come una pagina lunga invece di essere spezzato in pagine da girare. Un singolo libro può essere impostato a parte dall\'interruttore del lettore.</string>
     <string name="settings_lock_footer">Blocca il piè di pagina</string>
-    <string name="settings_lock_footer_detail">Impedisce modifiche accidentali alla configurazione del piè di pagina durante la lettura.</string>
+    <string name="settings_lock_footer_detail">Toccare il piè di pagina non lo modifica più durante la lettura. Una pressione prolungata apre comunque le sue opzioni.</string>
     <string name="settings_eink">Schermo e-ink</string>
     <string name="settings_eink_detail">Toglie le animazioni, che la carta elettronica sbava piuttosto che disegnare. Rilevato automaticamente; impostalo tu se l\'ipotesi è sbagliata.</string>
     <string name="settings_color_eink">E-ink a colori</string>
