@@ -99,7 +99,13 @@ internal class MlKitTranslationService(
     /** Asks ML Kit what is on the phone. Throws [TranslationError.Failed]. */
     internal suspend fun load(): Set<String> = listing.withLock {
         try {
-            engine.downloaded().also { models.value = it }
+            engine.downloaded().also { have ->
+                models.value = have
+                // A change can fail only in confirming it; a listing that shows it done settles that.
+                changes.update { now ->
+                    now.filterNot { (code, change) -> change is Change.Failed && (change.why == Change.Why.Delete) != (code in have) }
+                }
+            }
         } catch (e: TranslationError) {
             // A failed listing leaves nothing known, so the next question asks again.
             models.value = null

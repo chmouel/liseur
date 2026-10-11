@@ -259,6 +259,20 @@ class MlKitTranslationTest {
     }
 
     @Test
+    fun `a listing that shows a failed change done clears its failure`() = runBlocking {
+        val engine = FakeEngine(mutableSetOf("en", "fr"))
+        val service = MlKitTranslationService(engine, onWifi = { true })
+        engine.failListing = true
+        expect<TranslationError.Failed> { service.download("de") }
+        expect<TranslationError.Failed> { service.delete("fr") }
+        assertEquals(Change.Failed(Change.Why.Download), service.changes.value["de"])
+        assertEquals(Change.Failed(Change.Why.Delete), service.changes.value["fr"])
+        engine.failListing = false
+        service.load()
+        assertEquals(emptyMap<String, Change>(), service.changes.value)
+    }
+
+    @Test
     fun `a deletion asked during a download waits for it and shows as waiting`() = runBlocking {
         val gate = CompletableDeferred<Unit>()
         val engine = FakeEngine(mutableSetOf("en", "fr"), downloadGate = gate)
