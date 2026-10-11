@@ -44,6 +44,14 @@ class MlKitTranslationTest {
     }
 
     @Test
+    fun `Norwegian and Filipino are offered under the tags the system uses`() {
+        val targets = MlKitLanguages.targets(codes, downloaded = emptySet(), source = "en").keys
+        assertTrue("nb" in targets && "fil" in targets)
+        assertTrue("no" !in targets && "tl" !in targets)
+        assertEquals("nb", MlKitLanguages.tag("no"))
+    }
+
+    @Test
     fun `lists Liseur's tags, with Portuguese regions as sources`() {
         val sources = MlKitLanguages.sources(codes)
         assertTrue("zh-Hans" in sources && "pt-BR" in sources && "pt-PT" in sources)

@@ -23,8 +23,8 @@ internal object MlKitLanguages {
         return code.takeIf { it in codes }
     }
 
-    /** [code] as Liseur keeps it. */
-    fun tag(code: String): String = TranslationLanguages.of(code) ?: code
+    /** [code] as Liseur and the system tag it, so offered keys match saved targets. */
+    fun tag(code: String): String = TranslationLanguages.of(TAGS[code] ?: code) ?: code
 
     /** The languages a passage can be in. */
     fun sources(codes: Set<String>): Set<String> =
@@ -69,4 +69,7 @@ internal object MlKitLanguages {
 
     // Tags a book or the system may use for a language ML Kit codes another way.
     private val ALIASES = mapOf("nb" to "no", "fil" to "tl", "iw" to "he", "in" to "id")
+
+    // ML Kit codes whose language Android and Liseur's pickers tag another way.
+    private val TAGS = mapOf("no" to "nb", "tl" to "fil")
 }

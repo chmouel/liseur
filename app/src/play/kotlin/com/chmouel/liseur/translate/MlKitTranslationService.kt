@@ -298,7 +298,7 @@ internal class MlKitTranslationService(
                 val have = downloaded()
                 pair.toList().filter { it !in have }
             } catch (e: TranslationError) {
-                stage = Stage.Failed(MlKitDownloadFailed.Reason.Other)
+                stage = Stage.Unlisted
                 pair.toList()
             }
             if (missing?.isEmpty() == true) onReady()
@@ -334,6 +334,7 @@ internal class MlKitTranslationService(
                     when (val now = stage) {
                         Stage.Asking -> Unit
                         Stage.NoWifi -> Text(stringResource(R.string.translation_mlkit_download_wifi), color = MaterialTheme.colorScheme.error)
+                        Stage.Unlisted -> Text(stringResource(R.string.translation_mlkit_models_failed), color = MaterialTheme.colorScheme.error)
                         Stage.Downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             BusyIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text(stringResource(R.string.translation_mlkit_downloading))
@@ -362,6 +363,7 @@ internal class MlKitTranslationService(
     private sealed interface Stage {
         data object Asking : Stage
         data object NoWifi : Stage
+        data object Unlisted : Stage
         data object Downloading : Stage
         data class Failed(val reason: MlKitDownloadFailed.Reason) : Stage
     }
