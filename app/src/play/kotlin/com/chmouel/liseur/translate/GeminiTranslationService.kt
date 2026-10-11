@@ -79,7 +79,7 @@ internal class GeminiTranslationService(
     }
 
     @Composable
-    override fun SettingsRows(onManageServices: () -> Unit) {
+    override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) {
         val configured by account.configured.collectAsState()
         val stored by model.collectAsState(initial = GeminiTranslation.DEFAULT_MODEL)
         val generation by account.generation.collectAsState()

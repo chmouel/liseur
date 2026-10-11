@@ -46,8 +46,6 @@
     <string name="translation_mlkit_help">Google\'s ML Kit translates on this phone, so book text is not sent to Google. ML Kit does send Google diagnostic and usage data, such as errors and timings.</string>
     <string name="translation_mlkit_legal">Legal notice</string>
     <string name="translation_mlkit_terms">ML Kit terms</string>
-    <string name="translation_mlkit_models">Downloaded languages</string>
-    <string name="translation_mlkit_models_none">None yet. Liseur asks before downloading a language.</string>
     <string name="translation_mlkit_models_kept">Deleting a language keeps the translations already saved in your books.</string>
     <string name="translation_mlkit_models_failed">The downloaded languages could not be listed.</string>
     <string name="translation_mlkit_delete">Delete %1$s</string>
@@ -56,4 +54,26 @@
     <string name="translation_mlkit_acknowledgement">Translations are powered by Google Translate technology, running on this phone through Google\'s ML Kit.</string>
     <string name="translation_mlkit_cloud" translatable="false">Google Cloud Translation</string>
     <string name="translation_mlkit_consent">Book text stays on this phone. Once you choose it, Google\'s ML Kit starts sending Google diagnostic and usage data about itself, with an identifier for this installation. Language downloads also come from Google, only after you agree and only over Wi-Fi.</string>
+    <string name="translation_mlkit_languages">Languages</string>
+    <string name="translation_mlkit_languages_summary">On this phone: %1$d. Available: %2$d.</string>
+    <string name="translation_mlkit_languages_downloading">Downloading %1$s…</string>
+    <string name="translation_mlkit_languages_search">Search languages</string>
+    <string name="translation_mlkit_languages_no_match">No language matches this search.</string>
+    <string name="translation_mlkit_languages_on_phone">On this phone</string>
+    <string name="translation_mlkit_languages_available">Available to download</string>
+    <string name="translation_mlkit_languages_footer">Languages download over Wi-Fi only. Book text never leaves this phone.</string>
+    <string name="translation_mlkit_try_again">Try again</string>
+    <string name="translation_mlkit_language_size">About 30 MB</string>
+    <string name="translation_mlkit_language_built_in">Built in</string>
+    <string name="translation_mlkit_language_target">Your translation language</string>
+    <string name="translation_mlkit_language_source_only">Only for translating Portuguese books</string>
+    <string name="translation_mlkit_language_waiting">Waiting…</string>
+    <string name="translation_mlkit_language_deleting">Deleting…</string>
+    <string name="translation_mlkit_language_wifi">Connect to Wi-Fi first.</string>
+    <string name="translation_mlkit_language_space">Not enough free space.</string>
+    <string name="translation_mlkit_language_failed">The download failed. Try again.</string>
+    <string name="translation_mlkit_language_delete_failed">Could not delete it. Try again.</string>
+    <string name="translation_mlkit_language_download">Download %1$s</string>
+    <string name="translation_mlkit_delete_title">Delete %1$s?</string>
+    <string name="translation_mlkit_delete_target">%1$s is your translation language. You will need to download it again to translate into it.</string>
 </resources>

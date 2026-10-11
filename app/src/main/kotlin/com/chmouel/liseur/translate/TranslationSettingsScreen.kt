@@ -126,6 +126,16 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
     val configured by remember(service) { service.configured }.collectAsState(initial = true)
     val destination by produceState<String?>(null, service, server) { value = feature.destination(service) }
     val scope = rememberCoroutineScope()
+    // The service's own page, opened in place like the Services page.
+    var paging by rememberSaveable(service.id) { mutableStateOf(false) }
+    if (paging) {
+        val ui = LocalConfiguration.current.locales[0]
+        val stored by feature.target.collectAsState(initial = null)
+        val target = stored ?: TranslationLanguages.of(ui.toLanguageTag()) ?: TranslationLanguages.target(null, ui)
+        BackHandler { paging = false }
+        NestedPage { service.Page(target = target, onBack = { paging = false }) }
+        return
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -203,7 +213,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     )
                 }
                 SettingsGroup(server?.name ?: stringResource(service.label)) {
-                    service.SettingsRows(onManageServices = { managing = true })
+                    service.SettingsRows(onManageServices = { managing = true }, onOpenPage = { paging = true })
                     destination?.let {
                         Text(
                             text = stringResource(R.string.translation_settings_privacy, it),
@@ -513,7 +523,7 @@ internal fun errorSentence(error: TranslationError, name: String, source: String
     is TranslationError.Empty -> stringResource(R.string.translation_empty, name)
     is TranslationError.Truncated -> stringResource(R.string.translation_truncated, name)
     is TranslationError.DeviceFailed -> stringResource(R.string.translation_device_failed)
-    is TranslationError.Service, is TranslationError.Malformed, is TranslationError.Changed ->
+    is TranslationError.Service, is TranslationError.Malformed, is TranslationError.Changed, is TranslationError.Failed ->
         stringResource(R.string.translation_failed, name)
 }
 

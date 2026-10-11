@@ -309,7 +309,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     }.toBundle()
 
     @Composable
-    override fun SettingsRows(onManageServices: () -> Unit) = DeviceTranslationRows(this)
+    override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) = DeviceTranslationRows(this)
 
     // The system's screen: the reader is back, and asks again, on resuming.
     @Composable

@@ -25,8 +25,8 @@ internal interface MlKitEngine {
     /** The languages whose models are on the phone. */
     suspend fun downloaded(): Set<String>
 
-    /** Fetches the models for both languages, over Wi-Fi only. Throws [MlKitDownloadFailed]. */
-    suspend fun download(source: String, target: String)
+    /** Fetches the model for [code], over Wi-Fi only. Throws [MlKitDownloadFailed]. */
+    suspend fun download(code: String)
 
     suspend fun delete(code: String)
 
@@ -78,13 +78,13 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
     override suspend fun downloaded(): Set<String> = try {
         working { models.getDownloadedModels(TranslateRemoteModel::class.java).await().mapTo(mutableSetOf()) { it.language } }
     } catch (e: MlKitException) {
-        throw TranslationError.DeviceFailed("models not listed (${e.errorCode})")
+        throw TranslationError.Failed("models not listed (${e.errorCode})")
     }
 
-    override suspend fun download(source: String, target: String) {
+    override suspend fun download(code: String) {
         val wifi = DownloadConditions.Builder().requireWifi().build()
         try {
-            working { for (code in listOf(source, target)) models.download(model(code), wifi).await() }
+            working { models.download(model(code), wifi).await() }
         } catch (e: MlKitException) {
             throw MlKitDownloadFailed(
                 when (e.errorCode) {
@@ -100,7 +100,7 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
         try {
             working { models.deleteDownloadedModel(model(code)).await() }
         } catch (e: MlKitException) {
-            throw TranslationError.DeviceFailed("model not deleted (${e.errorCode})")
+            throw TranslationError.Failed("model not deleted (${e.errorCode})")
         }
     }
 
@@ -113,7 +113,7 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
                 )
             }
         } catch (e: MlKitException) {
-            throw TranslationError.DeviceFailed("ML Kit error ${e.errorCode}")
+            throw TranslationError.Failed("ML Kit error ${e.errorCode}")
         }
         return object : MlKitTranslator {
             override suspend fun translate(text: String): String = try {
@@ -121,7 +121,7 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
             } catch (e: MlKitException) {
                 throw when (e.errorCode) {
                     MlKitException.NOT_FOUND, MlKitException.FAILED_PRECONDITION -> TranslationError.NotDownloaded()
-                    else -> TranslationError.DeviceFailed("ML Kit error ${e.errorCode}")
+                    else -> TranslationError.Failed("ML Kit error ${e.errorCode}")
                 }
             }
 

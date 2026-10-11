@@ -36,4 +36,7 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
 
     /** The device's translator did not answer, or answered without a translation. */
     class DeviceFailed(reason: String) : TranslationError("The device's translator failed: $reason")
+
+    /** A translator on the phone other than the system's did not answer; named by its service. */
+    class Failed(reason: String) : TranslationError("The translator failed: $reason")
 }

@@ -78,9 +78,13 @@ internal interface TranslationService {
         override suspend fun translate(sentence: String, context: String?) = translate(sentence, source, target, context)
     }
 
-    /** Its own rows on the Translation page, under the service picker. */
+    /** Its own rows on the Translation page, under the service picker; [onOpenPage] shows its [Page]. */
     @Composable
-    fun SettingsRows(onManageServices: () -> Unit)
+    fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit)
+
+    /** A page of its own opened from its rows, such as its languages; [target] is the language passages go into. */
+    @Composable
+    fun Page(target: String, onBack: () -> Unit) = Unit
 
     /** Whether missing languages can be got from here, for a Download button. */
     suspend fun hasDownloads(): Boolean = false

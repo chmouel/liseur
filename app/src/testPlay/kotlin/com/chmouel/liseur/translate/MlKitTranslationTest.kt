@@ -96,7 +96,7 @@ class MlKitTranslationTest {
         val engine = FakeEngine(mutableSetOf("en", "fr"), failNext = true)
         val service = MlKitTranslationService(engine, onWifi = { true }, background = CoroutineScope(Dispatchers.Unconfined))
         val run = service.open("fr", "en", AppSettings())
-        expect<TranslationError.DeviceFailed> { run.translate("Un", null) }
+        expect<TranslationError.Failed> { run.translate("Un", null) }
         assertEquals(1, engine.closed)
         assertEquals("[fr>en] Deux", run.translate("Deux", null))
         assertEquals(2, engine.opened)
@@ -126,7 +126,7 @@ class MlKitTranslationTest {
         val service = MlKitTranslationService(engine, onWifi = { true })
         service.refresh()
         assertEquals(PairState.Ready, service.targets("fr")["en"])
-        expect<TranslationError.DeviceFailed> { service.translate("Bonjour", "fr", "en") }
+        expect<TranslationError.Failed> { service.translate("Bonjour", "fr", "en") }
         engine.failListing = false
         assertEquals("[fr>en] Bonjour", service.translate("Bonjour", "fr", "en"))
     }
@@ -137,12 +137,12 @@ class MlKitTranslationTest {
         val service = MlKitTranslationService(engine, onWifi = { true })
         assertEquals(PairState.Ready, service.targets("fr")["en"])
         engine.failListing = true
-        expect<TranslationError.DeviceFailed> { service.delete("fr") }
-        expect<TranslationError.DeviceFailed> { service.translate("Bonjour", "fr", "en") }
+        expect<TranslationError.Failed> { service.delete("fr") }
+        expect<TranslationError.Failed> { service.translate("Bonjour", "fr", "en") }
         engine.failListing = false
         expect<TranslationError.NotDownloaded> { service.translate("Bonjour", "fr", "en") }
         engine.failListing = true
-        expect<TranslationError.DeviceFailed> { service.download("fr", "en") }
+        expect<TranslationError.Failed> { service.download("fr", "en") }
         engine.failListing = false
         assertEquals("[fr>en] Bonjour", service.translate("Bonjour", "fr", "en"))
     }
@@ -213,6 +213,72 @@ class MlKitTranslationTest {
         }
     }
 
+    @Test
+    fun `the languages page splits what is on the phone from the rest, finds names without accents, and marks Portuguese`() {
+        val names = mapOf("en" to "English", "fr" to "Français", "de" to "Deutsch", "zh" to "Chinese (Simplified)", "pt" to "Portuguese", "no" to "Norwegian", "tl" to "Filipino")
+        val all = MlKitLanguages.entries(codes, setOf("en", "fr"), names::getValue, "", naturalOrder())
+        assertEquals(listOf("Chinese (Simplified)", "Deutsch", "English", "Filipino", "Français", "Norwegian", "Portuguese"), all.map { it.name })
+        assertEquals(setOf("en", "fr"), all.filter { it.onPhone }.map { it.code }.toSet())
+        assertEquals(listOf("pt"), all.filter { it.sourceOnly }.map { it.code })
+        assertEquals(listOf("fr"), MlKitLanguages.entries(codes, emptySet(), names::getValue, " fran ", naturalOrder()).map { it.code })
+        assertEquals(listOf("de"), MlKitLanguages.entries(codes, emptySet(), names::getValue, "DE", naturalOrder()).map { it.code })
+    }
+
+    @Test
+    fun `a language fetched from the page lands on the phone and leaves no mark`() = runBlocking {
+        val engine = FakeEngine(mutableSetOf("en"))
+        val service = MlKitTranslationService(engine, onWifi = { true }, background = CoroutineScope(SupervisorJob() + Dispatchers.Default))
+        service.fetch("de")
+        withTimeout(5_000) { while (service.models.value?.contains("de") != true || service.changes.value.isNotEmpty()) delay(10) }
+        assertEquals(setOf("en", "de"), engine.downloaded)
+    }
+
+    @Test
+    fun `without Wi-Fi the page asks for it and nothing downloads`() = runBlocking {
+        val engine = FakeEngine(mutableSetOf("en"))
+        val service = MlKitTranslationService(engine, onWifi = { false })
+        service.fetch("de")
+        assertEquals(Change.Failed(Change.Why.Wifi), service.changes.value["de"])
+        assertEquals(0, engine.downloads)
+    }
+
+    @Test
+    fun `a failed download stays on its row until it is tried again`() = runBlocking {
+        val engine = FakeEngine(mutableSetOf("en"))
+        engine.failDownload = MlKitDownloadFailed.Reason.Space
+        val service = MlKitTranslationService(engine, onWifi = { true })
+        expectAny { service.download("de") }
+        assertEquals(Change.Failed(Change.Why.Space), service.changes.value["de"])
+        engine.failDownload = null
+        service.download("de")
+        assertNull(service.changes.value["de"])
+    }
+
+    @Test
+    fun `a deletion asked during a download waits for it and shows as waiting`() = runBlocking {
+        val gate = CompletableDeferred<Unit>()
+        val engine = FakeEngine(mutableSetOf("en", "fr"), downloadGate = gate)
+        val service = MlKitTranslationService(engine, onWifi = { true }, background = CoroutineScope(SupervisorJob() + Dispatchers.Default))
+        service.fetch("de")
+        withTimeout(5_000) { while (service.changes.value["de"] != Change.Downloading) delay(10) }
+        service.remove("fr")
+        delay(50)
+        assertEquals(Change.Waiting, service.changes.value["fr"])
+        assertTrue("fr" in engine.downloaded)
+        gate.complete(Unit)
+        withTimeout(5_000) { while (service.changes.value.isNotEmpty()) delay(10) }
+        assertEquals(setOf("en", "de"), engine.downloaded)
+    }
+
+    private suspend fun expectAny(block: suspend () -> Unit) {
+        try {
+            block()
+            fail("expected a failure")
+        } catch (e: MlKitDownloadFailed) {
+            // Expected.
+        }
+    }
+
     private inner class FakeEngine(
         val downloaded: MutableSet<String>,
         var failNext: Boolean = false,
@@ -226,14 +292,17 @@ class MlKitTranslationTest {
         override fun languages() = codes
 
         override suspend fun downloaded(): Set<String> {
-            if (failListing) throw TranslationError.DeviceFailed("test")
+            if (failListing) throw TranslationError.Failed("test")
             return downloaded.toSet()
         }
 
-        override suspend fun download(source: String, target: String) {
+        var failDownload: MlKitDownloadFailed.Reason? = null
+
+        override suspend fun download(code: String) {
             downloads++
             downloadGate?.await()
-            downloaded += listOf(source, target)
+            failDownload?.let { throw MlKitDownloadFailed(it) }
+            downloaded += code
         }
 
         override suspend fun delete(code: String) {
@@ -246,7 +315,7 @@ class MlKitTranslationTest {
                 override suspend fun translate(text: String): String {
                     if (failNext) {
                         failNext = false
-                        throw TranslationError.DeviceFailed("test")
+                        throw TranslationError.Failed("test")
                     }
                     return "[$source>$target] $text"
                 }

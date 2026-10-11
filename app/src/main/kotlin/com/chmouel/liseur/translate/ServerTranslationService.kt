@@ -85,7 +85,7 @@ internal class ServerTranslationService(
     }
 
     @Composable
-    override fun SettingsRows(onManageServices: () -> Unit) {
+    override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) {
         val server by server.collectAsState(initial = null)
         val url = server?.url ?: return
         val id = server?.id

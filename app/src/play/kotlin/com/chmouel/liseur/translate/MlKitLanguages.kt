@@ -1,5 +1,8 @@
 package com.chmouel.liseur.translate
 
+import java.text.Normalizer
+import java.util.Locale
+
 /**
  * Liseur's language tags against ML Kit's codes. ML Kit has one Chinese
  * model, which writes Simplified characters, and one Portuguese model,
@@ -46,6 +49,23 @@ internal object MlKitLanguages {
         val to = code(target, codes, asTarget = true) ?: return null
         return if (from == to) null else from to to
     }
+
+    /** One language on the languages page: [sourceOnly] when books in it can be read but nothing is written in it. */
+    data class Entry(val code: String, val name: String, val onPhone: Boolean, val sourceOnly: Boolean)
+
+    /** Every language ML Kit has, named by [name], those matching [query] only, in [order] of their names. */
+    fun entries(codes: Set<String>, downloaded: Set<String>, name: (String) -> String, query: String, order: Comparator<in String>): List<Entry> {
+        val wanted = folded(query.trim())
+        return codes.map { Entry(it, name(it), it in downloaded, code(tag(it), codes, asTarget = true) != it) }
+            .filter { wanted.isEmpty() || wanted in folded(it.name) || it.code.equals(wanted, ignoreCase = true) }
+            .sortedWith(compareBy(order) { it.name })
+    }
+
+    // Without case or accents, so "fran" and "espanol" find what they mean.
+    private fun folded(text: String) =
+        Normalizer.normalize(text, Normalizer.Form.NFD).replace(MARKS, "").lowercase(Locale.ROOT)
+
+    private val MARKS = Regex("\\p{Mn}+")
 
     // Tags a book or the system may use for a language ML Kit codes another way.
     private val ALIASES = mapOf("nb" to "no", "fil" to "tl", "iw" to "he", "in" to "id")

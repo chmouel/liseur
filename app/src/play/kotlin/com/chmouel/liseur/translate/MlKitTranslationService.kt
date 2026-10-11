@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,12 +12,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.GTranslate
+import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -38,9 +38,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +53,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -79,10 +82,13 @@ internal class MlKitTranslationService(
     override val pageAction = R.string.translation_mlkit_page_action
     override val consent = R.string.translation_mlkit_consent
 
-    private val codes: Set<String> by lazy { engine.languages() }
+    internal val codes: Set<String> by lazy { engine.languages() }
 
     /** What is on the phone, as last asked; null until then. */
-    private val models = MutableStateFlow<Set<String>?>(null)
+    internal val models = MutableStateFlow<Set<String>?>(null)
+
+    /** What is being done to each language, by ML Kit code, kept while the reader is elsewhere. */
+    internal val changes = MutableStateFlow<Map<String, Change>>(emptyMap())
 
     // A deletion and a download are not run over each other.
     private val changing = Mutex()
@@ -90,8 +96,8 @@ internal class MlKitTranslationService(
     // Listings are taken one after another, so an older one never lands last.
     private val listing = Mutex()
 
-    /** Asks ML Kit what is on the phone. Throws [TranslationError.DeviceFailed]. */
-    private suspend fun load(): Set<String> = listing.withLock {
+    /** Asks ML Kit what is on the phone. Throws [TranslationError.Failed]. */
+    internal suspend fun load(): Set<String> = listing.withLock {
         try {
             engine.downloaded().also { models.value = it }
         } catch (e: TranslationError) {
@@ -185,7 +191,7 @@ internal class MlKitTranslationService(
         val text = try {
             withTimeout(TRANSLATE_TIMEOUT_MS) { block() }
         } catch (e: TimeoutCancellationException) {
-            throw TranslationError.DeviceFailed("timed out")
+            throw TranslationError.Failed("timed out")
         } catch (e: TranslationError.NotDownloaded) {
             refresh()
             throw e
@@ -199,20 +205,73 @@ internal class MlKitTranslationService(
      * ML Kit's download, which cannot be called back, still guarded and
      * followed by a fresh listing.
      */
-    internal suspend fun download(source: String, target: String) = guarded { engine.download(source, target) }
+    internal suspend fun download(source: String, target: String) =
+        guarded(listOf(source, target).filter { it != BUILT_IN && it !in models.value.orEmpty() }, Change.Downloading) {
+            for (code in listOf(source, target)) engine.download(code)
+        }
 
-    internal suspend fun delete(code: String) = guarded { engine.delete(code) }
+    internal suspend fun download(code: String) = guarded(listOf(code), Change.Downloading) { engine.download(code) }
 
-    private suspend fun guarded(work: suspend () -> Unit) = background.async {
-        changing.withLock {
+    internal suspend fun delete(code: String) = guarded(listOf(code), Change.Deleting) { engine.delete(code) }
+
+    /** Starts fetching [code] for the languages page; how it goes shows in [changes]. */
+    internal fun fetch(code: String) {
+        if (!onWifi()) {
+            mark(listOf(code), Change.Failed(Change.Why.Wifi))
+            return
+        }
+        mark(listOf(code), Change.Waiting)
+        background.launch {
             try {
-                work()
-            } catch (e: Throwable) {
-                refresh()
-                throw e
+                download(code)
+            } catch (e: Exception) {
+                // Shown in changes.
             }
-            // Done only once ML Kit says so: a failed listing fails the change.
-            load()
+        }
+    }
+
+    /** Starts deleting [code] for the languages page; how it goes shows in [changes]. */
+    internal fun remove(code: String) {
+        mark(listOf(code), Change.Waiting)
+        background.launch {
+            try {
+                delete(code)
+            } catch (e: Exception) {
+                // Shown in changes.
+            }
+        }
+    }
+
+    private fun mark(codes: List<String>, change: Change?) = changes.update { now ->
+        if (change == null) now - codes.toSet() else now + codes.associateWith { change }
+    }
+
+    private suspend fun guarded(marked: List<String>, doing: Change, work: suspend () -> Unit) = background.async {
+        mark(marked, Change.Waiting)
+        try {
+            changing.withLock {
+                mark(marked, doing)
+                try {
+                    work()
+                } catch (e: Throwable) {
+                    refresh()
+                    throw e
+                }
+                // Done only once ML Kit says so: a failed listing fails the change.
+                load()
+            }
+            mark(marked, null)
+        } catch (e: CancellationException) {
+            mark(marked, null)
+            throw e
+        } catch (e: Exception) {
+            val why = when {
+                doing == Change.Deleting -> Change.Why.Delete
+                e is MlKitDownloadFailed && e.reason == MlKitDownloadFailed.Reason.Space -> Change.Why.Space
+                else -> Change.Why.Download
+            }
+            mark(marked, Change.Failed(why))
+            throw e
         }
         Unit
     }.await()
@@ -269,7 +328,7 @@ internal class MlKitTranslationService(
                         Stage.Asking -> Unit
                         Stage.NoWifi -> Text(stringResource(R.string.translation_mlkit_download_wifi), color = MaterialTheme.colorScheme.error)
                         Stage.Downloading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            BusyIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             Text(stringResource(R.string.translation_mlkit_downloading))
                         }
                         is Stage.Failed -> Text(
@@ -301,6 +360,9 @@ internal class MlKitTranslationService(
     }
 
     @Composable
+    override fun Page(target: String, onBack: () -> Unit) = MlKitLanguagesPage(this, target, onBack)
+
+    @Composable
     override fun Credit(background: Color, modifier: Modifier) {
         val badge = when {
             background.luminance() < 0.5f -> R.drawable.mlkit_credit_white
@@ -315,9 +377,9 @@ internal class MlKitTranslationService(
     }
 
     @Composable
-    override fun SettingsRows(onManageServices: () -> Unit) {
-        val scope = rememberCoroutineScope()
+    override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) {
         val have by models.collectAsState()
+        val busy by changes.collectAsState()
         var failed by remember { mutableStateOf(false) }
         var legal by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
@@ -336,37 +398,29 @@ internal class MlKitTranslationService(
                 Credit(MaterialTheme.colorScheme.surface, Modifier)
                 TextButton(onClick = { legal = true }) { Text(stringResource(R.string.translation_mlkit_legal)) }
             }
-            Text(stringResource(R.string.translation_mlkit_models), style = MaterialTheme.typography.titleSmall)
-            when {
-                failed -> Text(stringResource(R.string.translation_mlkit_models_failed), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                have == null -> Unit
-                have.isNullOrEmpty() -> Text(stringResource(R.string.translation_mlkit_models_none), style = MaterialTheme.typography.bodyMedium, color = muted)
-                else -> Text(stringResource(R.string.translation_mlkit_models_kept), style = MaterialTheme.typography.bodySmall, color = muted)
-            }
         }
-        have.orEmpty().map { it to TranslationLanguages.name(MlKitLanguages.tag(it), ui) }.sortedBy { it.second }.forEach { (code, name) ->
-            ListItem(
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = { Text(name) },
-                trailingContent = trailing@{
-                    if (code == BUILT_IN) return@trailing
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                failed = try {
-                                    delete(code)
-                                    false
-                                } catch (e: TranslationError) {
-                                    true
-                                }
-                            }
-                        },
-                    ) {
-                        Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.translation_mlkit_delete, name))
-                    }
-                },
-            )
-        }
+        val downloading = busy.filterValues { it == Change.Downloading || it == Change.Waiting }.keys
+            .filter { it !in have.orEmpty() }
+        ListItem(
+            modifier = Modifier.clickable(role = Role.Button, onClick = onOpenPage),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            leadingContent = { Icon(Icons.Outlined.Language, contentDescription = null) },
+            headlineContent = { Text(stringResource(R.string.translation_mlkit_languages)) },
+            supportingContent = {
+                Text(
+                    when {
+                        downloading.isNotEmpty() -> stringResource(
+                            R.string.translation_mlkit_languages_downloading,
+                            downloading.joinToString { TranslationLanguages.name(MlKitLanguages.tag(it), ui) },
+                        )
+                        failed -> stringResource(R.string.translation_mlkit_models_failed)
+                        else -> have?.let { stringResource(R.string.translation_mlkit_languages_summary, it.size, (codes - it).size) }.orEmpty()
+                    },
+                    color = if (failed && downloading.isEmpty()) MaterialTheme.colorScheme.error else Color.Unspecified,
+                )
+            },
+            trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null) },
+        )
         if (legal) {
             val uri = LocalUriHandler.current
             AlertDialog(
@@ -389,7 +443,7 @@ internal class MlKitTranslationService(
         const val ID = "mlkit"
 
         // ML Kit ships English and keeps it; asking to delete it does nothing.
-        private const val BUILT_IN = "en"
+        internal const val BUILT_IN = "en"
         private const val TRANSLATE_TIMEOUT_MS = 30_000L
         private const val TERMS = "https://developers.google.com/ml-kit/terms"
         private const val GOOGLE_TRANSLATE = "https://cloud.google.com/translate"
@@ -400,4 +454,14 @@ internal class MlKitTranslationService(
             return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         }
     }
+}
+
+/** A language on its way to or off the phone, or what stopped it. */
+internal sealed interface Change {
+    data object Waiting : Change
+    data object Downloading : Change
+    data object Deleting : Change
+    data class Failed(val why: Why) : Change
+
+    enum class Why { Wifi, Space, Download, Delete }
 }
