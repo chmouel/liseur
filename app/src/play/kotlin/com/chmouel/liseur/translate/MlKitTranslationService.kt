@@ -154,15 +154,16 @@ internal class MlKitTranslationService(
 
         override suspend fun translate(sentence: String, context: String?): String = lock.withLock {
             if (closed) throw CancellationException("closed")
-            // Asked at each sentence, so a language deleted mid-run stops it.
-            val (from, to) = ready(source, target)
-            val translator = held ?: engine.open(from, to).also { held = it }
             try {
+                // Asked at each sentence, so a language deleted mid-run stops it.
+                val (from, to) = ready(source, target)
+                val translator = held ?: engine.open(from, to).also { held = it }
                 within { translator.translate(sentence) }
             } catch (e: TranslationError) {
-                // A failing translator is not trusted with the next sentence.
+                // A failing translator, or one whose language went away, is not
+                // trusted with the next sentence.
+                held?.close()
                 held = null
-                translator.close()
                 throw e
             }
         }
@@ -451,7 +452,17 @@ internal class MlKitTranslationService(
         private fun onWifi(context: Context): Boolean {
             val manager = context.getSystemService(ConnectivityManager::class.java) ?: return false
             val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
-            return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return true
+            if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return false
+            // A VPN hides the network under it; any Wi-Fi with internet will do,
+            // and ML Kit's own Wi-Fi condition still holds the download to it.
+            @Suppress("DEPRECATION")
+            return manager.allNetworks.any { network ->
+                manager.getNetworkCapabilities(network)?.let {
+                    it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                        it.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                } == true
+            }
         }
     }
 }

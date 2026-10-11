@@ -187,6 +187,7 @@ import com.chmouel.liseur.reader.chrome.FooterSlotNote
 import com.chmouel.liseur.reader.chrome.FooterSlotSheet
 import com.chmouel.liseur.reader.chrome.HeldPlace
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
+import com.chmouel.liseur.reader.chrome.shownResource
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.visibleWebViewCache
 import com.chmouel.liseur.reader.chrome.CachedLookup
@@ -3388,10 +3389,17 @@ fun ReaderScreen(
         val shownTranslation = pageTranslation ?: restoringPageTranslation
         val translationsBy by remember(shownTranslation, navigator) {
             val run = shownTranslation ?: return@remember flowOf(emptySet<String>())
-            val shown = navigator?.currentLocator?.map { ResourceAddress.canonicalPath(it.href.toString()) } ?: flowOf(null)
-            combine(run.swaps, shown) { swaps, href ->
+            val nav = navigator ?: return@remember run.swaps.map { swaps -> swaps.values.flatten().mapTo(mutableSetOf(), PageSwap::by) }
+            val said = nav.currentLocator.map { ResourceAddress.canonicalPath(it.href.toString()) }
+            // Readium can show the next resource before its locator names it,
+            // so the view on screen is asked too and both are credited.
+            combine(run.swaps, said, shownResource(nav.publicationView)) { swaps, href, shown ->
                 // Without a known resource, everything the run placed is credited.
-                val placed = if (href == null) swaps.values.flatten() else swaps[href].orEmpty()
+                val placed = if (href == null && shown == null) {
+                    swaps.values.flatten()
+                } else {
+                    setOfNotNull(href, shown).flatMap { swaps[it].orEmpty() }
+                }
                 placed.mapTo(mutableSetOf(), PageSwap::by)
             }.distinctUntilChanged()
         }.collectAsStateWithLifecycle(emptySet())

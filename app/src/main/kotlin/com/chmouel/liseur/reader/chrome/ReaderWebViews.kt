@@ -9,6 +9,8 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.chmouel.liseur.reader.ResourceAddress
 
 /**
  * The web view showing the chapter being read.
@@ -126,3 +128,28 @@ internal fun layoutPasses(root: View): Flow<Unit> = callbackFlow {
         if (current.isAlive) current.removeOnGlobalLayoutListener(listener)
     }
 }.conflate()
+
+/**
+ * The resource of the web view on screen, as [ResourceAddress.canonicalPath],
+ * or null while none is.
+ *
+ * Readium can show the next resource before its locator says so; this
+ * follows the views themselves, looked at again after every layout pass
+ * and scroll, which is what a page turn or a recycled view produces.
+ */
+internal fun shownResource(root: View): Flow<String?> = callbackFlow {
+    val observer = root.viewTreeObserver
+    val look = { trySend(visibleWebView(root)?.url?.let(ResourceAddress::canonicalPath)) }
+    val layout = ViewTreeObserver.OnGlobalLayoutListener { look() }
+    val scroll = ViewTreeObserver.OnScrollChangedListener { look() }
+    observer.addOnGlobalLayoutListener(layout)
+    observer.addOnScrollChangedListener(scroll)
+    look()
+    awaitClose {
+        val current = root.viewTreeObserver
+        if (current.isAlive) {
+            current.removeOnGlobalLayoutListener(layout)
+            current.removeOnScrollChangedListener(scroll)
+        }
+    }
+}.conflate().distinctUntilChanged()

@@ -87,8 +87,12 @@ class MlKitTranslationTest {
         assertEquals(1, engine.opened)
         service.delete("fr")
         expect<TranslationError.NotDownloaded> { run.translate("Trois", null) }
-        run.close()
         assertEquals(1, engine.closed)
+        service.download("fr")
+        assertEquals("[fr>en] Quatre", run.translate("Quatre", null))
+        assertEquals(2, engine.opened)
+        run.close()
+        assertEquals(2, engine.closed)
     }
 
     @Test
