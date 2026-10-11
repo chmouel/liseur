@@ -522,8 +522,9 @@ class AppSettingsRepository(
     /**
      * Locks the reader footer.
      *
-     * When true, the footer stays visible but ignores taps and long
-     * presses. When false, taps cycle its fields and long presses pick them.
+     * When true, the footer ignores taps, so a stray touch cannot change
+     * it, but a long press still opens the picker. When false, taps also
+     * cycle its fields. On unless the reader turned it off.
      */
     suspend fun setLockFooterOn(enabled: Boolean) {
         store.edit { it[Keys.LOCK_FOOTER_ON] = enabled }
