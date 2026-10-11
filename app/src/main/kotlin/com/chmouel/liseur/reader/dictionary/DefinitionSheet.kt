@@ -33,6 +33,8 @@ import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The Kindle-style definition card: the word, its senses, and a way out to a
@@ -66,7 +68,9 @@ fun DefinitionSheet(
 
     LaunchedEffect(term, languages, enabled, baseUrl) {
         if (!enabled) return@LaunchedEffect
-        state = client.define(term, languages, baseUrl)
+        state = client.define(term, languages, baseUrl) { initial ->
+            withContext(Dispatchers.Main.immediate) { state = initial }
+        }
     }
 
     LiseurModalBottomSheet(
@@ -165,7 +169,7 @@ private fun Sense(sense: DictionarySense, onOpenInBrowser: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.primary,
             )
         }
-        sense.definitions.take(MAX_DEFINITIONS).forEachIndexed { index, definition ->
+        sense.definitions.take(MAX_CARD_DEFINITIONS).forEachIndexed { index, definition ->
             Text(
                 text = "${index + 1}. $definition",
                 style = MaterialTheme.typography.bodyMedium,
@@ -194,6 +198,3 @@ private fun Sense(sense: DictionarySense, onOpenInBrowser: (String) -> Unit) {
         }
     }
 }
-
-/** Wiktionary lists dozens of senses for common words; a card is not a page. */
-private const val MAX_DEFINITIONS = 4

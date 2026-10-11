@@ -62,6 +62,53 @@ class DictionaryInflectionTest {
         assertNull(grammaticalPart("Étymologie"))
     }
 
+    @Test
+    fun `language qualified subsection anchors keep the target language`() {
+        for (anchor in listOf("fr-nom-1", "fr-nom")) {
+            val html = page("fr", "Français", "Forme de nom commun",
+                """<ol><li><i>Pluriel de</i> <a href="./livre#$anchor">livre</a>.</li></ol>""")
+            assertEquals(DictionaryReference("livre", "fr"),
+                parseWiktionaryEntryHtml(html).single().references[0])
+            assertTrue(parseWiktionaryEntryHtml(html.replace("#$anchor", "#en-noun"))
+                .single().references.isEmpty())
+        }
+    }
+
+    @Test
+    fun `French conjugation notes may end with du verbe`() {
+        val html = page("fr", "Français", "Forme de verbe",
+            """<ol><li><i>Deuxième personne du singulier de l’indicatif présent du verbe</i> <a href="./livrer">livrer</a>.</li></ol>""")
+        assertEquals(DictionaryReference("livrer", "fr"),
+            parseWiktionaryEntryHtml(html).single().references[0])
+    }
+
+    @Test
+    fun `French adjective forms accept straight and curly elision`() {
+        for (apostrophe in listOf("'", "’")) {
+            val html = page("fr", "Français", "Forme d${apostrophe}adjectif",
+                """<ol><li><i>Masculin pluriel de</i> <a href="./ami#fr-adj">ami</a>.</li></ol>""")
+            val sense = parseWiktionaryEntryHtml(html).single()
+            assertEquals("adjective", grammaticalPart(sense.partOfSpeech))
+            assertEquals(DictionaryReference("ami", "fr"), sense.references[0])
+        }
+    }
+
+    @Test
+    fun `English spelling variants abbreviations and obsolete forms are not inflections`() {
+        for (note in listOf("alternative spelling of", "alternative form of", "obsolete form of",
+            "abbreviation of", "initialism of", "misspelling of")) {
+            assertTrue(note, parseWiktionaryDefinitions(englishDefinition(
+                formLink("harness", note = note))).single().references.isEmpty())
+        }
+        for (note in listOf("plural of", "singular of", "simple past of", "past participle of",
+            "present participle of", "third-person singular simple present indicative of",
+            "comparative of", "superlative of", "inflection of")) {
+            assertEquals(note, DictionaryReference("harness", "en"),
+                parseWiktionaryDefinitions(englishDefinition(formLink("harness", note = note)))
+                    .single().references[0])
+        }
+    }
+
     companion object {
         // Reduced grammatical markup from the named Wiktionary entries (CC BY-SA 4.0).
         // https://{edition}.wiktionary.org/wiki/{word}; examples and prose definitions omitted.

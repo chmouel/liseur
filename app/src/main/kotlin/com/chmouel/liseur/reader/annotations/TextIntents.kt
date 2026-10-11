@@ -29,6 +29,7 @@ fun Context.shareText(text: String, subject: String?) {
  */
 fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
     val word = text.trim().takeIf { it.isNotBlank() } ?: return
+    val browserWord = word.takeWhile { !it.isWhitespace() }
     val process = Intent(Intent.ACTION_PROCESS_TEXT).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_PROCESS_TEXT, word)
@@ -36,13 +37,13 @@ fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
     }
     // Ask first so devices without a handler fall back to the browser.
     if (packageManager.queryIntentActivities(process, 0).isEmpty()) {
-        openDictionaryEntry(word, dictionaryBaseUrl)
+        openDictionaryEntry(browserWord, dictionaryBaseUrl)
         return
     }
     try {
         startActivity(process)
     } catch (_: ActivityNotFoundException) {
-        openDictionaryEntry(word, dictionaryBaseUrl)
+        openDictionaryEntry(browserWord, dictionaryBaseUrl)
     }
 }
 

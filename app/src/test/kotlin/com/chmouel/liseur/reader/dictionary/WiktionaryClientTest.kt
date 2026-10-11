@@ -271,7 +271,7 @@ class WiktionaryClientTest {
 
     @Test
     fun `follow-ups have a four request budget including endpoint fallback`() = runBlocking {
-        val definitions = (1..5).joinToString(",") {
+        val definitions = (1..4).joinToString(",") {
             """{"definition":${JSONObject.quote(formLink("base$it"))}}"""
         }
         server.enqueue(MockResponse(body = """{"en":[{"partOfSpeech":"Noun","definitions":[$definitions]}]}"""))
@@ -325,5 +325,32 @@ class WiktionaryClientTest {
         withTimeout(2_000) { lookup.cancelAndJoin() }
         assertTrue(lookup.isCancelled)
         assertTrue(client.dispatcher.runningCalls().all { it.isCanceled() })
+    }
+
+    @Test
+    fun `the initial definition is published before any base-word request`() = runBlocking {
+        server.enqueue(MockResponse(body = englishDefinition(formLink("harness"))))
+        server.enqueue(MockResponse(body = englishDefinition("A set of straps.")))
+        var published = false
+        val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) { initial ->
+            assertEquals(1, server.requestCount)
+            assertEquals("plural of harness", initial.senses.single().definitions.single())
+            assertTrue(initial.senses.single().resolved.isEmpty())
+            published = true
+        } as DictionaryState.Found
+        assertTrue(published)
+        assertEquals("A set of straps.", found.senses.single().resolved[0]!!.senses.single().definitions.single())
+    }
+
+    @Test
+    fun `hidden definitions never consume requests or display unrelated base meanings`() = runBlocking {
+        val visible = (1..4).joinToString(",") { """{"definition":"Meaning $it."}""" }
+        val hidden = JSONObject.quote(formLink("harness"))
+        server.enqueue(MockResponse(body =
+            """{"en":[{"partOfSpeech":"Noun","definitions":[$visible,{"definition":$hidden}]}]}"""))
+        val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) as DictionaryState.Found
+        assertEquals(1, server.requestCount)
+        assertEquals(5, found.senses.single().definitions.size)
+        assertTrue(found.senses.single().resolved.isEmpty())
     }
 }

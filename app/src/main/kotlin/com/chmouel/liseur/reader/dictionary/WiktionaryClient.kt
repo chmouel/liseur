@@ -70,12 +70,14 @@ class WiktionaryClient(
         word: String,
         languages: List<String>,
         baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
+        onInitialResult: suspend (DictionaryState.Found) -> Unit = {},
     ): DictionaryState =
         withContext(Dispatchers.IO) {
             val term = normaliseLookupTerm(word)
             if (term.isBlank()) return@withContext DictionaryState.NotFound
             val result = lookupWithLowercase(term, languages, baseUrl)
             if (result !is DictionaryState.Found) return@withContext result
+            onInitialResult(result)
             expand(term, result, baseUrl)
         }
 
@@ -102,7 +104,7 @@ class WiktionaryClient(
         val expansion = Expansion()
         val entries = mutableMapOf<DictionaryReference, DictionaryState>()
         return DictionaryState.Found(original.senses.map { sense ->
-            val resolved = sense.references.mapValues { (_, reference) ->
+            val resolved = sense.references.filterKeys { it < MAX_CARD_DEFINITIONS }.mapValues { (_, reference) ->
                 if (reference.term.equals(term, ignoreCase = true)) {
                     return@mapValues ResolvedDefinition(reference.term, problem = DefinitionProblem.UNRESOLVED)
                 }

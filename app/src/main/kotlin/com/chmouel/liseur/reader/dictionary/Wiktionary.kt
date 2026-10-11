@@ -4,6 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 
+internal const val MAX_CARD_DEFINITIONS = 4
+
 /** One sense of a word, as Wiktionary groups them under a part of speech. */
 data class DictionarySense(
     val partOfSpeech: String,

@@ -14,12 +14,17 @@ internal fun dictionaryReference(
     val copy = item.clone()
     copy.select("ul, ol, dl, style, .references, .reference").remove()
     val link = when (edition) {
-        "en" -> copy.select(".form-of-definition .form-of-definition-link a[href]").singleOrNull()
+        "en" -> {
+            val form = copy.selectFirst(".form-of-definition") ?: return null
+            val note = form.clone().apply { select(".form-of-definition-link").remove() }.text().lowercase()
+            if (!note.matches(ENGLISH_INFLECTION)) return null
+            form.select(".form-of-definition-link a[href]").singleOrNull()
+        }
         "fr" -> {
             val note = copy.selectFirst("> i")?.text().orEmpty()
-            if (!partOfSpeech.startsWith("Forme de ") ||
+            if (!partOfSpeech.contains(Regex("^Forme (?:de |d['’])")) ||
                 !(note.startsWith("Pluriel de") ||
-                    note.matches(Regex("(?i).*(personne|participe|féminin|masculin).* de")))) return null
+                    note.matches(Regex("(?i).*(personne|participe|féminin|masculin).* (?:de|du verbe)")))) return null
             copy.select("> a[href]").singleOrNull()
         }
         "es" -> {
@@ -47,13 +52,18 @@ internal fun dictionaryReference(
         title.any { it.isISOControl() || it in ":/?#\\" }) return null
     val fragment = relative.substringAfter('#', "")
     if (fragment.isNotBlank()) {
-        val targetLanguage = dictionaryLanguage(decodeWikiTitle(fragment) ?: return null)
+        val targetLanguage = dictionaryLanguage((decodeWikiTitle(fragment) ?: return null).substringBefore('-'))
         if (targetLanguage != language) return null
     }
     val taggedLanguage = link.parents().firstOrNull { it.hasAttr("lang") }?.attr("lang")
     if (!taggedLanguage.isNullOrBlank() && taggedLanguage != language) return null
     return DictionaryReference(title, language)
 }
+
+private val ENGLISH_INFLECTION = Regex(
+    "^(?:plural|singular|inflection|comparative|superlative|" +
+        "(?:first|second|third)-person(?: .+)?|(?:simple )?(?:past|present|future)(?: .+)?) of$",
+)
 
 private fun decodeWikiTitle(value: String): String? = try {
     URLDecoder.decode(value.replace("+", "%2B"), "UTF-8").replace('_', ' ')
