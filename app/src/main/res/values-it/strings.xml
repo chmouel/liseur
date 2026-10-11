@@ -1168,7 +1168,7 @@
         <item quantity="one">%d minuto</item>
         <item quantity="other">%d minuti</item>
     </plurals>
-    <string name="services_title">Servizi</string>
+    <string name="services_title">Servizi esterni e chiavi API</string>
     <string name="services_entry_summary">Server e chiavi API</string>
     <string name="services_manage">Gestisci servizi</string>
     <string name="services_servers">Server</string>
@@ -1201,7 +1201,7 @@
     <string name="translation_provider_device">Questo telefono</string>
     <string name="translation_provider_device_summary">Il traduttore di Android. I passaggi restano sul telefono.</string>
     <string name="translation_provider_server">Server (compatibile con OpenAI)</string>
-    <string name="translation_provider_server_summary">Un server della pagina Servizi, come OpenRouter.</string>
+    <string name="translation_provider_server_summary">Un server della pagina Servizi esterni e chiavi API, come OpenRouter.</string>
     <string name="translation_settings_privacy">I passaggi che traduci vengono inviati a %1$s.</string>
     <string name="translation_settings_target">Traduci in</string>
     <string name="translation_settings_target_app">%1$s, la lingua dell\'app</string>
@@ -1244,7 +1244,7 @@
     <string name="translation_choose_service">Scegli un altro servizio</string>
     <string name="translation_not_set_up">Scegli un servizio di traduzione per tradurre i passaggi.</string>
     <string name="translation_open_settings">Apri impostazioni</string>
-    <string name="translation_open_services">Apri Servizi</string>
+    <string name="translation_open_services">Apri servizi esterni</string>
     <string name="translation_network">Impossibile raggiungere %1$s. Controlla la connessione e riprova.</string>
     <string name="translation_key_refused">%1$s ha rifiutato la chiave API.</string>
     <string name="translation_rate_limited">%1$s indica che la quota o il limite di richieste è stato raggiunto. Riprova più tardi.</string>

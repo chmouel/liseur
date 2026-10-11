@@ -26,7 +26,7 @@
     <string name="services_gemini_privacy">用 Gemini 朗读或翻译的文字会发送给 Google。</string>
     <string name="translation_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。文字会发送给 Google。</string>
     <string name="translation_gemini_key_refused">Google 拒绝了该 Gemini API 密钥。</string>
-    <string name="translation_gemini_key_missing">在“服务”页面添加你的 Gemini API 密钥，即可用 Gemini 翻译。</string>
+    <string name="translation_gemini_key_missing">在“外部服务和 API 密钥”页面添加你的 Gemini API 密钥，即可用 Gemini 翻译。</string>
     <string name="translation_provider_mlkit">本机上的 Google</string>
     <string name="translation_provider_mlkit_summary">Google 的 ML Kit 翻译器，下载语言后在手机上运行。段落保留在手机上；ML Kit 会向 Google 发送使用诊断数据。</string>
     <string name="translation_mlkit_action">使用 Google 翻译</string>

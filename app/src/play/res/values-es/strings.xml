@@ -26,7 +26,7 @@
     <string name="services_gemini_privacy">El texto que se lee en voz alta o se traduce con Gemini se envía a Google.</string>
     <string name="translation_provider_gemini_summary">Gemini de Google, con tu clave de API. Los pasajes se envían a Google.</string>
     <string name="translation_gemini_key_refused">Google rechazó la clave de API de Gemini.</string>
-    <string name="translation_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios para traducir con Gemini.</string>
+    <string name="translation_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios externos y claves de API para traducir con Gemini.</string>
     <string name="translation_provider_mlkit">Google en este teléfono</string>
     <string name="translation_provider_mlkit_summary">El traductor ML Kit de Google, que funciona en el teléfono una vez descargados sus idiomas. Los pasajes se quedan en el teléfono; ML Kit envía a Google diagnósticos de uso.</string>
     <string name="translation_mlkit_action">Traducir con Google</string>

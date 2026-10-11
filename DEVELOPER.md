@@ -1425,7 +1425,7 @@ reader behavior.
   page, which Readium has not scrolled yet.
 - Providers are chosen on the Read aloud screen reached from its row on
   the main Settings list, under Reading & navigation: Gemini (Play only),
-  device voices, and any server listed on the Services page speaking
+  device voices, and any server listed on the External services and API keys page speaking
   OpenAI's API (OpenAI, a hosted service, or a self-hosted server such as
   Kokoro). Each is a
   `SpeechService` (`GeminiSpeechService`, `DeviceSpeechService`,
@@ -1500,7 +1500,7 @@ reader behavior.
   opened. All providers return 24 kHz
   mono 16-bit PCM, so the engine, cache and `AudioTrack` output are
   shared; only the `SpeechSynthesizer` a session is built with differs.
-  Servers and keys live on the Services page (`ServicesScreen`, reached
+  Servers and keys live on the External services and API keys page (`ServicesScreen`, reached
   from Settings and from "Manage services" in the voice service picker);
   `ServerConnections` owns adding, editing and deleting them, their keys
   and the per-origin generation that drops replies from before a change.
@@ -1541,7 +1541,7 @@ reader behavior.
   moving. A new or edited server is listed in
   `read_aloud_unsettled_servers` (local, not backed up) until its lists
   chose a model and voice; until then a refresh replaces the old model.
-  The Services page's "Test connection" only checks that the server
+  The External services and API keys page's "Test connection" only checks that the server
   answers with the key; read aloud's own test stays on its page. Groq's
   `model_terms_required` error is `SpeechError.TermsRequired`, which
   stops the session like a refused key.
@@ -1681,12 +1681,12 @@ reader behavior.
   settings that store their choice.
 - Services: this phone (`DeviceTranslationService`, Android 12+
   `TranslationManager`, no library and no Google Play services), any
-  server on the Services page speaking OpenAI's chat completions
+  server on the External services and API keys page speaking OpenAI's chat completions
   (`ServerTranslationService`), and in Play only Gemini
   (`GeminiTranslationService`, sharing the read-aloud key) and Google
   on this phone (`MlKitTranslationService`, ML Kit). The device is
-  the default; a network service is used only once chosen. The Services
-  page holds every key and server; the Translation page in Settings
+  the default; a network service is used only once chosen. The External
+  services and API keys page holds every key and server; the Translation page in Settings
   holds the service, its model and the target language.
 - The device service is decided at runtime on each phone. Every
   `TranslationManager` call runs off the main thread with a bounded wait

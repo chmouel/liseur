@@ -1168,7 +1168,7 @@
         <item quantity="one">%d minuto</item>
         <item quantity="other">%d minutos</item>
     </plurals>
-    <string name="services_title">Servicios</string>
+    <string name="services_title">Servicios externos y claves de API</string>
     <string name="services_entry_summary">Servidores y claves de API</string>
     <string name="services_manage">Gestionar servicios</string>
     <string name="services_servers">Servidores</string>
@@ -1201,7 +1201,7 @@
     <string name="translation_provider_device">Este teléfono</string>
     <string name="translation_provider_device_summary">El traductor de Android. Los pasajes no salen del teléfono.</string>
     <string name="translation_provider_server">Servidor (compatible con OpenAI)</string>
-    <string name="translation_provider_server_summary">Un servidor de la página Servicios, como OpenRouter.</string>
+    <string name="translation_provider_server_summary">Un servidor de la página Servicios externos y claves de API, como OpenRouter.</string>
     <string name="translation_settings_privacy">Los pasajes que traduces se envían a %1$s.</string>
     <string name="translation_settings_target">Traducir a</string>
     <string name="translation_settings_target_app">%1$s, el idioma de la aplicación</string>
@@ -1244,7 +1244,7 @@
     <string name="translation_choose_service">Elegir otro servicio</string>
     <string name="translation_not_set_up">Elige un servicio de traducción para traducir pasajes.</string>
     <string name="translation_open_settings">Abrir ajustes</string>
-    <string name="translation_open_services">Abrir Servicios</string>
+    <string name="translation_open_services">Abrir servicios externos</string>
     <string name="translation_network">No se pudo conectar con %1$s. Comprueba la conexión y vuelve a intentarlo.</string>
     <string name="translation_key_refused">%1$s rechazó la clave de API.</string>
     <string name="translation_rate_limited">%1$s indica que se alcanzó la cuota o el límite de solicitudes. Vuelve a intentarlo más tarde.</string>

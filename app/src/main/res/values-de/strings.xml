@@ -1180,7 +1180,7 @@
         <item quantity="one">%d Minute</item>
         <item quantity="other">%d Minuten</item>
     </plurals>
-    <string name="services_title">Dienste</string>
+    <string name="services_title">Externe Dienste und API-Schlüssel</string>
     <string name="services_entry_summary">Server und API-Schlüssel</string>
     <string name="services_manage">Dienste verwalten</string>
     <string name="services_servers">Server</string>
@@ -1213,7 +1213,7 @@
     <string name="translation_provider_device">Dieses Telefon</string>
     <string name="translation_provider_device_summary">Der Übersetzer von Android. Die Abschnitte bleiben auf dem Telefon.</string>
     <string name="translation_provider_server">Server (OpenAI-kompatibel)</string>
-    <string name="translation_provider_server_summary">Ein Server von der Seite Dienste, etwa OpenRouter.</string>
+    <string name="translation_provider_server_summary">Ein Server von der Seite Externe Dienste und API-Schlüssel, etwa OpenRouter.</string>
     <string name="translation_settings_privacy">Abschnitte, die du übersetzt, werden an %1$s gesendet.</string>
     <string name="translation_settings_target">Übersetzen nach</string>
     <string name="translation_settings_target_app">%1$s, die Sprache der App</string>
@@ -1256,7 +1256,7 @@
     <string name="translation_choose_service">Anderen Dienst wählen</string>
     <string name="translation_not_set_up">Wähle einen Übersetzungsdienst, um Abschnitte zu übersetzen.</string>
     <string name="translation_open_settings">Einstellungen öffnen</string>
-    <string name="translation_open_services">Dienste öffnen</string>
+    <string name="translation_open_services">Externe Dienste öffnen</string>
     <string name="translation_network">%1$s ist nicht erreichbar. Prüfe die Verbindung und versuche es erneut.</string>
     <string name="translation_key_refused">%1$s hat den API-Schlüssel abgelehnt.</string>
     <string name="translation_rate_limited">%1$s meldet, dass das Kontingent oder Anfragelimit erreicht ist. Versuche es später erneut.</string>

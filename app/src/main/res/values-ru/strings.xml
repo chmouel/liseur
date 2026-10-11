@@ -1258,7 +1258,7 @@
         <item quantity="many">%d минут</item>
         <item quantity="other">%d минуты</item>
     </plurals>
-    <string name="services_title">Сервисы</string>
+    <string name="services_title">Внешние сервисы и API-ключи</string>
     <string name="services_entry_summary">Серверы и API-ключи</string>
     <string name="services_manage">Управление сервисами</string>
     <string name="services_servers">Серверы</string>
@@ -1293,7 +1293,7 @@
     <string name="translation_provider_device">Этот телефон</string>
     <string name="translation_provider_device_summary">Встроенный переводчик Android. Отрывки остаются на телефоне.</string>
     <string name="translation_provider_server">Сервер (совместимый с OpenAI)</string>
-    <string name="translation_provider_server_summary">Сервер со страницы «Службы», например OpenRouter.</string>
+    <string name="translation_provider_server_summary">Сервер со страницы «Внешние сервисы и API-ключи», например OpenRouter.</string>
     <string name="translation_settings_privacy">Переводимые отрывки отправляются в %1$s.</string>
     <string name="translation_settings_target">Переводить на</string>
     <string name="translation_settings_target_app">%1$s, язык приложения</string>
@@ -1338,7 +1338,7 @@
     <string name="translation_choose_service">Выбрать другую службу</string>
     <string name="translation_not_set_up">Выберите службу перевода, чтобы переводить отрывки.</string>
     <string name="translation_open_settings">Открыть настройки</string>
-    <string name="translation_open_services">Открыть «Службы»</string>
+    <string name="translation_open_services">Открыть «Внешние сервисы»</string>
     <string name="translation_network">Не удалось связаться с %1$s. Проверьте подключение и повторите попытку.</string>
     <string name="translation_key_refused">%1$s отклонил ключ API.</string>
     <string name="translation_rate_limited">%1$s сообщает, что квота или лимит запросов исчерпаны. Повторите попытку позже.</string>

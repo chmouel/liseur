@@ -40,7 +40,7 @@ All of this stays in the app's own private storage:
 - If you connect a book server, its address and the credentials or token
   it issued. Those are encrypted with a key held in the Android Keystore,
   which cannot be exported from the device.
-- The server or Gemini API keys you paste on the Services page, for
+- The server or Gemini API keys you paste on the External services and API keys page, for
   reading aloud or translation, encrypted the same way. A server key is
   kept for the server you pasted it for, and is sent only to that
   server.
@@ -97,7 +97,7 @@ terms, chosen in Android's settings.
 
 Liseur can read aloud with any speech server that speaks OpenAI's API:
 a server of your own running a model such as Kokoro, OpenAI itself, or
-another hosted service. Nothing is sent until you add that server in Settings, Services,
+another hosted service. Nothing is sent until you add that server in Settings, External services and API keys,
 typing its address or picking it from the services listed on that field
 (picking one only fills in its address), and choose it in Settings, Read
 aloud. Liseur then
@@ -107,7 +107,7 @@ DeepInfra's, `https://api.deepinfra.com/v1/openai`, it also asks
 `https://api.deepinfra.com/models/` followed by the model's name for
 that model's voices, without your key or any text. Tapping a voice there, or
 typing one, sends a fixed sample sentence so you can hear it; it is not
-text from a book. "Test connection" on the Services page asks only for
+text from a book. "Test connection" on the External services and API keys page asks only for
 the list of models; on the Read aloud screen it asks for the same lists and sends
 the single word "Hello." with the model and voice you picked. Once you press play it sends
 the text being read, one sentence at a time by default or up to five
@@ -129,8 +129,8 @@ settings.
 
 ### A server, for translation
 
-Liseur can translate a selected passage with any server on the Services
-page that speaks OpenAI's chat API, such as OpenRouter or a server of
+Liseur can translate a selected passage with any server on the External
+services and API keys page that speaks OpenAI's chat API, such as OpenRouter or a server of
 your own. Nothing is sent until you choose that server in Settings,
 Translation. Liseur then asks it for its list of models, with your API
 key if you entered one for that server, so you can pick one. "Translate

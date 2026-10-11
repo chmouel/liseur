@@ -1168,7 +1168,7 @@
         <item quantity="one">%d minute</item>
         <item quantity="other">%d minutes</item>
     </plurals>
-    <string name="services_title">Services</string>
+    <string name="services_title">Services externes et clés d\'API</string>
     <string name="services_entry_summary">Serveurs et clés d\'API</string>
     <string name="services_manage">Gérer les services</string>
     <string name="services_servers">Serveurs</string>
@@ -1201,7 +1201,7 @@
     <string name="translation_provider_device">Ce téléphone</string>
     <string name="translation_provider_device_summary">Le traducteur d\'Android. Les passages restent sur le téléphone.</string>
     <string name="translation_provider_server">Serveur (compatible OpenAI)</string>
-    <string name="translation_provider_server_summary">Un serveur de la page Services, comme OpenRouter.</string>
+    <string name="translation_provider_server_summary">Un serveur de la page Services externes et clés d\'API, comme OpenRouter.</string>
     <string name="translation_settings_privacy">Les passages que vous traduisez sont envoyés à %1$s.</string>
     <string name="translation_settings_target">Traduire vers</string>
     <string name="translation_settings_target_app">%1$s, la langue de l\'application</string>
@@ -1244,7 +1244,7 @@
     <string name="translation_choose_service">Choisir un autre service</string>
     <string name="translation_not_set_up">Choisissez un service de traduction pour traduire des passages.</string>
     <string name="translation_open_settings">Ouvrir les paramètres</string>
-    <string name="translation_open_services">Ouvrir Services</string>
+    <string name="translation_open_services">Ouvrir les services externes</string>
     <string name="translation_network">Impossible de joindre %1$s. Vérifiez la connexion et réessayez.</string>
     <string name="translation_key_refused">%1$s a refusé la clé API.</string>
     <string name="translation_rate_limited">%1$s indique que le quota ou la limite de requêtes est atteint. Réessayez plus tard.</string>

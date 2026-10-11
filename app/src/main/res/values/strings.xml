@@ -1221,7 +1221,7 @@
         <item quantity="other">%d minutes</item>
     </plurals>
     <string name="read_aloud_speed_value" translatable="false">%1$s×</string>
-    <string name="services_title">Services</string>
+    <string name="services_title">External services and API keys</string>
     <string name="services_entry_summary">Servers and API keys</string>
     <string name="services_manage">Manage services</string>
     <string name="services_servers">Servers</string>
@@ -1254,7 +1254,7 @@
     <string name="translation_provider_device">This phone</string>
     <string name="translation_provider_device_summary">Android\'s own translator. Passages stay on the phone.</string>
     <string name="translation_provider_server">Server (OpenAI-compatible)</string>
-    <string name="translation_provider_server_summary">A server from the Services page, such as OpenRouter.</string>
+    <string name="translation_provider_server_summary">A server from the External services and API keys page, such as OpenRouter.</string>
     <string name="translation_settings_privacy">Passages you translate are sent to %1$s.</string>
     <string name="translation_settings_target">Translate into</string>
     <string name="translation_settings_target_app">%1$s, the app\'s language</string>
@@ -1297,7 +1297,7 @@
     <string name="translation_choose_service">Choose another service</string>
     <string name="translation_not_set_up">Choose a translation service to translate passages.</string>
     <string name="translation_open_settings">Open settings</string>
-    <string name="translation_open_services">Open Services</string>
+    <string name="translation_open_services">Open external services</string>
     <string name="translation_network">Couldn\'t reach %1$s. Check the connection and try again.</string>
     <string name="translation_key_refused">%1$s refused the API key.</string>
     <string name="translation_rate_limited">%1$s says the quota or rate limit is reached. Try again later.</string>
