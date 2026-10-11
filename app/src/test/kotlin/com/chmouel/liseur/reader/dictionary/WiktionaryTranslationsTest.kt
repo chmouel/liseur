@@ -53,7 +53,7 @@ class WiktionaryTranslationsTest {
     @Test
     fun `a moved table points at its subpage, whose tables take its place`() {
         val page = parseWiktionaryTranslations(HOUSE, "en", "fr")
-        assertEquals(listOf(TranslationSection("Noun", emptyList())), page.sections)
+        assertEquals(listOf(TranslationSection("Noun", emptyList(), moved = true)), page.sections)
         assertEquals("house/translations", page.subpage)
 
         val merged = page.plus(parseWiktionaryTranslations(HOUSE_TRANSLATIONS, "en", "fr"))
@@ -67,7 +67,8 @@ class WiktionaryTranslationsTest {
     fun `moved tables of repeated parts of speech keep page order`() {
         fun section(part: String, word: String = "") =
             TranslationSection(part, if (word.isEmpty()) emptyList() else listOf(TranslationGroup("", listOf(word))))
-        val entry = EntryTranslations(listOf(section("Noun"), section("Verb"), section("Noun")), "bank/translations")
+        fun moved(part: String) = TranslationSection(part, emptyList(), moved = true)
+        val entry = EntryTranslations(listOf(moved("Noun"), moved("Verb"), moved("Noun")), "bank/translations")
         val moved = EntryTranslations(
             listOf(section("Noun", "banque"), section("Verb", "déposer"), section("Noun", "rive"), section("Noun", "berge")),
         )
@@ -75,6 +76,18 @@ class WiktionaryTranslationsTest {
             listOf(section("Noun", "banque"), section("Verb", "déposer"), section("Noun", "rive"), section("Noun", "berge")),
             entry.plus(moved).sections,
         )
+    }
+
+    @Test
+    fun `an inline table without the language is not a moved one`() {
+        val inline = TranslationSection("Noun", emptyList())
+        val verb = TranslationSection("Verb", listOf(TranslationGroup("", listOf("déposer"))))
+        val entry = EntryTranslations(
+            listOf(inline, verb, TranslationSection("Noun", emptyList(), moved = true)),
+            "bank/translations",
+        )
+        val rive = TranslationSection("Noun", listOf(TranslationGroup("", listOf("rive"))))
+        assertEquals(listOf(inline, verb, rive), entry.plus(EntryTranslations(listOf(rive))).sections)
     }
 
     @Test

@@ -12,15 +12,20 @@ data class TranslationGroup(val gloss: String, val terms: List<String>)
 /**
  * One translations table of an entry, under the part of speech that heads
  * it. A word with several etymologies has several nouns, each its own
- * section, told apart by their glosses.
+ * section, told apart by their glosses. [moved] marks a table that only
+ * points at the translations subpage.
  */
-data class TranslationSection(val partOfSpeech: String, val groups: List<TranslationGroup>)
+data class TranslationSection(
+    val partOfSpeech: String,
+    val groups: List<TranslationGroup>,
+    val moved: Boolean = false,
+)
 
 /**
  * The translations an entry page lists into one language, in page order,
  * and the subpage they were moved to when the entry has too many to keep
  * inline (en.wiktionary's `house/translations`). A section whose table was
- * moved is kept empty, as the place the subpage's tables go.
+ * moved is kept empty and marked, as the place the subpage's tables go.
  */
 data class EntryTranslations(
     val sections: List<TranslationSection> = emptyList(),
@@ -52,33 +57,36 @@ fun parseWiktionaryTranslations(html: String, language: String, target: String):
     var subpage: String? = null
     for (translations in section.select("section:has(> $SUBHEADINGS)")) {
         if (!isTranslationHeading(translations.selectFirst("> $SUBHEADINGS")?.text().orEmpty())) continue
-        subpage = subpage ?: translations.select("a[title]").map { it.attr("title") }
+        val link = translations.select("a[title]").map { it.attr("title") }
             .firstOrNull { it.endsWith(SUBPAGE_SUFFIX) }
+        subpage = subpage ?: link
         val part = translations.parents().asSequence()
             .filter { it.tagName() == "section" }
             .mapNotNull { it.selectFirst("> $SUBHEADINGS")?.text() }
             .firstOrNull { !isTranslationHeading(it) }
             ?.let(::partOfSpeechHeading)
             ?: continue
-        sections += TranslationSection(part, groupsOf(translations, codes, scriptOf(target)))
+        val groups = groupsOf(translations, codes, scriptOf(target))
+        sections += TranslationSection(part, groups, moved = link != null && groups.isEmpty())
     }
     return EntryTranslations(sections, subpage)
 }
 
 /**
  * The entry's tables with the subpage's put where the entry pointed to
- * them: each empty section takes the next subpage section of its part of
+ * them: each moved section takes the next subpage section of its part of
  * speech, the last such placeholder takes all that remain, and any the
- * entry did not place come last.
+ * entry did not place come last. An inline table with no words in the
+ * target language stays empty.
  */
 internal fun EntryTranslations.plus(other: EntryTranslations): EntryTranslations {
     val unused = other.sections.toMutableList()
     val merged = sections.flatMapIndexed { index, section ->
-        if (section.groups.isNotEmpty()) return@flatMapIndexed listOf(section)
+        if (!section.moved) return@flatMapIndexed listOf(section)
         val part = section.partOfSpeech.lowercase()
         val matching = unused.filter { it.partOfSpeech.lowercase() == part }
         val laterPlaceholder = sections.drop(index + 1)
-            .any { it.groups.isEmpty() && it.partOfSpeech.lowercase() == part }
+            .any { it.moved && it.partOfSpeech.lowercase() == part }
         (if (laterPlaceholder) matching.take(1) else matching).also { unused.removeAll(it) }
     }
     return EntryTranslations(merged + unused, subpage)
