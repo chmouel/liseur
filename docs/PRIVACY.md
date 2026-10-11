@@ -196,7 +196,7 @@ described above, whichever service translated them.
 The Google Play build can translate with Google's ML Kit translator,
 which runs on your device. The F-Droid and GitHub builds do not contain
 it. None of it runs until you choose "Google on this phone" in Settings,
-Translation.
+Translation, and agree to the notice shown at that point.
 
 The passages and pages you translate with it stay on your device; it
 does not send book text, titles or reading positions anywhere. It needs

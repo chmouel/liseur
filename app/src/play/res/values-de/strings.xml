@@ -28,7 +28,7 @@
     <string name="translation_gemini_key_refused">Google hat den Gemini-API-Schlüssel abgelehnt.</string>
     <string name="translation_gemini_key_missing">Füge deinen Gemini-API-Schlüssel auf der Seite Dienste hinzu, um mit Gemini zu übersetzen.</string>
     <string name="translation_provider_mlkit">Google auf diesem Telefon</string>
-    <string name="translation_provider_mlkit_summary">Googles ML-Kit-Übersetzer, auf dem Telefon, sobald seine Sprachen heruntergeladen sind. Textstellen bleiben auf dem Telefon.</string>
+    <string name="translation_provider_mlkit_summary">Googles ML-Kit-Übersetzer, der nach dem Laden der Sprachen auf dem Telefon läuft. Textstellen bleiben auf dem Telefon; ML Kit sendet Google Nutzungsdiagnosen.</string>
     <string name="translation_mlkit_action">Mit Google übersetzen</string>
     <string name="translation_mlkit_page_action">Seite ab hier mit Google übersetzen</string>
     <string name="translation_mlkit_credit">Übersetzt von Google</string>
@@ -49,4 +49,5 @@
     <string name="translation_mlkit_delete">%1$s löschen</string>
     <string name="licences_intro">Liseur ist aus freien und quelloffenen Komponenten gebaut, mit Ausnahme der ML-Kit-Übersetzung von Google in dieser Google-Play-Ausgabe, die Google unter eigenen Bedingungen bereitstellt.</string>
     <string name="translation_mlkit_acknowledgement">Die Übersetzungen nutzen die Technologie von Google Übersetzer und laufen über Googles ML Kit auf diesem Telefon.</string>
+    <string name="translation_mlkit_consent">Buchtext bleibt auf diesem Telefon. Sobald du es auswählst, sendet Googles ML Kit Diagnose- und Nutzungsdaten über sich selbst an Google, mit einer Kennung für diese Installation. Sprachen werden ebenfalls von Google geladen, nur mit deiner Zustimmung und nur über WLAN.</string>
 </resources>

@@ -28,7 +28,7 @@
     <string name="translation_gemini_key_refused">Google ha rifiutato la chiave API Gemini.</string>
     <string name="translation_gemini_key_missing">Aggiungi la tua chiave API Gemini nella pagina Servizi per tradurre con Gemini.</string>
     <string name="translation_provider_mlkit">Google su questo telefono</string>
-    <string name="translation_provider_mlkit_summary">Il traduttore ML Kit di Google, sul telefono una volta scaricate le sue lingue. I passaggi restano sul telefono.</string>
+    <string name="translation_provider_mlkit_summary">Il traduttore ML Kit di Google, eseguito sul telefono dopo aver scaricato le lingue. I passaggi restano sul telefono; ML Kit invia a Google dati diagnostici di utilizzo.</string>
     <string name="translation_mlkit_action">Traduci con Google</string>
     <string name="translation_mlkit_page_action">Traduci la pagina da qui con Google</string>
     <string name="translation_mlkit_credit">Tradotto da Google</string>
@@ -49,4 +49,5 @@
     <string name="translation_mlkit_delete">Elimina %1$s</string>
     <string name="licences_intro">Liseur è costruito con componenti liberi e open-source, tranne la traduzione ML Kit di Google in questa edizione Google Play, che Google fornisce secondo i propri termini.</string>
     <string name="translation_mlkit_acknowledgement">Le traduzioni usano la tecnologia di Google Traduttore, eseguita su questo telefono tramite ML Kit di Google.</string>
+    <string name="translation_mlkit_consent">Il testo dei libri resta su questo telefono. Una volta scelto, ML Kit di Google inizia a inviare a Google dati diagnostici e di utilizzo su sé stesso, con un identificatore di questa installazione. Anche le lingue vengono scaricate da Google, solo con il tuo consenso e solo via Wi-Fi.</string>
 </resources>

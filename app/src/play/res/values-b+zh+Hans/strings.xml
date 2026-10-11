@@ -28,7 +28,7 @@
     <string name="translation_gemini_key_refused">Google 拒绝了该 Gemini API 密钥。</string>
     <string name="translation_gemini_key_missing">在“服务”页面添加你的 Gemini API 密钥，即可用 Gemini 翻译。</string>
     <string name="translation_provider_mlkit">本机上的 Google</string>
-    <string name="translation_provider_mlkit_summary">Google 的 ML Kit 翻译器，下载语言后在手机上运行。文段不会离开手机。</string>
+    <string name="translation_provider_mlkit_summary">Google 的 ML Kit 翻译器，下载语言后在手机上运行。段落保留在手机上；ML Kit 会向 Google 发送使用诊断数据。</string>
     <string name="translation_mlkit_action">使用 Google 翻译</string>
     <string name="translation_mlkit_page_action">使用 Google 从这里开始翻译页面</string>
     <string name="translation_mlkit_credit">由 Google 翻译</string>
@@ -49,4 +49,5 @@
     <string name="translation_mlkit_delete">删除%1$s</string>
     <string name="licences_intro">Liseur 由自由和开源组件构建，但此 Google Play 版本中的 Google ML Kit 翻译除外，它由 Google 按其自身条款提供。</string>
     <string name="translation_mlkit_acknowledgement">翻译由 Google 翻译技术提供，通过 Google 的 ML Kit 在本机上运行。</string>
+    <string name="translation_mlkit_consent">书籍文本保留在本机。选择后，Google 的 ML Kit 会开始向 Google 发送关于自身的诊断和使用数据，并附带此次安装的标识符。语言包也从 Google 下载，仅在您同意后且仅通过 Wi-Fi。</string>
 </resources>

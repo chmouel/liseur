@@ -32,7 +32,7 @@
     <string name="services_gemini_privacy">Text read aloud or translated with Gemini is sent to Google.</string>
     <!-- ML Kit translation. Google's terms ask for "Translate with Google" on the button, "Translated by Google" beside results, and the disclaimer as Google publishes it. -->
     <string name="translation_provider_mlkit">Google on this phone</string>
-    <string name="translation_provider_mlkit_summary">Google\'s ML Kit translator, run on the phone once its languages are downloaded. Passages stay on the phone.</string>
+    <string name="translation_provider_mlkit_summary">Google\'s ML Kit translator, run on the phone once its languages are downloaded. Passages stay on the phone; ML Kit sends Google usage diagnostics.</string>
     <string name="translation_mlkit_action">Translate with Google</string>
     <string name="translation_mlkit_page_action">Translate the page from here with Google</string>
     <string name="translation_mlkit_credit">Translated by Google</string>
@@ -55,4 +55,5 @@
     <string name="licences_intro">Liseur is built from free and open-source components, except Google\'s ML Kit translation in this Google Play edition, which Google provides under its own terms.</string>
     <string name="translation_mlkit_acknowledgement">Translations are powered by Google Translate technology, running on this phone through Google\'s ML Kit.</string>
     <string name="translation_mlkit_cloud" translatable="false">Google Cloud Translation</string>
+    <string name="translation_mlkit_consent">Book text stays on this phone. Once you choose it, Google\'s ML Kit starts sending Google diagnostic and usage data about itself, with an identifier for this installation. Language downloads also come from Google, only after you agree and only over Wi-Fi.</string>
 </resources>

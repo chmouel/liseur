@@ -147,6 +147,8 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     .padding(bottom = 32.dp),
             ) {
                 var picking by remember { mutableStateOf(false) }
+                // A service that needs agreement first, held until the reader agrees.
+                var agreeing by remember { mutableStateOf<TranslationService?>(null) }
                 ServiceRow(
                     icon = service.icon,
                     overline = stringResource(R.string.translation_settings_provider),
@@ -167,7 +169,11 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                         selectedServer = server?.id,
                         onPick = {
                             picking = false
-                            scope.launch { feature.choose(it) }
+                            if (it.consent != null && it.id != service.id) {
+                                agreeing = it
+                            } else {
+                                scope.launch { feature.choose(it) }
+                            }
                         },
                         onPickServer = {
                             picking = false
@@ -178,6 +184,22 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                             managing = true
                         },
                         onDismiss = { picking = false },
+                    )
+                }
+                agreeing?.let { asked ->
+                    AlertDialog(
+                        onDismissRequest = { agreeing = null },
+                        title = { Text(stringResource(R.string.translation_consent_title, stringResource(asked.label))) },
+                        text = { Text(stringResource(asked.consent ?: return@AlertDialog)) },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    agreeing = null
+                                    scope.launch { feature.choose(asked) }
+                                },
+                            ) { Text(stringResource(R.string.translation_consent_agree)) }
+                        },
+                        dismissButton = { TextButton(onClick = { agreeing = null }) { Text(stringResource(R.string.cancel)) } },
                     )
                 }
                 SettingsGroup(server?.name ?: stringResource(service.label)) {

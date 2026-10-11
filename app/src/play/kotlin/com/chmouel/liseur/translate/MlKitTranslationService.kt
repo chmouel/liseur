@@ -77,6 +77,7 @@ internal class MlKitTranslationService(
     override val credited = true
     override val action = R.string.translation_mlkit_action
     override val pageAction = R.string.translation_mlkit_page_action
+    override val consent = R.string.translation_mlkit_consent
 
     private val codes: Set<String> by lazy { engine.languages() }
 

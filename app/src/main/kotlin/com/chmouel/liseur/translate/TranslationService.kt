@@ -101,6 +101,10 @@ internal interface TranslationService {
     @Composable
     fun Credit(background: Color, modifier: Modifier) = Unit
 
+    /** What a reader is told and agrees to before it is chosen, or null when choosing it is enough. */
+    @get:StringRes
+    val consent: Int? get() = null
+
     /** The label of the button that translates a selection. */
     @get:StringRes
     val action: Int get() = R.string.translation_action
