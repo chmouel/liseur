@@ -1344,6 +1344,14 @@ reader behavior.
 
 ### Reader behavior
 
+- Dictionary lookups preserve explicit grammatical links in English, French,
+  Spanish, and Dutch Wiktionary entries. `WiktionaryClient` fetches base-word
+  meanings one step only, matching the source language and part of speech.
+  Follow-ups share fetched entries, allow at most four additional HTTP
+  requests (including endpoint fallback and retries), and refuse redirects.
+  `DefinitionSheet` keeps the original text and reports unresolved meanings.
+  Keep recognition fixture-backed in `DictionaryInflectionTest`; ordinary
+  definition links must not trigger lookups.
 - Bookmark identity comes from `samePage()` and the two locators, not from the
   rounded stored page number. Resolve duplicate reading-order entries by
   occurrence; use the stable Readium position for scrolled books.

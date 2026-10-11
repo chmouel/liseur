@@ -48,7 +48,7 @@ fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
 
 /** Opens the word's full entry on the configured dictionary site. */
 fun Context.openDictionaryEntry(word: String, dictionaryBaseUrl: String) {
-    val term = word.substringBefore(' ').takeIf { it.isNotBlank() } ?: return
+    val term = word.trim().takeIf { it.isNotBlank() } ?: return
     val url: Uri = DictionaryUrl.entryPage(dictionaryBaseUrl, term).toUri()
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
 }

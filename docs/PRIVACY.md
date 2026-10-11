@@ -77,8 +77,11 @@ cover what the server does with the data it receives.
 ### A dictionary site, if you enable it
 
 Looking a word up online is off by default. When you switch it on, Liseur
-sends the single selected word to the dictionary site configured in Settings,
-by default the public Wiktionary API, over HTTPS. No identifier, book title
+sends the selected word to the dictionary site configured in Settings,
+by default the public Wiktionary API, over HTTPS. For plural or conjugated
+forms, it may also look up base words explicitly linked by that dictionary,
+on the same site. It follows these links one step only, with at most four
+additional requests. No identifier, book title
 or account accompanies it. You may point this at any Wiktionary edition or
 mirror, or leave the feature off and hand words to an offline dictionary app
 installed on your device instead. When you pick or type a dictionary site in

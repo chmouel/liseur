@@ -311,10 +311,10 @@ readonly TINTS="FFD54F,9CCC65,64B5F6"
 # 30dp of chip and 6dp of gap: what the colours are spaced at, which is
 # how a row of chips is told from marks that happen to line up.
 readonly POPUP_CHIP_PITCH_DP=36
-readonly POPUP_NOTE_DP=118
-readonly POPUP_DEFINE_DP=179
+readonly POPUP_NOTE_DP=111
+readonly POPUP_DEFINE_DP=153
 # After Define come Search and Share, 36dp buttons 6dp apart.
-readonly POPUP_READ_ALOUD_DP=318
+readonly POPUP_READ_ALOUD_DP=279
 
 density=$(adb shell wm density | sed -nE 's/.*density: ([0-9]+).*/\1/p' | tail -n 1)
 [[ -n "$density" ]] || density=420

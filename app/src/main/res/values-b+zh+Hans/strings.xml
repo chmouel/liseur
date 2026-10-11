@@ -540,7 +540,12 @@
     <string name="dictionary_failed_host">无法连接 %1$s（%2$s）。请在设置中检查词典站点。</string>
     <string name="dictionary_other_app">在应用中打开</string>
     <string name="dictionary_open_full_entry">完整词条</string>
-    <string name="dictionary_disabled_explanation">释义功能已关闭。开启后，Liseur 会把您点击的单词发送给 %1$s，除此之外不发送任何内容。手机上的词典应用无需这些授权即可使用。</string>
+    <string name="dictionary_base_entry">“%1$s”的释义 · 完整词条</string>
+    <string name="dictionary_base_missing">未找到原形“%1$s”的词条。</string>
+    <string name="dictionary_base_failed">无法加载“%1$s”的释义。</string>
+    <string name="dictionary_base_limit">尚未加载“%1$s”就已达到查询次数上限。</string>
+    <string name="dictionary_base_unresolved">“%1$s”的部分释义需要再次查询。请打开完整词条继续查看。</string>
+    <string name="dictionary_disabled_explanation">释义功能已关闭。开启后，Liseur 会将所选单词及其链接指向的原形发送至 %1$s，以查找释义。不会发送书籍正文或账户信息。您也可以使用手机上的词典应用。</string>
     <string name="dictionary_enable">开启释义</string>
     <string name="download_failed_open">无法下载“%1$s”。</string>
     <string name="mark_read">标记为已读</string>
@@ -787,7 +792,7 @@
     <string name="definition_target_builtin">内置</string>
     <string name="definition_target_external">外部应用</string>
     <string name="settings_dictionary_lookup">在线查询释义</string>
-    <string name="settings_dictionary_lookup_detail">默认关闭。开启后，查询单词会将该单词发送至下方网站——这是 Liseur 除您自己的书库服务器外唯一通信的地方。</string>
+    <string name="settings_dictionary_lookup_detail">默认关闭。查询释义时，会将单词及其链接指向的原形发送至下方词典网站。</string>
     <string name="settings_dictionary_site">词典网站</string>
     <string name="settings_dictionary_site_detail">选择您所使用语言的维基词典，即可获取该语言的释义。</string>
     <string name="settings_dictionary_site_custom">自定义网站…</string>

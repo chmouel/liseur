@@ -528,7 +528,12 @@
     <string name="dictionary_failed_host">Could not reach %1$s (%2$s). Check the dictionary site in Settings.</string>
     <string name="dictionary_other_app">Open in app</string>
     <string name="dictionary_open_full_entry">Full entry</string>
-    <string name="dictionary_disabled_explanation">Definitions are off. Turning them on lets Liseur send the word you tapped, and nothing else, to %1$s. A dictionary app on your phone works without any of that.</string>
+    <string name="dictionary_base_entry">Meanings of “%1$s” · Full entry</string>
+    <string name="dictionary_base_missing">No entry found for the base word “%1$s”.</string>
+    <string name="dictionary_base_failed">Could not load the meanings of “%1$s”.</string>
+    <string name="dictionary_base_limit">Lookup limit reached before loading “%1$s”.</string>
+    <string name="dictionary_base_unresolved">Some meanings of “%1$s” need another lookup. Open its full entry to continue.</string>
+    <string name="dictionary_disabled_explanation">Definitions are off. Turning them on lets Liseur send the selected word and its linked base words to %1$s to find their meanings. No book text or account details are sent. You can also use a dictionary app on your phone.</string>
     <string name="dictionary_enable">Turn on definitions</string>
     <string name="download_failed_open">Could not download “%1$s”.</string>
     <string name="mark_read">Mark as read</string>
@@ -795,7 +800,7 @@
     <string name="definition_target_builtin">Built-in</string>
     <string name="definition_target_external">External app</string>
     <string name="settings_dictionary_lookup">Look up definitions online</string>
-    <string name="settings_dictionary_lookup_detail">Off by default. When on, defining a word sends that word to the site below — the only place Liseur talks to besides your own book server.</string>
+    <string name="settings_dictionary_lookup_detail">Off by default. Defining a word sends it and its linked base words to the dictionary site below.</string>
     <string name="settings_dictionary_site">Dictionary site</string>
     <string name="settings_dictionary_site_detail">Pick your language\'s Wiktionary to get its definitions, in its words.</string>
     <string name="settings_dictionary_site_custom">Custom site…</string>

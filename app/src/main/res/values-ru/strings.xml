@@ -557,7 +557,12 @@
     <string name="dictionary_failed_host">Не удалось связаться с %1$s (%2$s). Проверьте сайт словаря в Настройках.</string>
     <string name="dictionary_other_app">Открыть в приложении</string>
     <string name="dictionary_open_full_entry">Полная статья</string>
-    <string name="dictionary_disabled_explanation">Определения выключены. Если включить их, Liseur отправит только выбранное слово — и больше ничего — на %1$s. Словарное приложение на телефоне работает без этого.</string>
+    <string name="dictionary_base_entry">Значения «%1$s» · Полная статья</string>
+    <string name="dictionary_base_missing">Статья для начальной формы «%1$s» не найдена.</string>
+    <string name="dictionary_base_failed">Не удалось загрузить значения «%1$s».</string>
+    <string name="dictionary_base_limit">Лимит запросов достигнут до загрузки «%1$s».</string>
+    <string name="dictionary_base_unresolved">Некоторые значения «%1$s» требуют ещё одного запроса. Откройте полную статью, чтобы продолжить.</string>
+    <string name="dictionary_disabled_explanation">Определения выключены. Если включить их, Liseur отправит выбранное слово и его начальные формы по ссылкам на %1$s для поиска значений. Текст книги и данные аккаунта не отправляются. Также можно использовать словарное приложение на телефоне.</string>
     <string name="dictionary_enable">Включить определения</string>
     <string name="download_failed_open">Не удалось скачать «%1$s».</string>
     <string name="mark_read">Отметить как прочитанную</string>
@@ -810,7 +815,7 @@
     <string name="definition_target_builtin">Встроенный</string>
     <string name="definition_target_external">Внешнее приложение</string>
     <string name="settings_dictionary_lookup">Искать определения в интернете</string>
-    <string name="settings_dictionary_lookup_detail">По умолчанию выключено. Если включено, определение слова отправляет это слово на сайт ниже — единственное место, с которым Liseur общается кроме вашего сервера книг.</string>
+    <string name="settings_dictionary_lookup_detail">По умолчанию выключено. При поиске определения слово и его начальные формы по ссылкам отправляются на указанный ниже сайт словаря.</string>
     <string name="settings_dictionary_site">Сайт словаря</string>
     <string name="settings_dictionary_site_detail">Выберите Wiktionary вашего языка, чтобы получать определения на его языке.</string>
     <string name="settings_dictionary_site_custom">Свой сайт…</string>

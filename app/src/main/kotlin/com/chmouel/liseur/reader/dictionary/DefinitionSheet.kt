@@ -58,7 +58,7 @@ fun DefinitionSheet(
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
     val term = remember(word) { normaliseLookupTerm(word) }
-    var state by remember(term, enabled, baseUrl) {
+    var state by remember(term, languages, enabled, baseUrl) {
         mutableStateOf<DictionaryState>(
             if (enabled) DictionaryState.Loading else DictionaryState.Disabled,
         )
@@ -117,7 +117,7 @@ fun DefinitionSheet(
                 }
 
                 is DictionaryState.Found -> current.senses.forEach { sense ->
-                    Sense(sense)
+                    Sense(sense, onOpenInBrowser)
                 }
 
                 DictionaryState.NotFound -> Text(
@@ -155,7 +155,7 @@ fun DefinitionSheet(
 }
 
 @Composable
-private fun Sense(sense: DictionarySense) {
+private fun Sense(sense: DictionarySense, onOpenInBrowser: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (sense.partOfSpeech.isNotBlank()) {
             Text(
@@ -170,6 +170,27 @@ private fun Sense(sense: DictionarySense) {
                 text = "${index + 1}. $definition",
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+        sense.resolved.values.distinct().forEach { resolved ->
+            TextButton(onClick = { onOpenInBrowser(resolved.term) }) {
+                Text(stringResource(R.string.dictionary_base_entry, resolved.term))
+            }
+            resolved.senses.forEach { Sense(it, onOpenInBrowser) }
+            resolved.problem?.let { problem ->
+                Text(
+                    text = stringResource(
+                        when (problem) {
+                            DefinitionProblem.MISSING -> R.string.dictionary_base_missing
+                            DefinitionProblem.FAILED -> R.string.dictionary_base_failed
+                            DefinitionProblem.LIMIT -> R.string.dictionary_base_limit
+                            DefinitionProblem.UNRESOLVED -> R.string.dictionary_base_unresolved
+                        },
+                        resolved.term,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 }

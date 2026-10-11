@@ -22,6 +22,7 @@ import org.jsoup.nodes.Element
 fun parseWiktionaryEntryHtml(
     html: String,
     languages: List<String> = emptyList(),
+    edition: String? = null,
 ): List<DictionarySense> {
     val document = runCatching { Jsoup.parse(html) }.getOrNull() ?: return emptyList()
     val sections = document.select("section:has(> h2)")
@@ -34,7 +35,9 @@ fun parseWiktionaryEntryHtml(
     }
 
     for (section in ordered) {
-        val senses = sensesOf(section)
+        val language = dictionaryLanguage(section.selectFirst("> h2")?.text().orEmpty()).orEmpty()
+        val senses = sensesOf(section, edition ?: document.selectFirst("html[lang], body[lang]")?.attr("lang")
+            ?: language, language)
         if (senses.isNotEmpty()) return senses
     }
     return emptyList()
@@ -61,47 +64,51 @@ private val HEADING_LOCALES = listOf(
     "ko", "zh",
 )
 
-private fun sensesOf(languageSection: Element): List<DictionarySense> {
+private fun sensesOf(languageSection: Element, edition: String, language: String): List<DictionarySense> {
     val senses = mutableListOf<DictionarySense>()
     val subsections = languageSection.select("section:has(> h3), section:has(> h4)")
     for (subsection in subsections) {
-        val definitions = definitionsOf(subsection)
+        val items = definitionItemsOf(subsection)
+        val definitions = items.map { definitionText(it).replace(LEADING_NUMBER, "") }
         if (definitions.isEmpty()) continue
         val heading = subsection.selectFirst("> h3, > h4")?.text().orEmpty()
         senses += DictionarySense(
             partOfSpeech = heading.replace(Regex("\\s*\\d+$"), "").trim(),
             definitions = definitions,
+            language = language,
+            references = items.mapIndexedNotNull { index, item ->
+                dictionaryReference(item, edition, language, heading)?.let { index to it }
+            }.toMap(),
         )
     }
     return senses
 }
 
-private fun definitionsOf(subsection: Element): List<String> {
+private fun definitionItemsOf(subsection: Element): List<Element> {
     val fromLists = subsection.select("> ol, > p ~ ol")
         .asSequence()
         .filterNot { it.hasClass("references") || it.attr("typeof").contains("mw:Extension/references") }
         .flatMap { it.select("> li") }
         .filterNot { it.id().startsWith("cite_note") }
-        .map(::definitionText)
-        .filter { it.isNotBlank() }
+        .filter { definitionText(it).isNotBlank() }
         .toList()
     if (fromLists.isNotEmpty()) return fromLists
 
     // German-style <dd>[1] …</dd> and Spanish-style <dt>1 …</dt><dd>…</dd>.
-    val fromGlossaries = mutableListOf<String>()
+    val fromGlossaries = mutableListOf<Element>()
     for (glossary in subsection.select("dl")) {
         for (item in glossary.select("> dd")) {
             val text = definitionText(item)
-            if (text.matches(NUMBERED_DEFINITION)) fromGlossaries += text
+            if (text.matches(NUMBERED_DEFINITION)) fromGlossaries.add(item)
         }
         if (fromGlossaries.isNotEmpty()) continue
         for (term in glossary.select("> dt")) {
             if (!term.text().trim().matches(NUMBERED_TERM)) continue
-            val text = definitionText(term.nextElementSibling()?.takeIf { it.tagName() == "dd" } ?: continue)
-            if (text.isNotBlank()) fromGlossaries += text
+            val item = term.nextElementSibling()?.takeIf { it.tagName() == "dd" } ?: continue
+            if (definitionText(item).isNotBlank()) fromGlossaries.add(item)
         }
     }
-    return fromGlossaries.map { it.replace(LEADING_NUMBER, "") }
+    return fromGlossaries
 }
 
 /**

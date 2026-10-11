@@ -1,7 +1,12 @@
 package com.chmouel.liseur.reader.dictionary
 
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import org.junit.After
@@ -10,6 +15,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.chmouel.liseur.reader.dictionary.DictionaryInflectionTest.Companion.englishDefinition
+import com.chmouel.liseur.reader.dictionary.DictionaryInflectionTest.Companion.englishForms
+import com.chmouel.liseur.reader.dictionary.DictionaryInflectionTest.Companion.formLink
+import com.chmouel.liseur.reader.dictionary.DictionaryInflectionTest.Companion.htmlForms
+import com.chmouel.liseur.reader.dictionary.DictionaryInflectionTest.Companion.page
+import okhttp3.OkHttpClient
+import org.json.JSONObject
 
 /**
  * The definition client against a real socket.
@@ -170,5 +182,148 @@ class WiktionaryClientTest {
         assertEquals(listOf("fr", "en"), WiktionaryClient.languagesFor("fr-FR"))
         assertEquals(listOf("en"), WiktionaryClient.languagesFor("en"))
         assertEquals(listOf("en"), WiktionaryClient.languagesFor(null))
+    }
+
+    @Test
+    fun `harnesses gets noun and verb meanings from one base entry request`() = runBlocking {
+        server.enqueue(MockResponse(body = englishForms()))
+        server.enqueue(MockResponse(body = """
+            {"en":[
+                {"partOfSpeech":"Noun","definitions":[{"definition":"A set of straps."}]},
+                {"partOfSpeech":"Verb","definitions":[{"definition":"To put to use."}]}
+            ],"fr":[{"partOfSpeech":"Noun","definitions":[{"definition":"Wrong language."}]}]}
+        """.trimIndent()))
+
+        val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) as DictionaryState.Found
+
+        assertEquals("plural of harness", found.senses[0].definitions.single())
+        assertEquals(listOf("A set of straps."), found.senses[0].resolved[0]!!.senses.single().definitions)
+        assertEquals(listOf("To put to use."), found.senses[1].resolved[0]!!.senses.single().definitions)
+        assertTrue(found.senses.all { it.resolved[0]!!.problem == null })
+        assertEquals("/api/rest_v1/page/definition/harnesses", server.takeRequest().target)
+        assertEquals("/api/rest_v1/page/definition/harness", server.takeRequest().target)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `HTML editions resolve plurals and conjugations through mirror fallback`() = runBlocking {
+        for (fixture in htmlForms) {
+            val before = server.requestCount
+            server.enqueue(MockResponse(code = 501))
+            server.enqueue(MockResponse(body = fixture.html))
+            server.enqueue(MockResponse(code = 501))
+            val heading = when (fixture.language) {
+                "fr" -> "Français"
+                "es" -> "Español"
+                else -> "Nederlands"
+            }
+            val part = when (fixture.language to fixture.part) {
+                "fr" to "noun" -> "Nom commun"
+                "fr" to "verb" -> "Verbe"
+                "es" to "noun" -> "Sustantivo masculino"
+                "es" to "verb" -> "Verbo intransitivo"
+                "nl" to "noun" -> "Zelfstandig naamwoord"
+                else -> "Werkwoord"
+            }
+            server.enqueue(MockResponse(body = page(fixture.language, heading, part,
+                "<ol><li>Meaning of ${fixture.base}.</li></ol>")))
+            val state = WiktionaryClient().define(fixture.word, listOf(fixture.language), baseUrl()) as DictionaryState.Found
+            val resolved = state.senses.single().resolved[0]!!
+            assertNull(fixture.word, resolved.problem)
+            assertEquals(listOf("Meaning of ${fixture.base}."), resolved.senses.single().definitions)
+            assertEquals(before + 4, server.requestCount)
+            repeat(4) { server.takeRequest() }
+        }
+    }
+
+    @Test
+    fun `mixed senses survive and base references are not followed again`() = runBlocking {
+        server.enqueue(MockResponse(body = englishDefinition(formLink("child")).replace(
+            "\"definitions\":[", "\"definitions\":[{\"definition\":\"An independent meaning.\"},",
+        )))
+        server.enqueue(MockResponse(body = englishDefinition(formLink("person"))))
+        val state = WiktionaryClient().define("children", listOf("en"), baseUrl()) as DictionaryState.Found
+        assertEquals("An independent meaning.", state.senses.single().definitions[0])
+        assertEquals(DefinitionProblem.UNRESOLVED, state.senses.single().resolved[1]!!.problem)
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `missing and failed base lookups preserve the original answer`() = runBlocking {
+        for ((code, problem) in listOf(404 to DefinitionProblem.MISSING, 503 to DefinitionProblem.FAILED)) {
+            server.enqueue(MockResponse(body = englishDefinition(formLink("harness"))))
+            server.enqueue(MockResponse(code = code))
+            val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) as DictionaryState.Found
+            assertEquals("plural of harness", found.senses.single().definitions.single())
+            assertEquals(problem, found.senses.single().resolved[0]!!.problem)
+        }
+    }
+
+    @Test
+    fun `self references and probe do not cause follow-up requests`() = runBlocking {
+        server.enqueue(MockResponse(body = englishDefinition(formLink("harnesses"))))
+        val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) as DictionaryState.Found
+        assertEquals(DefinitionProblem.UNRESOLVED, found.senses.single().resolved[0]!!.problem)
+        server.enqueue(MockResponse(body = englishDefinition(formLink("volume"))))
+        assertNull(WiktionaryClient().probe(baseUrl()))
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `follow-ups have a four request budget including endpoint fallback`() = runBlocking {
+        val definitions = (1..5).joinToString(",") {
+            """{"definition":${JSONObject.quote(formLink("base$it"))}}"""
+        }
+        server.enqueue(MockResponse(body = """{"en":[{"partOfSpeech":"Noun","definitions":[$definitions]}]}"""))
+        repeat(2) {
+            server.enqueue(MockResponse(code = 501))
+            server.enqueue(MockResponse(body = page("en", "English", "Noun", "<ol><li>A meaning.</li></ol>")))
+        }
+        val found = WiktionaryClient().define("forms", listOf("en"), baseUrl()) as DictionaryState.Found
+        assertEquals(5, server.requestCount)
+        val resolved = found.senses.single().resolved.values.toList()
+        assertTrue(resolved.take(2).all { it.problem == null })
+        assertTrue(resolved.drop(2).all { it.problem == DefinitionProblem.LIMIT })
+    }
+
+    @Test
+    fun `base lookup redirects cannot send words to another origin`() = runBlocking {
+        MockWebServer().use { other ->
+            other.start(InetAddress.getByName("127.0.0.1"), 0)
+            other.enqueue(MockResponse(body = englishDefinition("Unexpected request.")))
+            server.enqueue(MockResponse(body = englishDefinition(formLink("harness"))))
+            server.enqueue(MockResponse.Builder().code(302)
+                .addHeader("Location", other.url("/leaked-word").toString()).build())
+            val found = WiktionaryClient().define("harnesses", listOf("en"), baseUrl()) as DictionaryState.Found
+            assertEquals(DefinitionProblem.FAILED, found.senses.single().resolved[0]!!.problem)
+            assertEquals(0, other.requestCount)
+        }
+    }
+
+    @Test
+    fun `automatic HTTP retries also consume the follow-up budget`() = runBlocking {
+        val definitions = (1..3).joinToString(",") {
+            """{"definition":${JSONObject.quote(formLink("base$it"))}}"""
+        }
+        server.enqueue(MockResponse(body = """{"en":[{"partOfSpeech":"Noun","definitions":[$definitions]}]}"""))
+        repeat(4) {
+            server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").build())
+        }
+        val found = WiktionaryClient().define("forms", listOf("en"), baseUrl()) as DictionaryState.Found
+        assertEquals(5, server.requestCount)
+        assertEquals(DefinitionProblem.LIMIT, found.senses.single().resolved[2]!!.problem)
+    }
+
+    @Test
+    fun `cancelling a lookup cancels its base-word HTTP call`() = runBlocking {
+        val client = OkHttpClient()
+        server.enqueue(MockResponse(body = englishDefinition(formLink("harness"))))
+        server.enqueue(MockResponse.Builder().headersDelay(10, TimeUnit.SECONDS).body("{}").build())
+        val lookup = async(Dispatchers.IO) { WiktionaryClient(client).define("harnesses", listOf("en"), baseUrl()) }
+        assertEquals("/api/rest_v1/page/definition/harnesses", server.takeRequest(5, TimeUnit.SECONDS)?.target)
+        assertEquals("/api/rest_v1/page/definition/harness", server.takeRequest(5, TimeUnit.SECONDS)?.target)
+        withTimeout(2_000) { lookup.cancelAndJoin() }
+        assertTrue(lookup.isCancelled)
+        assertTrue(client.dispatcher.runningCalls().all { it.isCanceled() })
     }
 }

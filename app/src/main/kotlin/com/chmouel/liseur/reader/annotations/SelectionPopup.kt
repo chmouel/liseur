@@ -17,8 +17,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
@@ -176,15 +178,19 @@ fun SelectionPopup(
                                 onClick = { actions.onHighlight(palette.default) },
                             )
                         }
-                        PopupAction(
-                            label = stringResource(R.string.annotation_note),
-                            onClick = actions.onNote,
+                        IconButton(onClick = actions.onNote, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Outlined.EditNote,
+                                contentDescription = stringResource(R.string.annotation_note),
+                            )
+                        }
+                    }
+                    IconButton(onClick = actions.onLookUp, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.MenuBook,
+                            contentDescription = stringResource(R.string.annotation_look_up),
                         )
                     }
-                    PopupAction(
-                        label = stringResource(R.string.annotation_look_up),
-                        onClick = actions.onLookUp,
-                    )
                     IconButton(onClick = actions.onSearch, modifier = Modifier.size(36.dp)) {
                         Icon(
                             Icons.Outlined.Search,

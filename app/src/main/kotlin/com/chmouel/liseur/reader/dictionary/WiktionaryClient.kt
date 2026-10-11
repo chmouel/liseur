@@ -3,11 +3,18 @@ package com.chmouel.liseur.reader.dictionary
 import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
+import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 /** What the definition card is showing at any moment. */
 sealed interface DictionaryState {
@@ -49,6 +56,15 @@ sealed interface DictionaryState {
 class WiktionaryClient(
     private val client: OkHttpClient = default(),
 ) {
+    private val expansionClient = client.newBuilder()
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .addNetworkInterceptor { chain ->
+            val expansion = checkNotNull(chain.request().tag(Expansion::class.java))
+            if (expansion.requests++ >= MAX_EXPANSION_REQUESTS) throw ExpansionLimitReached()
+            chain.proceed(chain.request())
+        }
+        .build()
 
     suspend fun define(
         word: String,
@@ -58,12 +74,73 @@ class WiktionaryClient(
         withContext(Dispatchers.IO) {
             val term = normaliseLookupTerm(word)
             if (term.isBlank()) return@withContext DictionaryState.NotFound
-            val result = lookup(term, languages, baseUrl)
-            if (result !is DictionaryState.NotFound) return@withContext result
-            val lowercaseTerm = term.lowercase()
-            if (lowercaseTerm == term) return@withContext result
-            lookup(lowercaseTerm, languages, baseUrl)
+            val result = lookupWithLowercase(term, languages, baseUrl)
+            if (result !is DictionaryState.Found) return@withContext result
+            expand(term, result, baseUrl)
         }
+
+    private suspend fun lookupWithLowercase(
+        term: String,
+        languages: List<String>,
+        baseUrl: String,
+        expansion: Expansion? = null,
+    ): DictionaryState {
+        val result = lookup(term, languages, baseUrl, expansion)
+        val lowercaseTerm = term.lowercase()
+        return if (result == DictionaryState.NotFound && lowercaseTerm != term) {
+            lookup(lowercaseTerm, languages, baseUrl, expansion)
+        } else {
+            result
+        }
+    }
+
+    private suspend fun expand(
+        term: String,
+        original: DictionaryState.Found,
+        baseUrl: String,
+    ): DictionaryState.Found {
+        val expansion = Expansion()
+        val entries = mutableMapOf<DictionaryReference, DictionaryState>()
+        return DictionaryState.Found(original.senses.map { sense ->
+            val resolved = sense.references.mapValues { (_, reference) ->
+                if (reference.term.equals(term, ignoreCase = true)) {
+                    return@mapValues ResolvedDefinition(reference.term, problem = DefinitionProblem.UNRESOLVED)
+                }
+                val entry = try {
+                    entries.getOrPut(reference) {
+                        lookupWithLowercase(reference.term, listOf(reference.language), baseUrl, expansion)
+                    }
+                } catch (_: ExpansionLimitReached) {
+                    return@mapValues ResolvedDefinition(reference.term, problem = DefinitionProblem.LIMIT)
+                }
+                when (entry) {
+                    is DictionaryState.Found -> {
+                        val matching = entry.senses.filter {
+                            it.language == reference.language &&
+                                grammaticalPart(it.partOfSpeech) == grammaticalPart(sense.partOfSpeech)
+                        }
+                        val meanings = matching.mapNotNull { target ->
+                            val definitions = target.definitions.filterIndexed { index, _ ->
+                                index !in target.references
+                            }
+                            target.copy(definitions = definitions, references = emptyMap())
+                                .takeIf { definitions.isNotEmpty() }
+                        }
+                        ResolvedDefinition(
+                            reference.term, meanings,
+                            if (meanings.isEmpty() || matching.any { it.references.isNotEmpty() }) {
+                                DefinitionProblem.UNRESOLVED
+                            } else null,
+                        )
+                    }
+                    DictionaryState.NotFound ->
+                        ResolvedDefinition(reference.term, problem = DefinitionProblem.MISSING)
+                    else -> ResolvedDefinition(reference.term, problem = DefinitionProblem.FAILED)
+                }
+            }
+            sense.copy(resolved = resolved)
+        })
+    }
 
     /**
      * Whether [baseUrl] answers as a dictionary at all, checked with a
@@ -81,86 +158,121 @@ class WiktionaryClient(
             }
         }
 
-    private fun lookup(
+    private suspend fun lookup(
         term: String,
         languages: List<String>,
         baseUrl: String,
+        expansion: Expansion? = null,
     ): DictionaryState {
         val edition = WiktionaryEditions.editionOf(baseUrl)
         val nonEnglishEdition = WiktionaryEditions.isWiktionaryHost(baseUrl) &&
             (edition == null || edition.code != "en")
-        if (nonEnglishEdition) return lookupEntryPage(term, languages, baseUrl)
+        if (nonEnglishEdition) return lookupEntryPage(term, languages, baseUrl, expansion)
 
-        val definitions = lookupDefinitions(term, languages, baseUrl)
+        val definitions = lookupDefinitions(term, languages, baseUrl, expansion)
         // A mirror may only serve pages: on the 501 that marks a wiki
         // without the definition endpoint, try the page instead.
         return if (definitions is DictionaryState.Failed && definitions.message == "HTTP 501") {
-            lookupEntryPage(term, languages, baseUrl)
+            lookupEntryPage(term, languages, baseUrl, expansion)
         } else {
             definitions
         }
     }
 
-    private fun lookupDefinitions(
+    private suspend fun lookupDefinitions(
         term: String,
         languages: List<String>,
         baseUrl: String,
+        expansion: Expansion?,
     ): DictionaryState =
         fetch(
             url = DictionaryUrl.definitionApi(baseUrl, term),
             baseUrl = baseUrl,
             accept = "application/json",
+            expansion = expansion,
         ) { body ->
             parseWiktionaryDefinitions(body, languages)
         }
 
-    private fun lookupEntryPage(
+    private suspend fun lookupEntryPage(
         term: String,
         languages: List<String>,
         baseUrl: String,
+        expansion: Expansion?,
     ): DictionaryState =
         fetch(
             url = DictionaryUrl.pageHtmlApi(baseUrl, term),
             baseUrl = baseUrl,
             accept = "text/html",
+            expansion = expansion,
         ) { body ->
-            parseWiktionaryEntryHtml(body, languages)
+            parseWiktionaryEntryHtml(body, languages, WiktionaryEditions.editionOf(baseUrl)?.code)
         }
 
-    private fun fetch(
+    private suspend fun fetch(
         url: String,
         baseUrl: String,
         accept: String,
+        expansion: Expansion?,
         parse: (String) -> List<DictionarySense>,
     ): DictionaryState {
         val host = DictionaryUrl.hostOf(baseUrl)
         val request = Request.Builder()
             .url(url)
             .header("Accept", accept)
+            .tag(Expansion::class.java, expansion)
             // Wikimedia answers 403 to requests without a descriptive
             // agent, so say who we are and where to complain.
             .header("User-Agent", USER_AGENT)
             .build()
-        return runCatching {
-            client.newCall(request).execute().use { response ->
-                when {
-                    response.code == 404 -> DictionaryState.NotFound
-                    !response.isSuccessful ->
-                        DictionaryState.Failed("HTTP ${response.code}", host)
-                    else -> {
-                        val senses = parse(response.body?.string().orEmpty())
-                        if (senses.isEmpty()) {
-                            DictionaryState.NotFound
-                        } else {
-                            DictionaryState.Found(senses)
-                        }
-                    }
+        return try {
+            val response = expansion?.responses?.get(url) ?: run {
+                if (expansion != null && expansion.requests >= MAX_EXPANSION_REQUESTS) throw ExpansionLimitReached()
+                request((if (expansion == null) client else expansionClient).newCall(request))
+                    .also { expansion?.responses?.put(url, it) }
+            }
+            when {
+                response.code == 404 -> DictionaryState.NotFound
+                response.code !in 200..299 -> DictionaryState.Failed("HTTP ${response.code}", host)
+                else -> {
+                    val senses = parse(response.body)
+                    if (senses.isEmpty()) DictionaryState.NotFound else DictionaryState.Found(senses)
                 }
             }
-        }.getOrElse { DictionaryState.Failed(it.message, host) }
+        } catch (error: ExpansionLimitReached) {
+            throw error
+        } catch (error: IOException) {
+            DictionaryState.Failed(error.message, host)
+        }
     }
 
+    private suspend fun request(call: Call): DictionaryResponse = suspendCancellableCoroutine { continuation ->
+        continuation.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (continuation.isActive) continuation.resumeWithException(e)
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val result = try {
+                    Result.success(response.use { DictionaryResponse(it.code, it.body.string()) })
+                } catch (error: IOException) {
+                    Result.failure(error)
+                }
+                if (continuation.isActive) result.fold(continuation::resume, continuation::resumeWithException)
+            }
+        })
+    }
+
+    private data class DictionaryResponse(val code: Int, val body: String)
+    private class Expansion {
+        var requests = 0
+        val responses = mutableMapOf<String, DictionaryResponse>()
+    }
+    private class ExpansionLimitReached : IOException()
+
     companion object {
+        private const val MAX_EXPANSION_REQUESTS = 4
         private val USER_AGENT =
             "Liseur/${BuildConfig.VERSION_NAME} " +
                 "(https://github.com/chmouel/liseur; ebook reader)"

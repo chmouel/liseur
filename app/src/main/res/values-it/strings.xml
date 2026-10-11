@@ -509,7 +509,12 @@
     <string name="dictionary_failed_host">Impossibile raggiungere %1$s (%2$s). Controlla il sito del dizionario in Impostazioni.</string>
     <string name="dictionary_other_app">Apri nell\'app</string>
     <string name="dictionary_open_full_entry">Voce completa</string>
-    <string name="dictionary_disabled_explanation">Le definizioni sono disattivate. Attivarle permette a Liseur di inviare la parola che hai toccato, e nient\'altro, a %1$s. Un\'app dizionario sul telefono funziona senza tutto questo.</string>
+    <string name="dictionary_base_entry">Significati di «%1$s» · Voce completa</string>
+    <string name="dictionary_base_missing">Nessuna voce trovata per la forma base «%1$s».</string>
+    <string name="dictionary_base_failed">Impossibile caricare i significati di «%1$s».</string>
+    <string name="dictionary_base_limit">Limite di ricerche raggiunto prima di caricare «%1$s».</string>
+    <string name="dictionary_base_unresolved">Alcuni significati di «%1$s» richiedono un\'altra ricerca. Apri la voce completa per continuare.</string>
+    <string name="dictionary_disabled_explanation">Le definizioni sono disattivate. Attivarle permette a Liseur di inviare la parola selezionata e le sue forme base collegate a %1$s per trovarne i significati. Non vengono inviati testo del libro o dati dell\'account. Puoi anche usare un\'app dizionario sul telefono.</string>
     <string name="dictionary_enable">Attiva le definizioni</string>
     <string name="download_failed_open">Impossibile scaricare “%1$s”.</string>
     <string name="mark_read">Segna come letto</string>
@@ -760,7 +765,7 @@
     <string name="definition_target_builtin">Integrato</string>
     <string name="definition_target_external">App esterna</string>
     <string name="settings_dictionary_lookup">Cerca definizioni online</string>
-    <string name="settings_dictionary_lookup_detail">Spento di default. Quando è acceso, definire una parola invia quella parola al sito sotto — l\'unico posto a cui Liseur parla oltre al tuo server dei libri.</string>
+    <string name="settings_dictionary_lookup_detail">Disattivato per impostazione predefinita. Cercare una definizione invia la parola e le sue forme base collegate al sito del dizionario qui sotto.</string>
     <string name="settings_dictionary_site">Sito del dizionario</string>
     <string name="settings_dictionary_site_detail">Scegli il Wiktionary della tua lingua per avere le sue definizioni, con le sue parole.</string>
     <string name="settings_dictionary_site_custom">Sito personalizzato…</string>

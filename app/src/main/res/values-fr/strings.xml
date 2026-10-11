@@ -509,7 +509,12 @@
     <string name="dictionary_failed_host">Impossible d\'atteindre %1$s (%2$s). Vérifiez le site du dictionnaire dans Paramètres.</string>
     <string name="dictionary_other_app">Ouvrir dans l\'appli</string>
     <string name="dictionary_open_full_entry">Entrée complète</string>
-    <string name="dictionary_disabled_explanation">Les définitions sont désactivées. Les activer permet à Liseur d\'envoyer le mot que vous avez touché, et rien d\'autre, à %1$s. Une appli dictionnaire sur votre téléphone fonctionne sans rien de tout cela.</string>
+    <string name="dictionary_base_entry">Sens de « %1$s » · Entrée complète</string>
+    <string name="dictionary_base_missing">Aucune entrée pour la forme de base « %1$s ».</string>
+    <string name="dictionary_base_failed">Impossible de charger les sens de « %1$s ».</string>
+    <string name="dictionary_base_limit">Limite de recherches atteinte avant le chargement de « %1$s ».</string>
+    <string name="dictionary_base_unresolved">Certains sens de « %1$s » nécessitent une autre recherche. Ouvrez son entrée complète pour continuer.</string>
+    <string name="dictionary_disabled_explanation">Les définitions sont désactivées. Les activer permet à Liseur d\'envoyer le mot sélectionné et ses formes de base liées à %1$s pour en trouver les sens. Aucun texte du livre ni renseignement de compte n\'est envoyé. Vous pouvez aussi utiliser une application dictionnaire sur votre téléphone.</string>
     <string name="dictionary_enable">Activer les définitions</string>
     <string name="download_failed_open">Impossible de télécharger « %1$s ».</string>
     <string name="mark_read">Marquer comme lu</string>
@@ -760,7 +765,7 @@
     <string name="definition_target_builtin">Intégré</string>
     <string name="definition_target_external">Appli externe</string>
     <string name="settings_dictionary_lookup">Chercher les définitions en ligne</string>
-    <string name="settings_dictionary_lookup_detail">Désactivé par défaut. Quand c\'est activé, définir un mot envoie ce mot au site ci-dessous — le seul endroit auquel Liseur parle en dehors de votre serveur de livres.</string>
+    <string name="settings_dictionary_lookup_detail">Désactivé par défaut. Définir un mot l\'envoie, avec ses formes de base liées, au site du dictionnaire ci-dessous.</string>
     <string name="settings_dictionary_site">Site du dictionnaire</string>
     <string name="settings_dictionary_site_detail">Choisissez le Wiktionary de votre langue pour obtenir ses définitions, dans ses mots.</string>
     <string name="settings_dictionary_site_custom">Site personnalisé…</string>

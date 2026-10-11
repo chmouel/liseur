@@ -509,7 +509,12 @@
     <string name="dictionary_failed_host">No se pudo contactar con %1$s (%2$s). Comprueba el sitio del diccionario en Ajustes.</string>
     <string name="dictionary_other_app">Abrir en la app</string>
     <string name="dictionary_open_full_entry">Entrada completa</string>
-    <string name="dictionary_disabled_explanation">Las definiciones están desactivadas. Activarlas permite que Liseur envíe la palabra que tocaste, y nada más, a %1$s. Una app de diccionario en tu teléfono funciona sin nada de eso.</string>
+    <string name="dictionary_base_entry">Significados de «%1$s» · Entrada completa</string>
+    <string name="dictionary_base_missing">No se encontró una entrada para la forma base «%1$s».</string>
+    <string name="dictionary_base_failed">No se pudieron cargar los significados de «%1$s».</string>
+    <string name="dictionary_base_limit">Se alcanzó el límite de consultas antes de cargar «%1$s».</string>
+    <string name="dictionary_base_unresolved">Algunos significados de «%1$s» necesitan otra consulta. Abre su entrada completa para continuar.</string>
+    <string name="dictionary_disabled_explanation">Las definiciones están desactivadas. Activarlas permite que Liseur envíe la palabra seleccionada y sus formas base enlazadas a %1$s para buscar sus significados. No se envía texto del libro ni datos de la cuenta. También puedes usar una aplicación de diccionario en tu teléfono.</string>
     <string name="dictionary_enable">Activar definiciones</string>
     <string name="download_failed_open">No se pudo descargar “%1$s”.</string>
     <string name="mark_read">Marcar como leído</string>
@@ -760,7 +765,7 @@
     <string name="definition_target_builtin">Integrado</string>
     <string name="definition_target_external">App externa</string>
     <string name="settings_dictionary_lookup">Buscar definiciones en línea</string>
-    <string name="settings_dictionary_lookup_detail">Desactivado por defecto. Cuando está activo, definir una palabra envía esa palabra al sitio de abajo — el único lugar con el que Liseur habla además de tu propio servidor de libros.</string>
+    <string name="settings_dictionary_lookup_detail">Desactivado por defecto. Definir una palabra la envía, junto con sus formas base enlazadas, al sitio del diccionario de abajo.</string>
     <string name="settings_dictionary_site">Sitio del diccionario</string>
     <string name="settings_dictionary_site_detail">Elige el Wiktionary de tu idioma para obtener sus definiciones, en sus palabras.</string>
     <string name="settings_dictionary_site_custom">Sitio personalizado…</string>
