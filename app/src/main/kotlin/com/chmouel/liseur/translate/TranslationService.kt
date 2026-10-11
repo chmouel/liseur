@@ -2,7 +2,10 @@ package com.chmouel.liseur.translate
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import kotlinx.coroutines.flow.Flow
 
@@ -78,6 +81,33 @@ internal interface TranslationService {
     /** Its own rows on the Translation page, under the service picker. */
     @Composable
     fun SettingsRows(onManageServices: () -> Unit)
+
+    /** Whether missing languages can be got from here, for a Download button. */
+    suspend fun hasDownloads(): Boolean = false
+
+    /**
+     * What the Download button opens for [source] into [target]: the
+     * system's screen, or a dialog that asks before fetching. [onReady]
+     * once they are on the phone, so the caller asks again; [onDismiss]
+     * otherwise.
+     */
+    @Composable
+    fun Downloads(source: String?, target: String, onReady: () -> Unit, onDismiss: () -> Unit) = Unit
+
+    /** Whether its translations must be shown with [Credit] beside them. */
+    val credited: Boolean get() = false
+
+    /** The mark its terms ask for beside its translations, drawn for a [background]. */
+    @Composable
+    fun Credit(background: Color, modifier: Modifier) = Unit
+
+    /** The label of the button that translates a selection. */
+    @get:StringRes
+    val action: Int get() = R.string.translation_action
+
+    /** The label of the button that goes on translating the page. */
+    @get:StringRes
+    val pageAction: Int get() = R.string.translation_page_start
 }
 
 /** A run of translations between two languages, closed when the page goes back to the original. */

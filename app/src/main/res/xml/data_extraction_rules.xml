@@ -18,11 +18,15 @@
         <include domain="database" path="liseur.db" />
         <include domain="file" path="datastore" />
         <include domain="sharedpref" path="." />
+        <!-- ML Kit's own instance id (Google Play build) is not the reader's to carry. -->
+        <exclude domain="sharedpref" path="com.google.mlkit.internal.xml" />
     </cloud-backup>
     <device-transfer>
         <include domain="database" path="liseur.db" />
         <include domain="file" path="datastore" />
         <include domain="sharedpref" path="." />
+        <!-- ML Kit's own instance id (Google Play build) is not the reader's to carry. -->
+        <exclude domain="sharedpref" path="com.google.mlkit.internal.xml" />
         <!-- Fonts the reader imported; nothing else can supply them. -->
         <include domain="file" path="fonts" />
     </device-transfer>

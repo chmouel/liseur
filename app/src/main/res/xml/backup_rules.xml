@@ -23,4 +23,6 @@
     <!-- DataStore: reading preferences, app settings, last session. -->
     <include domain="file" path="datastore" />
     <include domain="sharedpref" path="." />
+    <!-- ML Kit's own instance id (Google Play build) is not the reader's to carry. -->
+    <exclude domain="sharedpref" path="com.google.mlkit.internal.xml" />
 </full-backup-content>

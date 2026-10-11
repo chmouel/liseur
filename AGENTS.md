@@ -23,8 +23,9 @@ Use the Gradle wrapper, never a system Gradle:
 
 Use `make check` when the change crosses tests, lint, and the debug build.
 There are two flavors: `foss` (F-Droid, GitHub) and `play` (Google Play,
-adds the Gemini read-aloud voices). Read aloud itself is in both; code that
-calls Gemini belongs only in `app/src/play/`; see
+adds the Gemini read-aloud voices, Gemini translation, and ML Kit
+translation). Read aloud itself is in both; code that calls Gemini or ML Kit
+belongs only in `app/src/play/`; see
 [DEVELOPER.md](DEVELOPER.md#building).
 See [DEVELOPER.md](DEVELOPER.md#testing) for emulator and end-to-end checks.
 
@@ -79,6 +80,13 @@ installation on a real device and must be announced.
 - Every dependency must be FOSS and come from Maven Central or Google's Maven
   repository. Never add `readium-lcp`, proprietary blobs, trackers,
   analytics, Google Play services, or unapproved network endpoints.
+  The single exception is ML Kit Translation (`com.google.mlkit:translate`)
+  in the `play` flavor: it may bring its own dependencies (Play services
+  client libraries, Firebase components, datatransport), model downloads,
+  diagnostics, and Google attribution assets, all under `app/src/play/` and
+  `playImplementation`. It must not reach the `foss` build, and anything
+  that widens what it sends requires updating `docs/PRIVACY.md`; see
+  [DEVELOPER.md](DEVELOPER.md#f-droid-readiness).
 - Preserve release reproducibility. Do not remove the `dependenciesInfo` or
   `packaging.jniLibs.keepDebugSymbols` settings in
   `app/build.gradle.kts`; see [DEVELOPER.md](DEVELOPER.md#f-droid-readiness).

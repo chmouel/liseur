@@ -143,6 +143,8 @@ internal fun TranslationSheet(
     // Null when closed; true opens it on the Services page.
     var settings by remember { mutableStateOf<Boolean?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
+    // The service's way to the missing languages, open over the sheet.
+    var downloading by remember(service, source, target) { mutableStateOf(false) }
 
     // Asked again on returning, as from the system's settings with a language downloaded.
     var resumed by remember { mutableIntStateOf(0) }
@@ -233,7 +235,7 @@ internal fun TranslationSheet(
                     onPickTarget = { picking = Picking.Target },
                     onRetry = { attempt++ },
                     onSettings = { settings = it },
-                    onDownload = { scope.launch { (current as? DeviceTranslationService)?.openDownloads() } },
+                    onDownload = { downloading = true },
                     onTranslatePage = onTranslatePage?.let { start ->
                         target?.let {
                             {
@@ -245,6 +247,19 @@ internal fun TranslationSheet(
                 )
             }
         }
+    }
+
+    if (downloading && current != null && target != null) {
+        current.Downloads(
+            source = source,
+            target = target,
+            onReady = {
+                downloading = false
+                resumed++
+                attempt++
+            },
+            onDismiss = { downloading = false },
+        )
     }
 
     settings?.let { services ->
@@ -272,11 +287,10 @@ private fun Translation(
     onDownload: () -> Unit,
     onTranslatePage: (() -> Unit)?,
 ) {
-    val device = service as? DeviceTranslationService
-    val hasDownloads by produceState(false, device) { value = device?.hasDownloads() == true }
+    val hasDownloads by produceState(false, service) { value = service?.hasDownloads() == true }
     val sourceName = source?.let { TranslationLanguages.name(it, ui) }
     val targetName = target?.let { TranslationLanguages.name(it, ui) }.orEmpty()
-    val name = destination ?: stringResource(R.string.translation_provider_device)
+    val name = destination ?: stringResource(service?.label ?: R.string.translation_provider_device)
     Column(
         Modifier
             .verticalScroll(rememberScrollState())
@@ -326,18 +340,22 @@ private fun Translation(
             onPickTarget = onPickTarget,
         )
         if (body is Body.Text) {
-            Text(
-                text = destination?.let { stringResource(R.string.translation_attribution_service, it) }
-                    ?: stringResource(R.string.translation_attribution_device),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+            if (service?.credited == true) {
+                service.Credit(MaterialTheme.colorScheme.surface, Modifier.padding(top = 8.dp))
+            } else {
+                Text(
+                    text = destination?.let { stringResource(R.string.translation_attribution_service, it) }
+                        ?: stringResource(R.string.translation_attribution_device),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             onTranslatePage?.let {
                 OutlinedButton(onClick = it, modifier = Modifier.padding(top = 16.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.translation_page_start))
+                    Text(stringResource(service?.pageAction ?: R.string.translation_page_start))
                 }
             }
         }

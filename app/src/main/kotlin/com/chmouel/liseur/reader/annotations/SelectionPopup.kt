@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.annotations
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +62,8 @@ class SelectionActions(
     val onDelete: (() -> Unit)? = null,
     /** Translates the passage, when a service can. */
     val onTranslate: (() -> Unit)? = null,
+    /** The translate button's label, as the chosen service's terms word it. */
+    @param:StringRes val translateLabel: Int = R.string.translation_action,
     /** Reads aloud from here, where the build can. */
     val onReadAloud: (() -> Unit)? = null,
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
@@ -249,7 +252,7 @@ private fun MoreRow(actions: SelectionActions, onBack: () -> Unit) {
             }
             actions.onTranslate?.let {
                 PopupAction(
-                    label = stringResource(R.string.translation_action),
+                    label = stringResource(actions.translateLabel),
                     icon = Icons.Outlined.Translate,
                     onClick = it,
                 )

@@ -13,7 +13,7 @@ enough; `compileSdk`/`targetSdk` 37 requires a reasonably recent SDK
 Manager package list).
 
 ```bash
-./gradlew assemblePlayDebug    # debug APK with Gemini read-aloud and translation
+./gradlew assemblePlayDebug    # debug APK with Gemini and ML Kit
 ./gradlew assembleFossDebug    # debug APK of the F-Droid build
 ./gradlew assembleFossRelease  # minified release APK (F-Droid, GitHub)
 ./gradlew bundlePlayRelease    # minified release AAB, for Google Play only
@@ -22,9 +22,11 @@ Manager package list).
 There are two product flavors. `foss` is the build F-Droid reproduces
 and the GitHub release carries. `play` adds Gemini's read-aloud voices
 and Gemini translation, which send book text to a non-free Google
-service, and ships only on Google Play. Gemini's code lives under
-`app/src/play/` and `app/src/testPlay/`; the `foss` APK has none of its
-code, strings or endpoint. Read aloud and translation themselves, on the
+service, and Google's ML Kit translator, which keeps book text on the
+phone but is a proprietary SDK with its own diagnostics. They ship only
+on Google Play. Their code lives under
+`app/src/play/` and `app/src/testPlay/`; the `foss` APK has none of their
+code, strings or endpoints. Read aloud and translation themselves, on the
 device or with a server the reader enters, are in both. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
 
@@ -715,6 +717,18 @@ talks to something new, or changes what it stores. The privacy policy
 Play links to is `docs/PRIVACY.md`, served by GitHub Pages from `main`
 `/docs`; it is a published legal document, so change it in a commit and
 not in the console.
+
+ML Kit translation changes the Play declarations, so update them in the
+console before the first release that carries it. Data safety must list
+what Google's [ML Kit Android data disclosure](https://developers.google.com/ml-kit/android-data-disclosure)
+names for every feature, which covers `com.google.mlkit:translate`:
+device and app information, per-installation identifiers, performance
+metrics, API configuration, input and output sizes, events and error
+codes, collected for diagnostics and analytics, encrypted in transit and
+not shared. None of it is book text. The Play full description must carry Google's
+translation attribution and disclaimer from
+<https://cloud.google.com/translate/attribution>. The F-Droid metadata
+must not advertise it.
 
 Production publication is automated for every final release. **Before the
 first production release**, finish the Play listing rather than
@@ -1662,14 +1676,15 @@ reader behavior.
   sheet, never as a second sheet. The feature lives in
   `app/src/main/kotlin/.../translate/`; the reader sees only
   `TranslateFeature` (`None` when nothing is wired), built by the flavor's
-  `TranslateFeatureFactory`. Code that talks to Gemini, its client,
-  address and model list, lives only in `app/src/play/`; `main` knows
-  Gemini only as a service id and the settings that store its choice.
+  `TranslateFeatureFactory`. Code that talks to Gemini or ML Kit lives
+  only in `app/src/play/`; `main` knows them only as service ids and the
+  settings that store their choice.
 - Services: this phone (`DeviceTranslationService`, Android 12+
   `TranslationManager`, no library and no Google Play services), any
   server on the Services page speaking OpenAI's chat completions
-  (`ServerTranslationService`), and Gemini in Play only
-  (`GeminiTranslationService`, sharing the read-aloud key). The device is
+  (`ServerTranslationService`), and in Play only Gemini
+  (`GeminiTranslationService`, sharing the read-aloud key) and Google
+  on this phone (`MlKitTranslationService`, ML Kit). The device is
   the default; a network service is used only once chosen. The Services
   page holds every key and server; the Translation page in Settings
   holds the service, its model and the target language.
@@ -1681,6 +1696,31 @@ reader behavior.
   system settings shows at once. A pair that needs a download offers
   "Download languages" when the system has a settings screen for it, and
   says where to go when it does not.
+- ML Kit (Play only) keeps its SDK behind `MlKitEngine`, so
+  `MlKitTranslationService` and `MlKitLanguages` are tested with a fake
+  engine. `app/src/play/AndroidManifest.xml` removes
+  `MlKitInitProvider`, and the engine calls `MlKit.initialize` on first
+  use, so nothing of ML Kit runs until the service is chosen. Translating
+  never downloads: a missing model is `NotDownloaded`, and the service's
+  `Downloads` dialog asks first, checks for Wi-Fi, and downloads with
+  `requireWifi()`. English is built in and has no delete button (the SDK
+  ignores deleting it). Its language map is its own: zh is offered as
+  zh-Hans only, pt as a source only, so neither claims a script or
+  region it cannot promise. A page run keeps one translator and checks the
+  pair before every sentence, so deleting a model mid-run halts it.
+  Google's attribution rules apply: the action reads "Translate with
+  Google" (`TranslationService.action`/`pageAction`), and the "translated
+  by Google" badge (`Credit`, Play drawables in light, dark and greyscale
+  for e-ink) is shown next to every ML Kit result, in the sheet, the
+  settings test, the page bar and beside the translated-page mark with the
+  controls hidden. `PageSwap.by` records which service answered each
+  sentence, so the badge stays while any ML Kit sentence is on screen,
+  cached or not, even after switching service. Its cache identity is the
+  service id with no model: the SDK exposes no model version.
+  `app/proguard-rules-play.pro` keeps the no-argument constructors of
+  Firebase `ComponentRegistrar` classes; without it R8 removes them and
+  the release build crashes the first time ML Kit is asked anything.
+  Smoke-test ML Kit on a release build after upgrading it.
 - Languages keep the script and the Portuguese region
   (`TranslationLanguages`: zh-Hans and zh-Hant, pt-BR and pt-PT) and drop
   other regions. The source is the book's language when it declares
@@ -2333,7 +2373,7 @@ what lets it sync a book that came off an SD card.
 - Dependencies are all FOSS, from Maven Central or Google's Maven.
   In particular `readium-lcp` is deliberately absent: it pulls in the
   proprietary liblcp. The list users see is in `LicencesScreen.kt`.
-- No trackers or analytics, and no Google Play services. The only
+- No trackers or analytics, and no Google Play services, in `foss`. The only
   outbound traffic is to the calibre-web, Komga, BookOrbit or liseur-sync
   server the user configured, and to a dictionary site when a definition
   is asked for.
@@ -2349,7 +2389,18 @@ what lets it sync a book that came off an SD card.
   voices are in both and stay on the device, and they are the default.
   Read aloud and translation with a server are in both and talk only to
   the server the user sets. Device translation uses Android's own
-  `TranslationManager`, not ML Kit, so it needs no Google Play services. The address field offers a menu of hosted services
+  `TranslationManager`, not ML Kit, so it needs no Google Play services.
+  ML Kit translation is the one deliberate exception, Play only
+  (`playImplementation`): a proprietary SDK that pulls in Play services
+  client libraries, Firebase components and datatransport. Book text
+  stays on the phone, but once the service is chosen the SDK logs
+  diagnostics to `firebaselogging.googleapis.com`, and its first model
+  download creates a Firebase installation id and fetches ML Kit's remote
+  config. `docs/PRIVACY.md` describes this; keep it in step with any
+  change. Before changing that boundary, check that
+  `./gradlew :app:dependencies --configuration fossReleaseRuntimeClasspath`
+  lists no `mlkit`, `gms`, `firebase` or `datatransport`, and that the
+  `foss` release dex has no `com.google.mlkit` classes. The address field offers a menu of hosted services
   (`SpeechServerPresets`) next to a self-hosted example; none is selected
   or contacted until the user picks it, and the app works
   without any of them. Before

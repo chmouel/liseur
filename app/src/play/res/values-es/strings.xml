@@ -27,4 +27,26 @@
     <string name="translation_provider_gemini_summary">Gemini de Google, con tu clave de API. Los pasajes se envían a Google.</string>
     <string name="translation_gemini_key_refused">Google rechazó la clave de API de Gemini.</string>
     <string name="translation_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios para traducir con Gemini.</string>
+    <string name="translation_provider_mlkit">Google en este teléfono</string>
+    <string name="translation_provider_mlkit_summary">El traductor ML Kit de Google, en el teléfono una vez descargados sus idiomas. Los pasajes se quedan en el teléfono.</string>
+    <string name="translation_mlkit_action">Traducir con Google</string>
+    <string name="translation_mlkit_page_action">Traducir la página desde aquí con Google</string>
+    <string name="translation_mlkit_credit">Traducido por Google</string>
+    <string name="translation_mlkit_download_title">¿Descargar idiomas?</string>
+    <string name="translation_mlkit_download_body">Para traducir en este teléfono, el traductor de Google necesita: %1$s. Cada idioma ocupa unos 30 MB y solo se descarga por Wi-Fi.</string>
+    <string name="translation_mlkit_download_wifi">Conéctate primero a una red Wi-Fi. Los idiomas solo se descargan por Wi-Fi.</string>
+    <string name="translation_mlkit_downloading">Descargando…</string>
+    <string name="translation_mlkit_download_failed">La descarga ha fallado. Comprueba la conexión Wi-Fi y vuelve a intentarlo.</string>
+    <string name="translation_mlkit_download_space">No hay suficiente espacio libre en este teléfono para estos idiomas.</string>
+    <string name="translation_mlkit_download_confirm">Descargar</string>
+    <string name="translation_mlkit_help">ML Kit de Google traduce en este teléfono, así que el texto de los libros no se envía a Google. ML Kit sí envía a Google datos de diagnóstico y de uso, como errores y tiempos.</string>
+    <string name="translation_mlkit_legal">Aviso legal</string>
+    <string name="translation_mlkit_terms">Condiciones de ML Kit</string>
+    <string name="translation_mlkit_models">Idiomas descargados</string>
+    <string name="translation_mlkit_models_none">Ninguno todavía. Liseur pregunta antes de descargar un idioma.</string>
+    <string name="translation_mlkit_models_kept">Al eliminar un idioma se conservan las traducciones ya guardadas en tus libros.</string>
+    <string name="translation_mlkit_models_failed">No se han podido listar los idiomas descargados.</string>
+    <string name="translation_mlkit_delete">Eliminar %1$s</string>
+    <string name="licences_intro">Liseur está construido a partir de componentes libres y de código abierto, salvo la traducción ML Kit de Google en esta edición de Google Play, que Google ofrece bajo sus propias condiciones.</string>
+    <string name="translation_mlkit_acknowledgement">Las traducciones usan la tecnología de Google Traductor, que se ejecuta en este teléfono mediante ML Kit de Google.</string>
 </resources>

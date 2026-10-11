@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -115,6 +116,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
+import com.chmouel.liseur.translate.PageSwap
 import com.chmouel.liseur.translate.PageTranslation
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.MemoryPageTranslationModes
@@ -247,6 +249,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
@@ -552,6 +555,7 @@ fun ReaderScreen(
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
     val translateReady by translate.ready.collectAsStateWithLifecycle()
+    val translateLabel by translate.action.collectAsStateWithLifecycle()
     // When the page last went after the voice. Readium can report a move
     // more than once, and only the first report carries the marker, so
     // the rest are recognised by arriving just after it: taken for the
@@ -3379,19 +3383,36 @@ fun ReaderScreen(
                     .padding(end = 12.dp),
             )
         }
-        if (!showingEnd && !chromeVisible) {
-            pageTranslation?.let { run ->
-                TranslatedPageMark(
-                    source = run.translator.source,
-                    target = run.translator.target,
-                    theme = readingTheme,
-                    onClick = { chromeVisible = true },
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .then(behindViewer)
-                        .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
-                        .padding(start = 12.dp),
-                )
+        // What gave the translations in the resource on screen, for the credit a
+        // service's terms ask for. A stopped run keeps it until its words are gone.
+        val shownTranslation = pageTranslation ?: restoringPageTranslation
+        val translationsBy by remember(shownTranslation, navigator) {
+            val run = shownTranslation ?: return@remember flowOf(emptySet<String>())
+            val shown = navigator?.currentLocator?.map { ResourceAddress.canonicalPath(it.href.toString()) } ?: flowOf(null)
+            combine(run.swaps, shown) { swaps, href ->
+                // Without a known resource, everything the run placed is credited.
+                val placed = if (href == null) swaps.values.flatten() else swaps[href].orEmpty()
+                placed.mapTo(mutableSetOf(), PageSwap::by)
+            }.distinctUntilChanged()
+        }.collectAsStateWithLifecycle(emptySet())
+        if (!showingEnd && !chromeVisible && shownTranslation != null) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .then(behindViewer)
+                    .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                    .padding(start = 12.dp),
+            ) {
+                pageTranslation?.let { run ->
+                    TranslatedPageMark(
+                        source = run.translator.source,
+                        target = run.translator.target,
+                        theme = readingTheme,
+                        onClick = { chromeVisible = true },
+                    )
+                }
+                translate.PageCredit(translationsBy, readingTheme, Modifier.padding(top = 10.dp))
             }
         }
 
@@ -3456,12 +3477,18 @@ fun ReaderScreen(
                     translate.PageBar(
                         translator = run.translator,
                         state = state,
+                        answeredBy = translationsBy,
                         theme = readingTheme,
                         controls = chromeVisible || translationResumedCue,
                         onRetry = run::retry,
                         onStop = ::stopTranslatingBook,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
+                } ?: run {
+                    // Stopped with the controls up: the words are still being put back.
+                    if (chromeVisible && restoringPageTranslation != null) {
+                        translate.PageCredit(translationsBy, readingTheme, Modifier.align(Alignment.CenterHorizontally))
+                    }
                 }
                 readAloud?.let {
                     readAloudFeature.Player(
@@ -3932,7 +3959,7 @@ fun ReaderScreen(
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
                 selectionKey = active,
-                actions = remember(active, dictionary, translateReady, pageTranslated) {
+                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated) {
                     SelectionActions(
                         onHighlight = { tint ->
                             onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -3973,6 +4000,7 @@ fun ReaderScreen(
                         } else {
                             null
                         },
+                        translateLabel = translateLabel,
                         onReadAloud = readAloud
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->

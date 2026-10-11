@@ -17,6 +17,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.util.isNotEmpty
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
@@ -283,7 +284,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     }
 
     /** Whether the phone has a screen for downloading languages, for showing the button at all. */
-    suspend fun hasDownloads(): Boolean {
+    override suspend fun hasDownloads(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return withContext(Dispatchers.IO) {
             try {
@@ -309,6 +310,15 @@ internal class DeviceTranslationService(private val context: Context) : Translat
 
     @Composable
     override fun SettingsRows(onManageServices: () -> Unit) = DeviceTranslationRows(this)
+
+    // The system's screen: the reader is back, and asks again, on resuming.
+    @Composable
+    override fun Downloads(source: String?, target: String, onReady: () -> Unit, onDismiss: () -> Unit) {
+        LaunchedEffect(Unit) {
+            openDownloads()
+            onDismiss()
+        }
+    }
 
     companion object {
         const val ID = "device"

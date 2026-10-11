@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!--
+            ML Kit would start with every launch of the app. It is started
+            instead the first time the reader uses Google Translate on the
+            phone (MlKitEngine), so a reader who never picks it never
+            starts the SDK or its diagnostics.
+        -->
+        <provider
+            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+            android:authorities="${applicationId}.mlkitinitprovider"
+            tools:node="remove" />
+    </application>
+</manifest>

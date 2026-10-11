@@ -2,6 +2,7 @@ package com.chmouel.liseur.translate
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,6 +18,9 @@ interface TranslateFeature {
 
     /** Whether the chosen service could translate, so the selection bar offers it. */
     val ready: StateFlow<Boolean>
+
+    /** The selection bar's label for translating, as the chosen service's terms word it. */
+    val action: StateFlow<Int>
 
     /** Asks the chosen service again whether it can translate, such as when the reader comes back. */
     suspend fun refresh()
@@ -48,12 +52,14 @@ interface TranslateFeature {
     /**
      * The bar under a translated page, where read aloud's player sits: the
      * languages and Stop with the reader's [controls] up, and what stopped
-     * the run even without them.
+     * the run even without them. [answeredBy] names what gave the
+     * translations on the page, as [PageSwap.by] does.
      */
     @Composable
     fun PageBar(
         translator: SentenceTranslator,
         state: PageTranslationState,
+        answeredBy: Set<String>,
         theme: ReaderTheme,
         controls: Boolean,
         onRetry: () -> Unit,
@@ -61,9 +67,17 @@ interface TranslateFeature {
         modifier: Modifier,
     )
 
+    /**
+     * The marks the services in [answeredBy] ask for beside their
+     * translations, for the page with the reader's controls down.
+     */
+    @Composable
+    fun PageCredit(answeredBy: Set<String>, theme: ReaderTheme, modifier: Modifier)
+
     object None : TranslateFeature {
         override val isAvailable = false
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+        override val action: StateFlow<Int> = MutableStateFlow(R.string.translation_action).asStateFlow()
 
         override suspend fun refresh() = Unit
 
@@ -87,11 +101,15 @@ interface TranslateFeature {
         override fun PageBar(
             translator: SentenceTranslator,
             state: PageTranslationState,
+            answeredBy: Set<String>,
             theme: ReaderTheme,
             controls: Boolean,
             onRetry: () -> Unit,
             onStop: () -> Unit,
             modifier: Modifier,
         ) = Unit
+
+        @Composable
+        override fun PageCredit(answeredBy: Set<String>, theme: ReaderTheme, modifier: Modifier) = Unit
     }
 }

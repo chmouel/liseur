@@ -27,4 +27,26 @@
     <string name="translation_provider_gemini_summary">Gemini di Google, con la tua chiave API. I passaggi vengono inviati a Google.</string>
     <string name="translation_gemini_key_refused">Google ha rifiutato la chiave API Gemini.</string>
     <string name="translation_gemini_key_missing">Aggiungi la tua chiave API Gemini nella pagina Servizi per tradurre con Gemini.</string>
+    <string name="translation_provider_mlkit">Google su questo telefono</string>
+    <string name="translation_provider_mlkit_summary">Il traduttore ML Kit di Google, sul telefono una volta scaricate le sue lingue. I passaggi restano sul telefono.</string>
+    <string name="translation_mlkit_action">Traduci con Google</string>
+    <string name="translation_mlkit_page_action">Traduci la pagina da qui con Google</string>
+    <string name="translation_mlkit_credit">Tradotto da Google</string>
+    <string name="translation_mlkit_download_title">Scaricare le lingue?</string>
+    <string name="translation_mlkit_download_body">Per tradurre su questo telefono, il traduttore di Google ha bisogno di: %1$s. Ogni lingua occupa circa 30 MB e si scarica solo tramite Wi-Fi.</string>
+    <string name="translation_mlkit_download_wifi">Prima connettiti al Wi-Fi. Le lingue si scaricano solo tramite Wi-Fi.</string>
+    <string name="translation_mlkit_downloading">Download in corso…</string>
+    <string name="translation_mlkit_download_failed">Il download non è riuscito. Controlla la connessione Wi-Fi e riprova.</string>
+    <string name="translation_mlkit_download_space">Non c\'è abbastanza spazio libero su questo telefono per queste lingue.</string>
+    <string name="translation_mlkit_download_confirm">Scarica</string>
+    <string name="translation_mlkit_help">ML Kit di Google traduce su questo telefono, quindi il testo dei libri non viene inviato a Google. ML Kit invia comunque a Google dati diagnostici e di utilizzo, come errori e tempi.</string>
+    <string name="translation_mlkit_legal">Note legali</string>
+    <string name="translation_mlkit_terms">Termini di ML Kit</string>
+    <string name="translation_mlkit_models">Lingue scaricate</string>
+    <string name="translation_mlkit_models_none">Nessuna per ora. Liseur chiede prima di scaricare una lingua.</string>
+    <string name="translation_mlkit_models_kept">Eliminando una lingua, le traduzioni già salvate nei tuoi libri restano.</string>
+    <string name="translation_mlkit_models_failed">Impossibile elencare le lingue scaricate.</string>
+    <string name="translation_mlkit_delete">Elimina %1$s</string>
+    <string name="licences_intro">Liseur è costruito con componenti liberi e open-source, tranne la traduzione ML Kit di Google in questa edizione Google Play, che Google fornisce secondo i propri termini.</string>
+    <string name="translation_mlkit_acknowledgement">Le traduzioni usano la tecnologia di Google Traduttore, eseguita su questo telefono tramite ML Kit di Google.</string>
 </resources>

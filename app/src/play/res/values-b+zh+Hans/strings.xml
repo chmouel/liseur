@@ -27,4 +27,26 @@
     <string name="translation_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。文字会发送给 Google。</string>
     <string name="translation_gemini_key_refused">Google 拒绝了该 Gemini API 密钥。</string>
     <string name="translation_gemini_key_missing">在“服务”页面添加你的 Gemini API 密钥，即可用 Gemini 翻译。</string>
+    <string name="translation_provider_mlkit">本机上的 Google</string>
+    <string name="translation_provider_mlkit_summary">Google 的 ML Kit 翻译器，下载语言后在手机上运行。文段不会离开手机。</string>
+    <string name="translation_mlkit_action">使用 Google 翻译</string>
+    <string name="translation_mlkit_page_action">使用 Google 从这里开始翻译页面</string>
+    <string name="translation_mlkit_credit">由 Google 翻译</string>
+    <string name="translation_mlkit_download_title">下载语言？</string>
+    <string name="translation_mlkit_download_body">要在本机上翻译，Google 的翻译器需要：%1$s。每种语言约 30 MB，仅通过 Wi-Fi 下载。</string>
+    <string name="translation_mlkit_download_wifi">请先连接 Wi-Fi。语言仅通过 Wi-Fi 下载。</string>
+    <string name="translation_mlkit_downloading">正在下载…</string>
+    <string name="translation_mlkit_download_failed">下载失败。请检查 Wi-Fi 连接后重试。</string>
+    <string name="translation_mlkit_download_space">本机没有足够的可用空间来存放这些语言。</string>
+    <string name="translation_mlkit_download_confirm">下载</string>
+    <string name="translation_mlkit_help">Google 的 ML Kit 在本机上翻译，书籍文本不会发送给 Google。但 ML Kit 会向 Google 发送诊断和使用数据，例如错误和耗时。</string>
+    <string name="translation_mlkit_legal">法律声明</string>
+    <string name="translation_mlkit_terms">ML Kit 条款</string>
+    <string name="translation_mlkit_models">已下载的语言</string>
+    <string name="translation_mlkit_models_none">暂无。Liseur 会在下载语言前询问。</string>
+    <string name="translation_mlkit_models_kept">删除语言不会删除已保存在书中的译文。</string>
+    <string name="translation_mlkit_models_failed">无法列出已下载的语言。</string>
+    <string name="translation_mlkit_delete">删除%1$s</string>
+    <string name="licences_intro">Liseur 由自由和开源组件构建，但此 Google Play 版本中的 Google ML Kit 翻译除外，它由 Google 按其自身条款提供。</string>
+    <string name="translation_mlkit_acknowledgement">翻译由 Google 翻译技术提供，通过 Google 的 ML Kit 在本机上运行。</string>
 </resources>

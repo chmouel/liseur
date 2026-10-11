@@ -351,11 +351,14 @@ private fun TestRow(feature: ServiceTranslate, service: TranslationService, conf
         }
     }
     val name = produceState<String?>(null, service, choice) { value = feature.destination(service) }.value
-        ?: stringResource(R.string.translation_provider_device)
+        ?: stringResource(service.label)
+    val hasDownloads by produceState(false, service) { value = service.hasDownloads() }
+    var downloading by remember(service, target) { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = { asked++ }, enabled = configured && test != Test.Running) {
-                Text(stringResource(R.string.translation_settings_test))
+                // A provider whose terms name it on what asks it gets its own label.
+                Text(stringResource(if (service.credited) service.action else R.string.translation_settings_test))
             }
             if (test == Test.Running) BusyIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
         }
@@ -372,6 +375,21 @@ private fun TestRow(feature: ServiceTranslate, service: TranslationService, conf
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
+        if (test is Test.Passed && service.credited) service.Credit(MaterialTheme.colorScheme.surface, Modifier)
+        if ((test as? Test.Failed)?.error is TranslationError.NotDownloaded && hasDownloads) {
+            TextButton(onClick = { downloading = true }) { Text(stringResource(R.string.translation_download)) }
+        }
+    }
+    if (downloading) {
+        service.Downloads(
+            source = TEST_SOURCE,
+            target = target,
+            onReady = {
+                downloading = false
+                asked++
+            },
+            onDismiss = { downloading = false },
+        )
     }
 }
 

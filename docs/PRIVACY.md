@@ -6,20 +6,27 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 9 October 2026
+**Last updated:** 11 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
-no analytics and no trackers, and it collects nothing about you. Its
+no analytics and no trackers of its own, and the developer collects
+nothing about you. The one exception is a Google translator in the
+Google Play build, which reports diagnostics to Google once you choose
+it; it is described below. Its
 source code is public at
 <https://github.com/chmouel/liseur>, so every claim on this page can be
 checked rather than taken on trust.
 
 ## What Liseur collects
 
-Nothing. There is no server run by the developer, no crash reporting, no
-usage measurement, no advertising identifier, and no account to sign up
-for. No data leaves your device except to the servers described below,
-which are ones you choose and enter yourself.
+The developer receives nothing. There is no server run by the
+developer, no crash reporting, no advertising identifier, and no account
+to sign up for, and Liseur's own code measures no usage. No data leaves
+your device except to the servers described below, which are ones you
+choose and enter yourself. The one exception to "no usage measurement"
+is in the Google Play build: if you choose Google's on-phone translator,
+Google's SDK reports its own usage to Google, as described under
+"Google on this phone" below.
 
 ## What Liseur stores on your device
 
@@ -55,8 +62,8 @@ not copy your books anywhere.
 ## Network access
 
 Liseur talks only to addresses you choose. Every build knows the kinds
-below; the Google Play build adds Google Gemini, used only if you set it
-up.
+below; the Google Play build adds Google Gemini and Google's on-phone
+translator, each used only if you choose it.
 
 ### Your book server
 
@@ -184,6 +191,36 @@ passage's translation is shown on screen and is never written to
 storage; sentences translated in the page are saved on your device as
 described above, whichever service translated them.
 
+### Google on this phone, for translation (Google Play build only)
+
+The Google Play build can translate with Google's ML Kit translator,
+which runs on your device. The F-Droid and GitHub builds do not contain
+it. None of it runs until you choose "Google on this phone" in Settings,
+Translation.
+
+The passages and pages you translate with it stay on your device; it
+does not send book text, titles or reading positions anywhere. It needs
+a language model for each language, about 30 MB each, which it downloads
+from Google only after you agree, and only over Wi-Fi. You can delete
+those models in Settings, Translation. English is built in.
+
+Google's SDK sends Google diagnostic and usage data about itself,
+starting when you choose this translator. Android may upload events it
+has already recorded after you switch to another translator, and the
+identifier it created stays on the device until you clear the app's
+storage or uninstall it. Per Google's
+[ML Kit data disclosure](https://developers.google.com/ml-kit/android-data-disclosure),
+that covers the device model and Android version, the app's name and
+version, an identifier generated for this installation, timings, sizes
+of the text in and out, the kinds of events (such as a translation or a
+model download) and error codes. It goes to
+`firebaselogging.googleapis.com` over HTTPS; the first model download
+also creates that identifier with Firebase and fetches the SDK's
+settings from Google. Google says it does not share this data with
+third parties. It is covered by the
+[ML Kit terms](https://developers.google.com/ml-kit/terms) and Google's
+privacy policy, which this policy does not cover.
+
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else.
@@ -194,8 +231,9 @@ Liseur takes part in Android's standard backup, so your library, reading
 positions, highlights, notes and settings can follow you to a new device.
 That backup is handled by Android and stored in your own Google account,
 under Google's terms, not the developer's. Liseur has no access to it.
-Downloaded book files, generated covers and saved translations are
-deliberately excluded.
+Downloaded book files, generated covers, saved translations and, in the
+Google Play build, ML Kit's language models and installation identifier
+are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
 because the key that encrypts them never leaves the old one. Liseur notices
 this and asks you to sign in again. A server or Gemini API key
@@ -207,13 +245,16 @@ You can turn this off in your device's backup settings.
 
 ## Children
 
-Liseur is not directed at children and collects no personal information
-from anyone, of any age.
+Liseur is not directed at children. The developer collects no personal
+information from anyone, of any age. The Google Play build's optional
+Google translator sends Google the diagnostic data described above.
 
 ## Sharing
 
-Nothing is shared or sold, because nothing is collected. The developer
-receives no data from the app whatsoever.
+Nothing is shared or sold. The developer receives no data from the app
+whatsoever. In the Google Play build, if you choose Google's on-phone
+translator, Google receives the diagnostic data described above under
+its own terms.
 
 ## Changes
 

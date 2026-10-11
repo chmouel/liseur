@@ -64,6 +64,7 @@ internal fun PageTranslationBar(
     feature: ServiceTranslate,
     translator: SentenceTranslator,
     state: PageTranslationState,
+    answeredBy: Set<String>,
     theme: ReaderTheme,
     controls: Boolean,
     onRetry: () -> Unit,
@@ -74,8 +75,9 @@ internal fun PageTranslationBar(
     val ui = LocalConfiguration.current.locales[0]
     val scope = rememberCoroutineScope()
     val service by feature.service.collectAsState(initial = null)
-    val device = service as? DeviceTranslationService
-    val hasDownloads by produceState(false, device) { value = device?.hasDownloads() == true }
+    val hasDownloads by produceState(false, service) { value = service?.hasDownloads() == true }
+    var downloading by remember(service) { mutableStateOf(false) }
+    val credits = feature.credits(answeredBy)
     // Null when closed; true opens it on the Services page.
     var settings by remember { mutableStateOf<Boolean?>(null) }
     val halted = state as? PageTranslationState.Halted
@@ -92,7 +94,7 @@ internal fun PageTranslationBar(
 
     val sourceName = translator.source?.let { TranslationLanguages.name(it, ui) }
     val targetName = TranslationLanguages.name(translator.target, ui)
-    val name = translator.destination ?: stringResource(R.string.translation_provider_device)
+    val name = translator.destination ?: stringResource(service?.label ?: R.string.translation_provider_device)
     val status = when (state) {
         PageTranslationState.Translating -> stringResource(R.string.translation_loading)
         PageTranslationState.Ahead -> translator.destination?.let { stringResource(R.string.translation_attribution_service, it) }
@@ -100,7 +102,7 @@ internal fun PageTranslationBar(
         PageTranslationState.Ended -> stringResource(R.string.translation_page_ended)
         is PageTranslationState.Halted -> errorSentence(state.error, name, sourceName.orEmpty(), targetName)
     }
-    val action = halted?.let { haltAction(it.error, hasDownloads, onRetry, { settings = it }) { scope.launch { device?.openDownloads() } } }
+    val action = halted?.let { haltAction(it.error, hasDownloads, onRetry, { settings = it }) { downloading = true } }
 
     AnimatedVisibility(
         visible = controls || halted != null,
@@ -134,6 +136,7 @@ internal fun PageTranslationBar(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
+                    credits.forEach { it.Credit(theme.background, Modifier.padding(top = 4.dp)) }
                 }
                 action?.let {
                     TextButton(
@@ -146,6 +149,22 @@ internal fun PageTranslationBar(
                 }
             }
         }
+    }
+
+    val downloads = service
+    if (downloading && downloads != null) {
+        downloads.Downloads(
+            source = translator.source,
+            target = translator.target,
+            onReady = {
+                downloading = false
+                scope.launch {
+                    feature.refresh()
+                    onRetry()
+                }
+            },
+            onDismiss = { downloading = false },
+        )
     }
 
     settings?.let { services ->

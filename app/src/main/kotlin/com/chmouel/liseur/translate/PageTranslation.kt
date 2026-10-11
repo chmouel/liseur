@@ -26,8 +26,12 @@ fun interface PageSentences {
     suspend fun next(): PageSentence?
 }
 
-/** A sentence's translation, to put in the page where the sentence was. [id] counts them in the run. */
-data class PageSwap(val id: Int, val sentence: PageSentence, val translation: String)
+/**
+ * A sentence's translation, to put in the page where the sentence was.
+ * [id] counts them in the run; [by] is the [SentenceTranslator.answering]
+ * name of what translated it, saved or not, for the credit it needs.
+ */
+data class PageSwap(val id: Int, val sentence: PageSentence, val translation: String, val by: String = "")
 
 /** A sentence's translation and the [SentenceTranslator.answering] name of what gave it. */
 data class Translated(val text: String, val by: String)
@@ -359,13 +363,13 @@ internal class PageTranslation<P>(
             previous = sentence.text
             if (translation != null && placed.add(sentence)) {
                 walked.getOrNull(walked.size - 2)?.let { predecessors[sentence] = it }
-                val swap = PageSwap(nextId++, sentence, translation)
+                val swap = PageSwap(nextId++, sentence, translation.text, translation.by)
                 mutableSwaps.value += sentence.href to (mutableSwaps.value[sentence.href].orEmpty() + swap)
             }
         }
     }
 
-    private suspend fun translated(sentence: PageSentence, context: String?): String {
+    private suspend fun translated(sentence: PageSentence, context: String?): Translated {
         fun keyOf(identity: String) = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
         var identity = translator.answering()
         var lookup = cache.get(keyOf(identity))
@@ -378,7 +382,7 @@ internal class PageTranslation<P>(
                 lookup = cache.get(keyOf(identity))
                 continue
             }
-            lookup.translation?.let { return it }
+            lookup.translation?.let { return Translated(it, identity) }
             // Null when they changed after all, before it was sent: the new service may have it saved.
             answer = translator.translate(sentence.text, context, identity)
         }
@@ -388,7 +392,7 @@ internal class PageTranslation<P>(
         }
         // Filed under what answered, and only while that is still what the settings choose.
         if (translator.answering() == answer.by) cache.put(keyOf(answer.by), answer.text, lookup.stamp)
-        return answer.text
+        return answer
     }
 
     private val TranslationError.halts: Boolean

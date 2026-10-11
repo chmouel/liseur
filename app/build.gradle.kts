@@ -115,6 +115,7 @@ android {
         create("play") {
             dimension = "distribution"
             isDefault = true
+            proguardFiles("proguard-rules-play.pro")
         }
     }
 
@@ -241,6 +242,12 @@ dependencies {
     // that Readium does not recognise, and a transitive dependency is not a
     // promise.
     implementation(libs.jsoup)
+
+    // Play build only. ML Kit translates on the phone once a language
+    // model is downloaded, but the SDK is not free software and reports
+    // usage metrics to Google, so F-Droid and GitHub builds never carry
+    // it. See DEVELOPER.md, F-Droid readiness.
+    "playImplementation"(libs.mlkit.translate)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

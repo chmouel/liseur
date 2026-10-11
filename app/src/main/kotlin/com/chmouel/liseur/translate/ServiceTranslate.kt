@@ -1,10 +1,12 @@
 package com.chmouel.liseur.translate
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
@@ -48,7 +50,16 @@ internal class ServiceTranslate(
     override val ready: StateFlow<Boolean> = service.flatMapLatest { it.configured }
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_AFTER_MS), false)
 
+    override val action: StateFlow<Int> = service.map { it.action }
+        .stateIn(scope, SharingStarted.WhileSubscribed(STOP_AFTER_MS), R.string.translation_action)
+
     override suspend fun refresh() = resolve(settings.settings.first()).refresh()
+
+    /** The services in [answeredBy], as [PageSwap.by] names them, whose translations need a credit beside them. */
+    fun credits(answeredBy: Set<String>): List<TranslationService> {
+        val ids = answeredBy.mapNotNullTo(mutableSetOf(), ::pageIdentityService)
+        return services.filter { it.credited && it.id in ids }
+    }
 
     /** The server translation uses, when it uses one. */
     val server = settings.settings.map { s -> s.translationServerConnection.takeIf { resolve(s).id == ServerSettings.SERVER_PROVIDER } }
@@ -182,12 +193,20 @@ internal class ServiceTranslate(
     override fun PageBar(
         translator: SentenceTranslator,
         state: PageTranslationState,
+        answeredBy: Set<String>,
         theme: ReaderTheme,
         controls: Boolean,
         onRetry: () -> Unit,
         onStop: () -> Unit,
         modifier: Modifier,
-    ) = PageTranslationBar(this, translator, state, theme, controls, onRetry, onStop, modifier)
+    ) = PageTranslationBar(this, translator, state, answeredBy, theme, controls, onRetry, onStop, modifier)
+
+    @Composable
+    override fun PageCredit(answeredBy: Set<String>, theme: ReaderTheme, modifier: Modifier) {
+        val credits = credits(answeredBy)
+        if (credits.isEmpty()) return
+        Column(modifier) { credits.forEach { it.Credit(theme.background, Modifier) } }
+    }
 
     private companion object {
         const val STOP_AFTER_MS = 5_000L
@@ -204,6 +223,11 @@ internal fun pageIdentity(s: AppSettings, service: String, model: String?, sourc
     return listOf(IDENTITY_VERSION, TranslationPrompt.VERSION, service, server?.id, model, source, target)
         .joinToString("\u0000") { it?.toString().orEmpty() }
 }
+
+/** The service a [pageIdentity] names; null for one that is not an identity. */
+internal fun pageIdentityService(identity: String): String? = identity.split('\u0000').getOrNull(SERVICE_FIELD)
+
+private const val SERVICE_FIELD = 2
 
 // Raised when the fields of [pageIdentity] change.
 private const val IDENTITY_VERSION = 1

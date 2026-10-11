@@ -1,0 +1,52 @@
+package com.chmouel.liseur.translate
+
+/**
+ * Liseur's language tags against ML Kit's codes. ML Kit has one Chinese
+ * model, which writes Simplified characters, and one Portuguese model,
+ * whose output follows no particular region. A book in either Portuguese
+ * can be translated from; neither is offered as a target, nor is
+ * Traditional Chinese.
+ */
+internal object MlKitLanguages {
+    /** The ML Kit code for [tag], or null when ML Kit cannot read or write it as asked. */
+    fun code(tag: String, codes: Set<String>, asTarget: Boolean): String? {
+        val kept = TranslationLanguages.of(tag) ?: return null
+        val code = when {
+            kept == "zh-Hans" -> "zh"
+            kept == "pt" || kept == "pt-BR" || kept == "pt-PT" -> if (asTarget) return null else "pt"
+            '-' in kept -> return null
+            else -> ALIASES[kept] ?: kept
+        }
+        return code.takeIf { it in codes }
+    }
+
+    /** [code] as Liseur keeps it. */
+    fun tag(code: String): String = TranslationLanguages.of(code) ?: code
+
+    /** The languages a passage can be in. */
+    fun sources(codes: Set<String>): Set<String> =
+        codes.mapTo(mutableSetOf(), ::tag).apply { if ("pt" in codes) addAll(listOf("pt-BR", "pt-PT")) }
+
+    /**
+     * What [source] goes into: ready once both languages are on the phone.
+     * Any source, when it is not known, needs only the target's model.
+     */
+    fun targets(codes: Set<String>, downloaded: Set<String>, source: String?): Map<String, PairState> {
+        val from = source?.let { code(it, codes, asTarget = false) ?: return emptyMap() }
+        // Only what a saved target maps back to, so Portuguese is never offered.
+        return codes.filter { it != from && code(tag(it), codes, asTarget = true) == it }.associate { to ->
+            val ready = to in downloaded && (from == null || from in downloaded)
+            tag(to) to if (ready) PairState.Ready else PairState.NeedsDownload
+        }
+    }
+
+    /** The two ML Kit codes for [source] into [target]; null when ML Kit has no such pair. */
+    fun pair(codes: Set<String>, source: String?, target: String): Pair<String, String>? {
+        val from = source?.let { code(it, codes, asTarget = false) } ?: return null
+        val to = code(target, codes, asTarget = true) ?: return null
+        return if (from == to) null else from to to
+    }
+
+    // Tags a book or the system may use for a language ML Kit codes another way.
+    private val ALIASES = mapOf("nb" to "no", "fil" to "tl", "iw" to "he", "in" to "id")
+}
