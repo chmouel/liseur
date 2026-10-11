@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -155,8 +156,9 @@ class MainActivity : ComponentActivity() {
         if (LaunchRequests.shared.pending.value != null) deciding = false
 
         setContent {
-            val settings by container.appSettings.settings
+            val settingsState = container.appSettings.settings
                 .collectAsState(initial = AppSettings())
+            val settings by settingsState
             val appIsDark = settings.themeMode.isDark()
             // enableEdgeToEdge() above picked the icon colour from the
             // configuration this activity was created in and will not be
@@ -175,7 +177,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val resolution by launchModel.ready.collectAsStateWithLifecycle()
                     LiseurApp(
-                        settings,
+                        settingsState,
                         launch = resolution,
                         onLaunchHandled = launchModel::handled,
                     )
@@ -256,10 +258,14 @@ private const val SPONSOR_URL = "https://github.com/sponsors/chmouel"
 @OptIn(ExperimentalMaterial3AdaptiveApi::class)
 @Composable
 private fun LiseurApp(
-    settings: AppSettings,
+    settingsState: State<AppSettings>,
     launch: LaunchResolution? = null,
     onLaunchHandled: (LaunchRequest) -> Unit = {},
 ) {
+    // Read through the State, not passed in as a value: NavDisplay keeps
+    // each entry's content, so a plain value would leave every screen
+    // showing the settings as they were when it opened.
+    val settings by settingsState
     // The screens open, library at the bottom. Back closes the top one, so
     // the server screen returns to whichever screen opened it, and book
     // statistics to the shelf, the series or the overall statistics.
