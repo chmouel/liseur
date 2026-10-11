@@ -6,6 +6,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.MlKitException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -178,10 +179,29 @@ class MlKitTranslationTest {
     fun `a caller that stops waiting on an ML Kit task is still cancelled`() = runBlocking {
         val direct = Executor { it.run() }
         val pending = TaskCompletionSource<Unit>()
-        val waiter = launch(Dispatchers.Default) { pending.task.await(direct) }
+        // Undispatched, so it is already waiting on the task when it is cancelled.
+        val waiter = launch(start = CoroutineStart.UNDISPATCHED) { pending.task.await(direct) }
         waiter.cancelAndJoin()
         assertTrue(waiter.isCancelled)
         assertFalse(pending.task.isComplete)
+    }
+
+    @Test
+    fun `ML Kit failing to start on the phone is an ML Kit error, and cancelling still cancels`() {
+        for (thrown in listOf(IllegalStateException("not started"), UnsatisfiedLinkError("no libtranslate_jni"))) {
+            try {
+                working { throw thrown }
+                fail("expected MlKitException")
+            } catch (e: MlKitException) {
+                assertTrue(e.cause === thrown)
+            }
+        }
+        try {
+            working { throw CancellationException("stop") }
+            fail("expected CancellationException")
+        } catch (e: CancellationException) {
+            assertEquals("stop", e.message)
+        }
     }
 
     private suspend inline fun <reified E : TranslationError> expect(crossinline block: suspend () -> Unit) {

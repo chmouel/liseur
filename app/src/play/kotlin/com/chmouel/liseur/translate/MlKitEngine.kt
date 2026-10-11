@@ -10,6 +10,7 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -75,7 +76,7 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
     override fun languages(): Set<String> = TranslateLanguage.getAllLanguages().toSet()
 
     override suspend fun downloaded(): Set<String> = try {
-        models.getDownloadedModels(TranslateRemoteModel::class.java).await().mapTo(mutableSetOf()) { it.language }
+        working { models.getDownloadedModels(TranslateRemoteModel::class.java).await().mapTo(mutableSetOf()) { it.language } }
     } catch (e: MlKitException) {
         throw TranslationError.DeviceFailed("models not listed (${e.errorCode})")
     }
@@ -83,7 +84,7 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
     override suspend fun download(source: String, target: String) {
         val wifi = DownloadConditions.Builder().requireWifi().build()
         try {
-            for (code in listOf(source, target)) models.download(model(code), wifi).await()
+            working { for (code in listOf(source, target)) models.download(model(code), wifi).await() }
         } catch (e: MlKitException) {
             throw MlKitDownloadFailed(
                 when (e.errorCode) {
@@ -97,20 +98,26 @@ internal class SdkMlKitEngine(context: Context) : MlKitEngine {
 
     override suspend fun delete(code: String) {
         try {
-            models.deleteDownloadedModel(model(code)).await()
+            working { models.deleteDownloadedModel(model(code)).await() }
         } catch (e: MlKitException) {
             throw TranslationError.DeviceFailed("model not deleted (${e.errorCode})")
         }
     }
 
     override fun open(source: String, target: String): MlKitTranslator {
-        start()
-        val translator = Translation.getClient(
-            TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).setExecutor(executor).build(),
-        )
+        val translator = try {
+            working {
+                start()
+                Translation.getClient(
+                    TranslatorOptions.Builder().setSourceLanguage(source).setTargetLanguage(target).setExecutor(executor).build(),
+                )
+            }
+        } catch (e: MlKitException) {
+            throw TranslationError.DeviceFailed("ML Kit error ${e.errorCode}")
+        }
         return object : MlKitTranslator {
             override suspend fun translate(text: String): String = try {
-                translator.translate(text).await()
+                working { translator.translate(text).await() }
             } catch (e: MlKitException) {
                 throw when (e.errorCode) {
                     MlKitException.NOT_FOUND, MlKitException.FAILED_PRECONDITION -> TranslationError.NotDownloaded()
@@ -141,4 +148,18 @@ internal suspend fun <T> Task<T>.await(executor: Executor): T = suspendCancellab
             else -> continuation.resume(task.result)
         }
     }
+}
+
+/**
+ * [block], with ML Kit failing to start or to load its native library on
+ * this phone reported as an ML Kit error rather than crashing the app.
+ */
+internal inline fun <T> working(block: () -> T): T = try {
+    block()
+} catch (e: CancellationException) {
+    throw e
+} catch (e: RuntimeException) {
+    throw MlKitException("ML Kit unavailable: ${e.javaClass.simpleName}", MlKitException.UNKNOWN, e)
+} catch (e: LinkageError) {
+    throw MlKitException("ML Kit unavailable: ${e.javaClass.simpleName}", MlKitException.UNKNOWN, e)
 }
