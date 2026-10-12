@@ -88,6 +88,17 @@ internal object PageSwaps {
     fun shownWords(url: String, sentence: PageSentence): String =
         call("shownWords(${JSONObject.quote(url)}, ${sentence.json()})")
 
+    /**
+     * Whether the point at [fx] of the width and [fy] of the height of
+     * the web view holding the document at [url] is on the shown words
+     * of [sentence]; false when it is not, or they are not in that
+     * document, null in another document. The words are found again
+     * rather than read out of a painted mark, so it answers the same
+     * whether or not the page can paint one.
+     */
+    fun markedAt(url: String, sentence: PageSentence, fx: Float, fy: Float): String =
+        call("markedAt(${JSONObject.quote(url)}, ${sentence.json()}, $fx, $fy)")
+
     const val PAST = -2
     const val BEFORE = -1
     const val UNSEEN = -3
@@ -103,6 +114,10 @@ internal object PageSwaps {
     private fun call(what: String) = "(() => { $INSTALL return window.__liseurPage.$what; })()"
 
     private const val BEFORE_CHARS = 40
+
+    // How far around the marked words a finger still counts as on them,
+    // in CSS pixels.
+    private const val TAP_SLOP_PX = 8
 
     private val INSTALL = """
         if (!window.__liseurPage) {
@@ -317,6 +332,31 @@ internal object PageSwaps {
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
               return at ? quote(at) : null;
+            },
+            // Whether a tap landed on the words the voice is reading. They
+            // are found again, as mark finds them, rather than read out of
+            // the highlight: a tap must be answered the same whether the
+            // page could paint one or not.
+            markedAt(url, s, fx, fy) {
+              if (!here(url)) return null;
+              let at = null;
+              try { at = locate(s.selector, s.before, s.text); } catch (e) {}
+              if (!at) return false;
+              const rects = Array.from(shownRange(at).getClientRects()).filter(r => r.width > 0 && r.height > 0);
+              if (rects.length === 0) return false;
+              // The point comes as a fraction of the web view rather than
+              // in pixels, because a fixed-layout page is drawn at whatever
+              // scale fits it: a fraction of the viewport is the same
+              // fraction however the page is scaled.
+              const VW = window.innerWidth || document.documentElement.clientWidth;
+              const VH = window.innerHeight || document.documentElement.clientHeight;
+              const px = fx * VW;
+              const py = fy * VH;
+              // A finger is not a stylus: a few CSS pixels around the
+              // words still count as on them.
+              const SLOP = $TAP_SLOP_PX;
+              return rects.some(r =>
+                px >= r.left - SLOP && px <= r.right + SLOP && py >= r.top - SLOP && py <= r.bottom + SLOP);
             },
             restore() {
               unmark();

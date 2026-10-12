@@ -2012,6 +2012,15 @@ fun ReaderScreen(
             ?.let { SpeechKey.sentenceAt(it.text.highlight.orEmpty(), it) }
     }
 
+    // Whether a Readium decoration owns the mark on the voice's sentence
+    // rather than the page itself: a WebView too old to paint one left
+    // the words to it. The decoration's own listener then takes the tap,
+    // so the page's own must not, or the chrome would toggle twice.
+    fun decorationOwnsSpokenMark(): Boolean {
+        val left = spokenUnmarked.value ?: return false
+        return left.first == spokenOnPage.value
+    }
+
     // Whether the voice's sentence is on screen: found by the book's words,
     // or on a translated page where its translation stands.
     suspend fun spokenShowing(nav: EpubNavigatorFragment, utterance: Locator): Boolean =
@@ -2735,17 +2744,40 @@ fun ReaderScreen(
         pageTurner.publication = publication
         onPageTurnerChanged(if (nav != null) pageTurner else null)
         val listeners = nav?.let {
+            val zones = ReaderTapZones(
+                navigator = it,
+                isChromeVisible = { chromeVisibleNow },
+                isScrolling = { effectiveScrollingNow },
+                isSwapped = { swappedZonesNow },
+                isPinching = isPinching,
+                onTurnPage = pageTurner::turn,
+                onShowChrome = { chromeVisible = true },
+                onHideChrome = { chromeVisible = false },
+            )
             listOf(
-                ReaderTapZones(
-                    navigator = it,
-                    isChromeVisible = { chromeVisibleNow },
-                    isScrolling = { effectiveScrollingNow },
-                    isSwapped = { swappedZonesNow },
+                // Before the zones, which it stands in front of: on a
+                // translated page a tap on the sentence being read is
+                // decided against the page's own mark, and a tap it does
+                // not take is handed to the zones — the very listener
+                // below — as it always was.
+                SpokenMarkTaps(
+                    scope = effectScope,
+                    gate = {
+                        SpokenMarkTaps.claims(
+                            pinching = isPinching(),
+                            pageTranslated = pageTranslated,
+                            sentence = spokenOnPage.value,
+                            decorationOwnsMark = decorationOwnsSpokenMark(),
+                        )
+                    },
+                    sentence = { spokenOnPage.value },
+                    isCurrent = { navigatorNow === nav },
                     isPinching = isPinching,
-                    onTurnPage = pageTurner::turn,
-                    onShowChrome = { chromeVisible = true },
-                    onHideChrome = { chromeVisible = false },
+                    onToggleChrome = { chromeVisible = !chromeVisible },
+                    onZoneTap = zones::onTap,
+                    markedOnPage = { event, spoken -> pageMarksAt(nav.publicationView, event, spoken) },
                 ),
+                zones,
                 ScrollEdgeTurner(
                     navigator = it,
                     isScrolling = { effectiveScrollingNow },

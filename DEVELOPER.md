@@ -1612,7 +1612,11 @@ reader behavior.
   taps the page (`ReadAloudFeature.Player`'s `controls`), and go with it;
   notices such as a failed request still show on their own. A tap on the
   highlighted sentence toggles the chrome through the read-aloud decoration
-  listener, so it never turns the page, even in a page-turn zone.
+  listener, so it never turns the page, even in a page-turn zone. On a
+  translated page the sentence is the page's own mark rather than a
+  decoration, so the tap is hit-tested against it by `SpokenMarkTaps`,
+  which stands before `ReaderTapZones` and hands it the taps that miss
+  the marked words; the two never see the same one.
 - A session reads in one language, chosen when it starts from the
   book's declared `dc:language` (`SpeechLanguage.ofBook`: tags
   normalized, `eng` is `en`, `fra`/`fre` is `fr`; none, `und` or several
@@ -1932,7 +1936,12 @@ reader behavior.
   rather than a Readium decoration, marked again only when the sentence
   moves or its view's words are rewritten. A WebView without that API
   answers with the shown words instead, and the reader decorates them
-  through Readium. Visibility comes from `PageSwaps.showing`, which falls
+  through Readium. A tap on the marked words is hit-tested through the
+  page's own mark too (`PageSwaps.markedAt`, from `SpokenMarkTaps`):
+  the words are located again and the tap point, sent as a fraction of
+  the web view, is tested against their rects, so it answers the same
+  whether or not the page could paint the mark. Visibility comes from
+  `PageSwaps.showing`, which falls
   back to the sentence's element being on screen when it is not found.
   Follow goes to the translation's shown words (`PageSwaps.shownWords`
   through `TranslatedPages.shownLocator`, falling back to its element
