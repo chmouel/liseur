@@ -13,7 +13,9 @@ import org.readium.r2.shared.util.tokenizer.TextUnit
  * Whoever hands one to read aloud has [SentenceTranslations.acquire]d a
  * hold for it; the session lets go of it when it ends.
  */
-class SpeechTranslation(val translations: SentenceTranslations, val source: String?, val target: String)
+class SpeechTranslation(val translations: SentenceTranslations, val source: String?, val target: String) {
+    suspend fun identity(): String = translations.translator.answering()
+}
 
 /**
  * What one request says when the book is read translated: the book's
@@ -39,7 +41,11 @@ class TranslatedSpeech(
         var before = place.before
         val said = mutableListOf<String>()
         for (part in parts) {
-            said += translations.resolve(place.copy(text = part, before = before), context).text.trim()
+            val translated = translations.resolve(place.copy(text = part, before = before), context)
+            if (key.translationIdentity != null && translated.by != key.translationIdentity) {
+                throw TranslationError.Changed()
+            }
+            said += translated.text.trim()
             context = part
             before = before.orEmpty() + part
         }

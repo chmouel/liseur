@@ -15,7 +15,9 @@ import kotlinx.coroutines.ensureActive
  * what the page shows, whoever asked first. A sentence asked twice at
  * once, with the same sentence before it, waits for the first request.
  * Answers are filed under what answered, so a change of service, model
- * or languages is never answered from the old one.
+ * or languages is never answered from the old one. A failure the page
+ * leaves in the original is shared with the voice until that sentence is
+ * retried or the page walk ends.
  *
  * Held by [acquire] and [release]: it starts held once, by whoever
  * opened it, and closes the translator when the last holder lets go.
@@ -25,11 +27,23 @@ class SentenceTranslations(
     val translator: SentenceTranslator,
     private val cache: PageTranslationCache,
 ) {
+    private data class PageFailure(
+        val scope: PageFailureScope,
+        val identity: String,
+        val before: String?,
+        val error: TranslationError,
+    )
+    private class BoundFailure(val identity: String, val error: TranslationError) : Exception(error)
+
     private var holders = 1
     private val inflight = HashMap<Pair<String, String?>, CompletableDeferred<Translated>>()
+    private var pageScope: PageFailureScope? = null
 
     // Accepted translations by resource, element and sentence; the text before tells repeated ones apart.
     private val accepted = HashMap<Triple<String, String?, String>, MutableList<Pair<String?, Translated>>>()
+
+    // Failures the active page walk left in the original, shared with read aloud until it retries or ends.
+    private val pageFailures = HashMap<Triple<String, String?, String>, MutableList<PageFailure>>()
 
     /** Whether the translator is still open. */
     val open: Boolean get() = holders > 0
@@ -47,8 +61,25 @@ class SentenceTranslations(
         if (--holders == 0) {
             inflight.values.forEach { it.cancel() }
             inflight.clear()
+            pageScope = null
+            pageFailures.clear()
             translator.close()
         }
+    }
+
+    /** Starts a page walk whose untranslated failures may be shared with read aloud. */
+    internal fun beginPageWalk(): PageFailureScope {
+        val scope = PageFailureScope()
+        pageScope = scope
+        pageFailures.clear()
+        return scope
+    }
+
+    /** Ends [scope] without clearing failures from a newer page walk. */
+    internal fun endPageWalk(scope: PageFailureScope) {
+        if (pageScope !== scope) return
+        pageScope = null
+        pageFailures.clear()
     }
 
     /**
@@ -58,6 +89,36 @@ class SentenceTranslations(
      */
     suspend fun resolve(sentence: PageSentence, context: String?): Translated {
         val identity = translator.answering()
+        return try {
+            resolve(sentence, context, identity)
+        } catch (e: BoundFailure) {
+            throw e.error
+        }
+    }
+
+    /** The active page walk's request for [sentence], recording failures under the identity that actually failed. */
+    internal suspend fun resolveForPage(
+        scope: PageFailureScope,
+        sentence: PageSentence,
+        context: String?,
+    ): Translated {
+        if (pageScope !== scope) throw CancellationException()
+        clearPageFailure(scope, sentence)
+        val identity = translator.answering()
+        return try {
+            resolve(sentence, context, identity)
+        } catch (e: BoundFailure) {
+            acceptedFor(sentence, e.identity)?.let {
+                clearPageFailure(scope, sentence, e.identity)
+                return it
+            }
+            recordPageFailure(scope, sentence, e.error, e.identity)
+            throw e.error
+        }
+    }
+
+    private suspend fun resolve(sentence: PageSentence, context: String?, identity: String): Translated {
+        pageFailureFor(sentence, identity)?.let { throw it }
         acceptedFor(sentence, identity)?.let { return it }
         val key = sentence.text to context
         while (true) {
@@ -96,8 +157,41 @@ class SentenceTranslations(
             ?.firstOrNull { (before, translated) -> translated.by == identity && sameBefore(before, sentence.before) }
             ?.second
 
+    /** The failure the active page walk left for [sentence] under [identity], if any. */
+    private fun pageFailureFor(sentence: PageSentence, identity: String): TranslationError? {
+        val scope = pageScope ?: return null
+        return pageFailures[Triple(sentence.href, sentence.selector, sentence.text)]
+            ?.firstOrNull {
+                it.scope === scope && it.identity == identity && sameBefore(it.before, sentence.before)
+            }
+            ?.error
+    }
+
+    private fun recordPageFailure(
+        scope: PageFailureScope,
+        sentence: PageSentence,
+        error: TranslationError,
+        identity: String,
+    ) {
+        if (pageScope !== scope) return
+        val list = pageFailures.getOrPut(Triple(sentence.href, sentence.selector, sentence.text)) { mutableListOf() }
+        if (list.none { it.scope === scope && it.identity == identity && sameBefore(it.before, sentence.before) }) {
+            list += PageFailure(scope, identity, sentence.before, error)
+        }
+    }
+
+    private fun clearPageFailure(scope: PageFailureScope, sentence: PageSentence, identity: String? = null) {
+        val key = Triple(sentence.href, sentence.selector, sentence.text)
+        val list = pageFailures[key] ?: return
+        list.removeAll {
+            it.scope === scope && (identity == null || it.identity == identity) && sameBefore(it.before, sentence.before)
+        }
+        if (list.isEmpty()) pageFailures.remove(key)
+    }
+
     // Another context may have been accepted for this place meanwhile: the first one stands, shown and spoken alike.
     private fun settled(sentence: PageSentence, translated: Translated): Translated {
+        pageFailureFor(sentence, translated.by)?.let { throw it }
         accept(sentence, translated)
         return acceptedFor(sentence, translated.by) ?: translated
     }
@@ -124,11 +218,20 @@ class SentenceTranslations(
             }
             lookup.translation?.let { return Translated(it, identity) }
             // Null when they changed after all, before it was sent: the new service may have it saved.
-            answer = translator.translate(text, context, identity)
+            answer = try {
+                translator.translate(text, context, identity)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: TranslationError) {
+                throw BoundFailure(identity, e)
+            }
         }
         // Far longer than the sentence is not its translation, and it would be held for the whole session.
         if (answer.text.length > maxOf(LONGEST, text.length * GROWTH)) {
-            throw TranslationError.Malformed("the translation is far longer than the sentence")
+            throw BoundFailure(
+                answer.by,
+                TranslationError.Malformed("the translation is far longer than the sentence"),
+            )
         }
         // Filed under what answered, and only while that is still what the settings choose.
         if (translator.answering() == answer.by) cache.put(keyOf(answer.by), answer.text, lookup.stamp)
@@ -154,4 +257,6 @@ class SentenceTranslations(
             return x.takeLast(shorter) == y.takeLast(shorter)
         }
     }
+
+    internal class PageFailureScope
 }

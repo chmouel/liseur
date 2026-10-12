@@ -8,6 +8,11 @@ import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.translate.SentenceTranslator
 import com.chmouel.liseur.translate.Translated
 import com.chmouel.liseur.translate.TranslationError
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -15,21 +20,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.readium.r2.shared.util.Language
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TranslatedSpeechTest {
     private class Translator : SentenceTranslator {
         override val source = "fr"
         override val target = "en"
         override val destination: String? = null
+        var identity = "svc"
         val asked = mutableListOf<Pair<String, String?>>()
         var failOn: String? = null
         var longer = 1
 
-        override suspend fun answering() = "svc"
+        override suspend fun answering() = identity
 
         override suspend fun translate(sentence: String, context: String?, identity: String): Translated {
             asked += sentence to context
             if (sentence == failOn) throw TranslationError.Refused()
-            return Translated(List(longer) { "<$sentence>" }.joinToString(" "), "svc")
+            return Translated(List(longer) { "<$sentence>" }.joinToString(" "), identity)
         }
 
         override fun close() = Unit
@@ -91,6 +98,67 @@ class TranslatedSpeechTest {
     }
 
     @Test
+    fun `read aloud shares a sentence the page left untranslated`() = runTest {
+        val translator = Translator().apply { failOn = "untranslated" }
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache())
+        val book = listOf(
+            PageSentence("first", "ch1.xhtml", "#p1", null),
+            PageSentence("untranslated", "ch1.xhtml", "#p1", "first"),
+        )
+        val page = PageTranslation(backgroundScope, translations, { _: Int ->
+            object : PageSentences {
+                var at = 0
+                override suspend fun next() = book.getOrNull(at++)
+            }
+        })
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(listOf("first"), page.swaps.value["ch1.xhtml"]?.map { it.sentence.text })
+
+        translator.failOn = null
+        val failed = runCatching {
+            TranslatedSpeech(translations, { listOf(it) }, { listOf(it) })
+                .prepare(SpeechKey("untranslated", book[1], "svc"), previous = "first")
+        }
+        assertTrue(failed.exceptionOrNull() is TranslationError.Refused)
+        assertEquals(2, translator.asked.size)
+
+        translator.identity = "svc-2"
+        val underNewService = TranslatedSpeech(translations, { listOf(it) }, { listOf(it) })
+            .prepare(SpeechKey("untranslated", book[1], "svc-2"), previous = "first")
+        assertEquals(listOf("<untranslated>"), underNewService)
+        assertEquals(3, translator.asked.size)
+
+        assertTrue(translations.acquire())
+        page.stop()
+        assertTrue(translations.acquire())
+        val restartedPage = PageTranslation(backgroundScope, translations, { _: Int ->
+            object : PageSentences {
+                var at = 0
+                override suspend fun next() = book.getOrNull(at++)
+            }
+        })
+        restartedPage.start(0, "start")
+        runCurrent()
+        assertEquals(listOf("first", "untranslated"), restartedPage.swaps.value["ch1.xhtml"]?.map { it.sentence.text })
+        assertEquals(4, translator.asked.size)
+        restartedPage.stop()
+        translations.release()
+    }
+
+    @Test
+    fun `a changed translation identity cannot be filed under the previous one`() = runTest {
+        val translator = Translator()
+        val key = SpeechKey("sentence", place.copy(text = "sentence"), "svc")
+        translator.identity = "new-service"
+
+        val failed = runCatching { speech(translator, { listOf(it) }).prepare(key, previous = null) }
+
+        assertTrue(failed.exceptionOrNull() is TranslationError.Changed)
+        assertEquals(1, translator.asked.size)
+    }
+
+    @Test
     fun `a translation longer than a request takes goes in pieces of whole sentences`() {
         val sentence = "This sentence is translated into something a fair bit longer than it was."
         val text = List(30) { sentence }.joinToString(" ")
@@ -106,6 +174,45 @@ class TranslatedSpeechTest {
         val cache = SpeechCache(backgroundScope, { SpeechAudio(it.toByteArray()) }, prepare = { _, _ -> listOf("ab", "cd") })
         val audio = cache.claim(SpeechKey("x", place)).await()
         assertEquals("abcd", String(audio.pcm))
+    }
+
+    @Test
+    fun `translation identity changes discard prefetched audio`() = runTest {
+        val prepared = mutableListOf<SpeechKey>()
+        val cache = SpeechCache(backgroundScope, { SpeechAudio(it.toByteArray()) }, prepare = { key, _ ->
+            prepared += key
+            listOf(key.translationIdentity.orEmpty())
+        })
+        val old = SpeechKey("same", place.copy(text = "same"), "old")
+        val current = old.copy(translationIdentity = "current")
+
+        cache.prefetch(old)
+        runCurrent()
+        assertEquals(3L, cache.cachedBytes)
+
+        val audio = cache.claim(current).await()
+
+        assertEquals("current", String(audio.pcm))
+        assertEquals(0L, cache.cachedBytes)
+        assertEquals(listOf(old, current), prepared)
+    }
+
+    @Test
+    fun `a grouped request cannot join more PCM than the cache budget`() = runTest {
+        val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
+        val chunk = ByteArray(SpeechAudio.MAX_PCM_BYTES)
+        var synthesized = 0
+        val cache = SpeechCache(
+            scope,
+            { synthesized++; SpeechAudio(chunk) },
+            prepare = { _, _ -> listOf("one", "two", "three") },
+        )
+
+        val failed = runCatching { cache.claim(SpeechKey("group", place)).await() }
+        scope.cancel()
+
+        assertTrue(failed.exceptionOrNull() is SpeechError.InvalidResponse)
+        assertEquals(3, synthesized)
     }
 
     @Test

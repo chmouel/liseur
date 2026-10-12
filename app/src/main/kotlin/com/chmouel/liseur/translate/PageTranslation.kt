@@ -203,6 +203,7 @@ internal class PageTranslation<P>(
     private var catchingUp = false
     private var startedAt: String? = null
     private var halted: TranslationError? = null
+    private var failureScope: SentenceTranslations.PageFailureScope? = null
     private var nextId = 0
     private var job: Job? = null
     private var asking: Job? = null
@@ -210,6 +211,7 @@ internal class PageTranslation<P>(
     fun start(place: P, key: String) {
         check(job == null) { "Already started" }
         startedAt = key
+        failureScope = translations.beginPageWalk()
         job = scope.launch { walk(sentencesFrom(place)) }
     }
 
@@ -297,6 +299,7 @@ internal class PageTranslation<P>(
                 if (reader.key == startedAt && !(reader.before && walked.isNotEmpty())) return
                 startedAt = reader.key
                 restart = reader
+                failureScope = translations.beginPageWalk()
                 // The sentence on its way is for the place the reader left, and a slow service would hold the jump up.
                 asking?.cancel()
             }
@@ -314,6 +317,8 @@ internal class PageTranslation<P>(
     fun stop() {
         if (stopped) return
         stopped = true
+        failureScope?.let(translations::endPageWalk)
+        failureScope = null
         job?.cancel()
         wake.close()
         translations.release()
@@ -368,7 +373,8 @@ internal class PageTranslation<P>(
             mutableState.value = PageTranslationState.Translating
             val translation = try {
                 coroutineScope {
-                    val asked = async { translations.resolve(sentence, previous) }
+                    val pageScope = checkNotNull(failureScope)
+                    val asked = async { translations.resolveForPage(pageScope, sentence, previous) }
                     asking = asked
                     asked.await()
                 }

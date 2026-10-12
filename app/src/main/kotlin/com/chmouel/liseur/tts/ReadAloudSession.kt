@@ -127,7 +127,11 @@ internal class ReadAloudSession(
             )
         },
         keyOf = if (translation != null) {
-            { u -> u.locator?.let { SpeechKey.at(u.text, it) } ?: SpeechKey(u.text) }
+            { u ->
+                val identity = translation.identity()
+                u.locator?.let { SpeechKey.at(u.text, it, identity) }
+                    ?: SpeechKey(u.text, translationIdentity = identity)
+            }
         } else {
             { u -> SpeechKey(u.text) }
         },
@@ -144,6 +148,7 @@ internal class ReadAloudSession(
         },
         prefetcher = prefetcher,
         anchored = translation != null,
+        translationIdentity = { translation?.identity() },
         onStopRequested = { stop() },
         onChapterEnded = {
             settle()

@@ -2,6 +2,7 @@ package com.chmouel.liseur.translate
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -10,12 +11,14 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SentenceTranslationsTest {
     private class Translator : SentenceTranslator {
         override val source = "fr"
         override val target = "en"
         override val destination: String? = null
         var identity = "svc"
+        var identityAfterFailure: String? = null
         val asked = mutableListOf<Pair<String, String?>>()
         var gate: CompletableDeferred<Unit>? = null
         var failWith: TranslationError? = null
@@ -27,13 +30,41 @@ class SentenceTranslationsTest {
             val by = this.identity
             asked += sentence to context
             gate?.await()
-            failWith?.let { throw it }
+            failWith?.let {
+                identityAfterFailure?.let { changed -> this.identity = changed }
+                throw it
+            }
             return Translated("${sentence.uppercase()}<${context.orEmpty()}>", by)
         }
 
         override fun close() {
             closed = true
         }
+    }
+
+    private class RacingTranslator(
+        val pageGate: CompletableDeferred<Unit>,
+        val speechGate: CompletableDeferred<Unit>,
+    ) : SentenceTranslator {
+        override val source = "fr"
+        override val target = "en"
+        override val destination: String? = null
+        override suspend fun answering() = "svc"
+
+        override suspend fun translate(sentence: String, context: String?, identity: String): Translated? =
+            when (context) {
+                "page" -> {
+                    pageGate.await()
+                    throw TranslationError.Refused()
+                }
+                "speech" -> {
+                    speechGate.await()
+                    Translated("spoken translation", identity)
+                }
+                else -> error("Unexpected context: $context")
+            }
+
+        override fun close() = Unit
     }
 
     private fun at(text: String, before: String?, selector: String = "#p1") = PageSentence(text, "ch1.xhtml", selector, before)
@@ -126,6 +157,75 @@ class SentenceTranslationsTest {
         assertEquals(1, translator.asked.size)
         translator.failWith = null
         assertEquals("UN<>", translations.resolve(at("un", null), null).text)
+    }
+
+    @Test
+    fun `a page failure stays with the identity that failed the request`() = runTest {
+        val translator = Translator().apply {
+            failWith = TranslationError.Refused()
+            identityAfterFailure = "svc-2"
+        }
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache())
+        val scope = translations.beginPageWalk()
+
+        val failed = runCatching { translations.resolveForPage(scope, at("un", null), null) }
+
+        assertTrue(failed.exceptionOrNull() is TranslationError.Refused)
+        translator.failWith = null
+        translator.identityAfterFailure = null
+        assertEquals("UN<>", translations.resolve(at("un", null), null).text)
+        assertEquals(2, translator.asked.size)
+        translations.endPageWalk(scope)
+    }
+
+    @Test
+    fun `a page refusal prevents a concurrent speech success in another context`() = runTest {
+        val translator = RacingTranslator(CompletableDeferred(), CompletableDeferred())
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache())
+        val scope = translations.beginPageWalk()
+        val sentence = at("un", null)
+        val page = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { translations.resolveForPage(scope, sentence, "page") }
+        }
+        val speech = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { translations.resolve(sentence, "speech") }
+        }
+        runCurrent()
+
+        translator.pageGate.complete(Unit)
+        runCurrent()
+        assertTrue(page.await().exceptionOrNull() is TranslationError.Refused)
+        translator.speechGate.complete(Unit)
+        runCurrent()
+
+        assertTrue(speech.await().exceptionOrNull() is TranslationError.Refused)
+        assertEquals(null, translations.acceptedFor(sentence, "svc"))
+        translations.endPageWalk(scope)
+    }
+
+    @Test
+    fun `a concurrent speech success lets the page use that translation`() = runTest {
+        val translator = RacingTranslator(CompletableDeferred(), CompletableDeferred())
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache())
+        val scope = translations.beginPageWalk()
+        val sentence = at("un", null)
+        val page = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { translations.resolveForPage(scope, sentence, "page") }
+        }
+        val speech = async(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { translations.resolve(sentence, "speech") }
+        }
+        runCurrent()
+
+        translator.speechGate.complete(Unit)
+        runCurrent()
+        assertEquals("spoken translation", speech.await().getOrThrow().text)
+        translator.pageGate.complete(Unit)
+        runCurrent()
+
+        assertEquals("spoken translation", page.await().getOrThrow().text)
+        assertEquals("spoken translation", translations.acceptedFor(sentence, "svc")?.text)
+        translations.endPageWalk(scope)
     }
 
     @Test

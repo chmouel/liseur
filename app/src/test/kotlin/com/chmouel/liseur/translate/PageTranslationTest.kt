@@ -342,6 +342,42 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `restarting a page walk clears refusals shared with read aloud`() = runTest {
+        val run = FakeRun().apply { failWith = { if (it == "s1") TranslationError.Refused() else null } }
+        val translations = SentenceTranslations(run, MemoryPageTranslationCache())
+        val page = PageTranslation(backgroundScope, translations, ::sentencesFrom, ahead = 4)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(4, run.asked.size)
+
+        run.failWith = null
+        assertTrue(translations.acquire())
+        page.onReader(PageReader.Elsewhere(6, "jump"))
+        assertEquals("S1", translations.resolve(book[1], "s0").text)
+        assertEquals(5, run.asked.size)
+        translations.release()
+
+        page.stop()
+    }
+
+    @Test
+    fun `stopping a page walk clears refusals shared with read aloud`() = runTest {
+        val run = FakeRun().apply { failWith = { if (it == "s1") TranslationError.Refused() else null } }
+        val translations = SentenceTranslations(run, MemoryPageTranslationCache())
+        val page = PageTranslation(backgroundScope, translations, ::sentencesFrom, ahead = 4)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(4, run.asked.size)
+
+        run.failWith = null
+        assertTrue(translations.acquire())
+        page.stop()
+        assertEquals("S1", translations.resolve(book[1], "s0").text)
+        assertEquals(5, run.asked.size)
+        translations.release()
+    }
+
+    @Test
     fun `the end of the book ends the run`() = runTest {
         val run = FakeRun()
         val page = translation(run, ahead = 100)

@@ -74,6 +74,7 @@ class SpeechTtsEngineTest {
     private val waits = LinkedBlockingQueue<String>()
 
     @Volatile private var skipCount = 0
+    @Volatile private var translationIdentity: String? = null
     private val engine = SpeechTtsEngine(
         scope = scope,
         cache = cache,
@@ -82,6 +83,9 @@ class SpeechTtsEngineTest {
         publicationLanguage = null,
         initialPreferences = SpeechTtsPreferences(),
         observer = object : SpeechObserver {
+            override suspend fun keyFor(requestId: TtsEngine.RequestId, text: String) =
+                SpeechKey(text, translationIdentity = translationIdentity)
+
             override fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) =
                 waits.put("${if (waiting) "waiting" else "done waiting"} ${requestId.value}")
 
@@ -173,6 +177,31 @@ class SpeechTtsEngineTest {
         nextPlay().complete(Unit)
         assertEquals(SpeechAudio.SAMPLE_RATE, playedFrom.poll(2, TimeUnit.SECONDS))
         assertEquals("done 3@main", nextEvent())
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun changingTranslationIdentityWhilePausedFetchesFreshAudioFromTheBeginning() {
+        translationIdentity = "old"
+        speak("1", "Hello.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 1@main", nextEvent())
+        nextPlay()
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        output.heard = 2 * SpeechAudio.SAMPLE_RATE
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+
+        translationIdentity = "new"
+        speak("2", "Hello.")
+        val (text, reply) = nextRequest()
+        assertEquals("Hello.", text)
+        reply.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals("start 2@main", nextEvent())
+        val resumed = nextPlay()
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        resumed.complete(Unit)
+        assertEquals("done 2@main", nextEvent())
         assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
     }
 

@@ -155,15 +155,22 @@ class SpeechTtsEngine(
     }
 
     /** [skips] is the observer's count when the request was made: a skip after it makes its audio stale. */
-    private class Request(val id: TtsEngine.RequestId, val text: String, val from: Int, val skips: Int) {
+    private class Request(val id: TtsEngine.RequestId, val text: String, var from: Int, val skips: Int) {
         var job: Job? = null
         var audio: Deferred<SpeechAudio>? = null
+        var key: SpeechKey? = null
         var playing = false
         var finished = false
     }
 
-    /** A stopped sentence: its audio, possibly still on its way, the frame to play on from, and its request's skips. */
-    private class Held(val text: String, val audio: Deferred<SpeechAudio>, val from: Int, val skips: Int)
+    /** A stopped sentence: its key, audio, possibly still on its way, frame, and request's skips. */
+    private class Held(
+        val text: String,
+        val key: SpeechKey,
+        val audio: Deferred<SpeechAudio>,
+        val from: Int,
+        val skips: Int,
+    )
 
     private var listener: TtsEngine.Listener<Error>? = null
     private var current: Request? = null
@@ -193,6 +200,7 @@ class SpeechTtsEngine(
         val request = Request(requestId, text, resumed?.from ?: 0, observer.skips)
         // Owned at once, so a stop or close before the job runs keeps or cancels it.
         request.audio = resumed?.audio
+        request.key = resumed?.key
         current = request
         request.job = scope.launch {
             // Readium maps the new utterance to its public location asynchronously.
@@ -202,13 +210,23 @@ class SpeechTtsEngine(
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
+            val key = observer.keyFor(requestId, text)
+            if (request.finished) return@launch
+            if (key == null) {
+                request.audio?.cancel()
+                request.audio = null
+                request.key = null
+                fail(request, Error.Unplaced())
+                return@launch
+            }
+            if (request.audio != null && request.key != key) {
+                request.audio?.cancel()
+                request.audio = null
+                request.key = null
+                request.from = 0
+            }
             val audio = request.audio ?: run {
-                val key = observer.keyFor(requestId, text)
-                if (request.finished) return@launch
-                if (key == null) {
-                    fail(request, Error.Unplaced())
-                    return@launch
-                }
+                request.key = key
                 cache.claim(key, observer.previousOf(requestId)).also { request.audio = it }
             }
             observer.onWaiting(requestId, true)
@@ -246,11 +264,12 @@ class SpeechTtsEngine(
         val heard = output.halt()
         val request = current ?: return
         val audio = request.audio
-        if (audio != null) {
+        val key = request.key
+        if (audio != null && key != null) {
             val from = if (request.playing && heard != null) maxOf(request.from, heard - REWIND_FRAMES) else request.from
-            held = Held(request.text, audio, from, request.skips)
+            held = Held(request.text, key, audio, from, request.skips)
         }
-        interrupt(request, keepAudio = audio != null)
+        interrupt(request, keepAudio = audio != null && key != null)
     }
 
     override fun close() {

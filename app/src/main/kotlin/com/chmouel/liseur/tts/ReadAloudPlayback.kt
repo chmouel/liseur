@@ -56,6 +56,7 @@ class ReadAloudPlayback(
      * translate differently in different places.
      */
     private val anchored: Boolean = false,
+    private val translationIdentity: suspend () -> String? = { null },
 ) : SpeechObserver {
 
     /** A sentence that could not be spoken; [anchor] is where resuming starts. */
@@ -324,7 +325,7 @@ class ReadAloudPlayback(
         } ?: return null
         if (mutableNavigator.value !== navigator || requestId !in spoken) return null
         places[requestId] = location.utteranceLocator
-        return SpeechKey.at(text, location.utteranceLocator)
+        return SpeechKey.at(text, location.utteranceLocator, translationIdentity())
     }
 
     override fun previousOf(requestId: TtsEngine.RequestId): String? {

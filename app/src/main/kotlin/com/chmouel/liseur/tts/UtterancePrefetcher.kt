@@ -37,6 +37,8 @@ class SpeechCache(
 
     private val requests = Semaphore(maxConcurrent)
     private val entries = LinkedHashMap<SpeechKey, Entry>()
+    private var currentTranslationIdentity: String? = null
+    private var hasTranslationIdentity = false
 
     /** Bumped on every restart; speculative work from an older generation is dropped. */
     var generation = 0L
@@ -54,11 +56,18 @@ class SpeechCache(
 
     val hasRoom: Boolean get() = !halted && cachedBytes < maxBytes
 
+    private fun selectTranslation(identity: String?) {
+        if (hasTranslationIdentity && currentTranslationIdentity != identity) restart()
+        currentTranslationIdentity = identity
+        hasTranslationIdentity = true
+    }
+
     /** Starts fetching [text] unless it is already here or on its way. */
     fun prefetch(text: String) = prefetch(SpeechKey(text))
 
     /** Starts fetching [key], with [previous] the source text before it, unless it is already here or on its way. */
     fun prefetch(key: SpeechKey, previous: String? = null) {
+        selectTranslation(key.translationIdentity)
         if (!hasRoom || entries.containsKey(key)) return
         val generation = generation
         lateinit var entry: Entry
@@ -86,9 +95,11 @@ class SpeechCache(
     fun claim(text: String): Deferred<SpeechAudio> = claim(SpeechKey(text))
 
     /** As [claim] for [key]; [previous] is the source text before it, when known, for a request made now. */
-    fun claim(key: SpeechKey, previous: String? = null): Deferred<SpeechAudio> =
-        entries.remove(key)?.audio?.takeUnless { it.isCancelled }
+    fun claim(key: SpeechKey, previous: String? = null): Deferred<SpeechAudio> {
+        selectTranslation(key.translationIdentity)
+        return entries.remove(key)?.audio?.takeUnless { it.isCancelled }
             ?: request(key, previous, CoroutineStart.UNDISPATCHED) {}
+    }
 
     /** Forgets everything speculative: the reading jumped somewhere else. */
     fun restart() {
@@ -116,7 +127,17 @@ class SpeechCache(
             try {
                 // Translated outside the permits: those bound the speech service alone.
                 val pieces = prepare?.invoke(key, previous) ?: listOf(key.text)
-                val audio = pieces.map { piece -> requests.withPermit { synthesize(piece) } }
+                val audio = ArrayList<SpeechAudio>(pieces.size)
+                var totalBytes = 0L
+                for (piece in pieces) {
+                    val next = requests.withPermit { synthesize(piece) }
+                    val bytes = next.pcm.size.toLong()
+                    if (bytes > MAX_BYTES - totalBytes) {
+                        throw SpeechError.InvalidResponse("utterance audio too long")
+                    }
+                    totalBytes += bytes
+                    audio += next
+                }
                 (audio.singleOrNull() ?: joined(audio)).also(onArrived)
             } catch (e: SpeechError.RateLimited) {
                 halted = true
@@ -183,7 +204,7 @@ class UtterancePrefetcher<L>(
     private val cursorAt: suspend (L) -> UtteranceCursor,
     private val ahead: Int = AHEAD,
     /** What the cache files a sentence under; its text alone unless read translated. */
-    private val keyOf: (UtteranceText) -> SpeechKey = { SpeechKey(it.text) },
+    private val keyOf: suspend (UtteranceText) -> SpeechKey = { SpeechKey(it.text) },
 ) {
     private var cursor: UtteranceCursor? = null
 
