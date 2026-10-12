@@ -69,6 +69,7 @@ import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
+import com.chmouel.liseur.tts.SpeechTranslation
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderFontWeight
@@ -1203,6 +1204,13 @@ class ReaderViewModel(
      */
     private var readingGeneration = 0L
 
+    // Before the init below opens the book: a book already open for read
+    // aloud is handed over at once, while this object is still being built.
+    private val epubOwnership = Any()
+    private var ownedEpub: BookOrbitOpenedEpub? = null
+    private var epubsReleased = false
+    private var bookHandle: OpenBookHandle? = null
+
     init {
         viewModelScope.launch {
             positionPublisher.failures.collect { failedBook ->
@@ -1519,9 +1527,13 @@ class ReaderViewModel(
      * declined, and a verified opening is accepted, by the first place
      * the session saves.
      */
-    fun startReadAloud(selection: Locator, reader: Intent) {
-        val handle = bookHandle ?: return
-        if (bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) return
+    fun startReadAloud(selection: Locator, reader: Intent, translation: SpeechTranslation? = null) {
+        val handle = bookHandle
+        if (handle == null || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) {
+            // The hold on the translation was handed over with the start.
+            translation?.translations?.release()
+            return
+        }
         approximateOpening = null
         approximateCatchUp?.let { bookOrbitDeclinedPending = it }
         approximateCatchUp = null
@@ -1530,7 +1542,7 @@ class ReaderViewModel(
         bookOrbitDeclinedPending = null
         _catchUp.value = null
         handle.listeningSettles = ListeningSettlement(bookOrbitOpening.verifiedPull, declined)
-        readAloud.start(handle, selection, reader)
+        readAloud.start(handle, selection, reader, translation)
     }
 
     /**
@@ -2707,11 +2719,6 @@ class ReaderViewModel(
     fun setFooterField(slot: FooterSlot, field: FooterField) = viewModelScope.launch {
         prefsRepo.setFooterField(slot, field)
     }
-
-    private val epubOwnership = Any()
-    private var ownedEpub: BookOrbitOpenedEpub? = null
-    private var epubsReleased = false
-    private var bookHandle: OpenBookHandle? = null
 
     /** Keeps the opened book unless this ViewModel was cleared meanwhile. */
     private fun holdOpened(handle: OpenBookHandle): Boolean = synchronized(epubOwnership) {

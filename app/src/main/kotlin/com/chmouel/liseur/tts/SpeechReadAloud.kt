@@ -181,12 +181,18 @@ internal class SpeechReadAloud(
     private val mutableNotices = MutableSharedFlow<ReadAloudBookNotice>(extraBufferCapacity = 8)
     override val notices: SharedFlow<ReadAloudBookNotice> = mutableNotices.asSharedFlow()
 
-    override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent) {
+    override fun translation(bookId: String): SpeechTranslation? =
+        mutableCurrent.value?.takeIf { it.handle.bookId == bookId }?.translation?.takeIf { it.translations.open }
+
+    override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) {
         stop()
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
         startingOwner = UNKNOWN
+        // The translation's hold is this start's until a session takes it,
+        // given back however the start ends, even cancelled before it ran.
+        var translationHeld = translation != null
         starting = scope.launch {
             // Taken here rather than before launching: a start cancelled
             // before it runs never reaches the finally that gives it back.
@@ -198,7 +204,12 @@ internal class SpeechReadAloud(
                 startingOwner = service.owner(s)
                 noticeLabel = service.label
                 noticeHost = service.noticeName(s)
-                val book = SpeechLanguage.ofBook(handle.publication.metadata.languages)
+                // Read translated, the voice reads the translation's language.
+                val book = if (translation != null) {
+                    SpeechLanguage.normalize(translation.target)?.let(BookLanguage::Known) ?: BookLanguage.Missing
+                } else {
+                    SpeechLanguage.ofBook(handle.publication.metadata.languages)
+                }
                 val catalogue = service.catalogue(s) ?: return@launch notSetUp(handle.bookId)
                 val pick = when (val resolved = VoiceResolver.resolve(book, catalogue, s.voicePreferences)) {
                     is VoiceResolution.Resolved -> resolved.pick
@@ -220,8 +231,10 @@ internal class SpeechReadAloud(
                     onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
                     onChapterEnded = { setSleepTimer(null) },
+                    translation = translation,
                 )
                 held = false
+                translationHeld = false
                 reading = Reading(session, service, book, owner)
                 mutableCurrent.value = session
                 // The reads above suspend, so the reader may have left the
@@ -242,6 +255,13 @@ internal class SpeechReadAloud(
                     startingToken = null
                     startingBookId = null
                     startingOwner = null
+                }
+            }
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (translationHeld) {
+                    translationHeld = false
+                    translation?.translations?.release()
                 }
             }
         }

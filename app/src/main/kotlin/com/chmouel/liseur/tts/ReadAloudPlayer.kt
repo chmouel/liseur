@@ -449,6 +449,7 @@ private fun ReadAloudNotice.message(): Int = when (this) {
     ReadAloudNotice.NotSetUp -> R.string.read_aloud_notice_not_set_up
     ReadAloudNotice.SelectionNotFound -> R.string.read_aloud_notice_selection_not_found
     ReadAloudNotice.Unavailable -> R.string.read_aloud_notice_unavailable
+    ReadAloudNotice.TranslationFailed -> R.string.read_aloud_notice_translation_failed
 }
 
 private const val NOTICE_MS = 5_000L

@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 11 October 2026
+**Last updated:** 12 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers of its own, and the developer collects
@@ -95,6 +95,18 @@ mirror, or leave the feature off and hand words to an offline dictionary app
 installed on your device instead. When you pick or type a dictionary site in
 Settings, Liseur checks it once with a fixed word ("book"). A dead address
 fails then, and opening the screen makes no request.
+
+### Reading a translated book aloud
+
+Reading aloud a book you are reading translated in the page reads the
+translation. Each sentence goes first to the translation service you
+chose, as page translation sends it, with the sentence before it, a few
+sentences ahead of the voice; then its translation goes to the speech
+service you chose for reading aloud, as described below for that
+service, in place of the book's words. This carries on with the screen
+off or the book closed, for as long as the voice plays, and stops when
+you stop the voice or the translation. Nothing else goes with either
+request.
 
 ### Device voices, for reading aloud
 

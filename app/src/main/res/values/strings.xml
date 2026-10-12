@@ -1129,6 +1129,7 @@
     <string name="read_aloud_notice_invalid_key">%1$s refused the API key. Check it in Settings, Read aloud.</string>
     <string name="read_aloud_notice_selection_not_found">Reading from the start of the paragraph.</string>
     <string name="read_aloud_notice_unavailable">This book cannot be read aloud from here.</string>
+    <string name="read_aloud_notice_translation_failed">A sentence could not be translated. Paused; press play to try again, or skip it.</string>
     <string name="read_aloud_settings_entry_summary" translatable="false">%1$s · %2$s</string>
     <string name="read_aloud_settings_server_url_hint" translatable="false">http://192.168.1.10:8880</string>
     <string name="speech_preset_openai" translatable="false">OpenAI</string>

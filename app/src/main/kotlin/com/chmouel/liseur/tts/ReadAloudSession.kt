@@ -65,10 +65,15 @@ internal class ReadAloudSession(
     private val onEnded: (ReadAloudSession) -> Unit,
     private val onChapterEnded: () -> Unit,
     private val checkpointMillis: Long = CHECKPOINT_MILLIS,
+    /**
+     * Read in translation: each sentence is translated, the way the page
+     * translates it, before its audio is asked for, and the voice reads in
+     * the translation's language. The session holds it until it ends.
+     */
+    val translation: SpeechTranslation? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val publication = handle.publication
-    private val cache = SpeechCache(scope, voice.synthesizer::synthesize, voice.maxConcurrent)
     private val mutableChoice = MutableStateFlow(VoicePick(voice.name, language))
 
     /** The voice reading and the language it reads in, which may differ from what the settings hold. */
@@ -77,30 +82,68 @@ internal class ReadAloudSession(
     /** Chosen once for the session: the whole book is cut into sentences and spoken in it. */
     private val spoken: Language get() = Language(mutableChoice.value.language)
 
+    /**
+     * What the book's text is cut into sentences in. Read in its own words,
+     * the voice's language; read translated, the language translated from,
+     * as the page cuts it, whatever voice reads the translation. Null leaves
+     * it to the book.
+     */
+    private val textLanguage: Language?
+        get() = if (translation != null) translation.source?.let(::Language) else spoken
+
+    private val translatedSpeech = translation?.let { t ->
+        TranslatedSpeech(
+            translations = t.translations,
+            sentences = if (sentencesPerRequest <= 1) {
+                { listOf(it) }
+            } else {
+                { TranslatedSpeech.sentencesOf(it, textLanguage ?: publication.metadata.language) }
+            },
+            pieces = { TranslatedSpeech.piecesOf(it, Language(t.target)) },
+        )
+    }
+
+    private val cache = SpeechCache(
+        scope,
+        voice.synthesizer::synthesize,
+        voice.maxConcurrent,
+        prepare = translatedSpeech?.let { it::prepare },
+    )
+
     private val tokenizerFactory = BoundedSentenceTokenizer.factory(sentencesPerRequest)
 
-    private val prefetcher = UtterancePrefetcher<Locator>(scope, cache, { locator ->
-        val settings = playback.navigator.value?.settings?.value
-        PublicationUtteranceCursor(
-            publication,
-            locator,
-            tokenizerFactory,
-            settings?.language ?: spoken,
-            settings?.overrideContentLanguage ?: true,
-        )
-    })
+    private val prefetcher = UtterancePrefetcher<Locator>(
+        scope,
+        cache,
+        { locator ->
+            val settings = playback.navigator.value?.settings?.value
+            val cutIn = textLanguage
+            PublicationUtteranceCursor(
+                publication,
+                locator,
+                tokenizerFactory,
+                settings?.language ?: cutIn ?: publication.metadata.language,
+                settings?.overrideContentLanguage ?: (cutIn != null),
+            )
+        },
+        keyOf = if (translation != null) {
+            { u -> u.locator?.let { SpeechKey.at(u.text, it) } ?: SpeechKey(u.text) }
+        } else {
+            { u -> SpeechKey(u.text) }
+        },
+    )
 
     val playback: ReadAloudPlayback = ReadAloudPlayback(
         scope = scope,
         opener = { initial, observer, listener ->
-            val language = spoken
-            val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, language))
+            val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, spoken))
             val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
             TtsNavigatorFactory(application, publication, provider, tokenizerFactory)
-                ?.createNavigator(listener, initial, SpeechTtsPreferences(language))
+                ?.createNavigator(listener, initial, SpeechTtsPreferences(textLanguage))
                 ?.getOrNull()
         },
         prefetcher = prefetcher,
+        anchored = translation != null,
         onStopRequested = { stop() },
         onChapterEnded = {
             settle()
@@ -129,12 +172,24 @@ internal class ReadAloudSession(
         starting,
         playback.waiting,
     ) { playing, utterance, starting, waiting ->
-        ReadAloudUi(handle.bookId, playing, utterance, preparing = starting || (playing && waiting))
+        ReadAloudUi(
+            handle.bookId,
+            playing,
+            utterance,
+            preparing = starting || (playing && waiting),
+            translated = translation != null,
+        )
     }
         .stateIn(
             scope,
             SharingStarted.Eagerly,
-            ReadAloudUi(handle.bookId, playing = false, utterance = null, preparing = true),
+            ReadAloudUi(
+                handle.bookId,
+                playing = false,
+                utterance = null,
+                preparing = true,
+                translated = translation != null,
+            ),
         )
 
     init {
@@ -168,7 +223,7 @@ internal class ReadAloudSession(
     fun start(selection: Locator) {
         claim()
         scope.launch {
-            val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, spoken)
+            val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, textLanguage ?: publication.metadata.language)
             val target = SelectionTarget.of(selection, sentences)
             val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches })
             mutableStarting.value = false
@@ -207,7 +262,8 @@ internal class ReadAloudSession(
      */
     fun switchVoice(voice: SessionVoice, language: String = choice.value.language) {
         if (ended) return
-        val recut = language != choice.value.language
+        // Read translated, the book is cut in the language translated from, whatever the voice.
+        val recut = language != choice.value.language && translation == null
         mutableChoice.value = VoicePick(voice.name, language)
         cache.swap(voice.synthesizer::synthesize)
         // Still starting: the first sentence is fetched with the new voice.
@@ -229,6 +285,7 @@ internal class ReadAloudSession(
         checkpointJob?.cancel()
         playback.close()
         scope.cancel()
+        translation?.translations?.release()
         handle.release()
         onEnded(this)
     }
@@ -258,7 +315,10 @@ internal class ReadAloudSession(
     private fun save(share: Boolean) {
         val held = generation ?: return
         // The failed sentence was never heard, but it is where resuming starts.
+        // Read translated, a sentence can wait long on its translation: the
+        // place saved is the last one heard, never one only asked for.
         val heard = playback.failure.value?.anchor?.locator
+            ?: playback.heard.value?.takeIf { translation != null }
             ?: playback.navigator.value?.location?.value?.utteranceLocator
             ?: return
         checkpoints.save(handle, held, heard, spokenAt, share)
@@ -273,6 +333,8 @@ internal class ReadAloudSession(
         is SpeechTtsEngine.Error.Network -> ReadAloudNotice.Network
         is SpeechTtsEngine.Error.Service, is SpeechTtsEngine.Error.InvalidResponse -> ReadAloudNotice.Service
         is SpeechTtsEngine.Error.Output -> ReadAloudNotice.Output
+        is SpeechTtsEngine.Error.Translation -> ReadAloudNotice.TranslationFailed
+        is SpeechTtsEngine.Error.Unplaced -> ReadAloudNotice.Unavailable
     }
 
     companion object {

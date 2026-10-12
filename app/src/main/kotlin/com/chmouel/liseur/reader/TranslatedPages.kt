@@ -11,15 +11,20 @@ import com.chmouel.liseur.translate.PageTranslation
 import com.chmouel.liseur.translate.PageTranslationState
 import com.chmouel.liseur.tts.BoundedSentenceTokenizer
 import com.chmouel.liseur.tts.PublicationUtteranceCursor
+import com.chmouel.liseur.tts.SpeechKey
 import java.util.WeakHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONException
+import org.json.JSONObject
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
@@ -51,12 +56,8 @@ internal object TranslatedPages {
         )
         return PageSentences {
             val (text, locator) = cursor.nextLocated() ?: return@PageSentences null
-            PageSentence(
-                text = text.text,
-                href = ResourceAddress.canonicalPath(locator.href.toString()) ?: locator.href.toString(),
-                selector = locator.locations.otherLocations[CSS_SELECTOR] as? String,
-                before = locator.text.before,
-            )
+            // Named as read aloud names it, so the two share each sentence's translation.
+            SpeechKey.sentenceAt(text.text, locator)
         }
     }
 
@@ -88,11 +89,18 @@ internal object TranslatedPages {
      * paper the translations land together once the run has caught up,
      * rather than one sentence at a time, each a refresh of the panel.
      */
-    suspend fun follow(nav: EpubNavigatorFragment, run: PageTranslation<Locator>, touched: MutableSet<WebView>, eInk: Boolean) {
+    suspend fun follow(
+        nav: EpubNavigatorFragment,
+        run: PageTranslation<Locator>,
+        touched: MutableSet<WebView>,
+        eInk: Boolean,
+        spoken: StateFlow<PageSentence?> = MutableStateFlow(null),
+    ) {
         val root = nav.publicationView
         val id = ++follows
         val sent = WeakHashMap<WebView, Pair<String, Int>>()
-        merge(nav.currentLocator.map { }, layoutPasses(root), run.swaps.map { }, run.state.map { }).collect {
+        val marked = WeakHashMap<WebView, PageSentence?>()
+        merge(nav.currentLocator.map { }, layoutPasses(root), run.swaps.map { }, run.state.map { }, spoken.map { }).collect {
             if (!eInk || run.state.value != PageTranslationState.Translating) {
                 for (web in attachedWebViews(root)) {
                     val url = web.url ?: continue
@@ -112,8 +120,61 @@ internal object TranslatedPages {
                     sent[web] = href to held
                 }
             }
+            markSpoken(root, spoken.value, marked)
             measure(nav, run)
         }
+    }
+
+    /**
+     * Marks the voice's sentence in the view holding its chapter, over its
+     * translation, as Readium's own mark would over the book's words; a
+     * view whose words changed is marked again, the old mark gone with them.
+     */
+    private suspend fun markSpoken(root: android.view.View, sentence: PageSentence?, marked: WeakHashMap<WebView, PageSentence?>) {
+        for (web in attachedWebViews(root)) {
+            val url = web.url ?: continue
+            val href = ResourceAddress.canonicalPath(url) ?: continue
+            val here = sentence?.takeIf { it.href == href }
+            if (here == null && web !in marked) continue
+            web.evaluate(PageSwaps.mark(url, here)) ?: continue
+            if (here == null) marked -= web else marked[web] = here
+        }
+    }
+
+    /** Whether the voice's sentence at [locator] is on screen in a translated page, where its translation stands. */
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun isShowing(nav: EpubNavigatorFragment, locator: Locator): Boolean {
+        val web = visibleWebView(nav.publicationView) ?: return false
+        val url = web.url ?: return false
+        val text = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return false
+        val sentence = SpeechKey.sentenceAt(text, locator)
+        if (ResourceAddress.canonicalPath(url) != sentence.href) return false
+        val answer = web.evaluate(PageSwaps.showing(url, sentence))
+        return answer == "true" && stillShows(nav, web, url)
+    }
+
+    /**
+     * [locator], the voice's sentence on a translated page, pointed at the
+     * words shown in its place, for the page to go to them; null when no
+     * view holding its chapter finds them, as when it is in another one.
+     */
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun shownLocator(nav: EpubNavigatorFragment, locator: Locator): Locator? {
+        val text = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return null
+        val sentence = SpeechKey.sentenceAt(text, locator)
+        val root = nav.publicationView
+        // A later page of the chapter on screen is in the view on screen.
+        val web = (listOfNotNull(visibleWebView(root)) + attachedWebViews(root))
+            .firstOrNull { view -> view.url?.let(ResourceAddress::canonicalPath) == sentence.href } ?: return null
+        val url = web.url ?: return null
+        val answer = web.evaluate(PageSwaps.shownWords(url, sentence)) ?: return null
+        val shown = try {
+            JSONObject(answer)
+        } catch (_: JSONException) {
+            return null
+        }
+        val words = shown.optString("text").takeIf { it.isNotBlank() } ?: return null
+        return locator.copy(text = Locator.Text(before = shown.optString("before").ifEmpty { null }, highlight = words))
     }
 
     @OptIn(ExperimentalReadiumApi::class)

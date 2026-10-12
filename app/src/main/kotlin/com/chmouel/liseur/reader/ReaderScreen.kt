@@ -58,6 +58,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -119,6 +120,10 @@ import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageSwap
 import com.chmouel.liseur.translate.PageTranslation
+import com.chmouel.liseur.translate.PageSentence
+import com.chmouel.liseur.translate.SentenceTranslations
+import com.chmouel.liseur.tts.SpeechKey
+import com.chmouel.liseur.tts.SpeechTranslation
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
@@ -234,6 +239,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import java.io.IOException
 import java.util.Collections
 import java.util.WeakHashMap
@@ -245,6 +251,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -554,6 +561,8 @@ fun ReaderScreen(
     val readAloudSession by readAloudFeature.session.collectAsStateWithLifecycle()
     val listening = readAloudSession?.takeIf { it.bookId == readAloud?.bookId }
     val listeningNow by rememberUpdatedState(listening != null)
+    // Read in translation: the voice says the translated page, which stays translated while it plays.
+    val listeningTranslatedNow by rememberUpdatedState(listening?.translated == true)
     val listeningPlaying = listening?.playing == true
     val listeningPlayingNow by rememberUpdatedState(listeningPlaying)
     val readAloudConfigured by readAloudFeature.configured.collectAsStateWithLifecycle()
@@ -1968,11 +1977,12 @@ fun ReaderScreen(
     // The sentence being read aloud, marked for as long as the session
     // lasts, paused or not, so the listener can find where the voice is.
     val spoken = listening?.utterance
-    LaunchedEffect(navigator, spoken) {
+    LaunchedEffect(navigator, spoken, pageTranslated) {
         val nav = navigator ?: return@LaunchedEffect
         nav.applyDecorations(
             listOfNotNull(
-                spoken?.let {
+                // A translated page marks the voice's sentence itself, over the translation; see [TranslatedPages.follow].
+                spoken?.takeUnless { pageTranslated }?.let {
                     Decoration(
                         id = "read-aloud",
                         locator = it,
@@ -1983,6 +1993,18 @@ fun ReaderScreen(
             READ_ALOUD_DECORATION_GROUP,
         )
     }
+
+    // The voice's sentence as a translated page names it, for the page to mark over its translation.
+    val spokenOnPage = remember { MutableStateFlow<PageSentence?>(null) }
+    SideEffect {
+        spokenOnPage.value = spoken?.takeIf { listening?.translated == true }
+            ?.let { SpeechKey.sentenceAt(it.text.highlight.orEmpty(), it) }
+    }
+
+    // Whether the voice's sentence is on screen: found by the book's words,
+    // or on a translated page where its translation stands.
+    suspend fun spokenShowing(nav: EpubNavigatorFragment, utterance: Locator): Boolean =
+        if (pageTranslated) TranslatedPages.isShowing(nav, utterance) else SpokenPassage.isShowing(nav, utterance)
 
     // The page follows the voice, but only once it has read past what
     // is on screen. A reader selecting text, or a page being rebuilt,
@@ -1998,7 +2020,7 @@ fun ReaderScreen(
                 // Detaching is noticed as the move begins, while the
                 // sentence is still on screen; looking now would undo it.
                 awaitPageAtRest(nav)
-                if (SpokenPassage.isShowing(nav, utterance)) followDetached = false
+                if (spokenShowing(nav, utterance)) followDetached = false
                 return@repeatOnLifecycle
             }
             // A move still in the air is the reader's, or the last
@@ -2006,12 +2028,19 @@ fun ReaderScreen(
             // repeat the other.
             if (gate.isGated || reflow.active ||
                 moves.mark(SystemClock.elapsedRealtime()) == IssuedMoves.NONE ||
-                SpokenPassage.isShowing(nav, utterance)
+                spokenShowing(nav, utterance)
             ) {
                 return@repeatOnLifecycle
             }
+            // The book's words are not on a translated page to go to: the
+            // translation shown in their place is, else their element.
+            val target = if (pageTranslated) {
+                TranslatedPages.shownLocator(nav, utterance) ?: utterance.copy(text = Locator.Text())
+            } else {
+                utterance
+            }
             followedAt = SystemClock.elapsedRealtime()
-            navigate(nav, utterance, NavigatorPositionEvent.TTS_FOLLOW)
+            navigate(nav, target, NavigatorPositionEvent.TTS_FOLLOW)
         }
     }
 
@@ -2039,7 +2068,7 @@ fun ReaderScreen(
     // lands near it but not on it, and it carries no BookOrbit CFI. Once
     // the voice has stopped and that page is in front of the reader, it
     // is shown and saved again as an exact anchor.
-    LaunchedEffect(navigator, listeningPlaying, listening == null, lifecycle) {
+    LaunchedEffect(navigator, listeningPlaying, listening == null, lifecycle, pageTranslated) {
         val nav = navigator ?: return@LaunchedEffect
         if (listeningPlaying || readAloud == null) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -2055,6 +2084,10 @@ fun ReaderScreen(
             }
             while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
             settledMark()
+            // A translated page holds no exact anchor in the book's words:
+            // the place stays the sentence listening saved (ADR 45) until
+            // the book's words are back, when this runs again.
+            if (pageTranslated) return@repeatOnLifecycle
             val heard = readAloud.awaitingCapture() ?: return@repeatOnLifecycle
             if (!SpokenPassage.isShowing(nav, heard)) {
                 navigate(nav, heard, NavigatorPositionEvent.TTS_FOLLOW)
@@ -2100,6 +2133,10 @@ fun ReaderScreen(
 
     // The reader turned translation off for this book: it opens in its own words from now on.
     fun stopTranslatingBook() {
+        // The voice reads the translation: it goes quiet before the book's words come back,
+        // and a start still on its way for this book, which may read it translated, is given up.
+        if (listeningTranslatedNow) readAloudFeature.stop()
+        readAloud?.bookId?.let(readAloudFeature::cancelChoice)
         stopTranslatingPage()
         translationResumedCue = false
         translationMarked = false
@@ -2119,15 +2156,22 @@ fun ReaderScreen(
      * meanwhile, or another navigator, makes it give up.
      */
     suspend fun startTranslatingPage(nav: EpubNavigatorFragment, selection: Locator, source: String?, target: String): Boolean {
-        readAloudFeature.stop()
+        // This book read aloud in these languages: the page takes up the voice's translations.
+        val shared = readAloud?.bookId?.let(readAloudFeature::translation)
+            ?.takeIf { it.source == source && it.target == target }
+        if (shared == null) readAloudFeature.stop()
         stopTranslatingPage()
         val attempt = pageTranslationStarts.get()
         return startPageTranslation(
-            open = { translate.openPage(source, target) },
+            open = {
+                shared?.translations?.takeIf { it.acquire() }
+                    ?: translate.openPage(source, target)?.let { SentenceTranslations(it, pageTranslations) }
+            },
+            close = SentenceTranslations::release,
             prepare = { SpokenPassage.startingPoint(nav, selection) },
             wanted = { attempt == pageTranslationStarts.get() && navigatorNow === nav },
-        ) { translator, start ->
-            val run = PageTranslation<Locator>(effectScope, translator, pageTranslations, { place ->
+        ) { translations, start ->
+            val run = PageTranslation<Locator>(effectScope, translations, { place ->
                 TranslatedPages.sentences(publication, place, source)
             }, behind = { sentence -> navigatorNow?.let { TranslatedPages.behind(it, sentence) } ?: false })
             cachedBookOrbitCfi = null
@@ -2157,12 +2201,13 @@ fun ReaderScreen(
         if (!reflowableText || pageTranslationStarts.get() != 0) return@LaunchedEffect
         val mode = pageTranslationModes.saved() ?: return@LaunchedEffect
         translationMarked = true
-        // Read aloud, already on, asked for the book's own words.
-        if (listeningNow) {
+        // Read aloud, already on in the book's own words, asked for them.
+        // Read in translation, the page shows what the voice says again.
+        if (listeningNow && !listeningTranslatedNow) {
             stopTranslatingBook()
             return@LaunchedEffect
         }
-        fun wanted() = pageTranslationStarts.get() == 0 && navigatorNow === nav && !listeningNow
+        fun wanted() = pageTranslationStarts.get() == 0 && navigatorNow === nav && !(listeningNow && !listeningTranslatedNow)
         // The gate opening means the restore may go on, not that the page is ready.
         while (gate.isGated) settleLayout()
         val start = withTimeoutOrNull<Locator?>(TRANSLATION_RESUME_WAIT_MS) {
@@ -2188,11 +2233,11 @@ fun ReaderScreen(
         translationResumedCue = false
     }
 
-    // Read aloud speaks the book's own words, so a translated page gives
-    // them back, and the book no longer opens translated. A start still
-    // on its way is called off either way.
-    LaunchedEffect(listening != null) {
-        if (listening == null) return@LaunchedEffect
+    // Read aloud in the book's own words has a translated page give them
+    // back, and the book no longer opens translated. A start still on its
+    // way is called off either way. Read in translation, the page stays.
+    LaunchedEffect(listening != null, listening?.translated == true) {
+        if (listening == null || listening.translated) return@LaunchedEffect
         if (pageTranslation != null || pageTranslated || translationMarked) stopTranslatingBook() else stopTranslatingPage()
     }
 
@@ -2201,7 +2246,7 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         val run = pageTranslation
         if (run != null) {
-            TranslatedPages.follow(nav, run, translatedViews, eInkPage)
+            TranslatedPages.follow(nav, run, translatedViews, eInkPage, spokenOnPage)
         } else if (pageTranslated) {
             TranslatedPages.restore(nav, translatedViews) {
                 // Measured on translated words, and maybe still in flight.
@@ -4020,23 +4065,47 @@ fun ReaderScreen(
                                     // Translated words are not in the book; read from the sentence they translate.
                                     val original = (pageTranslation ?: restoringPageTranslation)
                                         ?.let { TranslatedPages.original(it, active.locator) }
-                                    effectScope.launch {
-                                        // Its marks go on the book's words, so those come back first.
-                                        if (pageTranslated) {
-                                            stopTranslatingBook()
-                                            val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
-                                                snapshotFlow { pageTranslated }.first { !it }
-                                            }
-                                            if (restored == null) {
-                                                Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
-                                                return@launch
+                                    // A translated page is read aloud in translation, and stays translated.
+                                    val run = pageTranslation
+                                    if (run != null && run.translations.acquire()) {
+                                        val translation = SpeechTranslation(
+                                            run.translations,
+                                            run.translator.source,
+                                            run.translator.target,
+                                        )
+                                        // Undispatched, so the hold is in the try below before anything can cancel it.
+                                        effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                            var handedOver = false
+                                            try {
+                                                val start = original
+                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                                    ?: active.locator
+                                                handedOver = true
+                                                reading.start(start, translation)
+                                            } finally {
+                                                if (!handedOver) translation.translations.release()
                                             }
                                         }
-                                        reading.start(
-                                            original
-                                                ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
-                                                ?: active.locator,
-                                        )
+                                    } else {
+                                        effectScope.launch {
+                                            // Its marks go on the book's words, so those come back first.
+                                            if (pageTranslated) {
+                                                stopTranslatingBook()
+                                                val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
+                                                    snapshotFlow { pageTranslated }.first { !it }
+                                                }
+                                                if (restored == null) {
+                                                    Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
+                                                    return@launch
+                                                }
+                                            }
+                                            reading.start(
+                                                original
+                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                                    ?: active.locator,
+                                                null,
+                                            )
+                                        }
                                     }
                                 }
                             },

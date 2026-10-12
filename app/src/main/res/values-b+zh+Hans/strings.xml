@@ -1042,6 +1042,7 @@
     <string name="read_aloud_notice_invalid_key">%1$s 拒绝了该 API 密钥。请在“设置 &gt; 朗读”中检查。</string>
     <string name="read_aloud_notice_selection_not_found">从段落开头开始朗读。</string>
     <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
+    <string name="read_aloud_notice_translation_failed">无法翻译某个句子。已暂停；点按播放重试，或跳过该句。</string>
     <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 朗读”中另选一个。</string>
     <string name="read_aloud_notice_terms_required">%1$s 要求先在其网站上接受此模型的条款。</string>
     <string name="read_aloud_notice_no_speech">%1$s 没有语音接口。请检查其地址，或在“设置 &gt; 朗读”中选择语音服务器。</string>

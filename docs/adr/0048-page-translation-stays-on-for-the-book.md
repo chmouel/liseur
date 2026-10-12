@@ -15,8 +15,12 @@ an error.
 ## Decision
 
 A book stays translated, between the same two languages, until the
-reader taps Stop on the translation bar or starts read aloud. Closing
-the book, or the app being killed, keeps it on.
+reader taps Stop on the translation bar. Closing the book, or the app
+being killed, keeps it on. Read aloud started on a translated page reads
+the translation and keeps the book translated; it used to turn
+translation off. A book reopened while its translation is still being
+read aloud shares the voice's translations rather than opening another
+translator.
 
 - The choice is a row in `translations.db` per local book URL, holding
   the two language codes and no text. Removing the book deletes it with

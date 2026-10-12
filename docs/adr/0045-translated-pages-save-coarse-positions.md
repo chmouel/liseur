@@ -22,7 +22,7 @@ Translation in the page walks the same sentences read aloud speaks
 (`PublicationUtteranceCursor`) and replaces each one in the page as its
 translation arrives, a few sentences ahead of the reader. Injected
 JavaScript keeps each changed text node's original and redraws from it,
-so Stop and read aloud put the book back exactly. Translations stay in
+so Stop puts the book back exactly. Translations stay in
 memory for the session; nothing is written to disk.
 
 > Amended by [ADR-0046](0046-translated-sentences-are-kept-on-the-phone.md):
@@ -37,8 +37,16 @@ While a page shows a translation:
   translated text.
 - Highlights are hidden, and new highlights, notes and bookmarks are off.
   Existing ones come back on Stop.
-- Starting read aloud stops the translation and restores the page first,
-  so the voice reads the book's words.
+- Starting read aloud reads the translation aloud and leaves the page
+  translated (amended below). Stopping the translation stops that voice
+  first, then restores the page.
+
+> Amended: read aloud on a translated page used to stop the translation
+> and restore the page first, so the voice read the book's words. It now
+> reads the translation, sentence by sentence, from the same translations
+> the page shows; positions it saves are the book's sentence it last
+> played, never translated words, and no exact anchor is captured from
+> the translated page.
 
 Fixed-layout books are not offered the mode.
 

@@ -11,6 +11,18 @@ internal suspend fun <P> startPageTranslation(
     prepare: suspend () -> P,
     wanted: () -> Boolean,
     install: (SentenceTranslator, P) -> Unit,
+): Boolean = startPageTranslation(open, SentenceTranslator::close, prepare, wanted, install)
+
+/**
+ * As above for anything held open, such as [SentenceTranslations] shared
+ * with read aloud: [close] lets go of what [open] gave unless installed.
+ */
+internal suspend fun <T : Any, P> startPageTranslation(
+    open: suspend () -> T?,
+    close: (T) -> Unit,
+    prepare: suspend () -> P,
+    wanted: () -> Boolean,
+    install: (T, P) -> Unit,
 ): Boolean {
     val translator = open() ?: return false
     var installed = false
@@ -21,6 +33,6 @@ internal suspend fun <P> startPageTranslation(
         installed = true
         return true
     } finally {
-        if (!installed) translator.close()
+        if (!installed) close(translator)
     }
 }

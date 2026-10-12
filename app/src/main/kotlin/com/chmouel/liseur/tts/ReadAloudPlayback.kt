@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,6 +50,12 @@ class ReadAloudPlayback(
     private val onStopRequested: () -> Unit = {},
     private val onChapterEnded: () -> Unit = {},
     private val stepTimeoutMillis: Long = 2_000,
+    /**
+     * Read translated: each request is filed under the book's sentence the
+     * navigator is on ([keyFor]), not its words alone, since the same words
+     * translate differently in different places.
+     */
+    private val anchored: Boolean = false,
 ) : SpeechObserver {
 
     /** A sentence that could not be spoken; [anchor] is where resuming starts. */
@@ -84,6 +92,18 @@ class ReadAloudPlayback(
     }
 
     private val spoken = LinkedHashMap<TtsEngine.RequestId, String>()
+
+    // Where each recent request is in the book, once told.
+    private val places = HashMap<TtsEngine.RequestId, Locator>()
+
+    private val mutableHeard = MutableStateFlow<Locator?>(null)
+
+    /**
+     * The last sentence whose audio began to play. The navigator's place
+     * moves on as soon as a sentence is asked for, which, waiting on a
+     * translation or its audio, can be well before it is heard.
+     */
+    val heard: StateFlow<Locator?> = mutableHeard.asStateFlow()
     private var closed = false
     private var playRequested = false
 
@@ -220,6 +240,7 @@ class ReadAloudPlayback(
         mutableNavigator.value?.close()
         mutableNavigator.value = null
         spoken.clear()
+        places.clear()
         waitFor(null)
     }
 
@@ -265,6 +286,7 @@ class ReadAloudPlayback(
         }
         val previous = mutableNavigator.value
         spoken.clear()
+        places.clear()
         waitFor(null)
         mutableNavigator.value = fresh
         previous?.close()
@@ -284,8 +306,30 @@ class ReadAloudPlayback(
             }
         }
         spoken[requestId] = text
-        if (spoken.size > SPOKEN_KEPT) spoken.remove(spoken.keys.first())
+        if (spoken.size > SPOKEN_KEPT) {
+            val oldest = spoken.keys.first()
+            spoken.remove(oldest)
+            places.remove(oldest)
+        }
         return true
+    }
+
+    override suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? {
+        if (!anchored) return SpeechKey(text)
+        val navigator = mutableNavigator.value ?: return null
+        if (requestId !in spoken) return null
+        // Readium publishes the sentence it asks for, possibly a moment after asking.
+        val location = withTimeoutOrNull(stepTimeoutMillis) {
+            navigator.location.first { it.utterance == text }
+        } ?: return null
+        if (mutableNavigator.value !== navigator || requestId !in spoken) return null
+        places[requestId] = location.utteranceLocator
+        return SpeechKey.at(text, location.utteranceLocator)
+    }
+
+    override fun onPlaying(requestId: TtsEngine.RequestId) {
+        if (requestId !in spoken) return
+        mutableHeard.value = places[requestId] ?: mutableNavigator.value?.location?.value?.utteranceLocator ?: return
     }
 
     override fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {

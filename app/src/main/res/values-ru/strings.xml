@@ -1169,6 +1169,7 @@
     <string name="read_aloud_notice_invalid_key">%1$s отклонил ключ API. Проверьте его в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_notice_selection_not_found">Чтение с начала абзаца.</string>
     <string name="read_aloud_notice_unavailable">Эту книгу нельзя прочитать вслух с этого места.</string>
+    <string name="read_aloud_notice_translation_failed">Не удалось перевести предложение. Пауза; нажмите «Воспроизвести», чтобы повторить, или пропустите его.</string>
     <string name="read_aloud_notice_invalid_voice">У сервиса %1$s нет выбранного голоса. Выберите другой в разделе Настройки, Чтение вслух.</string>
     <string name="read_aloud_notice_terms_required">Сервис %1$s требует сначала принять условия этой модели на своём сайте.</string>
     <string name="read_aloud_notice_no_speech">У сервера %1$s нет точки доступа для речи. Проверьте адрес или выберите сервер озвучивания в разделе Настройки, Чтение вслух.</string>

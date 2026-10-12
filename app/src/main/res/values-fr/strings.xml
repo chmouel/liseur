@@ -1085,6 +1085,7 @@
     <string name="read_aloud_notice_invalid_key">%1$s a refusé la clé API. Vérifiez-la dans Paramètres, Lecture à voix haute.</string>
     <string name="read_aloud_notice_selection_not_found">Lecture depuis le début du paragraphe.</string>
     <string name="read_aloud_notice_unavailable">Ce livre ne peut pas être lu à voix haute à partir d\'ici.</string>
+    <string name="read_aloud_notice_translation_failed">Une phrase n\'a pas pu être traduite. En pause ; appuyez sur lecture pour réessayer, ou passez-la.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s ne propose pas la voix choisie. Choisissez-en une autre dans Paramètres, Lecture à voix haute.</string>
     <string name="read_aloud_notice_terms_required">%1$s demande d\'abord d\'accepter les conditions de ce modèle sur son site.</string>
     <string name="read_aloud_notice_no_speech">%1$s n\'a pas de point d\'accès vocal. Vérifiez son adresse ou choisissez un serveur vocal dans Paramètres, Lecture à voix haute.</string>

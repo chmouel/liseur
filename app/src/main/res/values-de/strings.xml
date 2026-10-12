@@ -1097,6 +1097,7 @@
     <string name="read_aloud_notice_invalid_key">%1$s hat den API-Schlüssel abgelehnt. Prüfe ihn unter Einstellungen, Vorlesen.</string>
     <string name="read_aloud_notice_selection_not_found">Vorlesen ab dem Anfang des Absatzes.</string>
     <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
+    <string name="read_aloud_notice_translation_failed">Ein Satz konnte nicht übersetzt werden. Pausiert; tippe auf Wiedergabe, um es erneut zu versuchen, oder überspringe ihn.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Vorlesen eine andere.</string>
     <string name="read_aloud_notice_terms_required">%1$s verlangt zuerst, dass du die Bedingungen dieses Modells auf seiner Website akzeptierst.</string>
     <string name="read_aloud_notice_no_speech">%1$s hat keinen Sprach-Endpunkt. Prüfe die Adresse oder wähle unter Einstellungen, Vorlesen einen Sprachserver.</string>

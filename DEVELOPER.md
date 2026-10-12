@@ -1866,7 +1866,7 @@ reader behavior.
   under the same URL before the sweep looks. Every storage failure is a miss or a
   skipped save, logged by exception class only; only Clear reports one.
   See `docs/adr/0046-translated-sentences-are-kept-on-the-phone.md`.
-- A book left translated stays so until Stop or read aloud
+- A book left translated stays so until Stop
   (`PageTranslationModes`, a `page_translation_modes` row in
   `translations.db` swept with the book, kept by Clear). Its changes and
   reads go through one queue in `SavedTranslations` on the application
@@ -1890,8 +1890,48 @@ reader behavior.
   reloads and recycles them, and keeps restoring recycled views after
   Stop. While translated, positions save without quoted text, BookOrbit is
   not pushed, highlights are hidden, and highlights, notes and bookmarks
-  are off; read aloud stops the run and restores first. See
+  are off. See
   `docs/adr/0045-translated-pages-save-coarse-positions.md`.
+- Read aloud on a translated page speaks the translation. The page run
+  and the session share one `SentenceTranslations` (translator, saved
+  cache, in-flight requests and each sentence's accepted translation by
+  `PageSentence`), reference-counted: the page run and the session each
+  hold it, and the translator closes when both let go, so speech goes on
+  with the reader closed or the screen off, and a reopened book's run
+  takes the session's translations when the languages match. Starting
+  page translation in other languages stops a translated session; Stop
+  on the translation bar stops the voice before restoring the page;
+  stopping the voice leaves the page translated.
+- Translated speech keeps Readium's original publication as the
+  navigation authority. The navigator cuts the source text in the
+  translation's source language, whatever the voice; the voice is
+  resolved for the target language. `ReadAloudPlayback(anchored = true)`
+  answers the engine's `keyFor` with a `SpeechKey` naming the book's
+  sentence the navigator published for that request (href, selector,
+  text before), and the prefetcher files its look-ahead under keys built
+  from the same Readium locators, so the same words in two places never
+  share a translation or audio. `SpeechCache`'s `prepare` stage
+  (`TranslatedSpeech`) translates each source sentence of a request with
+  the one before it as context. For the request's first sentence that is
+  the sentence the read-ahead passed when it fetched the request; a
+  request it did not fetch (the first sentence, after a skip or a retry)
+  starts without context. Either way a translation already accepted for
+  that place in `SentenceTranslations` is reused, so the page and the
+  voice agree. It then cuts the translation into pieces within a
+  request's bounds, which play as one unit with one anchor. A
+  pending translation or audio holds the voice on its sentence with no
+  extra timeout; a failed translation pauses there with
+  `ReadAloudNotice.TranslationFailed` and is retried on play or passed
+  only by an explicit skip, never spoken in the book's words. Voice
+  changes drop audio but keep translations. Checkpoints save the last
+  sentence whose audio played (`ReadAloudPlayback.heard`), not one only
+  waited on. On a translated page the spoken sentence is marked through
+  `PageSwaps.mark` (CSS Custom Highlight over the translation's range)
+  rather than a Readium decoration, its visibility comes from
+  `PageSwaps.showing`, follow goes to the translation's shown words
+  (`PageSwaps.shownWords` through `TranslatedPages.shownLocator`, falling
+  back to its element when no attached view holds its chapter), and no
+  exact anchor is captured after listening.
 
 ### Covers, UI, and dependencies
 

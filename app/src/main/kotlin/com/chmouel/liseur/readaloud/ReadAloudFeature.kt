@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.OpenBookHandle
+import com.chmouel.liseur.tts.SpeechTranslation
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -20,8 +21,10 @@ data class ReadAloudUi(
     val playing: Boolean,
     /** The sentence being read, for highlighting and following the voice. */
     val utterance: Locator?,
-    /** Waiting for the voice: the first sentence, or audio that has not arrived yet. */
+    /** Waiting for the voice: the first sentence, or a translation or audio that has not arrived yet. */
     val preparing: Boolean = false,
+    /** Read in translation: the voice says the translated page, and the page stays translated. */
+    val translated: Boolean = false,
 )
 
 /** Something the reader should tell the listener about, once. */
@@ -58,6 +61,9 @@ enum class ReadAloudNotice {
 
     /** The book could not be read aloud from there. */
     Unavailable,
+
+    /** A sentence of a translated book could not be translated; paused on it until retried or skipped. */
+    TranslationFailed,
 }
 
 /** A [notice] about [bookId], shown only in that book's reader. */
@@ -82,9 +88,17 @@ interface ReadAloudFeature {
     /**
      * Reads [handle]'s book aloud from the sentence [selection] starts in,
      * ending any other session. The session takes its own hold on the book;
-     * [reader] reopens this book from the playback notification.
+     * [reader] reopens this book from the playback notification. With a
+     * [translation], whose hold the session takes over and lets go of when
+     * it ends, the book is read in translation.
      */
-    fun start(handle: OpenBookHandle, selection: Locator, reader: Intent)
+    fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation? = null)
+
+    /**
+     * The translation [bookId] is being read aloud in, for a translated
+     * page to share, or null when it is not being read translated.
+     */
+    fun translation(bookId: String): SpeechTranslation? = null
 
     /**
      * Gives up a start of [bookId] still waiting for its language or voice
@@ -129,7 +143,9 @@ interface ReadAloudFeature {
         override val session: StateFlow<ReadAloudUi?> = MutableStateFlow<ReadAloudUi?>(null).asStateFlow()
         override val notices: SharedFlow<ReadAloudBookNotice> = MutableSharedFlow<ReadAloudBookNotice>().asSharedFlow()
 
-        override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent) = Unit
+        override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) {
+            translation?.translations?.release()
+        }
         override fun pause() = Unit
         override fun resume() = Unit
         override fun stop() = Unit

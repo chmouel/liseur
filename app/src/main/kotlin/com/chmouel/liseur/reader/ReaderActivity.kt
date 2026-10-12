@@ -604,10 +604,11 @@ class ReaderActivity : FragmentActivity() {
                                         ReaderReadAloud(
                                             feature = container.readAloud,
                                             bookId = open.id,
-                                            start = { locator ->
+                                            start = { locator, translation ->
                                                 viewModel.startReadAloud(
                                                     locator,
                                                     intent(this@ReaderActivity, open.url.toString(), open.id),
+                                                    translation,
                                                 )
                                             },
                                             awaitingCapture = viewModel::listenedPlaceAwaitingCapture,

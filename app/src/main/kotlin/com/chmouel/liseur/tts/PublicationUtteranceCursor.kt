@@ -48,5 +48,5 @@ class PublicationUtteranceCursor(
     }
 
     private fun utterance(text: String, locator: Locator): Pair<UtteranceText, Locator>? =
-        if (text.any { it.isLetterOrDigit() }) UtteranceText(text, locator.text.before) to locator else null
+        if (text.any { it.isLetterOrDigit() }) UtteranceText(text, locator.text.before, locator) to locator else null
 }

@@ -3,6 +3,7 @@ package com.chmouel.liseur.tts
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
+import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -62,6 +63,18 @@ interface SpeechObserver {
 
     fun onFailure(requestId: TtsEngine.RequestId, error: SpeechTtsEngine.Error) {}
 
+    /**
+     * What the cache files this request under, called once [onSpeak]
+     * let it through, before any audio is claimed. Read translated, the
+     * key names the book's sentence the navigator is on; null when that
+     * place cannot be told, which fails the request rather than say
+     * something unplaced.
+     */
+    suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? = SpeechKey(text)
+
+    /** The request's audio starts playing: from now on it has been heard. */
+    fun onPlaying(requestId: TtsEngine.RequestId) {}
+
     /** True while the request waits for its audio, false once it arrives, fails, or is dropped. */
     fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) {}
 
@@ -109,6 +122,12 @@ class SpeechTtsEngine(
         class Service(speech: SpeechError) : Error("Speech service error", speech)
         class InvalidResponse(speech: SpeechError) : Error("The speech service returned no usable audio", speech)
         class Output(message: String) : Error(message)
+
+        /** The sentence could not be translated; the voice waits on it until it is, or is skipped. */
+        class Translation(val translation: TranslationError) : Error("The sentence could not be translated")
+
+        /** The sentence's place in the book could not be told, so its translation could not be looked up. */
+        class Unplaced : Error("The sentence could not be placed in the book")
 
         /** Worth a retry later; anything else needs the user to act. */
         val recoverable: Boolean
@@ -177,7 +196,15 @@ class SpeechTtsEngine(
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
-            val audio = request.audio ?: cache.claim(text).also { request.audio = it }
+            val audio = request.audio ?: run {
+                val key = observer.keyFor(requestId, text)
+                if (request.finished) return@launch
+                if (key == null) {
+                    fail(request, Error.Unplaced())
+                    return@launch
+                }
+                cache.claim(key).also { request.audio = it }
+            }
             observer.onWaiting(requestId, true)
             val speech = try {
                 audio.await()
@@ -186,10 +213,14 @@ class SpeechTtsEngine(
             } catch (e: SpeechError) {
                 fail(request, Error.of(e))
                 return@launch
+            } catch (e: TranslationError) {
+                fail(request, Error.Translation(e))
+                return@launch
             } finally {
                 observer.onWaiting(requestId, false)
             }
             if (request.finished) return@launch
+            observer.onPlaying(requestId)
             listener?.onStart(requestId)
             request.playing = true
             try {

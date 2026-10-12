@@ -146,12 +146,23 @@ class MemoryPageTranslationCache(private val capacity: Int = CAPACITY) : PageTra
  */
 internal class PageTranslation<P>(
     private val scope: CoroutineScope,
-    val translator: SentenceTranslator,
-    private val cache: PageTranslationCache,
+    /** The book's translations, which read aloud may share; the run holds them until [stop]. */
+    val translations: SentenceTranslations,
     private val sentencesFrom: (P) -> PageSentences,
     private val ahead: Int = AHEAD,
     private val behind: suspend (PageSentence) -> Boolean = { false },
 ) {
+    constructor(
+        scope: CoroutineScope,
+        translator: SentenceTranslator,
+        cache: PageTranslationCache,
+        sentencesFrom: (P) -> PageSentences,
+        ahead: Int = AHEAD,
+        behind: suspend (PageSentence) -> Boolean = { false },
+    ) : this(scope, SentenceTranslations(translator, cache), sentencesFrom, ahead, behind)
+
+    val translator: SentenceTranslator get() = translations.translator
+
     private val mutableState = MutableStateFlow<PageTranslationState>(PageTranslationState.Translating)
     val state: StateFlow<PageTranslationState> = mutableState.asStateFlow()
 
@@ -286,12 +297,16 @@ internal class PageTranslation<P>(
         wake.trySend(Unit)
     }
 
-    /** Stops asking and lets go of the translator. What was put in the page stays in [swaps]. */
+    /** Stops asking and lets go of the translations, closing the translator unless read aloud still holds them. What was put in the page stays in [swaps]. */
     fun stop() {
+        if (stopped) return
+        stopped = true
         job?.cancel()
         wake.close()
-        translator.close()
+        translations.release()
     }
+
+    private var stopped = false
 
     private suspend fun walk(first: PageSentences) {
         var sentences = first
@@ -340,7 +355,7 @@ internal class PageTranslation<P>(
             mutableState.value = PageTranslationState.Translating
             val translation = try {
                 coroutineScope {
-                    val asked = async { translated(sentence, previous) }
+                    val asked = async { translations.resolve(sentence, previous) }
                     asking = asked
                     asked.await()
                 }
@@ -369,32 +384,6 @@ internal class PageTranslation<P>(
         }
     }
 
-    private suspend fun translated(sentence: PageSentence, context: String?): Translated {
-        fun keyOf(identity: String) = listOf(identity, context.orEmpty(), sentence.text).joinToString("\u0000")
-        var identity = translator.answering()
-        var lookup = cache.get(keyOf(identity))
-        var answer: Translated? = null
-        while (answer == null) {
-            // Settings changed during the lookup: what was found answers for the service before.
-            val current = translator.answering()
-            if (current != identity) {
-                identity = current
-                lookup = cache.get(keyOf(identity))
-                continue
-            }
-            lookup.translation?.let { return Translated(it, identity) }
-            // Null when they changed after all, before it was sent: the new service may have it saved.
-            answer = translator.translate(sentence.text, context, identity)
-        }
-        // Far longer than the sentence is not its translation, and it would be held for the whole session.
-        if (answer.text.length > maxOf(LONGEST, sentence.text.length * GROWTH)) {
-            throw TranslationError.Malformed("the translation is far longer than the sentence")
-        }
-        // Filed under what answered, and only while that is still what the settings choose.
-        if (translator.answering() == answer.by) cache.put(keyOf(answer.by), answer.text, lookup.stamp)
-        return answer
-    }
-
     private val TranslationError.halts: Boolean
         get() = when (this) {
             is TranslationError.Refused, is TranslationError.Empty,
@@ -412,10 +401,6 @@ internal class PageTranslation<P>(
 
         // Enough of a selection, and of the text before it, to tell sentences apart.
         private const val MATCHED = 40
-
-        // A translation can run longer than its sentence, but not by this much.
-        private const val LONGEST = 2_000
-        private const val GROWTH = 8
 
         // Enough of the book's words before a sentence left untranslated to see they are on the page.
         private const val BOOK_TAIL = 8

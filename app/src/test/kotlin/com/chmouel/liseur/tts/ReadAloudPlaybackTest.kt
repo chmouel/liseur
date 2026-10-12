@@ -99,18 +99,56 @@ class ReadAloudPlaybackTest {
         publication = PublicationOpener(DefaultPublicationParser(context, http, assets, pdfFactory = null))
             .open(asset, allowUserInteraction = false).getOrNull()!!
 
-        cache = SpeechCache(scope, { text ->
-            val nth = requested.getOrPut(text) { AtomicInteger() }.incrementAndGet()
-            // A late answer, as from a slow network.
-            delay(30)
-            holds[text]?.await()
-            if (failures[text] == nth) {
-                failures.remove(text)
-                throw SpeechError.Service(503)
-            }
-            SpeechAudio(text.toByteArray())
-        })
+        cache = SpeechCache(scope, synthesize)
         playback = newPlayback()
+    }
+
+    private val synthesize: suspend (String) -> SpeechAudio = { text ->
+        val nth = requested.getOrPut(text) { AtomicInteger() }.incrementAndGet()
+        // A late answer, as from a slow network.
+        delay(30)
+        holds[text]?.await()
+        if (failures[text] == nth) {
+            failures.remove(text)
+            throw SpeechError.Service(503)
+        }
+        SpeechAudio(text.toByteArray())
+    }
+
+    /** What each translated request was filed under, in the order asked. */
+    private val translatedKeys: MutableList<SpeechKey> = Collections.synchronizedList(mutableListOf())
+
+    /** Holds back a sentence's translation until released. */
+    private val translationHolds = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
+    /** Fails the nth translation of a sentence, once. */
+    private val translationFailures = ConcurrentHashMap<String, Int>()
+    private val translationsAsked = ConcurrentHashMap<String, AtomicInteger>()
+
+    /** A sentence's translation, which says where it was, so two places are told apart. */
+    private fun translationOf(key: SpeechKey) = "T[${key.text}]#${key.place?.before.orEmpty().length}"
+
+    /** Reads the book translated: each request translated by a fake, where it is, before its audio. */
+    private fun readTranslated(prefetch: Boolean = false) {
+        runBlocking(main) { playback.close() }
+        cache = SpeechCache(scope, synthesize, prepare = { key, _ ->
+            translatedKeys += key
+            val nth = translationsAsked.getOrPut(key.text) { AtomicInteger() }.incrementAndGet()
+            translationHolds[key.text]?.await()
+            if (translationFailures[key.text] == nth) {
+                translationFailures.remove(key.text)
+                throw com.chmouel.liseur.translate.TranslationError.Refused()
+            }
+            listOf(translationOf(key))
+        })
+        val prefetcher = if (prefetch) {
+            UtterancePrefetcher<Locator>(scope, cache, { locator ->
+                PublicationUtteranceCursor(publication, locator, tokenizerFactory, Language("en"), false)
+            }, keyOf = { u -> u.locator?.let { SpeechKey.at(u.text, it) } ?: SpeechKey(u.text) })
+        } else {
+            null
+        }
+        playback = newPlayback(prefetcher, anchored = true)
     }
 
     private lateinit var cache: SpeechCache
@@ -125,7 +163,7 @@ class ReadAloudPlaybackTest {
         override fun release() {}
     }
 
-    private fun newPlayback(prefetcher: UtterancePrefetcher<Locator>? = null): ReadAloudPlayback {
+    private fun newPlayback(prefetcher: UtterancePrefetcher<Locator>? = null, anchored: Boolean = false): ReadAloudPlayback {
         val context = ApplicationProvider.getApplicationContext<Application>()
         return runBlocking(main) {
             ReadAloudPlayback(
@@ -145,6 +183,7 @@ class ReadAloudPlaybackTest {
                         ?.getOrNull()
                 },
                 onChapterEnded = { chapterStops.incrementAndGet() },
+                anchored = anchored,
             )
         }
     }
@@ -612,6 +651,124 @@ class ReadAloudPlaybackTest {
         )
         awaitPlayed(1)
         assertTrue(played.first() == FIRST)
+    }
+
+
+    @Test
+    fun aTranslatedBookSpeaksEachSentenceTranslatedWhereItIs() {
+        readTranslated()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(7)
+        val keys = translatedKeys.take(7)
+        // Every request named its place in the book before its translation was asked.
+        assertTrue(keys.all { it.place != null && it.place!!.href.endsWith("one.xhtml") })
+        assertEquals(listOf(FIRST, SECOND, THIRD, FOURTH, REPEATED, REPEATED, LAST), keys.map { it.text })
+        // The same words twice, told apart by where they are, and spoken as translated there.
+        assertTrue(keys[4].place != keys[5].place)
+        assertEquals(keys.map(::translationOf), played.take(7))
+    }
+
+    @Test
+    fun aLateTranslationHoldsTheVoiceOnItsSentenceThenSpeaksItOnce() {
+        readTranslated()
+        translationHolds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        awaitWaiting(true)
+        Thread.sleep(300)
+        // Nothing said, nothing asked of the voice, and the place heard is still the first sentence.
+        assertEquals(1, played.size)
+        assertTrue(requested.keys.none { it.startsWith("T[$SECOND]") })
+        assertEquals(SECOND, playback.navigator.value!!.location.value.utterance)
+        assertEquals(FIRST, playback.heard.value!!.text.highlight)
+
+        translationHolds.remove(SECOND)!!.complete(Unit)
+        awaitPlayed(3)
+        assertEquals(listOf(FIRST, SECOND, THIRD), translatedKeys.take(3).map { it.text })
+        assertEquals(1, played.count { it.startsWith("T[$SECOND]") })
+        assertEquals(1, translationsAsked[SECOND]!!.get())
+    }
+
+    @Test
+    fun pausingWhileATranslationIsLateAndPlayingOnAsksItOnce() {
+        readTranslated()
+        translationHolds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        awaitWaiting(true)
+        runBlocking(main) { playback.pause() }
+        awaitWaiting(false)
+        // Arriving while paused, it is not played.
+        translationHolds.remove(SECOND)!!.complete(Unit)
+        Thread.sleep(200)
+        assertEquals(1, played.size)
+
+        runBlocking(main) { playback.resume() }
+        awaitPlayed(2)
+        assertEquals(translationOf(translatedKeys[1]), played[1])
+        assertEquals(1, translationsAsked[SECOND]!!.get())
+    }
+
+    @Test
+    fun aFailedTranslationPausesOnItsSentenceAndRetryingSpeaksIt() {
+        readTranslated()
+        translationFailures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+        val failure = playback.failure.value!!
+        assertTrue(failure.error is SpeechTtsEngine.Error.Translation)
+        assertEquals(THIRD, failure.anchor!!.text)
+        // Nothing in the book's own words took its place.
+        assertTrue(played.none { it == THIRD })
+        assertEquals(2, played.size)
+        movePastTheFailure()
+
+        assertEquals(ReadAloudPlayback.Landing.Sentence, runBlocking(main) { playback.resume() })
+        awaitPlayed(4)
+        assertTrue(played[2].startsWith("T[$THIRD]"))
+        assertTrue(played[3].startsWith("T[$FOURTH]"))
+    }
+
+    @Test
+    fun aFailedTranslationIsPassedOnlyBySkipping() {
+        readTranslated()
+        translationFailures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+        // Left alone, the voice stays on the failed sentence.
+        Thread.sleep(300)
+        assertEquals(2, played.size)
+        runBlocking(main) {
+            playback.skipToNext()
+            playback.resume()
+        }
+        awaitPlayed(3)
+        assertTrue(played[2].startsWith("T[$FOURTH]"))
+    }
+
+    @Test
+    fun theReadAheadFilesTranslationsWhereTheVoiceClaimsThem() {
+        readTranslated(prefetch = true)
+        translationHolds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        // The voice waits on the second sentence while the read-ahead translates the fourth.
+        val deadline = System.currentTimeMillis() + 10_000
+        while (translatedKeys.none { it.text == FOURTH }) {
+            check(System.currentTimeMillis() < deadline) { "never read ahead: $translatedKeys" }
+            Thread.sleep(10)
+        }
+        assertEquals(1, played.size)
+        val readAhead = translatedKeys.first { it.text == FOURTH }
+
+        translationHolds.remove(SECOND)!!.complete(Unit)
+        awaitPlayed(7)
+        // Each sentence translated once, the repeated one once for each place.
+        assertEquals(1, translationsAsked[FOURTH]!!.get())
+        assertEquals(2, translationsAsked[REPEATED]!!.get())
+        // The voice spoke the read-ahead's translation, so it claimed the place it was filed under.
+        assertTrue(translationOf(readAhead) in played)
+        assertEquals(1, requested.getValue(translationOf(readAhead)).get())
     }
 
     private fun writeEpub(target: File) {

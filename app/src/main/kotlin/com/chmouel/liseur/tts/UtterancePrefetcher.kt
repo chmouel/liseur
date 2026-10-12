@@ -9,6 +9,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.readium.r2.shared.publication.Locator
 
 /**
  * Speech for the sentences about to be read, fetched ahead of the voice.
@@ -24,11 +25,18 @@ class SpeechCache(
     private var synthesize: suspend (String) -> SpeechAudio,
     maxConcurrent: Int = MAX_CONCURRENT,
     private val maxBytes: Long = MAX_BYTES,
+    /**
+     * What a request says, in pieces each within a request's bounds, given
+     * the source text before it when known; null to say the key's text.
+     * Read translated, this is where the sentence is translated, before
+     * its audio is asked for: a translation that fails fails the request.
+     */
+    private val prepare: (suspend (SpeechKey, String?) -> List<String>)? = null,
 ) {
     private class Entry(val audio: Deferred<SpeechAudio>, var bytes: Long = 0)
 
     private val requests = Semaphore(maxConcurrent)
-    private val entries = LinkedHashMap<String, Entry>()
+    private val entries = LinkedHashMap<SpeechKey, Entry>()
 
     /** Bumped on every restart; speculative work from an older generation is dropped. */
     var generation = 0L
@@ -47,22 +55,25 @@ class SpeechCache(
     val hasRoom: Boolean get() = !halted && cachedBytes < maxBytes
 
     /** Starts fetching [text] unless it is already here or on its way. */
-    fun prefetch(text: String) {
-        if (!hasRoom || entries.containsKey(text)) return
+    fun prefetch(text: String) = prefetch(SpeechKey(text))
+
+    /** Starts fetching [key], with [previous] the source text before it, unless it is already here or on its way. */
+    fun prefetch(key: SpeechKey, previous: String? = null) {
+        if (!hasRoom || entries.containsKey(key)) return
         val generation = generation
         lateinit var entry: Entry
         // Started only once stored: audio that comes back at once is looked up by its entry.
         entry = Entry(
-            request(text, CoroutineStart.LAZY) { audio ->
-                if (generation == this.generation && entries[text] === entry) {
+            request(key, previous, CoroutineStart.LAZY) { audio ->
+                if (generation == this.generation && entries[key] === entry) {
                     val bytes = audio.pcm.size.toLong()
                     // Requests in flight weigh nothing until they arrive, so
                     // the budget is held here; [claim] asks again if needed.
-                    if (cachedBytes + bytes > maxBytes) entries.remove(text) else entry.bytes = bytes
+                    if (cachedBytes + bytes > maxBytes) entries.remove(key) else entry.bytes = bytes
                 }
             },
         )
-        entries[text] = entry
+        entries[key] = entry
         entry.audio.start()
     }
 
@@ -72,8 +83,12 @@ class SpeechCache(
      * restart cannot cancel what is being waited for. The caller owns the
      * request and cancels it once it no longer wants it.
      */
-    fun claim(text: String): Deferred<SpeechAudio> =
-        entries.remove(text)?.audio?.takeUnless { it.isCancelled } ?: request(text, CoroutineStart.UNDISPATCHED) {}
+    fun claim(text: String): Deferred<SpeechAudio> = claim(SpeechKey(text))
+
+    /** As [claim] for [key]; [previous] is the source text before it, when known, for a request made now. */
+    fun claim(key: SpeechKey, previous: String? = null): Deferred<SpeechAudio> =
+        entries.remove(key)?.audio?.takeUnless { it.isCancelled }
+            ?: request(key, previous, CoroutineStart.UNDISPATCHED) {}
 
     /** Forgets everything speculative: the reading jumped somewhere else. */
     fun restart() {
@@ -91,14 +106,18 @@ class SpeechCache(
     }
 
     private fun request(
-        text: String,
+        key: SpeechKey,
+        previous: String?,
         start: CoroutineStart,
         onArrived: (SpeechAudio) -> Unit,
     ): Deferred<SpeechAudio> {
         requestsMade++
         return scope.async(start = start) {
             try {
-                requests.withPermit { synthesize(text) }.also(onArrived)
+                // Translated outside the permits: those bound the speech service alone.
+                val pieces = prepare?.invoke(key, previous) ?: listOf(key.text)
+                val audio = pieces.map { piece -> requests.withPermit { synthesize(piece) } }
+                (audio.singleOrNull() ?: joined(audio)).also(onArrived)
             } catch (e: SpeechError.RateLimited) {
                 halted = true
                 throw e
@@ -118,14 +137,28 @@ class SpeechCache(
         }
     }
 
+    /** Pieces of one request played as one: one place in the book, one stretch of audio. */
+    private fun joined(pieces: List<SpeechAudio>): SpeechAudio {
+        val pcm = ByteArray(pieces.sumOf { it.pcm.size })
+        var at = 0
+        for (piece in pieces) {
+            piece.pcm.copyInto(pcm, at)
+            at += piece.pcm.size
+        }
+        return SpeechAudio(pcm)
+    }
+
     companion object {
         const val MAX_CONCURRENT = 2
         const val MAX_BYTES = 16L * 1024 * 1024
     }
 }
 
-/** A sentence as Readium will speak it, with the text leading up to it in its element. */
-data class UtteranceText(val text: String, val before: String?) {
+/**
+ * A sentence as Readium will speak it, with the text leading up to it in
+ * its element, and the [locator] Readium gave it when the walk knows it.
+ */
+data class UtteranceText(val text: String, val before: String?, val locator: Locator? = null) {
     /** Whether this is [text] with [before] leading up to it; a missing context matches any. */
     fun isSentence(text: String, before: String?): Boolean =
         this.text == text && (before == null || this.before == null || this.before == before)
@@ -149,8 +182,13 @@ class UtterancePrefetcher<L>(
     private val cache: SpeechCache,
     private val cursorAt: suspend (L) -> UtteranceCursor,
     private val ahead: Int = AHEAD,
+    /** What the cache files a sentence under; its text alone unless read translated. */
+    private val keyOf: (UtteranceText) -> SpeechKey = { SpeechKey(it.text) },
 ) {
     private var cursor: UtteranceCursor? = null
+
+    // The last sentence the walk read, the one before the next it fetches.
+    private var lastRead: UtteranceText? = null
     private val window = ArrayDeque<UtteranceText>()
     private var current: Pair<UtteranceText, L>? = null
     private var suspended = false
@@ -204,6 +242,7 @@ class UtterancePrefetcher<L>(
         job = null
         cursor = null
         current = null
+        lastRead = null
         window.clear()
         cache.restart()
     }
@@ -225,9 +264,11 @@ class UtterancePrefetcher<L>(
                 val candidate = cursor.next() ?: return@launch
                 if (candidate.isSentence(text, before)) {
                     this@UtterancePrefetcher.cursor = cursor
+                    lastRead = candidate
                     fill(cursor)
                     return@launch
                 }
+                lastRead = candidate
             }
         }
     }
@@ -248,7 +289,8 @@ class UtterancePrefetcher<L>(
                 null
             } ?: return
             window.addLast(next)
-            cache.prefetch(next.text)
+            cache.prefetch(keyOf(next), lastRead?.text)
+            lastRead = next
         }
     }
 
