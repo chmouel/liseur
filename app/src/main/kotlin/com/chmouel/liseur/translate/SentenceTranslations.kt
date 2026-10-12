@@ -118,7 +118,7 @@ class SentenceTranslations(
     }
 
     private suspend fun resolve(sentence: PageSentence, context: String?, identity: String): Translated {
-        pageFailureFor(sentence, identity)?.let { throw it }
+        pageFailureFor(sentence)?.let { throw it }
         acceptedFor(sentence, identity)?.let { return it }
         val key = sentence.text to context
         while (true) {
@@ -158,11 +158,11 @@ class SentenceTranslations(
             ?.second
 
     /** The failure the active page walk left for [sentence] under [identity], if any. */
-    private fun pageFailureFor(sentence: PageSentence, identity: String): TranslationError? {
+    private fun pageFailureFor(sentence: PageSentence): TranslationError? {
         val scope = pageScope ?: return null
         return pageFailures[Triple(sentence.href, sentence.selector, sentence.text)]
             ?.firstOrNull {
-                it.scope === scope && it.identity == identity && sameBefore(it.before, sentence.before)
+                it.scope === scope && sameBefore(it.before, sentence.before)
             }
             ?.error
     }
@@ -191,7 +191,7 @@ class SentenceTranslations(
 
     // Another context may have been accepted for this place meanwhile: the first one stands, shown and spoken alike.
     private fun settled(sentence: PageSentence, translated: Translated): Translated {
-        pageFailureFor(sentence, translated.by)?.let { throw it }
+        pageFailureFor(sentence)?.let { throw it }
         accept(sentence, translated)
         return acceptedFor(sentence, translated.by) ?: translated
     }

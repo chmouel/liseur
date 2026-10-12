@@ -160,7 +160,7 @@ class SentenceTranslationsTest {
     }
 
     @Test
-    fun `a page failure stays with the identity that failed the request`() = runTest {
+    fun `a page failure stays visible until that sentence is retried`() = runTest {
         val translator = Translator().apply {
             failWith = TranslationError.Refused()
             identityAfterFailure = "svc-2"
@@ -173,8 +173,16 @@ class SentenceTranslationsTest {
         assertTrue(failed.exceptionOrNull() is TranslationError.Refused)
         translator.failWith = null
         translator.identityAfterFailure = null
-        assertEquals("UN<>", translations.resolve(at("un", null), null).text)
+        translator.identity = "svc-2"
+        val stillFailed = runCatching { translations.resolve(at("un", null), null) }
+        assertTrue(stillFailed.exceptionOrNull() is TranslationError.Refused)
+        assertEquals(1, translator.asked.size)
+
+        val retried = translations.resolveForPage(scope, at("un", null), null)
+        assertEquals("UN<>", retried.text)
+        assertEquals("svc-2", retried.by)
         assertEquals(2, translator.asked.size)
+        assertEquals(retried, translations.resolve(at("un", null), null))
         translations.endPageWalk(scope)
     }
 

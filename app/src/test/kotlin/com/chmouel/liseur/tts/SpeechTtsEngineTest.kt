@@ -9,6 +9,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import com.chmouel.liseur.translate.TranslationError
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -72,6 +73,7 @@ class SpeechTtsEngineTest {
 
     private val events = LinkedBlockingQueue<String>()
     private val waits = LinkedBlockingQueue<String>()
+    private val heldAudioResumes = LinkedBlockingQueue<Boolean>()
 
     @Volatile private var skipCount = 0
     @Volatile private var translationIdentity: String? = null
@@ -85,6 +87,17 @@ class SpeechTtsEngineTest {
         observer = object : SpeechObserver {
             override suspend fun keyFor(requestId: TtsEngine.RequestId, text: String) =
                 SpeechKey(text, translationIdentity = translationIdentity)
+
+            override suspend fun keyFor(
+                requestId: TtsEngine.RequestId,
+                text: String,
+                reusingHeldAudio: Boolean,
+            ) = SpeechKey(text, translationIdentity = translationIdentity).also {
+                heldAudioResumes.put(reusingHeldAudio)
+            }
+
+            override suspend fun refreshKey(requestId: TtsEngine.RequestId, text: String, key: SpeechKey) =
+                key.copy(translationIdentity = translationIdentity)
 
             override fun onWaiting(requestId: TtsEngine.RequestId, waiting: Boolean) =
                 waits.put("${if (waiting) "waiting" else "done waiting"} ${requestId.value}")
@@ -126,6 +139,9 @@ class SpeechTtsEngineTest {
 
     private fun nextPlay() = requireNotNull(plays.poll(2, TimeUnit.SECONDS)) { "no playback" }
 
+    private fun nextHeldAudioResume() =
+        requireNotNull(heldAudioResumes.poll(2, TimeUnit.SECONDS)) { "no key request" }
+
     @Test
     fun speaksThenReportsDoneOnMain() {
         speak("1", "Hello there.")
@@ -155,6 +171,7 @@ class SpeechTtsEngineTest {
     fun speakingAStoppedSentenceAgainPlaysOnASecondBackWithoutFetchingIt() {
         speak("1", "Hello.")
         nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        assertEquals(false, nextHeldAudioResume())
         assertEquals("start 1@main", nextEvent())
         nextPlay()
         assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
@@ -163,6 +180,7 @@ class SpeechTtsEngineTest {
         assertEquals("interrupted 1@main", nextEvent())
 
         speak("2", "Hello.")
+        assertEquals(true, nextHeldAudioResume())
         assertEquals("start 2@main", nextEvent())
         nextPlay()
         assertEquals(SpeechAudio.SAMPLE_RATE, playedFrom.poll(2, TimeUnit.SECONDS))
@@ -173,6 +191,7 @@ class SpeechTtsEngineTest {
         onMain { engine.stop() }
         assertEquals("interrupted 2@main", nextEvent())
         speak("3", "Hello.")
+        assertEquals(true, nextHeldAudioResume())
         assertEquals("start 3@main", nextEvent())
         nextPlay().complete(Unit)
         assertEquals(SpeechAudio.SAMPLE_RATE, playedFrom.poll(2, TimeUnit.SECONDS))
@@ -184,7 +203,9 @@ class SpeechTtsEngineTest {
     fun changingTranslationIdentityWhilePausedFetchesFreshAudioFromTheBeginning() {
         translationIdentity = "old"
         speak("1", "Hello.")
-        nextRequest().second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        val initial = nextRequest()
+        assertEquals(false, nextHeldAudioResume())
+        initial.second.complete(SpeechAudio(ByteArray(SECONDS_3)))
         assertEquals("start 1@main", nextEvent())
         nextPlay()
         assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
@@ -194,6 +215,7 @@ class SpeechTtsEngineTest {
 
         translationIdentity = "new"
         speak("2", "Hello.")
+        assertEquals(true, nextHeldAudioResume())
         val (text, reply) = nextRequest()
         assertEquals("Hello.", text)
         reply.complete(SpeechAudio(ByteArray(SECONDS_3)))
@@ -203,6 +225,62 @@ class SpeechTtsEngineTest {
         resumed.complete(Unit)
         assertEquals("done 2@main", nextEvent())
         assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun changingTranslationIdentityWhileFetchingDiscardsTheOldAudio() {
+        translationIdentity = "old"
+        speak("1", "Hello.")
+        val old = nextRequest()
+        assertEquals(false, nextHeldAudioResume())
+
+        translationIdentity = "new"
+        old.second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+        val fresh = nextRequest()
+        assertEquals("Hello.", fresh.first)
+        fresh.second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+
+        assertEquals("start 1@main", nextEvent())
+        nextPlay().complete(Unit)
+        assertEquals("done 1@main", nextEvent())
+        assertEquals(0, playedFrom.poll(2, TimeUnit.SECONDS))
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun aTranslationFailingBecauseTheServiceChangedFetchesFreshAudio() {
+        translationIdentity = "old"
+        speak("1", "Hello.")
+        val old = nextRequest()
+        assertEquals(false, nextHeldAudioResume())
+
+        translationIdentity = "new"
+        old.second.completeExceptionally(TranslationError.Changed())
+        val fresh = nextRequest()
+        assertEquals("Hello.", fresh.first)
+        fresh.second.complete(SpeechAudio(ByteArray(SECONDS_3)))
+
+        assertEquals("start 1@main", nextEvent())
+        nextPlay().complete(Unit)
+        assertEquals("done 1@main", nextEvent())
+        noMoreEvents()
+        assertNull(requests.poll(200, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun stoppingWhileTheFreshAudioIsFetchedInterruptsOnce() {
+        translationIdentity = "old"
+        speak("1", "Hello.")
+        val old = nextRequest()
+        assertEquals(false, nextHeldAudioResume())
+
+        translationIdentity = "new"
+        old.second.completeExceptionally(TranslationError.Changed())
+        nextRequest()
+        onMain { engine.stop() }
+        assertEquals("interrupted 1@main", nextEvent())
+        noMoreEvents()
+        assertTrue(plays.isEmpty())
     }
 
     @Test

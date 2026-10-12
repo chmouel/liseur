@@ -73,6 +73,18 @@ interface SpeechObserver {
     suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? = SpeechKey(text)
 
     /**
+     * [reusingHeldAudio] is true when this request resumes audio held for the same sentence.
+     */
+    suspend fun keyFor(
+        requestId: TtsEngine.RequestId,
+        text: String,
+        reusingHeldAudio: Boolean,
+    ): SpeechKey? = keyFor(requestId, text)
+
+    /** Rechecks mutable settings after audio arrives without relocating this request's sentence. */
+    suspend fun refreshKey(requestId: TtsEngine.RequestId, text: String, key: SpeechKey): SpeechKey = key
+
+    /**
      * The book's text straight before the request [keyFor] placed, for a
      * translation made now to read it in context; null when unknown.
      */
@@ -210,7 +222,7 @@ class SpeechTtsEngine(
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
-            val key = observer.keyFor(requestId, text)
+            val key = observer.keyFor(requestId, text, reusingHeldAudio = resumed != null)
             if (request.finished) return@launch
             if (key == null) {
                 request.audio?.cancel()
@@ -225,13 +237,13 @@ class SpeechTtsEngine(
                 request.key = null
                 request.from = 0
             }
-            val audio = request.audio ?: run {
+            if (request.audio == null) {
                 request.key = key
-                cache.claim(key, observer.previousOf(requestId)).also { request.audio = it }
+                request.audio = cache.claim(key, observer.previousOf(requestId))
             }
             observer.onWaiting(requestId, true)
             val speech = try {
-                audio.await()
+                awaitCurrentAudio(request)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: SpeechError) {
@@ -258,6 +270,38 @@ class SpeechTtsEngine(
             }
             finish(request) { onDone(requestId) }
         }
+    }
+
+    private suspend fun awaitCurrentAudio(request: Request): SpeechAudio {
+        var audio = checkNotNull(request.audio)
+        while (true) {
+            val speech = try {
+                audio.await()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SpeechError) {
+                if (!refreshAudio(request)) throw e
+                audio = checkNotNull(request.audio)
+                continue
+            } catch (e: TranslationError) {
+                if (!refreshAudio(request)) throw e
+                audio = checkNotNull(request.audio)
+                continue
+            }
+            if (request.finished || !refreshAudio(request)) return speech
+            audio = checkNotNull(request.audio)
+        }
+    }
+
+    private suspend fun refreshAudio(request: Request): Boolean {
+        val previous = checkNotNull(request.key)
+        val current = observer.refreshKey(request.id, request.text, previous)
+        if (current == previous) return false
+        request.audio?.cancel()
+        request.key = current
+        request.from = 0
+        request.audio = cache.claim(current, observer.previousOf(request.id))
+        return true
     }
 
     override fun stop() {

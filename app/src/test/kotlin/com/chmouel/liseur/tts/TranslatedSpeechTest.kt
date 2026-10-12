@@ -124,10 +124,12 @@ class TranslatedSpeechTest {
         assertEquals(2, translator.asked.size)
 
         translator.identity = "svc-2"
-        val underNewService = TranslatedSpeech(translations, { listOf(it) }, { listOf(it) })
-            .prepare(SpeechKey("untranslated", book[1], "svc-2"), previous = "first")
-        assertEquals(listOf("<untranslated>"), underNewService)
-        assertEquals(3, translator.asked.size)
+        val stillUntranslated = runCatching {
+            TranslatedSpeech(translations, { listOf(it) }, { listOf(it) })
+                .prepare(SpeechKey("untranslated", book[1], "svc-2"), previous = "first")
+        }
+        assertTrue(stillUntranslated.exceptionOrNull() is TranslationError.Refused)
+        assertEquals(2, translator.asked.size)
 
         assertTrue(translations.acquire())
         page.stop()
@@ -141,6 +143,10 @@ class TranslatedSpeechTest {
         restartedPage.start(0, "start")
         runCurrent()
         assertEquals(listOf("first", "untranslated"), restartedPage.swaps.value["ch1.xhtml"]?.map { it.sentence.text })
+        assertEquals(4, translator.asked.size)
+        val spoken = TranslatedSpeech(translations, { listOf(it) }, { listOf(it) })
+            .prepare(SpeechKey("untranslated", book[1], "svc-2"), previous = "first")
+        assertEquals(listOf("<untranslated>"), spoken)
         assertEquals(4, translator.asked.size)
         restartedPage.stop()
         translations.release()
@@ -198,13 +204,30 @@ class TranslatedSpeechTest {
     }
 
     @Test
-    fun `a grouped request cannot join more PCM than the cache budget`() = runTest {
+    fun `a grouped request accepts the exact per-utterance PCM limit`() = runTest {
+        val chunk = ByteArray(SpeechAudio.MAX_PCM_BYTES)
+        val cache = SpeechCache(
+            backgroundScope,
+            { SpeechAudio(chunk) },
+            prepare = { _, _ -> listOf("one", "two") },
+        )
+
+        val audio = cache.claim(SpeechKey("group", place)).await()
+
+        assertEquals(SpeechCache.MAX_BYTES.toInt(), audio.pcm.size)
+    }
+
+    @Test
+    fun `a grouped request rejects one byte over the PCM limit before joining`() = runTest {
         val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(testScheduler))
         val chunk = ByteArray(SpeechAudio.MAX_PCM_BYTES)
         var synthesized = 0
         val cache = SpeechCache(
             scope,
-            { synthesized++; SpeechAudio(chunk) },
+            { text ->
+                synthesized++
+                SpeechAudio(if (text == "three") byteArrayOf(0) else chunk)
+            },
             prepare = { _, _ -> listOf("one", "two", "three") },
         )
 

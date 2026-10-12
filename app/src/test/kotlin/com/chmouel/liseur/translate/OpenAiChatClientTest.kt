@@ -202,10 +202,43 @@ class OpenAiChatClientTest {
     }
 
     @Test
-    fun `a redirect is not followed`(): Unit = runBlocking {
-        server.enqueue(MockResponse.Builder().code(302).addHeader("Location", server.url("/elsewhere").toString()).build())
-        expect<TranslationError.Service> { runBlocking { client.translate(base, "secret", "m", "fr", "en", "x") } }
-        assertEquals(1, server.requestCount)
+    fun `model discovery sends the configured key as a bearer token`(): Unit = runBlocking {
+        server.enqueue(json("""{"data":[{"id":"gpt-4o-mini"}]}"""))
+
+        assertEquals(listOf(TextModel("gpt-4o-mini")), client.textModels(base, "discovery-key"))
+
+        val request = server.takeRequest()
+        assertEquals("/v1/models", request.url.encodedPath)
+        assertEquals("Bearer discovery-key", request.headers["Authorization"])
+    }
+
+    @Test
+    fun `a key that cannot be a header is rejected without repeating it`(): Unit = runBlocking {
+        val error = expect<TranslationError.InvalidKey> {
+            runBlocking { client.translate(base, "secret\nkey", "m", "fr", "en", "x") }
+        }
+        assertFalse(error.message.orEmpty().contains("secret"))
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `a redirect does not send the key or passage to another server`(): Unit = runBlocking {
+        MockWebServer().use { elsewhere ->
+            elsewhere.start(InetAddress.getByName("127.0.0.1"), 0)
+            server.enqueue(
+                MockResponse.Builder()
+                    .code(307)
+                    .addHeader("Location", elsewhere.url("/elsewhere").toString())
+                    .build(),
+            )
+
+            expect<TranslationError.Service> {
+                runBlocking { client.translate(base, "secret", "m", "fr", "en", "private passage") }
+            }
+
+            assertEquals(1, server.requestCount)
+            assertEquals(0, elsewhere.requestCount)
+        }
     }
 
     @Test

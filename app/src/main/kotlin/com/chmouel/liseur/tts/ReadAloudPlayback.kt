@@ -25,6 +25,22 @@ import org.readium.r2.shared.util.Url
 typealias SpeechNavigator =
     TtsNavigator<SpeechTtsSettings, SpeechTtsPreferences, SpeechTtsEngine.Error, SpeechTtsEngine.Voice>
 
+internal fun matchesSpeechRequestLocation(
+    utterance: String,
+    locator: Locator,
+    text: String,
+    previousPlace: Locator?,
+    allowSamePlace: Boolean,
+    skipFromPlace: Locator? = null,
+): Boolean {
+    if (utterance != text) return false
+    return when {
+        skipFromPlace != null -> !SpeechKey.sameLocation(text, locator, skipFromPlace)
+        allowSamePlace || previousPlace == null -> true
+        else -> !SpeechKey.sameLocation(text, locator, previousPlace)
+    }
+}
+
 /** Opens a paused navigator at [initial], its engine reporting to [observer]. Null when the book cannot be read aloud. */
 @OptIn(ExperimentalReadiumApi::class)
 fun interface NavigatorOpener {
@@ -50,6 +66,7 @@ class ReadAloudPlayback(
     private val onStopRequested: () -> Unit = {},
     private val onChapterEnded: () -> Unit = {},
     private val stepTimeoutMillis: Long = 2_000,
+    private val distinctPlaceGraceMillis: Long = 500,
     /**
      * Read translated: each request is filed under the book's sentence the
      * navigator is on ([keyFor]), not its words alone, since the same words
@@ -96,6 +113,8 @@ class ReadAloudPlayback(
 
     // Where each recent request is in the book, once told.
     private val places = HashMap<TtsEngine.RequestId, Locator>()
+    private val skipOrigins = HashMap<TtsEngine.RequestId, Locator>()
+    private var pendingSkipOrigin: Locator? = null
 
     private val mutableHeard = MutableStateFlow<Locator?>(null)
 
@@ -225,13 +244,17 @@ class ReadAloudPlayback(
     fun skipToNext() {
         mutableFailure.value = null
         skips++
-        mutableNavigator.value?.skipToNextUtterance()
+        val navigator = mutableNavigator.value
+        pendingSkipOrigin = navigator?.location?.value?.utteranceLocator
+        navigator?.skipToNextUtterance()
     }
 
     fun skipToPrevious() {
         mutableFailure.value = null
         skips++
-        mutableNavigator.value?.skipToPreviousUtterance()
+        val navigator = mutableNavigator.value
+        pendingSkipOrigin = navigator?.location?.value?.utteranceLocator
+        navigator?.skipToPreviousUtterance()
     }
 
     fun close() {
@@ -242,6 +265,8 @@ class ReadAloudPlayback(
         mutableNavigator.value = null
         spoken.clear()
         places.clear()
+        skipOrigins.clear()
+        pendingSkipOrigin = null
         waitFor(null)
     }
 
@@ -288,6 +313,8 @@ class ReadAloudPlayback(
         val previous = mutableNavigator.value
         spoken.clear()
         places.clear()
+        skipOrigins.clear()
+        pendingSkipOrigin = null
         waitFor(null)
         mutableNavigator.value = fresh
         previous?.close()
@@ -306,27 +333,65 @@ class ReadAloudPlayback(
                 return false
             }
         }
+        pendingSkipOrigin?.let { skipOrigins[requestId] = it }
+        pendingSkipOrigin = null
         spoken[requestId] = text
         if (spoken.size > SPOKEN_KEPT) {
             val oldest = spoken.keys.first()
             spoken.remove(oldest)
             places.remove(oldest)
+            skipOrigins.remove(oldest)
         }
         return true
     }
 
-    override suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? {
+    override suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? =
+        keyFor(requestId, text, reusingHeldAudio = false)
+
+    override suspend fun keyFor(
+        requestId: TtsEngine.RequestId,
+        text: String,
+        reusingHeldAudio: Boolean,
+    ): SpeechKey? {
         if (!anchored) return SpeechKey(text)
         val navigator = mutableNavigator.value ?: return null
         if (requestId !in spoken) return null
-        // Readium publishes the sentence it asks for, possibly a moment after asking.
-        val location = withTimeoutOrNull(stepTimeoutMillis) {
+        val skipFromPlace = skipOrigins.remove(requestId)
+        val previousPlace = spoken.entries
+            .takeWhile { it.key != requestId }
+            .lastOrNull { (previousId, previousText) ->
+                previousText == text && previousId in places
+            }
+            ?.let { places[it.key] }
+        val distinct = skipFromPlace != null || (!reusingHeldAudio && previousPlace != null)
+        // Readium publishes the sentence it asks for, possibly a moment after
+        // asking, and until then may still show the same words at their last
+        // place. Identical words in identical surroundings have no distinct
+        // place to wait for, and file under the same key whichever is shown.
+        val location = (if (distinct) withTimeoutOrNull(distinctPlaceGraceMillis) {
+            navigator.location.first {
+                matchesSpeechRequestLocation(
+                    utterance = it.utterance,
+                    locator = it.utteranceLocator,
+                    text = text,
+                    previousPlace = previousPlace,
+                    allowSamePlace = reusingHeldAudio,
+                    skipFromPlace = skipFromPlace,
+                )
+            }
+        } else null) ?: withTimeoutOrNull(stepTimeoutMillis) {
             navigator.location.first { it.utterance == text }
         } ?: return null
         if (mutableNavigator.value !== navigator || requestId !in spoken) return null
         places[requestId] = location.utteranceLocator
         return SpeechKey.at(text, location.utteranceLocator, translationIdentity())
     }
+
+    override suspend fun refreshKey(
+        requestId: TtsEngine.RequestId,
+        text: String,
+        key: SpeechKey,
+    ): SpeechKey = if (anchored) key.copy(translationIdentity = translationIdentity()) else key
 
     override fun previousOf(requestId: TtsEngine.RequestId): String? {
         val place = places[requestId] ?: return null

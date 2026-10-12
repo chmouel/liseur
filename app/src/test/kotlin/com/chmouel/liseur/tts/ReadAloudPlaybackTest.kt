@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -91,16 +92,20 @@ class ReadAloudPlaybackTest {
     @Before
     fun setUp() = runBlocking {
         clock.start()
-        val context = ApplicationProvider.getApplicationContext<Application>()
-        val http = DefaultHttpClient()
-        val assets = AssetRetriever(context.contentResolver, http)
         val epub = File(folder.root, "book.epub").also(::writeEpub)
-        val asset = assets.retrieve(epub.toUrl(isDirectory = false)).getOrNull()!!
-        publication = PublicationOpener(DefaultPublicationParser(context, http, assets, pdfFactory = null))
-            .open(asset, allowUserInteraction = false).getOrNull()!!
+        publication = openPublication(epub)
 
         cache = SpeechCache(scope, synthesize)
         playback = newPlayback()
+    }
+
+    private suspend fun openPublication(epub: File): Publication {
+        val context = ApplicationProvider.getApplicationContext<Application>()
+        val http = DefaultHttpClient()
+        val assets = AssetRetriever(context.contentResolver, http)
+        val asset = assets.retrieve(epub.toUrl(isDirectory = false)).getOrNull()!!
+        return PublicationOpener(DefaultPublicationParser(context, http, assets, pdfFactory = null))
+            .open(asset, allowUserInteraction = false).getOrNull()!!
     }
 
     private val synthesize: suspend (String) -> SpeechAudio = { text ->
@@ -124,6 +129,7 @@ class ReadAloudPlaybackTest {
     /** Fails the nth translation of a sentence, once. */
     private val translationFailures = ConcurrentHashMap<String, Int>()
     private val translationsAsked = ConcurrentHashMap<String, AtomicInteger>()
+    private val translationHoldsByRequest = ConcurrentHashMap<Pair<String, Int>, CompletableDeferred<Unit>>()
 
     /** The text each translation was asked with as the one before it, in the order asked. */
     private val translatedAfter: MutableList<Pair<String, String?>> = Collections.synchronizedList(mutableListOf())
@@ -132,13 +138,19 @@ class ReadAloudPlaybackTest {
     private fun translationOf(key: SpeechKey) = "T[${key.text}]#${key.place?.before.orEmpty().length}"
 
     /** Reads the book translated: each request translated by a fake, where it is, before its audio. */
-    private fun readTranslated(prefetch: Boolean = false) {
+    private fun readTranslated(prefetch: Boolean = false, repeatedCount: Int? = null) {
         runBlocking(main) { playback.close() }
+        if (repeatedCount != null) {
+            publication.close()
+            val epub = File(folder.root, "repeated-book.epub").also { writeEpub(it, repeatedCount) }
+            publication = runBlocking { openPublication(epub) }
+        }
         cache = SpeechCache(scope, synthesize, prepare = { key, previous ->
             translatedKeys += key
             translatedAfter += key.text to previous
             val nth = translationsAsked.getOrPut(key.text) { AtomicInteger() }.incrementAndGet()
             translationHolds[key.text]?.await()
+            translationHoldsByRequest[key.text to nth]?.await()
             if (translationFailures[key.text] == nth) {
                 translationFailures.remove(key.text)
                 throw com.chmouel.liseur.translate.TranslationError.Refused()
@@ -231,6 +243,14 @@ class ReadAloudPlaybackTest {
         val deadline = System.currentTimeMillis() + 10_000
         while (playback.waiting.value != expected) {
             check(System.currentTimeMillis() < deadline) { "waiting never became $expected after $played" }
+            Thread.sleep(10)
+        }
+    }
+
+    private fun awaitTranslations(text: String, count: Int) {
+        val deadline = System.currentTimeMillis() + 10_000
+        while ((translationsAsked[text]?.get() ?: 0) < count) {
+            check(System.currentTimeMillis() < deadline) { "only asked ${translationsAsked[text]?.get() ?: 0} times for $text" }
             Thread.sleep(10)
         }
     }
@@ -673,6 +693,45 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun anAdvancingRepeatedSentenceWaitsForItsOwnLocationButResumeCanReuseOne() {
+        val first = chapterStart.copy(
+            locations = chapterStart.locations.copy(position = 1),
+            text = Locator.Text(before = "First occurrence", highlight = REPEATED),
+        )
+        val second = chapterStart.copy(
+            locations = chapterStart.locations.copy(position = 2),
+            text = Locator.Text(before = "Second occurrence", highlight = REPEATED),
+        )
+
+        assertFalse(matchesSpeechRequestLocation(REPEATED, first, REPEATED, first, allowSamePlace = false))
+        assertTrue(matchesSpeechRequestLocation(REPEATED, second, REPEATED, first, allowSamePlace = false))
+        assertTrue(matchesSpeechRequestLocation(REPEATED, first, REPEATED, first, allowSamePlace = true))
+        // Skipping back from an occurrence waits for any other place, even one heard before.
+        assertFalse(
+            matchesSpeechRequestLocation(REPEATED, first, REPEATED, null, allowSamePlace = true, skipFromPlace = first),
+        )
+        assertTrue(
+            matchesSpeechRequestLocation(REPEATED, second, REPEATED, second, allowSamePlace = false, skipFromPlace = first),
+        )
+    }
+
+    @Test
+    fun repeatedSentencesWithTheSameSurroundingsPlayThrough() {
+        // Longer than Readium's context, so every repeat after the first has the same words before it.
+        readTranslated(repeatedCount = 4)
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(9)
+        assertTrue("playback failure: ${playback.failure.value}", playback.failure.value == null)
+
+        val repeats = synchronized(translatedKeys) { translatedKeys.filter { it.text == REPEATED } }
+        assertEquals(4, repeats.size)
+        assertTrue(repeats[0] != repeats[1])
+        assertEquals(1, repeats.drop(1).distinct().size)
+        assertEquals(4, played.count { it.startsWith("T[$REPEATED]") })
+        assertTrue(played[8].startsWith("T[$LAST]"))
+    }
+
+    @Test
     fun aLateTranslationHoldsTheVoiceOnItsSentenceThenSpeaksItOnce() {
         readTranslated()
         translationHolds[SECOND] = CompletableDeferred()
@@ -801,6 +860,86 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
+    fun skippingBackTwiceUsesTheLiveReadiumPosition() {
+        readTranslated()
+        translationHoldsByRequest[REPEATED to 2] = CompletableDeferred()
+        translationHoldsByRequest[REPEATED to 3] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(5)
+        awaitTranslations(REPEATED, 2)
+
+        runBlocking(main) { playback.skipToPrevious() }
+        awaitTranslations(REPEATED, 3)
+        runBlocking(main) { playback.skipToPrevious() }
+        awaitPlayed(6)
+
+        val repeats = synchronized(translatedKeys) { translatedKeys.filter { it.text == REPEATED } }
+        // The first skip landed on the earlier occurrence, not the one it left.
+        assertEquals(repeats[0], repeats[2])
+        // The second skip went back from there, to the sentence before it.
+        assertEquals(translationOf(translatedKeys.last { it.text == FOURTH }), played[5])
+        assertEquals(FOURTH to null, translatedAfter.last { it.first == FOURTH })
+    }
+
+    @Test
+    fun skippingBackWhilePausedUsesTheLiveReadiumPosition() {
+        readTranslated()
+        val lateTranslation = CompletableDeferred<Unit>()
+        translationHolds[FOURTH] = lateTranslation
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(3)
+        awaitWaiting(true)
+
+        runBlocking(main) { playback.pause() }
+        awaitWaiting(false)
+        runBlocking(main) {
+            playback.skipToPrevious()
+            playback.resume()
+        }
+        lateTranslation.complete(Unit)
+        awaitPlayed(4)
+
+        assertEquals(THIRD, translatedKeys.last().text)
+    }
+
+    @Test
+    fun skippingForwardFromARepeatedSentenceLandsOnTheNextOccurrence() {
+        readTranslated(repeatedCount = 3)
+        translationHoldsByRequest[REPEATED to 1] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(4)
+        awaitTranslations(REPEATED, 1)
+
+        runBlocking(main) { playback.skipToNext() }
+        awaitPlayed(5)
+
+        val repeats = synchronized(translatedKeys) { translatedKeys.filter { it.text == REPEATED } }
+        assertNotEquals(repeats[0], repeats[1])
+        assertEquals(translationOf(repeats[1]), played[4])
+    }
+
+    @Test
+    fun skippingBackFromAnIdenticalSentenceWaitsForItsEarlierPlace() {
+        readTranslated()
+        val firstTranslation = CompletableDeferred<Unit>()
+        translationHolds[REPEATED] = firstTranslation
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(4)
+        awaitWaiting(true)
+
+        val secondTranslation = CompletableDeferred<Unit>()
+        translationHolds[REPEATED] = secondTranslation
+        firstTranslation.complete(Unit)
+        awaitPlayed(5)
+        awaitWaiting(true)
+
+        runBlocking(main) { playback.skipToPrevious() }
+        secondTranslation.complete(Unit)
+        awaitPlayed(6)
+        assertEquals(translationOf(translatedKeys[4]), played[5])
+    }
+
+    @Test
     fun closingWhileATranslationIsLateSpeaksNothingMore() {
         readTranslated()
         translationHolds[SECOND] = CompletableDeferred()
@@ -815,7 +954,7 @@ class ReadAloudPlaybackTest {
         assertEquals(FIRST, playback.heard.value?.text?.highlight)
     }
 
-    private fun writeEpub(target: File) {
+    private fun writeEpub(target: File, repeatedCount: Int = 2) {
         ZipOutputStream(target.outputStream()).use { zip ->
             val mimetype = "application/epub+zip".toByteArray()
             zip.setMethod(ZipOutputStream.STORED)
@@ -869,7 +1008,7 @@ class ReadAloudPlaybackTest {
                 <html xmlns="http://www.w3.org/1999/xhtml">
                   <head><title>One</title></head>
                   <body>
-                    <p>$FIRST $SECOND $THIRD $FOURTH $REPEATED $REPEATED $LAST ${TAIL.joinToString(" ")}</p>
+                    <p>$FIRST $SECOND $THIRD $FOURTH ${List(repeatedCount) { REPEATED }.joinToString(" ")} $LAST ${TAIL.joinToString(" ")}</p>
                   </body>
                 </html>""",
             )

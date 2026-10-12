@@ -33,5 +33,9 @@ data class SpeechKey(
             selector = locator.locations.otherLocations[CSS_SELECTOR] as? String,
             before = locator.text.before,
         )
+
+        /** Whether [one] and [other] name the same occurrence of [text]. */
+        fun sameLocation(text: String, one: Locator, other: Locator): Boolean =
+            at(text, one) == at(text, other)
     }
 }
