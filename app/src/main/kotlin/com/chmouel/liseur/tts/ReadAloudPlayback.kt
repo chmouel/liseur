@@ -327,6 +327,19 @@ class ReadAloudPlayback(
         return SpeechKey.at(text, location.utteranceLocator)
     }
 
+    override fun previousOf(requestId: TtsEngine.RequestId): String? {
+        val place = places[requestId] ?: return null
+        val ids = spoken.keys.toList()
+        val before = ids.getOrNull(ids.indexOf(requestId) - 1) ?: return null
+        val text = spoken[before] ?: return null
+        val previous = places[before] ?: return null
+        // Only the sentence straight before it: after a skip back, the last one asked is not.
+        // Readium keeps 50 characters before a sentence, often fewer than the page needs to place one.
+        val follows = SpeechKey.sentenceAt(spoken.getValue(requestId), place)
+            .follows(SpeechKey.sentenceAt(text, previous), matched = BEFORE_MATCHED)
+        return text.takeIf { follows }
+    }
+
     override fun onPlaying(requestId: TtsEngine.RequestId) {
         if (requestId !in spoken) return
         mutableHeard.value = places[requestId] ?: mutableNavigator.value?.location?.value?.utteranceLocator ?: return
@@ -356,5 +369,6 @@ class ReadAloudPlayback(
     companion object {
         const val START_STEPS = 80
         private const val SPOKEN_KEPT = 8
+        private const val BEFORE_MATCHED = 24
     }
 }

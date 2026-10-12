@@ -18,7 +18,28 @@ import kotlinx.coroutines.launch
  * it sits in, and the text before it in that element, which together
  * find it again in the page.
  */
-data class PageSentence(val text: String, val href: String, val selector: String?, val before: String?)
+data class PageSentence(val text: String, val href: String, val selector: String?, val before: String?) {
+    /**
+     * Whether this comes straight after [previous] in the same element, as
+     * the text before it says; a [before] cut short within [previous] must
+     * still hold [matched] of its characters.
+     */
+    fun follows(previous: PageSentence, matched: Int = MATCHED): Boolean {
+        if (previous === this || previous.href != href || previous.selector != selector) return false
+        val before = squash(before.orEmpty())
+        val text = squash(previous.text)
+        if (before.isEmpty() || text.isEmpty()) return false
+        // The text before a sentence can stop partway into a long one.
+        return before.endsWith(text) || (before.length >= matched && text.endsWith(before))
+    }
+
+    private companion object {
+        // Enough of the text before a sentence to tell where it is.
+        const val MATCHED = 40
+
+        fun squash(text: String) = text.filterNot(Char::isWhitespace)
+    }
+}
 
 /** The book's sentences from a place onwards, the way read aloud walks them. */
 fun interface PageSentences {
@@ -260,15 +281,7 @@ internal class PageTranslation<P>(
             ?.first
     }
 
-    /** Whether [sentence] comes straight after [previous] in the same element, as the text before it says. */
-    private fun follows(previous: PageSentence, sentence: PageSentence): Boolean {
-        if (previous === sentence || previous.href != sentence.href || previous.selector != sentence.selector) return false
-        val before = squash(sentence.before.orEmpty())
-        val text = squash(previous.text)
-        if (before.isEmpty() || text.isEmpty()) return false
-        // The text before a sentence can stop partway into a long one.
-        return before.endsWith(text) || (before.length >= MATCHED && text.endsWith(before))
-    }
+    private fun follows(previous: PageSentence, sentence: PageSentence): Boolean = sentence.follows(previous)
 
     fun onReader(reader: PageReader<P>) {
         when (reader) {

@@ -1977,12 +1977,23 @@ fun ReaderScreen(
     // The sentence being read aloud, marked for as long as the session
     // lasts, paused or not, so the listener can find where the voice is.
     val spoken = listening?.utterance
-    LaunchedEffect(navigator, spoken, pageTranslated) {
+    // The words a translated page could not mark itself, on a WebView too old for it.
+    val spokenUnmarked = remember { MutableStateFlow<Pair<PageSentence, Locator.Text>?>(null) }
+    val unmarked by spokenUnmarked.collectAsStateWithLifecycle()
+    LaunchedEffect(navigator, spoken, pageTranslated, unmarked) {
         val nav = navigator ?: return@LaunchedEffect
+        // A translated page marks the voice's sentence itself, over the translation; see [TranslatedPages.follow].
+        val marked = if (pageTranslated) {
+            spoken?.let { at ->
+                unmarked?.takeIf { it.first == SpeechKey.sentenceAt(at.text.highlight.orEmpty(), at) }
+                    ?.let { at.copy(text = it.second) }
+            }
+        } else {
+            spoken
+        }
         nav.applyDecorations(
             listOfNotNull(
-                // A translated page marks the voice's sentence itself, over the translation; see [TranslatedPages.follow].
-                spoken?.takeUnless { pageTranslated }?.let {
+                marked?.let {
                     Decoration(
                         id = "read-aloud",
                         locator = it,
@@ -2246,7 +2257,7 @@ fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         val run = pageTranslation
         if (run != null) {
-            TranslatedPages.follow(nav, run, translatedViews, eInkPage, spokenOnPage)
+            TranslatedPages.follow(nav, run, translatedViews, eInkPage, spokenOnPage, spokenUnmarked)
         } else if (pageTranslated) {
             TranslatedPages.restore(nav, translatedViews) {
                 // Measured on translated words, and maybe still in flight.
@@ -4065,6 +4076,9 @@ fun ReaderScreen(
                                     // Translated words are not in the book; read from the sentence they translate.
                                     val original = (pageTranslation ?: restoringPageTranslation)
                                         ?.let { TranslatedPages.original(it, active.locator) }
+                                    suspend fun startingPoint() = original
+                                        ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
+                                        ?: active.locator
                                     // A translated page is read aloud in translation, and stays translated.
                                     val run = pageTranslation
                                     if (run != null && run.translations.acquire()) {
@@ -4077,9 +4091,7 @@ fun ReaderScreen(
                                         effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                             var handedOver = false
                                             try {
-                                                val start = original
-                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
-                                                    ?: active.locator
+                                                val start = startingPoint()
                                                 handedOver = true
                                                 reading.start(start, translation)
                                             } finally {
@@ -4099,12 +4111,7 @@ fun ReaderScreen(
                                                     return@launch
                                                 }
                                             }
-                                            reading.start(
-                                                original
-                                                    ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
-                                                    ?: active.locator,
-                                                null,
-                                            )
+                                            reading.start(startingPoint(), null)
                                         }
                                     }
                                 }

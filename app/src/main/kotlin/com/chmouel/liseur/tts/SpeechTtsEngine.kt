@@ -72,6 +72,12 @@ interface SpeechObserver {
      */
     suspend fun keyFor(requestId: TtsEngine.RequestId, text: String): SpeechKey? = SpeechKey(text)
 
+    /**
+     * The book's text straight before the request [keyFor] placed, for a
+     * translation made now to read it in context; null when unknown.
+     */
+    fun previousOf(requestId: TtsEngine.RequestId): String? = null
+
     /** The request's audio starts playing: from now on it has been heard. */
     fun onPlaying(requestId: TtsEngine.RequestId) {}
 
@@ -203,7 +209,7 @@ class SpeechTtsEngine(
                     fail(request, Error.Unplaced())
                     return@launch
                 }
-                cache.claim(key).also { request.audio = it }
+                cache.claim(key, observer.previousOf(requestId)).also { request.audio = it }
             }
             observer.onWaiting(requestId, true)
             val speech = try {

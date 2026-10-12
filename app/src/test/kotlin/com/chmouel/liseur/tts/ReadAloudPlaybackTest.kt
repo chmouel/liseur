@@ -125,14 +125,18 @@ class ReadAloudPlaybackTest {
     private val translationFailures = ConcurrentHashMap<String, Int>()
     private val translationsAsked = ConcurrentHashMap<String, AtomicInteger>()
 
+    /** The text each translation was asked with as the one before it, in the order asked. */
+    private val translatedAfter: MutableList<Pair<String, String?>> = Collections.synchronizedList(mutableListOf())
+
     /** A sentence's translation, which says where it was, so two places are told apart. */
     private fun translationOf(key: SpeechKey) = "T[${key.text}]#${key.place?.before.orEmpty().length}"
 
     /** Reads the book translated: each request translated by a fake, where it is, before its audio. */
     private fun readTranslated(prefetch: Boolean = false) {
         runBlocking(main) { playback.close() }
-        cache = SpeechCache(scope, synthesize, prepare = { key, _ ->
+        cache = SpeechCache(scope, synthesize, prepare = { key, previous ->
             translatedKeys += key
+            translatedAfter += key.text to previous
             val nth = translationsAsked.getOrPut(key.text) { AtomicInteger() }.incrementAndGet()
             translationHolds[key.text]?.await()
             if (translationFailures[key.text] == nth) {
@@ -769,6 +773,46 @@ class ReadAloudPlaybackTest {
         // The voice spoke the read-ahead's translation, so it claimed the place it was filed under.
         assertTrue(translationOf(readAhead) in played)
         assertEquals(1, requested.getValue(translationOf(readAhead)).get())
+    }
+
+    @Test
+    fun aSentenceTheVoiceAsksForItselfIsTranslatedAfterTheOneBeforeIt() {
+        readTranslated()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(4)
+        // Nothing comes before the first; each later one follows the one before it.
+        assertEquals(
+            listOf(FIRST to null, SECOND to FIRST, THIRD to SECOND, FOURTH to THIRD),
+            translatedAfter.take(4),
+        )
+    }
+
+    @Test
+    fun aSentenceSkippedBackToIsNotTranslatedAfterTheOneSkippedFrom() {
+        readTranslated()
+        translationHolds[THIRD] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(2)
+        awaitWaiting(true)
+        runBlocking(main) { playback.skipToPrevious() }
+        translationHolds.remove(THIRD)!!.complete(Unit)
+        awaitPlayed(3)
+        assertEquals(SECOND to null, translatedAfter.last { it.first == SECOND })
+    }
+
+    @Test
+    fun closingWhileATranslationIsLateSpeaksNothingMore() {
+        readTranslated()
+        translationHolds[SECOND] = CompletableDeferred()
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        awaitWaiting(true)
+        runBlocking(main) { playback.close() }
+        awaitWaiting(false)
+        translationHolds.remove(SECOND)!!.complete(Unit)
+        Thread.sleep(300)
+        assertEquals(1, played.size)
+        assertEquals(FIRST, playback.heard.value?.text?.highlight)
     }
 
     private fun writeEpub(target: File) {

@@ -65,12 +65,18 @@ internal object PageSwaps {
     /**
      * Marks the shown words of [sentence], the book's sentence the voice is
      * reading, in the document at [url], over whatever translation stands
-     * in its place; none clears the mark. Answers whether it is marked.
+     * in its place; none clears the mark. Answers whether it is marked,
+     * or, on a WebView without the CSS Custom Highlight API, the words as
+     * [shownWords] gives them for Readium to mark instead.
      */
     fun mark(url: String, sentence: PageSentence?): String =
         call("mark(${JSONObject.quote(url)}, ${sentence?.json() ?: "null"})")
 
-    /** Whether the shown words of [sentence] are on screen in the document at [url]. */
+    /**
+     * Whether the shown words of [sentence] are on screen in the document
+     * at [url]; one not found there is when its element is, as for the
+     * book's own words.
+     */
     fun showing(url: String, sentence: PageSentence): String =
         call("showing(${JSONObject.quote(url)}, ${sentence.json()})")
 
@@ -212,6 +218,19 @@ internal object PageSwaps {
             range.setEnd(last, Math.min(shown(last, at.offsets[at.end] + 1), last.data.length));
             return range;
           };
+          // The shown words of a sentence found, with the shown text just before them, for Readium to find.
+          const quote = at => {
+            if (!document.body) return null;
+            const range = shownRange(at);
+            const text = collapse(range.toString()).trim();
+            if (text.length === 0) return null;
+            const lead = document.createRange();
+            lead.setStart(document.body, 0);
+            lead.setEnd(range.startContainer, range.startOffset);
+            return { before: collapse(lead.toString()).slice(-$BEFORE_CHARS), text };
+          };
+          const onScreen = rects => Array.from(rects).some(r =>
+            r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight);
           const SPOKEN = "liseur-spoken";
           const unmark = () => { try { if (window.CSS && CSS.highlights) CSS.highlights.delete(SPOKEN); } catch (e) {} };
           // 1 on screen, 0 gone past (above, or on an earlier page), -1 still to come.
@@ -224,7 +243,7 @@ internal object PageSwaps {
             const style = getComputedStyle(document.body || document.documentElement);
             const mode = style.writingMode || style.webkitWritingMode || "";
             const pastRight = /^(vertical|sideways)-rl/.test(mode) || (!/^(vertical|sideways)/.test(mode) && rtl);
-            if (rects.some(r => r.right > 0 && r.bottom > 0 && r.left < window.innerWidth && r.top < window.innerHeight)) return 1;
+            if (onScreen(rects)) return 1;
             return rects.every(r => r.bottom <= 0 || (pastRight ? r.left >= window.innerWidth : r.right <= 0)) ? 0 : -1;
           };
           window.__liseurPage = {
@@ -270,10 +289,11 @@ internal object PageSwaps {
             mark(url, s) {
               if (!here(url)) return false;
               unmark();
-              if (!s || !window.CSS || !CSS.highlights || typeof Highlight === "undefined") return false;
+              if (!s) return false;
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
               if (!at) return false;
+              if (!window.CSS || !CSS.highlights || typeof Highlight === "undefined") return quote(at) || false;
               if (!document.getElementById(SPOKEN)) {
                 const style = document.createElement("style");
                 style.id = SPOKEN;
@@ -287,20 +307,16 @@ internal object PageSwaps {
               if (!here(url)) return false;
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
-              return !!at && where(at) === 1;
+              if (at) return where(at) === 1;
+              let block = null;
+              try { block = s.selector ? document.querySelector(s.selector) : null; } catch (e) {}
+              return !!block && onScreen(block.getClientRects());
             },
             shownWords(url, s) {
               if (!here(url)) return null;
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
-              if (!at || !document.body) return null;
-              const range = shownRange(at);
-              const text = collapse(range.toString()).trim();
-              if (text.length === 0) return null;
-              const lead = document.createRange();
-              lead.setStart(document.body, 0);
-              lead.setEnd(range.startContainer, range.startOffset);
-              return { before: collapse(lead.toString()).slice(-$BEFORE_CHARS), text };
+              return at ? quote(at) : null;
             },
             restore() {
               unmark();

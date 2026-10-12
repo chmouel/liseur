@@ -88,6 +88,8 @@ internal object TranslatedPages {
      * collects the views that were changed, for [restore]. On electronic
      * paper the translations land together once the run has caught up,
      * rather than one sentence at a time, each a refresh of the panel.
+     * [spoken] is marked over its translation; a WebView that cannot mark
+     * it puts the words to mark in [unmarked], for a Readium decoration.
      */
     suspend fun follow(
         nav: EpubNavigatorFragment,
@@ -95,12 +97,14 @@ internal object TranslatedPages {
         touched: MutableSet<WebView>,
         eInk: Boolean,
         spoken: StateFlow<PageSentence?> = MutableStateFlow(null),
+        unmarked: MutableStateFlow<Pair<PageSentence, Locator.Text>?> = MutableStateFlow(null),
     ) {
         val root = nav.publicationView
         val id = ++follows
         val sent = WeakHashMap<WebView, Pair<String, Int>>()
         val marked = WeakHashMap<WebView, PageSentence?>()
         merge(nav.currentLocator.map { }, layoutPasses(root), run.swaps.map { }, run.state.map { }, spoken.map { }).collect {
+            val rewritten = mutableSetOf<WebView>()
             if (!eInk || run.state.value != PageTranslationState.Translating) {
                 for (web in attachedWebViews(root)) {
                     val url = web.url ?: continue
@@ -117,28 +121,55 @@ internal object TranslatedPages {
                     var held = web.evaluate(PageSwaps.sync(url, id, from, swaps.drop(from)))?.toIntOrNull() ?: continue
                     // A reloaded page, or one an earlier run had changed, holds none of them.
                     if (held < from) held = web.evaluate(PageSwaps.sync(url, id, held, swaps.drop(held)))?.toIntOrNull() ?: continue
+                    if (held != from) rewritten += web
                     sent[web] = href to held
                 }
             }
-            markSpoken(root, spoken.value, marked)
+            markSpoken(root, spoken.value, marked, rewritten, unmarked)
             measure(nav, run)
         }
     }
 
     /**
      * Marks the voice's sentence in the view holding its chapter, over its
-     * translation, as Readium's own mark would over the book's words; a
-     * view whose words changed is marked again, the old mark gone with them.
+     * translation, as Readium's own mark would over the book's words. A
+     * view is marked again only when the sentence moved or its [rewritten]
+     * words took the old mark with them, not on every layout pass.
      */
-    private suspend fun markSpoken(root: android.view.View, sentence: PageSentence?, marked: WeakHashMap<WebView, PageSentence?>) {
+    private suspend fun markSpoken(
+        root: android.view.View,
+        sentence: PageSentence?,
+        marked: WeakHashMap<WebView, PageSentence?>,
+        rewritten: Set<WebView>,
+        unmarked: MutableStateFlow<Pair<PageSentence, Locator.Text>?>,
+    ) {
+        if (sentence == null) unmarked.value = null
         for (web in attachedWebViews(root)) {
             val url = web.url ?: continue
             val href = ResourceAddress.canonicalPath(url) ?: continue
             val here = sentence?.takeIf { it.href == href }
             if (here == null && web !in marked) continue
-            web.evaluate(PageSwaps.mark(url, here)) ?: continue
-            if (here == null) marked -= web else marked[web] = here
+            if (here != null && marked[web] == here && web !in rewritten) continue
+            val answer = web.evaluate(PageSwaps.mark(url, here)) ?: continue
+            if (here == null) {
+                marked -= web
+            } else if (answer != "false") {
+                // Not found yet, as on a page still loading: asked again on the next pass.
+                marked[web] = here
+                unmarked.value = quoted(answer)?.let { here to it }
+            }
         }
+    }
+
+    // The `{before, text}` PageSwaps answers with, as Readium's text to find; null for anything else.
+    private fun quoted(answer: String): Locator.Text? {
+        val shown = try {
+            JSONObject(answer)
+        } catch (_: JSONException) {
+            return null
+        }
+        val words = shown.optString("text").takeIf { it.isNotBlank() } ?: return null
+        return Locator.Text(before = shown.optString("before").ifEmpty { null }, highlight = words)
     }
 
     /** Whether the voice's sentence at [locator] is on screen in a translated page, where its translation stands. */
@@ -168,13 +199,7 @@ internal object TranslatedPages {
             .firstOrNull { view -> view.url?.let(ResourceAddress::canonicalPath) == sentence.href } ?: return null
         val url = web.url ?: return null
         val answer = web.evaluate(PageSwaps.shownWords(url, sentence)) ?: return null
-        val shown = try {
-            JSONObject(answer)
-        } catch (_: JSONException) {
-            return null
-        }
-        val words = shown.optString("text").takeIf { it.isNotBlank() } ?: return null
-        return locator.copy(text = Locator.Text(before = shown.optString("before").ifEmpty { null }, highlight = words))
+        return quoted(answer)?.let { locator.copy(text = it) }
     }
 
     @OptIn(ExperimentalReadiumApi::class)

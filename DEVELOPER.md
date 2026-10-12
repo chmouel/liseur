@@ -1913,9 +1913,11 @@ reader behavior.
   share a translation or audio. `SpeechCache`'s `prepare` stage
   (`TranslatedSpeech`) translates each source sentence of a request with
   the one before it as context. For the request's first sentence that is
-  the sentence the read-ahead passed when it fetched the request; a
-  request it did not fetch (the first sentence, after a skip or a retry)
-  starts without context. Either way a translation already accepted for
+  the sentence the read-ahead passed when it fetched the request. A
+  request it did not fetch gets the one the voice asked for just before
+  (`SpeechObserver.previousOf`), only when the request's Readium `before`
+  shows it comes straight after; the first sentence, one at the start of
+  an element, or one skipped back to starts without context. Either way a translation already accepted for
   that place in `SentenceTranslations` is reused, so the page and the
   voice agree. It then cuts the translation into pieces within a
   request's bounds, which play as one unit with one anchor. A
@@ -1927,11 +1929,15 @@ reader behavior.
   sentence whose audio played (`ReadAloudPlayback.heard`), not one only
   waited on. On a translated page the spoken sentence is marked through
   `PageSwaps.mark` (CSS Custom Highlight over the translation's range)
-  rather than a Readium decoration, its visibility comes from
-  `PageSwaps.showing`, follow goes to the translation's shown words
-  (`PageSwaps.shownWords` through `TranslatedPages.shownLocator`, falling
-  back to its element when no attached view holds its chapter), and no
-  exact anchor is captured after listening.
+  rather than a Readium decoration, marked again only when the sentence
+  moves or its view's words are rewritten. A WebView without that API
+  answers with the shown words instead, and the reader decorates them
+  through Readium. Visibility comes from `PageSwaps.showing`, which falls
+  back to the sentence's element being on screen when it is not found.
+  Follow goes to the translation's shown words (`PageSwaps.shownWords`
+  through `TranslatedPages.shownLocator`, falling back to its element
+  when no attached view holds its chapter), and no exact anchor is
+  captured after listening.
 
 ### Covers, UI, and dependencies
 
