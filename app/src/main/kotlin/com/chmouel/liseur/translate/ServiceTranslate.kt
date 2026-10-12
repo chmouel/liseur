@@ -72,7 +72,7 @@ internal class ServiceTranslate(
 
     private fun chosen(s: AppSettings): List<Any?> {
         val server = s.translationServerConnection
-        return listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, s.translationGeminiModel)
+        return listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, identityOptions(s), s.translationGeminiModel)
     }
 
     /** The language the reader picked to translate into; null follows the app's. */
@@ -216,12 +216,26 @@ internal class ServiceTranslate(
 /**
  * What a page translation by [service] with [model] depends on, written to
  * be kept across versions: the server by its address, never its name, its
- * key, or a model another service would use.
+ * key, or a model another service would use. The server's options that
+ * change a translation join it only once set, so a page translated before
+ * they existed keeps its identity.
  */
 internal fun pageIdentity(s: AppSettings, service: String, model: String?, source: String?, target: String): String {
     val server = s.translationServerConnection?.takeIf { service == ServerSettings.SERVER_PROVIDER }
-    return listOf(IDENTITY_VERSION, TranslationPrompt.VERSION, service, server?.id, model, source, target)
-        .joinToString("\u0000") { it?.toString().orEmpty() }
+    val fields = listOf(IDENTITY_VERSION, TranslationPrompt.version(model), service, server?.id, model, source, target)
+    val tuned = server?.let { identityOptions(s, model) }
+    return (if (tuned == null) fields else fields + tuned).joinToString("\u0000") { it?.toString().orEmpty() }
+}
+
+/**
+ * What of the chosen server's options changes its translations by [model]:
+ * not how long it keeps the model loaded, a context TranslateGemma never
+ * gets, nor whether the model refused a temperature. Null when none is set.
+ */
+private fun identityOptions(s: AppSettings, model: String? = null): List<Any?>? {
+    val state = s.translationServerConnection?.let { s.translationStates[it.id] } ?: return null
+    val context = state.context.takeIf { model == null || !TranslationPrompt.isTranslateGemma(model) }
+    return listOf(state.temperature, context, state.instructions, state.maxTokens).takeIf { it.any { field -> field != null } }
 }
 
 /** The service a [pageIdentity] names; null for one that is not an identity. */

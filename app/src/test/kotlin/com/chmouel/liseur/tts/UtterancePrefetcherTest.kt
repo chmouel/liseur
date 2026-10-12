@@ -248,6 +248,20 @@ class UtterancePrefetcherTest {
     }
 
     @Test
+    fun aServerWithoutSpeechStopsReadingAhead() = runTest {
+        val synth = FakeSynth()
+        val (cache, prefetcher) = setUp(synth, mapOf("p" to { cursor("A", "B", "C", "D", "E") }))
+        prefetcher.onUtterance("A", null, "p")
+        advanceUntilIdle()
+        synth.reply("B").completeExceptionally(SpeechError.NoSpeech(404))
+        advanceUntilIdle()
+        assertTrue(cache.halted)
+        prefetcher.onUtterance("B", null, "p")
+        advanceUntilIdle()
+        assertEquals(listOf("B", "C", "D"), synth.calls)
+    }
+
+    @Test
     fun suspendingCancelsAndStaysQuiet() = runTest {
         val synth = FakeSynth()
         val (_, prefetcher) = setUp(synth, mapOf("p" to { cursor("A", "B", "C") }))

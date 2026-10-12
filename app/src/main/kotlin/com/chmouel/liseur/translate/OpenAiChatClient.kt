@@ -19,8 +19,14 @@ import org.json.JSONObject
 class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client()) {
     /**
      * [passage] translated by [model], with [context] as the text before it
-     * when there is one. Throws [TranslationError]; cancelling the caller
-     * cancels the request.
+     * when there is one. TranslateGemma is asked in its own format, which
+     * has no room for [context]. [instructions] are the reader's own words
+     * for the prompt; [maxTokens] and [keepAlive] (Ollama's, as seconds or
+     * a duration) are sent only when set, and [temperature] unless it is
+     * null. A server that refuses the temperature, as OpenAI's reasoning
+     * models refuse all but their own, is asked once more without it, and
+     * [onTemperatureRefused] is told once that worked. Throws [TranslationError];
+     * cancelling the caller cancels the request.
      */
     suspend fun translate(
         base: HttpUrl,
@@ -30,18 +36,48 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
         target: String,
         passage: String,
         context: String? = null,
+        temperature: Double? = 0.0,
+        instructions: String? = null,
+        maxTokens: Int? = null,
+        keepAlive: String? = null,
+        onTemperatureRefused: suspend () -> Unit = {},
     ): String {
         val body = JSONObject()
             .put("model", model)
             .put("stream", false)
-            .put(
+        // Translation wants the likeliest wording, and the same sentence then gets the same translation.
+        temperature?.let { body.put("temperature", if (it == 0.0) 0 else it) }
+        maxTokens?.let { body.put("max_tokens", it) }
+        // Ollama reads a bare number as seconds but a string only as a duration with its unit.
+        keepAlive?.let { body.put("keep_alive", it.toLongOrNull() ?: it) }
+        if (TranslationPrompt.isTranslateGemma(model)) {
+            val prompt = TranslationPrompt.translateGemma(source, target, passage, instructions)
+            body.put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt)))
+        } else {
+            body.put(
                 "messages",
                 JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null)))
+                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null, instructions)))
                     .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context))),
             )
-            .toString()
-        val request = request(base, "chat/completions", apiKey).post(body.toRequestBody(JSON)).build()
+        }
+        val first = complete(base, apiKey, body)
+        val refused = first is ChatReply.Failure && first.code == 400 && body.has("temperature") &&
+            first.body.contains("temperature", ignoreCase = true)
+        val reply = if (refused) {
+            body.remove("temperature")
+            complete(base, apiKey, body).also { if (it is ChatReply.Text) onTemperatureRefused() }
+        } else {
+            first
+        }
+        return when (reply) {
+            is ChatReply.Text -> OpenAiChat.translation(reply.text)
+            is ChatReply.Failure -> throw OpenAiChat.errorFor(reply.code, reply.body, model)
+        }
+    }
+
+    private suspend fun complete(base: HttpUrl, apiKey: String?, body: JSONObject): ChatReply {
+        val request = request(base, "chat/completions", apiKey).post(body.toString().toRequestBody(JSON)).build()
         return TranslationHttp.execute(client, request, ::reply)
     }
 
@@ -57,11 +93,17 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
         return if (apiKey.isNullOrBlank()) builder else builder.secret("Authorization", "Bearer $apiKey")
     }
 
-    private fun reply(response: Response): String {
+    private fun reply(response: Response): ChatReply {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
-        if (!response.isSuccessful) throw errorFor(response.code, text.orEmpty())
+        if (!response.isSuccessful) return ChatReply.Failure(response.code, text.orEmpty().take(TranslationHttp.MAX_ERROR_BYTES.toInt()))
         if (text == null) throw TranslationError.Malformed("reply too large")
-        return OpenAiChat.translation(text)
+        return ChatReply.Text(text)
+    }
+
+    /** A chat completion's reply, read but not yet judged, so a refused option can be asked again without. */
+    private sealed interface ChatReply {
+        class Text(val text: String) : ChatReply
+        class Failure(val code: Int, val body: String) : ChatReply
     }
 
     private fun models(response: Response): List<TextModel> {
@@ -158,9 +200,27 @@ internal object OpenAiChat {
         "tts", "speech", "whisper", "transcribe", "embed", "dall-e", "image", "moderation", "kokoro", "rerank",
     )
 
-    fun errorFor(code: Int, body: String): TranslationError = when {
+    /**
+     * A failed request to [model], when it was one, from its status and
+     * reply. A 404 is the model missing only when the reply says so, as
+     * Ollama's "model not found" and OpenAI's `model_not_found` do; a
+     * server with no such route answers 404 too.
+     */
+    fun errorFor(code: Int, body: String, model: String? = null): TranslationError = when {
         code == 401 || code == 403 -> TranslationError.InvalidKey(code)
         code == 429 || code == 402 -> TranslationError.RateLimited(code)
+        code == 404 && model != null && missingModel(body) -> TranslationError.ModelNotFound(model)
         else -> TranslationError.Service(code)
+    }
+
+    private fun missingModel(body: String): Boolean {
+        val code = try {
+            JSONObject(body.trim()).optJSONObject("error")?.opt("code") as? String
+        } catch (_: JSONException) {
+            null
+        }
+        if (code == "model_not_found") return true
+        val text = body.lowercase()
+        return "model" in text && ("not found" in text || "does not exist" in text)
     }
 }

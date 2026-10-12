@@ -1044,6 +1044,7 @@
     <string name="read_aloud_notice_unavailable">本书无法从这里开始朗读。</string>
     <string name="read_aloud_notice_invalid_voice">%1$s 没有所选的声音。请在“设置 &gt; 朗读”中另选一个。</string>
     <string name="read_aloud_notice_terms_required">%1$s 要求先在其网站上接受此模型的条款。</string>
+    <string name="read_aloud_notice_no_speech">%1$s 没有语音接口。请检查其地址，或在“设置 &gt; 朗读”中选择语音服务器。</string>
     <string name="read_aloud_notice_not_set_up">朗读尚未设置。请在“设置 &gt; 朗读”中设置。</string>
     <string name="read_aloud_settings_title">朗读</string>
     <string name="read_aloud_settings_playback">播放</string>
@@ -1092,6 +1093,7 @@
     <string name="read_aloud_settings_preview_unreachable">无法连接语音服务。</string>
     <string name="read_aloud_settings_preview_refused">语音服务拒绝了 API 密钥。</string>
     <string name="read_aloud_settings_preview_no_voice">语音服务没有这个声音。</string>
+    <string name="read_aloud_settings_preview_no_speech">此服务器没有语音接口。请检查其地址，或选择语音服务器。</string>
     <string name="read_aloud_settings_terms_required">请在服务的网站上接受此模型的条款，然后重试。</string>
     <string name="read_aloud_settings_key_needs_url">请先输入服务器地址。</string>
     <string name="read_aloud_settings_key_not_saved">无法保存密钥。请重新粘贴。</string>
@@ -1175,6 +1177,22 @@
     <string name="translation_settings_target_follow">跟随应用语言</string>
     <string name="translation_settings_model_price">每百万词元：输入 $%1$s，输出 $%2$s</string>
     <string name="translation_settings_model_free">免费</string>
+    <string name="translation_options_temperature">温度</string>
+    <string name="translation_options_temperature_detail">为 0 时，同一段文字每次的译文都相同。数值越高，措辞变化越多。</string>
+    <string name="translation_options_temperature_refused">此模型不接受温度参数，因此不会发送。</string>
+    <string name="translation_options_context">发送前一句</string>
+    <string name="translation_options_context_detail">翻译整页时，每句会连同前一句一起发送，有助于处理代词和名字。</string>
+    <string name="translation_options_context_gemma">TranslateGemma 逐句单独翻译，从不接收前一句。</string>
+    <string name="translation_options_instructions">附加说明</string>
+    <string name="translation_options_instructions_detail">会添加到每段文字的请求中。</string>
+    <string name="translation_options_instructions_hint">使用“你”而不是“您”。人物名字保持原样。</string>
+    <string name="translation_options_max_tokens">最长回复</string>
+    <string name="translation_options_max_tokens_detail">以词元计。回复在此长度被截断时会显示错误。</string>
+    <string name="translation_options_server_default">服务器默认值</string>
+    <string name="translation_options_keep_alive">保持模型加载（Ollama）</string>
+    <string name="translation_options_keep_alive_detail">以秒计，或使用 10m、1h 这样的时长。-1 一直保持加载，0 在每次请求后卸载。</string>
+    <string name="translation_options_keep_alive_invalid">请输入秒数，或 10m 这样的时长。</string>
+    <string name="translation_options_reset">恢复默认值</string>
     <string name="translation_settings_test">翻译一句测试文字</string>
     <string name="translation_settings_saved">已保存的翻译</string>
     <plurals name="translation_settings_saved_count">
@@ -1219,6 +1237,7 @@
     <string name="translation_truncated">%1$s 未译完所选文字就停止了。请选择较短的文字后重试。</string>
     <string name="translation_failed">%1$s 无法翻译这段文字。</string>
     <string name="translation_device_failed">本机翻译无法翻译这段文字。</string>
+    <string name="translation_model_not_found">服务器上没有名为 %1$s 的模型。请检查名称，或先下载该模型。</string>
     <string name="translation_too_long">请选择较短的文字进行翻译。</string>
     <string name="translation_same">这段文字已经是%1$s。</string>
     <string name="translation_same_choose">这段文字已经是%1$s。请选择要翻译成的语言。</string>

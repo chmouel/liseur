@@ -2,7 +2,6 @@ package com.chmouel.liseur.tts
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpeechServerPresetsTest {
@@ -10,7 +9,9 @@ class SpeechServerPresetsTest {
     @Test
     fun everyAddressIsTakenAsItIs() {
         SpeechServerPresets.all.forEach { preset ->
-            assertEquals(preset.url, OpenAiTts.baseUrl(preset.url).toString())
+            // A self-hosted example is the server's own address; /v1 is added to it.
+            val expected = if (preset.example) "${preset.url}/v1" else preset.url
+            assertEquals(expected, OpenAiTts.baseUrl(preset.url).toString())
         }
     }
 
@@ -24,10 +25,12 @@ class SpeechServerPresetsTest {
     }
 
     @Test
-    fun theSelfHostedExampleIsNeverShownAsInUse() {
-        val example = SpeechServerPresets.all.single { it.example }
-        assertNull(SpeechServerPresets.matching(example.url))
-        assertEquals("192.168.1.10", example.url.substring(example.host))
-        assertTrue(SpeechServerPresets.all.count { it.example } == 1)
+    fun theSelfHostedExamplesAreNeverShownAsInUse() {
+        val examples = SpeechServerPresets.all.filter { it.example }
+        assertEquals(listOf("8880", "1234", "11434"), examples.map { OpenAiTts.baseUrl(it.url)!!.port.toString() })
+        examples.forEach { example ->
+            assertNull(SpeechServerPresets.matching(example.url))
+            assertEquals("192.168.1.10", example.url.substring(example.host))
+        }
     }
 }

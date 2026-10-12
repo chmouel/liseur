@@ -103,6 +103,7 @@ class SpeechTtsEngine(
         class InvalidKey(speech: SpeechError) : Error("The speech service rejected the API key", speech)
         class InvalidVoice(speech: SpeechError) : Error("The speech service has no such voice", speech)
         class TermsRequired(speech: SpeechError) : Error("The model's terms are not accepted", speech)
+        class NoSpeech(speech: SpeechError) : Error("The server does not make speech", speech)
         class RateLimited(speech: SpeechError) : Error("Speech quota exhausted", speech)
         class Network(speech: SpeechError) : Error("Speech service unreachable", speech)
         class Service(speech: SpeechError) : Error("Speech service error", speech)
@@ -110,13 +111,15 @@ class SpeechTtsEngine(
         class Output(message: String) : Error(message)
 
         /** Worth a retry later; anything else needs the user to act. */
-        val recoverable: Boolean get() = this !is InvalidKey && this !is InvalidVoice && this !is TermsRequired
+        val recoverable: Boolean
+            get() = this !is InvalidKey && this !is InvalidVoice && this !is TermsRequired && this !is NoSpeech
 
         companion object {
             fun of(error: SpeechError): Error = when (error) {
                 is SpeechError.InvalidKey -> InvalidKey(error)
                 is SpeechError.InvalidVoice -> InvalidVoice(error)
                 is SpeechError.TermsRequired -> TermsRequired(error)
+                is SpeechError.NoSpeech -> NoSpeech(error)
                 is SpeechError.RateLimited -> RateLimited(error)
                 is SpeechError.Network -> Network(error)
                 is SpeechError.LocalNetworkBlocked -> Network(error)
@@ -306,6 +309,7 @@ class SpeechTtsEngineProvider(
             is SpeechTtsEngine.Error.InvalidKey,
             is SpeechTtsEngine.Error.InvalidVoice,
             is SpeechTtsEngine.Error.TermsRequired,
+            is SpeechTtsEngine.Error.NoSpeech,
             is SpeechTtsEngine.Error.RateLimited,
             is SpeechTtsEngine.Error.Service,
             -> PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS

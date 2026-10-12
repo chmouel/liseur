@@ -141,17 +141,22 @@ settings.
 ### A server, for translation
 
 Liseur can translate a selected passage with any server on the External
-services and API keys page that speaks OpenAI's chat API, such as OpenRouter or a server of
-your own. Nothing is sent until you choose that server in Settings,
-Translation. Liseur then asks it for its list of models, with your API
-key if you entered one for that server, so you can pick one. "Translate
-a test sentence" sends one fixed English sentence, not text from a book.
-When you tap Translate on a passage, it sends that passage, up to 2,000
+services and API keys page that speaks OpenAI's chat API, such as
+OpenRouter or a server of your own (LM Studio or Ollama, for example).
+Nothing is sent until you choose that server in Settings, Translation.
+Liseur then asks it for its list of models, with your API key if you
+entered one for that server, so you can pick one. "Translate a test
+sentence" sends one fixed English sentence, not text from a book. When
+you tap Translate on a passage, it sends that passage, up to 2,000
 characters, with its language and the language you want, the model you
-picked and, if you entered one, your API key. No book title, file,
-identifier or reading position goes with it. Who else can see that text
-depends on the server and the network you chose; with a hosted service,
-the passage goes to that service under its own terms and privacy policy.
+picked and, if you entered one, your API key. If you set any of the
+server's Advanced options in Settings, Translation, such as extra
+instructions, they go with every request to that server. No book title,
+file, identifier or reading position goes with it. Who else can see that
+text depends on the server and the network you chose; with a hosted
+service, the passage goes to that service under its own terms and
+privacy policy. [Local AI servers](LOCAL_AI_SERVERS.md) explains how to
+run a translation server on your own computer.
 
 ### Google Gemini, for reading aloud (Google Play build only)
 

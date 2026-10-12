@@ -194,7 +194,8 @@ private fun haltAction(
             HaltAction(stringResource(R.string.translation_choose_service)) { onSettings(false) }
         }
     is TranslationError.Unsupported -> HaltAction(stringResource(R.string.translation_choose_service)) { onSettings(false) }
-    is TranslationError.NotSetUp, is TranslationError.LocalNetworkBlocked ->
+    // Retrying a missing model cannot help until it is pulled or another is chosen.
+    is TranslationError.NotSetUp, is TranslationError.LocalNetworkBlocked, is TranslationError.ModelNotFound ->
         HaltAction(stringResource(R.string.translation_open_settings)) { onSettings(false) }
     is TranslationError.InvalidKey -> HaltAction(stringResource(R.string.translation_open_services)) { onSettings(true) }
     else -> HaltAction(stringResource(R.string.read_aloud_settings_server_retry), onRetry)

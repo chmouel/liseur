@@ -2,10 +2,34 @@ package com.chmouel.liseur.translate
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TranslationPromptTest {
+
+    @Test
+    fun `TranslateGemma is known under every server's name for it`() {
+        listOf("translategemma:4b", "google/translategemma-4b-it", "TranslateGemma-12B-it-Q4_K_M.gguf", "translate-gemma:27b")
+            .forEach { assertTrue(it, TranslationPrompt.isTranslateGemma(it)) }
+        listOf(null, "gemma3:4b", "gpt-4o-mini").forEach { assertFalse("$it", TranslationPrompt.isTranslateGemma(it)) }
+    }
+
+    @Test
+    fun `TranslateGemma's prompt names the languages, or only the target`() {
+        val known = TranslationPrompt.translateGemma("en", "pt-BR", " Hello. ")
+        assertTrue(known, known.startsWith("You are a professional English (en) to Portuguese (Brazil) (pt-BR) translator."))
+        assertTrue(known.endsWith("Please translate the following English text into Portuguese (Brazil):\n\n\nHello."))
+        val unknown = TranslationPrompt.translateGemma(null, "en", "Привет.")
+        assertTrue(unknown, unknown.startsWith("You are a professional translator into English (en)."))
+        assertTrue(unknown.endsWith("Please translate the following text into English:\n\n\nПривет."))
+    }
+
+    @Test
+    fun `answers kept for TranslateGemma are versioned apart`() {
+        assertEquals(TranslationPrompt.VERSION.toString(), TranslationPrompt.version("gpt-4o-mini"))
+        assertTrue(TranslationPrompt.version("translategemma:4b") != TranslationPrompt.version("gemma3:4b"))
+    }
 
     @Test
     fun `the system message names both languages and fixes the task`() {
@@ -19,6 +43,13 @@ class TranslationPromptTest {
         val system = TranslationPrompt.system(null, "en")
         assertFalse(" from " in system)
         assertTrue("into English (en)" in system)
+    }
+
+    @Test
+    fun `the reader's instructions come before the closing rule`() {
+        val system = TranslationPrompt.system("fr", "en", instructions = "  Keep names in French. ")
+        assertTrue(system, system.indexOf("Keep names in French.") in 0 until system.indexOf("Reply with the translation only"))
+        assertEquals(TranslationPrompt.system("fr", "en"), TranslationPrompt.system("fr", "en", instructions = " "))
     }
 
     @Test
@@ -58,5 +89,22 @@ class TranslationPromptTest {
         val echoed = "<context>\nIl pleut.\n</context>\n<passage>\nIt is cold.\n</passage>"
         assertEquals("It is cold.", TranslationPrompt.clean(echoed))
         assertEquals("It is cold.", TranslationPrompt.clean("<context>Il pleut.</context>\nIt is cold."))
+    }
+
+    @Test
+    fun `a thinking model's reasoning is not taken for the translation`() {
+        assertEquals("Bonjour", TranslationPrompt.clean("<think>\nThe user wants French.\n</think>\n\nBonjour"))
+        assertEquals("Bonjour", TranslationPrompt.clean("<THINKING>hmm</THINKING><passage>Bonjour</passage>"))
+    }
+
+    @Test
+    fun `a reasoning tag inside the translation is kept`() {
+        assertEquals("La balise </think> ferme.", TranslationPrompt.clean("La balise </think> ferme."))
+        assertEquals("Le mot <think> reste.", TranslationPrompt.clean("<passage>Le mot <think> reste.</passage>"))
+    }
+
+    @Test
+    fun `reasoning that never ends is a cut-short translation`() {
+        assertThrows(TranslationError.Truncated::class.java) { TranslationPrompt.clean("<think>The user wants") }
     }
 }

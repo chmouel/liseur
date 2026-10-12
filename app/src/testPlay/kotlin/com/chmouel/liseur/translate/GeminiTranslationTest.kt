@@ -61,6 +61,7 @@ class GeminiTranslationTest {
         assertEquals(null, request.url.queryParameter("key"))
         val body = JSONObject(request.body!!.utf8())
         assertTrue("into English (en)" in body.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).getString("text"))
+        assertEquals(0, body.getJSONObject("generationConfig").getInt("temperature"))
     }
 
     @Test

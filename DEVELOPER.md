@@ -1558,25 +1558,29 @@ reader behavior.
   single edit on upgrade, and an older backup's legacy keys are merged by
   URL on restore (`ServerSettings`).
   The address field's menu (`SpeechServerPresets`) fills in a hosted
-  service's root, saving it and focusing the key field, or a Kokoro
-  example address with its host selected. The key, address, name and a
-  typed model save on Done, on focus loss (`Modifier.onLeaving`) and on
-  dispose; key saves go through `KeyCommits` in submission order and a
-  `KeyDraft` belongs to the server shown when it was started. Server and
-  model commits run in the service's scope under one lock with a
-  generation counter, so a superseded model choice or one for a previous
-  server never writes; the write itself runs in
-  `ServerConnections.unlessChanged`, so a key or address change cannot
-  land between its check and its write. The editor's saves go through
-  `ServerConnections.save` with a token per opening, so an editor
-  recreated or closed mid-save follows the server it was adding or
-  moving. A new or edited server is listed in
+  service's root, saving it and focusing the key field, or a self-hosted
+  example address (Kokoro, LM Studio, Ollama) with its host selected.
+  The key, address, name and a typed model save on Done, on focus loss
+  (`Modifier.onLeaving`) and on dispose; key saves go through
+  `KeyCommits` in submission order and a `KeyDraft` belongs to the
+  server shown when it was started. Server and model commits run in the
+  service's scope under one lock with a generation counter, so a
+  superseded model choice or one for a previous server never writes; the
+  write itself runs in `ServerConnections.unlessChanged`, so a key or
+  address change cannot land between its check and its write. The
+  editor's saves go through `ServerConnections.save` with a token per
+  opening, so an editor recreated or closed mid-save follows the server
+  it was adding or moving. A new or edited server is listed in
   `read_aloud_unsettled_servers` (local, not backed up) until its lists
   chose a model and voice; until then a refresh replaces the old model.
   The External services and API keys page's "Test connection" only checks that the server
   answers with the key; read aloud's own test stays on its page. Groq's
   `model_terms_required` error is `SpeechError.TermsRequired`, which
-  stops the session like a refused key.
+  stops the session like a refused key. A text-only server with no speech
+  route (Ollama's or llama.cpp's 404, LM Studio's 200 with
+  `Unexpected endpoint`) is `SpeechError.NoSpeech` and stops it too; a
+  404 with a string error code, or one naming a model or voice, keeps
+  its usual meaning.
   The OpenAI-compatible provider runs one request at a time with long
   timeouts, since a small server can be slower than real time. Its
   notices name the server's host. See
@@ -1768,21 +1772,50 @@ reader behavior.
   reply sizes (`TranslationHttp`), cancellable calls on `Dispatchers.IO`,
   and no logging of keys, passages or translations. The system message
   fixes the task and the passage goes as data between markers it cannot
-  close (`TranslationPrompt`); the reply is shown as plain text. Refusal,
-  empty, quota, malformed, refused key and unreachable are told apart
+  close (`TranslationPrompt`); the reply is shown as plain text. A
+  thinking model's reasoning left at the start of the reply (a leading
+  `<think>` block) is dropped, and reasoning that never ends is a
+  truncated reply. A tag anywhere else is the translation's own text.
+  Timeouts are as long as read aloud's, since a self-hosted server
+  (Ollama, LM Studio) may load the model first; setting those up is
+  covered in [docs/LOCAL_AI_SERVERS.md](docs/LOCAL_AI_SERVERS.md). Every
+  model, Gemini included, is asked at temperature 0 unless a server's
+  Advanced options say otherwise. A server model named TranslateGemma
+  (`translategemma:4b` on Ollama, for example) is asked instead in the
+  single user message it was trained on, without the previous sentence,
+  which it would translate too; it translates instruction-like passages
+  rather than following them. Refusal, empty, quota, malformed, refused
+  key, unreachable and a model the server does not have (a 404 whose
+  reply says so, `TranslationError.ModelNotFound`) are told apart
   (`TranslationError`). Each request runs under the connection's
   generation (`TranslationRequests`): a key or address change while it
   is out discards the reply and asks again. Each attempt checks the
   server it actually used, since a retry may be on another one after a
-  move, and the sheet drops a reply
-  for a passage, language, service or model it no longer shows.
+  move, and the sheet drops a reply for a passage, language, service or
+  model it no longer shows.
 - `translation_provider` and `translation_server` reference a listed
   server like read aloud's choice; each server's translation model is in
   `translation_server_state`, apart from its read-aloud model, and
-  Gemini's is `translation_gemini_model`. Deleting or moving a server
-  updates them in the same DataStore edit, and a deleted server's
-  translation falls back to the device. Like read aloud's, these are in
-  the settings backup but not in liseur-sync settings sync.
+  Gemini's is `translation_gemini_model`. The same per-server entry
+  holds the Advanced options (`ServerTranslationState`): temperature,
+  whether the previous sentence goes with page sentences, the reader's
+  extra instructions (added to the system prompt, or before
+  TranslateGemma's request), `max_tokens` and Ollama's `keep_alive`.
+  Each is stored only once set. The temperature is always sent, 0 unless
+  set; `max_tokens` and `keep_alive` are sent only once set, since
+  OpenAI refuses parameters it does not know. A server that answers a
+  400 naming the temperature is asked once more without it, and when
+  that works `no_temperature` is saved on the server's entry
+  (`ServerTranslationService`), so later requests to that model leave
+  the temperature out from the start; a model change clears it. The flag
+  is read from the current settings rather than the run's and is not
+  part of `pageIdentity`. `keep_alive` is validated as seconds (sent as
+  a number) or a Go duration with a unit (sent as a string), the only
+  forms Ollama accepts. Older versions read only `model` and ignore the
+  rest. Deleting or moving a server updates them in the same DataStore
+  edit, and a deleted server's translation falls back to the device.
+  Like read aloud's, these are in the settings backup but not in
+  liseur-sync settings sync.
 - Model lists are sorted by name. A server list that prices its models
   (OpenRouter's `pricing`, dollars per token) shows the input and output
   price per million tokens under each one.
@@ -1806,15 +1839,18 @@ reader behavior.
   backup allowlists, which name `liseur.db`, leave it out. A row is keyed
   by the local book URL and a SHA-256 of `pageIdentity` (a versioned
   service id, server id, model, languages and
-  `TranslationPrompt.VERSION`; never a display name or key), the context
-  and the sentence. Bump `TranslationPrompt.VERSION` when the prompt
-  changes. A run is opened with the settings its identity was read from
-  and asks with those, never the settings of the moment, so an answer
-  always belongs to its identity. Its retries are judged by that binding
-  too: a settings change while a sentence is out binds the run again
-  and asks the sentence anew. `PageTranslation` looks up before
-  asking, looks up again if the service changed during the lookup, and
-  saves only under the service that answered. The store keeps 50,000 sentences and 20 million
+  `TranslationPrompt.version`, plus the server's Advanced options that
+  change a reply once any is set, never `keep_alive`; never a display
+  name or key), the context and the sentence. Bump
+  `TranslationPrompt.VERSION` when the prompt changes, or its
+  TranslateGemma version when that prompt does. A run is opened with the
+  settings its identity was read from and asks with those, never the
+  settings of the moment, so an answer always belongs to its identity.
+  Its retries are judged by that binding too: a settings change while a
+  sentence is out binds the run again and asks the sentence anew.
+  `PageTranslation` looks up before asking, looks up again if the
+  service changed during the lookup, and saves only under the service
+  that answered. The store keeps 50,000 sentences and 20 million
   characters, least recently used first. It trims at start and after
   any save that goes past 50,000 sentences; the characters, which take
   a sum over the table, are checked every 100 saves. A lookup's stamp fences Clear: a reply asked before it is

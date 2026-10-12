@@ -445,6 +445,7 @@ private fun ReadAloudNotice.message(): Int = when (this) {
     ReadAloudNotice.InvalidKey -> R.string.read_aloud_notice_invalid_key
     ReadAloudNotice.InvalidVoice -> R.string.read_aloud_notice_invalid_voice
     ReadAloudNotice.TermsRequired -> R.string.read_aloud_notice_terms_required
+    ReadAloudNotice.NoSpeech -> R.string.read_aloud_notice_no_speech
     ReadAloudNotice.NotSetUp -> R.string.read_aloud_notice_not_set_up
     ReadAloudNotice.SelectionNotFound -> R.string.read_aloud_notice_selection_not_found
     ReadAloudNotice.Unavailable -> R.string.read_aloud_notice_unavailable

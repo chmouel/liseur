@@ -53,6 +53,53 @@ data class ServerSpeechState(
     val voices: Set<String> = emptySet(),
 )
 
+/**
+ * Translation's state on one listed server: its model and how it is
+ * asked. A null option is the default and is not stored, so a server
+ * never tuned asks exactly as before these options existed.
+ *
+ * @param temperature Sampling temperature, 0 when unset.
+ * @param context Whether the sentence before goes with each page sentence;
+ *   unset sends it, except to TranslateGemma, which has no room for it.
+ * @param instructions The reader's own words added to the prompt, such as
+ *   a register or names to keep.
+ * @param maxTokens The most tokens a reply may have; unset leaves it to the server.
+ * @param keepAlive How long Ollama keeps the model loaded after a request,
+ *   as seconds or a duration such as `10m`; unset sends nothing.
+ * @param noTemperature Whether [model] refused a temperature and answered
+ *   without one, so none is sent to it; learnt, not chosen, and dropped
+ *   with a change of model.
+ */
+data class ServerTranslationState(
+    val model: String? = null,
+    val temperature: Double? = null,
+    val context: Boolean? = null,
+    val instructions: String? = null,
+    val maxTokens: Int? = null,
+    val keepAlive: String? = null,
+    val noTemperature: Boolean = false,
+) {
+    val isEmpty: Boolean get() = this == ServerTranslationState()
+
+    /** Whether the reader set nothing but the model. */
+    val untuned: Boolean get() = copy(model = null, noTemperature = false).isEmpty
+
+    companion object {
+        val TEMPERATURES = 0.0..2.0
+        val MAX_TOKENS = 1..1_000_000
+        const val MAX_INSTRUCTIONS = 1_000
+
+        // Seconds, or a Go duration as Ollama parses it: a unit is required.
+        private val KEEP_ALIVE = Regex("""-?\d{1,9}|-?(?:\d{1,9}(?:\.\d{1,9})?(?:ms|s|m|h)){1,4}""")
+
+        fun validKeepAlive(value: String): Boolean = KEEP_ALIVE.matches(value)
+
+        /** A temperature as the slider keeps it: in range, to one decimal. */
+        fun temperature(value: Double): Double =
+            (Math.round(value.coerceIn(TEMPERATURES) * 10) / 10.0)
+    }
+}
+
 /** What an add or edit of a server came to. */
 sealed interface ServerChange {
     data class Saved(val id: String) : ServerChange
@@ -82,7 +129,7 @@ internal object ServerSettings {
     val TRANSLATION_PROVIDER = stringPreferencesKey(TRANSLATION_PROVIDER_NAME)
     val TRANSLATION_SERVER = stringPreferencesKey(TRANSLATION_SERVER_NAME)
 
-    /** Translation's model on each server, by server id. */
+    /** Translation's model and options on each server, by server id. */
     val TRANSLATION_STATE = stringPreferencesKey(TRANSLATION_STATE_NAME)
 
     /** Servers whose read-aloud model and voice are still to be chosen from their lists; never backed up. */
@@ -180,8 +227,8 @@ internal object ServerSettings {
         }
     }
 
-    /** Translation's model per server in [json]; throws [IllegalArgumentException] for anything malformed. */
-    fun decodeTranslationStates(json: String?): Map<String, String> {
+    /** Translation's state per server in [json]; throws [IllegalArgumentException] for anything malformed. */
+    fun decodeTranslationStates(json: String?): Map<String, ServerTranslationState> {
         if (json == null) return emptyMap()
         val root = try {
             JSONObject(json)
@@ -192,17 +239,57 @@ internal object ServerSettings {
             root.keys().forEach { id ->
                 if (ServerConnection.idOf(id) != id) invalid("Invalid translation state id")
                 val entry = root.opt(id) as? JSONObject ?: invalid("Malformed translation state")
-                entry.optionalString("model")?.let { put(id, it) }
+                val state = ServerTranslationState(
+                    model = entry.optionalString("model"),
+                    temperature = entry.optionalNumber("temperature")?.toDouble()
+                        ?.also { if (it !in ServerTranslationState.TEMPERATURES) invalid("Invalid temperature") },
+                    context = when (val raw = entry.opt("context")) {
+                        null -> null
+                        is Boolean -> raw
+                        else -> invalid("Malformed context")
+                    },
+                    instructions = entry.optionalString("instructions")
+                        ?.also { if (it.length > ServerTranslationState.MAX_INSTRUCTIONS) invalid("Instructions too long") },
+                    maxTokens = entry.optionalNumber("max_tokens")?.let { n ->
+                        val tokens = n.toLong()
+                        if (n.toDouble() != tokens.toDouble() || tokens < 1 || tokens > ServerTranslationState.MAX_TOKENS.last) {
+                            invalid("Invalid max tokens")
+                        }
+                        tokens.toInt()
+                    },
+                    keepAlive = entry.optionalString("keep_alive")
+                        ?.also { if (!ServerTranslationState.validKeepAlive(it)) invalid("Invalid keep alive") },
+                    noTemperature = when (val raw = entry.opt("no_temperature")) {
+                        null -> false
+                        is Boolean -> raw
+                        else -> invalid("Malformed no_temperature")
+                    },
+                )
+                if (!state.isEmpty) put(id, state)
             }
         }
     }
 
-    fun encodeTranslationStates(models: Map<String, String>): String = JSONObject().apply {
-        models.toSortedMap().forEach { (id, model) -> put(id, JSONObject().put("model", model)) }
+    fun encodeTranslationStates(states: Map<String, ServerTranslationState>): String = JSONObject().apply {
+        states.toSortedMap().forEach { (id, state) ->
+            if (state.isEmpty) return@forEach
+            put(
+                id,
+                JSONObject().apply {
+                    state.model?.let { put("model", it) }
+                    state.temperature?.let { put("temperature", it) }
+                    state.context?.let { put("context", it) }
+                    state.instructions?.let { put("instructions", it) }
+                    state.maxTokens?.let { put("max_tokens", it) }
+                    state.keepAlive?.let { put("keep_alive", it) }
+                    if (state.noTemperature) put("no_temperature", true)
+                },
+            )
+        }
     }.toString()
 
-    /** Translation's model per server; empty when the servers cannot be read. */
-    fun translationStates(p: Preferences): Map<String, String> = try {
+    /** Translation's state per server; empty when the servers cannot be read. */
+    fun translationStates(p: Preferences): Map<String, ServerTranslationState> = try {
         decodeTranslationStates(p[TRANSLATION_STATE])
     } catch (_: IllegalArgumentException) {
         emptyMap()
@@ -224,6 +311,12 @@ internal object ServerSettings {
     private fun JSONObject.optionalString(name: String): String? = when (val raw = opt(name)) {
         null -> null
         is String -> raw.takeIf { it.isNotBlank() }
+        else -> invalid("Malformed $name")
+    }
+
+    private fun JSONObject.optionalNumber(name: String): Number? = when (val raw = opt(name)) {
+        null -> null
+        is Number -> raw.takeIf { it.toDouble().isFinite() } ?: invalid("Malformed $name")
         else -> invalid("Malformed $name")
     }
 
@@ -402,14 +495,14 @@ internal class ServerEdit private constructor(
     val servers: MutableList<ServerConnection>,
     val states: MutableMap<String, ServerSpeechState>,
     val unsettled: MutableSet<String>,
-    val translationModels: MutableMap<String, String>,
+    val translationStates: MutableMap<String, ServerTranslationState>,
 ) {
     /** Drops the server [id], what each feature kept on it, and their use of it. */
     fun forget(id: String): Boolean {
         if (!servers.removeAll { it.id == id }) return false
         states.remove(id)
         unsettled.remove(id)
-        translationModels.remove(id)
+        translationStates.remove(id)
         if (p[ServerSettings.READ_ALOUD_SERVER] == id) {
             p.remove(ServerSettings.READ_ALOUD_SERVER)
             if (p[ServerSettings.PROVIDER] == ServerSettings.SERVER_PROVIDER) p.remove(ServerSettings.PROVIDER)
@@ -426,7 +519,8 @@ internal class ServerEdit private constructor(
         states.remove(id)?.let { states[newId] = it }
         unsettled -= id
         unsettled += newId
-        translationModels.remove(id)?.let { translationModels[newId] = it }
+        // A refused temperature was learnt of the old address; the new one is asked with it once.
+        translationStates.remove(id)?.copy(noTemperature = false)?.takeUnless { it.isEmpty }?.let { translationStates[newId] = it }
         if (p[ServerSettings.READ_ALOUD_SERVER] == id) p[ServerSettings.READ_ALOUD_SERVER] = newId
         if (p[ServerSettings.TRANSLATION_SERVER] == id) p[ServerSettings.TRANSLATION_SERVER] = newId
     }
@@ -435,10 +529,10 @@ internal class ServerEdit private constructor(
         p[ServerSettings.SERVERS] = ServerSettings.encodeServers(servers)
         p[ServerSettings.READ_ALOUD_STATE] = ServerSettings.encodeStates(states)
         if (unsettled.isEmpty()) p.remove(ServerSettings.READ_ALOUD_UNSETTLED) else p[ServerSettings.READ_ALOUD_UNSETTLED] = unsettled.toSet()
-        if (translationModels.isEmpty()) {
+        if (translationStates.isEmpty()) {
             p.remove(ServerSettings.TRANSLATION_STATE)
         } else {
-            p[ServerSettings.TRANSLATION_STATE] = ServerSettings.encodeTranslationStates(translationModels)
+            p[ServerSettings.TRANSLATION_STATE] = ServerSettings.encodeTranslationStates(translationStates)
         }
     }
 

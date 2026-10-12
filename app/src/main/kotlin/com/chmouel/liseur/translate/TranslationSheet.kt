@@ -419,7 +419,9 @@ private fun failure(
         is TranslationError.NotSetUp -> Body.Message(text, settings) { onSettings(false) }
         is TranslationError.InvalidKey ->
             Body.Message(text, stringResource(R.string.translation_open_services), error = true) { onSettings(true) }
-        is TranslationError.LocalNetworkBlocked -> Body.Message(text, settings, error = true) { onSettings(false) }
+        // Retrying a missing model cannot help until it is pulled or another is chosen.
+        is TranslationError.LocalNetworkBlocked, is TranslationError.ModelNotFound ->
+            Body.Message(text, settings, error = true) { onSettings(false) }
         is TranslationError.Refused -> Body.Message(text, error = true)
         else -> Body.Message(text, retry, error = true, onAction = onRetry)
     }

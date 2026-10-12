@@ -47,6 +47,9 @@ enum class ReadAloudNotice {
     /** The speech service wants the model's terms accepted on its website first; reading aloud stopped. */
     TermsRequired,
 
+    /** The server makes no speech, as a text-only one does not; reading aloud stopped. */
+    NoSpeech,
+
     /** The chosen service has no key, server or voice yet; nothing was read. */
     NotSetUp,
 

@@ -13,10 +13,12 @@ import okhttp3.Response
 
 /** HTTP as the translation clients use it. There is no logging interceptor: requests carry a key and a passage. */
 internal object TranslationHttp {
+    // A server of one's own may first load the model, as Ollama does after
+    // a few idle minutes, and answers only once the whole reply is written.
     fun client(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .callTimeout(90, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .callTimeout(180, TimeUnit.SECONDS)
         // A redirect could carry the key header and the passage elsewhere.
         .followRedirects(false)
         .followSslRedirects(false)

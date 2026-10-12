@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.ServerTranslationState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -31,6 +32,40 @@ class PageIdentityTest {
     fun `the model and the languages are part of it`() {
         assertNotEquals(server(settings()), server(settings(), model = "large"))
         assertNotEquals(server(settings()), server(settings(), source = null))
+    }
+
+    @Test
+    fun `options that change a translation change it, and untouched ones keep the old one`() {
+        val plain = settings()
+        val untuned = plain.copy(translationStates = mapOf(id to ServerTranslationState(model = "small", keepAlive = "10m")))
+        assertEquals(server(plain), server(untuned))
+        val warmer = plain.copy(translationStates = mapOf(id to ServerTranslationState(temperature = 0.7)))
+        val told = plain.copy(translationStates = mapOf(id to ServerTranslationState(instructions = "Use tu.")))
+        assertNotEquals(server(plain), server(warmer))
+        assertNotEquals(server(plain), server(told))
+        assertNotEquals(server(warmer), server(told))
+        // TranslateGemma never gets the sentence before, so turning it off changes nothing.
+        val alone = plain.copy(translationStates = mapOf(id to ServerTranslationState(context = false)))
+        assertEquals(server(plain, model = "translategemma:4b"), server(alone, model = "translategemma:4b"))
+        assertNotEquals(server(plain), server(alone))
+    }
+
+    @Test
+    fun `an untuned server keeps the identity pages were saved under before options existed`() {
+        // The fields and their order as they were, written out, so no constant can move them.
+        val legacy = listOf("1", "1", ServerSettings.SERVER_PROVIDER, id, "small", "fr", "en").joinToString("\u0000")
+        assertEquals(legacy, server(settings()))
+        val untuned = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small", keepAlive = "10m")))
+        assertEquals(legacy, server(untuned))
+    }
+
+    @Test
+    fun `a model that refused the temperature keeps its pages`() {
+        val plain = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small")))
+        val refused = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small", noTemperature = true)))
+        assertEquals(server(plain), server(refused))
+        val warmer = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small", temperature = 0.7)))
+        assertEquals(server(warmer), server(warmer.copy(translationStates = mapOf(id to ServerTranslationState(model = "small", temperature = 0.7, noTemperature = true)))))
     }
 
     @Test

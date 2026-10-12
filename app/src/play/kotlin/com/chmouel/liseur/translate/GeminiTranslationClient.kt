@@ -39,6 +39,8 @@ class GeminiTranslationClient(
                     JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage, context)))),
                 ),
             )
+            // Translation wants the likeliest wording, and the same sentence then gets the same translation.
+            .put("generationConfig", JSONObject().put("temperature", 0))
             .toString()
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
         return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::reply)

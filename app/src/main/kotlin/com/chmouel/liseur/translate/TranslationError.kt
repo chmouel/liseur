@@ -14,6 +14,9 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
         TranslationError("The service could not be reached (${cause.javaClass.simpleName})", cause)
     class Service(val code: Int) : TranslationError("The service answered HTTP $code")
 
+    /** The server has no [model] by that name: misspelled, or not downloaded yet. */
+    class ModelNotFound(val model: String) : TranslationError("The server has no such model")
+
     /** The model declined, or a safety filter held the answer back. */
     class Refused : TranslationError("The service declined to translate")
     class Empty : TranslationError("The service sent an empty translation")

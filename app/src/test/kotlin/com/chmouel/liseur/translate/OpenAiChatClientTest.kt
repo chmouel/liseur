@@ -9,6 +9,7 @@ import okhttp3.HttpUrl
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -66,9 +67,131 @@ class OpenAiChatClientTest {
         val body = JSONObject(request.body!!.utf8())
         assertEquals("gpt-4o-mini", body.getString("model"))
         assertEquals(false, body.getBoolean("stream"))
+        assertEquals(0, body.getInt("temperature"))
         val messages = body.getJSONArray("messages")
         assertEquals("system", messages.getJSONObject(0).getString("role"))
         assertEquals("<passage>\nLe soleil se couchait.\n</passage>", messages.getJSONObject(1).getString("content"))
+    }
+
+    @Test
+    fun `TranslateGemma gets its own single prompt, greedy and without context`(): Unit = runBlocking {
+        server.enqueue(json(completion("Il pleut.")))
+
+        val text = client.translate(base, null, "translategemma:4b", "en", "fr", "It rains.", context = "It was grey.")
+
+        assertEquals("Il pleut.", text)
+        val body = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals(0, body.getInt("temperature"))
+        val messages = body.getJSONArray("messages")
+        assertEquals(1, messages.length())
+        assertEquals("user", messages.getJSONObject(0).getString("role"))
+        val content = messages.getJSONObject(0).getString("content")
+        assertTrue(content, content.endsWith("into French:\n\n\nIt rains."))
+        assertTrue("It was grey" !in content)
+    }
+
+    @Test
+    fun `the reader's options go with the request, and only once set`(): Unit = runBlocking {
+        server.enqueue(json(completion("a")))
+        client.translate(base, null, "m", "en", "fr", "x")
+        val plain = JSONObject(server.takeRequest().body!!.utf8())
+        assertFalse(plain.has("max_tokens"))
+        assertFalse(plain.has("keep_alive"))
+
+        server.enqueue(json(completion("b")))
+        client.translate(
+            base, null, "m", "en", "fr", "x",
+            temperature = 0.3, instructions = "Use tu.", maxTokens = 200, keepAlive = "600",
+        )
+        val tuned = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals(0.3, tuned.getDouble("temperature"), 0.0)
+        assertEquals(200, tuned.getInt("max_tokens"))
+        // Ollama reads a number as seconds but refuses a string without a unit.
+        assertEquals(600, tuned.get("keep_alive"))
+        val system = tuned.getJSONArray("messages").getJSONObject(0).getString("content")
+        assertTrue(system, "Use tu." in system)
+
+        server.enqueue(json(completion("c")))
+        client.translate(base, null, "translategemma:4b", "en", "fr", "x", instructions = "Use tu.", keepAlive = "10m")
+        val gemma = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals("10m", gemma.get("keep_alive"))
+        val prompt = gemma.getJSONArray("messages").getJSONObject(0).getString("content")
+        assertTrue(prompt, prompt.indexOf("Use tu.") in 0 until prompt.indexOf("Please translate"))
+    }
+
+    @Test
+    fun `a server that refuses the temperature is asked once more without it, and says so`(): Unit = runBlocking {
+        server.enqueue(
+            json(
+                """{"error":{"message":"Unsupported value: 'temperature' does not support 0 with this model. Only the default (1) value is supported.","type":"invalid_request_error","param":"temperature","code":"unsupported_value"}}""",
+                400,
+            ),
+        )
+        server.enqueue(json(completion("Il pleut.")))
+        var refused = 0
+
+        val text = client.translate(base, "k", "o4-mini", "en", "fr", "It rains.", onTemperatureRefused = { refused++ })
+
+        assertEquals("Il pleut.", text)
+        assertEquals(1, refused)
+        assertEquals(2, server.requestCount)
+        assertEquals(0, JSONObject(server.takeRequest().body!!.utf8()).getInt("temperature"))
+        val retry = JSONObject(server.takeRequest().body!!.utf8())
+        assertFalse(retry.has("temperature"))
+        assertEquals("o4-mini", retry.getString("model"))
+    }
+
+    @Test
+    fun `a refusal that is not about the temperature is not asked again`(): Unit = runBlocking {
+        server.enqueue(json("""{"error":{"message":"messages too long"}}""", 400))
+        var refused = 0
+        val error = expect<TranslationError.Service> {
+            runBlocking { client.translate(base, "k", "m", "en", "fr", "x", onTemperatureRefused = { refused++ }) }
+        }
+        assertEquals(400, error.code)
+        assertEquals(1, server.requestCount)
+        assertEquals(0, refused)
+    }
+
+    @Test
+    fun `a retry without the temperature that fails too is not taken as the refusal`(): Unit = runBlocking {
+        server.enqueue(json("""{"error":{"message":"bad temperature"}}""", 400))
+        server.enqueue(json("""{"error":{"message":"busy"}}""", 503))
+        var refused = 0
+        expect<TranslationError.Service> {
+            runBlocking { client.translate(base, "k", "m", "en", "fr", "x", onTemperatureRefused = { refused++ }) }
+        }
+        assertEquals(2, server.requestCount)
+        assertEquals(0, refused)
+    }
+
+    @Test
+    fun `no temperature is sent when there is none, and a refusal then is not retried`(): Unit = runBlocking {
+        server.enqueue(json("""{"error":{"message":"temperature is required"}}""", 400))
+        expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x", temperature = null) } }
+        assertEquals(1, server.requestCount)
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("temperature"))
+    }
+
+    @Test
+    fun `a model the server does not have is named, and a missing route is not taken for one`(): Unit = runBlocking {
+        // Ollama's.
+        server.enqueue(json("""{"error":{"message":"model \"qwen9\" not found, try pulling it first","type":"api_error","param":null,"code":null}}""", 404))
+        assertEquals("qwen9", expect<TranslationError.ModelNotFound> { runBlocking { client.translate(base, null, "qwen9", "en", "fr", "x") } }.model)
+        // OpenAI's.
+        server.enqueue(
+            json(
+                """{"error":{"message":"The model `gpt-9` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}""",
+                404,
+            ),
+        )
+        assertEquals("gpt-9", expect<TranslationError.ModelNotFound> { runBlocking { client.translate(base, "k", "gpt-9", "en", "fr", "x") } }.model)
+        // A server with no chat endpoint there.
+        server.enqueue(MockResponse.Builder().code(404).body("404 page not found").build())
+        assertEquals(404, expect<TranslationError.Service> { runBlocking { client.translate(base, null, "m", "en", "fr", "x") } }.code)
+        // OpenRouter's 404 for a data policy names no missing model.
+        server.enqueue(json("""{"error":{"message":"No endpoints found matching your data policy (Free model publication)","code":404}}""", 404))
+        assertEquals(404, expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x") } }.code)
     }
 
     @Test
@@ -193,5 +316,8 @@ class OpenAiChatClientTest {
         assertTrue(OpenAiChat.errorFor(403, "") is TranslationError.InvalidKey)
         assertTrue(OpenAiChat.errorFor(402, "") is TranslationError.RateLimited)
         assertTrue(OpenAiChat.errorFor(503, "") is TranslationError.Service)
+        // Without the model asked for, a 404 cannot name it.
+        assertTrue(OpenAiChat.errorFor(404, """{"error":{"code":"model_not_found"}}""") is TranslationError.Service)
+        assertTrue(OpenAiChat.errorFor(404, """{"error":{"code":"model_not_found"}}""", "m") is TranslationError.ModelNotFound)
     }
 }

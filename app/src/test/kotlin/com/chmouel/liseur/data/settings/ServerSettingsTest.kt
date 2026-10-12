@@ -492,6 +492,139 @@ class ServerSettingsTest {
     }
 
     @Test
+    fun `translation options are kept in bounds, move with the server and survive a backup`() = runTest {
+        val source = repo()
+        val id = source.add("Kokoro", KOKORO)
+        source.selectTranslationServer(id)
+        source.setTranslationServerModel(KOKORO, "llama")
+        source.editTranslationServer(KOKORO) {
+            it.copy(temperature = 0.34, instructions = "  Use tu.  ", maxTokens = 0, keepAlive = "-1", context = false)
+        }
+        assertEquals(
+            ServerTranslationState(model = "llama", temperature = 0.3, context = false, instructions = "Use tu.", keepAlive = "-1"),
+            source.settings.first().translationStates[id],
+        )
+        // A value Ollama would refuse is not kept.
+        source.editTranslationServer(KOKORO) { it.copy(keepAlive = "-1 hour") }
+        assertNull(source.settings.first().translationStates[id]?.keepAlive)
+
+        source.updateServer(id, "Kokoro", MOVED)
+        source.setTranslationServerModel(MOVED, "")
+        val moved = source.settings.first().translationStates
+        assertEquals(setOf(MOVED_ID), moved.keys)
+        assertNull(moved.getValue(MOVED_ID).model)
+        assertEquals("Use tu.", moved.getValue(MOVED_ID).instructions)
+
+        val destination = AppSettingsRepository(PreferenceDataStoreFactory.create { folder.newFile("other.preferences_pb") })
+        destination.restoreBackupValues(source.backupValues())
+        assertEquals(moved, destination.settings.first().translationStates)
+
+        destination.editTranslationServer(MOVED) { ServerTranslationState(model = it.model) }
+        assertTrue(destination.settings.first().translationStates.isEmpty())
+    }
+
+    @Test
+    fun `a model's refused temperature is stored only when learnt, and read back`() {
+        val plain = ServerSettings.encodeTranslationStates(mapOf(KOKORO_ID to ServerTranslationState(model = "o4-mini")))
+        // Written as before the flag existed, so an older version reads it unchanged.
+        assertEquals(setOf("model"), JSONObject(plain).getJSONObject(KOKORO_ID).keys().asSequence().toSet())
+        assertFalse(ServerSettings.decodeTranslationStates(plain).getValue(KOKORO_ID).noTemperature)
+
+        val refused = ServerTranslationState(model = "o4-mini", temperature = 0.5, noTemperature = true)
+        val json = ServerSettings.encodeTranslationStates(mapOf(KOKORO_ID to refused))
+        assertTrue(JSONObject(json).getJSONObject(KOKORO_ID).getBoolean("no_temperature"))
+        assertEquals(mapOf(KOKORO_ID to refused), ServerSettings.decodeTranslationStates(json))
+        try {
+            ServerSettings.decodeTranslationStates("""{"$KOKORO_ID":{"model":"m","no_temperature":"yes"}}""")
+            fail("Read a malformed flag")
+        } catch (_: IllegalArgumentException) {
+        }
+    }
+
+    @Test
+    fun `a refused temperature goes with the model it was learnt of`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.setTranslationServerModel(KOKORO, "o4-mini")
+        repo.editTranslationServer(KOKORO) { it.copy(noTemperature = true) }
+        // Other options, a reset of them, and the same model again keep it.
+        repo.editTranslationServer(KOKORO) { it.copy(instructions = "Use tu.") }
+        repo.editTranslationServer(KOKORO) { ServerTranslationState(model = it.model, noTemperature = it.noTemperature) }
+        repo.setTranslationServerModel(KOKORO, " o4-mini ")
+        assertEquals(ServerTranslationState(model = "o4-mini", noTemperature = true), repo.settings.first().translationStates[id])
+
+        repo.setTranslationServerModel(KOKORO, "gpt-4o-mini")
+        assertEquals(ServerTranslationState(model = "gpt-4o-mini"), repo.settings.first().translationStates[id])
+
+        repo.editTranslationServer(KOKORO) { it.copy(noTemperature = true) }
+        repo.editTranslationServer(KOKORO) { it.copy(model = "o3") }
+        assertEquals(ServerTranslationState(model = "o3"), repo.settings.first().translationStates[id])
+    }
+
+    @Test
+    fun `a new temperature is tried again on a model that refused one`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.setTranslationServerModel(KOKORO, "o4-mini")
+        repo.editTranslationServer(KOKORO) { it.copy(temperature = 0.7) }
+        repo.editTranslationServer(KOKORO) { it.copy(noTemperature = true) }
+        // The same temperature, however it is written, keeps it.
+        repo.editTranslationServer(KOKORO) { it.copy(temperature = 0.74) }
+        assertEquals(
+            ServerTranslationState(model = "o4-mini", temperature = 0.7, noTemperature = true),
+            repo.settings.first().translationStates[id],
+        )
+
+        repo.editTranslationServer(KOKORO) { it.copy(temperature = 1.2) }
+        assertEquals(ServerTranslationState(model = "o4-mini", temperature = 1.2), repo.settings.first().translationStates[id])
+
+        // A reset that changes the temperature clears it too; one that does not was covered above.
+        repo.editTranslationServer(KOKORO) { it.copy(noTemperature = true) }
+        repo.editTranslationServer(KOKORO) { ServerTranslationState(model = it.model, noTemperature = it.noTemperature) }
+        assertEquals(ServerTranslationState(model = "o4-mini"), repo.settings.first().translationStates[id])
+    }
+
+    @Test
+    fun `a new address forgets a refused temperature and keeps the other options`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.setTranslationServerModel(KOKORO, "o4-mini")
+        repo.editTranslationServer(KOKORO) { it.copy(temperature = 0.5, instructions = "Use tu.") }
+        repo.editTranslationServer(KOKORO) { it.copy(noTemperature = true) }
+        assertTrue(repo.settings.first().translationStates.getValue(id).noTemperature)
+
+        repo.updateServer(id, "Kokoro", MOVED)
+
+        assertEquals(
+            mapOf(MOVED_ID to ServerTranslationState(model = "o4-mini", temperature = 0.5, instructions = "Use tu.")),
+            repo.settings.first().translationStates,
+        )
+    }
+
+    @Test
+    fun `translation options out of bounds are not read`() {
+        val entries = listOf(
+            """{"temperature":3}""",
+            """{"temperature":"0"}""",
+            """{"context":"no"}""",
+            """{"max_tokens":1.5}""",
+            """{"max_tokens":0}""",
+            """{"keep_alive":"soon"}""",
+            """{"instructions":"${"x".repeat(ServerTranslationState.MAX_INSTRUCTIONS + 1)}"}""",
+        )
+        for (entry in entries) {
+            try {
+                ServerSettings.decodeTranslationStates("""{"$KOKORO_ID":$entry}""")
+                fail("Read $entry")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        val state = ServerTranslationState(temperature = 1.2, maxTokens = 400, keepAlive = "1h30m")
+        val json = ServerSettings.encodeTranslationStates(mapOf(KOKORO_ID to state))
+        assertEquals(mapOf(KOKORO_ID to state), ServerSettings.decodeTranslationStates(json))
+    }
+
+    @Test
     fun `an archive whose translation refers to an unlisted server changes nothing`() = runTest {
         val repo = repo()
         repo.add("Kokoro", KOKORO)

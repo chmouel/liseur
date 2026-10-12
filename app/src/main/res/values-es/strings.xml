@@ -1087,6 +1087,7 @@
     <string name="read_aloud_notice_unavailable">Este libro no se puede leer en voz alta desde aquí.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s no tiene la voz elegida. Elige otra en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_notice_terms_required">%1$s pide aceptar antes los términos de este modelo en su sitio web.</string>
+    <string name="read_aloud_notice_no_speech">%1$s no tiene punto de acceso de voz. Revisa su dirección o elige un servidor de voz en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_notice_not_set_up">La lectura en voz alta aún no está configurada. Configúrala en Ajustes, Leer en voz alta.</string>
     <string name="read_aloud_settings_title">Leer en voz alta</string>
     <string name="read_aloud_settings_playback">Reproducción</string>
@@ -1135,6 +1136,7 @@
     <string name="read_aloud_settings_preview_unreachable">No se pudo conectar con el servicio de voz.</string>
     <string name="read_aloud_settings_preview_refused">El servicio de voz rechazó la clave de API.</string>
     <string name="read_aloud_settings_preview_no_voice">El servicio de voz no tiene esta voz.</string>
+    <string name="read_aloud_settings_preview_no_speech">Este servidor no tiene punto de acceso de voz. Revisa su dirección o elige un servidor de voz.</string>
     <string name="read_aloud_settings_terms_required">Acepta los términos de este modelo en el sitio web del servicio y vuelve a intentarlo.</string>
     <string name="read_aloud_settings_key_needs_url">Escribe primero la dirección del servidor.</string>
     <string name="read_aloud_settings_key_not_saved">No se pudo guardar la clave. Vuelve a pegarla.</string>
@@ -1222,6 +1224,22 @@
     <string name="translation_settings_target_follow">Seguir el idioma de la aplicación</string>
     <string name="translation_settings_model_price">%1$s $ de entrada, %2$s $ de salida por millón de tokens</string>
     <string name="translation_settings_model_free">Gratis</string>
+    <string name="translation_options_temperature">Temperatura</string>
+    <string name="translation_options_temperature_detail">Con 0, un mismo pasaje recibe siempre la misma traducción. Valores más altos la hacen variar.</string>
+    <string name="translation_options_temperature_refused">Este modelo rechaza la temperatura, así que no se envía.</string>
+    <string name="translation_options_context">Enviar la frase anterior</string>
+    <string name="translation_options_context_detail">Al traducir una página, cada frase va con la anterior, lo que ayuda con los pronombres y los nombres.</string>
+    <string name="translation_options_context_gemma">TranslateGemma traduce cada frase por separado y nunca recibe la anterior.</string>
+    <string name="translation_options_instructions">Instrucciones adicionales</string>
+    <string name="translation_options_instructions_detail">Se añaden a la petición de cada pasaje.</string>
+    <string name="translation_options_instructions_hint">Usar el tuteo. Mantener los nombres de los personajes tal cual.</string>
+    <string name="translation_options_max_tokens">Respuesta más larga</string>
+    <string name="translation_options_max_tokens_detail">En tokens. Una respuesta cortada en esta longitud muestra un error.</string>
+    <string name="translation_options_server_default">Valor del servidor</string>
+    <string name="translation_options_keep_alive">Mantener el modelo cargado (Ollama)</string>
+    <string name="translation_options_keep_alive_detail">En segundos, o una duración como 10m o 1h. -1 lo mantiene cargado, 0 lo descarga tras cada petición.</string>
+    <string name="translation_options_keep_alive_invalid">Indica segundos, o una duración como 10m.</string>
+    <string name="translation_options_reset">Restablecer valores predeterminados</string>
     <string name="translation_settings_test">Traducir una frase de prueba</string>
     <string name="translation_settings_saved">Traducciones guardadas</string>
     <plurals name="translation_settings_saved_count">
@@ -1267,6 +1285,7 @@
     <string name="translation_truncated">%1$s se detuvo antes del final del pasaje. Selecciona un pasaje más corto y vuelve a intentarlo.</string>
     <string name="translation_failed">%1$s no pudo traducir este pasaje.</string>
     <string name="translation_device_failed">El traductor de este teléfono no pudo traducir este pasaje.</string>
+    <string name="translation_model_not_found">El servidor no tiene ningún modelo llamado %1$s. Comprueba el nombre o descárgalo primero.</string>
     <string name="translation_too_long">Selecciona un pasaje más corto para traducir.</string>
     <string name="translation_same">El pasaje ya está en este idioma: %1$s.</string>
     <string name="translation_same_choose">Este pasaje ya está en este idioma: %1$s. Elige un idioma al que traducirlo.</string>

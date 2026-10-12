@@ -215,7 +215,7 @@ enum class DefinitionTarget(val id: String) {
  *   null for the device's own.
  * @param translationServer The id of the server translation uses when its
  *   provider is a server.
- * @param translationModels Translation's model on each server, by server id.
+ * @param translationStates Translation's model and options on each server, by server id.
  * @param translationGeminiModel The Gemini model translation uses, or null
  *   for the default.
  * @param translationTarget The language passages are translated into, as a
@@ -258,10 +258,14 @@ data class AppSettings(
     val voicePreferences: List<VoicePreference> = emptyList(),
     val translationProvider: String? = null,
     val translationServer: String? = null,
-    val translationModels: Map<String, String> = emptyMap(),
+    val translationStates: Map<String, ServerTranslationState> = emptyMap(),
     val translationGeminiModel: String? = null,
     val translationTarget: String? = null,
 ) {
+    /** Translation's model on each server, by server id. */
+    val translationModels: Map<String, String>
+        get() = translationStates.mapNotNull { (id, state) -> state.model?.let { id to it } }.toMap()
+
     /** The server translation is set to use, when it is listed. */
     val translationServerConnection: ServerConnection?
         get() = servers.readable?.firstOrNull { it.id == translationServer }
@@ -462,7 +466,7 @@ class AppSettingsRepository(
             voicePreferences = VoicePreferences.decode(p[Keys.READ_ALOUD_VOICE_PREFERENCES]),
             translationProvider = p[ServerSettings.TRANSLATION_PROVIDER],
             translationServer = p[ServerSettings.TRANSLATION_SERVER],
-            translationModels = ServerSettings.translationStates(p),
+            translationStates = ServerSettings.translationStates(p),
             translationGeminiModel = p[Keys.TRANSLATION_GEMINI_MODEL],
             translationTarget = p[Keys.TRANSLATION_TARGET],
         )
@@ -761,7 +765,38 @@ class AppSettingsRepository(
         store.edit { p ->
             val edit = ServerEdit.of(p) ?: return@edit
             if (edit.servers.none { it.id == id && it.url == url }) return@edit
-            if (trimmed.isEmpty()) edit.translationModels.remove(id) else edit.translationModels[id] = trimmed
+            val previous = edit.translationStates[id] ?: ServerTranslationState()
+            val model = trimmed.ifEmpty { null }
+            // What was learnt of a model goes with it.
+            val state = if (model == previous.model) previous else previous.copy(model = model, noTemperature = false)
+            if (state.isEmpty) edit.translationStates.remove(id) else edit.translationStates[id] = state
+            edit.save()
+        }
+    }
+
+    /**
+     * Changes how translation asks the server at [url], if it is still
+     * listed there. What [change] returns is kept within bounds; a value
+     * out of them, or blank, goes back to the default.
+     */
+    suspend fun editTranslationServer(url: String, change: (ServerTranslationState) -> ServerTranslationState) {
+        val id = ServerConnection.idOf(url) ?: return
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.none { it.id == id && it.url == url }) return@edit
+            val previous = edit.translationStates[id] ?: ServerTranslationState()
+            val changed = change(previous)
+            val temperature = changed.temperature?.let(ServerTranslationState::temperature)?.takeIf { it != 0.0 }
+            // What was learnt of a model goes with it, and a new temperature is tried once.
+            val learnt = changed.noTemperature && changed.model == previous.model && temperature == previous.temperature
+            val state = changed.copy(
+                temperature = temperature,
+                noTemperature = learnt,
+                instructions = changed.instructions?.trim()?.take(ServerTranslationState.MAX_INSTRUCTIONS)?.ifEmpty { null },
+                maxTokens = changed.maxTokens?.takeIf { it in ServerTranslationState.MAX_TOKENS },
+                keepAlive = changed.keepAlive?.trim()?.takeIf(ServerTranslationState::validKeepAlive),
+            )
+            if (state.isEmpty) edit.translationStates.remove(id) else edit.translationStates[id] = state
             edit.save()
         }
     }

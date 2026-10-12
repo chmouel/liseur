@@ -1099,6 +1099,7 @@
     <string name="read_aloud_notice_unavailable">Dieses Buch kann ab hier nicht vorgelesen werden.</string>
     <string name="read_aloud_notice_invalid_voice">%1$s hat die gewählte Stimme nicht. Wähle unter Einstellungen, Vorlesen eine andere.</string>
     <string name="read_aloud_notice_terms_required">%1$s verlangt zuerst, dass du die Bedingungen dieses Modells auf seiner Website akzeptierst.</string>
+    <string name="read_aloud_notice_no_speech">%1$s hat keinen Sprach-Endpunkt. Prüfe die Adresse oder wähle unter Einstellungen, Vorlesen einen Sprachserver.</string>
     <string name="read_aloud_notice_not_set_up">Vorlesen ist noch nicht eingerichtet. Richte es unter Einstellungen, Vorlesen ein.</string>
     <string name="read_aloud_settings_title">Vorlesen</string>
     <string name="read_aloud_settings_playback">Wiedergabe</string>
@@ -1147,6 +1148,7 @@
     <string name="read_aloud_settings_preview_unreachable">Der Sprachdienst ist nicht erreichbar.</string>
     <string name="read_aloud_settings_preview_refused">Der Sprachdienst hat den API-Schlüssel abgelehnt.</string>
     <string name="read_aloud_settings_preview_no_voice">Der Sprachdienst hat diese Stimme nicht.</string>
+    <string name="read_aloud_settings_preview_no_speech">Dieser Server hat keinen Sprach-Endpunkt. Prüfe die Adresse oder wähle einen Sprachserver.</string>
     <string name="read_aloud_settings_terms_required">Akzeptiere die Bedingungen dieses Modells auf der Website des Dienstes und versuche es dann erneut.</string>
     <string name="read_aloud_settings_key_needs_url">Gib zuerst die Serveradresse ein.</string>
     <string name="read_aloud_settings_key_not_saved">Der Schlüssel konnte nicht gespeichert werden. Füge ihn erneut ein.</string>
@@ -1234,6 +1236,22 @@
     <string name="translation_settings_target_follow">Sprache der App folgen</string>
     <string name="translation_settings_model_price">%1$s $ Eingabe, %2$s $ Ausgabe pro Million Tokens</string>
     <string name="translation_settings_model_free">Kostenlos</string>
+    <string name="translation_options_temperature">Temperatur</string>
+    <string name="translation_options_temperature_detail">Bei 0 wird derselbe Abschnitt immer gleich übersetzt. Höhere Werte variieren die Formulierung.</string>
+    <string name="translation_options_temperature_refused">Dieses Modell lehnt eine Temperatur ab, daher wird keine gesendet.</string>
+    <string name="translation_options_context">Vorherigen Satz mitsenden</string>
+    <string name="translation_options_context_detail">Beim Übersetzen einer Seite wird jeder Satz mit dem vorherigen gesendet, was bei Pronomen und Namen hilft.</string>
+    <string name="translation_options_context_gemma">TranslateGemma übersetzt jeden Satz einzeln und erhält nie den vorherigen.</string>
+    <string name="translation_options_instructions">Zusätzliche Anweisungen</string>
+    <string name="translation_options_instructions_detail">Werden jeder Anfrage für einen Abschnitt hinzugefügt.</string>
+    <string name="translation_options_instructions_hint">Duzen. Namen der Figuren unverändert lassen.</string>
+    <string name="translation_options_max_tokens">Längste Antwort</string>
+    <string name="translation_options_max_tokens_detail">In Tokens. Eine bei dieser Länge abgeschnittene Antwort zeigt stattdessen einen Fehler.</string>
+    <string name="translation_options_server_default">Standard des Servers</string>
+    <string name="translation_options_keep_alive">Modell geladen halten (Ollama)</string>
+    <string name="translation_options_keep_alive_detail">In Sekunden oder als Dauer wie 10m oder 1h. -1 hält es geladen, 0 entlädt es nach jeder Anfrage.</string>
+    <string name="translation_options_keep_alive_invalid">Gib Sekunden oder eine Dauer wie 10m an.</string>
+    <string name="translation_options_reset">Auf Standardwerte zurücksetzen</string>
     <string name="translation_settings_test">Testsatz übersetzen</string>
     <string name="translation_settings_saved">Gespeicherte Übersetzungen</string>
     <plurals name="translation_settings_saved_count">
@@ -1279,6 +1297,7 @@
     <string name="translation_truncated">%1$s hat vor dem Ende des Abschnitts aufgehört. Wähle einen kürzeren Abschnitt aus und versuche es erneut.</string>
     <string name="translation_failed">%1$s konnte diesen Abschnitt nicht übersetzen.</string>
     <string name="translation_device_failed">Der Übersetzer dieses Telefons konnte diesen Abschnitt nicht übersetzen.</string>
+    <string name="translation_model_not_found">Der Server hat kein Modell namens %1$s. Prüfe den Namen oder lade es zuerst herunter.</string>
     <string name="translation_too_long">Wähle einen kürzeren Abschnitt zum Übersetzen.</string>
     <string name="translation_same">Der Abschnitt ist bereits auf %1$s.</string>
     <string name="translation_same_choose">Der Abschnitt ist bereits auf %1$s. Wähle eine Sprache, in die er übersetzt werden soll.</string>

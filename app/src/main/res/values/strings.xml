@@ -1137,8 +1137,11 @@
     <string name="speech_preset_mistral" translatable="false">Mistral</string>
     <string name="speech_preset_groq" translatable="false">Groq</string>
     <string name="speech_preset_kokoro" translatable="false">Kokoro</string>
+    <string name="speech_preset_lm_studio" translatable="false">LM Studio</string>
+    <string name="speech_preset_ollama" translatable="false">Ollama</string>
     <string name="read_aloud_notice_invalid_voice">%1$s does not have the chosen voice. Pick another in Settings, Read aloud.</string>
     <string name="read_aloud_notice_terms_required">%1$s wants this model\'s terms accepted on its website first.</string>
+    <string name="read_aloud_notice_no_speech">%1$s has no speech endpoint. Check its address, or choose a speech server in Settings, Read aloud.</string>
     <string name="read_aloud_notice_not_set_up">Read aloud is not set up yet. Set it up in Settings, Read aloud.</string>
     <string name="read_aloud_settings_title">Read aloud</string>
     <string name="read_aloud_settings_playback">Playback</string>
@@ -1187,6 +1190,7 @@
     <string name="read_aloud_settings_preview_unreachable">Could not reach the speech service.</string>
     <string name="read_aloud_settings_preview_refused">The speech service refused the API key.</string>
     <string name="read_aloud_settings_preview_no_voice">The speech service does not have this voice.</string>
+    <string name="read_aloud_settings_preview_no_speech">This server has no speech endpoint. Check its address, or choose a speech server.</string>
     <string name="read_aloud_settings_terms_required">Accept this model\'s terms on the service\'s website, then try again.</string>
     <string name="read_aloud_settings_key_needs_url">Enter the server address first.</string>
     <string name="read_aloud_settings_key_not_saved">The key could not be saved. Paste it again.</string>
@@ -1275,6 +1279,22 @@
     <string name="translation_settings_target_follow">Follow the app\'s language</string>
     <string name="translation_settings_model_price">$%1$s in, $%2$s out per million tokens</string>
     <string name="translation_settings_model_free">Free</string>
+    <string name="translation_options_temperature">Temperature</string>
+    <string name="translation_options_temperature_detail">At 0 the same passage gets the same wording every time. Higher values vary it.</string>
+    <string name="translation_options_temperature_refused">This model refuses a temperature, so none is sent.</string>
+    <string name="translation_options_context">Send the sentence before</string>
+    <string name="translation_options_context_detail">When a page is translated, each sentence goes with the one before it, which helps with pronouns and names.</string>
+    <string name="translation_options_context_gemma">TranslateGemma translates each sentence on its own and never gets the one before.</string>
+    <string name="translation_options_instructions">Extra instructions</string>
+    <string name="translation_options_instructions_detail">Added to the request for every passage.</string>
+    <string name="translation_options_instructions_hint">Use the informal tu. Keep character names as written.</string>
+    <string name="translation_options_max_tokens">Longest reply</string>
+    <string name="translation_options_max_tokens_detail">In tokens. A reply cut short at this length shows an error instead.</string>
+    <string name="translation_options_server_default">Server default</string>
+    <string name="translation_options_keep_alive">Keep the model loaded (Ollama)</string>
+    <string name="translation_options_keep_alive_detail">Seconds, or a duration such as 10m or 1h. -1 keeps it loaded, 0 unloads it after each request.</string>
+    <string name="translation_options_keep_alive_invalid">Use seconds, or a duration such as 10m.</string>
+    <string name="translation_options_reset">Reset to defaults</string>
     <string name="translation_settings_test">Translate a test sentence</string>
     <string name="translation_settings_saved">Saved translations</string>
     <plurals name="translation_settings_saved_count">
@@ -1320,6 +1340,7 @@
     <string name="translation_truncated">%1$s stopped before the end of the passage. Select a shorter passage and try again.</string>
     <string name="translation_failed">%1$s couldn\'t translate this passage.</string>
     <string name="translation_device_failed">This phone\'s translator couldn\'t translate this passage.</string>
+    <string name="translation_model_not_found">The server has no model named %1$s. Check its name or download it first.</string>
     <string name="translation_too_long">Select a shorter passage to translate.</string>
     <string name="translation_same">The passage is already in %1$s.</string>
     <string name="translation_same_choose">This passage is already in %1$s. Choose a language to translate it into.</string>

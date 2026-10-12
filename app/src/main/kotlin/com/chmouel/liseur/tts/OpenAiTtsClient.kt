@@ -178,7 +178,7 @@ class OpenAiTtsClient(
             is Reply.Audio -> decode(reply, WAV)
             is Reply.Failure -> {
                 if (reply.code != 400 && reply.code != 422 || !reply.error.text.contains("response_format", ignoreCase = true)) {
-                    throw errorFor(reply.code, reply.error)
+                    throw speechErrorFor(reply.code, reply.error)
                 }
                 decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3).also { mp3Models += key }
             }
@@ -299,11 +299,13 @@ class OpenAiTtsClient(
 
     /** The audio in a JSON reply, as Mistral sends it: base64 under `audio_data`. */
     private fun audioData(body: ByteArray): ByteArray {
-        val data = try {
-            JSONObject(String(body, Charsets.UTF_8)).opt("audio_data") as? String
+        val reply = try {
+            JSONObject(String(body, Charsets.UTF_8))
         } catch (_: JSONException) {
             null
         } ?: throw SpeechError.InvalidResponse("unexpected format")
+        val data = reply.opt("audio_data") as? String
+            ?: throw if (unknownEndpoint(reply)) SpeechError.NoSpeech(200) else SpeechError.InvalidResponse("unexpected format")
         val audio = try {
             Base64.getDecoder().decode(data)
         } catch (_: IllegalArgumentException) {
@@ -388,7 +390,7 @@ class OpenAiTtsClient(
 
         fun orThrow(): Audio = when (this) {
             is Audio -> this
-            is Failure -> throw errorFor(code, error)
+            is Failure -> throw speechErrorFor(code, error)
         }
     }
 
@@ -405,6 +407,7 @@ class OpenAiTtsClient(
                 JSONArray(trimmed).let { VoicePage(names(it), it.length(), null) }
             } else {
                 val reply = JSONObject(trimmed)
+                if (unknownEndpoint(reply)) return null
                 val paged = reply.optJSONArray("items")
                 val items = reply.optJSONArray("voices") ?: paged ?: throw SpeechError.InvalidResponse("no list")
                 val total = (reply.opt("total") as? Int)?.takeIf { paged != null && items === paged && it >= 0 }
@@ -563,6 +566,22 @@ class OpenAiTtsClient(
             "Liseur/${BuildConfig.VERSION_NAME} (+https://github.com/chmouel/liseur)"
 
         private fun errorFor(code: Int, error: ErrorBody): SpeechError = errorFor(code, error.text, error.code)
+
+        /**
+         * A failed speech request: one the server has no route for (an
+         * Ollama or llama.cpp text server's 404) means it makes no speech,
+         * unless the error has a code of its own or names the voice or
+         * model it did not find.
+         */
+        private fun speechErrorFor(code: Int, error: ErrorBody): SpeechError {
+            val missingRoute = (code == 404 || code == 405) && error.code == null &&
+                listOf("voice", "model").none { error.text.contains(it, ignoreCase = true) }
+            return if (missingRoute) SpeechError.NoSpeech(code) else errorFor(code, error)
+        }
+
+        /** LM Studio answers a path it does not serve with a 200 and this error. */
+        private fun unknownEndpoint(reply: JSONObject): Boolean =
+            (reply.opt("error") as? String)?.startsWith("Unexpected endpoint", ignoreCase = true) == true
 
         private fun errorFor(code: Int, text: String, kind: String?): SpeechError = when {
             code == 401 || code == 403 -> SpeechError.InvalidKey(code)

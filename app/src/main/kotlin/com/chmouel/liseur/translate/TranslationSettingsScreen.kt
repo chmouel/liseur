@@ -223,6 +223,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                         )
                     }
                 }
+                service.AdvancedSettings()
                 SettingsGroup(stringResource(R.string.translation_settings_target)) {
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, configured)
@@ -523,6 +524,7 @@ internal fun errorSentence(error: TranslationError, name: String, source: String
     is TranslationError.Empty -> stringResource(R.string.translation_empty, name)
     is TranslationError.Truncated -> stringResource(R.string.translation_truncated, name)
     is TranslationError.DeviceFailed -> stringResource(R.string.translation_device_failed)
+    is TranslationError.ModelNotFound -> stringResource(R.string.translation_model_not_found, error.model)
     is TranslationError.Service, is TranslationError.Malformed, is TranslationError.Changed, is TranslationError.Failed ->
         stringResource(R.string.translation_failed, name)
 }

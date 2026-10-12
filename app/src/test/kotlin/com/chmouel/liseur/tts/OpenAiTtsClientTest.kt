@@ -153,6 +153,38 @@ class OpenAiTtsClientTest {
     }
 
     @Test
+    fun `a text-only server says it makes no speech`(): Unit = runBlocking {
+        // Ollama's and llama.cpp's answer to a route they do not have.
+        server.enqueue(MockResponse(code = 404, body = "404 page not found"))
+        expect<SpeechError.NoSpeech> { OpenAiTtsClient().synthesize(base, null, "t", "v", "qwen3") }
+        // LM Studio's: a 200 with an error.
+        val lmStudio = MockResponse.Builder()
+            .code(200)
+            .addHeader("Content-Type", "application/json; charset=utf-8")
+            .body("""{"error":"Unexpected endpoint or method. (POST /v1/audio/speech)"}""")
+            .build()
+        server.enqueue(lmStudio)
+        expect<SpeechError.NoSpeech> { OpenAiTtsClient().synthesize(base, null, "t", "v", "qwen3") }
+        // A missing model or voice is still named as such.
+        server.enqueue(MockResponse(code = 404, body = """{"error":{"message":"The model `x` does not exist"}}"""))
+        expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "v", "x") }
+        server.enqueue(MockResponse(code = 404, body = """{"detail":"Voice not found"}"""))
+        expect<SpeechError.InvalidVoice> { OpenAiTtsClient().synthesize(base, null, "t", "v", "kokoro") }
+        server.enqueue(MockResponse(code = 404, body = """{"error":{"message":"No such thing: x","code":"not_found"}}"""))
+        expect<SpeechError.Service> { OpenAiTtsClient().synthesize(base, null, "t", "v", "x") }
+        // llama.cpp's own: its numeric code is the HTTP status, not a kind.
+        server.enqueue(MockResponse(code = 404, body = """{"error":{"message":"File Not Found","type":"not_found_error","code":404}}"""))
+        expect<SpeechError.NoSpeech> { OpenAiTtsClient().synthesize(base, null, "t", "v", "qwen3") }
+    }
+
+    @Test
+    fun `LM Studio's answer to the voice list is no voice list`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 200, body = """{"error":"Unexpected endpoint or method. (GET /v1/audio/voices)"}"""))
+        server.enqueue(MockResponse(code = 200, body = """{"data":[{"id":"qwen3-8b","object":"model","owned_by":"organization_owner"}]}"""))
+        assertEquals(emptyList<String>(), OpenAiTtsClient().voices(base, null, "qwen3-8b"))
+    }
+
+    @Test
     fun `errors never repeat the key or the text`(): Unit = runBlocking {
         server.enqueue(MockResponse(code = 401, body = """{"detail":"bad key secret-key for Une phrase."}"""))
         val error = expect<SpeechError.InvalidKey> { OpenAiTtsClient().synthesize(base, "secret-key", "Une phrase.", "v", "kokoro") }

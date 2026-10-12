@@ -26,6 +26,8 @@ sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(
     )
     /** The service serves the model only once its terms are accepted on its website (Groq's). */
     class TermsRequired(code: Int) : SpeechError("The speech service wants the model's terms accepted (HTTP $code)")
+    /** The server has no speech endpoint at all, as a text-only one (LM Studio, Ollama) has not. */
+    class NoSpeech(code: Int) : SpeechError("The server does not make speech (HTTP $code)")
     class RateLimited(code: Int) : SpeechError("Speech quota or rate limit reached (HTTP $code)")
     class LocalNetworkBlocked : SpeechError("Local network access is not allowed")
     class Network(cause: IOException) :

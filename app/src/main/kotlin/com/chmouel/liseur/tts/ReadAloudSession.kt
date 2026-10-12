@@ -268,6 +268,7 @@ internal class ReadAloudSession(
         is SpeechTtsEngine.Error.InvalidKey -> ReadAloudNotice.InvalidKey
         is SpeechTtsEngine.Error.InvalidVoice -> ReadAloudNotice.InvalidVoice
         is SpeechTtsEngine.Error.TermsRequired -> ReadAloudNotice.TermsRequired
+        is SpeechTtsEngine.Error.NoSpeech -> ReadAloudNotice.NoSpeech
         is SpeechTtsEngine.Error.RateLimited -> ReadAloudNotice.RateLimited
         is SpeechTtsEngine.Error.Network -> ReadAloudNotice.Network
         is SpeechTtsEngine.Error.Service, is SpeechTtsEngine.Error.InvalidResponse -> ReadAloudNotice.Service

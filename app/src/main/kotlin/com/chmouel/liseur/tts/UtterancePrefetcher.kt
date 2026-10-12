@@ -111,6 +111,9 @@ class SpeechCache(
             } catch (e: SpeechError.TermsRequired) {
                 halted = true
                 throw e
+            } catch (e: SpeechError.NoSpeech) {
+                halted = true
+                throw e
             }
         }
     }

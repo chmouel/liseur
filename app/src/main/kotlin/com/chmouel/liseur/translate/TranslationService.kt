@@ -82,6 +82,10 @@ internal interface TranslationService {
     @Composable
     fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit)
 
+    /** Options most readers never need, in a section of their own that starts closed. */
+    @Composable
+    fun AdvancedSettings() = Unit
+
     /** A page of its own opened from its rows, such as its languages; [target] is the language passages go into. */
     @Composable
     fun Page(target: String, onBack: () -> Unit) = Unit

@@ -492,6 +492,7 @@ internal fun previewMessage(error: Throwable): Int = when (error) {
     is SpeechError.InvalidKey -> R.string.read_aloud_settings_preview_refused
     is SpeechError.InvalidVoice -> R.string.read_aloud_settings_preview_no_voice
     is SpeechError.TermsRequired -> R.string.read_aloud_settings_terms_required
+    is SpeechError.NoSpeech -> R.string.read_aloud_settings_preview_no_speech
     is SpeechError -> R.string.read_aloud_settings_preview_service
     else -> R.string.read_aloud_settings_preview_failed
 }

@@ -1,5 +1,6 @@
 package com.chmouel.liseur.translate
 
+import android.util.Log
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.runtime.Composable
@@ -17,6 +18,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.ServerTranslationState
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.tts.ListedField
 import com.chmouel.liseur.tts.Listing
@@ -24,6 +26,8 @@ import com.chmouel.liseur.tts.OpenAiTts
 import com.chmouel.liseur.tts.SpeechLocalNetworkPrompt
 import com.chmouel.liseur.tts.priceText
 import com.chmouel.liseur.tts.ServerKeys
+import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +59,10 @@ internal class ServerTranslationService(
     override fun model(s: AppSettings): String? =
         s.translationServerConnection?.let { s.translationModels[it.id] }?.takeIf { it.isNotBlank() }
 
+    /** How the reader asked for the chosen server to be asked; all defaults when untouched. */
+    private fun tuning(s: AppSettings): ServerTranslationState =
+        s.translationServerConnection?.let { s.translationStates[it.id] } ?: ServerTranslationState()
+
     override fun destination(s: AppSettings): String? = s.translationServerConnection?.name
 
     override fun owner(s: AppSettings): String? =
@@ -76,8 +84,35 @@ internal class ServerTranslationService(
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
         if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()
-        return client.translate(base, connections.key(ServerKeys.origin(base)), model, source, target, passage, context)
+        val tuning = tuning(s)
+        return client.translate(
+            base,
+            connections.key(ServerKeys.origin(base)),
+            model,
+            source,
+            target,
+            passage,
+            context.takeIf { tuning.context != false },
+            temperature = (tuning.temperature ?: 0.0).takeUnless { refusesTemperature(server.id, model) },
+            instructions = tuning.instructions,
+            maxTokens = tuning.maxTokens,
+            keepAlive = tuning.keepAlive,
+            onTemperatureRefused = {
+                // The translation came back; failing to remember this only means the next request retries.
+                try {
+                    settings.editTranslationServer(server.url) { if (it.model == model) it.copy(noTemperature = true) else it }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not save a refused temperature: ${e.javaClass.simpleName}")
+                }
+            },
+        )
     }
+
+    // Read afresh, as a page's run keeps the settings it was opened with and would otherwise be refused each sentence.
+    private suspend fun refusesTemperature(server: String, model: String): Boolean =
+        settings.settings.first().translationStates[server]?.let { it.noTemperature && it.model == model } == true
 
     /** Saves in the service's scope, so a model typed as the screen closes is still saved. */
     private fun commit(save: suspend () -> Unit) {
@@ -135,6 +170,28 @@ internal class ServerTranslationService(
         )
     }
 
+    @Composable
+    override fun AdvancedSettings() {
+        val server by server.collectAsState(initial = null)
+        val url = server?.url ?: return
+        val id = server?.id
+        val state by remember(id) { settings.settings.map { it.translationStates[id] ?: ServerTranslationState() } }
+            .collectAsState(initial = null)
+        val current = state ?: return
+        var open by remember { mutableStateOf(false) }
+        SettingsExpandableGroup(
+            title = stringResource(R.string.settings_advanced),
+            expanded = open,
+            onExpandedChange = { open = it },
+        ) {
+            ServerTranslationOptions(
+                state = current,
+                translateGemma = current.model?.let(TranslationPrompt::isTranslateGemma) == true,
+                onChange = { change -> commit { settings.editTranslationServer(url, change) } },
+            )
+        }
+    }
+
     private suspend fun models(url: String): Result<List<TextModel>> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(TranslationError.NotSetUp())
         return try {
@@ -150,5 +207,9 @@ internal class ServerTranslationService(
         is TranslationError.Network -> R.string.read_aloud_settings_server_unreachable
         is TranslationError.InvalidKey -> R.string.read_aloud_settings_server_refused
         else -> R.string.read_aloud_settings_server_models_failed
+    }
+
+    private companion object {
+        const val TAG = "ServerTranslation"
     }
 }
