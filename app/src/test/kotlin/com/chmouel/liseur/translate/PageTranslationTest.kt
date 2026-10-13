@@ -55,6 +55,8 @@ class PageTranslationTest {
         page.start(0, "start")
         runCurrent()
         assertEquals(listOf("S0", "S1", "S2", "S3"), page.texts())
+        assertEquals("S0", page.translationOf(book[0])?.translation)
+        assertEquals(null, page.translationOf(book[4]))
         assertEquals(PageTranslationState.Ahead, page.state.value)
 
         // The reader reaches the fourth sentence: four more fit in the window.

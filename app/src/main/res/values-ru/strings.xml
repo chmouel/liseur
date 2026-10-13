@@ -550,6 +550,7 @@
     <string name="search_result_count_capped">Первые %1$d результатов — уточните запрос, чтобы увидеть остальные</string>
     <string name="dictionary_loading">Ищем…</string>
     <string name="dictionary_not_found">Нет статьи для «%1$s».</string>
+    <string name="dictionary_translated_selection_failed">Не удалось найти выбранное слово на переведённой странице.</string>
     <string name="dictionary_failed">Не удалось связаться со словарём.</string>
     <string name="dictionary_failed_reason">Не удалось связаться со словарём: %1$s</string>
     <string name="dictionary_failed_host">Не удалось связаться с %1$s (%2$s). Проверьте сайт словаря в Настройках.</string>

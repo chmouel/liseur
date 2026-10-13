@@ -153,9 +153,11 @@ import com.chmouel.liseur.reader.annotations.lookUpExternally
 import com.chmouel.liseur.reader.annotations.openDictionaryEntry
 import com.chmouel.liseur.reader.annotations.shareText
 import com.chmouel.liseur.reader.annotations.toDecorations
+import com.chmouel.liseur.reader.dictionary.DefinitionQuery
 import com.chmouel.liseur.reader.dictionary.DefinitionSheet
 import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.reader.dictionary.altLanguageFor
+import com.chmouel.liseur.reader.dictionary.definitionQuery
 import com.chmouel.liseur.reader.footnotes.FootnoteLayout
 import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
@@ -695,7 +697,7 @@ fun ReaderScreen(
     val annotationsNow by rememberUpdatedState(annotations)
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
-    var defineWord by remember { mutableStateOf<String?>(null) }
+    var defineWord by remember { mutableStateOf<DefinitionQuery?>(null) }
     var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
     // The page translated sentence by sentence, while it is; see [TranslatedPages].
     var pageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
@@ -4158,11 +4160,16 @@ fun ReaderScreen(
     (tappedSelection ?: selection)
         ?.takeIf { viewedImage == null && notedTap == null }
         ?.let { active ->
+            val translationRun = if (pageTranslated) {
+                pageTranslation ?: restoringPageTranslation
+            } else {
+                null
+            }
             SelectionPopup(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated) {
+                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun) {
                     SelectionActions(
                         onHighlight = { tint ->
                             onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -4177,13 +4184,74 @@ fun ReaderScreen(
                             dismissSelection()
                         },
                         onLookUp = {
-                            when (dictionary.target) {
-                                DefinitionTarget.BUILT_IN -> defineWord = active.text
-                                DefinitionTarget.EXTERNAL_APP -> {
-                                    context.lookUpExternally(active.text, dictionary.baseUrl)
+                            val openLookup: (DefinitionQuery) -> Unit = { query ->
+                                when (dictionary.target) {
+                                    DefinitionTarget.BUILT_IN -> defineWord = query
+                                    DefinitionTarget.EXTERNAL_APP -> {
+                                        context.lookUpExternally(query.word, dictionary.baseUrl)
+                                    }
                                 }
                             }
-                            dismissSelection()
+                            if (pageTranslated) {
+                                val nav = navigatorNow
+                                val run = translationRun
+                                if (nav == null || run == null) {
+                                    dismissSelection()
+                                    Toast.makeText(
+                                        context,
+                                        R.string.dictionary_translated_selection_failed,
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                                } else {
+                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                        val displayedText = TranslatedPages.selectedText(nav)
+                                        if (navigatorNow !== nav) return@launch
+                                        if (
+                                            !pageTranslated ||
+                                            (pageTranslation ?: restoringPageTranslation) !== run
+                                        ) {
+                                            dismissSelection()
+                                            return@launch
+                                        }
+                                        val originalSentence = displayedText?.let { text ->
+                                            ResourceAddress.canonicalPath(active.locator.href.toString())?.let { href ->
+                                                run.original(href, text, active.locator.text.before)
+                                            }
+                                        }
+                                        val lookupLanguage = if (
+                                            originalSentence != null && run.translationOf(originalSentence) != null
+                                        ) {
+                                            run.translator.target
+                                        } else {
+                                            publication.metadata.languages.firstOrNull()
+                                        }
+                                        val query = definitionQuery(
+                                            originalText = active.text,
+                                            displayedText = displayedText,
+                                            language = lookupLanguage,
+                                            useDisplayedText = true,
+                                        )
+                                        dismissSelection()
+                                        if (query == null) {
+                                            Toast.makeText(
+                                                context,
+                                                R.string.dictionary_translated_selection_failed,
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        } else {
+                                            openLookup(query)
+                                        }
+                                    }
+                                }
+                            } else {
+                                definitionQuery(
+                                    originalText = active.text,
+                                    displayedText = null,
+                                    language = publication.metadata.languages.firstOrNull(),
+                                    useDisplayedText = false,
+                                )?.let(openLookup)
+                                dismissSelection()
+                            }
                         },
                         onShare = {
                             context.shareText(active.text, publication.metadata.title)
@@ -4237,17 +4305,18 @@ fun ReaderScreen(
             )
         }
 
-    defineWord?.let { word ->
+    defineWord?.let { query ->
         val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
+        val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
         DefinitionSheet(
-            word = word,
-            languages = remember(publication) {
-                WiktionaryClient.languagesFor(publication.metadata.languages.firstOrNull())
+            word = query.word,
+            languages = remember(definitionLanguage) {
+                WiktionaryClient.languagesFor(definitionLanguage)
             },
             enabled = dictionary.enabled,
             baseUrl = dictionary.baseUrl,
-            altLanguage = remember(publication, dictionary.altLanguage, appLanguage) {
-                altLanguageFor(dictionary.altLanguage, publication.metadata.languages.firstOrNull(), appLanguage)
+            altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {
+                altLanguageFor(dictionary.altLanguage, definitionLanguage, appLanguage)
             },
             onEnable = onEnableDictionary,
             onOpenInDictionaryApp = {

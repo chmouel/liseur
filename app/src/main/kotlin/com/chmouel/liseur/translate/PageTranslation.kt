@@ -231,6 +231,10 @@ internal class PageTranslation<P>(
         return found.toList()
     }
 
+    /** The translation placed for [sentence], if the page walk has translated it. */
+    fun translationOf(sentence: PageSentence): PageSwap? =
+        mutableSwaps.value[sentence.href].orEmpty().firstOrNull { it.sentence == sentence }
+
     /**
      * The book's sentence whose translation shows [selected] in [href], so
      * read aloud can start from the words the book has; when the selection

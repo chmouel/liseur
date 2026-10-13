@@ -506,6 +506,7 @@
     <string name="search_result_count_capped">Erste %1$d Treffer — suche enger, um den Rest zu sehen</string>
     <string name="dictionary_loading">Wird nachgeschlagen…</string>
     <string name="dictionary_not_found">Kein Eintrag für „%1$s“.</string>
+    <string name="dictionary_translated_selection_failed">Das ausgewählte Wort auf der übersetzten Seite konnte nicht nachgeschlagen werden.</string>
     <string name="dictionary_failed">Wörterbuch nicht erreichbar.</string>
     <string name="dictionary_failed_reason">Wörterbuch nicht erreichbar: %1$s</string>
     <string name="dictionary_failed_host">%1$s nicht erreichbar (%2$s). Prüfe die Wörterbuchseite in den Einstellungen.</string>

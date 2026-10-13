@@ -502,6 +502,7 @@
     <string name="search_result_count_capped">Primeros %1$d resultados — busca algo más concreto para ver el resto</string>
     <string name="dictionary_loading">Buscando…</string>
     <string name="dictionary_not_found">No hay entrada para “%1$s”.</string>
+    <string name="dictionary_translated_selection_failed">No se pudo buscar la palabra seleccionada en la página traducida.</string>
     <string name="dictionary_failed">No se pudo contactar con el diccionario.</string>
     <string name="dictionary_failed_reason">No se pudo contactar con el diccionario: %1$s</string>
     <string name="dictionary_failed_host">No se pudo contactar con %1$s (%2$s). Comprueba el sitio del diccionario en Ajustes.</string>

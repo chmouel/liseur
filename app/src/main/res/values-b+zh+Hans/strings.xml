@@ -533,6 +533,7 @@
     <string name="search_result_count_capped">前 %1$d 条结果——请缩小搜索范围以查看其余内容</string>
     <string name="dictionary_loading">正在查询…</string>
     <string name="dictionary_not_found">未找到“%1$s”的词条。</string>
+    <string name="dictionary_translated_selection_failed">无法查询译文页面中选定的单词。</string>
     <string name="dictionary_failed">无法连接词典。</string>
     <string name="dictionary_failed_reason">无法连接词典：%1$s</string>
     <string name="dictionary_failed_host">无法连接 %1$s（%2$s）。请在设置中检查词典站点。</string>

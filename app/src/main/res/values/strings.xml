@@ -521,6 +521,7 @@
     <string name="search_result_count_capped">First %1$d results — search for something narrower to see the rest</string>
     <string name="dictionary_loading">Looking it up…</string>
     <string name="dictionary_not_found">No entry for “%1$s”.</string>
+    <string name="dictionary_translated_selection_failed">Could not look up the selected word in the translated page.</string>
     <string name="dictionary_failed">Could not reach the dictionary.</string>
     <string name="dictionary_failed_reason">Could not reach the dictionary: %1$s</string>
     <string name="dictionary_failed_host">Could not reach %1$s (%2$s). Check the dictionary site in Settings.</string>

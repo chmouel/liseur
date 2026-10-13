@@ -25,6 +25,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONException
 import org.json.JSONObject
+import org.json.JSONTokener
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
@@ -64,6 +65,25 @@ internal object TranslatedPages {
     /** What names a place the walk starts from: its chapter and element. */
     fun key(place: Locator): String =
         "${ResourceAddress.canonicalPath(place.href.toString())}#${place.locations.otherLocations[CSS_SELECTOR]}"
+
+    /** The selected words as the translated page currently shows them. */
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun selectedText(nav: EpubNavigatorFragment): String? {
+        val result = withTimeoutOrNull(ANSWER_MS) {
+            nav.evaluateJavascript(SELECTION_TEXT_SCRIPT)
+        } ?: return null
+        return decodeSelectionText(result)
+    }
+
+    internal fun decodeSelectionText(result: String?): String? {
+        if (result == null) return null
+        val text = try {
+            JSONTokener(result).nextValue() as? String
+        } catch (_: JSONException) {
+            null
+        } ?: return null
+        return text.trim().takeIf { it.isNotEmpty() }
+    }
 
     /**
      * [selection], made on translated words, pointed at the book's sentence
@@ -248,6 +268,9 @@ internal object TranslatedPages {
 
     private fun stillShows(nav: EpubNavigatorFragment, web: WebView, url: String) =
         visibleWebView(nav.publicationView) === web && web.url == url
+
+    private const val SELECTION_TEXT_SCRIPT =
+        "(window.getSelection ? window.getSelection().toString() : '')"
 
     // Where the view is now: a scrolled page moves before its debounced locator says so.
     private fun WebView.position(): List<Int> {
