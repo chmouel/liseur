@@ -4282,13 +4282,14 @@ fun ReaderScreen(
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
                                 {
+                                    val selectionWasTranslated = pageTranslated
                                     dismissSelection()
                                     val nav = navigator
                                     // Translated words are not in the book; read from the sentence they translate.
                                     val original = (pageTranslation ?: restoringPageTranslation)
                                         ?.let { TranslatedPages.original(it, active.locator) }
                                     suspend fun startingPoint(): Locator {
-                                        val source = readAloudStartLocator(active.locator, original, pageTranslated)
+                                        val source = readAloudStartLocator(active.locator, original, selectionWasTranslated)
                                         val spoken = nav?.let { SpokenPassage.startingPoint(it, source) } ?: source
                                         return if (original != null || nav == null) spoken else capture(nav, spoken)
                                     }
