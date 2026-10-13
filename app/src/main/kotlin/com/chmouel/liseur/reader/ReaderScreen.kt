@@ -128,7 +128,6 @@ import com.chmouel.liseur.translate.PageTranslation
 import com.chmouel.liseur.translate.PageSentence
 import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.tts.SpeechKey
-import com.chmouel.liseur.tts.SpeechTranslation
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
@@ -2173,6 +2172,36 @@ fun ReaderScreen(
         }
     }
 
+    suspend fun startReadAloudFromHere(
+        reading: ReaderReadAloud,
+        startingPoint: suspend () -> Locator,
+    ) {
+        val run = pageTranslation
+        if (
+            run != null &&
+            handoffPageTranslationToReadAloud(
+                start = reading.start,
+                translations = run.translations,
+                source = run.translator.source,
+                target = run.translator.target,
+                startingPoint = startingPoint,
+            )
+        ) {
+            return
+        }
+        if (pageTranslated) {
+            stopTranslatingBook()
+            val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
+                snapshotFlow { pageTranslated }.first { !it }
+            }
+            if (restored == null) {
+                Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+        reading.start(startingPoint(), null)
+    }
+
     /**
      * Translates the page sentence by sentence from [selection] on, the
      * way read aloud reads it, in place of the book's words. Read aloud
@@ -3912,14 +3941,15 @@ fun ReaderScreen(
                                 null
                             }
                         val readAloudFromHere: (() -> Unit)? = readAloud
-                            ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured && !pageTranslated }
+                            ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
                                 {
-                                    effectScope.launch {
+                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         val nav = navigatorNow ?: return@launch
                                         val captured = ExactLocatorAnchor.capture(nav, nav.currentLocator.value)
-                                        val start = SpokenPassage.startingPoint(nav, captured)
-                                        reading.start(start, null)
+                                        startReadAloudFromHere(reading) {
+                                            SpokenPassage.startingPoint(nav, captured)
+                                        }
                                     }
                                 }
                             }
@@ -4186,40 +4216,8 @@ fun ReaderScreen(
                                     suspend fun startingPoint() = original
                                         ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
                                         ?: active.locator
-                                    // A translated page is read aloud in translation, and stays translated.
-                                    val run = pageTranslation
-                                    if (run != null && run.translations.acquire()) {
-                                        val translation = SpeechTranslation(
-                                            run.translations,
-                                            run.translator.source,
-                                            run.translator.target,
-                                        )
-                                        // Undispatched, so the hold is in the try below before anything can cancel it.
-                                        effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                            var handedOver = false
-                                            try {
-                                                val start = startingPoint()
-                                                handedOver = true
-                                                reading.start(start, translation)
-                                            } finally {
-                                                if (!handedOver) translation.translations.release()
-                                            }
-                                        }
-                                    } else {
-                                        effectScope.launch {
-                                            // Its marks go on the book's words, so those come back first.
-                                            if (pageTranslated) {
-                                                stopTranslatingBook()
-                                                val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
-                                                    snapshotFlow { pageTranslated }.first { !it }
-                                                }
-                                                if (restored == null) {
-                                                    Toast.makeText(context, R.string.read_aloud_notice_unavailable, Toast.LENGTH_SHORT).show()
-                                                    return@launch
-                                                }
-                                            }
-                                            reading.start(startingPoint(), null)
-                                        }
+                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                        startReadAloudFromHere(reading, ::startingPoint)
                                     }
                                 }
                             },

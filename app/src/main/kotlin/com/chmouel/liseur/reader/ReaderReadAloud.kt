@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.tts.SpeechTranslation
 import org.readium.r2.shared.publication.Locator
 
@@ -19,3 +20,24 @@ class ReaderReadAloud(
      */
     val awaitingCapture: () -> Locator?,
 )
+
+/** Transfers a hold on the page's translations to read aloud once its start place is ready. */
+internal suspend fun handoffPageTranslationToReadAloud(
+    start: (Locator, SpeechTranslation?) -> Unit,
+    translations: SentenceTranslations,
+    source: String?,
+    target: String,
+    startingPoint: suspend () -> Locator,
+): Boolean {
+    if (!translations.acquire()) return false
+    val speechTranslation = SpeechTranslation(translations, source, target)
+    var handedOver = false
+    try {
+        val locator = startingPoint()
+        handedOver = true
+        start(locator, speechTranslation)
+    } finally {
+        if (!handedOver) speechTranslation.translations.release()
+    }
+    return true
+}
