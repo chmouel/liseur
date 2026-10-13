@@ -4211,6 +4211,7 @@ fun ReaderScreen(
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         val displayedText = TranslatedPages.selectedText(nav)
                                         if (navigatorNow !== nav) return@launch
+                                        if ((tappedSelection ?: selection) !== active) return@launch
                                         if (
                                             !pageTranslated ||
                                             (pageTranslation ?: restoringPageTranslation) !== run
