@@ -370,6 +370,16 @@ class ReaderPreferencesMapperTest {
     }
 
     @Test
+    fun `text width is not capped so page margins work on tablets`() {
+        for (columns in ColumnMode.entries) {
+            assertEquals(
+                "none",
+                readingRsProperties(columns).overrides["--RS__maxLineLength"],
+            )
+        }
+    }
+
+    @Test
     fun `two columns still ask for a width they can fit in`() {
         // The column count alone is a ceiling: Readium's default 45em
         // column width means two of them only appear on a screen wide
