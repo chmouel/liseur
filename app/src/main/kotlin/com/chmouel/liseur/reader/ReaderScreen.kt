@@ -4247,7 +4247,8 @@ fun ReaderScreen(
                                         val lookupLanguage = when {
                                             translatedSentence == null -> publication.metadata.languages.firstOrNull()
                                             intersectsAppliedSwap == true -> run.translator.target
-                                            intersectsAppliedSwap == false -> publication.metadata.languages.firstOrNull()
+                                            intersectsAppliedSwap == false ->
+                                                run.translator.source ?: publication.metadata.languages.firstOrNull()
                                             else -> {
                                                 dismissSelection()
                                                 Toast.makeText(
