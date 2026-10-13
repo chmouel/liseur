@@ -27,6 +27,7 @@ reorderable = "3.1.0"
 navigation3 = "1.2.0"
 adaptiveNavigation3 = "1.3.0"
 robolectric = "4.17"
+rhino = "1.9.1"
 # Play build only: on-device translation (see DEVELOPER.md, F-Droid readiness).
 mlkitTranslate = "17.0.3"
 junit = "4.13.2"
@@ -60,6 +61,7 @@ room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 room-testing = { module = "androidx.room:room-testing", version.ref = "room" }
 androidx-test-core = { module = "androidx.test:core", version = "1.7.0" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
