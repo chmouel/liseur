@@ -3954,12 +3954,19 @@ fun ReaderScreen(
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
                                 {
+                                    val attempt = pageTranslationStarts.get()
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         val nav = navigatorNow ?: return@launch
                                         val captured = if (effectiveScrollingNow) {
                                             scrolledPlace(nav) ?: return@launch
                                         } else {
                                             capture(nav, nav.currentLocator.value)
+                                        }
+                                        if (
+                                            pageTranslationStarts.get() != attempt ||
+                                            navigatorNow !== nav
+                                        ) {
+                                            return@launch
                                         }
                                         startReadAloudFromHere(reading) {
                                             SpokenPassage.startingPoint(nav, captured)
