@@ -1,6 +1,6 @@
 # 47. The selection bar keeps one colour and a More
 
-Status: accepted
+Status: superseded by [ADR-0049](0049-selection-actions-stay-in-main-row.md)
 
 ## Context
 

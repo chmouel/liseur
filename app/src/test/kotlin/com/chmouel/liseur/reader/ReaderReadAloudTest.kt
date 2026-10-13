@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader
 
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.translate.SentenceTranslator
@@ -37,6 +38,34 @@ class ReaderReadAloudTest {
         override fun close() {
             closes++
         }
+    }
+
+    @Test
+    fun `translated selection without a source match starts from a coarse locator`() {
+        val selected = Locator(href = Url("chapter.xhtml")!!, mediaType = MediaType.XHTML).copy(
+            locations = Locator.Locations(
+                otherLocations = mapOf(
+                    ExactLocatorAnchor.MARKER to 1,
+                    ExactLocatorAnchor.CSS_SELECTOR to "p:nth-child(2)",
+                ),
+            ),
+            text = Locator.Text(before = "before", highlight = "translated words", after = "after"),
+        )
+
+        val start = readAloudStartLocator(selected, original = null, translated = true)
+
+        assertEquals(Locator.Text(), start.text)
+        assertEquals(null, start.locations.otherLocations[ExactLocatorAnchor.MARKER])
+        assertEquals(selected.href, start.href)
+    }
+
+    @Test
+    fun `read aloud keeps a mapped source locator and ordinary selection text`() {
+        val selected = Locator(href = Url("chapter.xhtml")!!, mediaType = MediaType.XHTML)
+        val original = selected.copy(text = Locator.Text(highlight = "source words"))
+
+        assertSame(original, readAloudStartLocator(selected, original, translated = true))
+        assertSame(selected, readAloudStartLocator(selected, original = null, translated = false))
     }
 
     @Test

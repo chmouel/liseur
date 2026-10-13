@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.tts.SpeechTranslation
 import org.readium.r2.shared.publication.Locator
@@ -20,6 +21,9 @@ class ReaderReadAloud(
      */
     val awaitingCapture: () -> Locator?,
 )
+
+internal fun readAloudStartLocator(selected: Locator, original: Locator?, translated: Boolean): Locator =
+    original ?: if (translated) ExactLocatorAnchor.coarse(selected) else selected
 
 /** Transfers a hold on the page's translations to read aloud once its start place is ready. */
 internal suspend fun handoffPageTranslationToReadAloud(

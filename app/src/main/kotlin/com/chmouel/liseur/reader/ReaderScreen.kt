@@ -4281,9 +4281,11 @@ fun ReaderScreen(
                                     // Translated words are not in the book; read from the sentence they translate.
                                     val original = (pageTranslation ?: restoringPageTranslation)
                                         ?.let { TranslatedPages.original(it, active.locator) }
-                                    suspend fun startingPoint() = original
-                                        ?: nav?.let { SpokenPassage.startingPoint(it, active.locator) }
-                                        ?: active.locator
+                                    suspend fun startingPoint(): Locator {
+                                        val source = readAloudStartLocator(active.locator, original, pageTranslated)
+                                        val spoken = nav?.let { SpokenPassage.startingPoint(it, source) } ?: source
+                                        return if (original != null || nav == null) spoken else capture(nav, spoken)
+                                    }
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         startReadAloudFromHere(reading, ::startingPoint)
                                     }
