@@ -4231,10 +4231,10 @@ fun ReaderScreen(
                                                 run.original(href, text, active.locator.text.before)
                                             }
                                         }
-                                        val displayedInTranslation = originalSentence?.let { sentence ->
-                                            run.translationOf(sentence) != null &&
-                                                TranslatedPages.selectionIntersectsAppliedSwap(nav, sentence) == true
-                                        } == true
+                                        val translatedSentence = originalSentence?.let { run.translationOf(it) }
+                                        val intersectsAppliedSwap = translatedSentence?.let {
+                                            TranslatedPages.selectionIntersectsAppliedSwap(nav, it.sentence)
+                                        }
                                         if (navigatorNow !== nav) return@launch
                                         if ((tappedSelection ?: selection) !== active) return@launch
                                         if (
@@ -4244,12 +4244,19 @@ fun ReaderScreen(
                                             dismissSelection()
                                             return@launch
                                         }
-                                        val lookupLanguage = if (
-                                            displayedInTranslation
-                                        ) {
-                                            run.translator.target
-                                        } else {
-                                            publication.metadata.languages.firstOrNull()
+                                        val lookupLanguage = when {
+                                            translatedSentence == null -> publication.metadata.languages.firstOrNull()
+                                            intersectsAppliedSwap == true -> run.translator.target
+                                            intersectsAppliedSwap == false -> publication.metadata.languages.firstOrNull()
+                                            else -> {
+                                                dismissSelection()
+                                                Toast.makeText(
+                                                    context,
+                                                    R.string.dictionary_translated_selection_failed,
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                                return@launch
+                                            }
                                         }
                                         val query = definitionQuery(
                                             originalText = active.text,
