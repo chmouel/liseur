@@ -4132,7 +4132,6 @@ fun ReaderScreen(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                selectionKey = active,
                 actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated) {
                     SelectionActions(
                         onHighlight = { tint ->
