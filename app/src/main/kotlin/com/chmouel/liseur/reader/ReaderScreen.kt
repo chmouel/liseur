@@ -3949,7 +3949,11 @@ fun ReaderScreen(
                                 {
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         val nav = navigatorNow ?: return@launch
-                                        val captured = capture(nav, nav.currentLocator.value)
+                                        val captured = if (effectiveScrollingNow) {
+                                            scrolledPlace(nav) ?: return@launch
+                                        } else {
+                                            capture(nav, nav.currentLocator.value)
+                                        }
                                         startReadAloudFromHere(reading) {
                                             SpokenPassage.startingPoint(nav, captured)
                                         }
