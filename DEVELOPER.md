@@ -1417,8 +1417,8 @@ reader behavior.
   outside touch.
 - The selection bar keeps one height. Translate and Read aloud share its
   horizontally scrolling action row instead of hiding behind More. See
-  `docs/adr/0049-selection-actions-stay-in-main-row.md`, which supersedes
-  ADR-0047.
+  `docs/adr/0049-selection-actions-stay-in-main-row.md`, which amends only
+  ADR-0047's More-row decision. Its one-colour default remains in effect.
 - A page's CSS `prefers-color-scheme` follows the reading page, not the
   system. WebView reads it from `android:isLightTheme` on the reader
   activity's theme, so `showPagesAs()` forces a `PageColorScheme` style

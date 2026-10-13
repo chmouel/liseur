@@ -22,6 +22,10 @@ height. Note, Define, Search, Share and Delete stay in the main row:
 the first four are what a selection is mostly for, and a destructive
 action should not hide.
 
+> Amended by [ADR-0049](0049-selection-actions-stay-in-main-row.md):
+> Read aloud and Translate now stay in the main horizontally scrolling
+> row. The one-colour default remains unchanged.
+
 We did not use a dropdown menu. The bar is a `Popup`, and a menu is a
 second window whose taps the bar can take for a touch outside it,
 dismissing the selection before the item runs (#257 has the same cause).

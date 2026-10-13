@@ -7,6 +7,8 @@ Status: accepted
 ADR-0047 put Translate and Read aloud behind More to keep the selection
 bar compact. That made both actions take an extra tap, even as page
 translation and read-aloud became part of the same reading flow.
+This amendment changes only their placement; the one-colour default
+from ADR-0047 remains in effect.
 
 ## Decision
 

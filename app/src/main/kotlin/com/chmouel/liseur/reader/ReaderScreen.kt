@@ -3948,7 +3948,7 @@ fun ReaderScreen(
                                 {
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         val nav = navigatorNow ?: return@launch
-                                        val captured = ExactLocatorAnchor.capture(nav, nav.currentLocator.value)
+                                        val captured = capture(nav, nav.currentLocator.value)
                                         startReadAloudFromHere(reading) {
                                             SpokenPassage.startingPoint(nav, captured)
                                         }
