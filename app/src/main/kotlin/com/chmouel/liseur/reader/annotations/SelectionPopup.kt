@@ -183,12 +183,11 @@ fun SelectionPopup(
                         }
                     }
                     actions.onTranslate?.let { translate ->
-                        IconButton(onClick = translate, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Outlined.Translate,
-                                contentDescription = stringResource(actions.translateLabel),
-                            )
-                        }
+                        PopupAction(
+                            label = stringResource(actions.translateLabel),
+                            icon = Icons.Outlined.Translate,
+                            onClick = translate,
+                        )
                     }
                     actions.onReadAloud?.let { readAloud ->
                         IconButton(onClick = readAloud, modifier = Modifier.size(36.dp)) {

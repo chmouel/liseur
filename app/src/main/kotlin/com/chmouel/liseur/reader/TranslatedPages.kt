@@ -87,7 +87,9 @@ internal object TranslatedPages {
         val url = web.url ?: return null
         if (ResourceAddress.canonicalPath(url) != sentence.href) return null
         val result = try {
-            nav.evaluateJavascript(PageSwaps.selectionIntersectsAppliedSwap(url, sentence))?.trim()
+            withTimeoutOrNull(ANSWER_MS) {
+                nav.evaluateJavascript(PageSwaps.selectionIntersectsAppliedSwap(url, sentence))?.trim()
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
