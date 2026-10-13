@@ -156,7 +156,7 @@ fun ReadingStatsScreen(
             return@Scaffold
         }
         val ready = state as ReadingStatsUiState.Ready
-        val stats = ready.stats
+        val stats = ready.stats.hideBrieflyReadBooks()
         if (stats.isEmpty && ready.headline.totalMs <= 0) {
             EmptyStats(
                 Modifier

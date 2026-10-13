@@ -23,6 +23,29 @@ class StatsSnapshotUnionTest {
     private val books = mapOf("book" to StatsBook("book", "A book", null, 0.2, false))
 
     @Test
+    fun `short contributions qualify after union while brief remote books stay hidden`() {
+        val local = readingStats(
+            listOf(SessionSpan("book", at, 60_000, at)), books, zone, today,
+        )
+        val remote = WorkInsights(1, 1.0, null, at, "work", "A book")
+        val brief = WorkInsights(1, 119_999 / 60_000.0, null, at, "brief", "Brief book")
+        val snapshot = snapshot(0.0).copy(
+            summary = InsightsSummary(remote.activeMinutes + brief.activeMinutes, 2, 1),
+            books = WorkTotals(mapOf("book" to remote), listOf(brief)),
+            days = listOf(InsightDay(today, remote.activeMinutes + brief.activeMinutes)),
+        )
+        val result = uniteSnapshot(local, books, emptyMap(), snapshot)!!
+        val displayed = result.stats.hideBrieflyReadBooks()
+
+        assertEquals(120_000L, displayed.books.single().totalMs)
+        assertEquals("book", displayed.books.single().bookUrl)
+        assertEquals(1, displayed.booksRead)
+        assertEquals(239_999L, result.headline.totalMs)
+        assertEquals(239_999L, displayed.totalMs)
+        assertEquals(239_999L, displayed.recent.last().totalMs)
+    }
+
+    @Test
     fun `acknowledgement flags cannot change headline book or calendar union`() {
         val snapshot = snapshot(overlapMinutes = 20.0)
         val results = listOf(false, true).map { uploaded ->

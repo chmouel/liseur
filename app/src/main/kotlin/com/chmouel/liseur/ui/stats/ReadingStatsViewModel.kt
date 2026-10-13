@@ -845,3 +845,13 @@ class ReadingStatsViewModel(
  */
 internal fun Double.minutesAsMillis(): Long =
     if (!isFinite() || this < 0) 0 else (this * 60_000).roundToLong()
+
+// Apply after the local/server union so short contributions can qualify together.
+internal fun ReadingStats.hideBrieflyReadBooks(): ReadingStats {
+    val visible = books.filter { it.totalMs >= 2 * 60_000L }
+    return copy(
+        books = visible,
+        booksRead = visible.size,
+        booksFinished = visible.count { it.finished },
+    )
+}

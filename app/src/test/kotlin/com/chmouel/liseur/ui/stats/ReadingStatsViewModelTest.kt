@@ -127,6 +127,40 @@ class ReadingStatsViewModelTest {
     }
 
     @Test
+    fun `briefly read books are hidden without removing their time`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val brief = "calibre:brief"
+            val boundary = "calibre:boundary"
+            val longer = "calibre:longer"
+            for (url in listOf(brief, boundary, longer)) {
+                db.bookDao().upsert(book(url).copy(finishedAt = if (url != longer) 1L else null))
+            }
+            db.readingSessionDao().insert(session(brief, today, 119_999))
+            db.readingSessionDao().insert(session(boundary, today, 60_000))
+            db.readingSessionDao().insert(session(boundary, today, 60_000, LocalTime.of(13, 0)))
+            db.readingSessionDao().insert(session(longer, today, 120_001))
+            // Reading outside the selected period must not qualify a brief row.
+            db.readingSessionDao().insert(session(brief, today.minusDays(200), 600_000))
+
+            val loaded = model().state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+            val displayed = loaded.stats.hideBrieflyReadBooks()
+
+            assertEquals(listOf(longer, boundary), displayed.books.map { it.bookUrl })
+            assertEquals(2, displayed.booksRead)
+            assertEquals(1, displayed.booksFinished)
+            assertEquals(360_000L, loaded.headline.totalMs)
+            assertEquals(360_000L, displayed.totalMs)
+            assertEquals(360_000L, displayed.recent.last().totalMs)
+            assertEquals(4, loaded.headline.sessions)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun `with no server the headline is this device's own count for the span`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
