@@ -186,7 +186,10 @@ internal fun readingRsProperties(columnMode: ColumnMode): RsProperties = RsPrope
         ColumnMode.TWO -> Length.Vw(TWO_COLUMN_WIDTH_VW)
         else -> null
     },
-    overrides = selectionOverrides,
+    // Readium centres a 40rem body even when pageMargins asks for narrow
+    // padding. Let the paginated column fill its width so the chosen
+    // gutters also determine the visible margins in landscape.
+    overrides = selectionOverrides + ("--RS__maxLineLength" to "none"),
 )
 
 /**
