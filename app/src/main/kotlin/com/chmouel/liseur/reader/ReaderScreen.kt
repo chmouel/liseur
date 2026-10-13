@@ -4292,7 +4292,7 @@ fun ReaderScreen(
                                         val source = readAloudStartLocator(active.locator, original, selectionWasTranslated)
                                         if (original != null || nav == null) return source
                                         val spoken = SpokenPassage.startingPoint(nav, source)
-                                        return capture(nav, spoken)
+                                        return if (selectionWasTranslated) capture(nav, spoken) else spoken
                                     }
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         startReadAloudFromHere(reading, ::startingPoint)
