@@ -6,6 +6,8 @@ import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.translate.SentenceTranslator
 import com.chmouel.liseur.translate.Translated
 import com.chmouel.liseur.tts.SpeechTranslation
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -85,6 +87,7 @@ class ReaderReadAloudTest {
             source = "fr",
             target = "en",
             startingPoint = { locator },
+            isCurrent = { true },
         )
 
         assertTrue(handedOff)
@@ -115,10 +118,45 @@ class ReaderReadAloudTest {
                 source = "fr",
                 target = "en",
                 startingPoint = { error("start place unavailable") },
+                isCurrent = { true },
             )
         }
 
         assertEquals("start place unavailable", failure.exceptionOrNull()?.message)
+        assertFalse(started)
+        translations.release()
+        assertEquals(1, translator.closes)
+    }
+
+    @Test
+    fun `translation stopped while finding start place does not transfer its hold`() = runTest {
+        val translator = Translator()
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache())
+        val locator = Locator(href = Url("chapter.xhtml")!!, mediaType = MediaType.XHTML)
+        val atStartPlace = CompletableDeferred<Unit>()
+        val finishStartPlace = CompletableDeferred<Locator>()
+        var current = true
+        var started = false
+
+        val handoff = async {
+            handoffPageTranslationToReadAloud(
+                start = { _, _ -> started = true },
+                translations = translations,
+                source = "fr",
+                target = "en",
+                startingPoint = {
+                    atStartPlace.complete(Unit)
+                    finishStartPlace.await()
+                },
+                isCurrent = { current },
+            )
+        }
+
+        atStartPlace.await()
+        current = false
+        finishStartPlace.complete(locator)
+
+        assertFalse(handoff.await())
         assertFalse(started)
         translations.release()
         assertEquals(1, translator.closes)

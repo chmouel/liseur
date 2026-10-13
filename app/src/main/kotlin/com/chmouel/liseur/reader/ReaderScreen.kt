@@ -2187,6 +2187,7 @@ fun ReaderScreen(
                 source = run.translator.source,
                 target = run.translator.target,
                 startingPoint = startingPoint,
+                isCurrent = { pageTranslation === run && pageTranslated },
             )
         ) {
             return

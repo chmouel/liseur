@@ -32,12 +32,14 @@ internal suspend fun handoffPageTranslationToReadAloud(
     source: String?,
     target: String,
     startingPoint: suspend () -> Locator,
+    isCurrent: () -> Boolean,
 ): Boolean {
     if (!translations.acquire()) return false
     val speechTranslation = SpeechTranslation(translations, source, target)
     var handedOver = false
     try {
         val locator = startingPoint()
+        if (!isCurrent()) return false
         handedOver = true
         start(locator, speechTranslation)
     } finally {
