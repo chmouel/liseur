@@ -2178,6 +2178,7 @@ fun ReaderScreen(
         reading: ReaderReadAloud,
         startingPoint: suspend () -> Locator,
     ) {
+        val attempt = pageTranslationStarts.get()
         val run = pageTranslation
         if (
             run != null &&
@@ -2192,6 +2193,7 @@ fun ReaderScreen(
         ) {
             return
         }
+        if (pageTranslationStarts.get() != attempt) return
         if (pageTranslated) {
             stopTranslatingBook()
             val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
@@ -4224,8 +4226,21 @@ fun ReaderScreen(
                                                 run.original(href, text, active.locator.text.before)
                                             }
                                         }
+                                        val displayedInTranslation = originalSentence?.let { sentence ->
+                                            run.translationOf(sentence) != null &&
+                                                TranslatedPages.selectionIntersectsAppliedSwap(nav, sentence) == true
+                                        } == true
+                                        if (navigatorNow !== nav) return@launch
+                                        if ((tappedSelection ?: selection) !== active) return@launch
+                                        if (
+                                            !pageTranslated ||
+                                            (pageTranslation ?: restoringPageTranslation) !== run
+                                        ) {
+                                            dismissSelection()
+                                            return@launch
+                                        }
                                         val lookupLanguage = if (
-                                            originalSentence != null && run.translationOf(originalSentence) != null
+                                            displayedInTranslation
                                         ) {
                                             run.translator.target
                                         } else {

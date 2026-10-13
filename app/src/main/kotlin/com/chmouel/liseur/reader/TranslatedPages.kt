@@ -81,6 +81,26 @@ internal object TranslatedPages {
         return decodeSelectionText(result)
     }
 
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun selectionIntersectsAppliedSwap(nav: EpubNavigatorFragment, sentence: PageSentence): Boolean? {
+        val web = visibleWebView(nav.publicationView) ?: return null
+        val url = web.url ?: return null
+        if (ResourceAddress.canonicalPath(url) != sentence.href) return null
+        val result = try {
+            nav.evaluateJavascript(PageSwaps.selectionIntersectsAppliedSwap(url, sentence))?.trim()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val intersects = when (result) {
+            "true" -> true
+            "false" -> false
+            else -> return null
+        }
+        return intersects.takeIf { stillShows(nav, web, url) }
+    }
+
     internal fun decodeSelectionText(result: String?): String? {
         if (result == null) return null
         val text = try {

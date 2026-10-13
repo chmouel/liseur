@@ -69,6 +69,18 @@ class PageSwapsTest {
     }
 
     @Test
+    fun `dictionary language follows edits intersecting the current selection`() {
+        val js = PageSwaps.selectionIntersectsAppliedSwap(
+            "https://book/EPUB/text/ch1.xhtml",
+            sentence,
+        )
+        assertTrue(js.contains("window.getSelection()"))
+        assertTrue(js.contains("edits.get(node)"))
+        assertTrue(js.contains("range.compareBoundaryPoints(Range.END_TO_START, changed)"))
+        assertTrue(js.contains("range.compareBoundaryPoints(Range.START_TO_END, changed)"))
+    }
+
+    @Test
     fun `a rect with nothing in it is not a place a finger can land`() {
         assertTrue(body().contains("r.width > 0 && r.height > 0"))
     }

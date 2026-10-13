@@ -88,6 +88,10 @@ internal object PageSwaps {
     fun shownWords(url: String, sentence: PageSentence): String =
         call("shownWords(${JSONObject.quote(url)}, ${sentence.json()})")
 
+    /** Whether the current selection intersects text changed by an applied translation. */
+    fun selectionIntersectsAppliedSwap(url: String, sentence: PageSentence): String =
+        call("selectionIntersectsAppliedSwap(${JSONObject.quote(url)}, ${sentence.json()})")
+
     /**
      * Whether the point at [fx] of the width and [fy] of the height of
      * the web view holding the document at [url] is on the shown words
@@ -332,6 +336,41 @@ internal object PageSwaps {
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
               return at ? quote(at) : null;
+            },
+            selectionIntersectsAppliedSwap(url, s) {
+              if (!here(url)) return null;
+              const selection = window.getSelection();
+              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+              let at = null;
+              try { at = locate(s.selector, s.before, s.text); } catch (e) {}
+              if (!at) return false;
+              const bounds = new Map();
+              for (let i = at.start; i <= at.end; i++) {
+                const node = at.nodes[i];
+                const offset = at.offsets[i];
+                const extent = bounds.get(node);
+                if (extent) {
+                  extent[0] = Math.min(extent[0], offset);
+                  extent[1] = Math.max(extent[1], offset + 1);
+                } else {
+                  bounds.set(node, [offset, offset + 1]);
+                }
+              }
+              const range = selection.getRangeAt(0);
+              for (const [node, extent] of bounds) {
+                for (const edit of edits.get(node) || []) {
+                  if (!edit.text || edit.to <= extent[0] || edit.from >= extent[1]) continue;
+                  const start = Math.min(shown(node, edit.from), node.data.length);
+                  const end = Math.min(start + edit.text.length, node.data.length);
+                  if (end <= start) continue;
+                  const changed = document.createRange();
+                  changed.setStart(node, start);
+                  changed.setEnd(node, end);
+                  if (range.compareBoundaryPoints(Range.END_TO_START, changed) > 0 &&
+                      range.compareBoundaryPoints(Range.START_TO_END, changed) < 0) return true;
+                }
+              }
+              return false;
             },
             // Whether a tap landed on the words the voice is reading. They
             // are found again, as mark finds them, rather than read out of
