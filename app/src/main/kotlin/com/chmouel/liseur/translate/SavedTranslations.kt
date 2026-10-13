@@ -231,6 +231,9 @@ interface TranslationSyncStateDao {
     @Query("SELECT * FROM translation_sync_state WHERE peer_id = :peerId")
     suspend fun forPeer(peerId: String): List<TranslationSyncState>
 
+    @Query("SELECT DISTINCT peer_id FROM translation_sync_state")
+    suspend fun peerIds(): List<String>
+
     @Query("DELETE FROM translation_sync_state WHERE peer_id IN (:peerIds)")
     suspend fun forgetPeers(peerIds: List<String>): Int
 
@@ -246,11 +249,34 @@ interface TranslationSyncStateDao {
 }
 
 /**
+ * A rekey whose copy this store has committed but whose account
+ * transaction may not have: the copy must survive a collection that
+ * cannot tell the two apart (see [SavedTranslations.forgetPeersBeyond]).
+ */
+@Entity(tableName = "translation_rekey_moves", primaryKeys = ["from_key", "to_key"])
+data class TranslationRekeyMove(
+    @ColumnInfo(name = "from_key") val fromKey: String,
+    @ColumnInfo(name = "to_key") val toKey: String,
+)
+
+@Dao
+interface TranslationRekeyMoveDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(row: TranslationRekeyMove)
+
+    @Query("SELECT to_key FROM translation_rekey_moves")
+    suspend fun toKeys(): List<String>
+
+    @Query("DELETE FROM translation_rekey_moves WHERE from_key = :key OR to_key = :key")
+    suspend fun forget(key: String)
+}
+
+/**
  * Kept apart from `liseur.db`: the backup rules name that file only, so
  * a cache that can always be asked for again stays out of backups.
  */
 @Database(
-    entities = [TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class],
+    entities = [TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class, TranslationRekeyMove::class],
     version = 3,
     exportSchema = true,
 )
@@ -260,6 +286,8 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
     abstract fun modes(): PageTranslationModeDao
 
     abstract fun translationSync(): TranslationSyncStateDao
+
+    abstract fun rekeyMoves(): TranslationRekeyMoveDao
 
     companion object {
         const val NAME = "translations.db"
@@ -297,6 +325,10 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
                         "`pushed_rowid` INTEGER NOT NULL DEFAULT 0, " +
                         "`pull_cursor` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`peer_id`, `book_url`))",
                 )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `translation_rekey_moves` (`from_key` TEXT NOT NULL, " +
+                        "`to_key` TEXT NOT NULL, PRIMARY KEY(`from_key`, `to_key`))",
+                )
             }
         }
 
@@ -331,6 +363,7 @@ class SavedTranslations(
     private val dao = database.sentences()
     private val modes = database.modes()
     private val sync = database.translationSync()
+    private val moves = database.rekeyMoves()
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
@@ -560,7 +593,37 @@ class SavedTranslations(
      * numbers, of no use to the next one.
      */
     suspend fun forgetPeer(peerId: String) {
-        writes.withLock { sync.forgetPeers(listOf(peerId)) }
+        writes.withLock {
+            sync.forgetPeers(listOf(peerId))
+            moves.forget(peerId)
+        }
+    }
+
+    /**
+     * Forgets the bookkeeping of every peer the connected account is
+     * not, asked where a translation pass begins. A pass runs for as
+     * long as the network takes, and a disconnect landing between its
+     * ownership check and a write leaves behind a row naming a peer
+     * nobody answers to any more — a watermark and a cursor that are
+     * that server's own numbers, of no use to the next one — and
+     * nothing else collects it: a sweep asks what became of books, not
+     * of accounts. The sentences stay, as they do when one account
+     * goes: they are this phone's cache.
+     *
+     * Which peers survive is asked under the store's lock, from the
+     * account connected *now* rather than the one the pass began for,
+     * so a pass running on after its account was renamed cannot take
+     * the new name's progress for dead. A rekey whose copy this store
+     * has committed but whose account transaction has not landed is
+     * indistinguishable from that, so its target is protected by the
+     * move the copy recorded, until the key is carried again or goes.
+     */
+    suspend fun forgetPeersBeyond(live: suspend () -> Set<String>) = quietly("forget peers of") {
+        writes.withLock {
+            val keep = live() + moves.toKeys()
+            val gone = sync.peerIds().filterNot { it in keep }
+            gone.chunked(BATCH).forEach { sync.forgetPeers(it) }
+        }
     }
 
     /**
@@ -580,6 +643,17 @@ class SavedTranslations(
     suspend fun rekeyPeer(from: String, to: String) {
         writes.withLock {
             database.withTransaction {
+                // The move is recorded with the copy, in the same
+                // transaction: a collection that runs while the account
+                // transaction is still open cannot tell a copy that
+                // will be rolled back from one that will not, and must
+                // not delete either. A key renamed again retires the
+                // protection it carried, incoming and outgoing: the
+                // earlier attempt either landed, and its target is a
+                // key nobody answers to now, or it rolled back, and
+                // its copy is one nobody ever answers to.
+                moves.forget(from)
+                moves.put(TranslationRekeyMove(from, to))
                 for (row in sync.forPeer(from)) {
                     sync.put(row.copy(peerId = to))
                 }

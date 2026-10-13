@@ -14,7 +14,9 @@ import com.chmouel.liseur.translate.TranslationCacheDatabase
 import java.net.InetAddress
 import java.security.MessageDigest
 import javax.crypto.KeyGenerator
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
@@ -152,6 +154,57 @@ class LiseurSyncTranslationsTest {
         // handed out, not the one the run started from.
         server.takeRequest()
         assertEquals(CURSOR_A, server.takeRequest().url.queryParameter("after"))
+    }
+
+    @Test
+    fun `a disconnect landing mid-pull leaves no peer bookkeeping behind`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        // The page is served as the account goes: the pass has already
+        // passed its ownership check, so the landing and the cursor are
+        // writes a peer that is gone must not keep.
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { db.remoteServerDao().delete() }
+                return page(row(hashed("one"), "un"))
+            }
+        }
+
+        val outcome = sync(store)
+
+        assertEquals(1, outcome.pulled)
+        // The sentence landed is this phone's cache now, whoever connected.
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+        // The cursor the landing wrote, and the state the pass began
+        // under, name a peer nobody answers to any more: gone, here,
+        // not at the next run.
+        assertNull(store.syncState(peer(), BOOK))
+        assertEquals(0, pushes())
+    }
+
+    @Test
+    fun `a pass from before a rekey cannot take the new key's progress for dead`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        server.enqueue(page())
+        sync(store)
+        assertEquals(CURSOR, store.syncState(peer(), BOOK)!!.pullCursor)
+
+        // The account is renamed and its bookkeeping carried; the pass
+        // that began under the old name runs on after it.
+        val bob = peer().replace("|ada", "|bob")
+        store.rekeyPeer(peer(), bob)
+        connect(username = "bob")
+
+        pass(store).sync(peerFor(), book = BOOK)
+
+        // The new key's progress is intact, and the old key's rows —
+        // the originals the rekey copied, and the fresh state the
+        // stale pass wrote — are gone.
+        assertEquals(CURSOR, store.syncState(bob, BOOK)!!.pullCursor)
+        assertNull(store.syncState(peer(), BOOK))
     }
 
     @Test
@@ -398,26 +451,28 @@ class LiseurSyncTranslationsTest {
     private var pass: LiseurSyncTranslations? = null
 
     private suspend fun sync(store: SavedTranslations): LiseurSyncTranslations.Outcome =
-        (pass ?: LiseurSyncTranslations(
+        pass(store).sync(peerFor(), book = BOOK)
+
+    private fun peerFor() = LiseurSyncTranslations.Peer(
+        baseUrl = "http://127.0.0.1:${server.port}",
+        credentials = RemoteCredentials.Bearer("device-secret"),
+        peerId = peer(),
+        accountKey = peer(),
+    )
+
+    private fun pass(store: SavedTranslations): LiseurSyncTranslations =
+        pass ?: LiseurSyncTranslations(
             serverDao = db.remoteServerDao(),
             identityDao = db.workIdentityDao(),
             saved = { store },
             now = { clock },
-        ).also { pass = it }).sync(
-            LiseurSyncTranslations.Peer(
-                baseUrl = "http://127.0.0.1:${server.port}",
-                credentials = RemoteCredentials.Bearer("device-secret"),
-                peerId = peer(),
-                accountKey = peer(),
-            ),
-            book = BOOK,
-        )
+        ).also { pass = it }
 
-    private suspend fun connect() = db.remoteServerDao().upsert(
+    private suspend fun connect(username: String = "ada") = db.remoteServerDao().upsert(
         RemoteServer(
             kind = ServerKind.LISEUR_SYNC,
             baseUrl = "http://127.0.0.1:${server.port}",
-            username = "ada",
+            username = username,
             passwordCipher = null,
             apiKeyCipher = null,
             accountId = null,

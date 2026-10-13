@@ -122,6 +122,15 @@ class LiseurSyncTranslations(
      * run finds the book once it has one.
      */
     suspend fun sync(peer: Peer, book: String?): Outcome {
+        // The bookkeeping of peers the connected account is not goes
+        // before anything else this pass does, and from the account
+        // connected now rather than the one this pass began for: a
+        // disconnect that landed between a past pass's ownership check
+        // and its write left a row nothing else collects, and a pass
+        // running on after its account was renamed must not take the
+        // new name's progress for dead (see
+        // [SavedTranslations.forgetPeersBeyond]).
+        saved().forgetPeersBeyond { setOfNotNull(serverDao.get()?.accountKey) }
         if (peer.baseUrl in unsupported) return Outcome()
         val progress = Progress()
         val aliases = identityDao.aliasesFor(peer.peerId).filter { it.usable }
@@ -136,13 +145,19 @@ class LiseurSyncTranslations(
             pull(peer, alias.bookUrl, alias.workId, state.pullCursor, progress)
             // A server with no translation routes has none to push to
             // either; the run is over for this peer, not just the pull.
-            if (peer.baseUrl in unsupported) return progress.outcome()
+            if (peer.baseUrl in unsupported) break
             if (progress.stopped) break
             // A book whose name the server disowned is not pushed under
             // that name; the next run offers it under the fresh one.
             if (alias.bookUrl in progress.reresolve) continue
             push(peer, alias.bookUrl, alias.workId, state, progress)
         }
+        // A disconnect that landed mid-book can leave this pass's own
+        // last writes — a landed page's cursor, an acknowledged push's
+        // watermark, a book's fresh state — as the only trace of a peer
+        // that is gone. Its numbers are nobody's now, so they go; the
+        // sentences stay, as they do when one account goes.
+        if (!stillOurs(peer)) saved().forgetPeer(peer.peerId)
         return progress.outcome()
     }
 

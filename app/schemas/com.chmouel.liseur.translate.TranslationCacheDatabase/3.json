@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "ec774c23c5aea26300f5e5ec3fc7cfb0",
+    "identityHash": "33ecdc88b178dfcd18138b38d14760cd",
     "entities": [
       {
         "tableName": "translated_sentences",
@@ -155,11 +155,36 @@
             "book_url"
           ]
         }
+      },
+      {
+        "tableName": "translation_rekey_moves",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`from_key` TEXT NOT NULL, `to_key` TEXT NOT NULL, PRIMARY KEY(`from_key`, `to_key`))",
+        "fields": [
+          {
+            "fieldPath": "fromKey",
+            "columnName": "from_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "toKey",
+            "columnName": "to_key",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "from_key",
+            "to_key"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ec774c23c5aea26300f5e5ec3fc7cfb0')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '33ecdc88b178dfcd18138b38d14760cd')"
     ]
   }
 }

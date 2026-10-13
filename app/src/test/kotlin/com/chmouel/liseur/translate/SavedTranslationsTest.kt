@@ -584,6 +584,83 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `peers beyond the ones still connected lose their bookkeeping, not their sentences`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.ensureWork(OTHER_PEER, BOOK, "work-one")
+        store.ensureWork(PEER, BOOK, "work-one")
+
+        store.forgetPeersBeyond { setOf(PEER) }
+
+        assertNull(store.syncState(OTHER_PEER, BOOK))
+        assertEquals("work-one", store.syncState(PEER, BOOK)!!.workId)
+        // The sentences are this phone's cache, whoever connected.
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+    }
+
+    @Test
+    fun `a rekeyed peer's old bookkeeping goes once the new key is the live one`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        val state = store.ensureWork(PEER, BOOK, "work-one")
+        store.recordPushed(PEER, BOOK, store.unsynced(BOOK, state, 500).single())
+
+        store.rekeyPeer(PEER, OTHER_PEER)
+        val carried = store.syncState(OTHER_PEER, BOOK)!!
+        store.forgetPeersBeyond { setOf(OTHER_PEER) }
+
+        // The copy the rekey made is the account's progress now; the
+        // original is a key nobody answers to.
+        assertNull(store.syncState(PEER, BOOK))
+        assertEquals(carried, store.syncState(OTHER_PEER, BOOK))
+    }
+
+    @Test
+    fun `a rekey mid-transaction keeps both keys' bookkeeping`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        val state = store.ensureWork(PEER, BOOK, "work-one")
+        val pushed = store.unsynced(BOOK, state, 500).single()
+        store.recordPushed(PEER, BOOK, pushed)
+
+        // The copy has committed here; the account transaction that
+        // renames the key has not, so the account still answers to the
+        // old name. A collection now must not take the copy for a dead
+        // peer's leftovers, whichever way the transaction lands.
+        store.rekeyPeer(PEER, OTHER_PEER)
+        store.forgetPeersBeyond { setOf(PEER) }
+
+        assertEquals(pushed.savedAt, store.syncState(PEER, BOOK)!!.pushedSavedAt)
+        assertEquals(pushed.savedAt, store.syncState(OTHER_PEER, BOOK)!!.pushedSavedAt)
+    }
+
+    @Test
+    fun `an abandoned rekey target does not stay protected forever`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.ensureWork(PEER, BOOK, "work-one")
+
+        // A rekey that rolled back leaves its copy behind, protected
+        // while the account still answers to the old name...
+        store.rekeyPeer(PEER, OTHER_PEER)
+        // ...until the account is carried again, to a different name:
+        // the earlier target was never taken, and goes.
+        val third = "liseursync|https://elsewhere|carol"
+        store.rekeyPeer(PEER, third)
+        store.forgetPeersBeyond { setOf(third) }
+        assertNull(store.syncState(OTHER_PEER, BOOK))
+
+        // And with no account connected at all, nothing but the
+        // sentences survives — not the carried key's bookkeeping, not
+        // the abandoned move records that protected the other target.
+        store.forgetPeer(third)
+        store.forgetPeersBeyond { emptySet() }
+        assertNull(store.syncState(third, BOOK))
+        assertNull(store.syncState(PEER, BOOK))
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+    }
+
+    @Test
     fun `a pulled page counts against the same caps a save does`() = runTest {
         val store = saved(maxSentences = 2)
         store.landPulled(
