@@ -4290,8 +4290,9 @@ fun ReaderScreen(
                                         ?.let { TranslatedPages.original(it, active.locator) }
                                     suspend fun startingPoint(): Locator {
                                         val source = readAloudStartLocator(active.locator, original, selectionWasTranslated)
-                                        val spoken = nav?.let { SpokenPassage.startingPoint(it, source) } ?: source
-                                        return if (original != null || nav == null) spoken else capture(nav, spoken)
+                                        if (original != null || nav == null) return source
+                                        val spoken = SpokenPassage.startingPoint(nav, source)
+                                        return capture(nav, spoken)
                                     }
                                     effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                                         startReadAloudFromHere(reading, ::startingPoint)
