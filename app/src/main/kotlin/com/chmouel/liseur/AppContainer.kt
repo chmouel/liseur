@@ -46,6 +46,7 @@ import com.chmouel.liseur.data.liseursync.LiseurSyncLive
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncTranslations
 import com.chmouel.liseur.data.liseursync.LiseurSyncUploadClient
 import com.chmouel.liseur.data.liseursync.RemoteStatsCache
 import com.chmouel.liseur.data.liseursync.WorkResolver
@@ -361,6 +362,16 @@ class AppContainer(context: Context) {
         remoteStatsDao = database.remoteStatsDao(),
         starterProgressDao = database.starterCatalogProgressDao(),
         settingsSyncState = settingsSyncState,
+        forgetTranslationPeer = { peerId ->
+            if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
+                savedTranslations.forgetPeer(peerId)
+            }
+        },
+        rekeyTranslationPeer = { from, to ->
+            if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
+                savedTranslations.rekeyPeer(from, to)
+            }
+        },
         // Declared later in this file, so it is reached through the
         // lambda rather than held: the pairing is only ever touched
         // after a connection has landed, never while one is being built.
@@ -485,6 +496,16 @@ class AppContainer(context: Context) {
         settings = syncableSettings,
     )
 
+    /** The sentence translation cache across devices (ADR-0052). */
+    private val liseurSyncTranslations = LiseurSyncTranslations(
+        serverDao = database.remoteServerDao(),
+        identityDao = database.workIdentityDao(),
+        // Reached lazily: the pass opens the store on its first run,
+        // which is the point on a phone that has translated nothing —
+        // the pull fills the cache before the reader asks a service.
+        saved = { savedTranslations },
+    )
+
     val liseurSync = LiseurSyncPositionSync(
         furthestDao = database.furthestPositionDao(),
         serverDao = database.remoteServerDao(),
@@ -502,6 +523,7 @@ class AppContainer(context: Context) {
         reporting = syncReporting,
         networkAvailability = networkAvailability,
         annotations = liseurSyncAnnotations,
+        translations = liseurSyncTranslations,
         settingsSync = liseurSyncSettings,
         readerIsOpen = { ReaderPresence.isOpen },
         inTransaction = { work -> database.withTransaction { work() } },

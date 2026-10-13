@@ -1870,6 +1870,32 @@ reader behavior.
   under the same URL before the sweep looks. Every storage failure is a miss or a
   skipped save, logged by exception class only; only Clear reports one.
   See `docs/adr/0046-translated-sentences-are-kept-on-the-phone.md`.
+- The cache travels between devices on a liseur-sync account
+  (`LiseurSyncTranslations`; ADR-0052 on the server side). A sentence's
+  key is the same hash the local cache uses, so the sentence itself
+  never travels, only the hash and the translation — which still says
+  what the sentence means; the hash is for matching, not secrecy. The
+  pass is folded into the position sync after annotations and uses the
+  same work names; it pulls before it pushes, and its first run opens
+  the store — which is the point on a phone that has translated
+  nothing: the pull fills the cache before the reader ever calls a
+  translation service. Pulled rows keep `saved_at` 0 and are never pushed back; a
+  local translation always wins over a pulled one, while a row first
+  received from a peer follows the account's newer text instead of
+  freezing at the first copy it pulled. Each peer keeps its own
+  `(pushed_saved_at, pushed_rowid)` watermark and pull cursor per book
+  in `translation_sync_state` — the pair, not the time, because a
+  page's sentences share a millisecond, and the stamps themselves never
+  move backward (`SavedTranslations.save` stamps above the last) so a
+  stepped-back clock cannot strand a save behind a watermark. The
+  watermark moves only after the server acknowledges a batch, so an
+  interrupted push is simply repeated; a refusal naming a single
+  item's shape is written off, and any other is surfaced as a failure
+  rather than counted as sent. The state remembers the work id it was
+  made under, and a book re-resolved after `unknown_work` starts the
+  exchange over under the new name. A local Clear keeps the server
+  where it is: the next pull refills from it. Disconnecting or rekeying
+  the account carries the peer's bookkeeping, not the sentences.
 - A book left translated stays so until Stop
   (`PageTranslationModes`, a `page_translation_modes` row in
   `translations.db` swept with the book, kept by Clear). Its changes and
@@ -2473,6 +2499,18 @@ what lets it sync a book that came off an SD card.
 - Statistics (`/v1/insights/*`) are decoration. Every failure is null
   and silent, and a null `eta_seconds` is carried through untouched: no
   estimate beats an invented one.
+- Sentence translations (`/v1/works/{id}/translations`) are keyed by
+  the client's own cache hash, a SHA-256 of the service, model,
+  languages, context and sentence, so the sentence itself never
+  travels. The client pulls before it pushes, pages of 500 ordered by
+  `(updated_at, key)` behind an opaque cursor, and pushes batches of
+  500 under last-writer-wins where an identical push writes nothing.
+  A 404 with no body means an older server without the routes, and
+  the client skips translations for the rest of the session; a 400
+  `unknown_work` (or a 404 with a body on pull) is the same stale
+  work name everything else recovers from by re-resolving. Each peer
+  records how far it pushed and pulled in `translations.db`, so a run
+  interrupted anywhere is simply repeated. See ADR-0052.
 - Uploading is opt-in twice over. The server advertises the
   `library-upload` scope on `GET /v1/token` and marks the folders that
   take uploads in `GET /v1/folders`; without both, the action is not

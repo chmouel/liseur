@@ -71,7 +71,15 @@ If you connect a book server, Liseur talks to the calibre-web, Komga or
 liseur-sync server whose address you entered. It sends the credentials that
 server asked for, downloads the books and covers you request, and exchanges
 your reading position so the same book resumes in the right place on another
-device. You operate that server, or someone you trust does. This policy does not
+device. A liseur-sync server also keeps the sentence translations of the
+pages you have translated, so another device reading the same book does not
+have to call a translation service again. What travels is each sentence's
+one-way hash — the same key the local cache uses — and its translation,
+under the account you signed in with. The original sentence is not sent,
+but the translation says what it means, and a hash is for matching, not
+for secrecy: an operator who knows the book can test whether a given
+sentence was translated. You operate that server, or someone you trust
+does. This policy does not
 cover what the server does with the data it receives.
 
 ### A dictionary site, if you enable it

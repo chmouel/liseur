@@ -47,6 +47,30 @@ class TranslationCacheMigrationTest {
         }
     }
 
+    @Test
+    fun `saved sentences keep their last read as their save, and the peer bookkeeping arrives empty`() {
+        helper.createDatabase(TEST_DB, 2).use { old ->
+            old.execSQL(
+                "INSERT INTO translated_sentences (book_url, `key`, translation, used_at) " +
+                    "VALUES ('file:///one.epub', 'k', 'un', 1000)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 3, true, *TranslationCacheDatabase.MIGRATIONS).use { db ->
+            // A sentence saved before the upgrade is shared once: its
+            // save is the last time it was read, not 0, which is kept
+            // for sentences pulled from a peer and never pushed back.
+            db.query("SELECT saved_at FROM translated_sentences").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(1000, it.getLong(0))
+            }
+            db.query("SELECT COUNT(*) FROM translation_sync_state").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "translations-migration-test"
     }

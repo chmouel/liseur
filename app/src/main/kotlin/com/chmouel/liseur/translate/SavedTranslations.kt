@@ -11,6 +11,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
@@ -38,7 +39,7 @@ import kotlinx.coroutines.withContext
 @Entity(
     tableName = "translated_sentences",
     primaryKeys = ["book_url", "key"],
-    indices = [Index("used_at")],
+    indices = [Index("used_at"), Index("saved_at")],
 )
 data class TranslatedSentence(
     @ColumnInfo(name = "book_url") val bookUrl: String,
@@ -46,10 +47,28 @@ data class TranslatedSentence(
     val key: String,
     val translation: String,
     @ColumnInfo(name = "used_at") val usedAt: Long,
+    /**
+     * When the translation was saved here, and never changed after:
+     * a sentence a peer pulled in keeps 0, so it is never pushed back
+     * (ADR-0052), while one translated on this phone keeps the save it
+     * was made at, which is what a peer's push watermark cuts at.
+     */
+    @ColumnInfo(name = "saved_at", defaultValue = "0") val savedAt: Long = 0,
 )
 
 /** A saved row and the length of its translation, oldest first, for trimming to the character budget. */
 data class SavedLength(val id: Long, val length: Long)
+
+/** A saved sentence a peer is owed: the hashed key, the text, and where the save sits in the push order. */
+data class SavedTranslationForPush(
+    val rowId: Long,
+    val key: String,
+    val translation: String,
+    val savedAt: Long,
+)
+
+/** A sentence translation arriving from a peer, keyed as the local cache is. */
+data class PulledTranslation(val key: String, val translation: String)
 
 @Dao
 interface TranslatedSentenceDao {
@@ -61,6 +80,54 @@ interface TranslatedSentenceDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun put(row: TranslatedSentence)
+
+    /**
+     * Lays a pulled sentence down without disturbing one saved here:
+     * a local translation always wins locally (ADR-0052), so the
+     * conflict is ignored rather than replaced — which also keeps the
+     * row's own `saved_at`, so a sentence this phone translated is
+     * still pushed even after a peer's copy of it arrives.
+     *
+     * @return the new row's rowid, or -1 when a row was already here.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun putPulled(row: TranslatedSentence): Long
+
+    /**
+     * Follows a newer text the account holds for a sentence a peer
+     * pulled in: only rows never saved here (`saved_at = 0`) move, and
+     * only when the text really changed — so a row this phone
+     * translated keeps its own words, while a row first received from
+     * a peer follows the account's later edit instead of freezing at
+     * the first copy it happened to pull.
+     *
+     * @return 1 when the row followed, 0 when it kept its ground.
+     */
+    @Query(
+        "UPDATE translated_sentences SET translation = :translation, used_at = :usedAt " +
+            "WHERE book_url = :bookUrl AND `key` = :key AND saved_at = 0 AND translation != :translation",
+    )
+    suspend fun refreshPulled(bookUrl: String, key: String, translation: String, usedAt: Long): Int
+
+    /**
+     * The sentences a peer has not been sent, in push order: by save,
+     * then by row within the saves sharing a millisecond — a page's
+     * sentences are saved in a loop, so ties are the norm, and a
+     * watermark that cut at the time alone would strand every row
+     * tied with the last one acknowledged. The pair, not the time, is
+     * the watermark.
+     */
+    @Query(
+        "SELECT rowid AS rowId, `key` AS `key`, translation, saved_at AS savedAt FROM translated_sentences " +
+            "WHERE book_url = :bookUrl AND saved_at > 0 AND " +
+            "(saved_at > :at OR (saved_at = :at AND rowid > :rowId)) " +
+            "ORDER BY saved_at, rowid LIMIT :limit",
+    )
+    suspend fun unsynced(bookUrl: String, at: Long, rowId: Long, limit: Int): List<SavedTranslationForPush>
+
+    /** The highest save stamp in the table: the floor a new save is stamped above. */
+    @Query("SELECT MAX(saved_at) FROM translated_sentences")
+    suspend fun maxSavedAt(): Long?
 
     @Query("SELECT COUNT(*) FROM translated_sentences")
     suspend fun count(): Int
@@ -125,14 +192,74 @@ interface PageTranslationModeDao {
 }
 
 /**
+ * Where one peer stands with one book's sentence translations (ADR-0052):
+ * how far its pushes reached and where its pull stopped. The push
+ * watermark is the `(saved_at, rowid)` pair of the last row the server
+ * acknowledged — the pair because sentences saved in the same
+ * millisecond are the norm, and the time alone cannot tell which of
+ * them were sent. Keyed by peer and book, because both belong to that
+ * pairing — a different server, or the same book under another
+ * account, starts again from nothing.
+ *
+ * [workId] records which server work that progress was made against.
+ * A book whose work is re-resolved — the recovery every pass shares
+ * for a name the server disowned — starts again from nothing under
+ * the new name: the old watermark and cursor say how far another work
+ * went, which is nothing about this one.
+ */
+@Entity(tableName = "translation_sync_state", primaryKeys = ["peer_id", "book_url"])
+data class TranslationSyncState(
+    @ColumnInfo(name = "peer_id") val peerId: String,
+    @ColumnInfo(name = "book_url") val bookUrl: String,
+    @ColumnInfo(name = "work_id", defaultValue = "") val workId: String = "",
+    @ColumnInfo(name = "pushed_saved_at", defaultValue = "0") val pushedSavedAt: Long = 0,
+    @ColumnInfo(name = "pushed_rowid", defaultValue = "0") val pushedRowid: Long = 0,
+    @ColumnInfo(name = "pull_cursor", defaultValue = "") val pullCursor: String = "",
+)
+
+@Dao
+interface TranslationSyncStateDao {
+    @Query("SELECT * FROM translation_sync_state WHERE peer_id = :peerId AND book_url = :bookUrl")
+    suspend fun get(peerId: String, bookUrl: String): TranslationSyncState?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(row: TranslationSyncState)
+
+    @Query("SELECT book_url FROM translation_sync_state")
+    suspend fun books(): List<String>
+
+    @Query("SELECT * FROM translation_sync_state WHERE peer_id = :peerId")
+    suspend fun forPeer(peerId: String): List<TranslationSyncState>
+
+    @Query("DELETE FROM translation_sync_state WHERE peer_id IN (:peerIds)")
+    suspend fun forgetPeers(peerIds: List<String>): Int
+
+    @Query("DELETE FROM translation_sync_state WHERE book_url IN (:bookUrls)")
+    suspend fun forget(bookUrls: List<String>): Int
+
+    @Query("DELETE FROM translation_sync_state")
+    suspend fun clear()
+
+    /** The highest watermark any peer reached: a save's floor outlives the rows it cut at. */
+    @Query("SELECT MAX(pushed_saved_at) FROM translation_sync_state")
+    suspend fun maxPushedSavedAt(): Long?
+}
+
+/**
  * Kept apart from `liseur.db`: the backup rules name that file only, so
  * a cache that can always be asked for again stays out of backups.
  */
-@Database(entities = [TranslatedSentence::class, PageTranslationModeRow::class], version = 2, exportSchema = true)
+@Database(
+    entities = [TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class],
+    version = 3,
+    exportSchema = true,
+)
 abstract class TranslationCacheDatabase : RoomDatabase() {
     abstract fun sentences(): TranslatedSentenceDao
 
     abstract fun modes(): PageTranslationModeDao
+
+    abstract fun translationSync(): TranslationSyncStateDao
 
     companion object {
         const val NAME = "translations.db"
@@ -146,7 +273,34 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+        /**
+         * Version 3 adds the cross-device sentence cache's bookkeeping
+         * (ADR-0052). Sentences saved before the upgrade keep the last
+         * time they were read as their save, so they are shared once
+         * rather than never; sentences pulled from a peer keep 0, which
+         * is what keeps them from being pushed back.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE translated_sentences ADD COLUMN saved_at INTEGER NOT NULL DEFAULT 0",
+                )
+                db.execSQL("UPDATE translated_sentences SET saved_at = used_at")
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_translated_sentences_saved_at` " +
+                        "ON translated_sentences (`saved_at`)",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `translation_sync_state` (`peer_id` TEXT NOT NULL, " +
+                        "`book_url` TEXT NOT NULL, `work_id` TEXT NOT NULL DEFAULT '', " +
+                        "`pushed_saved_at` INTEGER NOT NULL DEFAULT 0, " +
+                        "`pushed_rowid` INTEGER NOT NULL DEFAULT 0, " +
+                        "`pull_cursor` TEXT NOT NULL DEFAULT '', PRIMARY KEY(`peer_id`, `book_url`))",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }
 
@@ -176,9 +330,13 @@ class SavedTranslations(
 
     private val dao = database.sentences()
     private val modes = database.modes()
+    private val sync = database.translationSync()
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
+
+    /** The highest save stamp handed out, under [writes]; read from the table on first use. */
+    private var lastSaveAt: Long? = null
     private var puts = 0
     private val resized = MutableStateFlow(0)
 
@@ -230,15 +388,23 @@ class SavedTranslations(
      * committed: one rolled back leaves its book, and its sentences, where
      * they were. Whole under the lock, so an older sweep never acts on
      * what a newer one has already settled.
+     *
+     * A book's peer bookkeeping goes with its sentences, for the same
+     * reason the sentences do: a book that comes back starts again from
+     * nothing, and a watermark or a cursor naming rows that no longer
+     * exist would only mislead.
      */
     suspend fun sweep() = quietly("sweep") {
         val emptied = writes.withLock {
-            val books = (dao.books() + modes.books() + epochs.keys).distinct()
+            val books = (dao.books() + modes.books() + sync.books() + epochs.keys).distinct()
             if (books.isEmpty()) return@withLock false
             val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
             val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
-            gone.chunked(BATCH).forEach { modes.forget(it) }
+            gone.chunked(BATCH).forEach {
+                modes.forget(it)
+                sync.forget(it)
+            }
             // Removed books stay fenced, so they are gone again on every later sweep with nothing left to delete.
             val removed = gone.chunked(BATCH).sumOf { dao.forget(it) }
             removed > 0 && dao.count() == 0
@@ -251,13 +417,174 @@ class SavedTranslations(
      * Forgets every saved sentence. Fails when they could not be deleted;
      * the space is then given back as well as it can be. The books left
      * translated stay so: that is the reader's choice, not a cache.
+     *
+     * The peer bookkeeping goes too, both halves of it: the pull cursors
+     * so the next pull re-fetches what the account holds (a local Clear
+     * was never the account's to clear, ADR-0052), and the push
+     * watermarks because there are no rows behind them to keep place
+     * for — whatever is saved next starts from the beginning.
      */
     suspend fun clear() {
         writes.withLock {
             cleared.incrementAndGet()
-            dao.clear()
+            // One transaction, so an interruption cannot leave an empty
+            // cache behind the bookkeeping of the cache it emptied: the
+            // next pull would resume past rows that are no longer here
+            // and never bring them back.
+            database.withTransaction {
+                dao.clear()
+                sync.clear()
+            }
         }
         compact()
+    }
+
+    // -- Cross-device exchange (ADR-0052) ----------------------------------
+
+    /**
+     * A pull's right to land, captured before the request leaves.
+     *
+     * The same fencing a save answers to: a page that comes back after
+     * a Clear, or after its book left the library, is dropped rather
+     * than written — and its cursor with it, so nothing the fence
+     * refused is stepped over for good.
+     */
+    class PullTicket internal constructor(internal val clearedAt: Long, internal val epochAt: Long)
+
+    /** Registers the book and captures the fence a pull will answer to. */
+    fun pullTicket(bookUrl: String): PullTicket =
+        PullTicket(cleared.get(), epochs.computeIfAbsent(bookUrl) { 0L })
+
+    /** Where a peer stands with a book: its push watermark and pull cursor, or nothing yet. */
+    suspend fun syncState(peerId: String, bookUrl: String): TranslationSyncState? = sync.get(peerId, bookUrl)
+
+    /**
+     * Where a peer stands with a book *under this work name*, starting
+     * over when the name changed. A book re-resolved after the server
+     * disowned its work id is a different work to the account, whatever
+     * it is on this phone: the old watermark says how far pushes to a
+     * work the server no longer holds reached, and the old cursor where
+     * a pull of that work stopped — neither is a word about the new one,
+     * so both go and the exchange begins again from nothing.
+     */
+    suspend fun ensureWork(peerId: String, bookUrl: String, workId: String): TranslationSyncState = writes.withLock {
+        val state = sync.get(peerId, bookUrl)
+        if (state != null && state.workId == workId) {
+            state
+        } else {
+            TranslationSyncState(peerId, bookUrl, workId).also { sync.put(it) }
+        }
+    }
+
+    /** The sentences a peer has not been sent, oldest save first. */
+    suspend fun unsynced(bookUrl: String, watermark: TranslationSyncState, limit: Int): List<SavedTranslationForPush> =
+        dao.unsynced(bookUrl, watermark.pushedSavedAt, watermark.pushedRowid, limit)
+
+    /**
+     * Lays one pulled page down and moves the peer's cursor, together
+     * or not at all — the same rule the position sync's cursor lives
+     * by, here a transaction rather than a hope. A local translation
+     * always wins locally, so a sentence already here keeps its own
+     * words and its own `saved_at`; a sentence first received from a
+     * peer follows the account's newer text instead of freezing at the
+     * first copy it happened to pull. What lands counts against the
+     * same caps a save does — a phone that only receives must fit the
+     * cache too — and a row the trim evicts is gone until a cursor
+     * restart re-reads it, which is the same bargain every cached
+     * sentence already makes.
+     *
+     * @return how many sentences landed or changed.
+     */
+    suspend fun landPulled(
+        peerId: String,
+        bookUrl: String,
+        ticket: PullTicket,
+        rows: List<PulledTranslation>,
+        cursor: String,
+    ): Int = writes.withLock {
+        if (cleared.get() != ticket.clearedAt || (epochs[bookUrl] ?: 0L) != ticket.epochAt) return 0
+        if (rows.isNotEmpty() && present(listOf(bookUrl)).isEmpty()) return 0
+        val at = now()
+        var landed = 0
+        database.withTransaction {
+            for (row in rows) {
+                // A pulled sentence has never been saved here, so it is never
+                // pushed back; its `used_at` is its arrival, and the local
+                // trim treats it like any other sentence.
+                if (dao.putPulled(TranslatedSentence(bookUrl, row.key, row.translation, at)) > 0) {
+                    landed++
+                } else {
+                    landed += dao.refreshPulled(bookUrl, row.key, row.translation, at)
+                }
+            }
+            val state = sync.get(peerId, bookUrl) ?: TranslationSyncState(peerId, bookUrl)
+            sync.put(state.copy(pullCursor = cursor))
+        }
+        // Both caps, not only the sentence count: a page of long
+        // translations, or a refresh that lengthened them, can spend
+        // the characters while the count stays put.
+        trim()
+        landed
+    }
+
+    /** Drops a peer's pull cursor for a book, so the next pull starts over. */
+    suspend fun restartPull(peerId: String, bookUrl: String) {
+        writes.withLock {
+            sync.get(peerId, bookUrl)?.let { sync.put(it.copy(pullCursor = "")) }
+        }
+    }
+
+    /**
+     * Records how far a peer's pushes reached, after the server
+     * acknowledged them — never before, so an interrupted push is
+     * simply repeated. The watermark is the pair of the last row
+     * acknowledged; it only moves forward.
+     */
+    suspend fun recordPushed(peerId: String, bookUrl: String, watermark: SavedTranslationForPush) {
+        writes.withLock {
+            val state = sync.get(peerId, bookUrl) ?: TranslationSyncState(peerId, bookUrl)
+            if (watermark.savedAt > state.pushedSavedAt ||
+                (watermark.savedAt == state.pushedSavedAt && watermark.rowId > state.pushedRowid)
+            ) {
+                sync.put(
+                    state.copy(pushedSavedAt = watermark.savedAt, pushedRowid = watermark.rowId),
+                )
+            }
+        }
+    }
+
+    /**
+     * Forgets a peer's bookkeeping when its account goes. The sentences
+     * stay — they are this phone's cache, and were never the server's to
+     * take away — but a watermark and a cursor are that server's own
+     * numbers, of no use to the next one.
+     */
+    suspend fun forgetPeer(peerId: String) {
+        writes.withLock { sync.forgetPeers(listOf(peerId)) }
+    }
+
+    /**
+     * Carries a peer's bookkeeping to its account's new key, when a
+     * rekey renames it: the same progress under the name the account
+     * answers to now. A book with rows under both keys keeps the one
+     * being carried, which is the one the account just used.
+     *
+     * The rows under the old key are kept, not deleted: this store
+     * commits on its own, outside the main database's transaction, and
+     * a move that deleted first would leave the account with no
+     * progress at all if that transaction rolled back. The copies are
+     * written over harmlessly if the move runs again, and the rows
+     * under a key nothing answers to any more go when the account
+     * disconnects ([forgetPeer]).
+     */
+    suspend fun rekeyPeer(from: String, to: String) {
+        writes.withLock {
+            database.withTransaction {
+                for (row in sync.forPeer(from)) {
+                    sync.put(row.copy(peerId = to))
+                }
+            }
+        }
     }
 
     private suspend fun compact() {
@@ -307,7 +634,20 @@ class SavedTranslations(
         writes.withLock {
             if (cleared.get() != stamp || (epochs[bookUrl] ?: 0L) != epoch) return
             if (!inLibrary()) return
-            dao.put(TranslatedSentence(bookUrl, hash(key), translation, now()))
+            // A save is stamped never below the last one, clock be damned:
+            // the stamp is a push watermark's coordinate, and a save that
+            // landed below a watermark a peer already acknowledged would
+            // be stranded behind it for good. The floor is remembered in
+            // memory and read from the table on the first save of a run —
+            // from the sentences, and from the watermarks, which outlive
+            // the sentences an eviction can take — so a restart costs one
+            // query and a stepped-back clock costs nothing.
+            if (lastSaveAt == null) {
+                lastSaveAt = maxOf(dao.maxSavedAt() ?: 0L, sync.maxPushedSavedAt() ?: 0L)
+            }
+            val at = maxOf(now(), (lastSaveAt ?: 0L) + 1)
+            lastSaveAt = at
+            dao.put(TranslatedSentence(bookUrl, hash(key), translation, at, at))
             // Counting is cheap, so the sentence cap holds after every save; summing the characters waits.
             if (++puts % TRIM_EVERY == 0 || dao.count() > maxSentences) trim()
         }

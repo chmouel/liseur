@@ -22,6 +22,9 @@ object LiseurSyncApi {
     /** Highlights, notes and bookmarks (ADR-0028). */
     const val ANNOTATIONS = "/v1/annotations"
 
+    /** The account's sentence translation cache (ADR-0052). */
+    const val WORK_TRANSLATIONS = "/v1/works/{id}/translations"
+
     /** Per-account key/value settings, synced across devices. */
     const val ME_SETTINGS = "/v1/me/settings"
 
@@ -96,6 +99,23 @@ object LiseurSyncApi {
     fun workAnnotations(baseUrl: String, workId: String): String =
         url(baseUrl, "/v1/works/${pathSegment(workId)}/annotations")
 
+    /**
+     * One page of a work's sentence translation cache (ADR-0052). The
+     * cursor is the server's opaque string, so it travels quoted — it
+     * contains a space, and a query built by concatenation would not
+     * survive its own first page.
+     */
+    fun workTranslations(baseUrl: String, workId: String, limit: Int, after: String): String =
+        url(
+            baseUrl,
+            "/v1/works/${pathSegment(workId)}/translations?limit=$limit" +
+                (if (after.isEmpty()) "" else "&after=${queryValue(after)}"),
+        )
+
+    /** Where a work's sentence translations are pushed (ADR-0052). */
+    fun pushWorkTranslations(baseUrl: String, workId: String): String =
+        url(baseUrl, "/v1/works/${pathSegment(workId)}/translations")
+
     /** Retires one annotation, at the rev the caller believes it holds. */
     fun deleteAnnotation(baseUrl: String, id: String, rev: Long): String =
         url(baseUrl, "$ANNOTATIONS/${pathSegment(id)}?rev=$rev")
@@ -121,6 +141,10 @@ object LiseurSyncApi {
             .build()
             .encodedPathSegments
             .first()
+
+    /** Escapes one query value; `URLEncoder`'s `+` for a space is a query's own convention. */
+    private fun queryValue(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8")
 
     /**
      * Whether a URL can name this id at all.

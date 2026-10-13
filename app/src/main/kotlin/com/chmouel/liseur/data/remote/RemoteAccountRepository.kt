@@ -96,6 +96,25 @@ class RemoteAccountRepository(
      */
     private val settingsSyncState: com.chmouel.liseur.data.settings.SettingsSyncRepository? = null,
     /**
+     * Drops a liseur-sync peer's translation-cache bookkeeping (ADR-0052):
+     * a push watermark and a pull cursor are that server's own numbers,
+     * of no use to the next account. The sentences themselves stay. A
+     * provider rather than the store, because the store opens lazily and
+     * a disconnect is not a reason to open it. Null in tests that do not
+     * exercise a liseur-sync account's translations.
+     */
+    private val forgetTranslationPeer: (suspend (String) -> Unit)? = null,
+    /**
+     * Carries the same bookkeeping to an account's new key when a rekey
+     * renames it (ADR-0052), like every other peer-keyed row this
+     * repository owns. A provider for the same lazy reason, and for the
+     * same reason as the settings baseline it is not counted in the
+     * move's occupancy check: it lives in its own store, which commits
+     * without waiting for this transaction. Null in tests that do not
+     * exercise a liseur-sync account's translations.
+     */
+    private val rekeyTranslationPeer: (suspend (String, String) -> Unit)? = null,
+    /**
      * The KOReader pairing, which a connection may drop, replace or
      * leave alone.
      *
@@ -949,6 +968,7 @@ class RemoteAccountRepository(
         // already under the new key is replaced rather than guarded.
         remoteStatsDao?.rekeyPeer(from, to)
         settingsSyncState?.rekeyPeer(from, to)
+        rekeyTranslationPeer?.invoke(from, to)
         progressDao.rekeyAccount(from, to)
         return next
     }
@@ -1165,6 +1185,7 @@ class RemoteAccountRepository(
         // itself and go quiet. The reader's settings themselves stay —
         // signing out of a server is not a request to be reconfigured.
         settingsSyncState?.forgetPeer(server.accountKey)
+        forgetTranslationPeer?.invoke(server.accountKey)
     }
 
     private companion object {

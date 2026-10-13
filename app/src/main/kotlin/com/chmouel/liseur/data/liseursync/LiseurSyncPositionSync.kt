@@ -100,6 +100,12 @@ class LiseurSyncPositionSync(
      * names. Null in tests that are only about positions.
      */
     private val annotations: LiseurSyncAnnotations? = null,
+    /**
+     * The sentence translation pass (ADR-0052), folded in for the same
+     * reason the annotation pass is. Null in tests that are only about
+     * positions and marks.
+     */
+    private val translations: LiseurSyncTranslations? = null,
     private val settingsSync: LiseurSyncSettings? = null,
     /**
      * Whether a book is on screen right now.
@@ -670,6 +676,15 @@ class LiseurSyncPositionSync(
             0
         }
 
+        // The sentence translation cache after them (ADR-0052): a cached
+        // sentence can wait a run like a mark can, and it asks nothing of
+        // the names the stages above fixed — it only uses them.
+        val translated = if (trouble.unreachable == null) {
+            syncTranslations(account, book, trouble)
+        } else {
+            0
+        }
+
         // A server that went quiet outranks anything it managed to say
         // earlier. The first failure may well be a 404 on one book, which
         // is nobody's fault and not worth retrying; if the connection then
@@ -707,7 +722,7 @@ class LiseurSyncPositionSync(
                 !firstFailure.worthRetrying && named.owing > 0 && named.done > 0 ->
                     SyncOutcome.Incomplete
 
-                pulled > 0 || pushed > 0 || marked > 0 -> SyncOutcome.Partial(firstFailure)
+                pulled > 0 || pushed > 0 || marked > 0 || translated > 0 -> SyncOutcome.Partial(firstFailure)
                 else -> SyncOutcome.Failure(firstFailure)
             }
         }
@@ -754,6 +769,60 @@ class LiseurSyncPositionSync(
         outcome.failure?.let { trouble.refused(it) }
         outcome.unreachable?.let { trouble.refused(it) }
         return outcome.pulled + outcome.pushed
+    }
+
+    /**
+     * Runs the sentence translation pass, if this build wired one.
+     *
+     * Folded into the run's trouble like the annotation pass: a server
+     * that stops answering here still cuts the run short, while a
+     * translation the server refused never fails a position sync that
+     * worked. The re-resolve it asks for is the same stale work name
+     * everything else recovers from.
+     *
+     * Storage failures are contained rather than propagated: the
+     * cache's own contract makes every one of them a miss or a skipped
+     * save, so a corrupt or full `translations.db` is a cache that
+     * stops helping, not a reason to fail the positions and marks the
+     * same run already did. The class is logged and nothing else: the
+     * message of a store failure can quote what was being written,
+     * and a sentence is the one thing this feature never says out
+     * loud.
+     */
+    private suspend fun syncTranslations(
+        account: Account,
+        book: String?,
+        trouble: Trouble,
+    ): Int {
+        val pass = translations ?: return 0
+        return try {
+            val outcome = pass.sync(
+                LiseurSyncTranslations.Peer(
+                    baseUrl = account.baseUrl,
+                    credentials = account.credentials,
+                    peerId = account.peerId,
+                    accountKey = account.accountKey,
+                ),
+                book = book,
+            )
+            // The pass's own verdict reaches the run's trouble first:
+            // it does not depend on the re-resolution below, and a
+            // storage failure in that loop must not swallow a server
+            // that went quiet.
+            outcome.failure?.let { trouble.refused(it) }
+            outcome.unreachable?.let { trouble.refused(it) }
+            for ((bookUrl, staleWorkId) in outcome.reresolve) {
+                forAccount(account) {
+                    identityDao.deleteAliasIfStale(bookUrl, account.peerId, staleWorkId)
+                }
+            }
+            outcome.pulled + outcome.pushed
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Translation sync failed, continuing: ${e.javaClass.simpleName}")
+            0
+        }
     }
 
     /**
