@@ -69,6 +69,8 @@ internal object TranslatedPages {
     /** The selected words as the translated page currently shows them. */
     @OptIn(ExperimentalReadiumApi::class)
     suspend fun selectedText(nav: EpubNavigatorFragment): String? {
+        val web = visibleWebView(nav.publicationView) ?: return null
+        val url = web.url ?: return null
         val result = try {
             withTimeoutOrNull(ANSWER_MS) {
                 nav.evaluateJavascript(SELECTION_TEXT_SCRIPT)
@@ -78,7 +80,7 @@ internal object TranslatedPages {
         } catch (_: Exception) {
             null
         } ?: return null
-        return decodeSelectionText(result)
+        return decodeSelectionText(result)?.takeIf { stillShows(nav, web, url) }
     }
 
     @OptIn(ExperimentalReadiumApi::class)

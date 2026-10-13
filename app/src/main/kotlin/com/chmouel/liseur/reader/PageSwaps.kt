@@ -340,10 +340,10 @@ internal object PageSwaps {
             selectionIntersectsAppliedSwap(url, s) {
               if (!here(url)) return null;
               const selection = window.getSelection();
-              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return false;
+              if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
               let at = null;
               try { at = locate(s.selector, s.before, s.text); } catch (e) {}
-              if (!at) return false;
+              if (!at) return null;
               const bounds = new Map();
               for (let i = at.start; i <= at.end; i++) {
                 const node = at.nodes[i];

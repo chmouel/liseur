@@ -78,6 +78,12 @@ class PageSwapsTest {
         assertTrue(js.contains("edits.get(node)"))
         assertTrue(js.contains("range.compareBoundaryPoints(Range.END_TO_START, changed)"))
         assertTrue(js.contains("range.compareBoundaryPoints(Range.START_TO_END, changed)"))
+        val body = js.substringAfter("selectionIntersectsAppliedSwap(url, s) {")
+            .substringBefore("markedAt(url, s, fx, fy) {")
+        assertTrue(
+            body.contains("if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;"),
+        )
+        assertTrue(body.contains("if (!at) return null;"))
     }
 
     @Test
