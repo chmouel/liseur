@@ -2178,7 +2178,7 @@ fun ReaderScreen(
         reading: ReaderReadAloud,
         startingPoint: suspend () -> Locator,
     ) {
-        val attempt = pageTranslationStarts.get()
+        var attempt = pageTranslationStarts.get()
         val run = pageTranslation
         if (
             run != null &&
@@ -2196,6 +2196,7 @@ fun ReaderScreen(
         if (pageTranslationStarts.get() != attempt) return
         if (pageTranslated) {
             stopTranslatingBook()
+            attempt = pageTranslationStarts.get()
             val restored = withTimeoutOrNull(RESTORE_WAIT_MS) {
                 snapshotFlow { pageTranslated }.first { !it }
             }
@@ -2204,7 +2205,11 @@ fun ReaderScreen(
                 return
             }
         }
-        reading.start(startingPoint(), null)
+        startReadAloudIfCurrent(
+            startingPoint = startingPoint,
+            isCurrent = { pageTranslationStarts.get() == attempt },
+            start = { reading.start(it, null) },
+        )
     }
 
     /**

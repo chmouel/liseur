@@ -25,6 +25,17 @@ class ReaderReadAloud(
 internal fun readAloudStartLocator(selected: Locator, original: Locator?, translated: Boolean): Locator =
     original ?: if (translated) ExactLocatorAnchor.coarse(selected) else selected
 
+internal suspend fun startReadAloudIfCurrent(
+    startingPoint: suspend () -> Locator,
+    isCurrent: () -> Boolean,
+    start: (Locator) -> Unit,
+): Boolean {
+    val locator = startingPoint()
+    if (!isCurrent()) return false
+    start(locator)
+    return true
+}
+
 /** Transfers a hold on the page's translations to read aloud once its start place is ready. */
 internal suspend fun handoffPageTranslationToReadAloud(
     start: (Locator, SpeechTranslation?) -> Unit,

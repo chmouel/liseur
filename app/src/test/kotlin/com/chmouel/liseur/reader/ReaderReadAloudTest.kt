@@ -161,4 +161,31 @@ class ReaderReadAloudTest {
         translations.release()
         assertEquals(1, translator.closes)
     }
+
+    @Test
+    fun `new translation during fallback lookup does not start book speech`() = runTest {
+        val locator = Locator(href = Url("chapter.xhtml")!!, mediaType = MediaType.XHTML)
+        val atStartPlace = CompletableDeferred<Unit>()
+        val finishStartPlace = CompletableDeferred<Locator>()
+        var generation = 0
+        var started = false
+
+        val start = async {
+            startReadAloudIfCurrent(
+                startingPoint = {
+                    atStartPlace.complete(Unit)
+                    finishStartPlace.await()
+                },
+                isCurrent = { generation == 0 },
+                start = { started = true },
+            )
+        }
+
+        atStartPlace.await()
+        generation++
+        finishStartPlace.complete(locator)
+
+        assertFalse(start.await())
+        assertFalse(started)
+    }
 }
