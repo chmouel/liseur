@@ -1819,8 +1819,11 @@ reader behavior.
   Like read aloud's, these are in the settings backup but not in
   liseur-sync settings sync.
 - Model lists are sorted by name. A server list that prices its models
-  (OpenRouter's `pricing`, dollars per token) shows the input and output
-  price per million tokens under each one.
+  shows the input and output price per million tokens under each one:
+  OpenRouter's `pricing` (dollars per token) or DeepInfra's
+  `metadata.pricing` (`input_tokens`/`output_tokens`, already per
+  million). A model the list prices only by the character or second, a
+  speech model say, shows no token price.
 - "Translate the page from here" in the sheet translates the book in
   place (reflowable books only). The More menu (⋮) in the reader's top
   bar offers the same action from the current page, next to Read aloud

@@ -345,6 +345,24 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `a model's metadata prices it too, already per million tokens`() {
+        val list = """{"data":[
+            {"id":"google/gemma-3-12b-it","metadata":{"tags":["chat"],"pricing":{"input_tokens":0.05,"output_tokens":0.15}}},
+            {"id":"ResembleAI/chatterbox-turbo","metadata":{"tags":["tts"],"pricing":{"input_characters":1}}},
+            {"id":"half","metadata":{"pricing":{"input_tokens":0.05}}},
+            {"id":"varying","metadata":{"pricing":{"input_tokens":-1,"output_tokens":-1}}},
+            {"id":"plain","metadata":{"tags":["chat"]}}
+        ]}"""
+        val prices = OpenAiChat.textModels(list).associate { it.id to it.price }
+        assertEquals(TextPrice(0.05, 0.15), prices.getValue("google/gemma-3-12b-it"))
+        // A model that bills by the character has no token price, and one side alone or a varying one is none.
+        assertEquals(null, prices["ResembleAI/chatterbox-turbo"])
+        assertEquals(null, prices["half"])
+        assertEquals(null, prices["varying"])
+        assertEquals(null, prices["plain"])
+    }
+
+    @Test
     fun `errors map to what the reader can do`() {
         assertTrue(OpenAiChat.errorFor(403, "") is TranslationError.InvalidKey)
         assertTrue(OpenAiChat.errorFor(402, "") is TranslationError.RateLimited)
