@@ -206,8 +206,8 @@ paragraphs around them, then the ones the model asks to search or read,
 up to 64,000 characters of book text in all. Nothing from the chapter
 you are in or any later chapter is sent, not even the sentence around
 your selection. The model, and your API key if you entered one, go
-with every request. No book title, file, identifier or reading position
-goes with it, and the recaps
+with every request. No book title, file, identifier or precise reading
+position goes with it, and the recaps
 described below are only used on the phone to find passages; their
 wording is never sent.
 
