@@ -32,7 +32,7 @@ class CompanionLookupsTest {
     private val catalog = object : BookCatalog<Int> {
         val asked = mutableListOf<AskingScope>()
 
-        override val map: ChapterMap get() = throw UnsupportedOperationException()
+        override val map: ChapterMap = ChapterMap.of((1..8).map { "ch$it.xhtml" }, (1..8).map { TocNode("ch$it.xhtml", title = "Chapter $it") })
 
         override suspend fun scopeOf(place: Int, translated: Boolean): AskingScope? {
             if (place == UNREADABLE_PLACE) throw IOException("unreadable")
@@ -97,6 +97,7 @@ class CompanionLookupsTest {
         val profile = (view(lookups) as CompanionView.Profile).profile
         assertTrue(profile.identity.single().sources.all { it.range.hi < 4 })
         assertEquals(AskingScope(4, 8), lookups.panel.value?.scope)
+        assertEquals("Chapter 1", lookups.panel.value?.titles?.first())
         val sent = requests.flatten().joinToString("\n") { it.content }
         assertFalse(sent.contains("LATER"))
         assertTrue(sent.contains("Chapter 4."))

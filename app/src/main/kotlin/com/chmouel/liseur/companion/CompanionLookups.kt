@@ -73,6 +73,8 @@ data class CompanionPanel<P>(
     val visible: Boolean = true,
     /** The name first selected, while a candidate it was ambiguous between is shown. */
     val also: String? = null,
+    /** Each chapter's title in the contents, where it has one, to label sources; never sent away. */
+    val titles: List<String?> = emptyList(),
 )
 
 /**
@@ -121,8 +123,11 @@ class CompanionLookups<P>(
         val name = PassageText.name(selection)
         _panel.value = CompanionPanel(selection, name, null, CompanionView.Loading(CompanionView.Stage.READING))
         job = scope.launch {
+            var titles = emptyList<String?>()
             val asked = try {
-                catalog().scopeOf(place, translated)
+                val book = catalog()
+                titles = List(book.map.chapterCount) { book.map.titleOf(it) }
+                book.scopeOf(place, translated)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -130,7 +135,7 @@ class CompanionLookups<P>(
                 show(CompanionView.Failed(CompanionFailure.UNREADABLE))
                 return@launch
             }
-            _panel.update { it?.copy(scope = asked) }
+            _panel.update { it?.copy(scope = asked, titles = titles) }
             when {
                 asked == null -> show(CompanionView.Unplaced)
                 !asked.hasEarlier -> show(CompanionView.FirstChapter)

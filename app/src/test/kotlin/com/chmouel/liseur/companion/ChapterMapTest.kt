@@ -82,7 +82,7 @@ class ChapterMapTest {
     }
 
     @Test
-    fun `a lone wrapper is looked through and parts stay whole`() {
+    fun `a lone wrapper is looked through and a part over several files opens up`() {
         val contents = listOf(
             TocNode(
                 "ch1.xhtml",
@@ -93,9 +93,49 @@ class ChapterMapTest {
             ),
         )
         val map = ChapterMap.of(files.take(5), contents)
-        assertEquals(2, map.chapterCount)
-        assertEquals(ChapterRange(0, 0), map.resourceRange(2))
-        assertEquals(ChapterRange(1, 1), map.resourceRange(4))
+        assertEquals(4, map.chapterCount)
+        assertEquals(ChapterRange(2, 2), map.resourceRange(2))
+        // A single section in another file does not open its chapter up.
+        assertEquals(ChapterRange(3, 3), map.resourceRange(4))
+    }
+
+    @Test
+    fun `chapters nested under volumes are chapters, as in Gutenberg's Monte Cristo`() {
+        val order = listOf("title.xhtml", "v1c1.xhtml", "c2.xhtml", "c3.xhtml", "v2.xhtml", "c4.xhtml", "c5.xhtml", "notes.xhtml")
+        val contents = listOf(
+            TocNode("title.xhtml#t", title = "THE COUNT OF MONTE CRISTO"),
+            TocNode("title.xhtml#contents", title = "Contents"),
+            TocNode(
+                "v1c1.xhtml#v1",
+                listOf(TocNode("v1c1.xhtml#c1", title = "Chapter 1"), TocNode("c2.xhtml#c2", title = "Chapter 2"), TocNode("c3.xhtml#c3", title = "Chapter 3")),
+                title = "VOLUME ONE",
+            ),
+            TocNode("v2.xhtml#v2", listOf(TocNode("c4.xhtml#c4"), TocNode("c5.xhtml#c5")), title = "VOLUME TWO"),
+            TocNode("notes.xhtml#n", title = "FOOTNOTES:"),
+        )
+        val map = ChapterMap.of(order, contents)
+        assertEquals(10, map.chapterCount)
+        assertEquals("Chapter 3", map.titleOf(5))
+        assertEquals(null, map.titleOf(7))
+        val anchors = mapOf("v1" to 0, "c1" to 2, "c2" to 0, "c3" to 0)
+        val scope = AskingScope(map.range(3, 4, 6, anchors).lo, map.chapterCount)
+        assertEquals(5, scope.lo)
+        assertTrue(Eligibility.allows(scope, map.range(1, 5, 9, anchors)))
+        assertTrue(Eligibility.allows(scope, map.range(2, 3, 9, anchors)))
+        assertFalse(Eligibility.allows(scope, map.range(3, 1, 2, anchors)))
+        assertFalse(Eligibility.allows(scope, map.resourceRange(5)))
+    }
+
+    @Test
+    fun `sections inside a chapter's own file never split it`() {
+        val contents = listOf(
+            TocNode("ch1.xhtml"),
+            TocNode("ch2.xhtml", listOf(TocNode("ch2.xhtml#s1"), TocNode("ch2.xhtml#s2"))),
+            TocNode("ch3.xhtml"),
+        )
+        val map = ChapterMap.of(files.take(3), contents)
+        assertEquals(3, map.chapterCount)
+        assertEquals(ChapterRange(1, 1), map.range(1, 5, 9, mapOf("s1" to 2, "s2" to 6)))
     }
 
     @Test

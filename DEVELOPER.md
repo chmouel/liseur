@@ -2044,9 +2044,14 @@ liseur-sync settings.
   never picks it never starts the SDK. It cannot be tested on an
   emulator.
 
-- Chapters come from the contents, not from files (`ChapterMap`). Only
-  top-level entries are chapters, a lone wrapper entry is looked
-  through, and nested entries never split one, whichever file they open.
+- Chapters come from the contents, not from files (`ChapterMap`).
+  Top-level entries are chapters and a lone wrapper entry is looked
+  through. A top-level entry whose entries open two or more files is a
+  part (Gutenberg nests every chapter under its volumes): it keeps its
+  own start and its entries are chapters too. Deeper entries never split
+  a chapter, so sections in the chapter's own file, or a single section
+  in another file, stay in it. Source pills show the contents' chapter
+  titles, falling back to numbers; titles stay on the phone.
   Text whose chapter cannot be told for certain (a missing anchor, an
   element that cannot be located, a repeated spine resource, entries out
   of reading order) gets the whole range of chapters it might belong to,

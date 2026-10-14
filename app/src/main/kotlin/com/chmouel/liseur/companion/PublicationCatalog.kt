@@ -81,6 +81,7 @@ class PublicationCatalog(private val publication: Publication) : BookCatalog<Loc
         return TocNode(
             href = url.path() + if (fragment.isNotBlank()) "#$fragment" else "",
             children = link.children.map(::node),
+            title = link.title,
         )
     }
 

@@ -40,10 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,61 +91,63 @@ internal fun CompanionSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .widthIn(max = contentWidthCap(windowWidth()))
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            val view = panel.view
-            val profile = (view as? CompanionView.Profile)?.profile
-            val title = profile?.name ?: panel.name ?: panel.selection
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                panel.also?.let {
+        CompositionLocalProvider(LocalChapterTitles provides panel.titles) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                val view = panel.view
+                val profile = (view as? CompanionView.Profile)?.profile
+                val title = profile?.name ?: panel.name ?: panel.selection
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        stringResource(R.string.companion_also_from, it),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    panel.also?.let {
+                        Text(
+                            stringResource(R.string.companion_also_from, it),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Text(
+                        stringResource(R.string.companion_scope),
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                Text(
-                    stringResource(R.string.companion_scope),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (profile != null && profile.aliases.isNotEmpty()) {
-                    AliasPills(profile.aliases, onSource)
-                }
-            }
-            Column(
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                when (view) {
-                    CompanionView.Setup -> Message(R.string.companion_setup) {
-                        Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
+                    if (profile != null && profile.aliases.isNotEmpty()) {
+                        AliasPills(profile.aliases, onSource)
                     }
-                    CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
-                    CompanionView.Unplaced -> Message(R.string.companion_unplaced)
-                    CompanionView.NotAName -> Message(R.string.companion_not_a_name)
-                    CompanionView.Insufficient -> Message(
-                        stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
-                    ) { Retry(onRetry) }
-                    is CompanionView.Loading -> Loading(view.stage, onCancel)
-                    is CompanionView.Failed -> Message(failureText(view.failure)) { Retry(onRetry) }
-                    is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
-                    is CompanionView.Profile -> Profile(view.profile, onSource)
+                }
+                Column(
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    when (view) {
+                        CompanionView.Setup -> Message(R.string.companion_setup) {
+                            Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
+                        }
+                        CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
+                        CompanionView.Unplaced -> Message(R.string.companion_unplaced)
+                        CompanionView.NotAName -> Message(R.string.companion_not_a_name)
+                        CompanionView.Insufficient -> Message(
+                            stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
+                        ) { Retry(onRetry) }
+                        is CompanionView.Loading -> Loading(view.stage, onCancel)
+                        is CompanionView.Failed -> Message(failureText(view.failure)) { Retry(onRetry) }
+                        is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
+                        is CompanionView.Profile -> Profile(view.profile, onSource)
+                    }
                 }
             }
         }
@@ -470,6 +474,9 @@ private fun SourceToggleChip(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
             Icon(
                 imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
@@ -480,28 +487,33 @@ private fun SourceToggleChip(
     }
 }
 
+/** The open book's chapter titles, by chapter number, where its contents give one. */
+private val LocalChapterTitles = staticCompositionLocalOf<List<String?>> { emptyList() }
+
 @Composable
 private fun chapterSummary(passages: List<Passage<Locator>>): String {
     val ranges = passages.map { it.range }.distinct().sortedWith(compareBy({ it.lo }, { it.hi }))
-    return ranges.map { range ->
-        if (range.lo == range.hi) {
-            stringResource(R.string.companion_source_chapter, range.lo + 1)
-        } else {
-            stringResource(R.string.companion_source_chapters, range.lo + 1, range.hi + 1)
-        }
-    }.joinToString(", ")
+    return ranges.map { chapterLabel(it) }.joinToString(", ")
+}
+
+/** The contents' own titles for [range], or chapter numbers where it has none. */
+@Composable
+private fun chapterLabel(range: ChapterRange): String {
+    val titles = LocalChapterTitles.current
+    val first = titles.getOrNull(range.lo)
+    val last = titles.getOrNull(range.hi)
+    return when {
+        range.lo == range.hi && first != null -> first
+        range.lo != range.hi && first != null && last != null -> "$first – $last"
+        range.lo == range.hi -> stringResource(R.string.companion_source_chapter, range.lo + 1)
+        else -> stringResource(R.string.companion_source_chapters, range.lo + 1, range.hi + 1)
+    }
 }
 
 /** A passage the claim rests on, in the book's own words, opening it in the book. */
 @Composable
 private fun Quote(passage: Passage<Locator>, onSource: (Passage<Locator>) -> Unit) {
-    val where = passage.range.let {
-        if (it.lo == it.hi) {
-            stringResource(R.string.companion_source_chapter, it.lo + 1)
-        } else {
-            stringResource(R.string.companion_source_chapters, it.lo + 1, it.hi + 1)
-        }
-    }
+    val where = chapterLabel(passage.range)
     val rule = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
     Row(
         modifier = Modifier
@@ -540,6 +552,9 @@ private fun Quote(passage: Passage<Locator>, onSource: (Passage<Locator>) -> Uni
                     where,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.OpenInNew,

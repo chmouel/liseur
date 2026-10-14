@@ -1,7 +1,7 @@
 package com.chmouel.liseur.companion
 
-/** A contents entry: an href with its fragment, already normalised, and the entries under it. */
-data class TocNode(val href: String, val children: List<TocNode> = emptyList())
+/** A contents entry: an href with its fragment, already normalised, its title, and the entries under it. */
+data class TocNode(val href: String, val children: List<TocNode> = emptyList(), val title: String? = null)
 
 /**
  * The chapters a stretch of text may belong to, numbered from 0 in the
@@ -37,11 +37,14 @@ object Eligibility {
  * The book's chapters as its contents declare them, mapped onto the
  * reading order.
  *
- * Only top-level entries are chapters; a lone top-level wrapper (the
- * book's title, say) is looked through. Nested entries never split a
- * chapter, so a part holding ten chapters is one. Text before the first
- * entry joins the first chapter, and a book whose contents give nothing
- * usable is a single chapter.
+ * Top-level entries are chapters; a lone top-level wrapper (the book's
+ * title, say) is looked through. A top-level entry whose entries open two
+ * or more files is a part: it keeps its own start, for its heading, and
+ * its entries are chapters too. Deeper entries never split a chapter, so
+ * a chapter whose sections share its file, or that has a single section
+ * in another file, stays whole. Text before the first entry joins the
+ * first chapter, and a book whose contents give nothing usable is a
+ * single chapter.
  *
  * A chapter starting partway into a resource starts at its anchor. Where
  * that anchor or a passage cannot be found, or the contents list chapters
@@ -52,11 +55,15 @@ object Eligibility {
 class ChapterMap private constructor(
     private val readingOrder: List<String>,
     private val starts: List<Start>,
+    private val titles: List<String?>,
 ) {
     /** A chapter's first place: a resource in the reading order, and an anchor in it when not its top. */
     private data class Start(val resource: Int, val fragment: String?)
 
     val chapterCount: Int get() = starts.size
+
+    /** Chapter [unit]'s title in the contents, for the reader's eyes only: it is never sent away. */
+    fun titleOf(unit: Int): String? = titles.getOrNull(unit)
 
     private val occurrences: Map<String, List<Int>> =
         readingOrder.withIndex().groupBy({ it.value }, { it.index })
@@ -149,9 +156,14 @@ class ChapterMap private constructor(
         fun of(readingOrder: List<String>, toc: List<TocNode>): ChapterMap {
             var level = toc
             while (level.size == 1 && level.single().children.isNotEmpty()) level = level.single().children
+            val entries = level.flatMap { entry ->
+                val files = entry.children.mapTo(mutableSetOf()) { it.href.substringBefore('#') }.filter { it in readingOrder }
+                if (files.size >= 2) listOf(entry) + entry.children else listOf(entry)
+            }
             val starts = mutableListOf<Start>()
+            val titles = mutableListOf<String?>()
             var after = 0
-            level.forEach { entry ->
+            entries.forEach { entry ->
                 val path = entry.href.substringBefore('#')
                 val fragment = entry.href.substringAfter('#', "").takeIf { it.isNotBlank() }
                 val listed = readingOrder.indices.filter { readingOrder[it] == path }
@@ -161,10 +173,14 @@ class ChapterMap private constructor(
                 val start = Start(resource, fragment)
                 if (start in starts) return@forEach
                 starts += start
+                titles += entry.title?.trim()?.takeIf { it.isNotEmpty() }
                 after = maxOf(after, resource)
             }
-            if (starts.isEmpty()) starts += Start(0, null)
-            return ChapterMap(readingOrder, starts)
+            if (starts.isEmpty()) {
+                starts += Start(0, null)
+                titles += null
+            }
+            return ChapterMap(readingOrder, starts, titles)
         }
     }
 }
