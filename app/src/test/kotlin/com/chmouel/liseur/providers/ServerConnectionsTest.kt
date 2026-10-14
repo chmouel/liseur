@@ -168,7 +168,7 @@ class ServerConnectionsTest {
         val before = connections.generation(origin(SPEECH)).value
         told.clear()
 
-        assertEquals(ServerChange.Duplicate, update(id, "Speech", ELSEWHERE))
+        assertEquals(ServerChange.Duplicate("Elsewhere"), update(id, "Speech", ELSEWHERE))
 
         assertTrue(told.isEmpty())
         assertEquals(before, connections.generation(origin(SPEECH)).value)

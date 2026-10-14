@@ -1197,7 +1197,7 @@
     <string name="services_add">Ajouter un serveur</string>
     <string name="services_add_detail">Un serveur compatible OpenAI, hébergé ou sur votre propre réseau.</string>
     <string name="services_server_used_read_aloud">%1$s, utilisé pour la lecture à voix haute</string>
-    <string name="services_server_duplicate">Ce serveur est déjà dans la liste.</string>
+    <string name="services_server_duplicate">Cette adresse est déjà dans la liste, sous le nom « %1$s ».</string>
     <string name="services_unreadable">Impossible de lire les serveurs enregistrés.</string>
     <string name="services_delete">Supprimer le serveur</string>
     <string name="services_delete_title">Supprimer %1$s ?</string>

@@ -270,7 +270,8 @@ private fun ServerScreen(
     // Kept across a recreation, which saves nothing, so what was typed is still there to save on leaving.
     var address by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(server?.url.orEmpty())) }
     var name by rememberSaveable { mutableStateOf(server?.name.orEmpty()) }
-    var duplicate by rememberSaveable { mutableStateOf(false) }
+    // The name of the listed server the address is already on.
+    var duplicate by rememberSaveable { mutableStateOf<String?>(null) }
     // The address the key belongs to: the saved one, or the one being saved.
     var committedUrl by rememberSaveable { mutableStateOf(server?.url) }
     // The address last saved, which a refused save falls back to.
@@ -306,7 +307,7 @@ private fun ServerScreen(
             connections.save(draft, currentId, typedName, url, newName = typedName.ifEmpty { suggestedName(url, context) }) { change ->
                 if (change is ServerChange.Saved) persistedUrl = url
                 if (save == saves) {
-                    duplicate = change == ServerChange.Duplicate
+                    duplicate = (change as? ServerChange.Duplicate)?.name
                     committedUrl = if (change is ServerChange.Saved) url else persistedUrl
                 }
             }
@@ -378,7 +379,7 @@ private fun ServerScreen(
                         value = address,
                         onValueChange = {
                             address = it
-                            duplicate = false
+                            duplicate = null
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -387,7 +388,7 @@ private fun ServerScreen(
                             .focusRequester(urlFocus)
                             .onLeaving { commit() },
                         singleLine = true,
-                        isError = invalid || duplicate,
+                        isError = invalid || duplicate != null,
                         placeholder = { Text(stringResource(R.string.read_aloud_settings_server_url_hint)) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(
@@ -402,8 +403,8 @@ private fun ServerScreen(
                             invalid -> {
                                 { Text(stringResource(R.string.read_aloud_settings_server_url_invalid)) }
                             }
-                            duplicate -> {
-                                { Text(stringResource(R.string.services_server_duplicate)) }
+                            duplicate != null -> {
+                                { Text(stringResource(R.string.services_server_duplicate, duplicate.orEmpty())) }
                             }
                             else -> null
                         },

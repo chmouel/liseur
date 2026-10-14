@@ -1287,7 +1287,7 @@
     <string name="services_add">Добавить сервер</string>
     <string name="services_add_detail">Сервер, совместимый с OpenAI, в интернете или в вашей сети.</string>
     <string name="services_server_used_read_aloud">%1$s, используется для чтения вслух</string>
-    <string name="services_server_duplicate">Этот сервер уже есть в списке.</string>
+    <string name="services_server_duplicate">Этот адрес уже есть в списке под именем «%1$s».</string>
     <string name="services_unreadable">Не удалось прочитать сохранённые серверы.</string>
     <string name="services_delete">Удалить сервер</string>
     <string name="services_delete_title">Удалить %1$s?</string>

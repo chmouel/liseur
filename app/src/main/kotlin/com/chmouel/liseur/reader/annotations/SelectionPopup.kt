@@ -33,10 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -183,11 +181,12 @@ fun SelectionPopup(
                         }
                     }
                     actions.onTranslate?.let { translate ->
-                        PopupAction(
-                            label = stringResource(actions.translateLabel),
-                            icon = Icons.Outlined.Translate,
-                            onClick = translate,
-                        )
+                        IconButton(onClick = translate, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Outlined.Translate,
+                                contentDescription = stringResource(actions.translateLabel),
+                            )
+                        }
                     }
                     actions.onReadAloud?.let { readAloud ->
                         IconButton(onClick = readAloud, modifier = Modifier.size(36.dp)) {
@@ -239,19 +238,14 @@ internal fun TintChip(
 private fun PopupAction(
     label: String,
     onClick: () -> Unit,
-    icon: ImageVector? = null,
-    description: String? = null,
 ) {
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
             .clickable(onClick = onClick, role = Role.Button)
-            .then(if (description != null) Modifier.clearAndSetSemantics { contentDescription = description } else Modifier)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        icon?.let { Icon(it, contentDescription = null, modifier = Modifier.size(20.dp)) }
         Text(text = label, style = MaterialTheme.typography.labelLarge, maxLines = 1)
     }
 }

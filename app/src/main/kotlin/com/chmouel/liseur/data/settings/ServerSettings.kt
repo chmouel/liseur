@@ -103,7 +103,8 @@ data class ServerTranslationState(
 /** What an add or edit of a server came to. */
 sealed interface ServerChange {
     data class Saved(val id: String) : ServerChange
-    data object Duplicate : ServerChange
+    /** The address is already listed, as the server named [name]. */
+    data class Duplicate(val name: String) : ServerChange
     data object Invalid : ServerChange
     data object Unreadable : ServerChange
 }

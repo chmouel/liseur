@@ -163,9 +163,19 @@ class ServerSettingsTest {
         repo.add("Kokoro", KOKORO)
         val other = repo.add("OpenRouter", OPENROUTER)
 
-        assertEquals(ServerChange.Duplicate, repo.addServer("Again", "$KOKORO/"))
-        assertEquals(ServerChange.Duplicate, repo.updateServer(other, "OpenRouter", " $KOKORO "))
+        assertEquals(ServerChange.Duplicate("Kokoro"), repo.addServer("Again", "$KOKORO/"))
+        assertEquals(ServerChange.Duplicate("Kokoro"), repo.updateServer(other, "OpenRouter", " $KOKORO "))
         assertEquals(listOf("Kokoro", "OpenRouter"), repo.settings.first().servers.readable!!.map { it.name })
+    }
+
+    @Test
+    fun `the same host on another port is another server`() = runTest {
+        val repo = repo()
+        repo.add("Kokoro", KOKORO)
+
+        assertTrue(repo.addServer("Other", "http://192.168.1.10:8881") is ServerChange.Saved)
+        assertTrue(repo.addServer("Bare", "192.168.1.10:8882") is ServerChange.Saved)
+        assertEquals(3, repo.settings.first().servers.readable!!.size)
     }
 
     @Test

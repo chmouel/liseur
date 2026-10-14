@@ -1252,7 +1252,7 @@
     <string name="services_add">Add server</string>
     <string name="services_add_detail">An OpenAI-compatible server, hosted or on your own network.</string>
     <string name="services_server_used_read_aloud">%1$s, used for read aloud</string>
-    <string name="services_server_duplicate">This server is already listed.</string>
+    <string name="services_server_duplicate">This address is already listed as “%1$s”.</string>
     <string name="services_unreadable">Saved servers couldn\'t be read.</string>
     <string name="services_delete">Delete server</string>
     <string name="services_delete_title">Delete %1$s?</string>

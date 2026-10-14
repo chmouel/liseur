@@ -1151,7 +1151,7 @@
     <string name="services_add">添加服务器</string>
     <string name="services_add_detail">兼容 OpenAI 的服务器，可以是托管服务，也可以在你自己的网络中。</string>
     <string name="services_server_used_read_aloud">%1$s，用于朗读</string>
-    <string name="services_server_duplicate">此服务器已在列表中。</string>
+    <string name="services_server_duplicate">此地址已在列表中，名称为“%1$s”。</string>
     <string name="services_unreadable">无法读取已保存的服务器。</string>
     <string name="services_delete">删除服务器</string>
     <string name="services_delete_title">删除 %1$s？</string>

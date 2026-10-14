@@ -161,7 +161,7 @@ internal class ServerConnections(
             return settings.updateServer(id, name, url)
         }
         val newId = ServerConnection.idOf(url.trim()) ?: return ServerChange.Invalid
-        if (newId != id && listed.any { it.id == newId }) return ServerChange.Duplicate
+        if (newId != id) listed.firstOrNull { it.id == newId }?.let { return ServerChange.Duplicate(it.name) }
         return changing(setOfNotNull(originOf(before.url), originOf(url))) { settings.updateServer(id, name, url) }
     }
 

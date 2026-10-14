@@ -668,8 +668,8 @@ class AppSettingsRepository(
         var change: ServerChange = ServerChange.Unreadable
         store.edit { p ->
             val edit = ServerEdit.of(p) ?: return@edit
-            if (edit.servers.any { it.id == id }) {
-                change = ServerChange.Duplicate
+            edit.servers.firstOrNull { it.id == id }?.let {
+                change = ServerChange.Duplicate(it.name)
                 return@edit
             }
             edit.servers += ServerConnection(id, name.trim().ifEmpty { defaultServerName(trimmed) }, trimmed)
@@ -697,9 +697,11 @@ class AppSettingsRepository(
                 change = ServerChange.Invalid
                 return@edit
             }
-            if (newId != id && edit.servers.any { it.id == newId }) {
-                change = ServerChange.Duplicate
-                return@edit
+            if (newId != id) {
+                edit.servers.firstOrNull { it.id == newId }?.let {
+                    change = ServerChange.Duplicate(it.name)
+                    return@edit
+                }
             }
             edit.servers[index] = ServerConnection(newId, name.trim().ifEmpty { edit.servers[index].name }, trimmed)
             if (newId != id) {
