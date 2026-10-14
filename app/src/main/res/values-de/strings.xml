@@ -1373,6 +1373,6 @@
     <string name="companion_settings_model">Modell</string>
     <string name="companion_settings_recaps_group">Hintergrund-Zusammenfassungen</string>
     <string name="companion_settings_recaps">Kapitel beim Lesen zusammenfassen</string>
-    <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus.</string>
+    <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus. Jedes Buch kann das im ⋮-Menü des Readers ändern.</string>
     <string name="companion_settings_privacy">Text aus früheren Kapiteln wird an den gewählten Server gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Der Anbieter kann diese Anfragen berechnen.</string>
 </resources>

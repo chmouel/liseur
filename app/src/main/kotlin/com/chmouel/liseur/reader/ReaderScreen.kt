@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.DropdownMenu
@@ -121,7 +122,12 @@ import androidx.core.content.ContextCompat
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material3.Checkbox
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageSwap
@@ -4022,9 +4028,12 @@ fun ReaderScreen(
                                 }
                             }
                         val clearTranslations = onClearTranslations?.takeIf { translate.isAvailable }
-                        // Actions on the page and the book, not settings:
-                        // those stay in Aa. Hidden when none can run.
-                        if (translateFromHere != null || readAloudFromHere != null || clearTranslations != null) {
+                        // Actions that start something on the page, this
+                        // book's background recaps, and forgetting this
+                        // book's saved translations; reading settings stay
+                        // in Aa. Hidden when none applies.
+                        val recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value
+                        if (translateFromHere != null || readAloudFromHere != null || clearTranslations != null || recapsHere != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4065,6 +4074,18 @@ fun ReaderScreen(
                                             onClick = {
                                                 moreOpen = false
                                                 clearingTranslations = true
+                                            },
+                                        )
+                                    }
+                                    if (recapsHere != null) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.companion_settings_recaps)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Summarize, contentDescription = null) },
+                                            trailingIcon = { Checkbox(checked = recapsHere, onCheckedChange = null) },
+                                            onClick = { companion?.setRecapsHere?.invoke(!recapsHere) },
+                                            modifier = Modifier.semantics {
+                                                toggleableState = ToggleableState(recapsHere)
+                                                role = Role.Checkbox
                                             },
                                         )
                                     }

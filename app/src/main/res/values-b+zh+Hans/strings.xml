@@ -1312,6 +1312,6 @@
     <string name="companion_settings_model">模型</string>
     <string name="companion_settings_recaps_group">后台章节摘要</string>
     <string name="companion_settings_recaps">阅读时为章节生成摘要</string>
-    <string name="companion_settings_recaps_summary">读过一章的结尾后，会在后台为其生成摘要，帮助之后的查找更快找到段落。默认关闭。</string>
+    <string name="companion_settings_recaps_summary">读过一章的结尾后，会在后台为其生成摘要，帮助之后的查找更快找到段落。默认关闭。每本书都可以在阅读器的 ⋮ 菜单中单独更改。</string>
     <string name="companion_settings_privacy">前面章节的文本会发送到所选服务器；开启后台摘要后会发送整章内容。服务提供方可能对这些请求收费。</string>
 </resources>

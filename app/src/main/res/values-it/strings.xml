@@ -1361,6 +1361,6 @@
     <string name="companion_settings_model">Modello</string>
     <string name="companion_settings_recaps_group">Riassunti in background</string>
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
-    <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita.</string>
+    <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo dal menu ⋮ del lettore.</string>
     <string name="companion_settings_privacy">Il testo dei capitoli precedenti viene inviato al server scelto, e capitoli interi se i riassunti in background sono attivi. Il suo fornitore può addebitare queste richieste.</string>
 </resources>

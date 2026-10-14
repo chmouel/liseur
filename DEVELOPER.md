@@ -2059,6 +2059,14 @@ liseur-sync settings.
   names and aliases are kept only if they appear in the passages it
   cites; a lookup uses them to pick seed passages, never sends their
   prose.
+- The recap switch is the default for every book; the reader's ⋮ menu
+  overrides it for the open book (shown only once a server and model are
+  chosen). The override is a `recap_choice` row in `companion.db`, so it
+  is not backed up or synced and is swept with the book. Turning a book
+  off drops its waiting chapters and bumps a per-book counter folded into
+  the recap ticket, never the book's epoch, so the open handle keeps
+  working if it is turned back on. Turning the switch off in settings
+  keeps the waiting chapters of books turned on here.
 - `companion.db` (`CompanionDatabase`, separate from `liseur.db`) keys
   recaps by book URL, content sha (`BookFingerprintStore`), unit key,
   server, model and `Recap.FORMAT`. Without a content sha nothing is

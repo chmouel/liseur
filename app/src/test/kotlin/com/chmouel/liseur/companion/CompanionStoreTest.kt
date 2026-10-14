@@ -4,10 +4,12 @@ import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -46,16 +48,16 @@ class CompanionStoreTest {
     )
 
     @Test
-    fun `the first version of the database matches its exported schema`() {
-        helper.createDatabase("characters-schema-test", 1).close()
-        helper.runMigrationsAndValidate("characters-schema-test", 1, true, *CompanionDatabase.MIGRATIONS).close()
+    fun `the database migrates to its exported schema`() {
+        helper.createDatabase("companion-schema-test", 1).close()
+        helper.runMigrationsAndValidate("companion-schema-test", 2, true, *CompanionDatabase.MIGRATIONS).close()
     }
 
     @Test
     fun `a recap is read back only under the identity that wrote it`() = runTest {
         val store = store()
         val book = store.forBook(BOOK, SHA)
-        assertTrue(book.saveRecap(IDENTITY, UNIT_1, "one", store.ticket()))
+        assertTrue(book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket()))
         assertEquals(listOf(SavedRecap(UNIT_1, "one")), book.recaps(IDENTITY))
 
         for (other in listOf(
@@ -63,7 +65,7 @@ class CompanionStoreTest {
             IDENTITY.copy(model = "other"),
             IDENTITY.copy(format = IDENTITY.format + 1),
         )) {
-            book.saveRecap(IDENTITY, UNIT_1, "one", store.ticket())
+            book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket())
             assertTrue("$other", book.recaps(other).isEmpty())
             // Dropped, not merely hidden: going back does not bring it back.
             assertTrue("$other", book.recaps(IDENTITY).isEmpty())
@@ -74,7 +76,7 @@ class CompanionStoreTest {
     fun `a rewritten file does not see the old file's recaps or queue`() = runTest {
         val store = store()
         val old = store.forBook(BOOK, SHA)
-        old.saveRecap(IDENTITY, UNIT_1, "one", store.ticket())
+        old.saveRecap(IDENTITY, UNIT_1, "one", old.ticket())
         old.enqueue(UNIT_2)
 
         val fresh = store.forBook(BOOK, "other-sha")
@@ -88,8 +90,8 @@ class CompanionStoreTest {
         val store = store()
         val book = store.forBook(BOOK, SHA)
         book.enqueue(UNIT_1)
-        assertTrue(book.savePart(IDENTITY, UNIT_1, 0, 3, "a", store.ticket()))
-        assertTrue(book.savePart(IDENTITY, UNIT_1, 1, 3, "b", store.ticket()))
+        assertTrue(book.savePart(IDENTITY, UNIT_1, 0, 3, "a", book.ticket()))
+        assertTrue(book.savePart(IDENTITY, UNIT_1, 1, 3, "b", book.ticket()))
 
         val reopened = store.forBook(BOOK, SHA)
         assertEquals(mapOf(0 to "a", 1 to "b"), reopened.parts(IDENTITY, UNIT_1, 3))
@@ -97,8 +99,8 @@ class CompanionStoreTest {
         // Another batching, as after a format change, starts over.
         assertTrue(reopened.parts(IDENTITY, UNIT_1, 4).isEmpty())
 
-        reopened.savePart(IDENTITY, UNIT_1, 0, 3, "a", store.ticket())
-        reopened.saveRecap(IDENTITY, UNIT_1, "abc", store.ticket())
+        reopened.savePart(IDENTITY, UNIT_1, 0, 3, "a", reopened.ticket())
+        reopened.saveRecap(IDENTITY, UNIT_1, "abc", reopened.ticket())
         assertTrue(reopened.parts(IDENTITY, UNIT_1, 3).isEmpty())
         assertTrue(reopened.queued().isEmpty())
     }
@@ -120,7 +122,7 @@ class CompanionStoreTest {
         val store = store()
         val book = store.forBook(BOOK, SHA)
         book.enqueue(UNIT_1)
-        val ticket = store.ticket()
+        val ticket = book.ticket()
 
         store.stopRecaps()
 
@@ -128,7 +130,47 @@ class CompanionStoreTest {
         assertFalse(book.savePart(IDENTITY, UNIT_1, 0, 2, "a", ticket))
         assertFalse(book.saveRecap(IDENTITY, UNIT_1, "a", ticket))
         assertTrue(book.recaps(IDENTITY).isEmpty())
-        assertTrue(book.saveRecap(IDENTITY, UNIT_1, "a", store.ticket()))
+        assertTrue(book.saveRecap(IDENTITY, UNIT_1, "a", book.ticket()))
+    }
+
+    @Test
+    fun `turning one book off empties only its queue and keeps what was begun for it from landing`() = runTest {
+        val store = store()
+        val book = store.forBook(BOOK, SHA)
+        val other = store.forBook(OTHER, SHA)
+        book.enqueue(UNIT_1)
+        other.enqueue(UNIT_1)
+        val ticket = book.ticket()
+        val otherTicket = other.ticket()
+        assertNull(store.recapChoice(BOOK).first())
+
+        store.setRecapChoice(BOOK, false)
+
+        assertEquals(false, store.recapChoice(BOOK).first())
+        assertTrue(book.queued().isEmpty())
+        assertFalse(book.saveRecap(IDENTITY, UNIT_1, "a", ticket))
+        assertEquals(listOf(UNIT_1), other.queued())
+        assertTrue(other.saveRecap(IDENTITY, UNIT_1, "a", otherTicket))
+
+        store.setRecapChoice(BOOK, true)
+        assertEquals(true, store.recapChoice(BOOK).first())
+        assertTrue(book.enqueue(UNIT_2))
+        assertTrue(book.saveRecap(IDENTITY, UNIT_2, "b", book.ticket()))
+    }
+
+    @Test
+    fun `turning recaps off in settings keeps the queue of a book turned on`() = runTest {
+        val store = store()
+        val book = store.forBook(BOOK, SHA)
+        val other = store.forBook(OTHER, SHA)
+        store.setRecapChoice(OTHER, true)
+        book.enqueue(UNIT_1)
+        other.enqueue(UNIT_1)
+
+        store.stopRecaps()
+
+        assertTrue(book.queued().isEmpty())
+        assertEquals(listOf(UNIT_1), other.queued())
     }
 
     @Test
@@ -136,10 +178,12 @@ class CompanionStoreTest {
         val store = store()
         val book = store.forBook(BOOK, SHA)
         val other = store.forBook(OTHER, SHA)
-        book.saveRecap(IDENTITY, UNIT_1, "one", store.ticket())
-        book.savePart(IDENTITY, UNIT_2, 0, 2, "a", store.ticket())
+        book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket())
+        book.savePart(IDENTITY, UNIT_2, 0, 2, "a", book.ticket())
         book.enqueue(UNIT_2)
-        other.saveRecap(IDENTITY, UNIT_1, "kept", store.ticket())
+        other.saveRecap(IDENTITY, UNIT_1, "kept", other.ticket())
+        store.setRecapChoice(BOOK, true)
+        store.setRecapChoice(OTHER, false)
 
         library -= BOOK
         store.sweep()
@@ -147,26 +191,28 @@ class CompanionStoreTest {
         assertTrue(db.recaps().recaps(BOOK).isEmpty())
         assertTrue(db.recaps().parts(BOOK, UNIT_2.key).isEmpty())
         assertTrue(db.recaps().queued(BOOK).isEmpty())
-        assertFalse(book.saveRecap(IDENTITY, UNIT_2, "late", store.ticket()))
+        assertFalse(book.saveRecap(IDENTITY, UNIT_2, "late", book.ticket()))
         assertFalse(book.enqueue(UNIT_2))
         assertTrue(db.recaps().recaps(BOOK).isEmpty())
         assertEquals(listOf(SavedRecap(UNIT_1, "kept")), other.recaps(IDENTITY))
+        assertNull(store.recapChoice(BOOK).first())
+        assertEquals(false, store.recapChoice(OTHER).first())
     }
 
     @Test
     fun `the least recently used recaps go first once over the limits`() = runTest {
         val store = store(maxRecaps = 2)
         val book = store.forBook(BOOK, SHA)
-        book.saveRecap(IDENTITY, UNIT_1, "one", store.ticket())
-        book.saveRecap(IDENTITY, UNIT_2, "two", store.ticket())
+        book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket())
+        book.saveRecap(IDENTITY, UNIT_2, "two", book.ticket())
         store.forBook(OTHER, SHA).recaps(IDENTITY)
-        book.saveRecap(IDENTITY, UNIT_3, "three", store.ticket())
+        book.saveRecap(IDENTITY, UNIT_3, "three", book.ticket())
         assertEquals(setOf(UNIT_2, UNIT_3), book.recaps(IDENTITY).map { it.unit }.toSet())
 
         val small = store(maxRecaps = 100, maxCharacters = 8)
         val other = small.forBook(OTHER, SHA)
-        other.saveRecap(IDENTITY, UNIT_1, "aaaa", small.ticket())
-        other.saveRecap(IDENTITY, UNIT_2, "bbbbbb", small.ticket())
+        other.saveRecap(IDENTITY, UNIT_1, "aaaa", other.ticket())
+        other.saveRecap(IDENTITY, UNIT_2, "bbbbbb", other.ticket())
         assertEquals(listOf(UNIT_2), other.recaps(IDENTITY).map { it.unit })
     }
 

@@ -712,6 +712,8 @@ class ReaderActivity : FragmentActivity() {
         returnArrived = viewModel::returnArrived,
         returnFailed = viewModel::returnFailed,
         showsPlace = viewModel::showsPlace,
+        recapsHere = companionViewModel.recapsHere,
+        setRecapsHere = companionViewModel::setRecapsHere,
         settings = { back ->
             CompanionSettingsScreen(
                 container.companionServer,

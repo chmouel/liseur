@@ -29,6 +29,9 @@ class ReaderCompanion(
     val returnArrived: (Int) -> Unit,
     val returnFailed: (Int) -> Unit,
     val showsPlace: (place: Locator, here: Locator) -> Boolean,
+    /** Whether this book is recapped in the background; null while the companion is not set up. */
+    val recapsHere: StateFlow<Boolean?>,
+    val setRecapsHere: (Boolean) -> Unit,
     /** The reading companion's settings, opened in place over the book. */
     val settings: @Composable (onBack: () -> Unit) -> Unit,
 )

@@ -8,12 +8,16 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.room.withTransaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -60,6 +64,13 @@ data class RecapQueueRow(
     val unit: Int,
     @ColumnInfo(name = "content_sha") val contentSha: String,
     @ColumnInfo(name = "enqueued_at") val enqueuedAt: Long,
+)
+
+/** The reader's own choice for one book, over the switch in settings. */
+@Entity(tableName = "recap_choice")
+data class RecapChoiceRow(
+    @PrimaryKey @ColumnInfo(name = "book_url") val bookUrl: String,
+    val enabled: Boolean,
 )
 
 @Dao
@@ -109,12 +120,18 @@ interface CompanionRecapDao {
     @Query("DELETE FROM recap_queue WHERE book_url = :bookUrl AND content_sha != :sha")
     suspend fun forgetOtherQueued(bookUrl: String, sha: String)
 
-    @Query("DELETE FROM recap_queue")
-    suspend fun clearQueue()
+    @Query("DELETE FROM recap_queue WHERE book_url NOT IN (SELECT book_url FROM recap_choice WHERE enabled)")
+    suspend fun clearQueueFollowingSettings()
+
+    @Query("SELECT enabled FROM recap_choice WHERE book_url = :bookUrl")
+    fun choice(bookUrl: String): Flow<Boolean?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putChoice(row: RecapChoiceRow)
 
     @Query(
         "SELECT book_url FROM chapter_recap UNION SELECT book_url FROM recap_part " +
-            "UNION SELECT book_url FROM recap_queue",
+            "UNION SELECT book_url FROM recap_queue UNION SELECT book_url FROM recap_choice",
     )
     suspend fun books(): List<String>
 
@@ -126,6 +143,9 @@ interface CompanionRecapDao {
 
     @Query("DELETE FROM recap_queue WHERE book_url IN (:bookUrls)")
     suspend fun forgetQueued(bookUrls: List<String>): Int
+
+    @Query("DELETE FROM recap_choice WHERE book_url IN (:bookUrls)")
+    suspend fun forgetChoices(bookUrls: List<String>): Int
 
     @Query("SELECT COUNT(*) FROM chapter_recap")
     suspend fun recapCount(): Int
@@ -161,8 +181,8 @@ data class RecapLength(
  * text, are neither backed up nor synced.
  */
 @Database(
-    entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class],
-    version = 1,
+    entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class],
+    version = 2,
     exportSchema = true,
 )
 abstract class CompanionDatabase : RoomDatabase() {
@@ -171,7 +191,17 @@ abstract class CompanionDatabase : RoomDatabase() {
     companion object {
         const val NAME = "companion.db"
 
-        val MIGRATIONS = emptyArray<androidx.room.migration.Migration>()
+        /** Adds the reader's per-book recap choice. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `recap_choice` (`book_url` TEXT NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2)
     }
 }
 
@@ -219,7 +249,7 @@ interface RecapBook {
  *
  * Removing a book drops all of it and fences open handles, as a reply
  * asked before the removal must not be saved after it; so does turning
- * recaps off, through [ticket].
+ * recaps off, everywhere or for one book, through [BookRecaps.ticket].
  */
 class CompanionStore(
     private val database: CompanionDatabase,
@@ -234,19 +264,37 @@ class CompanionStore(
     private val writes = Mutex()
     private val epochs = ConcurrentHashMap<String, Long>()
     private val disabled = AtomicLong()
+    private val stops = ConcurrentHashMap<String, Long>()
 
     /** The book at [bookUrl], whose file hashes to [contentSha], for one opening of it. */
     fun forBook(bookUrl: String, contentSha: String): BookRecaps =
         BookRecaps(bookUrl, contentSha, epochs.computeIfAbsent(bookUrl) { 0L })
 
-    /** What a recap begun now must still hold to be saved; recaps turned off change it. */
-    fun ticket(): Long = disabled.get()
+    // Both counters only grow, so the sum changes whenever either does.
+    private fun ticket(bookUrl: String): Long = disabled.get() + (stops[bookUrl] ?: 0L)
 
-    /** Recaps were turned off: forgets every waiting chapter, and no recap begun before is saved. */
+    /**
+     * Recaps were turned off in settings: forgets every waiting chapter of
+     * the books that follow settings, and no recap begun before is saved.
+     */
     suspend fun stopRecaps() {
         writes.withLock {
             disabled.incrementAndGet()
-            dao.clearQueue()
+            dao.clearQueueFollowingSettings()
+        }
+    }
+
+    /** The reader's choice for [bookUrl], or null while it follows settings. */
+    fun recapChoice(bookUrl: String): Flow<Boolean?> = dao.choice(bookUrl)
+
+    /** Recaps on or off for [bookUrl] alone; off forgets its waiting chapters and saves no recap begun before. */
+    suspend fun setRecapChoice(bookUrl: String, enabled: Boolean) {
+        writes.withLock {
+            if (!enabled) stops.merge(bookUrl, 1L, Long::plus)
+            database.withTransaction {
+                dao.putChoice(RecapChoiceRow(bookUrl, enabled))
+                if (!enabled) dao.forgetQueued(listOf(bookUrl))
+            }
         }
     }
 
@@ -269,6 +317,7 @@ class CompanionStore(
                     dao.forgetRecaps(it)
                     dao.forgetParts(it)
                     dao.forgetQueued(it)
+                    dao.forgetChoices(it)
                 }
             }
         }
@@ -314,7 +363,7 @@ class CompanionStore(
     ) : RecapBook {
         private fun fenced() = epochs[bookUrl] != epoch
 
-        override fun ticket(): Long = this@CompanionStore.ticket()
+        override fun ticket(): Long = this@CompanionStore.ticket(bookUrl)
 
         override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit): Boolean {
             val row = dao.recap(bookUrl, unit.key) ?: return false
@@ -362,7 +411,7 @@ class CompanionStore(
         ): Boolean {
             require(identity.contentSha == contentSha && index in 0 until count)
             return writes.withLock {
-                if (fenced() || ticket != disabled.get()) return false
+                if (fenced() || ticket != ticket()) return false
                 dao.putPart(
                     RecapPartRow(
                         bookUrl, unit.key, index, count, contentSha,
@@ -377,7 +426,7 @@ class CompanionStore(
         override suspend fun saveRecap(identity: RecapIdentity, unit: RecapUnit, json: String, ticket: Long): Boolean {
             require(identity.contentSha == contentSha)
             return writes.withLock {
-                if (fenced() || ticket != disabled.get()) return false
+                if (fenced() || ticket != ticket()) return false
                 val at = now()
                 database.withTransaction {
                     dao.putRecap(

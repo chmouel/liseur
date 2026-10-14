@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -60,10 +61,19 @@ class CompanionViewModel(
         .map { it.isAtLeast(Lifecycle.State.STARTED) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    // The reader's choice for this book, over the switch in settings.
+    private val recapsOn = combine(
+        server.recapsEnabled,
+        store.recapChoice(bookUrl).catch {
+            Log.w(TAG, "No recap choice for this book: ${it.javaClass.simpleName}")
+            emit(null)
+        },
+    ) { inSettings, here -> here ?: inSettings }.distinctUntilChanged()
+
     // Keyed on what decides the identity, so an unrelated setting
     // changing does not cancel a recap that is under way.
     private val recapSettings: StateFlow<RecapSettings> =
-        combine(choice, server.recapsEnabled, contentSha) { chosen, enabled, sha -> Triple(chosen, enabled, sha) }
+        combine(choice, recapsOn, contentSha) { chosen, enabled, sha -> Triple(chosen, enabled, sha) }
             .distinctUntilChanged()
             .map { (chosen, enabled, sha) ->
                 val setup = if (chosen != null && sha != null) {
@@ -86,6 +96,15 @@ class CompanionViewModel(
     )
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
+
+    /** Whether this book is recapped in the background; null until a server and model are chosen. */
+    val recapsHere: StateFlow<Boolean?> = combine(choice, recapsOn) { chosen, on -> on.takeIf { chosen != null } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Turns background recaps on or off for this book alone. */
+    fun setRecapsHere(enabled: Boolean) {
+        viewModelScope.launch { quietly { store.setRecapChoice(bookUrl, enabled) } }
+    }
 
     init {
         viewModelScope.launch {

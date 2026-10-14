@@ -1,0 +1,238 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "41addeb78661b63ae47a8b0c5c2e007e",
+    "entities": [
+      {
+        "tableName": "chapter_recap",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `unit_key` TEXT NOT NULL, `unit` INTEGER NOT NULL, `content_sha` TEXT NOT NULL, `server_id` TEXT NOT NULL, `model` TEXT NOT NULL, `format` INTEGER NOT NULL, `json` TEXT NOT NULL, `saved_at` INTEGER NOT NULL, `used_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`, `unit_key`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitKey",
+            "columnName": "unit_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha",
+            "columnName": "content_sha",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverId",
+            "columnName": "server_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "model",
+            "columnName": "model",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAt",
+            "columnName": "saved_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "usedAt",
+            "columnName": "used_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url",
+            "unit_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_chapter_recap_used_at",
+            "unique": false,
+            "columnNames": [
+              "used_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chapter_recap_used_at` ON `${TABLE_NAME}` (`used_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "recap_part",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `unit_key` TEXT NOT NULL, `batch_index` INTEGER NOT NULL, `batch_count` INTEGER NOT NULL, `content_sha` TEXT NOT NULL, `server_id` TEXT NOT NULL, `model` TEXT NOT NULL, `format` INTEGER NOT NULL, `json` TEXT NOT NULL, `saved_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`, `unit_key`, `batch_index`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitKey",
+            "columnName": "unit_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchIndex",
+            "columnName": "batch_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchCount",
+            "columnName": "batch_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha",
+            "columnName": "content_sha",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serverId",
+            "columnName": "server_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "model",
+            "columnName": "model",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "json",
+            "columnName": "json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAt",
+            "columnName": "saved_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url",
+            "unit_key",
+            "batch_index"
+          ]
+        }
+      },
+      {
+        "tableName": "recap_queue",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `unit_key` TEXT NOT NULL, `unit` INTEGER NOT NULL, `content_sha` TEXT NOT NULL, `enqueued_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`, `unit_key`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unitKey",
+            "columnName": "unit_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unit",
+            "columnName": "unit",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentSha",
+            "columnName": "content_sha",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enqueuedAt",
+            "columnName": "enqueued_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url",
+            "unit_key"
+          ]
+        }
+      },
+      {
+        "tableName": "recap_choice",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `enabled` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+        "fields": [
+          {
+            "fieldPath": "bookUrl",
+            "columnName": "book_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "book_url"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '41addeb78661b63ae47a8b0c5c2e007e')"
+    ]
+  }
+}
