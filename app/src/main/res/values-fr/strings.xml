@@ -1332,6 +1332,10 @@
     <string name="character_source_chapter">Chapitre %1$d</string>
     <string name="character_source_chapters">Chapitres %1$d–%2$d</string>
     <string name="character_source_open">Afficher ce passage dans le livre</string>
+    <plurals name="character_sources_count">
+        <item quantity="one">%1$d passage</item>
+        <item quantity="other">%1$d passages</item>
+    </plurals>
     <string name="character_peek_return">Revenir où vous étiez</string>
     <string name="character_peek_show">Afficher la fiche</string>
     <string name="character_retry">Réessayer</string>

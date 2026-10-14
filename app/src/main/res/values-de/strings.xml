@@ -1344,6 +1344,10 @@
     <string name="character_source_chapter">Kapitel %1$d</string>
     <string name="character_source_chapters">Kapitel %1$d–%2$d</string>
     <string name="character_source_open">Diese Stelle im Buch zeigen</string>
+    <plurals name="character_sources_count">
+        <item quantity="one">%1$d Textstelle</item>
+        <item quantity="other">%1$d Textstellen</item>
+    </plurals>
     <string name="character_peek_return">Zurück zur Frage</string>
     <string name="character_peek_show">Profil zeigen</string>
     <string name="character_retry">Erneut versuchen</string>

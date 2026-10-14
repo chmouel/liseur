@@ -1284,6 +1284,9 @@
     <string name="character_source_chapter">第 %1$d 章</string>
     <string name="character_source_chapters">第 %1$d–%2$d 章</string>
     <string name="character_source_open">在书中显示此段落</string>
+    <plurals name="character_sources_count">
+        <item quantity="other">%1$d 处段落</item>
+    </plurals>
     <string name="character_peek_return">返回提问处</string>
     <string name="character_peek_show">显示人物资料</string>
     <string name="character_retry">重试</string>

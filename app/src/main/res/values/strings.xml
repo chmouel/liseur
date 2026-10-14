@@ -1388,6 +1388,10 @@
     <string name="character_source_chapter">Chapter %1$d</string>
     <string name="character_source_chapters">Chapters %1$d–%2$d</string>
     <string name="character_source_open">Show this passage in the book</string>
+    <plurals name="character_sources_count">
+        <item quantity="one">%1$d passage</item>
+        <item quantity="other">%1$d passages</item>
+    </plurals>
     <string name="character_peek_return">Back to where you asked</string>
     <string name="character_peek_show">Show profile</string>
     <string name="character_retry">Try again</string>
