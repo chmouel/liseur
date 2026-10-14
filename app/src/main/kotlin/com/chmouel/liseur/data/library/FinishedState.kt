@@ -24,6 +24,8 @@ class FinishedState(
     private val progressDao: ReadingProgressDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val now: () -> Long = System::currentTimeMillis,
+    /** Told of every book someone said they finished, once it is written. */
+    private val onFinished: suspend (String) -> Unit = {},
 ) {
 
     /**
@@ -35,6 +37,7 @@ class FinishedState(
     suspend fun setFinished(bookUrl: String, finished: Boolean) {
         val override = if (finished) FinishedOverride.FINISHED else FinishedOverride.UNREAD
         setStatus(bookUrl, override, null)
+        if (finished) onFinished(bookUrl)
     }
 
     /**

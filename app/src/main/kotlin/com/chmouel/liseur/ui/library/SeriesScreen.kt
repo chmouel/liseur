@@ -153,6 +153,7 @@ fun SeriesScreen(
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
     val localDeleteFailed = stringResource(R.string.delete_local_failed)
+    val accountClearBeforeRemovalFailed = stringResource(R.string.account_translation_clear_before_removal_failed)
     val reordering = reorder != null
 
     // Back leaves the mode before it leaves the screen: a draft is
@@ -179,7 +180,11 @@ fun SeriesScreen(
 
     LaunchedEffect(deleteFailures) {
         deleteFailures.collect { failure ->
-            val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
+            val message = when {
+                failure.accountClearFailed -> accountClearBeforeRemovalFailed
+                failure.onServer -> serverDeleteFailed
+                else -> localDeleteFailed
+            }
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
     }

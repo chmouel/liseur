@@ -112,9 +112,12 @@ object LiseurSyncApi {
                 (if (after.isEmpty()) "" else "&after=${queryValue(after)}"),
         )
 
-    /** Where a work's sentence translations are pushed (ADR-0052). */
+    /** Where a work's sentence translations are pushed (ADR-0052), and cleared (ADR-0050). */
     fun pushWorkTranslations(baseUrl: String, workId: String): String =
         url(baseUrl, "/v1/works/${pathSegment(workId)}/translations")
+
+    /** Every work's sentence translations on the account, for an account-wide clear (ADR-0050). */
+    fun allTranslations(baseUrl: String): String = url(baseUrl, "/v1/translations")
 
     /** Retires one annotation, at the rev the caller believes it holds. */
     fun deleteAnnotation(baseUrl: String, id: String, rev: Long): String =

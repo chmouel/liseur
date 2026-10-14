@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -16,6 +17,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.Executor
+import java.util.concurrent.Executors
+import kotlinx.coroutines.runBlocking
 
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
@@ -423,6 +427,91 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a pull ticket sampled during a clear is fenced after commit`() = runTest {
+        val transactionExecutor = GatedTransactionExecutor()
+        val racingDatabase = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            TranslationCacheDatabase::class.java,
+        ).setTransactionExecutor(transactionExecutor).allowMainThreadQueries().build()
+        try {
+            racingDatabase.openHelper.writableDatabase
+            val store = SavedTranslations(
+                database = racingDatabase,
+                present = { urls -> urls.filter { it == BOOK } },
+                now = { clock++ },
+            )
+            val gate = transactionExecutor.pauseNext()
+            val clearing = async { store.clear() }
+            gate.started.await()
+            val ticket = store.pullTicket(BOOK)
+
+            gate.release.complete(Unit)
+            clearing.await()
+            val landed = store.landPulled(
+                PEER, BOOK, ticket,
+                listOf(PulledTranslation(hashed("one"), "un")),
+                "cursor-1",
+            )
+
+            assertEquals(0, landed)
+            assertNull(store.forBook(BOOK).get("one").translation)
+            assertNull(store.syncState(PEER, BOOK))
+        } finally {
+            transactionExecutor.releaseAndClose()
+            racingDatabase.close()
+        }
+    }
+
+    @Test
+    fun `a ticket sampled during a canceled clear is fenced`() = runTest {
+        assertClearTicketFencedByCancellation { it.clear() }
+    }
+
+    @Test
+    fun `a ticket sampled during a canceled book clear is fenced`() = runTest {
+        assertClearTicketFencedByCancellation { it.clearBook(BOOK) }
+    }
+
+    private suspend fun assertClearTicketFencedByCancellation(
+        clear: suspend (SavedTranslations) -> Unit,
+    ) = coroutineScope {
+        val transactionExecutor = GatedTransactionExecutor()
+        val racingDatabase = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            TranslationCacheDatabase::class.java,
+        ).setTransactionExecutor(transactionExecutor).allowMainThreadQueries().build()
+        try {
+            racingDatabase.openHelper.writableDatabase
+            val store = SavedTranslations(
+                database = racingDatabase,
+                present = { urls -> urls.filter { it == BOOK } },
+                now = { clock++ },
+            )
+            val gate = transactionExecutor.pauseNext()
+            val clearing = async { clear(store) }
+            gate.started.await()
+            val ticket = store.pullTicket(BOOK)
+
+            clearing.cancel()
+            gate.release.complete(Unit)
+            gate.completed.await()
+            clearing.join()
+            val landed = store.landPulled(
+                PEER, BOOK, ticket,
+                listOf(PulledTranslation(hashed("one"), "un")),
+                "cursor-1",
+            )
+
+            assertEquals(0, landed)
+            assertNull(store.forBook(BOOK).get("one").translation)
+            assertNull(store.syncState(PEER, BOOK))
+        } finally {
+            transactionExecutor.releaseAndClose()
+            racingDatabase.close()
+        }
+    }
+
+    @Test
     fun `a pull asked before a clear lands nothing and keeps no cursor`() = runTest {
         val store = saved()
         val ticket = store.pullTicket(BOOK)
@@ -727,6 +816,164 @@ class SavedTranslationsTest {
         // survives to be one.
         val state = second.syncState(PEER, BOOK)!!
         assertEquals(listOf(hashed("two")), second.unsynced(BOOK, state, 500).map { it.key })
+    }
+
+    @Test
+    fun `clearing a book forgets its sentences and bookkeeping and leaves the others`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.forBook(OTHER).keep("two", "deux")
+        store.ensureWork(PEER, BOOK, "work-one")
+
+        store.clearBook(BOOK)
+
+        assertNull(store.forBook(BOOK).get("one").translation)
+        assertNull(store.syncState(PEER, BOOK))
+        assertEquals("deux", store.forBook(OTHER).get("two").translation)
+        assertTrue(store.owedClears(PEER).isEmpty())
+    }
+
+    @Test
+    fun `a reply or a pull asked before a book's clear is not kept after it`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        val asked = book.get("one")
+        val ticket = store.pullTicket(BOOK)
+
+        store.clearBook(BOOK)
+        book.put("one", "un", asked.stamp)
+        val landed = store.landPulled(
+            PEER, BOOK, ticket,
+            listOf(PulledTranslation(hashed("two"), "deux")),
+            "cursor-1",
+        )
+
+        assertNull(book.get("one").translation)
+        assertEquals(0, landed)
+        assertNull(store.syncState(PEER, BOOK))
+    }
+
+    @Test
+    fun `an account clear is owed until settled, account-wide covering every work`() = runTest {
+        val store = saved()
+        store.clearBook(BOOK, listOf(TranslationAccountClear(PEER, "work-one")))
+        store.requestAccountClears(listOf(TranslationAccountClear.everyWork(OTHER_PEER)))
+
+        assertTrue(store.clearOwed(PEER, "work-one"))
+        assertTrue(!store.clearOwed(PEER, "work-two"))
+        assertTrue(store.clearOwed(OTHER_PEER, "work-two"))
+
+        store.settleClear(store.owedClears(PEER).single())
+        assertTrue(store.owedClears(PEER).isEmpty())
+        assertEquals(listOf(OTHER_PEER to ""), store.owedClears(OTHER_PEER).map { it.peerId to it.workId })
+    }
+
+    @Test
+    fun `a clear asked again while the first was being sent outlives the first's answer`() = runTest {
+        val store = saved()
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")))
+        val sent = store.owedClears(PEER).single()
+
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")))
+        store.settleClear(sent)
+
+        assertTrue(store.clearOwed(PEER, "work-one"))
+        store.settleClear(store.owedClears(PEER).single())
+        assertTrue(store.owedClears(PEER).isEmpty())
+    }
+
+    @Test
+    fun `a book's clear leaves the open reader's handles saving`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        book.keep("one", "un")
+
+        store.clearBook(BOOK)
+        book.keep("two", "deux")
+
+        assertNull(book.get("one").translation)
+        assertEquals("deux", book.get("two").translation)
+    }
+
+    @Test
+    fun `an account clear for a book leaves its sentences here but never to be pushed`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")), BOOK)
+
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+        val state = store.ensureWork(PEER, BOOK, "work-one")
+        assertTrue(store.unsynced(BOOK, state, 500).isEmpty())
+        store.forBook(BOOK).keep("two", "deux")
+        assertEquals(listOf(hashed("two")), store.unsynced(BOOK, state, 500).map { it.key })
+    }
+
+    @Test
+    fun `clearing everything can owe the account its clear in the same step`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+
+        store.clear(listOf(TranslationAccountClear.everyWork(PEER)))
+
+        assertEquals(0, store.stats.first().sentences)
+        assertEquals(listOf(PEER to ""), store.owedClears(PEER).map { it.peerId to it.workId })
+    }
+
+    @Test
+    fun `owed clears follow the peer's key and go with the peer`() = runTest {
+        val store = saved()
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")))
+
+        store.rekeyPeer(PEER, OTHER_PEER)
+        assertTrue(store.clearOwed(OTHER_PEER, "work-one"))
+
+        store.forgetPeersBeyond { setOf(OTHER_PEER) }
+        assertTrue(store.owedClears(PEER).isEmpty())
+        assertTrue(store.clearOwed(OTHER_PEER, "work-one"))
+
+        store.forgetPeer(OTHER_PEER)
+        assertTrue(store.owedClears(OTHER_PEER).isEmpty())
+    }
+
+    private class GatedTransactionExecutor : Executor {
+        data class Gate(
+            val started: CompletableDeferred<Unit> = CompletableDeferred(),
+            val release: CompletableDeferred<Unit> = CompletableDeferred(),
+            val completed: CompletableDeferred<Unit> = CompletableDeferred(),
+        )
+
+        private val delegate = Executors.newSingleThreadExecutor()
+        @Volatile private var nextGate: Gate? = null
+        @Volatile private var activeGate: Gate? = null
+
+        fun pauseNext(): Gate = Gate().also {
+            nextGate = it
+            activeGate = it
+        }
+
+        override fun execute(command: Runnable) {
+            val gate = nextGate
+            nextGate = null
+            delegate.execute {
+                try {
+                    if (gate != null) {
+                        gate.started.complete(Unit)
+                        runBlocking { gate.release.await() }
+                        activeGate = null
+                    }
+                    command.run()
+                } finally {
+                    gate?.completed?.complete(Unit)
+                }
+            }
+        }
+
+        fun releaseAndClose() {
+            nextGate?.release?.complete(Unit)
+            activeGate?.release?.complete(Unit)
+            delegate.shutdownNow()
+        }
     }
 
     private companion object {

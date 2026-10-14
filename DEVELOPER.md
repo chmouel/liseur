@@ -1898,8 +1898,25 @@ reader behavior.
   rather than counted as sent. The state remembers the work id it was
   made under, and a book re-resolved after `unknown_work` starts the
   exchange over under the new name. A local Clear keeps the server
-  where it is: the next pull refills from it. Disconnecting or rekeying
-  the account carries the peer's bookkeeping, not the sentences.
+  where it is, and the next pull refills from it, unless the reader asked
+  for the account's copy to go too. That clear is owed as a
+  `translation_account_clears` row (peer, work id, empty for the whole
+  account, plus a generation so an earlier answer cannot settle a
+  later ask), written with the local clear under the same fence as
+  Clear (the global `cleared` stamp, not the book's epoch, so the
+  open reader's cache keeps saving) and sent before the pass reads
+  anything. A success or a `404` saying `work not found` settles
+  it; a server without the routes (the mux's plain-text `404` or a
+  `405`) drops it; any
+  other failure keeps it, and the pass leaves the works it covers alone
+  until it goes through. A removal's clear also moves the book's push
+  watermark past what this phone kept, so it is never pushed back.
+  The remove and delete dialogs, the reader's
+  menu, Settings Clear and finishing a book (`FinishedState.setFinished`
+  only, behind `clearTranslationsOnFinish`) ask for it. Disconnecting or
+  rekeying the account carries the peer's bookkeeping and owed clears,
+  not the sentences. See
+  `docs/adr/0050-clearing-translations-reaches-the-account.md`.
 - A book left translated stays so until Stop
   (`PageTranslationModes`, a `page_translation_modes` row in
   `translations.db` swept with the book, kept by Clear). Its changes and
@@ -2509,12 +2526,15 @@ what lets it sync a book that came off an SD card.
   travels. The client pulls before it pushes, pages of 500 ordered by
   `(updated_at, key)` behind an opaque cursor, and pushes batches of
   500 under last-writer-wins where an identical push writes nothing.
-  A 404 with no body means an older server without the routes, and
+  The mux's plain-text `404 page not found` means an older server
+  without the routes, and
   the client skips translations for the rest of the session; a 400
   `unknown_work` (or a 404 with a body on pull) is the same stale
   work name everything else recovers from by re-resolving. Each peer
   records how far it pushed and pulled in `translations.db`, so a run
-  interrupted anywhere is simply repeated. See ADR-0052.
+  interrupted anywhere is simply repeated. See ADR-0052. The client
+  clears a work's rows with `DELETE /v1/works/{id}/translations` and the
+  account's with `DELETE /v1/translations` (ADR-0053).
 - Uploading is opt-in twice over. The server advertises the
   `library-upload` scope on `GET /v1/token` and marks the folders that
   take uploads in `GET /v1/folders`; without both, the action is not

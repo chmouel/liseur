@@ -354,6 +354,8 @@
     <string name="reader_no_contents">This book has no table of contents.</string>
     <string name="reader_untitled_section">Untitled section</string>
     <string name="server_sync_now">Sync reading positions now</string>
+    <string name="server_sync_clear_translations_on_finish">Clear a book\'s translations when I finish it</string>
+    <string name="server_sync_clear_translations_on_finish_hint">Removes its saved sentence translations from this device and from your account.</string>
     <string name="server_sync_running">Syncing reading positions…</string>
     <string name="server_sync_offline">Could not reach the server; positions will sync later.</string>
     <string name="reader_sync_book">Sync this book</string>
@@ -555,6 +557,7 @@
     <string name="remove">Remove</string>
     <string name="delete_from_server_failed">Could not delete “%1$s” from the server.</string>
     <string name="delete_local_failed">Could not delete the file for “%1$s”. Liseur may only be allowed to read that folder — add it again to grant deletion.</string>
+    <string name="account_translation_clear_before_removal_failed">Could not save the request to clear translations from your account. “%1$s” was not removed; try again.</string>
     <string name="delete">Delete</string>
 
     <string name="remove_from_library">Remove from library</string>
@@ -1308,6 +1311,14 @@
     <string name="translation_settings_saved_clear_confirm">Clear</string>
     <string name="translation_settings_saved_clear_failed">Could not clear saved translations. Try again.</string>
     <string name="translation_settings_saved_note">Translated pages are kept on this phone so going back to them is instant. They are not backed up.</string>
+    <string name="translation_settings_saved_clear_account">Also clear from my account</string>
+    <string name="translation_settings_saved_clear_account_hint">Removes every book\'s saved translations from your liseur-sync account. Other devices keep the ones they already have.</string>
+    <string name="clear_account_translations_choice">Also clear its translations from my account</string>
+    <string name="clear_account_translations_choice_hint">Other devices keep the ones they already have.</string>
+    <string name="reader_clear_translations">Clear translations</string>
+    <string name="reader_clear_translations_title">Clear this book\'s translations?</string>
+    <string name="reader_clear_translations_body">Its saved sentence translations are removed from this device and, if you use liseur-sync, from your account. Pages will be translated again the next time you read them.</string>
+    <string name="reader_clear_translations_confirm">Clear</string>
     <string name="translation_settings_test_passed">It works: %1$s</string>
     <string name="translation_settings_device_unavailable">This phone has no translator that apps can use. Choose another service.</string>
     <string name="translation_settings_device_downloads_detail">A language is translated once it is downloaded in the system\'s settings.</string>

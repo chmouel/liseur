@@ -336,6 +336,8 @@
     <string name="reader_no_contents">Questo libro non ha un indice.</string>
     <string name="reader_untitled_section">Sezione senza titolo</string>
     <string name="server_sync_now">Sincronizza ora le posizioni di lettura</string>
+    <string name="server_sync_clear_translations_on_finish">Cancella le traduzioni di un libro quando lo finisco</string>
+    <string name="server_sync_clear_translations_on_finish_hint">Rimuove le traduzioni delle frasi salvate da questo dispositivo e dal tuo account.</string>
     <string name="server_sync_running">Sincronizzazione delle posizioni…</string>
     <string name="server_sync_offline">Impossibile raggiungere il server; le posizioni si sincronizzeranno dopo.</string>
     <string name="reader_sync_book">Sincronizza questo libro</string>
@@ -536,6 +538,7 @@
     <string name="remove">Rimuovi</string>
     <string name="delete_from_server_failed">Impossibile eliminare “%1$s” dal server.</string>
     <string name="delete_local_failed">Impossibile eliminare il file di “%1$s”. Liseur potrebbe avere solo il permesso di lettura su quella cartella — aggiungila di nuovo per concedere l\'eliminazione.</string>
+    <string name="account_translation_clear_before_removal_failed">Impossibile salvare la richiesta di cancellazione delle traduzioni dall’account. «%1$s» non è stata rimossa; riprova.</string>
     <string name="delete">Elimina</string>
     <string name="remove_from_library">Rimuovi dalla libreria</string>
     <string name="remove_from_library_warning">“%1$s” verrà tolto dallo scaffale. Il file resta su questo dispositivo, e puoi rimettere il libro da Impostazioni → Libri nascosti.</string>
@@ -1253,6 +1256,14 @@
     <string name="translation_settings_saved_clear_confirm">Cancella</string>
     <string name="translation_settings_saved_clear_failed">Impossibile cancellare le traduzioni salvate. Riprova.</string>
     <string name="translation_settings_saved_note">Le pagine tradotte restano su questo telefono, così tornarci è immediato. Non sono incluse nel backup.</string>
+    <string name="translation_settings_saved_clear_account">Cancella anche dal mio account</string>
+    <string name="translation_settings_saved_clear_account_hint">Rimuove le traduzioni salvate di tutti i libri dal tuo account liseur-sync. Gli altri dispositivi mantengono quelle che hanno già.</string>
+    <string name="clear_account_translations_choice">Cancella anche le sue traduzioni dal mio account</string>
+    <string name="clear_account_translations_choice_hint">Gli altri dispositivi mantengono quelle che hanno già.</string>
+    <string name="reader_clear_translations">Cancella traduzioni</string>
+    <string name="reader_clear_translations_title">Cancellare le traduzioni di questo libro?</string>
+    <string name="reader_clear_translations_body">Le traduzioni delle frasi salvate vengono rimosse da questo dispositivo e, se usi liseur-sync, dal tuo account. Le pagine verranno tradotte di nuovo la prossima volta che le leggi.</string>
+    <string name="reader_clear_translations_confirm">Cancella</string>
     <string name="translation_settings_test_passed">Funziona: %1$s</string>
     <string name="translation_settings_device_unavailable">Questo telefono non ha un traduttore utilizzabile dalle app. Scegli un altro servizio.</string>
     <string name="translation_settings_device_downloads_detail">Una lingua viene tradotta dopo averla scaricata nelle impostazioni di sistema.</string>

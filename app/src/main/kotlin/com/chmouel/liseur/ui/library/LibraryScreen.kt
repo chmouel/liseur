@@ -176,14 +176,16 @@ fun LibraryScreen(
     onBrowseLibraries: () -> Unit,
     onDownload: (Book) -> Unit,
     onCancelDownload: (Book) -> Unit,
-    onRemoveDownload: (Book) -> Unit,
+    onRemoveDownload: (Book, clearAccountTranslations: Boolean) -> Unit,
     onSetFinished: (Book, Boolean) -> Unit,
     onSetArchived: (Book, Boolean) -> Unit,
-    onDeleteLocal: (Book) -> Unit,
-    onRemoveFromLibrary: (Book) -> Unit,
+    onDeleteLocal: (Book, clearAccountTranslations: Boolean) -> Unit,
+    onRemoveFromLibrary: (Book, clearAccountTranslations: Boolean) -> Unit,
     onUnhide: (String) -> Unit,
     hiddenBooks: Flow<Book>,
     onDeleteFromServer: (Book, Boolean) -> Unit,
+    /** Books whose translations the remove and delete dialogs may clear from the account. */
+    accountTranslationBooks: Set<String> = emptySet(),
     onUploadToServer: (Book) -> Unit,
     onUploadPending: () -> Unit,
     onUploadPendingAlways: () -> Unit,
@@ -263,9 +265,14 @@ fun LibraryScreen(
     val downloadFailed = stringResource(R.string.download_failed_open)
     val serverDeleteFailed = stringResource(R.string.delete_from_server_failed)
     val localDeleteFailed = stringResource(R.string.delete_local_failed)
+    val accountClearBeforeRemovalFailed = stringResource(R.string.account_translation_clear_before_removal_failed)
     LaunchedEffect(deleteFailures) {
         deleteFailures.collect { failure ->
-            val message = if (failure.onServer) serverDeleteFailed else localDeleteFailed
+            val message = when {
+                failure.accountClearFailed -> accountClearBeforeRemovalFailed
+                failure.onServer -> serverDeleteFailed
+                else -> localDeleteFailed
+            }
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
     }
@@ -812,8 +819,9 @@ fun LibraryScreen(
     confirmLocalDelete?.let { book ->
         ConfirmLocalDeleteDialog(
             book = book,
-            onConfirm = {
-                onDeleteLocal(book)
+            canClearAccountTranslations = book.url in accountTranslationBooks,
+            onConfirm = { clearAccount ->
+                onDeleteLocal(book, clearAccount)
                 confirmLocalDelete = null
             },
             onDismiss = { confirmLocalDelete = null },
@@ -823,8 +831,9 @@ fun LibraryScreen(
     confirmRemoveFromLibrary?.let { book ->
         ConfirmRemoveFromLibraryDialog(
             book = book,
-            onConfirm = {
-                onRemoveFromLibrary(book)
+            canClearAccountTranslations = book.url in accountTranslationBooks,
+            onConfirm = { clearAccount ->
+                onRemoveFromLibrary(book, clearAccount)
                 confirmRemoveFromLibrary = null
             },
             onDismiss = { confirmRemoveFromLibrary = null },
@@ -834,8 +843,9 @@ fun LibraryScreen(
     confirmRemoveDownload?.let { book ->
         ConfirmRemoveDownloadDialog(
             book = book,
-            onConfirm = {
-                onRemoveDownload(book)
+            canClearAccountTranslations = book.url in accountTranslationBooks,
+            onConfirm = { clearAccount ->
+                onRemoveDownload(book, clearAccount)
                 confirmRemoveDownload = null
             },
             onDismiss = { confirmRemoveDownload = null },
@@ -1033,17 +1043,56 @@ internal fun ConfirmServerDeleteDialog(
 @Composable
 internal fun ConfirmLocalDeleteDialog(
     book: Book,
-    onConfirm: () -> Unit,
+    onConfirm: (clearAccountTranslations: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    canClearAccountTranslations: Boolean = false,
 ) {
+    var clearAccount by rememberSaveable { mutableStateOf(false) }
     ConfirmBookActionDialog(
         title = stringResource(R.string.delete_file),
         warning = stringResource(R.string.delete_file_warning, book.title),
         confirmLabel = stringResource(R.string.delete),
         destructive = true,
-        onConfirm = onConfirm,
+        onConfirm = { onConfirm(canClearAccountTranslations && clearAccount) },
         onDismiss = onDismiss,
+        extra = clearAccountTranslationsChoice(canClearAccountTranslations, clearAccount) { clearAccount = it },
     )
+}
+
+/**
+ * The offer to clear a book's translations from the liseur-sync account
+ * as it leaves (ADR-0050). Off unless ticked: the account's copy is what
+ * spares every other device the translation service, and taking a book
+ * off one shelf says nothing about the others.
+ */
+private fun clearAccountTranslationsChoice(
+    offered: Boolean,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+): (@Composable () -> Unit)? = if (!offered) {
+    null
+} else {
+    {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onCheckedChange(!checked) },
+        ) {
+            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+            Column(modifier = Modifier.padding(start = 4.dp)) {
+                Text(
+                    text = stringResource(R.string.clear_account_translations_choice),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(R.string.clear_account_translations_choice_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -1056,16 +1105,19 @@ internal fun ConfirmLocalDeleteDialog(
 @Composable
 internal fun ConfirmRemoveFromLibraryDialog(
     book: Book,
-    onConfirm: () -> Unit,
+    onConfirm: (clearAccountTranslations: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    canClearAccountTranslations: Boolean = false,
 ) {
+    var clearAccount by rememberSaveable { mutableStateOf(false) }
     ConfirmBookActionDialog(
         title = stringResource(R.string.remove_from_library),
         warning = stringResource(R.string.remove_from_library_warning, book.title),
         confirmLabel = stringResource(R.string.remove),
         destructive = false,
-        onConfirm = onConfirm,
+        onConfirm = { onConfirm(canClearAccountTranslations && clearAccount) },
         onDismiss = onDismiss,
+        extra = clearAccountTranslationsChoice(canClearAccountTranslations, clearAccount) { clearAccount = it },
     )
 }
 
@@ -1073,16 +1125,19 @@ internal fun ConfirmRemoveFromLibraryDialog(
 @Composable
 internal fun ConfirmRemoveDownloadDialog(
     book: Book,
-    onConfirm: () -> Unit,
+    onConfirm: (clearAccountTranslations: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    canClearAccountTranslations: Boolean = false,
 ) {
+    var clearAccount by rememberSaveable { mutableStateOf(false) }
     ConfirmBookActionDialog(
         title = stringResource(R.string.remove_copy_on_device),
         warning = stringResource(R.string.remove_copy_warning, book.title),
         confirmLabel = stringResource(R.string.remove),
         destructive = false,
-        onConfirm = onConfirm,
+        onConfirm = { onConfirm(canClearAccountTranslations && clearAccount) },
         onDismiss = onDismiss,
+        extra = clearAccountTranslationsChoice(canClearAccountTranslations, clearAccount) { clearAccount = it },
     )
 }
 

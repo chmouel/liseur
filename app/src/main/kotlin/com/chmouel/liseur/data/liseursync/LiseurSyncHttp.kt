@@ -29,6 +29,8 @@ import org.json.JSONObject
 class LiseurSyncRejection(
     val code: Int,
     val body: JSONObject?,
+    /** The exact response body distinguishes an empty 404 from malformed proxy output. */
+    val rawBody: String = "",
 ) : java.io.IOException("liseur-sync refused with $code"), AnsweredFailure {
 
     /** The server's own word for what was wrong, if it gave one. */
@@ -187,7 +189,7 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
         http.client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (response.code in expected) {
-                throw LiseurSyncRejection(response.code, parseOrNull(text))
+                throw LiseurSyncRejection(response.code, parseOrNull(text), text)
             }
             if (!response.isSuccessful) throw failureFor(response, text)
             parseOrNull(text) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
@@ -203,7 +205,7 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
         http.client.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (response.code in expected) {
-                throw LiseurSyncRejection(response.code, parseOrNull(text))
+                throw LiseurSyncRejection(response.code, parseOrNull(text), text)
             }
             if (!response.isSuccessful) throw failureFor(response, text)
         }
@@ -262,5 +264,8 @@ class LiseurSyncHttp(private val http: RemoteHttp = RemoteHttp()) {
 
         /** A cursor that fell behind the server's compaction horizon. */
         const val GONE = 410
+
+        /** A path the server knows, under a method it does not. */
+        const val METHOD_NOT_ALLOWED = 405
     }
 }

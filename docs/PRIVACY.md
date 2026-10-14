@@ -78,8 +78,10 @@ one-way hash — the same key the local cache uses — and its translation,
 under the account you signed in with. The original sentence is not sent,
 but the translation says what it means, and a hash is for matching, not
 for secrecy: an operator who knows the book can test whether a given
-sentence was translated. You operate that server, or someone you trust
-does. This policy does not
+sentence was translated. You can clear them from the account for one
+book, from the reader's menu or when removing or finishing it, or for
+every book from Settings, Translation. You operate that server, or
+someone you trust does. This policy does not
 cover what the server does with the data it receives.
 
 ### A dictionary site, if you enable it

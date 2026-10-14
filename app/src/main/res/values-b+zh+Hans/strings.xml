@@ -399,6 +399,8 @@
     <string name="reader_no_contents">这本书没有目录。</string>
     <string name="reader_untitled_section">无标题章节</string>
     <string name="server_sync_now">立即同步阅读进度</string>
+    <string name="server_sync_clear_translations_on_finish">读完一本书时清除其翻译</string>
+    <string name="server_sync_clear_translations_on_finish_hint">从此设备和你的账户中删除这本书已保存的句子翻译。</string>
     <string name="server_sync_running">正在同步阅读进度…</string>
     <string name="server_sync_offline">无法连接服务器，阅读进度将在稍后同步。</string>
     <string name="reader_sync_book">同步这本书</string>
@@ -567,6 +569,7 @@
     <string name="remove">移除</string>
     <string name="delete_from_server_failed">无法从服务器删除“%1$s”。</string>
     <string name="delete_local_failed">无法删除“%1$s”的文件。Liseur 可能仅有该文件夹的读取权限——请重新添加该文件夹以授予删除权限。</string>
+    <string name="account_translation_clear_before_removal_failed">无法保存从账号中清除翻译的请求。“%1$s”未被移除；请重试。</string>
     <string name="delete">删除</string>
     <string name="remove_from_library">从书库移除</string>
     <string name="remove_from_library_warning">“%1$s”将从书架移除。文件仍保留在本设备上，您可以从“设置 → 隐藏的图书”中把书放回。</string>
@@ -1205,6 +1208,14 @@
     <string name="translation_settings_saved_clear_confirm">清除</string>
     <string name="translation_settings_saved_clear_failed">无法清除已保存的翻译，请重试。</string>
     <string name="translation_settings_saved_note">翻译过的页面会保存在这部手机上，回看时无需等待。它们不会被备份。</string>
+    <string name="translation_settings_saved_clear_account">同时从我的账户中清除</string>
+    <string name="translation_settings_saved_clear_account_hint">从你的 liseur-sync 账户中删除所有书籍已保存的翻译。其他设备会保留它们已有的翻译。</string>
+    <string name="clear_account_translations_choice">同时从我的账户中清除其翻译</string>
+    <string name="clear_account_translations_choice_hint">其他设备会保留它们已有的翻译。</string>
+    <string name="reader_clear_translations">清除翻译</string>
+    <string name="reader_clear_translations_title">清除这本书的翻译？</string>
+    <string name="reader_clear_translations_body">这本书已保存的句子翻译会从此设备中删除；如果你使用 liseur-sync，也会从你的账户中删除。下次阅读时会重新翻译这些页面。</string>
+    <string name="reader_clear_translations_confirm">清除</string>
     <string name="translation_settings_test_passed">可以使用：%1$s</string>
     <string name="translation_settings_device_unavailable">本机没有可供应用使用的翻译功能。请选择其他服务。</string>
     <string name="translation_settings_device_downloads_detail">在系统设置中下载语言后即可翻译。</string>

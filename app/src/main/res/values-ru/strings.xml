@@ -368,6 +368,8 @@
     <string name="reader_no_contents">У этой книги нет оглавления.</string>
     <string name="reader_untitled_section">Раздел без названия</string>
     <string name="server_sync_now">Синхронизировать позиции чтения сейчас</string>
+    <string name="server_sync_clear_translations_on_finish">Удалять переводы книги, когда я её дочитываю</string>
+    <string name="server_sync_clear_translations_on_finish_hint">Удаляет сохранённые переводы предложений с этого устройства и из вашей учётной записи.</string>
     <string name="server_sync_running">Синхронизация позиций чтения…</string>
     <string name="server_sync_offline">Не удалось связаться с сервером; позиции синхронизируются позже.</string>
     <string name="reader_sync_book">Синхронизировать эту книгу</string>
@@ -584,6 +586,7 @@
     <string name="remove">Убрать</string>
     <string name="delete_from_server_failed">Не удалось удалить «%1$s» с сервера.</string>
     <string name="delete_local_failed">Не удалось удалить файл «%1$s». Возможно, Liseur разрешено только читать эту папку — добавьте её снова, чтобы разрешить удаление.</string>
+    <string name="account_translation_clear_before_removal_failed">Не удалось сохранить запрос на удаление переводов из аккаунта. «%1$s» не удалена; попробуйте ещё раз.</string>
     <string name="delete">Удалить</string>
     <string name="remove_from_library">Убрать из библиотеки</string>
     <string name="remove_from_library_warning">«%1$s» будет снята с полки. Файл останется на устройстве; книгу можно вернуть в Настройки → Скрытые книги.</string>
@@ -1347,6 +1350,14 @@
     <string name="translation_settings_saved_clear_confirm">Очистить</string>
     <string name="translation_settings_saved_clear_failed">Не удалось очистить сохранённые переводы. Попробуйте ещё раз.</string>
     <string name="translation_settings_saved_note">Переведённые страницы хранятся на этом телефоне, чтобы к ним можно было сразу вернуться. В резервную копию они не попадают.</string>
+    <string name="translation_settings_saved_clear_account">Также удалить из моей учётной записи</string>
+    <string name="translation_settings_saved_clear_account_hint">Удаляет сохранённые переводы всех книг из вашей учётной записи liseur-sync. На других устройствах останутся уже полученные переводы.</string>
+    <string name="clear_account_translations_choice">Также удалить её переводы из моей учётной записи</string>
+    <string name="clear_account_translations_choice_hint">На других устройствах останутся уже полученные переводы.</string>
+    <string name="reader_clear_translations">Удалить переводы</string>
+    <string name="reader_clear_translations_title">Удалить переводы этой книги?</string>
+    <string name="reader_clear_translations_body">Сохранённые переводы предложений будут удалены с этого устройства и, если вы используете liseur-sync, из вашей учётной записи. Страницы будут переведены заново, когда вы снова их откроете.</string>
+    <string name="reader_clear_translations_confirm">Удалить</string>
     <string name="translation_settings_test_passed">Работает: %1$s</string>
     <string name="translation_settings_device_unavailable">На этом телефоне нет переводчика, доступного приложениям. Выберите другую службу.</string>
     <string name="translation_settings_device_downloads_detail">Язык переводится после загрузки в системных настройках.</string>

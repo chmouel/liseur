@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.translate.PulledTranslation
 import com.chmouel.liseur.translate.SavedTranslations
+import com.chmouel.liseur.translate.TranslationAccountClear
 import com.chmouel.liseur.translate.TranslationCacheDatabase
 import java.net.InetAddress
 import java.security.MessageDigest
@@ -415,12 +416,12 @@ class LiseurSyncTranslationsTest {
     // -- Older servers -----------------------------------------------------
 
     @Test
-    fun `a 404 with no body leaves the server alone for the session`() = runTest {
+    fun `a plain-text 404 leaves the server alone for the session`() = runTest {
         connect()
         alias()
         val store = saved()
         store.forBook(BOOK).keep("one", "un")
-        server.enqueue(MockResponse(code = 404, body = ""))
+        server.enqueue(MockResponse(code = 404, body = "404 page not found\n"))
 
         val outcome = sync(store)
 
@@ -432,6 +433,154 @@ class LiseurSyncTranslationsTest {
         sync(store)
         // One ask, once: the second run never reached the network.
         assertEquals(1, server.requestCount)
+    }
+
+    // -- Clears (ADR-0050) -------------------------------------------------
+
+    @Test
+    fun `an owed clear is sent before the pull and settled`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.clearBook(BOOK, listOf(TranslationAccountClear(peer(), WORK)))
+        server.enqueue(json("""{"deleted":3}"""))
+        server.enqueue(page())
+
+        val outcome = sync(store)
+
+        assertEquals(null, outcome.failure)
+        val cleared = server.takeRequest()
+        assertEquals("DELETE", cleared.method)
+        assertEquals("/v1/works/$WORK/translations", cleared.url.encodedPath)
+        assertEquals("GET", server.takeRequest().method)
+        assertTrue(store.owedClears(peer()).isEmpty())
+    }
+
+    @Test
+    fun `the account-wide clear goes before a work's`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.requestAccountClears(
+            listOf(TranslationAccountClear(peer(), WORK), TranslationAccountClear.everyWork(peer())),
+        )
+        server.enqueue(json("""{"deleted":5}"""))
+        server.enqueue(json("""{"deleted":0}"""))
+        server.enqueue(page())
+
+        sync(store)
+
+        assertEquals("/v1/translations", server.takeRequest().url.encodedPath)
+        assertEquals("/v1/works/$WORK/translations", server.takeRequest().url.encodedPath)
+        assertTrue(store.owedClears(peer()).isEmpty())
+    }
+
+    @Test
+    fun `a clear the server cannot answer is dropped and the feed still syncs`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.requestAccountClears(
+            listOf(
+                TranslationAccountClear.everyWork(peer()),
+                TranslationAccountClear(peer(), WORK),
+                TranslationAccountClear(peer(), "w-gone"),
+            ),
+        )
+        // A server from before clears, as Go's mux answers it: no route
+        // at all for the account's clear (a plain-text 404), no DELETE on
+        // a path it serves (405); and a work it dropped.
+        server.enqueue(MockResponse(code = 404, body = "404 page not found\n"))
+        server.enqueue(MockResponse(code = 405, body = "Method Not Allowed\n"))
+        server.enqueue(MockResponse(code = 404, body = """{"error":"work not found"}"""))
+        server.enqueue(page(row(hashed("one"), "un")))
+
+        val outcome = sync(store)
+
+        assertEquals(null, outcome.failure)
+        assertTrue(store.owedClears(peer()).isEmpty())
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+    }
+
+    @Test
+    fun `a plain-text 404 on a clear does not stop the feed for the session`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.requestAccountClears(listOf(TranslationAccountClear(peer(), WORK)))
+        server.enqueue(MockResponse(code = 404, body = "404 page not found\n"))
+        server.enqueue(page(row(hashed("one"), "un")))
+
+        sync(store)
+
+        assertTrue(store.owedClears(peer()).isEmpty())
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
+    }
+
+    @Test
+    fun `a clear that could not be sent stays owed and its work is left alone`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.requestAccountClears(listOf(TranslationAccountClear(peer(), WORK)))
+        server.enqueue(MockResponse(code = 500, body = ""))
+
+        val outcome = sync(store)
+
+        assertTrue(outcome.failure != null)
+        assertEquals(listOf(peer() to WORK), store.owedClears(peer()).map { it.peerId to it.workId })
+        // No pull to bring the old rows back, no push for them to clear.
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a 404 that does not say the work is gone leaves the clear owed`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.requestAccountClears(listOf(TranslationAccountClear(peer(), WORK)))
+        server.enqueue(MockResponse(code = 404, body = """{"error":"user not found"}"""))
+
+        val outcome = sync(store)
+
+        assertTrue(outcome.failure != null)
+        assertTrue(store.clearOwed(peer(), WORK))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a non-json 404 keeps the account clear owed`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.requestAccountClears(listOf(TranslationAccountClear(peer(), WORK)))
+        server.enqueue(MockResponse(code = 404, body = "<html>not found</html>"))
+
+        val outcome = sync(store)
+
+        assertTrue(outcome.failure != null)
+        assertTrue(store.clearOwed(peer(), WORK))
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a book's account clear does not push its old sentences back`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.requestAccountClears(listOf(TranslationAccountClear(peer(), WORK)), BOOK)
+        server.enqueue(json("""{"deleted":1}"""))
+        server.enqueue(page())
+
+        val outcome = sync(store)
+
+        assertEquals(null, outcome.failure)
+        assertEquals("DELETE", server.takeRequest().method)
+        assertEquals("GET", server.takeRequest().method)
+        assertEquals(2, server.requestCount)
+        assertEquals("un", store.forBook(BOOK).get("one").translation)
     }
 
     // -- Helpers -----------------------------------------------------------

@@ -242,6 +242,8 @@ data class AppSettings(
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val dictionaryAltLanguage: String? = null,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
+    /** Whether finishing a book clears its saved translations, here and on the liseur-sync account (ADR-0050). */
+    val clearTranslationsOnFinish: Boolean = true,
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
     val readAloudVoice: String? = null,
@@ -369,6 +371,7 @@ class AppSettingsRepository(
         val DICTIONARY_ALT_LANGUAGE = stringPreferencesKey(DICTIONARY_ALT_LANGUAGE_NAME)
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
+        val CLEAR_TRANSLATIONS_ON_FINISH = booleanPreferencesKey("clear_translations_on_finish")
         val STATS_RANGE = stringPreferencesKey("stats_range")
         val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
@@ -447,6 +450,7 @@ class AppSettingsRepository(
             dictionaryAltLanguage = p[Keys.DICTIONARY_ALT_LANGUAGE]
                 ?.takeIf { it == ALT_LANGUAGE_OFF || TranslationLanguages.of(it) == it },
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
+            clearTranslationsOnFinish = p[Keys.CLEAR_TRANSLATIONS_ON_FINISH] ?: true,
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
             highlightPalette = HighlightPalette.of(
                 offeredNames = p[Keys.HIGHLIGHT_TINTS],
@@ -502,6 +506,10 @@ class AppSettingsRepository(
 
     suspend fun setUploadPolicy(policy: UploadPolicy) {
         store.edit { it[Keys.UPLOAD_POLICY] = policy.id }
+    }
+
+    suspend fun setClearTranslationsOnFinish(enabled: Boolean) {
+        store.edit { it[Keys.CLEAR_TRANSLATIONS_ON_FINISH] = enabled }
     }
 
     suspend fun setDynamicColor(enabled: Boolean) {
@@ -956,6 +964,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
     DICTIONARY_ALT_LANGUAGE_NAME to BackupValueType.STRING,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
+    "clear_translations_on_finish" to BackupValueType.BOOLEAN,
     "highlight_tints_offered" to BackupValueType.STRING_SET,"lock_footer_on" to BackupValueType.BOOLEAN,
     "highlight_tint_default" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING, "read_aloud_model" to BackupValueType.STRING,

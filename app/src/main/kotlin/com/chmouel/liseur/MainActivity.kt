@@ -691,6 +691,7 @@ private fun ServerAccountRoute(
         onRetryCapabilities = viewModel::retryCapabilities,
         onKoboToken = viewModel::setKoboToken,
         onSetUploadPolicy = viewModel::setUploadPolicy,
+        onSetClearTranslationsOnFinish = viewModel::setClearTranslationsOnFinish,
         onDisconnect = viewModel::disconnect,
         onSyncNow = viewModel::syncPositions,
         onAnswerConfirmation = viewModel::answerConfirmation,
@@ -851,6 +852,7 @@ private fun LibraryRoute(
     val reorder by viewModel.reorder.collectAsStateWithLifecycle()
     val notice by viewModel.notice.collectAsStateWithLifecycle()
     val renamingSeries by viewModel.renamingSeries.collectAsStateWithLifecycle()
+    val accountTranslationBooks by viewModel.accountTranslationBooks.collectAsStateWithLifecycle()
 
     // A rename moves the shelf: it is keyed by name, so the old key
     // stops matching the moment the catalog refresh lands. Following it
@@ -1007,8 +1009,9 @@ private fun LibraryRoute(
         seriesLocalDelete?.let { book ->
             ConfirmLocalDeleteDialog(
                 book = book,
-                onConfirm = {
-                    viewModel.deleteLocalBook(book)
+                canClearAccountTranslations = book.url in accountTranslationBooks,
+                onConfirm = { clearAccount ->
+                    viewModel.deleteLocalBook(book, clearAccount)
                     seriesLocalDelete = null
                 },
                 onDismiss = { seriesLocalDelete = null },
@@ -1017,8 +1020,9 @@ private fun LibraryRoute(
         seriesRemoveFromLibrary?.let { book ->
             ConfirmRemoveFromLibraryDialog(
                 book = book,
-                onConfirm = {
-                    viewModel.removeFromLibrary(book)
+                canClearAccountTranslations = book.url in accountTranslationBooks,
+                onConfirm = { clearAccount ->
+                    viewModel.removeFromLibrary(book, clearAccount)
                     seriesRemoveFromLibrary = null
                 },
                 onDismiss = { seriesRemoveFromLibrary = null },
@@ -1027,8 +1031,9 @@ private fun LibraryRoute(
         seriesRemoveDownload?.let { book ->
             ConfirmRemoveDownloadDialog(
                 book = book,
-                onConfirm = {
-                    viewModel.removeDownload(book)
+                canClearAccountTranslations = book.url in accountTranslationBooks,
+                onConfirm = { clearAccount ->
+                    viewModel.removeDownload(book, clearAccount)
                     seriesRemoveDownload = null
                 },
                 onDismiss = { seriesRemoveDownload = null },
@@ -1062,6 +1067,7 @@ private fun LibraryRoute(
         onUnhide = viewModel::unhide,
         hiddenBooks = viewModel.hiddenBooks,
         onDeleteFromServer = viewModel::deleteFromServer,
+        accountTranslationBooks = accountTranslationBooks,
         onUploadToServer = viewModel::uploadToServer,
         onUploadPending = viewModel::uploadPending,
         onUploadPendingAlways = viewModel::uploadPendingAlways,

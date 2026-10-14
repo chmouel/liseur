@@ -104,8 +104,8 @@ class LiseurSyncTranslations(
 
     /**
      * Servers found not to serve the translation routes, so they are
-     * asked once per session. The guard is a 404 with no body — the
-     * mux's own answer for a path no route names — which is how
+     * asked once per session. The guard is a plain-text
+     * `404 page not found`, the mux's own answer for a path no route names, which is how
      * [LiseurSyncSettings] tells an older server too; a 404 that says
      * `work not found` has a body, and is the server knowing the routes
      * but not the book.
@@ -133,11 +133,18 @@ class LiseurSyncTranslations(
         saved().forgetPeersBeyond { setOfNotNull(serverDao.get()?.accountKey) }
         if (peer.baseUrl in unsupported) return Outcome()
         val progress = Progress()
+        // What the reader asked the account to forget goes before
+        // anything is read from it, or the pull would bring it back.
+        drainClears(peer, progress)
         val aliases = identityDao.aliasesFor(peer.peerId).filter { it.usable }
         val scope = if (book == null) aliases else aliases.filter { it.bookUrl == book }
         for (alias in scope) {
             if (progress.stopped) break
             if (!stillOurs(peer)) break
+            // A work whose clear could not be sent is left alone until it
+            // is: its old rows must not land here again, and what is
+            // pushed now would only be cleared with them.
+            if (saved().clearOwed(peer.peerId, alias.workId)) continue
             // Where this peer stands under this work name: a book whose
             // work was re-resolved starts over from nothing (see
             // [SavedTranslations.ensureWork]).
@@ -178,6 +185,9 @@ class LiseurSyncTranslations(
         val store = saved()
         var cursor = from
         val ticket = store.pullTicket(bookUrl)
+        // After the ticket, so a clear asked for from here on either
+        // shows here or moves the fence the page answers to.
+        if (store.clearOwed(peer.peerId, workId)) return
         var restarted = false
         var guard = MAX_PAGES
         while (guard-- > 0) {
@@ -274,6 +284,9 @@ class LiseurSyncTranslations(
         var watermark = state
         while (true) {
             if (progress.stopped || !stillOurs(peer)) return
+            // A clear asked for meanwhile moved the watermark past what
+            // this loop still holds; the next pass starts from there.
+            if (store.clearOwed(peer.peerId, workId)) return
             val batch = store.unsynced(bookUrl, watermark, BATCH)
             if (batch.isEmpty()) return
             val taken = post(peer, bookUrl, workId, batch, progress)
@@ -371,11 +384,67 @@ class LiseurSyncTranslations(
         }
     }
 
+    // -- Clears ------------------------------------------------------------
+
+    /**
+     * Sends the clears owed to the account (ADR-0050), every work's
+     * first. A clear the server answered is settled, and so is one it
+     * cannot answer: a work it no longer holds has nothing left to
+     * clear, and a server without the route never will — it is told
+     * nothing, and the log says so. Anything else, a 404 that names
+     * something other than the work included, leaves the clear owed,
+     * and the sync loop keeps away from the works it covers.
+     */
+    private suspend fun drainClears(peer: Peer, progress: Progress) {
+        val store = saved()
+        for (clear in store.owedClears(peer.peerId)) {
+            if (progress.stopped || !stillOurs(peer)) return
+            val url = if (clear.everyWork) {
+                LiseurSyncApi.allTranslations(peer.baseUrl)
+            } else {
+                LiseurSyncApi.pushWorkTranslations(peer.baseUrl, clear.workId)
+            }
+            try {
+                http.delete(
+                    url,
+                    peer.credentials,
+                    expected = setOf(LiseurSyncHttp.NOT_FOUND, LiseurSyncHttp.METHOD_NOT_ALLOWED),
+                )
+                store.settleClear(clear)
+            } catch (e: LiseurSyncRejection) {
+                // A server that predates clears answers for the path
+                // with no route (a bare 404) or with no such method on
+                // it (405); it may still serve the feed, so it is not
+                // marked [unsupported].
+                when {
+                    isMissingRoute(e) || e.code == LiseurSyncHttp.METHOD_NOT_ALLOWED ->
+                        Log.i(TAG, "The server cannot clear translations; dropping the clear")
+                    e.body?.optString("error") == WORK_NOT_FOUND ->
+                        Log.i(TAG, "The server no longer holds ${clear.workId}; nothing to clear")
+                    else -> {
+                        Log.i(TAG, "The server refused a translation clear: ${e.body?.optString("error")}")
+                        progress.failed(e, reasonFor(e))
+                        continue
+                    }
+                }
+                store.settleClear(clear)
+            } catch (e: IOException) {
+                Log.i(TAG, "Could not clear the account's translations", e)
+                progress.failed(e, reasonFor(e))
+            }
+        }
+    }
+
     // -- Odds and ends -----------------------------------------------------
 
-    /** A 404 with no body is the mux's own answer for a route that is not there. */
+    /**
+     * A route that is not there is answered by Go's mux itself, with
+     * `404 page not found` (or nothing, through some proxies). Any other
+     * 404 body, a proxy's HTML page included, is not taken as an older
+     * server.
+     */
     private fun isMissingRoute(e: LiseurSyncRejection): Boolean =
-        e.code == LiseurSyncHttp.NOT_FOUND && e.body == null
+        e.code == LiseurSyncHttp.NOT_FOUND && e.rawBody.trim().let { it.isEmpty() || it == MUX_NOT_FOUND }
 
     /**
      * Whether the account this pass began for is still the connected
@@ -397,6 +466,12 @@ class LiseurSyncTranslations(
 
     private companion object {
         private const val TAG = "LiseurSyncTranslations"
+
+        /** The error a translation clear of a work the server does not hold answers with. */
+        const val WORK_NOT_FOUND = "work not found"
+
+        /** What Go's `http.ServeMux` answers for a path it has no route for. */
+        const val MUX_NOT_FOUND = "404 page not found"
 
         /** The feed's own page cap, from `docs/openapi.yaml`. */
         const val PAGE = 500

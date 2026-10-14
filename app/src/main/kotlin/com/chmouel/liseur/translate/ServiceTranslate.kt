@@ -41,6 +41,10 @@ internal class ServiceTranslate(
     val services: List<TranslationService>,
     /** Page translations kept on this phone, shown and cleared in the settings; opened when shown. */
     val saved: Lazy<SavedTranslations>? = null,
+    /** The account's copy of them, which the settings' Clear can take too (ADR-0050). */
+    val accountClears: AccountTranslationClears? = null,
+    /** Has a full sync send a clear just recorded. */
+    val requestFullSync: suspend () -> Unit = {},
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : TranslateFeature {
     override val isAvailable = true

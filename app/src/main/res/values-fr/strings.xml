@@ -336,6 +336,8 @@
     <string name="reader_no_contents">Ce livre n\'a pas de table des matières.</string>
     <string name="reader_untitled_section">Section sans titre</string>
     <string name="server_sync_now">Synchroniser les positions de lecture maintenant</string>
+    <string name="server_sync_clear_translations_on_finish">Effacer les traductions d\'un livre quand je le termine</string>
+    <string name="server_sync_clear_translations_on_finish_hint">Supprime ses traductions de phrases enregistrées de cet appareil et de votre compte.</string>
     <string name="server_sync_running">Synchronisation des positions de lecture…</string>
     <string name="server_sync_offline">Impossible d\'atteindre le serveur ; les positions se synchroniseront plus tard.</string>
     <string name="reader_sync_book">Synchroniser ce livre</string>
@@ -536,6 +538,7 @@
     <string name="remove">Retirer</string>
     <string name="delete_from_server_failed">Impossible de supprimer « %1$s » du serveur.</string>
     <string name="delete_local_failed">Impossible de supprimer le fichier de « %1$s ». Liseur n\'a peut-être le droit que de lire ce dossier — ajoutez-le à nouveau pour autoriser la suppression.</string>
+    <string name="account_translation_clear_before_removal_failed">Impossible d’enregistrer la demande d’effacement des traductions du compte. « %1$s » n’a pas été retiré ; réessayez.</string>
     <string name="delete">Supprimer</string>
     <string name="remove_from_library">Retirer de la bibliothèque</string>
     <string name="remove_from_library_warning">« %1$s » sera retiré de l\'étagère. Le fichier reste sur cet appareil, et vous pouvez remettre le livre depuis Paramètres → Livres masqués.</string>
@@ -1253,6 +1256,14 @@
     <string name="translation_settings_saved_clear_confirm">Effacer</string>
     <string name="translation_settings_saved_clear_failed">Impossible d\'effacer les traductions enregistrées. Réessayez.</string>
     <string name="translation_settings_saved_note">Les pages traduites sont gardées sur ce téléphone pour y revenir sans attendre. Elles ne sont pas sauvegardées.</string>
+    <string name="translation_settings_saved_clear_account">Effacer aussi de mon compte</string>
+    <string name="translation_settings_saved_clear_account_hint">Supprime les traductions enregistrées de tous les livres de votre compte liseur-sync. Les autres appareils gardent celles qu\'ils ont déjà.</string>
+    <string name="clear_account_translations_choice">Effacer aussi ses traductions de mon compte</string>
+    <string name="clear_account_translations_choice_hint">Les autres appareils gardent celles qu\'ils ont déjà.</string>
+    <string name="reader_clear_translations">Effacer les traductions</string>
+    <string name="reader_clear_translations_title">Effacer les traductions de ce livre ?</string>
+    <string name="reader_clear_translations_body">Ses traductions de phrases enregistrées sont supprimées de cet appareil et, si vous utilisez liseur-sync, de votre compte. Les pages seront traduites à nouveau la prochaine fois que vous les lirez.</string>
+    <string name="reader_clear_translations_confirm">Effacer</string>
     <string name="translation_settings_test_passed">Ça marche : %1$s</string>
     <string name="translation_settings_device_unavailable">Ce téléphone n\'a pas de traducteur utilisable par les applications. Choisissez un autre service.</string>
     <string name="translation_settings_device_downloads_detail">Une langue est traduite une fois téléchargée dans les paramètres du système.</string>

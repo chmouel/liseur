@@ -45,3 +45,5 @@ a Room database separate from `liseur.db`.
   answers to the old prompt would keep being served.
 - Since ADR-0048 the same database also records which books are left
   translated. Clear leaves those.
+- Since ADR-0050 the same database records the clears owed to a
+  liseur-sync account, and finishing a book can clear its sentences.

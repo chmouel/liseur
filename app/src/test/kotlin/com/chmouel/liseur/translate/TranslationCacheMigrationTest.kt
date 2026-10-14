@@ -71,6 +71,27 @@ class TranslationCacheMigrationTest {
         }
     }
 
+    @Test
+    fun `saved sentences survive the upgrade that adds owed account clears`() {
+        helper.createDatabase(TEST_DB, 3).use { old ->
+            old.execSQL(
+                "INSERT INTO translated_sentences (book_url, `key`, translation, used_at, saved_at) " +
+                    "VALUES ('file:///one.epub', 'k', 'un', 1000, 1000)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, *TranslationCacheDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT translation FROM translated_sentences").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("un", it.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM translation_account_clears").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "translations-migration-test"
     }

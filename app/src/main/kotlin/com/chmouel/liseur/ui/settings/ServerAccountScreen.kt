@@ -134,6 +134,7 @@ fun ServerAccountScreen(
     onRetryCapabilities: () -> Unit,
     onKoboToken: (String) -> Unit,
     onSetUploadPolicy: (UploadPolicy) -> Unit,
+    onSetClearTranslationsOnFinish: (Boolean) -> Unit,
     onDisconnect: () -> Unit,
     onSyncNow: () -> Unit,
     onAnswerConfirmation: (String, Boolean) -> Unit,
@@ -256,6 +257,8 @@ fun ServerAccountScreen(
                         onEditAddress = onEditAddress,
                         uploadPolicy = state.uploadPolicy,
                         onSetUploadPolicy = onSetUploadPolicy,
+                        clearTranslationsOnFinish = state.clearTranslationsOnFinish,
+                        onSetClearTranslationsOnFinish = onSetClearTranslationsOnFinish,
                         batch = state.bulkBatch,
                         estimating = state.estimating,
                         onAskDownloadAll = onAskDownloadAll,
@@ -967,6 +970,8 @@ private fun ConnectedCard(
     onSyncNow: () -> Unit,
     uploadPolicy: UploadPolicy,
     onSetUploadPolicy: (UploadPolicy) -> Unit,
+    clearTranslationsOnFinish: Boolean,
+    onSetClearTranslationsOnFinish: (Boolean) -> Unit,
     batch: BulkBatch?,
     estimating: Boolean,
     onAskDownloadAll: () -> Unit,
@@ -1186,6 +1191,14 @@ private fun ConnectedCard(
                         identity.strandedBooks,
                     ),
                     tone = NoticeTone.PROBLEM,
+                )
+            }
+            if (server.kind == ServerKind.LISEUR_SYNC) {
+                SwitchRow(
+                    title = stringResource(R.string.server_sync_clear_translations_on_finish),
+                    subtitle = stringResource(R.string.server_sync_clear_translations_on_finish_hint),
+                    checked = clearTranslationsOnFinish,
+                    onCheckedChange = onSetClearTranslationsOnFinish,
                 )
             }
             TextButton(

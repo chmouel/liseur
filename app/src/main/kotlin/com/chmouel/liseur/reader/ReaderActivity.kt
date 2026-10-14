@@ -621,6 +621,9 @@ class ReaderActivity : FragmentActivity() {
                                     pageTranslationModes = remember(target?.id) {
                                         container.pageTranslationMode(checkNotNull(target).id)
                                     },
+                                    onClearTranslations = {
+                                        container.clearBookTranslationsLater(checkNotNull(target).id)
+                                    },
                                 )
                             }
                         }

@@ -14,6 +14,8 @@ object TranslateFeatureFactory {
         connections = container.serverConnections,
         accounts = container.serviceAccounts,
         saved = lazy { container.savedTranslations },
+        accountClears = container.accountTranslationClears,
+        requestFullSync = container::requestFullSync,
         services = listOf(
             DeviceTranslationService(context.applicationContext),
             MlKitTranslationService(context.applicationContext),

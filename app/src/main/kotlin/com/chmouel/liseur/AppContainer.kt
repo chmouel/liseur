@@ -68,6 +68,7 @@ import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.translate.AccountTranslationClears
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.SavedTranslations
 import com.chmouel.liseur.translate.PageTranslationModes
@@ -99,6 +100,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.asStateFlow
@@ -179,6 +181,64 @@ class AppContainer(context: Context) {
     /** Sentences page translation translated, kept apart from the library and its backups. */
     val savedTranslations: SavedTranslations by savedTranslationsOpening
 
+    /** Which clears of the account's translations a reader's request comes to (ADR-0050). */
+    val accountTranslationClears = AccountTranslationClears(
+        serverDao = database.remoteServerDao(),
+        identityDao = database.workIdentityDao(),
+    )
+
+    /**
+     * Clears [bookUrl]'s saved translations here and, under the work
+     * name the account knows it by, on the account (ADR-0050); the
+     * book's next sync sends the clear. A phone that never translated
+     * anything and has no account clear to record opens no store.
+     */
+    suspend fun clearBookTranslations(bookUrl: String) {
+        val clears = accountTranslationClears.forBook(bookUrl)
+        if (clears.isEmpty() && !savedTranslationsOpening.isInitialized() && !savedTranslationsFile.exists()) return
+        savedTranslations.clearBook(bookUrl, clears)
+        if (clears.isNotEmpty()) requestBookSync(bookUrl)
+    }
+
+    /** [clearBookTranslations] for the reader's menu, carried on past the screen that asked. */
+    fun clearBookTranslationsLater(bookUrl: String) {
+        applicationScope.launch {
+            try {
+                clearBookTranslations(bookUrl)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("translations", "Could not clear a book's translations: ${e.javaClass.simpleName}")
+            }
+        }
+    }
+
+    /**
+     * Records the account's clear of [bookUrl]'s translations, leaving
+     * this device's where they are but never to be pushed again, for a
+     * book about to leave the shelf. Taken before it goes: the work
+     * name goes with it.
+     */
+    suspend fun requestAccountTranslationClear(bookUrl: String): Boolean {
+        val clears = accountTranslationClears.forBook(bookUrl)
+        if (clears.isEmpty()) return false
+        savedTranslations.requestAccountClears(clears, bookUrl)
+        return true
+    }
+
+    /** Finishing a book clears its translations, when the reader left that on. */
+    private suspend fun clearTranslationsOnFinish(bookUrl: String) {
+        try {
+            if (!appSettings.current().clearTranslationsOnFinish) return
+            if (accountTranslationClears.peer() == null) return
+            clearBookTranslations(bookUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w("translations", "Could not clear a finished book's translations: ${e.javaClass.simpleName}")
+        }
+    }
+
     init {
         // Once at start, then after each change to the library once it has
         // committed: a removal inside a caller's transaction only shows then.
@@ -258,6 +318,9 @@ class AppContainer(context: Context) {
         bookDao = database.bookDao(),
         progressDao = database.readingProgressDao(),
         inTransaction = { work -> database.withTransaction { work() } },
+        // Awaited, so the clear is recorded before finishing returns; the
+        // sync that sends it is only signalled.
+        onFinished = { clearTranslationsOnFinish(it) },
     )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
@@ -684,6 +747,11 @@ class AppContainer(context: Context) {
     )
 
     fun requestBookSync(bookId: String) = latestPositionSync.signal(bookId)
+
+    /** A full sync, for work that is not one book's: an account-wide clear, a book that has left the shelf. */
+    suspend fun requestFullSync() {
+        positionSync.request(SyncScope.Full)
+    }
 
     /** Books open in the reader or being read aloud, shared between them. */
     val openBookHandles = OpenBookHandles()

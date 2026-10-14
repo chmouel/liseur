@@ -339,6 +339,8 @@
     <string name="reader_no_contents">Dieses Buch hat kein Inhaltsverzeichnis.</string>
     <string name="reader_untitled_section">Unbenannter Abschnitt</string>
     <string name="server_sync_now">Lesepositionen jetzt synchronisieren</string>
+    <string name="server_sync_clear_translations_on_finish">Übersetzungen eines Buchs löschen, wenn ich es beende</string>
+    <string name="server_sync_clear_translations_on_finish_hint">Entfernt die gespeicherten Satzübersetzungen von diesem Gerät und aus deinem Konto.</string>
     <string name="server_sync_running">Lesepositionen werden synchronisiert…</string>
     <string name="server_sync_offline">Server nicht erreichbar; Positionen synchronisieren später.</string>
     <string name="reader_sync_book">Dieses Buch synchronisieren</string>
@@ -540,6 +542,7 @@
     <string name="remove">Entfernen</string>
     <string name="delete_from_server_failed">„%1$s“ konnte nicht vom Server gelöscht werden.</string>
     <string name="delete_local_failed">Die Datei für „%1$s“ konnte nicht gelöscht werden. Liseur darf diesen Ordner vielleicht nur lesen — füge ihn erneut hinzu, um das Löschen zu erlauben.</string>
+    <string name="account_translation_clear_before_removal_failed">Die Anfrage zum Löschen der Übersetzungen aus deinem Konto konnte nicht gespeichert werden. „%1$s“ wurde nicht entfernt; versuche es erneut.</string>
     <string name="delete">Löschen</string>
 
     <string name="remove_from_library">Aus der Bibliothek entfernen</string>
@@ -1265,6 +1268,14 @@
     <string name="translation_settings_saved_clear_confirm">Löschen</string>
     <string name="translation_settings_saved_clear_failed">Die gespeicherten Übersetzungen konnten nicht gelöscht werden. Versuche es erneut.</string>
     <string name="translation_settings_saved_note">Übersetzte Seiten bleiben auf diesem Telefon, damit du sofort zu ihnen zurückkehren kannst. Sie werden nicht gesichert.</string>
+    <string name="translation_settings_saved_clear_account">Auch aus meinem Konto löschen</string>
+    <string name="translation_settings_saved_clear_account_hint">Entfernt die gespeicherten Übersetzungen aller Bücher aus deinem liseur-sync-Konto. Andere Geräte behalten die, die sie bereits haben.</string>
+    <string name="clear_account_translations_choice">Auch seine Übersetzungen aus meinem Konto löschen</string>
+    <string name="clear_account_translations_choice_hint">Andere Geräte behalten die, die sie bereits haben.</string>
+    <string name="reader_clear_translations">Übersetzungen löschen</string>
+    <string name="reader_clear_translations_title">Übersetzungen dieses Buchs löschen?</string>
+    <string name="reader_clear_translations_body">Die gespeicherten Satzübersetzungen werden von diesem Gerät und, wenn du liseur-sync nutzt, aus deinem Konto entfernt. Seiten werden beim nächsten Lesen erneut übersetzt.</string>
+    <string name="reader_clear_translations_confirm">Löschen</string>
     <string name="translation_settings_test_passed">Es funktioniert: %1$s</string>
     <string name="translation_settings_device_unavailable">Dieses Telefon hat keinen Übersetzer, den Apps nutzen können. Wähle einen anderen Dienst.</string>
     <string name="translation_settings_device_downloads_detail">Eine Sprache wird übersetzt, sobald sie in den Systemeinstellungen heruntergeladen ist.</string>

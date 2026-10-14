@@ -14,11 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
@@ -73,6 +75,7 @@ import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import java.text.NumberFormat
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /** Translation's row on the main settings screen: which service, and into what. */
@@ -228,7 +231,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, configured)
                 }
-                feature.saved?.let { SavedTranslationsGroup(it.value) }
+                feature.saved?.let { SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync) }
             }
         }
     }
@@ -431,11 +434,19 @@ private fun TestRow(feature: ServiceTranslate, service: TranslationService, conf
  * take, with the way to forget them all.
  */
 @Composable
-private fun SavedTranslationsGroup(saved: SavedTranslations) {
+private fun SavedTranslationsGroup(
+    saved: SavedTranslations,
+    accountClears: AccountTranslationClears?,
+    requestFullSync: suspend () -> Unit,
+) {
     val context = LocalContext.current
     val stats by saved.stats.collectAsState(initial = null)
+    val accountConnected by remember(accountClears) {
+        accountClears?.observeConnected() ?: flowOf(false)
+    }.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     var confirming by remember { mutableStateOf(false) }
+    var alsoAccount by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     SettingsGroup(stringResource(R.string.translation_settings_saved)) {
@@ -457,7 +468,15 @@ private fun SavedTranslationsGroup(saved: SavedTranslations) {
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = { confirming = true }, enabled = count > 0 && !clearing) {
+                // With an account connected there may be translations
+                // to clear there even when this phone has none.
+                OutlinedButton(
+                    onClick = {
+                        alsoAccount = false
+                        confirming = true
+                    },
+                    enabled = (count > 0 || accountConnected) && !clearing,
+                ) {
                     Text(stringResource(R.string.translation_settings_saved_clear))
                 }
                 if (clearing) BusyIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -481,16 +500,44 @@ private fun SavedTranslationsGroup(saved: SavedTranslations) {
         AlertDialog(
             onDismissRequest = { confirming = false },
             title = { Text(stringResource(R.string.translation_settings_saved_clear_title)) },
-            text = { Text(stringResource(R.string.translation_settings_saved_clear_body)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.translation_settings_saved_clear_body))
+                    if (accountConnected) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .toggleable(value = alsoAccount, role = Role.Checkbox) { alsoAccount = it },
+                        ) {
+                            Checkbox(checked = alsoAccount, onCheckedChange = null)
+                            Column(Modifier.padding(start = 8.dp)) {
+                                Text(
+                                    stringResource(R.string.translation_settings_saved_clear_account),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    stringResource(R.string.translation_settings_saved_clear_account_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         confirming = false
                         clearing = true
                         failed = false
+                        val clearAccount = accountConnected && alsoAccount
                         scope.launch {
                             failed = try {
-                                saved.clear()
+                                val clears = if (clearAccount) accountClears?.everyWork().orEmpty() else emptyList()
+                                saved.clear(clears)
+                                if (clears.isNotEmpty()) requestFullSync()
                                 false
                             } catch (e: CancellationException) {
                                 throw e

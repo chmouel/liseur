@@ -165,6 +165,8 @@ data class ServerAccountUiState(
     val ambiguities: Int = 0,
     /** What to do with a book that arrives on this device. */
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
+    /** Whether finishing a book clears its translations here and on the account. */
+    val clearTranslationsOnFinish: Boolean = true,
     /** The bulk download that is running, or the last one's summary. */
     val bulkBatch: BulkBatch? = null,
     /** What a "download everything" would cost, once the reader asks. */
@@ -266,7 +268,12 @@ class ServerAccountViewModel(
         }
         viewModelScope.launch {
             appSettings.settings.collect { settings ->
-                _state.update { it.copy(uploadPolicy = settings.uploadPolicy) }
+                _state.update {
+                    it.copy(
+                        uploadPolicy = settings.uploadPolicy,
+                        clearTranslationsOnFinish = settings.clearTranslationsOnFinish,
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -798,6 +805,10 @@ class ServerAccountViewModel(
 
     fun setUploadPolicy(policy: UploadPolicy) {
         viewModelScope.launch { appSettings.setUploadPolicy(policy) }
+    }
+
+    fun setClearTranslationsOnFinish(enabled: Boolean) {
+        viewModelScope.launch { appSettings.setClearTranslationsOnFinish(enabled) }
     }
 
     fun setKoboToken(value: String) {

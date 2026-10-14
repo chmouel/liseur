@@ -125,6 +125,13 @@ interface TranslatedSentenceDao {
     )
     suspend fun unsynced(bookUrl: String, at: Long, rowId: Long, limit: Int): List<SavedTranslationForPush>
 
+    /** The book's last save in push order, the watermark that has nothing left to send. */
+    @Query(
+        "SELECT rowid AS rowId, `key` AS `key`, translation, saved_at AS savedAt FROM translated_sentences " +
+            "WHERE book_url = :bookUrl AND saved_at > 0 ORDER BY saved_at DESC, rowid DESC LIMIT 1",
+    )
+    suspend fun lastSaved(bookUrl: String): SavedTranslationForPush?
+
     /** The highest save stamp in the table: the floor a new save is stamped above. */
     @Query("SELECT MAX(saved_at) FROM translated_sentences")
     suspend fun maxSavedAt(): Long?
@@ -272,12 +279,75 @@ interface TranslationRekeyMoveDao {
 }
 
 /**
+ * A clear of the account's translations that this device owes a peer
+ * (ADR-0050): one work's, or with an empty [workId] every work's. It is
+ * state rather than a queue — one row per clear still owed, the same
+ * request however often it is sent, gone once the server answered it.
+ * The work id is taken when the reader asks, because removing a book
+ * takes its work alias with it. [generation] goes up each time the
+ * same clear is asked for again, so an answer to an earlier request
+ * settles only that one, not a later one it may have raced.
+ */
+@Entity(tableName = "translation_account_clears", primaryKeys = ["peer_id", "work_id"])
+data class TranslationAccountClear(
+    @ColumnInfo(name = "peer_id") val peerId: String,
+    @ColumnInfo(name = "work_id") val workId: String,
+    @ColumnInfo(name = "generation", defaultValue = "0") val generation: Long = 0,
+) {
+    val everyWork: Boolean get() = workId.isEmpty()
+
+    companion object {
+        fun everyWork(peerId: String) = TranslationAccountClear(peerId, "")
+    }
+}
+
+@Dao
+interface TranslationAccountClearDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(rows: List<TranslationAccountClear>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(row: TranslationAccountClear): Long
+
+    @Query(
+        "UPDATE translation_account_clears SET generation = generation + 1 " +
+            "WHERE peer_id = :peerId AND work_id = :workId",
+    )
+    suspend fun bump(peerId: String, workId: String): Int
+
+    /** Every work's clear first: it answers for the others too. */
+    @Query("SELECT * FROM translation_account_clears WHERE peer_id = :peerId ORDER BY work_id")
+    suspend fun forPeer(peerId: String): List<TranslationAccountClear>
+
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM translation_account_clears " +
+            "WHERE peer_id = :peerId AND (work_id = '' OR work_id = :workId))",
+    )
+    suspend fun owed(peerId: String, workId: String): Boolean
+
+    @Query(
+        "DELETE FROM translation_account_clears " +
+            "WHERE peer_id = :peerId AND work_id = :workId AND generation = :generation",
+    )
+    suspend fun settle(peerId: String, workId: String, generation: Long)
+
+    @Query("SELECT DISTINCT peer_id FROM translation_account_clears")
+    suspend fun peerIds(): List<String>
+
+    @Query("DELETE FROM translation_account_clears WHERE peer_id IN (:peerIds)")
+    suspend fun forgetPeers(peerIds: List<String>): Int
+}
+
+/**
  * Kept apart from `liseur.db`: the backup rules name that file only, so
  * a cache that can always be asked for again stays out of backups.
  */
 @Database(
-    entities = [TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class, TranslationRekeyMove::class],
-    version = 3,
+    entities = [
+        TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class,
+        TranslationRekeyMove::class, TranslationAccountClear::class,
+    ],
+    version = 4,
     exportSchema = true,
 )
 abstract class TranslationCacheDatabase : RoomDatabase() {
@@ -288,6 +358,8 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
     abstract fun translationSync(): TranslationSyncStateDao
 
     abstract fun rekeyMoves(): TranslationRekeyMoveDao
+
+    abstract fun accountClears(): TranslationAccountClearDao
 
     companion object {
         const val NAME = "translations.db"
@@ -332,7 +404,18 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** Version 4 adds the clears owed to the account (ADR-0050). */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `translation_account_clears` (`peer_id` TEXT NOT NULL, " +
+                        "`work_id` TEXT NOT NULL, `generation` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`peer_id`, `work_id`))",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }
 
@@ -364,6 +447,7 @@ class SavedTranslations(
     private val modes = database.modes()
     private val sync = database.translationSync()
     private val moves = database.rekeyMoves()
+    private val owedClears = database.accountClears()
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
@@ -456,20 +540,107 @@ class SavedTranslations(
      * was never the account's to clear, ADR-0052), and the push
      * watermarks because there are no rows behind them to keep place
      * for — whatever is saved next starts from the beginning.
+     *
+     * [accountClears] are the account clears the reader asked for along
+     * with this one (ADR-0050), recorded in the same transaction: a
+     * pull that ran between the two would bring back what was just
+     * cleared.
      */
-    suspend fun clear() {
+    suspend fun clear(accountClears: List<TranslationAccountClear> = emptyList()) {
         writes.withLock {
             cleared.incrementAndGet()
             // One transaction, so an interruption cannot leave an empty
             // cache behind the bookkeeping of the cache it emptied: the
             // next pull would resume past rows that are no longer here
-            // and never bring them back.
-            database.withTransaction {
-                dao.clear()
-                sync.clear()
+            // and never bring them back. Advance the fence after the
+            // transaction even when cancellation is delivered as it
+            // returns: a ticket sampled while it ran cannot land later.
+            try {
+                database.withTransaction {
+                    dao.clear()
+                    sync.clear()
+                    owe(accountClears)
+                }
+            } finally {
+                cleared.incrementAndGet()
             }
         }
         compact()
+    }
+
+    /**
+     * Forgets one book's saved sentences and where every peer stood
+     * with it, for a book that stays. [accountClears] are recorded with
+     * it, for the reason [clear] gives.
+     *
+     * What is in flight is fenced the way [clear] fences it, every
+     * book's at once, rather than by the book's epoch: the reader that
+     * asked keeps its cache and mode handles, and they must go on
+     * saving what it translates next.
+     */
+    suspend fun clearBook(bookUrl: String, accountClears: List<TranslationAccountClear> = emptyList()) {
+        writes.withLock {
+            cleared.incrementAndGet()
+            try {
+                database.withTransaction {
+                    dao.forget(listOf(bookUrl))
+                    sync.forget(listOf(bookUrl))
+                    owe(accountClears)
+                }
+            } finally {
+                // Invalidate tickets sampled after the first fence advance
+                // even if cancellation is delivered as the transaction returns.
+                cleared.incrementAndGet()
+            }
+        }
+        resized.value++
+    }
+
+    /**
+     * Records clears owed to the account, leaving this device's
+     * sentences where they are. Those of [bookUrl] are marked sent to
+     * each peer cleared, in the same transaction: the sync that sends
+     * the clear would otherwise push them straight back.
+     */
+    suspend fun requestAccountClears(clears: List<TranslationAccountClear>, bookUrl: String? = null) {
+        if (clears.isEmpty()) return
+        writes.withLock {
+            database.withTransaction {
+                owe(clears)
+                if (bookUrl == null) return@withTransaction
+                val last = dao.lastSaved(bookUrl) ?: return@withTransaction
+                for (clear in clears.filterNot { it.everyWork }) {
+                    val state = sync.get(clear.peerId, bookUrl)
+                        ?.takeIf { it.workId == clear.workId }
+                        ?: TranslationSyncState(clear.peerId, bookUrl, clear.workId)
+                    if (last.savedAt > state.pushedSavedAt ||
+                        (last.savedAt == state.pushedSavedAt && last.rowId > state.pushedRowid)
+                    ) {
+                        sync.put(state.copy(pushedSavedAt = last.savedAt, pushedRowid = last.rowId))
+                    }
+                }
+            }
+        }
+    }
+
+    // Called holding [writes], inside a transaction.
+    private suspend fun owe(clears: List<TranslationAccountClear>) {
+        for (clear in clears) {
+            if (owedClears.bump(clear.peerId, clear.workId) == 0) {
+                owedClears.insert(TranslationAccountClear(clear.peerId, clear.workId))
+            }
+        }
+    }
+
+    /** The clears owed to a peer, every work's first. */
+    suspend fun owedClears(peerId: String): List<TranslationAccountClear> = owedClears.forPeer(peerId)
+
+    /** Whether a clear owed to the peer still covers this work, its own or every work's. */
+    suspend fun clearOwed(peerId: String, workId: String): Boolean = owedClears.owed(peerId, workId)
+
+    /** Drops a clear the server has answered, unless it was asked for again since. */
+    suspend fun settleClear(clear: TranslationAccountClear) {
+        writes.withLock { owedClears.settle(clear.peerId, clear.workId, clear.generation) }
     }
 
     // -- Cross-device exchange (ADR-0052) ----------------------------------
@@ -590,11 +761,13 @@ class SavedTranslations(
      * Forgets a peer's bookkeeping when its account goes. The sentences
      * stay — they are this phone's cache, and were never the server's to
      * take away — but a watermark and a cursor are that server's own
-     * numbers, of no use to the next one.
+     * numbers, of no use to the next one. So are the clears still owed
+     * to it: the next account never held those translations.
      */
     suspend fun forgetPeer(peerId: String) {
         writes.withLock {
             sync.forgetPeers(listOf(peerId))
+            owedClears.forgetPeers(listOf(peerId))
             moves.forget(peerId)
         }
     }
@@ -623,6 +796,8 @@ class SavedTranslations(
             val keep = live() + moves.toKeys()
             val gone = sync.peerIds().filterNot { it in keep }
             gone.chunked(BATCH).forEach { sync.forgetPeers(it) }
+            val owedGone = owedClears.peerIds().filterNot { it in keep }
+            owedGone.chunked(BATCH).forEach { owedClears.forgetPeers(it) }
         }
     }
 
@@ -657,6 +832,7 @@ class SavedTranslations(
                 for (row in sync.forPeer(from)) {
                     sync.put(row.copy(peerId = to))
                 }
+                owedClears.put(owedClears.forPeer(from).map { it.copy(peerId = to) })
             }
         }
     }

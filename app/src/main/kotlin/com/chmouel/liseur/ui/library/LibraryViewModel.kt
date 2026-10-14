@@ -325,7 +325,46 @@ fun LibraryUiState.canDownload(book: Book): Boolean =
  * A deletion the user asked for that did not happen, and where it was
  * meant to happen, so the library can explain the right thing.
  */
-data class DeleteFailure(val book: Book, val onServer: Boolean)
+data class DeleteFailure(
+    val book: Book,
+    val onServer: Boolean,
+    val accountClearFailed: Boolean = false,
+)
+
+internal enum class AccountClearRemovalResult { NotRequested, Recorded, Failed }
+
+/**
+ * Records an opted-in account clear before removing its only local identity.
+ * A missing work/account identity or a storage error must not look like a
+ * successful opt-out: keep the book until the request is durably recorded.
+ */
+internal suspend fun removeAfterAccountClear(
+    clearSelected: Boolean,
+    recordClear: suspend () -> Boolean,
+    onClearFailure: suspend (Exception?) -> Unit,
+    remove: suspend () -> Unit,
+): AccountClearRemovalResult {
+    if (!clearSelected) {
+        remove()
+        return AccountClearRemovalResult.NotRequested
+    }
+
+    val recorded = try {
+        recordClear()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onClearFailure(e)
+        return AccountClearRemovalResult.Failed
+    }
+    if (!recorded) {
+        onClearFailure(null)
+        return AccountClearRemovalResult.Failed
+    }
+
+    remove()
+    return AccountClearRemovalResult.Recorded
+}
 
 /**
  * A book to open after it was picked by hand: where its bytes are, and
@@ -351,7 +390,51 @@ class LibraryViewModel(
     private val seriesOrderDao: SeriesOrderDao,
     private val seriesExtras: SeriesExtrasRepository,
     private val refusals: UploadRefusalDao,
+    /** Books whose translations the account could be asked to clear (ADR-0050). */
+    accountTranslationBookUrls: Flow<Set<String>> = flowOf(emptySet()),
+    /** Records the account's clear of a book's translations; whether there was one to record. */
+    private val requestAccountTranslationClear: suspend (String) -> Boolean = { false },
 ) : ViewModel() {
+
+    /** Where the remove and delete dialogs offer to clear the account's translations too. */
+    val accountTranslationBooks: StateFlow<Set<String>> =
+        accountTranslationBookUrls.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
+
+    /** Records an opted-in clear before the operation can remove the book's work identity. */
+    private suspend fun removeBookAfterAccountClear(
+        book: Book,
+        clearSelected: Boolean,
+        remove: suspend () -> Unit,
+    ): Boolean? {
+        val result = removeAfterAccountClear(
+            clearSelected = clearSelected,
+            recordClear = { requestAccountTranslationClear(book.url) },
+            onClearFailure = { failure ->
+                if (failure == null) {
+                    Log.w(TAG, "Could not record the account's translation clear: work identity unavailable")
+                } else {
+                    Log.w(TAG, "Could not record the account's translation clear: ${failure.javaClass.simpleName}", failure)
+                }
+                _deleteFailures.emit(DeleteFailure(book, onServer = false, accountClearFailed = true))
+            },
+            remove = remove,
+        )
+        return when (result) {
+            AccountClearRemovalResult.NotRequested -> false
+            AccountClearRemovalResult.Recorded -> true
+            AccountClearRemovalResult.Failed -> null
+        }
+    }
+
+    /**
+     * A full sync sends the clear: a book no longer on the shelf has no
+     * book sync of its own. Not awaited, so the removal never waits on
+     * the network.
+     */
+    private fun sendAccountClear(owed: Boolean) {
+        if (!owed) return
+        viewModelScope.launch { positionSync.request(SyncScope.Full, System.currentTimeMillis()) }
+    }
 
     /**
      * What the server adds to the series being looked at, if anything
@@ -926,16 +1009,24 @@ class LibraryViewModel(
         viewModelScope.launch { downloads.cancel(book) }
     }
 
-    fun removeDownload(book: Book) {
-        viewModelScope.launch { downloads.removeDownload(book) }
+    fun removeDownload(book: Book, clearAccountTranslations: Boolean = false) {
+        viewModelScope.launch {
+            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
+                downloads.removeDownload(book)
+            } ?: return@launch
+            sendAccountClear(owed)
+        }
     }
 
     /** Deletes a local book's file and drops it from the library. */
-    fun deleteLocalBook(book: Book) {
+    fun deleteLocalBook(book: Book, clearAccountTranslations: Boolean = false) {
         viewModelScope.launch {
-            if (!downloads.deleteLocalBook(book)) {
-                _deleteFailures.emit(DeleteFailure(book, onServer = false))
-            }
+            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
+                if (!downloads.deleteLocalBook(book)) {
+                    _deleteFailures.emit(DeleteFailure(book, onServer = false))
+                }
+            } ?: return@launch
+            sendAccountClear(owed)
         }
     }
 
@@ -1320,9 +1411,12 @@ class LibraryViewModel(
     }
 
     /** Takes a book off the shelf without touching its file. */
-    fun removeFromLibrary(book: Book) {
+    fun removeFromLibrary(book: Book, clearAccountTranslations: Boolean = false) {
         viewModelScope.launch {
-            library.removeFromLibrary(book)
+            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
+                library.removeFromLibrary(book)
+            } ?: return@launch
+            sendAccountClear(owed)
             _hiddenBook.emit(book)
         }
     }
@@ -1435,6 +1529,8 @@ class LibraryViewModel(
                     seriesOrderDao = container.database.seriesOrderDao(),
                     seriesExtras = container.seriesExtras,
                     refusals = container.database.uploadRefusalDao(),
+                    accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
+                    requestAccountTranslationClear = container::requestAccountTranslationClear,
                 )
             }
         }

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
@@ -486,6 +487,8 @@ fun ReaderScreen(
     pageTranslations: PageTranslationCache = remember { MemoryPageTranslationCache() },
     // Whether the book is left translated, so it opens translated again until the reader stops it.
     pageTranslationModes: PageTranslationModes = remember { MemoryPageTranslationModes() },
+    // Forgets this book's saved translations, here and on the account; null where nothing is saved.
+    onClearTranslations: (() -> Unit)? = null,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -499,6 +502,7 @@ fun ReaderScreen(
     var searchFor by remember { mutableStateOf<String?>(null) }
     var goToPage by remember { mutableStateOf(false) }
     var goToPercent by remember { mutableStateOf(false) }
+    var clearingTranslations by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
     // Which footer slot a long press opened a picker for. Its own state
@@ -2423,6 +2427,7 @@ fun ReaderScreen(
         searchFor == null &&
         !goToPage &&
         !goToPercent &&
+        !clearingTranslations &&
         footnote == null &&
         selection == null &&
         tappedSelection == null &&
@@ -3974,9 +3979,10 @@ fun ReaderScreen(
                                     }
                                 }
                             }
-                        // Actions that start something on the page, not
-                        // settings: those stay in Aa. Hidden when none can run.
-                        if (translateFromHere != null || readAloudFromHere != null) {
+                        val clearTranslations = onClearTranslations?.takeIf { translate.isAvailable }
+                        // Actions on the page and the book, not settings:
+                        // those stay in Aa. Hidden when none can run.
+                        if (translateFromHere != null || readAloudFromHere != null || clearTranslations != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4007,6 +4013,16 @@ fun ReaderScreen(
                                                 moreOpen = false
                                                 chromeVisible = false
                                                 action()
+                                            },
+                                        )
+                                    }
+                                    if (clearTranslations != null) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.reader_clear_translations)) },
+                                            leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null) },
+                                            onClick = {
+                                                moreOpen = false
+                                                clearingTranslations = true
                                             },
                                         )
                                     }
@@ -4529,6 +4545,18 @@ fun ReaderScreen(
                     navigateLater(destination.locator, NavigatorPositionEvent.LOCAL_JUMP)
                 },
                 onDismiss = { goToPage = false },
+            )
+        }
+    }
+
+    if (clearingTranslations) {
+        onClearTranslations?.let { clear ->
+            ClearTranslationsDialog(
+                onConfirm = {
+                    clearingTranslations = false
+                    clear()
+                },
+                onDismiss = { clearingTranslations = false },
             )
         }
     }
