@@ -435,6 +435,28 @@ class LiseurSyncTranslationsTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test
+    fun `a clear queued after a server is known unsupported is settled`() = runTest {
+        connect()
+        alias()
+        val store = saved()
+        server.enqueue(MockResponse(code = 404, body = "404 page not found\n"))
+
+        sync(store)
+        store.requestAccountClears(listOf(TranslationAccountClear.everyWork(peer())))
+        server.enqueue(MockResponse(code = 404, body = "404 page not found\n"))
+
+        val outcome = sync(store)
+
+        assertEquals(null, outcome.failure)
+        assertEquals(2, server.requestCount)
+        assertEquals("GET", server.takeRequest().method)
+        val clear = server.takeRequest()
+        assertEquals("DELETE", clear.method)
+        assertEquals("/v1/translations", clear.url.encodedPath)
+        assertTrue(store.owedClears(peer()).isEmpty())
+    }
+
     // -- Clears (ADR-0050) -------------------------------------------------
 
     @Test

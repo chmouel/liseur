@@ -962,6 +962,38 @@ class SavedTranslationsTest {
         assertTrue(store.owedClears(OTHER_PEER).isEmpty())
     }
 
+    @Test
+    fun `a late clear resolved under the old key survives rekey collection`() = runTest {
+        val store = saved()
+        store.forBook(BOOK).keep("one", "un")
+        store.rekeyPeer(PEER, OTHER_PEER)
+
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")), BOOK)
+
+        assertTrue(store.clearOwed(PEER, "work-one"))
+        assertTrue(store.clearOwed(OTHER_PEER, "work-one"))
+        val state = store.ensureWork(OTHER_PEER, BOOK, "work-one")
+        assertTrue(store.unsynced(BOOK, state, 500).isEmpty())
+
+        store.forgetPeersBeyond { setOf(OTHER_PEER) }
+
+        assertTrue(store.owedClears(PEER).isEmpty())
+        assertTrue(store.clearOwed(OTHER_PEER, "work-one"))
+    }
+
+    @Test
+    fun `settling a clear for the old key also settles its rekey copy`() = runTest {
+        val store = saved()
+        store.rekeyPeer(PEER, OTHER_PEER)
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")))
+        store.forgetPeersBeyond { setOf(PEER) }
+
+        store.settleClear(store.owedClears(PEER).single())
+
+        assertTrue(store.owedClears(PEER).isEmpty())
+        assertTrue(store.owedClears(OTHER_PEER).isEmpty())
+    }
+
     private class GatedTransactionExecutor : Executor {
         data class Gate(
             val started: CompletableDeferred<Unit> = CompletableDeferred(),

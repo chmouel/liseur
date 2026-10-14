@@ -131,11 +131,13 @@ class LiseurSyncTranslations(
         // new name's progress for dead (see
         // [SavedTranslations.forgetPeersBeyond]).
         saved().forgetPeersBeyond { setOfNotNull(serverDao.get()?.accountKey) }
-        if (peer.baseUrl in unsupported) return Outcome()
         val progress = Progress()
         // What the reader asked the account to forget goes before
         // anything is read from it, or the pull would bring it back.
         drainClears(peer, progress)
+        // A clear may arrive after an earlier pass found no translation routes.
+        // Drain it before returning so the queue does not wait for a restart.
+        if (peer.baseUrl in unsupported) return progress.outcome()
         val aliases = identityDao.aliasesFor(peer.peerId).filter { it.usable }
         val scope = if (book == null) aliases else aliases.filter { it.bookUrl == book }
         for (alias in scope) {

@@ -274,6 +274,9 @@ interface TranslationRekeyMoveDao {
     @Query("SELECT to_key FROM translation_rekey_moves")
     suspend fun toKeys(): List<String>
 
+    @Query("SELECT to_key FROM translation_rekey_moves WHERE from_key = :fromKey LIMIT 1")
+    suspend fun targetFor(fromKey: String): String?
+
     @Query("DELETE FROM translation_rekey_moves WHERE from_key = :key OR to_key = :key")
     suspend fun forget(key: String)
 }
@@ -610,10 +613,10 @@ class SavedTranslations(
             cleared.incrementAndGet()
             try {
                 database.withTransaction {
-                    owe(clears)
+                    val recorded = owe(clears)
                     if (bookUrl == null) return@withTransaction
                     val last = dao.lastSaved(bookUrl) ?: return@withTransaction
-                    for (clear in clears.filterNot { it.everyWork }) {
+                    for (clear in recorded.filterNot { it.everyWork }) {
                         val state = sync.get(clear.peerId, bookUrl)
                             ?.takeIf { it.workId == clear.workId }
                             ?: TranslationSyncState(clear.peerId, bookUrl, clear.workId)
@@ -631,12 +634,22 @@ class SavedTranslations(
     }
 
     // Called holding [writes], inside a transaction.
-    private suspend fun owe(clears: List<TranslationAccountClear>) {
+    private suspend fun owe(clears: List<TranslationAccountClear>): List<TranslationAccountClear> {
+        val expanded = mutableListOf<TranslationAccountClear>()
         for (clear in clears) {
+            expanded += clear
+            // The account rename may still roll back, so keep the clear under both keys.
+            val target = moves.targetFor(clear.peerId)
+            if (target != null && target != clear.peerId) {
+                expanded += clear.copy(peerId = target)
+            }
+        }
+        for (clear in expanded) {
             if (owedClears.bump(clear.peerId, clear.workId) == 0) {
                 owedClears.insert(TranslationAccountClear(clear.peerId, clear.workId))
             }
         }
+        return expanded
     }
 
     /** The clears owed to a peer, every work's first. */
@@ -647,7 +660,17 @@ class SavedTranslations(
 
     /** Drops a clear the server has answered, unless it was asked for again since. */
     suspend fun settleClear(clear: TranslationAccountClear) {
-        writes.withLock { owedClears.settle(clear.peerId, clear.workId, clear.generation) }
+        writes.withLock {
+            database.withTransaction {
+                owedClears.settle(clear.peerId, clear.workId, clear.generation)
+                val target = moves.targetFor(clear.peerId) ?: return@withTransaction
+                val carried = owedClears.forPeer(target).firstOrNull { it.workId == clear.workId }
+                    ?: return@withTransaction
+                if (carried.generation <= clear.generation) {
+                    owedClears.settle(target, clear.workId, carried.generation)
+                }
+            }
+        }
     }
 
     // -- Cross-device exchange (ADR-0052) ----------------------------------
