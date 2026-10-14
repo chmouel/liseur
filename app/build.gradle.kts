@@ -244,10 +244,12 @@ dependencies {
     implementation(libs.jsoup)
 
     // Play build only. ML Kit translates on the phone once a language
-    // model is downloaded, but the SDK is not free software and reports
-    // usage metrics to Google, so F-Droid and GitHub builds never carry
-    // it. See DEVELOPER.md, F-Droid readiness.
+    // model is downloaded, and its Prompt API runs Gemini Nano for the
+    // reading companion on phones that have it, but the SDKs are not free
+    // software and report usage metrics to Google, so F-Droid and GitHub
+    // builds never carry them. See DEVELOPER.md, F-Droid readiness.
     "playImplementation"(libs.mlkit.translate)
+    "playImplementation"(libs.mlkit.genai.prompt)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

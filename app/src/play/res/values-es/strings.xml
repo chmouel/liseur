@@ -73,4 +73,14 @@
     <string name="companion_provider_gemini_summary">Gemini de Google, con tu clave de API. El texto del libro se envía a Google.</string>
     <string name="companion_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios externos y claves de API para que el compañero de lectura use Gemini.</string>
     <string name="companion_gemini_privacy">El texto de los capítulos anteriores se envía a Google con tu clave de Gemini, y capítulos enteros si los resúmenes en segundo plano están activados. Google puede cobrar por estas solicitudes.</string>
+    <string name="companion_provider_nano">Gemini Nano en este teléfono</string>
+    <string name="companion_provider_nano_summary">El modelo pequeño de Google, ejecutado en el teléfono. El texto del libro se queda en el teléfono.</string>
+    <string name="companion_nano_privacy">El texto del libro se queda en el teléfono. ML Kit envía a Google diagnósticos de uso.</string>
+    <string name="companion_nano_ready">Gemini Nano está listo en este teléfono.</string>
+    <string name="companion_nano_downloadable">Android debe descargar Gemini Nano antes de que el compañero pueda usarlo.</string>
+    <string name="companion_nano_download">Descargar</string>
+    <string name="companion_nano_downloading">Descargando Gemini Nano…</string>
+    <string name="companion_nano_download_failed">La descarga no terminó. Inténtalo de nuevo.</string>
+    <string name="companion_nano_unavailable">Gemini Nano no está disponible en este teléfono por ahora.</string>
+    <string name="companion_nano_note">Gemini Nano lee mucho menos texto a la vez que el modelo de un servidor, así que las búsquedas leen menos pasajes y pueden encontrar menos. Solo funciona mientras Liseur está abierto.</string>
 </resources>
