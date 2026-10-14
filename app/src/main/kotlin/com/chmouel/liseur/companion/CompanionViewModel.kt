@@ -68,7 +68,7 @@ class CompanionViewModel(
             Log.w(TAG, "No recap choice for this book: ${it.javaClass.simpleName}")
             emit(null)
         },
-    ) { inSettings, here -> here ?: inSettings }.distinctUntilChanged()
+    ) { inSettings, here -> recapsEnabledFor(here, inSettings) }.distinctUntilChanged()
 
     // Keyed on what decides the identity, so an unrelated setting
     // changing does not cancel a recap that is under way.
@@ -160,6 +160,11 @@ class CompanionViewModel(
                     pendingShown += place to movement
                     return@withLock
                 }
+                // Placing the page costs a resource read, so it is done only
+                // while a recap can be queued for this book. The check is
+                // against the same state the scheduler's gate uses, and the
+                // next emission after recaps are turned on re-syncs it.
+                if (!recapSettings.value.enabled) return@withLock
                 val lo = quietly { opened.scopeOf(place, translated = false)?.lo } ?: return@withLock
                 recaps.moved(lo, movement)
             }

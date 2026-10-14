@@ -141,6 +141,18 @@ class RecapTest {
     // -- Scheduling ----------------------------------------------------------
 
     @Test
+    fun `a book is tracked for recaps by its own choice, otherwise by the setting`() {
+        // The setting off and no choice for the book: nothing is tracked.
+        assertFalse(recapsEnabledFor(bookChoice = null, setting = false))
+        // The book turned on keeps it tracked while the setting is off.
+        assertTrue(recapsEnabledFor(bookChoice = true, setting = false))
+        // The setting on alone tracks it.
+        assertTrue(recapsEnabledFor(bookChoice = null, setting = true))
+        // The book turned off wins over the setting.
+        assertFalse(recapsEnabledFor(bookChoice = false, setting = true))
+    }
+
+    @Test
     fun `reading on into the next chapter recaps the one just finished, and only its text`() = runTest {
         val h = harness()
         h.scheduler.moved(0, movement = false)

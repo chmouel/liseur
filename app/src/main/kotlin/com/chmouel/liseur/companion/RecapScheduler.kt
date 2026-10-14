@@ -22,6 +22,12 @@ data class RecapSetup(val identity: RecapIdentity, val chat: CompanionChat, val 
 data class RecapSettings(val enabled: Boolean, val setup: RecapSetup?)
 
 /**
+ * Whether this book's reading is tracked for recaps: its own choice when
+ * the reader made one, over the switch in settings.
+ */
+fun recapsEnabledFor(bookChoice: Boolean?, setting: Boolean): Boolean = bookChoice ?: setting
+
+/**
  * Recaps the chapters the reader finishes in one open book, one at a
  * time, in the background.
  *
