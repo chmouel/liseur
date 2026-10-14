@@ -1,5 +1,7 @@
 package com.chmouel.liseur
 
+import com.chmouel.liseur.characters.CharacterSettingsEntry
+import com.chmouel.liseur.characters.CharacterSettingsScreen
 import android.app.ActivityOptions
 import android.content.Intent
 import android.content.BroadcastReceiver
@@ -482,6 +484,7 @@ private fun LiseurApp(
                             flavorReadingRows = {
                                 context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
                                 context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
+                                CharacterSettingsEntry(context.container.characterServer, onClick = { openPage(Route.Characters) })
                                 ServicesEntry(onClick = { openPage(Route.Services) })
                             },
                         )
@@ -493,6 +496,17 @@ private fun LiseurApp(
 
                     Route.Translation -> {
                         context.container.translate.SettingsScreen(onBack = back)
+                    }
+
+                    Route.Characters -> {
+                        CharacterSettingsScreen(
+                            server = context.container.characterServer,
+                            store = context.container.characterStore,
+                            onBack = back,
+                            servicesPage = { leave ->
+                                ServicesScreen(context.container.serverConnections, context.container.serviceAccounts, leave)
+                            },
+                        )
                     }
 
                     Route.Services -> {

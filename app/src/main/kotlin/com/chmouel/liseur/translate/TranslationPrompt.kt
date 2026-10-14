@@ -122,7 +122,7 @@ internal object TranslationPrompt {
      * settings). Only a block the reply opens with counts: a tag further
      * on can be the translation's own words.
      */
-    private fun withoutReasoning(text: String): String {
+    fun withoutReasoning(text: String): String {
         for ((open, close) in REASONING) {
             if (!text.startsWith(open, ignoreCase = true)) continue
             val end = text.indexOf(close, open.length, ignoreCase = true)

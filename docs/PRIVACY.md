@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 12 October 2026
+**Last updated:** 13 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers of its own, and the developer collects
@@ -52,6 +52,13 @@ All of this stays in the app's own private storage:
   A passage translated in the sheet is not saved.
 - Which books you left translated, and between which two languages, so
   they open translated. Tapping Stop or deleting the book removes it.
+- If you turn on background chapter recaps for character profiles, the
+  short recaps your chosen server wrote of the chapters you finished,
+  and the chapters still waiting for one. They are kept for the book
+  they came from, the oldest going first past a fixed limit. Deleting
+  the book deletes them, and turning recaps off stops the work and drops
+  the waiting chapters. They are not backed up and not synced. Character
+  profiles themselves are not saved.
 
 Uninstalling the app removes all of it.
 
@@ -181,6 +188,37 @@ service, the passage goes to that service under its own terms and
 privacy policy. [Local AI servers](LOCAL_AI_SERVERS.md) explains how to
 run a translation server on your own computer.
 
+### A server, for character profiles
+
+Selecting a name in the reader and tapping Character asks a server on the
+External services and API keys page that speaks OpenAI's chat API who
+that character is, from the chapters before the one you are reading.
+Nothing is sent until you choose that server and a model in Settings,
+Characters, and Liseur then asks it for its list of models the same way
+as for translation. A lookup sends the name you selected, how many
+chapters the book has and how many come before yours, and passages from
+those earlier chapters only: the ones that mention the name with the
+paragraphs around them, then the ones the model asks to search or read,
+up to 64,000 characters of book text in all. Nothing from the chapter
+you are in or any later chapter is sent, not even the sentence around
+your selection. The model, and your API key if you entered one, go
+with every request. No book title, file, identifier or reading position
+goes with it, and the recaps
+described below are only used on the phone to find passages; their
+wording is never sent.
+
+If you also turn on background chapter recaps, then while the book is
+open on screen and you read on from the end of one chapter into the
+next, Liseur sends the whole chapter you just finished to the same
+server, in parts of about 12,000 characters, and keeps the short recap
+it writes back. Chapters you skip, or that you read before turning
+recaps on, are not sent. Requests to a hosted service may be charged
+to your account there. A model may also know a well-known book from
+its training and let something from later in it slip into its answer;
+Liseur asks it not to, and shows next to every statement the passage
+from the book it relied on, but it cannot guarantee what a model
+writes.
+
 ### Google Gemini, for reading aloud (Google Play build only)
 
 The Google Play build can read a book aloud with a voice made by Google's
@@ -270,7 +308,8 @@ Liseur takes part in Android's standard backup, so your library, reading
 positions, highlights, notes and settings can follow you to a new device.
 That backup is handled by Android and stored in your own Google account,
 under Google's terms, not the developer's. Liseur has no access to it.
-Downloaded book files, generated covers, saved translations and, in the
+Downloaded book files, generated covers, saved translations, chapter
+recaps and, in the
 Google Play build, ML Kit's language models and installation identifier
 are deliberately excluded.
 Server credentials are included but arrive unreadable on a new device,
@@ -278,7 +317,8 @@ because the key that encrypts them never leaves the old one. Liseur notices
 this and asks you to sign in again. A server or Gemini API key
 is not backed up at all; you paste it again on a new device. The servers'
 addresses, and the models, voices and languages you chose for reading
-aloud and translation, are backed up with your other settings.
+aloud, translation and character profiles, are backed up with your
+other settings.
 
 You can turn this off in your device's backup settings.
 

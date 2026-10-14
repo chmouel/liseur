@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.EditNote
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Translate
@@ -58,6 +59,8 @@ class SelectionActions(
     @param:StringRes val translateLabel: Int = R.string.translation_action,
     /** Reads aloud from here, where the build can. */
     val onReadAloud: (() -> Unit)? = null,
+    /** Describes the selected character from the chapters before this one. */
+    val onCharacter: (() -> Unit)? = null,
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
     val annotate: Boolean = true,
 )
@@ -165,6 +168,14 @@ fun SelectionPopup(
                             Icons.AutoMirrored.Outlined.MenuBook,
                             contentDescription = stringResource(R.string.annotation_look_up),
                         )
+                    }
+                    actions.onCharacter?.let { character ->
+                        IconButton(onClick = character, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Outlined.PersonSearch,
+                                contentDescription = stringResource(R.string.character_action),
+                            )
+                        }
                     }
                     IconButton(onClick = actions.onSearch, modifier = Modifier.size(36.dp)) {
                         Icon(

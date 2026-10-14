@@ -18,8 +18,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import com.chmouel.liseur.characters.CharacterSettingsScreen
+import com.chmouel.liseur.characters.CharacterViewModel
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.settings.AppLocales
+import com.chmouel.liseur.providers.ServicesScreen
 import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -67,6 +70,7 @@ import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
+import java.util.Locale
 
 class ReaderActivity : FragmentActivity() {
 
@@ -97,6 +101,10 @@ class ReaderActivity : FragmentActivity() {
     private val viewModel: ReaderViewModel by viewModels {
         val open = checkNotNull(target)
         ReaderViewModel.factory(open.url, open.id)
+    }
+
+    private val characterViewModel: CharacterViewModel by viewModels {
+        CharacterViewModel.factory(checkNotNull(target).id)
     }
 
     /**
@@ -446,6 +454,18 @@ class ReaderActivity : FragmentActivity() {
                                         }
                                     }
                                 }
+                                val characters = remember(s.publication) {
+                                    characterViewModel.attach(s.publication)
+                                    readerCharacters()
+                                }
+                                LaunchedEffect(viewModel, characterViewModel) {
+                                    characterViewModel.setLanguage(
+                                        resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH),
+                                    )
+                                    viewModel.onPlaceShown = characterViewModel::shown
+                                    viewModel.peek.map { it?.origin }.distinctUntilChanged()
+                                        .collect(characterViewModel::peeking)
+                                }
                                 ReaderScreen(
                                     publication = s.publication,
                                     displayAuthors = s.displayAuthors,
@@ -624,6 +644,7 @@ class ReaderActivity : FragmentActivity() {
                                     onClearTranslations = {
                                         container.clearBookTranslationsLater(checkNotNull(target).id)
                                     },
+                                    characters = characters,
                                 )
                             }
                         }
@@ -677,6 +698,33 @@ class ReaderActivity : FragmentActivity() {
             UploadDecision.NOTHING -> Unit
         }
     }
+
+    private fun readerCharacters() = ReaderCharacters(
+        panel = characterViewModel.panel,
+        peek = viewModel.peek,
+        open = characterViewModel::open,
+        retry = characterViewModel::retry,
+        cancel = characterViewModel::cancel,
+        choose = characterViewModel::choose,
+        hide = characterViewModel::hide,
+        reveal = characterViewModel::reveal,
+        close = characterViewModel::close,
+        startPeek = viewModel::startPeek,
+        onUserTurn = viewModel::onUserTurn,
+        endPeek = viewModel::endPeek,
+        returnFromPeek = viewModel::returnFromPeek,
+        returnArrived = viewModel::returnArrived,
+        returnFailed = viewModel::returnFailed,
+        showsPlace = viewModel::showsPlace,
+        settings = { back ->
+            CharacterSettingsScreen(
+                container.characterServer,
+                container.characterStore,
+                back,
+                servicesPage = { leave -> ServicesScreen(container.serverConnections, container.serviceAccounts, leave) },
+            )
+        },
+    )
 
     private fun sendUp(book: Book, accountKey: String?) {
         // The worker drops the job if another account is connected by

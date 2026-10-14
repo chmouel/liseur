@@ -121,9 +121,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -340,6 +343,11 @@ class ReaderViewModel(
 
     /** Offer to return to where reading was before the last jump. */
     val jumpBack: StateFlow<JumpBack?> = _jumpBack.asStateFlow()
+
+    private val _peek = MutableStateFlow<SourcePeek?>(null)
+
+    /** A character profile's source being looked at; see [SourcePeek]. */
+    val peek: StateFlow<SourcePeek?> = _peek.asStateFlow()
 
     /**
      * Raised when the last page has been turned: the next volume, if
@@ -643,6 +651,12 @@ class ReaderViewModel(
      * already failed to help by the time this is pressed.
      */
     var preparePositionAction: suspend () -> Boolean = { false }
+
+    /**
+     * Told every place the reader is shown, and whether they got there by
+     * reading on, so character recaps know which chapters are finished.
+     */
+    var onPlaceShown: (Locator, Boolean) -> Unit = { _, _ -> }
 
     fun syncThisBook() {
         // A choice already on screen is the question being asked; a
@@ -1500,6 +1514,8 @@ class ReaderViewModel(
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
             lastLocator?.let { _progress.value = progressAt(it) }
+            (lastLocator ?: publication.readingOrder.firstOrNull()?.let { publication.locatorFromLink(it) })
+                ?.let { onPlaceShown(it, false) }
             viewModelScope.launch {
                 // Listening is neither reading time nor reading pace, even
                 // with the reader in front: the page turn that ends it must
@@ -1509,6 +1525,7 @@ class ReaderViewModel(
                     .distinctUntilChanged()
                     .collect { playing ->
                         if (playing) {
+                            endPeek()
                             speed.forgetLastPosition()
                             sessions.suspendForListening()
                         } else {
@@ -1602,11 +1619,25 @@ class ReaderViewModel(
         // position arrives, manufacturing a sync conflict.
         if (!readerActive && effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) return
         val prepared = prepareLocator(locator)
+        _peek.value?.let { peek ->
+            val moved = lastLocator?.sameReadingPositionAs(prepared) != true
+            if (peek.endedBy(effectiveEvent, moved)) {
+                endPeek()
+            } else {
+                // A source on screen is shown, never saved: the saved
+                // place stays where the reader asked.
+                lastLocator = prepared
+                _progress.value = progressAt(prepared)
+                onPlaceShown(prepared, false)
+                return
+            }
+        }
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
         val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true &&
             bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } != true
         lastLocator = prepared
+        onPlaceShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
         val stable = bookPositions?.resolve(prepared)
         _progress.value = progressAt(prepared, stable)
         // Readium recalculates totalProgression for a different viewport,
@@ -2083,7 +2114,11 @@ class ReaderViewModel(
      * exactly that last position.
      */
     fun onJump(from: Locator? = null) {
-        val given = from?.let(::prepareLocator)
+        // Jumping on from a source is reading again, and the way back is
+        // to where the reader asked, not to the source glanced at.
+        val origin = _peek.value?.origin
+        if (origin != null) endPeek()
+        val given = (origin ?: from)?.let(::prepareLocator)
         val place = given ?: lastLocator ?: return
         val progress = _progress.value
         // The jump itself is not reading, and neither is finding your
@@ -2108,6 +2143,64 @@ class ReaderViewModel(
         jumpBackTimer?.cancel()
         _jumpBack.value = null
     }
+
+    /**
+     * Starts showing a character profile's source.
+     *
+     * The place the reader asked from is the one last shown, which the
+     * screen settles first when scrolling. A source followed from another
+     * source keeps the first origin. Returns the origin and whether this
+     * call began the peek, so a navigation that fails can undo just that;
+     * null when no place is known yet.
+     */
+    fun startPeek(): Pair<Locator, Boolean>? {
+        _peek.value?.let { current ->
+            _peek.value = current.copy(phase = SourcePeek.Phase.PEEKING, userTurned = false)
+            return current.origin to false
+        }
+        val origin = lastLocator ?: return null
+        dismissJumpBack()
+        speed.forgetLastPosition()
+        sessions.suspendForPeek()
+        _peek.value = SourcePeek(origin)
+        return origin to true
+    }
+
+    /** The reader turned a page or scrolled; the move it makes ends a peek. */
+    fun onUserTurn() {
+        _peek.update { it?.turned() }
+    }
+
+    /** Ends a peek where the reader is: reading on, or a navigation that never left. */
+    fun endPeek() {
+        if (_peek.getAndUpdate { null } == null) return
+        speed.forgetLastPosition()
+        sessions.resumeAfterPeek()
+    }
+
+    /** Sets off back to where the reader asked; null when not peeking. */
+    fun returnFromPeek(): Pair<Locator, Int>? {
+        val returning = _peek.updateAndGet { it?.returningNow() } ?: return null
+        return returning.origin to returning.returning
+    }
+
+    /** The Return of [generation] was seen to arrive back where the reader asked. */
+    fun returnArrived(generation: Int) {
+        val peek = _peek.value ?: return
+        if (!peek.returnedBy(generation)) return
+        lastLocator = peek.origin
+        _progress.value = progressAt(peek.origin)
+        onPlaceShown(peek.origin, false)
+        endPeek()
+    }
+
+    /** The Return of [generation] did not arrive; the source stays a peek. */
+    fun returnFailed(generation: Int) {
+        _peek.update { it?.returnFailed(generation) }
+    }
+
+    /** Whether [here] is the same page as [place], as bookmarks judge it. */
+    fun showsPlace(place: Locator, here: Locator): Boolean = samePlaceAs(prepareLocator(place), prepareLocator(here))
 
     /**
      * Going back from a percentage-only BookOrbit opening turns that place

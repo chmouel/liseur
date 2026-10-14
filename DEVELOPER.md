@@ -2002,6 +2002,77 @@ reader behavior.
   when no attached view holds its chapter), and no exact anchor is
   captured after listening.
 
+### Characters
+
+Selecting a name and tapping Character opens a profile drawn only from
+the chapters before the one the reader asked from
+([ADR-0050](docs/adr/0050-character-profiles-use-only-earlier-chapters.md)).
+The feature lives in `app/src/main/kotlin/.../characters/`, in both
+flavors, and reuses the servers on External services and API keys
+through `OpenAiChatClient.chat`; its server, model and recap switch
+(`character_server`, `character_server_state`, `character_recaps`) are
+separate from translation's, are moved and forgotten with server edits
+in `ServerSettings`, travel in the settings backup archive, and are not
+liseur-sync settings.
+
+- Chapters come from the contents, not from files (`ChapterMap`). Only
+  top-level entries are chapters, a lone wrapper entry is looked
+  through, and nested entries never split one, whichever file they open.
+  Text whose chapter cannot be told for certain (a missing anchor, an
+  element that cannot be located, a repeated spine resource, entries out
+  of reading order) gets the whole range of chapters it might belong to,
+  `[lo, hi]`. A book with no usable contents is one chapter.
+- `Eligibility.allows` (`hi < asking.lo`) is the single gate between the
+  book and the network. The asking scope is frozen when the panel opens
+  (on a translated page it is the resource's lowest chapter) and is kept
+  through sources, Return and candidate reruns. Every seed passage,
+  search hit, read excerpt, recap hint and recap batch passes the gate,
+  so text that might be in the asking chapter is withheld rather than
+  guessed at.
+- Only these go into a request body: the selected name, the numeric
+  scope, app-issued session refs (`S1`…), and eligible passage text. Never
+  `Locator.text.before/after`, chapter titles, notes, recap prose, or the
+  model's malformed reply. Book text and the name sit in
+  `CharacterPrompt`'s unclosable data blocks, as in `TranslationPrompt`.
+  `InvestigationTest` and `RecapTest` capture every request and assert
+  that no chapter-5-or-later sentinel leaves.
+- `Investigation` runs JSON actions (`search`, `read`) over ordinary chat
+  completions: at most 6 rounds, 12 operations, 64,000 characters of
+  unique source text and 10 HTTP requests, then one final request. The
+  first request shows up to 20,000 characters: mentions taken in turn
+  from each earlier chapter, each with the paragraph before and after;
+  `read` adds two paragraphs on each side. A name absent from eligible
+  text is insufficient without any request.
+  Every claim must cite refs sent in this lookup; the quotes shown are
+  the local passages, never model text. One corrective request with a
+  fixed error code, then a retryable error.
+- Recaps are opt-in and only a retrieval index. `RecapScheduler` queues
+  a chapter when `READER_MOVEMENT` crosses from it into the next one (no
+  jumps, no backfill), runs one batch at a time while the app is in the
+  foreground, stands aside for a lookup, and never sends a chapter at or
+  after the one on screen or the peek origin. Batches of about 12,000
+  characters cover every passage exactly once and are saved as parts, so
+  an interruption does not pay twice; combining them is local. A recap's
+  names and aliases are kept only if they appear in the passages it
+  cites; a lookup uses them to pick seed passages, never sends their
+  prose.
+- `characters.db` (`CharacterDatabase`, separate from `liseur.db`) keys
+  recaps by book URL, content sha (`BookFingerprintStore`), unit key,
+  server, model and `Recap.FORMAT`. Without a content sha nothing is
+  queued or saved. Rows under another identity are ignored and dropped,
+  the store trims to fixed limits, removed books are swept, and the
+  database is outside the backup allowlist. Bump `PassageText.VERSION`
+  when refs or passage splitting change, and the recap prompt version
+  in `Recap` when the prompt or its JSON change.
+- Following a supporting passage is a peek (`SourcePeek` in
+  `ReaderViewModel`): the asking place stays the saved one, and nothing
+  at the source is saved, synced, timed (`ReadingSessionRecorder`'s peek
+  suspension) or taken as furthest until the reader turns a page there
+  and moves, jumps elsewhere, or starts auto-scroll. Return and Back go
+  back and end the peek only once arrival is verified with
+  `ExactLocatorAnchor` or the bookmark place comparison; a Return that
+  does not arrive leaves the peek in place.
+
 ### Covers, UI, and dependencies
 
 - Resolve a local cover once at import in this order: publication cover,

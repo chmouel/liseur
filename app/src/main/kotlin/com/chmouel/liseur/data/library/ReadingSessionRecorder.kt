@@ -40,6 +40,7 @@ class ReadingSessionRecorder(
         data class Resumed(override val at: Moment) : Event
         data class Paused(override val at: Moment) : Event
         data class Listening(override val at: Moment, val playing: Boolean) : Event
+        data class Peeking(override val at: Moment, val peeking: Boolean) : Event
         data class Checkpoint(
             override val at: Moment,
             /** Null for the periodic tick, which turned no page. */
@@ -62,6 +63,7 @@ class ReadingSessionRecorder(
     private var ready = false
     private var foreground = false
     private var listening = false
+    private var peeking = false
     private var sessionId: Long? = null
 
     /**
@@ -115,6 +117,20 @@ class ReadingSessionRecorder(
     /** Read-aloud paused or stopped; time counts again once the reader is in front. */
     fun resumeAfterListening() {
         enqueue(Event.Listening(moment(), playing = false))
+    }
+
+    /**
+     * The reader followed a character profile's source to look at it. A
+     * glance at an earlier page is not reading, so the session closes
+     * until [resumeAfterPeek].
+     */
+    fun suspendForPeek() {
+        enqueue(Event.Peeking(moment(), peeking = true))
+    }
+
+    /** The reader went back from a source, or read on from it. */
+    fun resumeAfterPeek() {
+        enqueue(Event.Peeking(moment(), peeking = false))
     }
 
     /**
@@ -201,6 +217,12 @@ class ReadingSessionRecorder(
                 true
             }
 
+            is Event.Peeking -> {
+                peeking = event.peeking
+                if (peeking) finish(event.at) else startIfNeeded(event.at)
+                true
+            }
+
             is Event.Checkpoint -> {
                 checkpoint(event.at, event.progression)
                 true
@@ -221,7 +243,7 @@ class ReadingSessionRecorder(
 
     /** Starts only when both Android and publication opening agree it is readable. */
     private suspend fun startIfNeeded(at: Moment) {
-        if (!ready || !foreground || listening || sessionId != null) return
+        if (!ready || !foreground || listening || peeking || sessionId != null) return
         clock.resume(at.elapsed)
         sessionId = dao.insert(
             ReadingSession(

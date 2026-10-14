@@ -220,6 +220,10 @@ enum class DefinitionTarget(val id: String) {
  *   for the default.
  * @param translationTarget The language passages are translated into, as a
  *   BCP 47 tag, or null to follow the app's language.
+ * @param characterServer The id of the server character profiles use.
+ * @param characterStates Character profiles' model on each server, by server id.
+ * @param characterRecaps Whether chapters are recapped in the background as
+ *   they are finished, to help later character lookups.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -263,7 +267,18 @@ data class AppSettings(
     val translationStates: Map<String, ServerTranslationState> = emptyMap(),
     val translationGeminiModel: String? = null,
     val translationTarget: String? = null,
+    val characterServer: String? = null,
+    val characterStates: Map<String, ServerCharacterState> = emptyMap(),
+    val characterRecaps: Boolean = false,
 ) {
+    /** The server character profiles are set to use, when it is listed. */
+    val characterServerConnection: ServerConnection?
+        get() = servers.readable?.firstOrNull { it.id == characterServer }
+
+    /** The model character profiles use on their server, when one is chosen. */
+    val characterModel: String?
+        get() = characterServerConnection?.let { characterStates[it.id]?.model }
+
     /** Translation's model on each server, by server id. */
     val translationModels: Map<String, String>
         get() = translationStates.mapNotNull { (id, state) -> state.model?.let { id to it } }.toMap()
@@ -385,6 +400,7 @@ class AppSettingsRepository(
         val READ_ALOUD_VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
         val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
+        val CHARACTER_RECAPS = booleanPreferencesKey(CHARACTER_RECAPS_NAME)
     }
 
     /**
@@ -473,6 +489,9 @@ class AppSettingsRepository(
             translationStates = ServerSettings.translationStates(p),
             translationGeminiModel = p[Keys.TRANSLATION_GEMINI_MODEL],
             translationTarget = p[Keys.TRANSLATION_TARGET],
+            characterServer = p[ServerSettings.CHARACTER_SERVER],
+            characterStates = ServerSettings.characterStates(p),
+            characterRecaps = p[Keys.CHARACTER_RECAPS] ?: false,
         )
     }
 
@@ -811,6 +830,43 @@ class AppSettingsRepository(
         }
     }
 
+    /** Has character profiles use the listed server [id]; false when it is not listed. */
+    suspend fun selectCharacterServer(id: String): Boolean {
+        var selected = false
+        store.edit { p ->
+            if (ServerSettings.servers(p).readable?.any { it.id == id } != true) return@edit
+            p[ServerSettings.CHARACTER_SERVER] = id
+            selected = true
+        }
+        return selected
+    }
+
+    /**
+     * Stores character profiles' model on the server at [url], if it is
+     * still listed there; blank forgets it. [noTemperature] records that
+     * the model refused a temperature, and is forgotten with the model.
+     */
+    suspend fun setCharacterServerModel(url: String, model: String, noTemperature: Boolean = false) {
+        val id = ServerConnection.idOf(url) ?: return
+        val trimmed = model.trim().ifEmpty { null }
+        store.edit { p ->
+            val edit = ServerEdit.of(p) ?: return@edit
+            if (edit.servers.none { it.id == id && it.url == url }) return@edit
+            val previous = edit.characterStates[id] ?: ServerCharacterState()
+            val state = ServerCharacterState(
+                model = trimmed,
+                noTemperature = trimmed != null && (noTemperature || (trimmed == previous.model && previous.noTemperature)),
+            )
+            if (state.isEmpty) edit.characterStates.remove(id) else edit.characterStates[id] = state
+            edit.save()
+        }
+    }
+
+    /** Turns background chapter recaps for character profiles on or off. */
+    suspend fun setCharacterRecaps(enabled: Boolean) {
+        store.edit { it[Keys.CHARACTER_RECAPS] = enabled }
+    }
+
     /** Stores the Gemini model translation uses; blank goes back to the default. */
     suspend fun setTranslationGeminiModel(name: String) = setOrRemove(Keys.TRANSLATION_GEMINI_MODEL, name)
 
@@ -983,8 +1039,12 @@ internal val APP_BACKUP_TYPES = mapOf(
     ServerSettings.TRANSLATION_STATE_NAME to BackupValueType.STRING,
     TRANSLATION_GEMINI_MODEL_NAME to BackupValueType.STRING,
     TRANSLATION_TARGET_NAME to BackupValueType.STRING,
+    ServerSettings.CHARACTER_SERVER_NAME to BackupValueType.STRING,
+    ServerSettings.CHARACTER_STATE_NAME to BackupValueType.STRING,
+    CHARACTER_RECAPS_NAME to BackupValueType.BOOLEAN,
 )
 
 private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
+private const val CHARACTER_RECAPS_NAME = "character_recaps"

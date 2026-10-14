@@ -3,6 +3,8 @@ package com.chmouel.liseur
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
+import com.chmouel.liseur.characters.CharacterDatabase
+import com.chmouel.liseur.characters.CharacterStore
 import com.chmouel.liseur.data.AndroidNetworkAvailability
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
@@ -246,6 +248,28 @@ class AppContainer(context: Context) {
         applicationScope.launch {
             database.invalidationTracker.createFlow("books").conflate().collect {
                 if (savedTranslationsOpening.isInitialized() || saved.exists()) savedTranslations.sweep()
+                delay(SWEEP_SPACING_MS)
+            }
+        }
+    }
+
+    private val characterStoreOpening = lazy {
+        CharacterStore(
+            database = Room.databaseBuilder(context, CharacterDatabase::class.java, CharacterDatabase.NAME)
+                .addMigrations(*CharacterDatabase.MIGRATIONS)
+                .build(),
+            present = { urls -> database.bookDao().presentUrls(urls) },
+        ).also { store -> applicationScope.launch { store.tidy() } }
+    }
+
+    /** Character profiles' chapter recaps, kept apart from the library and its backups. */
+    val characterStore: CharacterStore by characterStoreOpening
+
+    init {
+        val saved = context.getDatabasePath(CharacterDatabase.NAME)
+        applicationScope.launch {
+            database.invalidationTracker.createFlow("books").conflate().collect {
+                if (characterStoreOpening.isInitialized() || saved.exists()) characterStore.sweep()
                 delay(SWEEP_SPACING_MS)
             }
         }
@@ -799,6 +823,11 @@ class AppContainer(context: Context) {
     /** The servers and keys on the Services page, shared by every feature that reaches one. */
     internal val serverConnections: ServerConnections by lazy {
         ServerConnections(appSettings, ServerKeys(context.applicationContext), localNetwork)
+    }
+
+    /** The server and model chosen for character profiles. */
+    internal val characterServer: com.chmouel.liseur.characters.CharacterServer by lazy {
+        com.chmouel.liseur.characters.CharacterServer(serverConnections, appSettings)
     }
 
     /** The build's own accounts on the Services page, such as the Play build's Gemini key. */

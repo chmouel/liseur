@@ -1,0 +1,67 @@
+package com.chmouel.liseur.characters
+
+/** One text element as the content iterator gives it: its file, the selector naming it, its text, where it is. */
+data class SourceElement<P>(val href: String, val selector: String?, val text: String, val place: P)
+
+/**
+ * Turns the book's text elements, walked in reading order, into passages
+ * each carrying the chapters it may belong to.
+ *
+ * An element whose file is not in the reading order is left out: with no
+ * place in the book it has no chapter, and text whose chapter is unknown
+ * is never offered.
+ */
+class PassageCatalogBuilder<P>(
+    private val map: ChapterMap,
+    private val readingOrder: List<String>,
+    private val html: suspend (resource: Int) -> String?,
+) {
+    private var resource = -1
+    private var ordinal = 0
+    private var outline: ResourceOutline? = null
+    private var anchors: Map<String, Int> = emptyMap()
+
+    /** The reading-order index of the last element added, or -1 before any. */
+    val current: Int get() = resource
+
+    /** The passages [element] makes, possibly none. */
+    suspend fun add(element: SourceElement<P>): List<Passage<P>> {
+        if (resource < 0 || readingOrder.getOrNull(resource) != element.href) {
+            val next = readingOrder.indices.firstOrNull { it > resource && readingOrder[it] == element.href }
+                ?: return emptyList()
+            enter(next)
+        }
+        val span = element.selector?.let { outline?.span(it) }
+        val range = map.range(resource, span?.first, span?.last, anchors)
+        val parts = PassageText.split(element.text)
+        val index = ordinal++
+        return parts.mapIndexed { part, text ->
+            Passage(
+                ref = PassageText.ref(resource, index, part.takeIf { parts.size > 1 }),
+                hash = PassageText.hash(text),
+                resource = resource,
+                text = text,
+                range = range,
+                place = element.place,
+            )
+        }
+    }
+
+    /**
+     * Where [selector] sits in [at], as chapters, for the place a lookup is
+     * asked from. Null [selector], or one that cannot be found, gives the
+     * whole file's chapters.
+     */
+    suspend fun rangeOf(at: Int, selector: String?): ChapterRange {
+        val located = selector?.let { html(at) }?.let(::ResourceOutline)
+        val span = selector?.let { located?.span(it) }
+        return map.range(at, span?.first, span?.last, located?.anchors(map.anchorsIn(at)) ?: emptyMap())
+    }
+
+    private suspend fun enter(next: Int) {
+        resource = next
+        ordinal = 0
+        outline = html(next)?.let(::ResourceOutline)
+        anchors = outline?.anchors(map.anchorsIn(next)) ?: emptyMap()
+    }
+}

@@ -61,17 +61,58 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
                     .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context))),
             )
         }
+        return OpenAiChat.translation(send(base, apiKey, model, body, onTemperatureRefused))
+    }
+
+    /**
+     * What [model] answers [messages], each a role and its content, with
+     * any reasoning a thinking model wrote first taken off. [temperature]
+     * is sent unless null, and a server refusing it is asked once more
+     * without, as [translate] does. [beforeRequest] is called before each
+     * request goes, so a caller can bound how many it makes. Throws
+     * [TranslationError]; cancelling the caller cancels the request.
+     */
+    suspend fun chat(
+        base: HttpUrl,
+        apiKey: String?,
+        model: String,
+        messages: List<Pair<String, String>>,
+        temperature: Double? = 0.0,
+        beforeRequest: () -> Unit = {},
+        onTemperatureRefused: suspend () -> Unit = {},
+    ): String {
+        val body = JSONObject()
+            .put("model", model)
+            .put("stream", false)
+        temperature?.let { body.put("temperature", if (it == 0.0) 0 else it) }
+        body.put(
+            "messages",
+            JSONArray().apply { messages.forEach { (role, content) -> put(JSONObject().put("role", role).put("content", content)) } },
+        )
+        return OpenAiChat.answer(send(base, apiKey, model, body, onTemperatureRefused, beforeRequest))
+    }
+
+    private suspend fun send(
+        base: HttpUrl,
+        apiKey: String?,
+        model: String,
+        body: JSONObject,
+        onTemperatureRefused: suspend () -> Unit,
+        beforeRequest: () -> Unit = {},
+    ): String {
+        beforeRequest()
         val first = complete(base, apiKey, body)
         val refused = first is ChatReply.Failure && first.code == 400 && body.has("temperature") &&
             first.body.contains("temperature", ignoreCase = true)
         val reply = if (refused) {
             body.remove("temperature")
+            beforeRequest()
             complete(base, apiKey, body).also { if (it is ChatReply.Text) onTemperatureRefused() }
         } else {
             first
         }
         return when (reply) {
-            is ChatReply.Text -> OpenAiChat.translation(reply.text)
+            is ChatReply.Text -> reply.text
             is ChatReply.Failure -> throw OpenAiChat.errorFor(reply.code, reply.body, model)
         }
     }
@@ -135,7 +176,17 @@ internal object OpenAiChat {
      * The translation in a chat completion. Throws [TranslationError] for a
      * refusal, a filtered or empty answer, or anything not a completion.
      */
-    fun translation(text: String): String {
+    fun translation(text: String): String = TranslationPrompt.clean(content(text)).ifEmpty { throw TranslationError.Empty() }
+
+    /**
+     * The answer in a chat completion, without the reasoning a thinking
+     * model may have opened it with. Throws [TranslationError] as
+     * [translation] does.
+     */
+    fun answer(text: String): String =
+        TranslationPrompt.withoutReasoning(content(text).trim()).ifEmpty { throw TranslationError.Empty() }
+
+    private fun content(text: String): String {
         val root = try {
             JSONObject(text.trim())
         } catch (_: JSONException) {
@@ -150,7 +201,7 @@ internal object OpenAiChat {
             "content_filter" -> throw TranslationError.Refused()
             "length" -> throw TranslationError.Truncated()
         }
-        val content = when (val raw = message.opt("content")) {
+        return when (val raw = message.opt("content")) {
             is String -> raw
             is JSONArray -> (0 until raw.length()).mapNotNull { i ->
                 raw.optJSONObject(i)?.takeIf { it.optString("type") == "text" }?.opt("text") as? String
@@ -158,7 +209,6 @@ internal object OpenAiChat {
             null, JSONObject.NULL -> ""
             else -> throw TranslationError.Malformed("unexpected content")
         }
-        return TranslationPrompt.clean(content).ifEmpty { throw TranslationError.Empty() }
     }
 
     /**

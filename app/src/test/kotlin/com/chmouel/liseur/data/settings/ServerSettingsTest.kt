@@ -656,6 +656,82 @@ class ServerSettingsTest {
         assertEquals(before, repo.settings.first())
     }
 
+    // -- Character profiles -----------------------------------------------
+
+    @Test
+    fun `character profiles keep their own server and model, apart from translation`() = runTest {
+        val repo = repo()
+        val id = repo.add("OpenRouter", OPENROUTER)
+        repo.selectTranslationServer(id)
+        repo.setTranslationServerModel(OPENROUTER, "gpt-4o-mini")
+        assertTrue(repo.selectCharacterServer(id))
+        repo.setCharacterServerModel(OPENROUTER, " gpt-5 ")
+        repo.setCharacterRecaps(true)
+
+        val s = repo.settings.first()
+        assertEquals(id, s.characterServerConnection?.id)
+        assertEquals("gpt-5", s.characterModel)
+        assertEquals("gpt-4o-mini", s.translationModels[id])
+        assertTrue(s.characterRecaps)
+    }
+
+    @Test
+    fun `a new address takes character profiles with it, and deleting it forgets them`() = runTest {
+        val repo = repo()
+        val id = repo.add("Kokoro", KOKORO)
+        repo.selectCharacterServer(id)
+        repo.setCharacterServerModel(KOKORO, "llama", noTemperature = true)
+
+        repo.updateServer(id, "Kokoro", MOVED)
+        val moved = repo.settings.first()
+        assertEquals(MOVED_ID, moved.characterServer)
+        assertEquals(ServerCharacterState("llama"), moved.characterStates[MOVED_ID])
+
+        assertTrue(repo.deleteServer(MOVED_ID))
+        val deleted = repo.settings.first()
+        assertNull(deleted.characterServer)
+        assertTrue(deleted.characterStates.isEmpty())
+    }
+
+    @Test
+    fun `an archive keeps character profiles' server, model and recaps`() = runTest {
+        val source = repo()
+        val id = source.add("OpenRouter", OPENROUTER)
+        source.selectCharacterServer(id)
+        source.setCharacterServerModel(OPENROUTER, "gpt-5")
+        source.setCharacterRecaps(true)
+        val archive = source.backupValues()
+
+        val destination = AppSettingsRepository(PreferenceDataStoreFactory.create { folder.newFile("other.preferences_pb") })
+        destination.restoreBackupValues(archive)
+
+        val s = destination.settings.first()
+        assertEquals(OPENROUTER_ID, s.characterServerConnection?.id)
+        assertEquals("gpt-5", s.characterModel)
+        assertTrue(s.characterRecaps)
+    }
+
+    @Test
+    fun `an archive whose character profiles refer to an unlisted server changes nothing`() = runTest {
+        val repo = repo()
+        repo.add("Kokoro", KOKORO)
+        val before = repo.settings.first()
+
+        val broken = listOf(
+            JSONObject().put(ServerSettings.CHARACTER_SERVER_NAME, OPENROUTER_ID),
+            JSONObject().put(ServerSettings.CHARACTER_STATE_NAME, """{"$OPENROUTER_ID":{"model":"x"}}"""),
+            JSONObject().put(ServerSettings.CHARACTER_STATE_NAME, "{"),
+        )
+        for (archive in broken) {
+            try {
+                repo.restoreBackupValues(archive.put("theme_mode", "dark"))
+                fail("Restored $archive")
+            } catch (_: IllegalArgumentException) {
+            }
+        }
+        assertEquals(before, repo.settings.first())
+    }
+
     private fun legacyArchive() = JSONObject()
         .put("speech_server_url", KOKORO)
         .put("speech_server_model", "kokoro")

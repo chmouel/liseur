@@ -132,6 +132,27 @@ class ReadingSessionDaoTest {
     }
 
     @Test
+    fun `a peek at a source and listening each hold the clock`() = runTest {
+        val recorder = recorder()
+        recorder.resumed()
+        now += minute
+        recorder.suspendForPeek()
+        recorder.awaitIdle()
+        now += 20 * minute
+        // Listening ending while the source is still shown starts nothing.
+        recorder.suspendForListening()
+        recorder.resumeAfterListening()
+        recorder.awaitIdle()
+        now += 5 * minute
+        recorder.resumeAfterPeek()
+        recorder.awaitIdle()
+        now += 2 * minute
+        recorder.paused()
+
+        assertEquals(3 * minute, totalFor(book))
+    }
+
+    @Test
     fun `listening that stops in the background starts nothing`() = runTest {
         val recorder = recorder()
         recorder.resumed()
