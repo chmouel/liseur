@@ -70,8 +70,6 @@ class Investigation<P>(
     private val chat: CompanionChat,
     private val scope: AskingScope,
     passages: List<Passage<P>>,
-    /** The language profiles are written in, by its English name. */
-    private val language: String,
     private val limits: InvestigationLimits = InvestigationLimits(),
 ) {
     private val eligible = passages.filter { Eligibility.allows(scope, it.range) }
@@ -126,7 +124,7 @@ class Investigation<P>(
             val mentions = asked.flatMap(::mentioning).distinct().sorted()
             val hinted = hintedFor(asked, hints)
             if (mentions.isEmpty() && hinted.isEmpty()) return CompanionAnswer.Insufficient
-            history += ChatMessage("system", CompanionPrompt.system(language, limits))
+            history += ChatMessage("system", CompanionPrompt.system(limits))
             history += ChatMessage("user", seed(mentions, hinted))
             while (true) {
                 val reply = request()

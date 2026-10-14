@@ -2035,6 +2035,8 @@ liseur-sync settings.
   `Locator.text.before/after`, chapter titles, notes, recap prose, or the
   model's malformed reply. Book text and the name sit in
   `CompanionPrompt`'s unclosable data blocks, as in `TranslationPrompt`.
+  The profile is written in the language of the passages, so it follows
+  the book rather than the app, whatever the EPUB metadata claims.
   `InvestigationTest` and `RecapTest` capture every request and assert
   that no chapter-5-or-later sentinel leaves.
 - `Investigation` runs JSON actions (`search`, `read`) over ordinary chat

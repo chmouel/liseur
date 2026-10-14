@@ -47,7 +47,6 @@ class CompanionViewModel(
     private val catalog = CompletableDeferred<PublicationCatalog>()
     private val contentSha = MutableStateFlow<String?>(null)
     private val placed = Mutex()
-    private var language: String = "English"
     private var scheduler: RecapScheduler<Locator>? = null
 
     // What the screen reported before the scheduler started, in order.
@@ -83,7 +82,6 @@ class CompanionViewModel(
         chatFor = server::chat,
         hints = ::hints,
         aside = { block -> scheduler?.aside(block) ?: block() },
-        language = { language },
         log = { Log.w(TAG, "Character lookup failed: ${it.javaClass.simpleName}") },
     )
 
@@ -126,11 +124,6 @@ class CompanionViewModel(
                 pendingShown.clear()
             }
         }
-    }
-
-    /** The app's language, by its English name, for the profile's prose. */
-    fun setLanguage(name: String) {
-        language = name
     }
 
     /**

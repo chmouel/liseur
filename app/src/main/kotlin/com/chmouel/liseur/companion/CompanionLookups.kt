@@ -81,7 +81,7 @@ data class CompanionPanel<P>(
  * panel cancels the request in flight. [aside] runs a lookup with the
  * book's background recaps paused, and [hints] reads what saved recaps
  * say about the chapters a scope allows. Completed answers are cached for
- * the open book under the server, model, language, asking scope, name and
+ * the open book under the server, model, asking scope, name and
  * recap hints that produced them, so tapping the same character again in
  * the same chapter is instant; an explicit [retry] bypasses the cache.
  */
@@ -92,7 +92,6 @@ class CompanionLookups<P>(
     private val chatFor: (CompanionChoice) -> CompanionChat,
     private val hints: suspend (CompanionChoice, AskingScope, List<Passage<P>>) -> List<RecapHint>,
     private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
-    private val language: () -> String,
     private val limits: InvestigationLimits = InvestigationLimits(),
     private val log: (Throwable) -> Unit = {},
 ) {
@@ -100,7 +99,6 @@ class CompanionLookups<P>(
         val serverId: String,
         val model: String,
         val generation: Int,
-        val language: String,
         val scope: AskingScope,
         val name: String,
         val also: String?,
@@ -205,12 +203,10 @@ class CompanionLookups<P>(
                 val book = catalog()
                 val passages = book.passagesBefore(asked)
                 val offered = hints(chosen, asked, passages)
-                val lang = language()
                 val key = CacheKey(
                     serverId = chosen.serverId,
                     model = chosen.model,
                     generation = chosen.generation,
-                    language = lang,
                     scope = asked,
                     name = PassageText.fold(name),
                     also = also?.let(PassageText::fold),
@@ -219,7 +215,7 @@ class CompanionLookups<P>(
                 val cached = if (useCache) synchronized(cache) { cache[key] } else null
                 val answer = cached ?: aside {
                     show(CompanionView.Loading(CompanionView.Stage.ASKING))
-                    Investigation(chatFor(chosen), asked, passages, lang, limits).run(name, also, offered)
+                    Investigation(chatFor(chosen), asked, passages, limits).run(name, also, offered)
                 }.also { fresh ->
                     if (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous) {
                         synchronized(cache) { cache[key] = fresh }

@@ -67,7 +67,6 @@ class CompanionLookupsTest {
         },
         hints = { _, _, _ -> emptyList() },
         aside = { it() },
-        language = { "English" },
     )
 
     private fun refs(messages: List<ChatMessage>): List<String> =

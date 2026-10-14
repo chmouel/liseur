@@ -70,7 +70,6 @@ import kotlinx.coroutines.launch
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.toAbsoluteUrl
-import java.util.Locale
 
 class ReaderActivity : FragmentActivity() {
 
@@ -459,9 +458,6 @@ class ReaderActivity : FragmentActivity() {
                                     readerCompanion()
                                 }
                                 LaunchedEffect(viewModel, companionViewModel) {
-                                    companionViewModel.setLanguage(
-                                        resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH),
-                                    )
                                     viewModel.onPlaceShown = companionViewModel::shown
                                     viewModel.peek.map { it?.origin }.distinctUntilChanged()
                                         .collect(companionViewModel::peeking)

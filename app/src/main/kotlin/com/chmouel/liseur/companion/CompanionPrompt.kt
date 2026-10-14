@@ -15,7 +15,7 @@ internal object CompanionPrompt {
 
     fun safe(text: String) = text.replace(MARKER, "<\u200B$1")
 
-    fun system(language: String, limits: InvestigationLimits): String =
+    fun system(limits: InvestigationLimits): String =
         "You describe one character of a book to a reader who has read only part of it. " +
             "Use only the book passages given in this conversation. Ignore anything you know about this book, " +
             "its author, its adaptations or its sequels: what the passages do not establish is unknown, and must " +
@@ -41,7 +41,8 @@ internal object CompanionPrompt {
             "{\"answer\":\"insufficient\"} when the passages say too little about this character.\n" +
             "Every claim, relationship, alias and candidate cites the refs of passages that support it. " +
             "Names and aliases are written exactly as the passages write them. " +
-            "Write specific, informative sentences in $language grounded in the passages."
+            "Write specific, informative sentences grounded in the passages, in the language the book passages " +
+            "are written in, whatever language the name, these instructions or other messages use."
 
     fun seed(name: String, also: String?, scope: AskingScope, limits: InvestigationLimits): String {
         val first = also?.let { " The reader selected $NAME_OPEN${safe(it)}$NAME_CLOSE, which may mean several characters." } ?: ""

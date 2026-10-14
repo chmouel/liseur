@@ -58,7 +58,7 @@ class InvestigationTest {
     }
 
     private fun investigation(chat: CompanionChat, scope: AskingScope = chapter5, passages: List<Passage<Int>> = book, limits: InvestigationLimits = InvestigationLimits()) =
-        Investigation(chat, scope, passages, "English", limits)
+        Investigation(chat, scope, passages, limits)
 
     private fun profile(refs: List<String>, aliases: JSONArray = JSONArray(), relationships: JSONArray = JSONArray()) = JSONObject()
         .put("answer", "profile")
