@@ -12,7 +12,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -36,7 +35,11 @@ import com.chmouel.liseur.tts.ServerKeys
 import com.chmouel.liseur.tts.SpeechLocalNetworkPrompt
 import com.chmouel.liseur.tts.priceText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -50,6 +53,7 @@ internal class ServerCompanionService(
     private val connections: ServerConnections,
     private val settings: AppSettingsRepository,
     private val client: OpenAiChatClient = OpenAiChatClient(),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : CompanionService {
     override val id = CompanionService.SERVER
     override val offered: Flow<Boolean> = flowOf(true)
@@ -114,6 +118,11 @@ internal class ServerCompanionService(
 
     suspend fun setModel(url: String, model: String) = settings.setCompanionServerModel(url, model)
 
+    /** Saves [model] in the service's scope, so leaving the screen does not drop it. */
+    fun commitModel(url: String, model: String) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { setModel(url, model) }
+    }
+
     /** The models the server at [url] lists. */
     suspend fun models(url: String): Result<List<TextModel>> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(TranslationError.NotSetUp())
@@ -172,7 +181,6 @@ internal class ServerCompanionService(
         var listing by remember(url, generation) { mutableStateOf<Listing?>(null) }
         var prices by remember(url, generation) { mutableStateOf(emptyMap<String, TextPrice>()) }
         var asked by remember(url, generation) { mutableIntStateOf(0) }
-        val scope = rememberCoroutineScope()
         LaunchedEffect(url, generation, asked, allowed) {
             if (!allowed) return@LaunchedEffect
             listing = Listing.Loading(url)
@@ -206,7 +214,7 @@ internal class ServerCompanionService(
                 stored = stored,
                 enabled = true,
                 listing = listing?.takeIf { it.url == url },
-                onSave = { model -> scope.launch { setModel(url, model) } },
+                onSave = { model -> commitModel(url, model) },
                 onRetry = { asked++ },
                 detail = { id ->
                     prices[id]?.let {
