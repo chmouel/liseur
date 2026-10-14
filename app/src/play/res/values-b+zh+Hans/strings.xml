@@ -70,4 +70,7 @@
     <string name="translation_mlkit_language_download">下载%1$s</string>
     <string name="translation_mlkit_delete_title">删除%1$s？</string>
     <string name="translation_mlkit_delete_target">%1$s是你的翻译语言。要再次翻译成这种语言，需要重新下载。</string>
+    <string name="companion_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。书籍文本会发送给 Google。</string>
+    <string name="companion_gemini_key_missing">请在“外部服务和 API 密钥”页面添加你的 Gemini API 密钥，阅读伴侣才能使用 Gemini。</string>
+    <string name="companion_gemini_privacy">前面章节的文本会使用你的 Gemini 密钥发送给 Google；开启后台摘要后会发送整章内容。Google 可能对这些请求收费。</string>
 </resources>

@@ -65,6 +65,40 @@ class GeminiTranslationTest {
     }
 
     @Test
+    fun `a chat sends system messages as the instruction and the assistant's turns as the model's`(): Unit = runBlocking {
+        server.enqueue(MockResponse.Builder().code(200).body(reply("""{"answer":"x"}""")).build())
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        var asked = false
+
+        val answer = client.chat(
+            "secret",
+            "gemini-flash-latest",
+            listOf("system" to "Rules", "user" to "Who?", "assistant" to "search", "user" to "Passages"),
+        ) { asked = true }
+
+        assertEquals("""{"answer":"x"}""", answer)
+        assertTrue(asked)
+        val request = server.takeRequest()
+        assertEquals("/v1beta/models/gemini-flash-latest:generateContent", request.url.encodedPath)
+        assertEquals("secret", request.headers["x-goog-api-key"])
+        val body = JSONObject(request.body!!.utf8())
+        assertEquals("Rules", body.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).getString("text"))
+        val contents = body.getJSONArray("contents")
+        assertEquals(listOf("user", "model", "user"), (0 until contents.length()).map { contents.getJSONObject(it).getString("role") })
+        assertEquals("search", contents.getJSONObject(1).getJSONArray("parts").getJSONObject(0).getString("text"))
+        assertEquals("application/json", body.getJSONObject("generationConfig").getString("responseMimeType"))
+    }
+
+    @Test
+    fun `a chat reply keeps its text as written, and an empty one is empty`(): Unit = runBlocking {
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        server.enqueue(MockResponse.Builder().code(200).body(reply("```json\n{}\n```")).build())
+        assertEquals("```json\n{}\n```", client.chat("k", "m", listOf("user" to "q")))
+        server.enqueue(MockResponse.Builder().code(200).body(reply(" ")).build())
+        expect<TranslationError.Empty> { runBlocking { client.chat("k", "m", listOf("user" to "q")) } }
+    }
+
+    @Test
     fun `a refused key and a spent quota say so`(): Unit = runBlocking {
         val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
         server.enqueue(

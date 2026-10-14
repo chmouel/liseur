@@ -13,7 +13,7 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-/** The Gemini API's generateContent, asked to translate, and its list of text models. */
+/** The Gemini API's generateContent, asked to translate or to chat, and its list of text models. */
 class GeminiTranslationClient(
     private val client: OkHttpClient = TranslationHttp.client(),
     private val base: HttpUrl = GeminiTranslation.ENDPOINT.toHttpUrl(),
@@ -46,6 +46,19 @@ class GeminiTranslationClient(
         return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::reply)
     }
 
+    /**
+     * What [model] answers [messages], each a role and its content: system
+     * messages become the system instruction, and an assistant's turns the
+     * model's. [beforeRequest] is called before the request goes. Throws
+     * [TranslationError]; cancelling the caller cancels the request.
+     */
+    suspend fun chat(apiKey: String, model: String, messages: List<Pair<String, String>>, beforeRequest: () -> Unit = {}): String {
+        val body = GeminiTranslation.chatBody(messages).toString()
+        val url = base.newBuilder().addPathSegment("$model:generateContent").build()
+        beforeRequest()
+        return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::answer)
+    }
+
     /** The models the key can use that write text, by id, sorted. Throws [TranslationError]. */
     suspend fun models(apiKey: String): List<String> {
         val url = base.newBuilder().addQueryParameter("pageSize", "1000").build()
@@ -60,6 +73,13 @@ class GeminiTranslationClient(
         if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
         if (text == null) throw TranslationError.Malformed("reply too large")
         return GeminiTranslation.translation(text)
+    }
+
+    private fun answer(response: Response): String {
+        val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
+        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
+        if (text == null) throw TranslationError.Malformed("reply too large")
+        return GeminiTranslation.content(text).ifBlank { throw TranslationError.Empty() }
     }
 
     private fun models(response: Response): List<String> {
@@ -88,7 +108,35 @@ internal object GeminiTranslation {
     private val BLOCKED = setOf("SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY")
 
     /** The translation in a generateContent reply. Throws [TranslationError] for a block, an empty answer or anything else. */
-    fun translation(text: String): String {
+    fun translation(text: String): String = TranslationPrompt.clean(content(text)).ifEmpty { throw TranslationError.Empty() }
+
+    /**
+     * A generateContent body for a chat: system messages joined as the
+     * system instruction, the rest as turns, an assistant's as the model's.
+     * The reply is asked for as JSON, which every chat expects.
+     */
+    fun chatBody(messages: List<Pair<String, String>>): JSONObject {
+        val system = messages.filter { it.first == "system" }.joinToString("\n\n") { it.second }
+        val contents = JSONArray()
+        messages.filter { it.first != "system" }.forEach { (role, content) ->
+            contents.put(
+                JSONObject()
+                    .put("role", if (role == "assistant") "model" else "user")
+                    .put("parts", JSONArray().put(JSONObject().put("text", content))),
+            )
+        }
+        val body = JSONObject()
+        if (system.isNotEmpty()) body.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+        return body
+            .put("contents", contents)
+            // The same question about the same passages then gets the same answer. Without the JSON
+            // type, Gemini reads the prompt's {"op":…} actions as a tool call and fails the reply
+            // with MALFORMED_FUNCTION_CALL.
+            .put("generationConfig", JSONObject().put("temperature", 0).put("responseMimeType", "application/json"))
+    }
+
+    /** The text of a generateContent reply, thoughts left out. Throws [TranslationError] for a block or an unfinished answer. */
+    fun content(text: String): String {
         val root = try {
             JSONObject(text.trim())
         } catch (_: JSONException) {
@@ -106,11 +154,10 @@ internal object GeminiTranslation {
         // no reason at all means the model had not finished.
         if (finish != "STOP") throw TranslationError.Malformed("finished with ${finish.ifEmpty { "no reason" }}")
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts")
-        val content = (0 until (parts?.length() ?: 0)).mapNotNull { i ->
+        return (0 until (parts?.length() ?: 0)).mapNotNull { i ->
             // A thinking model's thoughts come as parts of their own.
             parts?.optJSONObject(i)?.takeUnless { it.optBoolean("thought") }?.opt("text") as? String
         }.joinToString("")
-        return TranslationPrompt.clean(content).ifEmpty { throw TranslationError.Empty() }
     }
 
     /** The models in a list that generate content and are not for speech, images, music or embeddings, sorted by id. */

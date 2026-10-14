@@ -70,4 +70,7 @@
     <string name="translation_mlkit_language_download">Télécharger %1$s</string>
     <string name="translation_mlkit_delete_title">Supprimer %1$s ?</string>
     <string name="translation_mlkit_delete_target">%1$s est votre langue de traduction. Pour traduire à nouveau dans cette langue, il faudra la télécharger de nouveau.</string>
+    <string name="companion_provider_gemini_summary">Gemini de Google, avec votre clé API. Le texte du livre est envoyé à Google.</string>
+    <string name="companion_gemini_key_missing">Ajoutez votre clé API Gemini dans la page Services externes et clés API pour que le compagnon de lecture utilise Gemini.</string>
+    <string name="companion_gemini_privacy">Le texte des chapitres précédents est envoyé à Google avec votre clé Gemini, et des chapitres entiers si les résumés en arrière-plan sont activés. Google peut facturer ces requêtes.</string>
 </resources>
