@@ -80,6 +80,9 @@
     <string name="companion_nano_downloadable">Android 需要先下载 Gemini Nano，阅读伴侣才能使用它。</string>
     <string name="companion_nano_download">下载</string>
     <string name="companion_nano_downloading">正在下载 Gemini Nano…</string>
+    <string name="companion_nano_download_size">%1$s / %2$s</string>
+    <string name="companion_nano_download_so_far">已下载 %1$s</string>
+    <string name="companion_nano_download_waiting">正在等待 Android 开始下载。</string>
     <string name="companion_nano_download_failed">下载未完成。请重试。</string>
     <string name="companion_nano_unavailable">Gemini Nano 目前在本机不可用。</string>
     <string name="companion_nano_note">Gemini Nano 一次能读取的文本远少于服务器上的模型，因此查找读取的段落更少，找到的信息也可能更少。它仅在 Liseur 打开时工作。</string>

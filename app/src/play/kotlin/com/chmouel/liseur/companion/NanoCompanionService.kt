@@ -2,6 +2,7 @@ package com.chmouel.liseur.companion
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.text.format.Formatter
 import android.util.Log
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.runtime.State as ComposeState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
@@ -124,7 +126,10 @@ internal class NanoCompanionService(
             try {
                 model.value.download().collect { status ->
                     when (status) {
-                        is DownloadStatus.DownloadStarted -> state.value = State.Downloading(0, status.bytesToDownload)
+                        is DownloadStatus.DownloadStarted -> {
+                            Log.i(TAG, "Gemini Nano download started: ${status.bytesToDownload} bytes")
+                            state.value = State.Downloading(0, status.bytesToDownload)
+                        }
                         is DownloadStatus.DownloadProgress -> state.update {
                             State.Downloading(status.totalBytesDownloaded, (it as? State.Downloading)?.total ?: 0)
                         }
@@ -212,10 +217,25 @@ internal class NanoCompanionService(
             )
             when (val s = current) {
                 is State.Downloadable -> TextButton(onClick = ::startDownload) { Text(stringResource(R.string.companion_nano_download)) }
-                is State.Downloading -> if (s.total > 0) {
-                    LinearProgressIndicator(progress = { (s.done.toFloat() / s.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
-                } else {
-                    LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                is State.Downloading -> {
+                    if (s.total > 0) {
+                        LinearProgressIndicator(progress = { (s.done.toFloat() / s.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                    } else {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                    }
+                    val context = LocalContext.current
+                    fun size(bytes: Long) = Formatter.formatShortFileSize(context, bytes)
+                    // A download already under way when Liseur started following it reports no size.
+                    Text(
+                        text = when {
+                            s.total > 0 -> stringResource(R.string.companion_nano_download_size, size(s.done), size(s.total))
+                            s.done > 0 -> stringResource(R.string.companion_nano_download_so_far, size(s.done))
+                            else -> stringResource(R.string.companion_nano_download_waiting)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
                 else -> Unit
             }

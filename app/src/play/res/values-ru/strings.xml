@@ -80,6 +80,9 @@
     <string name="companion_nano_downloadable">Android должен загрузить Gemini Nano, прежде чем помощник сможет её использовать.</string>
     <string name="companion_nano_download">Загрузить</string>
     <string name="companion_nano_downloading">Загрузка Gemini Nano…</string>
+    <string name="companion_nano_download_size">%1$s из %2$s</string>
+    <string name="companion_nano_download_so_far">Загружено: %1$s</string>
+    <string name="companion_nano_download_waiting">Ожидание, пока Android начнёт загрузку.</string>
     <string name="companion_nano_download_failed">Загрузка не завершилась. Попробуйте ещё раз.</string>
     <string name="companion_nano_unavailable">Gemini Nano сейчас недоступна на этом телефоне.</string>
     <string name="companion_nano_note">Gemini Nano читает за раз гораздо меньше текста, чем модель на сервере, поэтому поиск просматривает меньше отрывков и может найти меньше. Она работает, только пока Liseur открыт.</string>

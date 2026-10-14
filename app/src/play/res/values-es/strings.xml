@@ -80,6 +80,9 @@
     <string name="companion_nano_downloadable">Android debe descargar Gemini Nano antes de que el compañero pueda usarlo.</string>
     <string name="companion_nano_download">Descargar</string>
     <string name="companion_nano_downloading">Descargando Gemini Nano…</string>
+    <string name="companion_nano_download_size">%1$s de %2$s</string>
+    <string name="companion_nano_download_so_far">%1$s descargados</string>
+    <string name="companion_nano_download_waiting">Esperando a que Android inicie la descarga.</string>
     <string name="companion_nano_download_failed">La descarga no terminó. Inténtalo de nuevo.</string>
     <string name="companion_nano_unavailable">Gemini Nano no está disponible en este teléfono por ahora.</string>
     <string name="companion_nano_note">Gemini Nano lee mucho menos texto a la vez que el modelo de un servidor, así que las búsquedas leen menos pasajes y pueden encontrar menos. Solo funciona mientras Liseur está abierto.</string>
