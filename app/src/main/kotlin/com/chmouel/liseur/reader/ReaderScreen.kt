@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader
 import android.app.Activity
 import android.graphics.BitmapFactory
 import android.graphics.Rect
+import android.os.Build
 import android.util.Log
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -190,6 +191,7 @@ import com.chmouel.liseur.reader.chrome.AutoScrollTicker
 import com.chmouel.liseur.reader.chrome.autoScrollControlsShown
 import com.chmouel.liseur.reader.chrome.JumpBackPill
 import com.chmouel.liseur.reader.chrome.PageCurl
+import com.chmouel.liseur.reader.chrome.isPageCurlSupportedOnDevice
 import com.chmouel.liseur.reader.chrome.PageCurlOverlay
 import com.chmouel.liseur.reader.chrome.PageCurlState
 import com.chmouel.liseur.reader.chrome.PageTurnDrag
@@ -1145,6 +1147,14 @@ fun ReaderScreen(
 
     val eInk = LocalEInk.current
     val eInkNow by rememberUpdatedState(eInk)
+    val pageCurlSupportedOnDevice = remember {
+        isPageCurlSupportedOnDevice(
+            manufacturer = Build.MANUFACTURER.orEmpty(),
+            brand = Build.BRAND.orEmpty(),
+            model = Build.MODEL.orEmpty(),
+            device = Build.DEVICE.orEmpty(),
+        )
+    }
     var showingEnd by remember { mutableStateOf(false) }
     chromeTransition.targetState = chromeVisible && !showingEnd
     val showingEndNow by rememberUpdatedState(showingEnd)
@@ -1245,7 +1255,7 @@ fun ReaderScreen(
                     tappedSelection == null &&
                     viewedImageNow == null && !openingImageNow
             },
-            interactive = { !eInkNow },
+            interactive = { !eInkNow && pageCurlSupportedOnDevice },
             isRtl = {
                 navigatorNow?.overflow?.value?.readingProgression == ReadingProgression.RTL
             },

@@ -125,6 +125,23 @@ class PageTurnDragTest {
         assertTrue(h.curl.log.isEmpty())
     }
 
+    @Test
+    fun `a reported device leaves the horizontal drag to the navigator`() {
+        val h = Harness(
+            interactive = isPageCurlSupportedOnDevice(
+                manufacturer = "TECNO",
+                brand = "TECNO",
+                model = "TECNO-KJ5",
+                device = "KJ5",
+            ),
+        )
+
+        assertFalse(h.drag.offer(pointers = 1, dx = -200f, dy = 4f))
+        assertFalse(h.drag.release())
+        assertTrue(h.turns.isEmpty())
+        assertTrue(h.curl.log.isEmpty())
+    }
+
     // Curls.
 
     @Test
