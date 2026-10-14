@@ -20,6 +20,10 @@ class PassageCatalogBuilder<P>(
     private var ordinal = 0
     private var outline: ResourceOutline? = null
     private var anchors: Map<String, Int> = emptyMap()
+    // The last outline parsed for an ask rather than for the walk, kept so
+    // repeated asks about the resource the reader is in stay cheap.
+    private var askedResource = -1
+    private var askedOutline: ResourceOutline? = null
 
     /** The reading-order index of the last element added, or -1 before any. */
     val current: Int get() = resource
@@ -53,9 +57,19 @@ class PassageCatalogBuilder<P>(
      * whole file's chapters.
      */
     suspend fun rangeOf(at: Int, selector: String?): ChapterRange {
-        val located = selector?.let { html(at) }?.let(::ResourceOutline)
+        val located = selector?.let { outlineAt(at) }
         val span = selector?.let { located?.span(it) }
         return map.range(at, span?.first, span?.last, located?.anchors(map.anchorsIn(at)) ?: emptyMap())
+    }
+
+    /** The outline of a resource asked about, parsed once and kept for the next ask about it. */
+    private suspend fun outlineAt(at: Int): ResourceOutline? {
+        if (at == askedResource) return askedOutline
+        if (at == resource) return outline
+        val parsed = html(at)?.let(::ResourceOutline)
+        askedResource = at
+        askedOutline = parsed
+        return parsed
     }
 
     private suspend fun enter(next: Int) {
