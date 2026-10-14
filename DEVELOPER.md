@@ -20,13 +20,14 @@ Manager package list).
 ```
 
 There are two product flavors. `foss` is the build F-Droid reproduces
-and the GitHub release carries. `play` adds Gemini's read-aloud voices
-and Gemini translation, which send book text to a non-free Google
-service, and Google's ML Kit translator, which keeps book text on the
-phone but is a proprietary SDK with its own diagnostics. They ship only
+and the GitHub release carries. `play` adds Gemini's read-aloud voices,
+Gemini translation and the reading companion on Gemini, which send book
+text to a non-free Google service, and Google's ML Kit translator and
+the companion on Gemini Nano, which keep book text on the phone but use
+proprietary SDKs with their own diagnostics. They ship only
 on Google Play. Their code lives under
 `app/src/play/` and `app/src/testPlay/`; the `foss` APK has none of their
-code, strings or endpoints. Read aloud and translation themselves, on the
+code, strings or endpoints. Read aloud, translation and the reading companion themselves, on the
 device or with a server the reader enters, are in both. Both flavors share the application id, version and signing
 key. Plain `assembleRelease` or `assembleDebug` builds both flavors.
 
@@ -722,7 +723,8 @@ not in the console.
 ML Kit translation changes the Play declarations, so update them in the
 console before the first release that carries it. Data safety must list
 what Google's [ML Kit Android data disclosure](https://developers.google.com/ml-kit/android-data-disclosure)
-names for every feature, which covers `com.google.mlkit:translate`:
+names for every feature, which covers `com.google.mlkit:translate` and
+`com.google.mlkit:genai-prompt`:
 device and app information, per-installation identifiers, performance
 metrics, API configuration, input and output sizes, events and error
 codes, collected for diagnostics and analytics, encrypted in transit and
@@ -2016,6 +2018,32 @@ separate from translation's, are moved and forgotten with server edits
 in `ServerSettings`, travel in the settings backup archive, and are not
 liseur-sync settings.
 
+- Each service is a `CompanionService`; `CompanionServer` picks the one
+  named by `companion_provider` (absent means a listed server, as before)
+  and fences every request on its `CompanionChoice`. `CompanionFeatureFactory`
+  lists them per flavor: `foss` has only `ServerCompanionService`, `play`
+  adds `GeminiCompanionService` (the reader's Gemini key through
+  `GeminiTranslationClient.chat`, model in `companion_gemini_model`,
+  fenced on the key's generation) and `NanoCompanionService` (Gemini Nano
+  through ML Kit's Prompt API). A provider this build lacks, such as one
+  restored from a Play backup on F-Droid, reads as not set up rather than
+  falling back. Choosing a listed server clears `companion_provider`.
+- A choice carries its `CompanionLimits`. Servers and Gemini use the
+  defaults below; Nano reads about 4,000 tokens at once, so it gets 3
+  rounds, 6 operations, 5,000 characters of source, 5 requests, a
+  3,000-character first request and 6,000-character recap batches. It
+  counts tokens before each request and fails with
+  `CompanionError.TooLong` rather than have the model read part of what
+  it was sent. Nano takes one turn, so `NanoPrompt` writes earlier turns
+  into the prompt. Recaps are keyed by service id and model, so switching
+  never reuses another service's recaps.
+- Nano is offered only where AICore (`com.google.android.aicore`) is
+  installed, found with a package query. ML Kit is started (`MlKit.initialize`;
+  its startup provider is removed in the `play` manifest) and asked for
+  Nano's status only once Nano is the chosen service, so a reader who
+  never picks it never starts the SDK. It cannot be tested on an
+  emulator.
+
 - Chapters come from the contents, not from files (`ChapterMap`). Only
   top-level entries are chapters, a lone wrapper entry is looked
   through, and nested entries never split one, whichever file they open.
@@ -2657,14 +2685,15 @@ what lets it sync a book that came off an SD card.
   TetheredNet anti-feature. Together those justify `INTERNET`;
   `ACCESS_NETWORK_STATE` is there for the `NetworkType.CONNECTED`
   constraint on the sync workers.
-- Gemini read-aloud and Gemini translation, which send book text to
-  Google, are in the `play` flavor only. F-Droid builds `foss`, which has none of its code, strings
+- Gemini read-aloud, Gemini translation and the companion on Gemini,
+  which send book text to Google, are in the `play` flavor only. F-Droid builds `foss`, which has none of its code, strings
   or endpoint, so the NonFreeNet anti-feature does not apply. Device
   voices are in both and stay on the device, and they are the default.
   Read aloud and translation with a server are in both and talk only to
   the server the user sets. Device translation uses Android's own
   `TranslationManager`, not ML Kit, so it needs no Google Play services.
-  ML Kit translation is the one deliberate exception, Play only
+  ML Kit (translation, and the Prompt API for the companion on Gemini
+  Nano) is the one deliberate exception, Play only
   (`playImplementation`): a proprietary SDK that pulls in Play services
   client libraries, Firebase components and datatransport. Book text
   stays on the phone, but once the service is chosen the SDK logs
