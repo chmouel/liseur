@@ -2008,7 +2008,7 @@ reader behavior.
 
 Selecting a name and tapping Ask companion opens a character profile
 drawn only from the chapters before the one the reader asked from
-([ADR-0050](docs/adr/0050-character-profiles-use-only-earlier-chapters.md)).
+([ADR-0051](docs/adr/0051-character-profiles-use-only-earlier-chapters.md)).
 The feature lives in `app/src/main/kotlin/.../companion/`, in both
 flavors, and its settings sit under Settings, Intelligence. It reuses
 the servers on External services and API keys
