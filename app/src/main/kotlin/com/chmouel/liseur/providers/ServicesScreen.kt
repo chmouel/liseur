@@ -100,7 +100,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
-/** The Services row in Settings > Reading. */
+/** The Services row in Settings > Intelligence. */
 @Composable
 internal fun ServicesEntry(onClick: () -> Unit) {
     ConnectionRow(

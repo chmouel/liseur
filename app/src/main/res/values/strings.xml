@@ -764,6 +764,7 @@
     <string name="footer_field_empty">Nothing here</string>
 
     <string name="settings_reading">Reading</string>
+    <string name="settings_intelligence">Intelligence</string>
     <string name="settings_reading_navigation">Reading &amp; navigation</string>
     <string name="settings_page_placeholder">Choose a setting to open it here.</string>
     <string name="settings_reading_navigation_paged">Paged. Page-turn sides: %1$s</string>

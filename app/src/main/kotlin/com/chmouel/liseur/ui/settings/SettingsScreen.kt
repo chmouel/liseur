@@ -87,6 +87,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     /** Rows a build flavor adds to Reading: read aloud, in both builds. */
     flavorReadingRows: @Composable () -> Unit = {},
+    /** Rows for the AI features and the services they use: translation, characters, servers and keys. */
+    intelligenceRows: @Composable () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
@@ -343,6 +345,10 @@ fun SettingsScreen(
                         onClick = onOpenReadingNavigation,
                     )
                     flavorReadingRows()
+                }
+
+                SettingsGroup(stringResource(R.string.settings_intelligence)) {
+                    intelligenceRows()
                 }
 
                 SettingsGroup(stringResource(R.string.settings_export_import)) {

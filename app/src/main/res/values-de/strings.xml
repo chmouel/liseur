@@ -740,6 +740,7 @@
     <string name="footer_field_empty">Nichts hier</string>
 
     <string name="settings_reading">Lesen</string>
+    <string name="settings_intelligence">Intelligenz</string>
     <string name="settings_reading_navigation">Lesen &amp; Navigation</string>
     <string name="settings_page_placeholder">Wähle eine Einstellung, um sie hier zu öffnen.</string>
     <string name="settings_reading_navigation_paged">Seitenweise. Umblätterseiten: %1$s</string>

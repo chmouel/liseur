@@ -483,6 +483,8 @@ private fun LiseurApp(
                             onBack = closeSettings,
                             flavorReadingRows = {
                                 context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
+                            },
+                            intelligenceRows = {
                                 context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
                                 CharacterSettingsEntry(context.container.characterServer, onClick = { openPage(Route.Characters) })
                                 ServicesEntry(onClick = { openPage(Route.Services) })
