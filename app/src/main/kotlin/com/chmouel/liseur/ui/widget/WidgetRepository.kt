@@ -19,6 +19,19 @@ data class WidgetSnapshot(
     val book: WidgetBook?,
 )
 
+/**
+ * What the library widget draws: the shelf size, and the books at the
+ * indices [anchor] can reach at any widget size.
+ */
+data class LibrarySnapshot(
+    val anchor: Int,
+    val count: Int,
+    val books: Map<Int, WidgetBook>,
+) {
+    fun page(start: Int, capacity: Int): List<WidgetBook> =
+        (start until minOf(start + capacity, count)).mapNotNull(books::get)
+}
+
 data class WidgetBook(
     val url: String,
     val title: String,
@@ -34,6 +47,7 @@ data class WidgetBook(
 class WidgetRepository(
     private val bookDao: BookDao,
     private val decodeCover: (String) -> Bitmap? = ::decodeCoverBitmap,
+    private val decodeShelfCover: (String) -> Bitmap? = { decodeCoverBitmap(it, maxEdge = SHELF_COVER_MAX_EDGE) },
 ) {
     suspend fun load(context: Context): WidgetSnapshot = withContext(Dispatchers.IO) {
         WidgetSnapshot(
@@ -41,7 +55,26 @@ class WidgetRepository(
         )
     }
 
-    internal fun Book.toWidgetBook(context: Context): WidgetBook {
+    /** The shelf around [anchor], with every cover a widget size could show already decoded. */
+    suspend fun loadLibrary(context: Context, anchor: Int): LibrarySnapshot = withContext(Dispatchers.IO) {
+        val books = libraryBooks(bookDao.allOnce(), bookDao.mostRecentlyOpened())
+        val featuredIndices = LIBRARY_FEATURED_CAPACITIES.mapTo(hashSetOf()) { capacity ->
+            libraryPageStart(anchor, books.size, capacity)
+        }
+        LibrarySnapshot(
+            anchor = anchor,
+            count = books.size,
+            books = libraryWindow(anchor, books.size).associateWith { index ->
+                val decode = if (index in featuredIndices) decodeCover else decodeShelfCover
+                books[index].toWidgetBook(context, decode)
+            },
+        )
+    }
+
+    internal fun Book.toWidgetBook(
+        context: Context,
+        decode: (String) -> Bitmap? = decodeCover,
+    ): WidgetBook {
         val fileUrl = openableUri()
         val open = if (fileUrl != null) {
             ReaderActivity.intent(context, fileUrl, url)
@@ -52,7 +85,7 @@ class WidgetRepository(
         return WidgetBook(
             url = url,
             title = displayTitle,
-            cover = coverPath?.let(decodeCover),
+            cover = coverPath?.let(decode),
             initials = coverInitials(displayTitle),
             openIntent = open,
         )
@@ -113,3 +146,6 @@ private fun sampleSize(width: Int, height: Int, maxEdge: Int): Int {
 }
 
 private const val COVER_MAX_EDGE = 256
+
+/** Up to five shelf covers per drawn size share the RemoteViews budget. */
+private const val SHELF_COVER_MAX_EDGE = 160

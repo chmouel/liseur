@@ -46,7 +46,7 @@ object WidgetUpdater {
      */
     val generation: StateFlow<Long> = refreshes.asStateFlow()
 
-    private fun widgets(): List<GlanceAppWidget> = listOf(CoverOnlyWidget())
+    private fun widgets(): List<GlanceAppWidget> = listOf(CoverOnlyWidget(), LibraryWidget())
 
     private fun supportsWidgets(context: Context): Boolean =
         context.packageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)

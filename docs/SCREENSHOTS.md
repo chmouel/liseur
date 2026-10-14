@@ -128,8 +128,8 @@ guessed about reading you did before Liseur arrived.
 
 ## Home-screen widgets
 
-One widget remains: the current cover. The library, combined-cover, and
-reading stats widgets were removed.
+Two widgets sit on the home screen: the current cover and a paged shelf of
+library covers. The combined-cover and reading stats widgets were removed.
 
 | Light | Dark |
 | --- | --- |

@@ -1027,6 +1027,10 @@
     <string name="widget_cover_description">The cover of the book you are reading</string>
     <string name="widget_empty_title">Nothing on the shelf yet</string>
     <string name="widget_empty_detail">Open a book in Liseur and its cover will appear here.</string>
+    <string name="widget_library_label">Your books</string>
+    <string name="widget_library_description">Browse the covers of books in your library</string>
+    <string name="widget_previous_books">Previous books</string>
+    <string name="widget_next_books">Next books</string>
     <string name="more_options">More</string>
     <string name="reader_footnote">Note</string>
     <string name="reader_footnote_dismiss">Close note</string>

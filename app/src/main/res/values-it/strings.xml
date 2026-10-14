@@ -984,6 +984,10 @@
     <string name="widget_cover_description">La copertina del libro che stai leggendo</string>
     <string name="widget_empty_title">Ancora niente sullo scaffale</string>
     <string name="widget_empty_detail">Apri un libro in Liseur e la sua copertina apparirà qui.</string>
+    <string name="widget_library_label">I tuoi libri</string>
+    <string name="widget_library_description">Sfoglia le copertine dei libri nella tua biblioteca</string>
+    <string name="widget_previous_books">Libri precedenti</string>
+    <string name="widget_next_books">Libri successivi</string>
     <string name="more_options">Altro</string>
     <string name="reader_footnote">Nota</string>
     <string name="reader_footnote_dismiss">Chiudi nota</string>

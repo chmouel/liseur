@@ -2137,17 +2137,19 @@ liseur-sync settings.
 
 ### Home-screen widgets
 
-The Glance widget in `ui/widget/` shows the current cover. Rendering reads
-Room and cached cover files; it never waits on a network request.
+Two Glance widgets in `ui/widget/` sit on the home screen: the current cover
+(`CoverOnlyWidget`) and a paged shelf of library covers (`LibraryWidget`).
+Rendering reads Room and cached cover files; it never waits on a network
+request.
 
-- Taps on the cover go through the unexported `WidgetLaunchActivity`, which
-  hands the request to `MainActivity` in process via `LaunchRequests`.
-  `MainActivity` is exported, so it never reads widget targets from intent
-  extras.
-- One trigger redraws the cover: `AppContainer` collects
+- Taps on a remote cover or the shelf header go through the unexported
+  `WidgetLaunchActivity`, which hands the request to `MainActivity` in
+  process via `LaunchRequests`. `MainActivity` is exported, so it never reads
+  widget targets from intent extras.
+- One trigger redraws the widgets: `AppContainer` collects
   `LiseurDatabase.widgetInputs()`, a Room invalidation flow over
   `WIDGET_TABLES` (`books`, `reading_progress`, `work_alias`,
-  `remote_server`). A new table that changes what the widget shows goes into
+  `remote_server`). A new table that changes what the widgets show goes into
   that list. Do not add refresh callbacks to repositories or view models.
 - `WidgetUpdater.schedule` feeds `RefreshCoalescer`: a redraw runs after 3 s
   of quiet or 15 s after the first unserved request, whichever comes first.
@@ -2155,20 +2157,28 @@ Room and cached cover files; it never waits on a network request.
   reading. A request that lands during a redraw earns exactly one more.
 - Glance recomposes a running session on `update()` without calling
   `provideGlance` again, so anything loaded there would go stale.
-  `LiveSnapshot` reloads the snapshot whenever the updater's generation
-  changes. Each placed widget loads its own snapshot;
-  there is no shared cache.
-- `CoverOnlyWidgetReceiver` keeps its component identity across upgrades.
-  Library, combined-cover, and stats providers were removed outright,
-  including their paging, period, and configuration state helpers; their
-  placements disappear.
-- There is no periodic widget refresh. The cover widget has no
-  date-dependent content, so nothing runs in the background for it.
+  `LiveSnapshot` (for the cover widget) and `LibraryWidget` preload their
+  initial snapshot before `provideContent` so the first frame is never blank
+  if the session ends early, and reload in place whenever the updater's
+  generation (or the shelf page anchor) changes. Each placed widget loads its
+  own snapshot; there is no shared cache.
+- `LibraryWidget` puts the current book first (`bookDao.mostRecentlyOpened()`,
+  including reading synced from other devices), followed by books opened on
+  this device and unread books by title, excluding hidden and archived books.
+  When the widget is tall enough for two rows, the first book on the page
+  spans both rows on the left (and two columns when the grid has three or
+  more, so the cover is not cropped to a strip); the remaining columns stack
+  two covers each.
+  Paging arrows update `LibraryAnchor` in Glance state and redraw once.
+- `CoverOnlyWidgetReceiver` and `LibraryWidgetReceiver` are the two widget
+  providers. Combined-cover and stats providers were removed outright,
+  including their period and configuration state helpers.
+- There is no periodic widget refresh. Neither widget has date-dependent
+  content, so nothing runs in the background for them.
   `retireLegacyWork` cancels the unique work that earlier versions queued
   for the hourly refresh and the stats widget. It runs from app start and
   from the receiver on `MY_PACKAGE_REPLACED`. `TIME_SET`, `TIMEZONE_CHANGED`
-  and `LOCALE_CHANGED` redraw at once, since the labels are drawn in the
-  local time.
+  and `LOCALE_CHANGED` redraw at once.
 - Any of these broadcasts may be what started the process, and Android
   can kill it once the receiver returns. The receiver holds the broadcast
   with `goAsync()` until its work is safe: the legacy work is retired, or the
@@ -2177,8 +2187,10 @@ Room and cached cover files; it never waits on a network request.
   process-local scope and return.
 - On a device without `FEATURE_APP_WIDGETS` the updater does nothing:
   there is no `AppWidgetManager`, and Glance's id lookup would throw.
-- Single covers are decoded at most 256 px on the long edge in `RGB_565`, which
-  keeps the RemoteViews bitmap well under the binder transaction limit.
+- Single covers are decoded at most 256 px on the long edge in `RGB_565`
+  (160 px on the shelf grid, which decodes only the page window the anchor
+  can reach across widget sizes), keeping the RemoteViews bitmaps well under
+  the binder transaction limit.
 - The picker previews are static layouts (`layout/widget_preview_*`, Android
   12 and later) with PNG fallbacks in `drawable-nodpi`. Their colours in
   `widget_preview_colors.xml` must follow `WidgetComponents.kt`.

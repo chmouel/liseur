@@ -971,6 +971,10 @@
     <string name="widget_cover_description">您正在阅读的图书封面</string>
     <string name="widget_empty_title">书架上还没有书</string>
     <string name="widget_empty_detail">在 Liseur 中打开一本书，其封面就会显示在这里。</string>
+    <string name="widget_library_label">您的书</string>
+    <string name="widget_library_description">浏览书库中图书的封面</string>
+    <string name="widget_previous_books">上一批图书</string>
+    <string name="widget_next_books">下一批图书</string>
     <string name="more_options">更多</string>
     <string name="reader_footnote">注释</string>
     <string name="reader_footnote_dismiss">关闭注释</string>

@@ -1054,6 +1054,10 @@
     <string name="widget_cover_description">Обложка книги, которую вы читаете</string>
     <string name="widget_empty_title">На полке пока пусто</string>
     <string name="widget_empty_detail">Откройте книгу в Liseur — и её обложка появится здесь.</string>
+    <string name="widget_library_label">Ваши книги</string>
+    <string name="widget_library_description">Просмотр обложек книг в вашей библиотеке</string>
+    <string name="widget_previous_books">Предыдущие книги</string>
+    <string name="widget_next_books">Следующие книги</string>
     <string name="more_options">Ещё</string>
     <string name="reader_footnote">Примечание</string>
     <string name="reader_footnote_dismiss">Закрыть примечание</string>

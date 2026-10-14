@@ -63,15 +63,53 @@ class WidgetRepositoryTest {
     }
 
     @Test
-    fun `only the cover receiver is offered without configuration`() {
+    fun `the cover and library receivers are offered without configuration`() {
         val receivers = context.packageManager.queryBroadcastReceivers(
             Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).setPackage(context.packageName),
             PackageManager.GET_META_DATA,
         )
         assertEquals(
-            setOf(CoverOnlyWidgetReceiver::class.java.name),
+            setOf(CoverOnlyWidgetReceiver::class.java.name, LibraryWidgetReceiver::class.java.name),
             receivers.map { it.activityInfo.name }.toSet(),
         )
+    }
+
+    @Test
+    fun `the library leads with the book read most recently on any device`() = runBlocking {
+        insertBook("file:///here.epub", "Here", openedAt = 2_000L)
+        insertBook("file:///elsewhere.epub", "Elsewhere", openedAt = 1_000L)
+        db.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl = "file:///elsewhere.epub",
+                locatorJson = "{}",
+                totalProgression = 0.4,
+                updatedAt = 3_000L,
+                readAt = 3_000L,
+            ),
+        )
+
+        val shelf = repository().loadLibrary(context, anchor = 0)
+        assertEquals(2, shelf.count)
+        assertEquals(
+            listOf("file:///elsewhere.epub", "file:///here.epub"),
+            shelf.page(start = 0, capacity = 8).map { it.url },
+        )
+    }
+
+    @Test
+    fun `the library decodes only the covers its widget sizes can show`() = runBlocking {
+        repeat(30) { insertBook("file:///$it.epub", "Book $it", openedAt = 1_000L + it, coverPath = "/covers/$it.jpg") }
+        val decoded = mutableListOf<String>()
+        val featured = mutableListOf<String>()
+        val shelf = WidgetRepository(
+            bookDao = db.bookDao(),
+            decodeCover = { featured += it; null },
+            decodeShelfCover = { decoded += it; null },
+        ).loadLibrary(context, anchor = 12)
+        assertEquals(30, shelf.count)
+        assertEquals(libraryWindow(12, 30), shelf.books.keys)
+        assertEquals(shelf.books.size, decoded.size + featured.size)
+        assertTrue(featured.isNotEmpty())
     }
 
     @Test
@@ -144,13 +182,13 @@ class WidgetRepositoryTest {
         decodeCover = decodeCover,
     )
 
-    private suspend fun insertBook(url: String, title: String, openedAt: Long) {
+    private suspend fun insertBook(url: String, title: String, openedAt: Long, coverPath: String? = null) {
         db.bookDao().upsert(
             Book(
                 url = url,
                 title = title,
                 author = "Author",
-                coverPath = null,
+                coverPath = coverPath,
                 source = null,
                 addedAt = openedAt,
                 lastOpenedAt = openedAt,

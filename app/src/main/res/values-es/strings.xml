@@ -984,6 +984,10 @@
     <string name="widget_cover_description">La portada del libro que estás leyendo</string>
     <string name="widget_empty_title">Aún no hay nada en el estante</string>
     <string name="widget_empty_detail">Abre un libro en Liseur y su portada aparecerá aquí.</string>
+    <string name="widget_library_label">Tus libros</string>
+    <string name="widget_library_description">Explora las portadas de los libros de tu biblioteca</string>
+    <string name="widget_previous_books">Libros anteriores</string>
+    <string name="widget_next_books">Libros siguientes</string>
     <string name="more_options">Más</string>
     <string name="reader_footnote">Nota</string>
     <string name="reader_footnote_dismiss">Cerrar nota</string>

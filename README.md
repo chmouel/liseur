@@ -69,9 +69,8 @@ A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publicat
 
 With liseur-sync you get extras, like a per-device settings backup, and better insights of your reading progress across devices.
 
-A home-screen widget shows the current book cover. Tap it to read. It needs no
-configuration. The former library, combined-cover, and reading stats widgets
-have been removed; their placements do not survive an upgrade.
+Two home-screen widgets show the current book cover or a paged shelf of your
+library covers. Tap a cover to read. Neither needs configuration.
 
 No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
 servers and dictionary sources you configure. See the

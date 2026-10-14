@@ -996,6 +996,10 @@
     <string name="widget_cover_description">Das Cover des Buchs, das du liest</string>
     <string name="widget_empty_title">Noch nichts im Regal</string>
     <string name="widget_empty_detail">Öffne ein Buch in Liseur, dann erscheint sein Cover hier.</string>
+    <string name="widget_library_label">Deine Bücher</string>
+    <string name="widget_library_description">Buchcover deiner Bibliothek durchblättern</string>
+    <string name="widget_previous_books">Vorherige Bücher</string>
+    <string name="widget_next_books">Nächste Bücher</string>
     <string name="more_options">Mehr</string>
     <string name="reader_footnote">Anmerkung</string>
     <string name="reader_footnote_dismiss">Anmerkung schließen</string>

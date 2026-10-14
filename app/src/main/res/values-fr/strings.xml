@@ -984,6 +984,10 @@
     <string name="widget_cover_description">La couverture du livre que vous lisez</string>
     <string name="widget_empty_title">Rien sur l’étagère pour l’instant</string>
     <string name="widget_empty_detail">Ouvrez un livre dans Liseur et sa couverture apparaîtra ici.</string>
+    <string name="widget_library_label">Vos livres</string>
+    <string name="widget_library_description">Parcourir les couvertures des livres de votre bibliothèque</string>
+    <string name="widget_previous_books">Livres précédents</string>
+    <string name="widget_next_books">Livres suivants</string>
     <string name="more_options">Plus</string>
     <string name="reader_footnote">Note</string>
     <string name="reader_footnote_dismiss">Fermer la note</string>
