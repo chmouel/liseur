@@ -87,11 +87,8 @@ interface CompanionRecapDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putRecap(row: ChapterRecapRow)
 
-    @Query(
-        "DELETE FROM chapter_recap WHERE book_url = :bookUrl AND " +
-            "(content_sha != :sha OR server_id != :server OR model != :model OR format != :format)",
-    )
-    suspend fun forgetOtherRecaps(bookUrl: String, sha: String, server: String, model: String, format: Int)
+    @Query("DELETE FROM chapter_recap WHERE book_url = :bookUrl AND (content_sha != :sha OR format != :format)")
+    suspend fun forgetOtherRecaps(bookUrl: String, sha: String, format: Int)
 
     @Query("SELECT * FROM recap_part WHERE book_url = :bookUrl AND unit_key = :unitKey")
     suspend fun parts(bookUrl: String, unitKey: String): List<RecapPartRow>
@@ -205,7 +202,13 @@ abstract class CompanionDatabase : RoomDatabase() {
     }
 }
 
-/** Who wrote a recap, for which version of the book, in which format: a recap is read only under the same. */
+/**
+ * Who wrote a recap, for which version of the book, in which format. A
+ * recap is read under the same book version and format whoever wrote it:
+ * lookups use only its names and refs, which are checked against the
+ * passages. Batches of an unfinished recap are kept only for the same
+ * server and model.
+ */
 data class RecapIdentity(
     val contentSha: String,
     val serverId: String,
@@ -353,8 +356,9 @@ class CompanionStore(
 
     /**
      * One book's recaps for one opening of it. Reads return only what
-     * matches the identity asked for, and drop the rest: a recap from
-     * another file, server, model or format is never used again.
+     * matches the book version and format asked for, and drop the rest: a
+     * recap from another file or format is never used again. One from
+     * another server or model is kept and used.
      */
     inner class BookRecaps internal constructor(
         val bookUrl: String,
@@ -367,16 +371,15 @@ class CompanionStore(
 
         override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit): Boolean {
             val row = dao.recap(bookUrl, unit.key) ?: return false
-            return row.contentSha == identity.contentSha && row.serverId == identity.serverId &&
-                row.model == identity.model && row.format == identity.format
+            return row.contentSha == identity.contentSha && row.format == identity.format
         }
 
-        /** The recaps written under [identity], touched as used. */
+        /** The recaps for [identity]'s book version and format, by any server or model, touched as used. */
         override suspend fun recaps(identity: RecapIdentity): List<SavedRecap> {
             require(identity.contentSha == contentSha)
             val rows = writes.withLock {
                 if (fenced()) return emptyList()
-                with(identity) { dao.forgetOtherRecaps(bookUrl, contentSha, serverId, model, format) }
+                dao.forgetOtherRecaps(bookUrl, contentSha, identity.format)
                 dao.recaps(bookUrl).also { found ->
                     if (found.isNotEmpty()) dao.touch(bookUrl, found.map { it.unitKey }, now())
                 }

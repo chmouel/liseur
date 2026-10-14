@@ -55,7 +55,9 @@ All of this stays in the app's own private storage:
   they open translated. Tapping Stop or deleting the book removes it.
 - If you turn on background chapter recaps for the reading companion, the
   short recaps your chosen server wrote of the chapters you finished,
-  and the chapters still waiting for one. They are kept for the book
+  and the chapters still waiting for one. Recaps written before you
+  switched to another server or model are kept and used by
+  the new one on the phone; nothing more is sent. They are kept for the book
   they came from, the oldest going first past a fixed limit. Deleting
   the book deletes them, and turning recaps off stops the work and drops
   the waiting chapters. They are not backed up and not synced. Character

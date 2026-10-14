@@ -330,10 +330,54 @@ class InvestigationTest {
         try {
             investigation(chat).run("Mira")
             fail("Expected an error")
-        } catch (_: CompanionError.Malformed) {
+        } catch (e: CompanionError.Malformed) {
+            assertEquals("not_json+not_json", e.code)
         }
         assertEquals(2, chat.requests.size)
     }
+
+    @Test
+    fun `a reply cut off at the output limit is asked for again, shorter, once`() = runTest {
+        val chat = FakeChat { messages ->
+            if (requests.size == 1) throw TranslationError.Truncated() else profile(shown(messages).take(1))
+        }
+
+        val answer = investigation(chat).run("Mira")
+
+        assertTrue(answer is CompanionAnswer.Profile)
+        assertEquals(2, chat.requests.size)
+        assertTrue(chat.requests[1].last().content.contains("(too_long)"))
+
+        val always = FakeChat { throw TranslationError.Truncated() }
+        try {
+            investigation(always).run("Mira")
+            fail("Expected an error")
+        } catch (e: CompanionError.Malformed) {
+            assertEquals("too_long+too_long", e.code)
+        }
+        assertEquals(2, always.requests.size)
+    }
+
+    @Test
+    fun `a lone claim written where a list is asked for is taken as a list of one`() = runTest {
+        val chat = FakeChat { messages ->
+            val refs = shown(messages).take(1)
+            JSONObject()
+                .put("answer", "profile")
+                .put("identity", claim("A miller's daughter.", refs))
+                .put("backstory", claim("She keeps the ledger.", refs))
+                .put("aliases", JSONObject().put("name", "Wren").put("refs", JSONArray(holding(messages, "Wren").take(1))))
+                .toString()
+        }
+
+        val answer = investigation(chat).run("Mira") as CompanionAnswer.Profile
+
+        assertEquals(1, chat.requests.size)
+        assertEquals(listOf("A miller's daughter."), answer.identity.map { it.text })
+        assertEquals(listOf("She keeps the ledger."), answer.backstory.map { it.text })
+        assertEquals(listOf("Wren"), answer.aliases.map { it.name })
+    }
+
 
     @Test
     fun `a ref never shown in this lookup cannot be cited`() = runTest {

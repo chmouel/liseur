@@ -150,7 +150,8 @@ object Recaps {
             batch.withIndex().joinToString("\n") { (k, p) -> CompanionPrompt.block("P${k + 1}", p.range, p.text) }
 
     fun correction(code: String): String =
-        "Your last reply could not be used ($code). Reply with exactly one JSON object as the instructions describe."
+        "Your last reply could not be used ($code). Reply with exactly one JSON object as the instructions describe" +
+            (if (code == CompanionPrompt.TOO_LONG) ", much shorter" else "") + "."
 
     /**
      * The recap a batch's [reply] gives, keeping only what its own
@@ -169,7 +170,7 @@ object Recaps {
         }
         if (!o.has("characters") && !o.has("summary")) return null
         val summary = o.optString("summary").trim().take(MAX_SUMMARY)
-        val characters = o.optJSONArray("characters").objects().take(MAX_CHARACTERS).mapNotNull { character(it, batch) }
+        val characters = o.items("characters").objects().take(MAX_CHARACTERS).mapNotNull { character(it, batch) }
         return ChapterRecap(listOfNotNull(summary.takeIf { it.isNotEmpty() }), characters)
     }
 
@@ -190,8 +191,8 @@ object Recaps {
                 }
                 RecapFact(text, passages.map(::stored), with) to passages
             }
-        val facts = facts(o.optJSONArray("facts"), related = false)
-        val relationships = facts(o.optJSONArray("relationships"), related = true)
+        val facts = facts(o.items("facts"), related = false)
+        val relationships = facts(o.items("relationships"), related = true)
         val passages = (facts + relationships).flatMap { it.second }.distinct()
         if (passages.none { PassageText.mentions(it, name) }) return null
         val aliases = o.optJSONArray("aliases").strings()

@@ -54,22 +54,24 @@ class CompanionStoreTest {
     }
 
     @Test
-    fun `a recap is read back only under the identity that wrote it`() = runTest {
+    fun `a recap is read back under any server or model, but only for the same file and format`() = runTest {
         val store = store()
         val book = store.forBook(BOOK, SHA)
         assertTrue(book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket()))
         assertEquals(listOf(SavedRecap(UNIT_1, "one")), book.recaps(IDENTITY))
 
-        for (other in listOf(
-            IDENTITY.copy(serverId = "other"),
-            IDENTITY.copy(model = "other"),
-            IDENTITY.copy(format = IDENTITY.format + 1),
-        )) {
-            book.saveRecap(IDENTITY, UNIT_1, "one", book.ticket())
-            assertTrue("$other", book.recaps(other).isEmpty())
-            // Dropped, not merely hidden: going back does not bring it back.
-            assertTrue("$other", book.recaps(IDENTITY).isEmpty())
+        // Another service reads it, counts it as done, and does not drop it.
+        for (other in listOf(IDENTITY.copy(serverId = "other"), IDENTITY.copy(model = "other"))) {
+            assertEquals("$other", listOf(SavedRecap(UNIT_1, "one")), book.recaps(other))
+            assertTrue("$other", book.hasRecap(other, UNIT_1))
         }
+        assertEquals(listOf(SavedRecap(UNIT_1, "one")), book.recaps(IDENTITY))
+
+        val format = IDENTITY.copy(format = IDENTITY.format + 1)
+        assertFalse(book.hasRecap(format, UNIT_1))
+        assertTrue(book.recaps(format).isEmpty())
+        // Dropped, not merely hidden: going back does not bring it back.
+        assertTrue(book.recaps(IDENTITY).isEmpty())
     }
 
     @Test

@@ -64,5 +64,9 @@ internal object CompanionPrompt {
     fun correction(code: String, finishing: Boolean): String =
         "Your last reply could not be used ($code). Reply with exactly one JSON object as the instructions describe" +
             (if (finishing) ", and give a final answer now" else "") +
+            (if (code == TOO_LONG) ", much shorter, with fewer and shorter items" else "") +
             ". Every ref you cite must be one you were shown."
+
+    /** The code for a reply cut off at the model's output limit. */
+    const val TOO_LONG = "too_long"
 }

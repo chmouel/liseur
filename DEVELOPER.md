@@ -2035,8 +2035,12 @@ liseur-sync settings.
   counts tokens before each request and fails with
   `CompanionError.TooLong` rather than have the model read part of what
   it was sent. Nano takes one turn, so `NanoPrompt` writes earlier turns
-  into the prompt. Recaps are keyed by service id and model, so switching
-  never reuses another service's recaps.
+  into the prompt.
+- A reply cut off at the output limit gets one `too_long` correction
+  asking for a shorter answer. A failed lookup or recap logs the error
+  class and, for `CompanionError.Malformed`, the fixed codes of the rules
+  broken (never text). Replies may hold a lone item where a list is asked
+  for, so they read either (`JSONObject.items`).
 - Nano is offered only where AICore (`com.google.android.aicore`) is
   installed, found with a package query. ML Kit is started (`MlKit.initialize`;
   its startup provider is removed in the `play` manifest) and asked for
@@ -2103,8 +2107,12 @@ liseur-sync settings.
 - `companion.db` (`CompanionDatabase`, separate from `liseur.db`) keys
   recaps by book URL, content sha (`BookFingerprintStore`), unit key,
   server, model and `Recap.FORMAT`. Without a content sha nothing is
-  queued or saved. Rows under another identity are ignored and dropped,
-  the store trims to fixed limits, removed books are swept, and the
+  queued or saved. Recaps are read back under any server or model, which
+  stay in the row as provenance, so switching service keeps them as
+  lookup hints and a chapter recapped by any model is not redone. Rows
+  for another content sha or format are ignored and dropped; unfinished
+  parts stay per server and model, since batch sizes differ. The store
+  trims to fixed limits, removed books are swept, and the
   database is outside the backup allowlist. Bump `PassageText.VERSION`
   when refs or passage splitting change, and the recap prompt version
   in `Recap` when the prompt or its JSON change.

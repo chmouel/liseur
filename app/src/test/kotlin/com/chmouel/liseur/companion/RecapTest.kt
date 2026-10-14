@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -330,21 +331,34 @@ class RecapTest {
     }
 
     @Test
-    fun `a saved recap from another server, model or format is written again`() = runTest {
+    fun `a saved recap from another format is written again, one from another server or model is kept`() = runTest {
         val h = harness()
         h.book.saved[h.unit(0)] = "{}"
-        h.book.savedBy[h.unit(0)] = h.setup.identity.copy(model = "other")
+        h.book.savedBy[h.unit(0)] = h.setup.identity.copy(format = h.setup.identity.format + 1)
         h.book.queue += h.unit(0)
         h.scheduler.moved(3, movement = false)
         runCurrent()
         assertEquals(1, h.chat.requests.size)
 
-        val unchanged = harness(book = h.book)
-        unchanged.book.queue += unchanged.unit(0)
-        unchanged.scheduler.moved(3, movement = false)
+        h.book.savedBy[h.unit(0)] = h.setup.identity.copy(serverId = "other", model = "other")
+        val switched = harness(book = h.book)
+        switched.book.queue += switched.unit(0)
+        switched.scheduler.moved(3, movement = false)
         runCurrent()
-        assertTrue("already recapped under this identity", unchanged.chat.requests.isEmpty())
-        assertTrue(unchanged.book.queue.isEmpty())
+        assertTrue("already recapped by another model", switched.chat.requests.isEmpty())
+        assertTrue(switched.book.queue.isEmpty())
+    }
+
+    @Test
+    fun `a recap cut off at the output limit is asked for again, shorter`() = runTest {
+        val h = harness(truncateFirst = true)
+        h.book.queue += h.unit(0)
+        h.scheduler.moved(3, movement = false)
+        runCurrent()
+
+        assertEquals(2, h.chat.requests.size)
+        assertTrue(h.chat.requests[1].last().content.contains("(too_long)"))
+        assertEquals(listOf(0), h.book.saved.keys.map { it.index })
     }
 
     // -- Fixtures --------------------------------------------------------------
@@ -372,9 +386,10 @@ class RecapTest {
         malformed: Boolean = false,
         book: FakeBook = FakeBook(),
         longChapter: List<String>? = null,
+        truncateFirst: Boolean = false,
     ): Harness {
         val catalog = FakeCatalog(8, longChapter)
-        val chat = RecapChat(hold, malformed)
+        val chat = RecapChat(hold, malformed, truncateFirst)
         val setup = RecapSetup(RecapIdentity("sha", "server", "model", Recaps.FORMAT), chat)
         val settings = MutableStateFlow(RecapSettings(enabled, setup))
         val foreground = MutableStateFlow(true)
@@ -385,7 +400,7 @@ class RecapTest {
     }
 
     /** Replies with a recap of Mira citing the first passage, or hangs until cancelled while [hold]. */
-    private class RecapChat(var hold: Boolean, private val malformed: Boolean) : CompanionChat {
+    private class RecapChat(var hold: Boolean, private val malformed: Boolean, private val truncateFirst: Boolean = false) : CompanionChat {
         val requests = mutableListOf<List<ChatMessage>>()
         var cancelled = false
         var holdAfter = -1
@@ -401,6 +416,7 @@ class RecapTest {
                 }
             }
             if (malformed) return "Sorry, here is a poem instead."
+            if (truncateFirst && requests.size == 1) throw TranslationError.Truncated()
             val text = messages.last().content
             val step = Regex("step ([0-9]+)").find(text)?.value ?: "the mill"
             return JSONObject()
@@ -419,10 +435,14 @@ class RecapTest {
 
         override fun ticket() = 0L
 
-        override suspend fun recaps(identity: RecapIdentity) =
-            saved.filter { savedBy[it.key] == identity }.map { SavedRecap(it.key, it.value) }
+        // As the store: any server or model, the same file and format.
+        private fun RecapIdentity?.reads(identity: RecapIdentity) =
+            this != null && contentSha == identity.contentSha && format == identity.format
 
-        override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit) = unit in saved && savedBy[unit] == identity
+        override suspend fun recaps(identity: RecapIdentity) =
+            saved.filter { savedBy[it.key].reads(identity) }.map { SavedRecap(it.key, it.value) }
+
+        override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit) = unit in saved && savedBy[unit].reads(identity)
 
         override suspend fun parts(identity: RecapIdentity, unit: RecapUnit, batchCount: Int) =
             parts.filterKeys { it.first == unit }.mapKeys { it.key.second }

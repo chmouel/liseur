@@ -95,7 +95,7 @@ class CompanionViewModel(
         chatFor = server::chat,
         hints = ::hints,
         aside = { block -> scheduler?.aside(block) ?: block() },
-        log = { Log.w(TAG, "Character lookup failed: ${it.javaClass.simpleName}") },
+        log = { Log.w(TAG, "Character lookup failed: ${CompanionError.describe(it)}") },
     )
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel

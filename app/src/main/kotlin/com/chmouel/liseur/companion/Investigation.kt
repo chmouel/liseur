@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.translate.TranslationError
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -41,15 +42,24 @@ sealed interface CompanionAnswer<out P> {
     data object Insufficient : CompanionAnswer<Nothing>
 }
 
+/** The list a reply holds under [key]; a small model may write a lone item where a list is asked for. */
+internal fun JSONObject.items(key: String): JSONArray? = optJSONArray(key) ?: optJSONObject(key)?.let { JSONArray().put(it) }
+
 sealed class CompanionError(message: String) : Exception(message) {
-    /** The model's reply could not be used, even after being told why. */
-    class Malformed : CompanionError("The model sent no usable answer")
+    /** The model's reply could not be used, even after being told why; [code] names the fixed rules it broke. */
+    class Malformed(val code: String) : CompanionError("The model sent no usable answer ($code)")
 
     /** The lookup made as many requests as one may. */
     class TooManyRequests : CompanionError("The lookup made too many requests")
 
     /** A request holds more text than the model can read at once. */
     class TooLong : CompanionError("The request is too long for the model")
+
+    companion object {
+        /** For logs: the class, and for [Malformed] the fixed rule broken; never book text or replies. */
+        fun describe(e: Throwable): String =
+            e.javaClass.simpleName + ((e as? Malformed)?.let { " (${it.code})" } ?: "")
+    }
 }
 
 data class InvestigationLimits(
@@ -119,7 +129,7 @@ class Investigation<P>(
         private var rounds = 0
         private var operations = 0
         private var requests = 0
-        private var corrected = false
+        private var corrected: String? = null
         private var finishing = false
 
         suspend fun run(hints: List<RecapHint>): CompanionAnswer<P> {
@@ -130,11 +140,16 @@ class Investigation<P>(
             history += ChatMessage("system", CompanionPrompt.system(limits))
             history += ChatMessage("user", seed(mentions, hinted))
             while (true) {
-                val reply = request()
-                when (val parsed = parse(reply)) {
+                val parsed = try {
+                    parse(request())
+                } catch (_: TranslationError.Truncated) {
+                    // Cut off at the output limit: asked once for a shorter reply, as for any unusable one.
+                    Parsed.Invalid(CompanionPrompt.TOO_LONG)
+                }
+                when (parsed) {
                     is Parsed.Invalid -> {
-                        if (corrected) throw CompanionError.Malformed()
-                        corrected = true
+                        corrected?.let { throw CompanionError.Malformed("$it+${parsed.code}") }
+                        corrected = parsed.code
                         val last = history.removeAt(history.lastIndex)
                         history += last.copy(content = last.content + "\n\n" + CompanionPrompt.correction(parsed.code, finishing))
                     }
@@ -368,13 +383,13 @@ class Investigation<P>(
         }
 
         private fun profile(json: JSONObject): Parsed {
-            val (identity, badIdentity) = claims(json.optJSONArray("identity"), MAX_CLAIMS)
-            val (backstory, badBackstory) = claims(json.optJSONArray("backstory"), MAX_CLAIMS)
+            val (identity, badIdentity) = claims(json.items("identity"), MAX_CLAIMS)
+            val (backstory, badBackstory) = claims(json.items("backstory"), MAX_CLAIMS)
             if (identity.isEmpty() && backstory.isEmpty()) {
                 return Parsed.Invalid(if (badIdentity || badBackstory) "bad_citation" else "empty_profile")
             }
             val relationships = mutableListOf<Relationship<P>>()
-            json.optJSONArray("relationships")?.let { array ->
+            json.items("relationships")?.let { array ->
                 for (k in 0 until minOf(array.length(), MAX_CLAIMS)) {
                     val o = array.optJSONObject(k) ?: continue
                     val text = o.optString("text").trim().takeIf { it.isNotEmpty() && it.length <= MAX_CLAIM }
@@ -387,7 +402,7 @@ class Investigation<P>(
                 }
             }
             val aliases = mutableListOf<Alias<P>>()
-            json.optJSONArray("aliases")?.let { array ->
+            json.items("aliases")?.let { array ->
                 for (k in 0 until minOf(array.length(), MAX_ALIASES)) {
                     val o = array.optJSONObject(k) ?: continue
                     val cited = sources(o.optJSONArray("refs")) ?: continue
@@ -401,7 +416,7 @@ class Investigation<P>(
         }
 
         private fun ambiguous(json: JSONObject): Parsed {
-            val array = json.optJSONArray("candidates") ?: return Parsed.Invalid("bad_candidates")
+            val array = json.items("candidates") ?: return Parsed.Invalid("bad_candidates")
             val candidates = mutableListOf<Candidate<P>>()
             for (k in 0 until minOf(array.length(), MAX_CANDIDATES)) {
                 val o = array.optJSONObject(k) ?: return Parsed.Invalid("bad_candidates")

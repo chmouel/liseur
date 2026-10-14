@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.util.Log
+import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -129,7 +130,7 @@ class RecapScheduler<P>(
             } catch (e: Exception) {
                 // Tried again on the next opening; book text and replies are never logged.
                 failed += unit.key
-                Log.w(TAG, "Could not recap a chapter: ${e.javaClass.simpleName}")
+                Log.w(TAG, "Could not recap a chapter: ${CompanionError.describe(e)}")
             }
         }
         val watch = launch {
@@ -176,15 +177,21 @@ class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatal
         var requests = 0
         val user = Recaps.user(batch, unit.index, catalog.map.chapterCount)
         var messages = listOf(ChatMessage("system", Recaps.system()), ChatMessage("user", user))
+        var code = "not_json"
         repeat(2) { attempt ->
-            val reply = setup.chat.reply(messages) {
-                if (!allowed()) throw CancellationException("No longer allowed")
-                if (++requests > MAX_REQUESTS) throw CompanionError.TooManyRequests()
+            val reply = try {
+                setup.chat.reply(messages) {
+                    if (!allowed()) throw CancellationException("No longer allowed")
+                    if (++requests > MAX_REQUESTS) throw CompanionError.TooManyRequests()
+                }
+            } catch (_: TranslationError.Truncated) {
+                null
             }
-            Recaps.parse(reply, batch)?.let { return it }
-            if (attempt == 0) messages = listOf(messages[0], ChatMessage("user", user + "\n\n" + Recaps.correction("not_json")))
+            code = if (reply == null) CompanionPrompt.TOO_LONG else "not_json"
+            reply?.let { Recaps.parse(it, batch) }?.let { return it }
+            if (attempt == 0) messages = listOf(messages[0], ChatMessage("user", user + "\n\n" + Recaps.correction(code)))
         }
-        throw CompanionError.Malformed()
+        throw CompanionError.Malformed(code)
     }
 
     private companion object {
