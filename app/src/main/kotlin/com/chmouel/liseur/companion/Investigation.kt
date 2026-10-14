@@ -98,15 +98,15 @@ class Investigation<P>(
 
     private fun mentioning(phrase: String): List<Int> {
         val needle = PassageText.fold(phrase).takeIf { it.isNotEmpty() } ?: return emptyList()
-        val exact = eligible.indices.filter { eligible[it].folded.contains(" $needle ") }
+        val exact = eligible.indices.filter { PassageText.hasWords(eligible[it].folded, needle) }
         if (exact.isNotEmpty()) return exact
         val core = needle.split(' ')
             .filter { it.length >= MIN_NAME_PART && it !in HONORIFICS }
             .distinct()
         if (core.isEmpty()) return emptyList()
-        val together = eligible.indices.filter { i -> core.all { eligible[i].folded.contains(" $it ") } }
+        val together = eligible.indices.filter { i -> core.all { PassageText.hasWords(eligible[i].folded, it) } }
         if (together.isNotEmpty()) return together
-        return eligible.indices.filter { i -> core.any { eligible[i].folded.contains(" $it ") } }
+        return eligible.indices.filter { i -> core.any { PassageText.hasWords(eligible[i].folded, it) } }
     }
 
     private fun hintedFor(asked: List<String>, hints: List<RecapHint>): List<Int> =
@@ -254,7 +254,7 @@ class Investigation<P>(
                 out.append("search refused, use one to ${PassageText.MAX_NAME_WORDS} words.\n")
                 return
             }
-            val all = acrossChapters(eligible.indices.filter { i -> words.all { eligible[i].folded.contains(" $it ") } })
+            val all = acrossChapters(eligible.indices.filter { i -> words.all { PassageText.hasWords(eligible[i].folded, it) } })
             if (all.isEmpty()) {
                 out.append("search found nothing.\n")
                 return

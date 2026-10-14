@@ -259,4 +259,12 @@ class ChapterMapTest {
         assertEquals("Mr Darcy", PassageText.name("  “Mr  Darcy,” "))
         assertEquals(null, PassageText.name("one two three four five six seven"))
     }
+
+    @Test
+    fun `names in scripts without spaces are found inside the text`() {
+        assertTrue(PassageText.mentions("林黛玉听了，便说道。", "林黛玉"))
+        assertTrue(PassageText.mentions("ハリーは笑った。", "ハリー"))
+        assertFalse(PassageText.mentions("贾宝玉听了。", "林黛玉"))
+        assertFalse(PassageText.mentions("Then Harrison said hello.", "Harry"))
+    }
 }

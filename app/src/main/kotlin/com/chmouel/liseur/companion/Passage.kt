@@ -85,13 +85,36 @@ object PassageText {
     /** Whether [phrase] occurs in [text] as whole words, both folded. */
     fun mentions(text: String, phrase: String): Boolean {
         val needle = fold(phrase).takeIf { it.isNotEmpty() } ?: return false
-        return " ${fold(text)} ".contains(" $needle ")
+        return hasWords(" ${fold(text)} ", needle)
     }
 
     /** Whether [phrase] occurs in [passage] as whole words, using its pre-folded text. */
     fun mentions(passage: Passage<*>, phrase: String): Boolean {
         val needle = fold(phrase).takeIf { it.isNotEmpty() } ?: return false
-        return passage.folded.contains(" $needle ")
+        return hasWords(passage.folded, needle)
+    }
+
+    /**
+     * Whether the folded [needle] occurs in [padded], folded text with a
+     * space at each end, as whole words. Chinese, Japanese, Thai and the
+     * like do not put spaces between words, so a [needle] in one of them
+     * is matched anywhere.
+     */
+    fun hasWords(padded: String, needle: String): Boolean =
+        if (needle.any(::unspaced)) padded.contains(needle) else padded.contains(" $needle ")
+
+    private fun unspaced(c: Char): Boolean = when (Character.UnicodeScript.of(c.code)) {
+        Character.UnicodeScript.HAN,
+        Character.UnicodeScript.HIRAGANA,
+        Character.UnicodeScript.KATAKANA,
+        Character.UnicodeScript.HANGUL,
+        Character.UnicodeScript.THAI,
+        Character.UnicodeScript.LAO,
+        Character.UnicodeScript.KHMER,
+        Character.UnicodeScript.MYANMAR,
+        Character.UnicodeScript.TIBETAN,
+        -> true
+        else -> false
     }
 
     /**
