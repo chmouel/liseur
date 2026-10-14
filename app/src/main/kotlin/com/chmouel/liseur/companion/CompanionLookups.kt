@@ -54,6 +54,7 @@ enum class CompanionFailure {
     SERVER,
     MALFORMED,
     LIMIT,
+    TOO_LONG,
     UNREADABLE,
 }
 
@@ -92,7 +93,6 @@ class CompanionLookups<P>(
     private val chatFor: (CompanionChoice) -> CompanionChat,
     private val hints: suspend (CompanionChoice, AskingScope, List<Passage<P>>) -> List<RecapHint>,
     private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
-    private val limits: InvestigationLimits = InvestigationLimits(),
     private val log: (Throwable) -> Unit = {},
 ) {
     private data class CacheKey(
@@ -215,7 +215,7 @@ class CompanionLookups<P>(
                 val cached = if (useCache) synchronized(cache) { cache[key] } else null
                 val answer = cached ?: aside {
                     show(CompanionView.Loading(CompanionView.Stage.ASKING))
-                    Investigation(chatFor(chosen), asked, passages, limits).run(name, also, offered)
+                    Investigation(chatFor(chosen), asked, passages, chosen.limits.investigation).run(name, also, offered)
                 }.also { fresh ->
                     if (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous) {
                         synchronized(cache) { cache[key] = fresh }
@@ -247,6 +247,7 @@ class CompanionLookups<P>(
     private fun failureOf(e: Exception): CompanionFailure = when (e) {
         is CompanionError.Malformed -> CompanionFailure.MALFORMED
         is CompanionError.TooManyRequests -> CompanionFailure.LIMIT
+        is CompanionError.TooLong -> CompanionFailure.TOO_LONG
         is TranslationError.InvalidKey -> CompanionFailure.KEY
         is TranslationError.RateLimited -> CompanionFailure.RATE_LIMITED
         is TranslationError.LocalNetworkBlocked -> CompanionFailure.LOCAL_NETWORK

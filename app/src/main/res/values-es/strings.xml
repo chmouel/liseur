@@ -1349,6 +1349,7 @@
     <string name="companion_failed_server">El servidor no pudo responder.</string>
     <string name="companion_failed_malformed">La respuesta del modelo no se pudo usar.</string>
     <string name="companion_failed_limit">La búsqueda dio demasiados pasos sin respuesta.</string>
+    <string name="companion_failed_too_long">Esta búsqueda incluye más texto del que el modelo puede leer de una vez.</string>
     <string name="companion_failed_unreadable">No se pudieron leer los capítulos anteriores de este libro.</string>
     <string name="companion_settings_title">Compañero de lectura</string>
     <string name="companion_settings_entry_summary">%1$s, %2$s</string>
@@ -1357,6 +1358,8 @@
     <string name="companion_settings_server_none">Ningún servidor elegido</string>
     <string name="companion_settings_server_none_detail">Elige uno de tus servidores</string>
     <string name="companion_settings_server_change">Cambiar el servidor del compañero de lectura</string>
+    <string name="companion_settings_service">Servicio</string>
+    <string name="companion_settings_service_change">Cambiar el servicio del compañero de lectura</string>
     <string name="companion_settings_manage_detail">Añade un servidor, como OpenRouter o uno propio, para el compañero de lectura.</string>
     <string name="companion_settings_model">Modelo</string>
     <string name="companion_settings_recaps_group">Resúmenes en segundo plano</string>

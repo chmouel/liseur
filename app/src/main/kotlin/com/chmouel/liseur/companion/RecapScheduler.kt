@@ -12,8 +12,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** How recaps are written: the identity they are saved under and the chat that writes them. */
-data class RecapSetup(val identity: RecapIdentity, val chat: CompanionChat)
+/**
+ * How recaps are written: the identity they are saved under, the chat
+ * that writes them, and how much of a chapter one request may hold.
+ */
+data class RecapSetup(val identity: RecapIdentity, val chat: CompanionChat, val batchCharacters: Int = Recaps.BATCH_CHARACTERS)
 
 /** Whether recaps are on, and with what; [setup] is null until a server and model are chosen. */
 data class RecapSettings(val enabled: Boolean, val setup: RecapSetup?)
@@ -153,7 +156,7 @@ class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatal
         }
         val passages = catalog.passagesOf(unit.index)
         if (passages.any { it.range.hi != unit.index }) throw IllegalStateException("A passage is outside its chapter")
-        val batches = Recaps.batches(passages)
+        val batches = Recaps.batches(passages, setup.batchCharacters)
         val done = book.parts(identity, unit, batches.size).toMutableMap()
         val recaps = batches.mapIndexed { index, batch ->
             done[index]?.let(ChapterRecap::decode) ?: ask(batch, unit, setup, allowed).also {

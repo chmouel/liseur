@@ -1405,6 +1405,7 @@
     <string name="companion_failed_server">The server could not answer.</string>
     <string name="companion_failed_malformed">The model\'s answer could not be used.</string>
     <string name="companion_failed_limit">The lookup took too many steps without an answer.</string>
+    <string name="companion_failed_too_long">This lookup holds more of the book than the model can read at once.</string>
     <string name="companion_failed_unreadable">Could not read this book\'s earlier chapters.</string>
     <string name="companion_settings_title">Reading companion</string>
     <string name="companion_settings_entry_summary">%1$s, %2$s</string>
@@ -1413,6 +1414,8 @@
     <string name="companion_settings_server_none">No server chosen</string>
     <string name="companion_settings_server_none_detail">Choose one of your listed servers</string>
     <string name="companion_settings_server_change">Change the reading companion\'s server</string>
+    <string name="companion_settings_service">Service</string>
+    <string name="companion_settings_service_change">Change the reading companion\'s service</string>
     <string name="companion_settings_manage_detail">Add a server such as OpenRouter, or your own, for the reading companion to use.</string>
     <string name="companion_settings_model">Model</string>
     <string name="companion_settings_recaps_group">Background recaps</string>

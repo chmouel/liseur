@@ -1445,6 +1445,7 @@
     <string name="companion_failed_server">Сервер не смог ответить.</string>
     <string name="companion_failed_malformed">Ответ модели нельзя использовать.</string>
     <string name="companion_failed_limit">Поиск занял слишком много шагов без ответа.</string>
+    <string name="companion_failed_too_long">В этом запросе больше текста, чем модель может прочитать за раз.</string>
     <string name="companion_failed_unreadable">Не удалось прочитать предыдущие главы книги.</string>
     <string name="companion_settings_title">Помощник при чтении</string>
     <string name="companion_settings_entry_summary">%1$s, %2$s</string>
@@ -1453,6 +1454,8 @@
     <string name="companion_settings_server_none">Сервер не выбран</string>
     <string name="companion_settings_server_none_detail">Выберите один из ваших серверов</string>
     <string name="companion_settings_server_change">Сменить сервер помощника при чтении</string>
+    <string name="companion_settings_service">Сервис</string>
+    <string name="companion_settings_service_change">Сменить сервис помощника при чтении</string>
     <string name="companion_settings_manage_detail">Добавьте сервер, например OpenRouter или собственный, для помощника при чтении.</string>
     <string name="companion_settings_model">Модель</string>
     <string name="companion_settings_recaps_group">Фоновые пересказы</string>

@@ -1300,6 +1300,7 @@
     <string name="companion_failed_server">服务器无法回答。</string>
     <string name="companion_failed_malformed">无法使用模型的回答。</string>
     <string name="companion_failed_limit">查找步骤过多，仍未得到回答。</string>
+    <string name="companion_failed_too_long">此次查找包含的文本超过模型一次能读取的量。</string>
     <string name="companion_failed_unreadable">无法读取本书前面的章节。</string>
     <string name="companion_settings_title">阅读伴侣</string>
     <string name="companion_settings_entry_summary">%1$s，%2$s</string>
@@ -1308,6 +1309,8 @@
     <string name="companion_settings_server_none">未选择服务器</string>
     <string name="companion_settings_server_none_detail">从已添加的服务器中选择一个</string>
     <string name="companion_settings_server_change">更改阅读伴侣的服务器</string>
+    <string name="companion_settings_service">服务</string>
+    <string name="companion_settings_service_change">更改阅读伴侣的服务</string>
     <string name="companion_settings_manage_detail">添加一个服务器（例如 OpenRouter 或你自己的服务器）供阅读伴侣使用。</string>
     <string name="companion_settings_model">模型</string>
     <string name="companion_settings_recaps_group">后台章节摘要</string>

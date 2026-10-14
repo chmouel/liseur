@@ -825,9 +825,9 @@ class AppContainer(context: Context) {
         ServerConnections(appSettings, ServerKeys(context.applicationContext), localNetwork)
     }
 
-    /** The server and model chosen for character profiles. */
+    /** The service and model the reading companion uses: a listed server, and in the Play build Gemini too. */
     internal val companionServer: com.chmouel.liseur.companion.CompanionServer by lazy {
-        com.chmouel.liseur.companion.CompanionServer(serverConnections, appSettings)
+        com.chmouel.liseur.companion.CompanionFeatureFactory.create(context.applicationContext, this)
     }
 
     /** The build's own accounts on the Services page, such as the Play build's Gemini key. */

@@ -47,6 +47,9 @@ sealed class CompanionError(message: String) : Exception(message) {
 
     /** The lookup made as many requests as one may. */
     class TooManyRequests : CompanionError("The lookup made too many requests")
+
+    /** A request holds more text than the model can read at once. */
+    class TooLong : CompanionError("The request is too long for the model")
 }
 
 data class InvestigationLimits(

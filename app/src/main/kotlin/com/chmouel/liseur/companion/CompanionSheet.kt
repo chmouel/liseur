@@ -229,6 +229,7 @@ private fun failureText(failure: CompanionFailure): String = stringResource(
         CompanionFailure.SERVER -> R.string.companion_failed_server
         CompanionFailure.MALFORMED -> R.string.companion_failed_malformed
         CompanionFailure.LIMIT -> R.string.companion_failed_limit
+        CompanionFailure.TOO_LONG -> R.string.companion_failed_too_long
         CompanionFailure.UNREADABLE -> R.string.companion_failed_unreadable
     },
 )

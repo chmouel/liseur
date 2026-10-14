@@ -77,7 +77,7 @@ class CompanionViewModel(
             .distinctUntilChanged()
             .map { (chosen, enabled, sha) ->
                 val setup = if (chosen != null && sha != null) {
-                    RecapSetup(RecapIdentity(sha, chosen.serverId, chosen.model, Recaps.FORMAT), server.chat(chosen))
+                    RecapSetup(RecapIdentity(sha, chosen.serverId, chosen.model, Recaps.FORMAT), server.chat(chosen), chosen.limits.recapBatch)
                 } else {
                     null
                 }

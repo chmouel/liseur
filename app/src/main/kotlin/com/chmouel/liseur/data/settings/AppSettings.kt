@@ -224,6 +224,10 @@ enum class DefinitionTarget(val id: String) {
  * @param companionStates The reading companion's model on each server, by server id.
  * @param companionRecaps Whether chapters are recapped in the background as
  *   they are finished, to help later character lookups.
+ * @param companionProvider Which service the reading companion asks, by id,
+ *   or null for a listed server.
+ * @param companionGeminiModel The Gemini model the reading companion uses,
+ *   or null for the default.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -270,6 +274,8 @@ data class AppSettings(
     val companionServer: String? = null,
     val companionStates: Map<String, ServerCompanionState> = emptyMap(),
     val companionRecaps: Boolean = false,
+    val companionProvider: String? = null,
+    val companionGeminiModel: String? = null,
 ) {
     /** The server character profiles are set to use, when it is listed. */
     val companionServerConnection: ServerConnection?
@@ -401,6 +407,8 @@ class AppSettingsRepository(
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
         val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
         val COMPANION_RECAPS = booleanPreferencesKey(COMPANION_RECAPS_NAME)
+        val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
+        val COMPANION_GEMINI_MODEL = stringPreferencesKey(COMPANION_GEMINI_MODEL_NAME)
     }
 
     /**
@@ -492,6 +500,8 @@ class AppSettingsRepository(
             companionServer = p[ServerSettings.COMPANION_SERVER],
             companionStates = ServerSettings.companionStates(p),
             companionRecaps = p[Keys.COMPANION_RECAPS] ?: false,
+            companionProvider = p[Keys.COMPANION_PROVIDER],
+            companionGeminiModel = p[Keys.COMPANION_GEMINI_MODEL],
         )
     }
 
@@ -830,12 +840,13 @@ class AppSettingsRepository(
         }
     }
 
-    /** Has character profiles use the listed server [id]; false when it is not listed. */
+    /** Has the reading companion use the listed server [id], over any other service; false when it is not listed. */
     suspend fun selectCompanionServer(id: String): Boolean {
         var selected = false
         store.edit { p ->
             if (ServerSettings.servers(p).readable?.any { it.id == id } != true) return@edit
             p[ServerSettings.COMPANION_SERVER] = id
+            p.remove(Keys.COMPANION_PROVIDER)
             selected = true
         }
         return selected
@@ -866,6 +877,14 @@ class AppSettingsRepository(
     suspend fun setCompanionRecaps(enabled: Boolean) {
         store.edit { it[Keys.COMPANION_RECAPS] = enabled }
     }
+
+    /** Has the reading companion ask the service [id]; see [selectCompanionServer] for a server. */
+    suspend fun setCompanionProvider(id: String) {
+        store.edit { it[Keys.COMPANION_PROVIDER] = id }
+    }
+
+    /** Stores the Gemini model the reading companion uses; blank goes back to the default. */
+    suspend fun setCompanionGeminiModel(name: String) = setOrRemove(Keys.COMPANION_GEMINI_MODEL, name)
 
     /** Stores the Gemini model translation uses; blank goes back to the default. */
     suspend fun setTranslationGeminiModel(name: String) = setOrRemove(Keys.TRANSLATION_GEMINI_MODEL, name)
@@ -1042,9 +1061,13 @@ internal val APP_BACKUP_TYPES = mapOf(
     ServerSettings.COMPANION_SERVER_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_STATE_NAME to BackupValueType.STRING,
     COMPANION_RECAPS_NAME to BackupValueType.BOOLEAN,
+    COMPANION_PROVIDER_NAME to BackupValueType.STRING,
+    COMPANION_GEMINI_MODEL_NAME to BackupValueType.STRING,
 )
 
 private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
 private const val COMPANION_RECAPS_NAME = "companion_recaps"
+private const val COMPANION_PROVIDER_NAME = "companion_provider"
+private const val COMPANION_GEMINI_MODEL_NAME = "companion_gemini_model"
