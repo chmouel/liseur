@@ -142,9 +142,9 @@ class CompanionViewModel(
             contentSha.value = sha
             val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), opened, recapSettings, foreground)
                 .also { it.start() }
-            peeking(lastOrigin)
             placed.withLock {
                 scheduler = started
+                peeking(lastOrigin)
                 for ((place, movement) in pendingShown) {
                     val lo = quietly { opened.scopeOf(place, translated = false)?.lo } ?: continue
                     started.moved(lo, movement)
