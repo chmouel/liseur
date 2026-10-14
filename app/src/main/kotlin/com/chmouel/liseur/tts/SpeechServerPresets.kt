@@ -28,6 +28,7 @@ internal object SpeechServerPresets {
         SpeechServerPreset(R.string.speech_preset_openrouter, "https://openrouter.ai/api/v1"),
         SpeechServerPreset(R.string.speech_preset_mistral, "https://api.mistral.ai/v1"),
         SpeechServerPreset(R.string.speech_preset_groq, "https://api.groq.com/openai/v1"),
+        SpeechServerPreset(R.string.speech_preset_together, "https://api.together.ai/v1"),
         SpeechServerPreset(R.string.speech_preset_kokoro, "http://192.168.1.10:8880", example = true),
         SpeechServerPreset(R.string.speech_preset_lm_studio, "http://192.168.1.10:1234", example = true),
         SpeechServerPreset(R.string.speech_preset_ollama, "http://192.168.1.10:11434", example = true),

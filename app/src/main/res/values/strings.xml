@@ -1139,6 +1139,7 @@
     <string name="speech_preset_openrouter" translatable="false">OpenRouter</string>
     <string name="speech_preset_mistral" translatable="false">Mistral</string>
     <string name="speech_preset_groq" translatable="false">Groq</string>
+    <string name="speech_preset_together" translatable="false">Together AI</string>
     <string name="speech_preset_kokoro" translatable="false">Kokoro</string>
     <string name="speech_preset_lm_studio" translatable="false">LM Studio</string>
     <string name="speech_preset_ollama" translatable="false">Ollama</string>

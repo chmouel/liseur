@@ -163,9 +163,10 @@ internal object OpenAiChat {
 
     /**
      * The models in a list that answer in text, sorted by name: those that
-     * say their output includes text, or say nothing and are not named for
-     * speech, images or embeddings. Each keeps its price when the list has
-     * one, as OpenRouter's does.
+     * say their output includes text or their type writes it, or say
+     * nothing and are not named for speech, images or embeddings.
+     * Each keeps its price when the list has
+     * one, as OpenRouter's, DeepInfra's and Together's do.
      */
     fun textModels(text: String): List<TextModel> {
         val items = try {
@@ -181,9 +182,27 @@ internal object OpenAiChat {
         }.distinctBy { it.id }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.id })
     }
 
-    // OpenRouter gives dollars per token, as text; a negative one means the price varies.
+    /**
+     * Dollars per million tokens sent and written when the list gives
+     * both: DeepInfra's, in its model metadata and already per million,
+     * Together's `pricing.input`/`output`, also per million, or
+     * OpenRouter's `pricing`, dollars per token as text, where a
+     * negative one means the price varies. A model that bills by the
+     * character, second or hour has no token price, and one side alone is
+     * none: half a price is not worth showing as the whole one.
+     */
     private fun price(item: JSONObject?): TextPrice? {
+        val metadata = item?.optJSONObject("metadata")?.optJSONObject("pricing")
+        if (metadata != null) {
+            fun perMillion(key: String) = metadata.optDouble(key).takeIf { it.isFinite() && it >= 0 }
+            return TextPrice(perMillion("input_tokens") ?: return null, perMillion("output_tokens") ?: return null)
+        }
         val pricing = item?.optJSONObject("pricing") ?: return null
+        if (pricing.has("input") || pricing.has("output")) {
+            if (pricing.optDouble("hourly", 0.0) > 0) return null
+            fun perMillion(key: String) = pricing.optDouble(key).takeIf { it.isFinite() && it >= 0 }
+            return TextPrice(perMillion("input") ?: return null, perMillion("output") ?: return null)
+        }
         fun perMillion(key: String) = pricing.optString(key).toDoubleOrNull()?.takeIf { it.isFinite() && it >= 0 }?.times(1_000_000)
         return TextPrice(perMillion("prompt") ?: return null, perMillion("completion") ?: return null)
     }
@@ -192,6 +211,10 @@ internal object OpenAiChat {
         val output = item?.optJSONArray("output_modalities")
             ?: item?.optJSONObject("architecture")?.optJSONArray("output_modalities")
         if (output != null) return (0 until output.length()).any { output.optString(it).equals("text", ignoreCase = true) }
+        when (item?.optString("type")?.lowercase()) {
+            "chat", "language", "code" -> return true
+            "image", "embedding", "moderation", "rerank", "audio", "transcribe", "video" -> return false
+        }
         val lower = id.lowercase()
         return NOT_TEXT.none { it in lower }
     }

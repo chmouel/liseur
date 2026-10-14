@@ -345,6 +345,68 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `a model's metadata prices it too, already per million tokens`() {
+        val list = """{"data":[
+            {"id":"google/gemma-3-12b-it","metadata":{"tags":["chat"],"pricing":{"input_tokens":0.05,"output_tokens":0.15}}},
+            {"id":"ResembleAI/chatterbox-turbo","metadata":{"tags":["tts"],"pricing":{"input_characters":1}}},
+            {"id":"half","metadata":{"pricing":{"input_tokens":0.05}}},
+            {"id":"varying","metadata":{"pricing":{"input_tokens":-1,"output_tokens":-1}}},
+            {"id":"plain","metadata":{"tags":["chat"]}}
+        ]}"""
+        val prices = OpenAiChat.textModels(list).associate { it.id to it.price }
+        assertEquals(TextPrice(0.05, 0.15), prices.getValue("google/gemma-3-12b-it"))
+        // A model that bills by the character has no token price, and one side alone or a varying one is none.
+        assertEquals(null, prices["ResembleAI/chatterbox-turbo"])
+        assertEquals(null, prices["half"])
+        assertEquals(null, prices["varying"])
+        assertEquals(null, prices["plain"])
+    }
+
+    @Test
+    fun `Together lists token prices per million and keeps only text model types`() {
+        val list = """[
+            {"id":"chat","type":"chat","pricing":{"input":0.3,"output":0.6}},
+            {"id":"speech-named-code","type":"code","pricing":{"input":0,"output":0}},
+            {"id":"language","type":"language"},
+            {"id":"a","type":"image","pricing":{"input":0.3,"output":0.6}},
+            {"id":"b","type":"embedding"},
+            {"id":"c","type":"moderation"},
+            {"id":"d","type":"rerank"},
+            {"id":"e","type":"audio"},
+            {"id":"f","type":"transcribe"},
+            {"id":"g","type":"video"},
+            {"id":"explicit-text","type":"audio","output_modalities":["text"]},
+            {"id":"explicit-audio","type":"chat","output_modalities":["audio"]},
+            {"id":"unknown","type":"model"},
+            {"id":"plain"}
+        ]"""
+        val models = OpenAiChat.textModels(list)
+        assertEquals(listOf("chat", "explicit-text", "language", "plain", "speech-named-code", "unknown"), models.map { it.id })
+        val prices = models.associate { it.id to it.price }
+        assertEquals(TextPrice(0.3, 0.6), prices["chat"])
+        assertEquals(TextPrice(0.0, 0.0), prices["speech-named-code"])
+        assertEquals(null, prices["language"])
+        assertEquals(null, prices["plain"])
+    }
+
+    @Test
+    fun `Together partial invalid varying and hourly prices are not token prices`() {
+        val list = """[
+            {"id":"input-only","pricing":{"input":0.3}},
+            {"id":"output-only","pricing":{"output":0.6}},
+            {"id":"varying","pricing":{"input":-1,"output":0.6}},
+            {"id":"invalid","pricing":{"input":"unknown","output":0.6}},
+            {"id":"infinite","pricing":{"input":"Infinity","output":0.6}},
+            {"id":"null","pricing":{"input":null,"output":0.6}},
+            {"id":"hourly","pricing":{"input":0,"output":0,"hourly":2}},
+            {"id":"hourly-only","pricing":{"hourly":2}}
+        ]"""
+        val models = OpenAiChat.textModels(list)
+        assertEquals(8, models.size)
+        assertTrue(models.all { it.price == null })
+    }
+
+    @Test
     fun `errors map to what the reader can do`() {
         assertTrue(OpenAiChat.errorFor(403, "") is TranslationError.InvalidKey)
         assertTrue(OpenAiChat.errorFor(402, "") is TranslationError.RateLimited)
