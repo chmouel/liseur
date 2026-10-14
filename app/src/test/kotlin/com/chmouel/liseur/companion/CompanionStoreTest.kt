@@ -168,11 +168,15 @@ class CompanionStoreTest {
         store.setRecapChoice(OTHER, true)
         book.enqueue(UNIT_1)
         other.enqueue(UNIT_1)
+        val ticket = book.ticket()
+        val otherTicket = other.ticket()
 
         store.stopRecaps()
 
         assertTrue(book.queued().isEmpty())
         assertEquals(listOf(UNIT_1), other.queued())
+        assertFalse(book.saveRecap(IDENTITY, UNIT_1, "a", ticket))
+        assertTrue(other.saveRecap(IDENTITY, UNIT_1, "a", otherTicket))
     }
 
     @Test

@@ -15,7 +15,6 @@ import androidx.room.migration.Migration
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
@@ -119,6 +118,9 @@ interface CompanionRecapDao {
 
     @Query("DELETE FROM recap_queue WHERE book_url NOT IN (SELECT book_url FROM recap_choice WHERE enabled)")
     suspend fun clearQueueFollowingSettings()
+
+    @Query("SELECT book_url FROM recap_choice WHERE enabled")
+    suspend fun turnedOn(): List<String>
 
     @Query("SELECT enabled FROM recap_choice WHERE book_url = :bookUrl")
     fun choice(bookUrl: String): Flow<Boolean?>
@@ -266,23 +268,23 @@ class CompanionStore(
     private val dao = database.recaps()
     private val writes = Mutex()
     private val epochs = ConcurrentHashMap<String, Long>()
-    private val disabled = AtomicLong()
     private val stops = ConcurrentHashMap<String, Long>()
 
     /** The book at [bookUrl], whose file hashes to [contentSha], for one opening of it. */
     fun forBook(bookUrl: String, contentSha: String): BookRecaps =
         BookRecaps(bookUrl, contentSha, epochs.computeIfAbsent(bookUrl) { 0L })
 
-    // Both counters only grow, so the sum changes whenever either does.
-    private fun ticket(bookUrl: String): Long = disabled.get() + (stops[bookUrl] ?: 0L)
+    private fun ticket(bookUrl: String): Long = stops[bookUrl] ?: 0L
 
     /**
      * Recaps were turned off in settings: forgets every waiting chapter of
-     * the books that follow settings, and no recap begun before is saved.
+     * the books that follow settings, and no recap begun before for one of
+     * them is saved. Books turned on from the reader's menu keep going.
      */
     suspend fun stopRecaps() {
         writes.withLock {
-            disabled.incrementAndGet()
+            val turnedOn = dao.turnedOn().toSet()
+            for (bookUrl in epochs.keys) if (bookUrl !in turnedOn) stops.merge(bookUrl, 1L, Long::plus)
             dao.clearQueueFollowingSettings()
         }
     }
