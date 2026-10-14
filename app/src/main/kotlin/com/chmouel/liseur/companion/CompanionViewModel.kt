@@ -49,6 +49,9 @@ class CompanionViewModel(
     private val contentSha = MutableStateFlow<String?>(null)
     private val placed = Mutex()
     private var scheduler: RecapScheduler<Locator>? = null
+    // Set once attach() has found no content identity, so no scheduler
+    // will ever start and shown() stops collecting.
+    private var noScheduler = false
 
     // What the screen reported before the scheduler started, in order.
     private val pendingShown = mutableListOf<Pair<Locator, Boolean>>()
@@ -129,7 +132,13 @@ class CompanionViewModel(
             }
             // Without an identity nothing is queued or saved; lookups
             // still work, searching the earlier chapters directly.
-            if (sha.isNullOrBlank()) return@launch
+            if (sha.isNullOrBlank()) {
+                placed.withLock {
+                    noScheduler = true
+                    pendingShown.clear()
+                }
+                return@launch
+            }
             contentSha.value = sha
             val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), opened, recapSettings, foreground)
                 .also { it.start() }
@@ -154,6 +163,7 @@ class CompanionViewModel(
         viewModelScope.launch {
             // In order, so a quick run of page turns cannot be taken backwards.
             placed.withLock {
+                if (noScheduler) return@withLock
                 val recaps = scheduler
                 val opened = catalog.takeIf { it.isCompleted }?.getCompleted()
                 if (recaps == null || opened == null) {
