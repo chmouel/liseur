@@ -910,6 +910,32 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `an account clear fences a save and pull already in flight`() = runTest {
+        val store = saved()
+        val book = store.forBook(BOOK)
+        book.keep("already-sent", "sent")
+        store.ensureWork(PEER, BOOK, "work-one")
+
+        val lookup = book.get("arriving")
+        val ticket = store.pullTicket(BOOK)
+        store.requestAccountClears(listOf(TranslationAccountClear(PEER, "work-one")), BOOK)
+
+        book.put("arriving", "late save", lookup.stamp)
+        val landed = store.landPulled(
+            PEER,
+            BOOK,
+            ticket,
+            listOf(PulledTranslation(hashed("remote"), "from server")),
+            "cursor-1",
+        )
+
+        assertNull(book.get("arriving").translation)
+        assertEquals(0, landed)
+        val state = store.ensureWork(PEER, BOOK, "work-one")
+        assertTrue(store.unsynced(BOOK, state, 500).isEmpty())
+    }
+
+    @Test
     fun `clearing everything can owe the account its clear in the same step`() = runTest {
         val store = saved()
         store.forBook(BOOK).keep("one", "un")

@@ -601,24 +601,31 @@ class SavedTranslations(
      * sentences where they are. Those of [bookUrl] are marked sent to
      * each peer cleared, in the same transaction: the sync that sends
      * the clear would otherwise push them straight back.
+     * A global fence drops saves and pulls started before this
+     * transaction, so a late translation is not pushed after the clear.
      */
     suspend fun requestAccountClears(clears: List<TranslationAccountClear>, bookUrl: String? = null) {
         if (clears.isEmpty()) return
         writes.withLock {
-            database.withTransaction {
-                owe(clears)
-                if (bookUrl == null) return@withTransaction
-                val last = dao.lastSaved(bookUrl) ?: return@withTransaction
-                for (clear in clears.filterNot { it.everyWork }) {
-                    val state = sync.get(clear.peerId, bookUrl)
-                        ?.takeIf { it.workId == clear.workId }
-                        ?: TranslationSyncState(clear.peerId, bookUrl, clear.workId)
-                    if (last.savedAt > state.pushedSavedAt ||
-                        (last.savedAt == state.pushedSavedAt && last.rowId > state.pushedRowid)
-                    ) {
-                        sync.put(state.copy(pushedSavedAt = last.savedAt, pushedRowid = last.rowId))
+            cleared.incrementAndGet()
+            try {
+                database.withTransaction {
+                    owe(clears)
+                    if (bookUrl == null) return@withTransaction
+                    val last = dao.lastSaved(bookUrl) ?: return@withTransaction
+                    for (clear in clears.filterNot { it.everyWork }) {
+                        val state = sync.get(clear.peerId, bookUrl)
+                            ?.takeIf { it.workId == clear.workId }
+                            ?: TranslationSyncState(clear.peerId, bookUrl, clear.workId)
+                        if (last.savedAt > state.pushedSavedAt ||
+                            (last.savedAt == state.pushedSavedAt && last.rowId > state.pushedRowid)
+                        ) {
+                            sync.put(state.copy(pushedSavedAt = last.savedAt, pushedRowid = last.rowId))
+                        }
                     }
                 }
+            } finally {
+                cleared.incrementAndGet()
             }
         }
     }

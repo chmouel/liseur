@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -18,6 +19,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1077,9 +1079,9 @@ private fun clearAccountTranslationsChoice(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { onCheckedChange(!checked) },
+                .toggleable(value = checked, role = Role.Checkbox) { onCheckedChange(it) },
         ) {
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
+            Checkbox(checked = checked, onCheckedChange = null)
             Column(modifier = Modifier.padding(start = 4.dp)) {
                 Text(
                     text = stringResource(R.string.clear_account_translations_choice),
