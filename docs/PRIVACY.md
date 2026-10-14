@@ -162,7 +162,8 @@ settings.
 
 Liseur can translate a selected passage with any server on the External
 services and API keys page that speaks OpenAI's chat API, such as
-OpenRouter or a server of your own (LM Studio or Ollama, for example).
+OpenRouter, Together AI (`https://api.together.ai/v1`), or a server of
+your own (LM Studio or Ollama, for example).
 Nothing is sent until you choose that server in Settings, Translation.
 Liseur then asks it for its list of models, with your API key if you
 entered one for that server, so you can pick one. "Translate a test

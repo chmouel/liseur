@@ -363,6 +363,50 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `Together lists token prices per million and keeps only text model types`() {
+        val list = """[
+            {"id":"chat","type":"chat","pricing":{"input":0.3,"output":0.6}},
+            {"id":"speech-named-code","type":"code","pricing":{"input":0,"output":0}},
+            {"id":"language","type":"language"},
+            {"id":"a","type":"image","pricing":{"input":0.3,"output":0.6}},
+            {"id":"b","type":"embedding"},
+            {"id":"c","type":"moderation"},
+            {"id":"d","type":"rerank"},
+            {"id":"e","type":"audio"},
+            {"id":"f","type":"transcribe"},
+            {"id":"g","type":"video"},
+            {"id":"explicit-text","type":"audio","output_modalities":["text"]},
+            {"id":"explicit-audio","type":"chat","output_modalities":["audio"]},
+            {"id":"unknown","type":"model"},
+            {"id":"plain"}
+        ]"""
+        val models = OpenAiChat.textModels(list)
+        assertEquals(listOf("chat", "explicit-text", "language", "plain", "speech-named-code", "unknown"), models.map { it.id })
+        val prices = models.associate { it.id to it.price }
+        assertEquals(TextPrice(0.3, 0.6), prices["chat"])
+        assertEquals(TextPrice(0.0, 0.0), prices["speech-named-code"])
+        assertEquals(null, prices["language"])
+        assertEquals(null, prices["plain"])
+    }
+
+    @Test
+    fun `Together partial invalid varying and hourly prices are not token prices`() {
+        val list = """[
+            {"id":"input-only","pricing":{"input":0.3}},
+            {"id":"output-only","pricing":{"output":0.6}},
+            {"id":"varying","pricing":{"input":-1,"output":0.6}},
+            {"id":"invalid","pricing":{"input":"unknown","output":0.6}},
+            {"id":"infinite","pricing":{"input":"Infinity","output":0.6}},
+            {"id":"null","pricing":{"input":null,"output":0.6}},
+            {"id":"hourly","pricing":{"input":0,"output":0,"hourly":2}},
+            {"id":"hourly-only","pricing":{"hourly":2}}
+        ]"""
+        val models = OpenAiChat.textModels(list)
+        assertEquals(8, models.size)
+        assertTrue(models.all { it.price == null })
+    }
+
+    @Test
     fun `errors map to what the reader can do`() {
         assertTrue(OpenAiChat.errorFor(403, "") is TranslationError.InvalidKey)
         assertTrue(OpenAiChat.errorFor(402, "") is TranslationError.RateLimited)

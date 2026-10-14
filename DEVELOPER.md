@@ -1822,8 +1822,11 @@ reader behavior.
   shows the input and output price per million tokens under each one:
   OpenRouter's `pricing` (dollars per token) or DeepInfra's
   `metadata.pricing` (`input_tokens`/`output_tokens`, already per
-  million). A model the list prices only by the character or second, a
-  speech model say, shows no token price.
+  million), or Together's `pricing.input`/`output` (also per million).
+  Together's declared model type keeps non-text models out of the
+  translation list. Together AI is offered on the shared server address
+  field at `https://api.together.ai/v1`. A model the list prices only by
+  the character, second, or hour shows no token price.
 - "Translate the page from here" in the sheet translates the book in
   place (reflowable books only). The More menu (⋮) in the reader's top
   bar offers the same action from the current page, next to Read aloud

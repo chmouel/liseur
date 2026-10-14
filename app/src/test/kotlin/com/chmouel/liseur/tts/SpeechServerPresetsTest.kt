@@ -20,6 +20,9 @@ class SpeechServerPresetsTest {
         val deepInfra = SpeechServerPresets.all.single { it.url.contains("deepinfra") }
         assertEquals(deepInfra, SpeechServerPresets.matching("https://API.deepinfra.com:443/v1/openai/"))
         assertEquals(deepInfra, SpeechServerPresets.matching("https://api.deepinfra.com/v1/other"))
+        val together = SpeechServerPresets.all.single { it.url == "https://api.together.ai/v1" }
+        assertEquals(together, SpeechServerPresets.matching("https://API.together.ai:443/v1/"))
+        assertNull(SpeechServerPresets.matching("http://api.together.ai/v1"))
         assertNull(SpeechServerPresets.matching("http://api.deepinfra.com/v1/openai"))
         assertNull(SpeechServerPresets.matching("not an address"))
     }
