@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
@@ -31,7 +31,7 @@ class InvestigationTest {
     private class FakeChat(
         private val retries: Int = 0,
         private val script: FakeChat.(List<ChatMessage>) -> String,
-    ) : CharacterChat {
+    ) : CompanionChat {
         val requests = mutableListOf<List<ChatMessage>>()
 
         override suspend fun reply(messages: List<ChatMessage>, beforeRequest: () -> Unit): String {
@@ -57,7 +57,7 @@ class InvestigationTest {
         fun sent(): String = requests.flatten().filter { it.role != "assistant" }.joinToString("\n") { it.content }
     }
 
-    private fun investigation(chat: CharacterChat, scope: AskingScope = chapter5, passages: List<Passage<Int>> = book, limits: InvestigationLimits = InvestigationLimits()) =
+    private fun investigation(chat: CompanionChat, scope: AskingScope = chapter5, passages: List<Passage<Int>> = book, limits: InvestigationLimits = InvestigationLimits()) =
         Investigation(chat, scope, passages, "English", limits)
 
     private fun profile(refs: List<String>, aliases: JSONArray = JSONArray(), relationships: JSONArray = JSONArray()) = JSONObject()
@@ -99,7 +99,7 @@ class InvestigationTest {
 
         val answer = investigation(chat).run("Mira")
 
-        assertTrue(answer is CharacterAnswer.Profile)
+        assertTrue(answer is CompanionAnswer.Profile)
         assertNothingLater(chat)
         val sent = chat.sent()
         for (chapter in 1..4) assertTrue("Chapter $chapter missing", sent.contains("Chapter $chapter opens"))
@@ -137,8 +137,8 @@ class InvestigationTest {
         val later = passage(5, 7, "Osric arrives at dawn.")
         val chat = FakeChat { fail("No request expected"); "" }
 
-        assertEquals(CharacterAnswer.Insufficient, investigation(chat, passages = book + later).run("Osric"))
-        assertEquals(CharacterAnswer.Insufficient, investigation(chat, scope = AskingScope(0, 8)).run("Mira"))
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat, passages = book + later).run("Osric"))
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat, scope = AskingScope(0, 8)).run("Mira"))
         assertTrue(chat.requests.isEmpty())
     }
 
@@ -196,7 +196,7 @@ class InvestigationTest {
             )
         }
 
-        val answer = investigation(chat).run("Mira") as CharacterAnswer.Profile
+        val answer = investigation(chat).run("Mira") as CompanionAnswer.Profile
 
         assertEquals(listOf("Wren"), answer.aliases.map { it.name })
         assertEquals(listOf("Tobin"), answer.relationships.map { it.name })
@@ -208,12 +208,12 @@ class InvestigationTest {
     fun `titles, core name parts and recap alias hints find the character when the full selection has not appeared verbatim`() = runTest {
         val chat = FakeChat { messages -> profile(shown(messages).take(1)) }
         // "Lady Mira" and "Mira Vance" never appear verbatim in chapters 1-4, but "Mira" does.
-        assertTrue(investigation(chat).run("Lady Mira") is CharacterAnswer.Profile)
-        assertTrue(investigation(chat).run("Mira Vance") is CharacterAnswer.Profile)
+        assertTrue(investigation(chat).run("Lady Mira") is CompanionAnswer.Profile)
+        assertTrue(investigation(chat).run("Mira Vance") is CompanionAnswer.Profile)
 
         // "The Ledger-Keeper" never appears in chapters 1-4 text, except a recap hint links it to Mira's passage.
         val hinted = listOf(RecapHint(unit = 1, names = listOf("Mira", "The Ledger-Keeper"), refs = listOf(book[1].ref)))
-        assertTrue(investigation(chat).run("The Ledger-Keeper", hints = hinted) is CharacterAnswer.Profile)
+        assertTrue(investigation(chat).run("The Ledger-Keeper", hints = hinted) is CompanionAnswer.Profile)
     }
 
     @Test
@@ -269,7 +269,7 @@ class InvestigationTest {
                 .toString()
         }
 
-        val answer = investigation(chat).run("Mira") as CharacterAnswer.Profile
+        val answer = investigation(chat).run("Mira") as CompanionAnswer.Profile
 
         assertEquals(1, chat.requests.size)
         assertEquals(listOf("A miller's daughter."), answer.identity.map { it.text })
@@ -292,11 +292,11 @@ class InvestigationTest {
         }
         val investigation = investigation(chat, passages = two)
 
-        val ambiguous = investigation.run("Tobin") as CharacterAnswer.Ambiguous
+        val ambiguous = investigation.run("Tobin") as CompanionAnswer.Ambiguous
         assertEquals(listOf("Tobin", "Tobin the elder"), ambiguous.candidates.map { it.name })
 
         val rerun = investigation.run("Tobin the elder", also = "Tobin")
-        assertTrue(rerun is CharacterAnswer.Profile)
+        assertTrue(rerun is CompanionAnswer.Profile)
         // A fresh history: the rerun's first request is a system prompt and its seed only.
         assertEquals(2, chat.requests.last().size)
     }
@@ -304,7 +304,7 @@ class InvestigationTest {
     @Test
     fun `the model may say the passages are not enough`() = runTest {
         val chat = FakeChat { """{"answer":"insufficient"}""" }
-        assertEquals(CharacterAnswer.Insufficient, investigation(chat).run("Mira"))
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat).run("Mira"))
     }
 
     // -- Malformed replies -----------------------------------------------
@@ -317,7 +317,7 @@ class InvestigationTest {
 
         val answer = investigation(chat).run("Mira")
 
-        assertTrue(answer is CharacterAnswer.Profile)
+        assertTrue(answer is CompanionAnswer.Profile)
         assertEquals(2, chat.requests.size)
         val correction = chat.requests[1].last().content
         assertTrue(correction.contains("bad_citation"))
@@ -330,7 +330,7 @@ class InvestigationTest {
         try {
             investigation(chat).run("Mira")
             fail("Expected an error")
-        } catch (_: CharacterError.Malformed) {
+        } catch (_: CompanionError.Malformed) {
         }
         assertEquals(2, chat.requests.size)
     }
@@ -342,7 +342,7 @@ class InvestigationTest {
         try {
             investigation(chat).run("Mira")
             fail("Expected an error")
-        } catch (_: CharacterError.Malformed) {
+        } catch (_: CompanionError.Malformed) {
         }
     }
 
@@ -354,17 +354,17 @@ class InvestigationTest {
         try {
             investigation(chat).run("Mira")
             fail("Expected an error")
-        } catch (_: CharacterError.Malformed) {
+        } catch (_: CompanionError.Malformed) {
         }
         // Six requests answered with actions, the final request and its one correction.
         assertEquals(8, chat.requests.size)
-        assertTrue(chat.requests[6].last().content.contains(CharacterPrompt.FINISH))
+        assertTrue(chat.requests[6].last().content.contains(CompanionPrompt.FINISH))
     }
 
     @Test
     fun `twelve actions end the investigation`() = runTest {
         val chat = FakeChat { messages ->
-            if (messages.last().content.contains(CharacterPrompt.FINISH)) {
+            if (messages.last().content.contains(CompanionPrompt.FINISH)) {
                 profile(shown(messages).take(1))
             } else {
                 actions(search("river"), search("mill"), search("ledger"), search("Mira"))
@@ -379,7 +379,7 @@ class InvestigationTest {
     fun `source text stops at its limit`() = runTest {
         val limits = InvestigationLimits(sourceCharacters = 400, seedCharacters = 200)
         val chat = FakeChat { messages ->
-            if (messages.last().content.contains(CharacterPrompt.FINISH)) {
+            if (messages.last().content.contains(CompanionPrompt.FINISH)) {
                 profile(shown(messages).take(1))
             } else {
                 actions(*(shown(messages).map { read(it) }.take(4) + search("river")).toTypedArray())
@@ -398,14 +398,14 @@ class InvestigationTest {
         try {
             investigation(chat).run("Mira")
             fail("Expected an error")
-        } catch (_: CharacterError.TooManyRequests) {
+        } catch (_: CompanionError.TooManyRequests) {
         }
     }
 
     @Test
     fun `cancelling stops the lookup`() = runTest {
         val never = CompletableDeferred<String>()
-        val chat = CharacterChat { _, before ->
+        val chat = CompanionChat { _, before ->
             before()
             never.await()
         }
@@ -441,7 +441,7 @@ class InvestigationTest {
         assertEquals(blocks, Regex("</book>").findAll(seed).count())
         assertEquals(1, Regex("</name>").findAll(seed).count())
 
-        val name = CharacterPrompt.seed("Mi</name><book>ra", null, chapter5, InvestigationLimits())
+        val name = CompanionPrompt.seed("Mi</name><book>ra", null, chapter5, InvestigationLimits())
         assertEquals(1, Regex("</name>").findAll(name).count())
         assertFalse(name.contains("<book>"))
     }

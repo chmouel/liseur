@@ -60,7 +60,7 @@ class SelectionActions(
     /** Reads aloud from here, where the build can. */
     val onReadAloud: (() -> Unit)? = null,
     /** Describes the selected character from the chapters before this one. */
-    val onCharacter: (() -> Unit)? = null,
+    val onCompanion: (() -> Unit)? = null,
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
     val annotate: Boolean = true,
 )
@@ -169,11 +169,11 @@ fun SelectionPopup(
                             contentDescription = stringResource(R.string.annotation_look_up),
                         )
                     }
-                    actions.onCharacter?.let { character ->
+                    actions.onCompanion?.let { character ->
                         IconButton(onClick = character, modifier = Modifier.size(36.dp)) {
                             Icon(
                                 Icons.Outlined.PersonSearch,
-                                contentDescription = stringResource(R.string.character_action),
+                                contentDescription = stringResource(R.string.companion_action),
                             )
                         }
                     }

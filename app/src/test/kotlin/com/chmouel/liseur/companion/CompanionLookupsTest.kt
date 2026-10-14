@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
@@ -16,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
-class CharacterLookupsTest {
+class CompanionLookupsTest {
 
     // Places are chapter * 100 + ordinal; a negative place cannot be told
     // apart, and UNREADABLE_PLACE throws while the book is read.
@@ -48,18 +48,18 @@ class CharacterLookupsTest {
         override suspend fun passagesOf(unit: Int): List<Passage<Int>> = book.filter { it.range.hi == unit }
     }
 
-    private var choice: CharacterChoice? = CharacterChoice("s1", "https://ai.example/v1", "m", "https://ai.example", 0)
-    private val chats = mutableListOf<CharacterChoice>()
+    private var choice: CompanionChoice? = CompanionChoice("s1", "https://ai.example/v1", "m", "https://ai.example", 0)
+    private val chats = mutableListOf<CompanionChoice>()
     private var replies: suspend (List<ChatMessage>) -> String = { profileFor(it) }
     private val requests = mutableListOf<List<ChatMessage>>()
 
-    private fun TestScope.lookups() = CharacterLookups(
+    private fun TestScope.lookups() = CompanionLookups(
         scope = this,
         catalog = { catalog },
         choice = { choice },
         chatFor = { chosen ->
             chats += chosen
-            CharacterChat { messages, before ->
+            CompanionChat { messages, before ->
                 before()
                 requests += messages
                 replies(messages)
@@ -87,7 +87,7 @@ class CharacterLookupsTest {
         .put("relationships", JSONArray())
         .toString()
 
-    private fun view(lookups: CharacterLookups<Int>) = lookups.panel.value?.view
+    private fun view(lookups: CompanionLookups<Int>) = lookups.panel.value?.view
 
     @Test
     fun `a name asked in chapter 5 is answered from chapters 1 to 4 only`() = runTest {
@@ -95,7 +95,7 @@ class CharacterLookupsTest {
         lookups.open("Mira", place = 400, translated = false)
         advanceUntilIdle()
 
-        val profile = (view(lookups) as CharacterView.Profile).profile
+        val profile = (view(lookups) as CompanionView.Profile).profile
         assertTrue(profile.identity.single().sources.all { it.range.hi < 4 })
         assertEquals(AskingScope(4, 8), lookups.panel.value?.scope)
         val sent = requests.flatten().joinToString("\n") { it.content }
@@ -109,19 +109,19 @@ class CharacterLookupsTest {
 
         lookups.open("Mira", place = 5, translated = false)
         advanceUntilIdle()
-        assertEquals(CharacterView.FirstChapter, view(lookups))
+        assertEquals(CompanionView.FirstChapter, view(lookups))
 
         lookups.open("Mira", place = -1, translated = false)
         advanceUntilIdle()
-        assertEquals(CharacterView.Unplaced, view(lookups))
+        assertEquals(CompanionView.Unplaced, view(lookups))
 
         lookups.open("Mira walked all the way to the old mill by the river", place = 400, translated = false)
         advanceUntilIdle()
-        assertEquals(CharacterView.NotAName, view(lookups))
+        assertEquals(CompanionView.NotAName, view(lookups))
 
         lookups.open("Mira", place = UNREADABLE_PLACE, translated = false)
         advanceUntilIdle()
-        assertEquals(CharacterView.Failed(CharacterFailure.UNREADABLE), view(lookups))
+        assertEquals(CompanionView.Failed(CompanionFailure.UNREADABLE), view(lookups))
 
         assertTrue(requests.isEmpty())
     }
@@ -132,12 +132,12 @@ class CharacterLookupsTest {
         val lookups = lookups()
         lookups.open("Mira", place = 400, translated = false)
         advanceUntilIdle()
-        assertEquals(CharacterView.Setup, view(lookups))
+        assertEquals(CompanionView.Setup, view(lookups))
 
-        choice = CharacterChoice("s1", "https://ai.example/v1", "m", "https://ai.example", 0)
+        choice = CompanionChoice("s1", "https://ai.example/v1", "m", "https://ai.example", 0)
         lookups.setUp()
         advanceUntilIdle()
-        assertTrue(view(lookups) is CharacterView.Profile)
+        assertTrue(view(lookups) is CompanionView.Profile)
     }
 
     @Test
@@ -156,17 +156,17 @@ class CharacterLookupsTest {
         lookups.open("Mira", place = 400, translated = false)
         runCurrent()
         started.await()
-        assertEquals(CharacterView.Loading(CharacterView.Stage.ASKING), view(lookups))
+        assertEquals(CompanionView.Loading(CompanionView.Stage.ASKING), view(lookups))
 
         lookups.cancel()
         runCurrent()
         assertTrue(cancelled)
-        assertEquals(CharacterView.Failed(CharacterFailure.CANCELLED), view(lookups))
+        assertEquals(CompanionView.Failed(CompanionFailure.CANCELLED), view(lookups))
 
         replies = { profileFor(it) }
         lookups.retry()
         advanceUntilIdle()
-        assertTrue(view(lookups) is CharacterView.Profile)
+        assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals(listOf(AskingScope(4, 8), AskingScope(4, 8)), catalog.asked)
     }
 
@@ -189,14 +189,14 @@ class CharacterLookupsTest {
         val lookups = lookups()
         lookups.open("Tobin", place = 300, translated = false)
         advanceUntilIdle()
-        val ambiguous = view(lookups) as CharacterView.Ambiguous
+        val ambiguous = view(lookups) as CompanionView.Ambiguous
         assertEquals(listOf("Tobin", "Tobin the elder"), ambiguous.candidates.map { it.name })
 
         val before = requests.size
         lookups.choose(ambiguous.candidates[1])
         advanceUntilIdle()
 
-        assertTrue(view(lookups) is CharacterView.Profile)
+        assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals("Tobin the elder", lookups.panel.value?.name)
         assertEquals("Tobin", lookups.panel.value?.also)
         assertEquals(AskingScope(3, 8), lookups.panel.value?.scope)
@@ -214,37 +214,37 @@ class CharacterLookupsTest {
         val lookups = lookups()
         lookups.open("Mira", place = 400, translated = false)
         advanceUntilIdle()
-        assertTrue(view(lookups) is CharacterView.Profile)
+        assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals(2, chats.size)
 
         changes = 2
         lookups.retry()
         advanceUntilIdle()
-        assertEquals(CharacterView.Failed(CharacterFailure.SERVER), view(lookups))
+        assertEquals(CompanionView.Failed(CompanionFailure.SERVER), view(lookups))
     }
 
     @Test
     fun `server failures are told apart and can be retried`() = runTest {
         val cases = listOf(
-            TranslationError.InvalidKey(401) to CharacterFailure.KEY,
-            TranslationError.RateLimited(429) to CharacterFailure.RATE_LIMITED,
-            TranslationError.LocalNetworkBlocked() to CharacterFailure.LOCAL_NETWORK,
-            TranslationError.Network(IOException("down")) to CharacterFailure.NETWORK,
-            TranslationError.ModelNotFound("m") to CharacterFailure.MODEL_MISSING,
-            TranslationError.Service(500) to CharacterFailure.SERVER,
-            TranslationError.Truncated() to CharacterFailure.MALFORMED,
+            TranslationError.InvalidKey(401) to CompanionFailure.KEY,
+            TranslationError.RateLimited(429) to CompanionFailure.RATE_LIMITED,
+            TranslationError.LocalNetworkBlocked() to CompanionFailure.LOCAL_NETWORK,
+            TranslationError.Network(IOException("down")) to CompanionFailure.NETWORK,
+            TranslationError.ModelNotFound("m") to CompanionFailure.MODEL_MISSING,
+            TranslationError.Service(500) to CompanionFailure.SERVER,
+            TranslationError.Truncated() to CompanionFailure.MALFORMED,
         )
         val lookups = lookups()
         for ((error, failure) in cases) {
             replies = { throw error }
             lookups.open("Mira", place = 400, translated = false)
             advanceUntilIdle()
-            assertEquals(CharacterView.Failed(failure), view(lookups))
+            assertEquals(CompanionView.Failed(failure), view(lookups))
         }
         replies = { "not json at all" }
         lookups.retry()
         advanceUntilIdle()
-        assertEquals(CharacterView.Failed(CharacterFailure.MALFORMED), view(lookups))
+        assertEquals(CompanionView.Failed(CompanionFailure.MALFORMED), view(lookups))
     }
 
     @Test
@@ -274,7 +274,7 @@ class CharacterLookupsTest {
         lookups.close()
         lookups.open("  mira ", place = 402, translated = false)
         advanceUntilIdle()
-        assertTrue(view(lookups) is CharacterView.Profile)
+        assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals(1, requests.size)
 
         // Different chapter (chapter 6 instead of chapter 5): asks afresh because chapter 5 is now eligible.

@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import org.json.JSONArray
 import org.json.JSONException
@@ -147,7 +147,7 @@ object Recaps {
     /** The batch's passages, each under a ref of this batch only. */
     fun <P> user(batch: List<Passage<P>>, unit: Int, count: Int): String =
         "Chapter ${unit + 1} of $count, part of it:\n" +
-            batch.withIndex().joinToString("\n") { (k, p) -> CharacterPrompt.block("P${k + 1}", p.range, p.text) }
+            batch.withIndex().joinToString("\n") { (k, p) -> CompanionPrompt.block("P${k + 1}", p.range, p.text) }
 
     fun correction(code: String): String =
         "Your last reply could not be used ($code). Reply with exactly one JSON object as the instructions describe."

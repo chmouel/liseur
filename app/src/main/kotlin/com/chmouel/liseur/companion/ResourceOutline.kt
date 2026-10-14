@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element

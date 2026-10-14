@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex

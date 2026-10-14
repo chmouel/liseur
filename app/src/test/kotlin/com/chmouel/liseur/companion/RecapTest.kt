@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -373,7 +373,7 @@ class RecapTest {
     }
 
     /** Replies with a recap of Mira citing the first passage, or hangs until cancelled while [hold]. */
-    private class RecapChat(var hold: Boolean, private val malformed: Boolean) : CharacterChat {
+    private class RecapChat(var hold: Boolean, private val malformed: Boolean) : CompanionChat {
         val requests = mutableListOf<List<ChatMessage>>()
         var cancelled = false
         var holdAfter = -1

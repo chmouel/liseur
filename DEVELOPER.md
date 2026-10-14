@@ -2002,15 +2002,16 @@ reader behavior.
   when no attached view holds its chapter), and no exact anchor is
   captured after listening.
 
-### Characters
+### Reading companion
 
-Selecting a name and tapping Character opens a profile drawn only from
-the chapters before the one the reader asked from
+Selecting a name and tapping Ask companion opens a character profile
+drawn only from the chapters before the one the reader asked from
 ([ADR-0050](docs/adr/0050-character-profiles-use-only-earlier-chapters.md)).
-The feature lives in `app/src/main/kotlin/.../characters/`, in both
-flavors, and reuses the servers on External services and API keys
+The feature lives in `app/src/main/kotlin/.../companion/`, in both
+flavors, and its settings sit under Settings, Intelligence. It reuses
+the servers on External services and API keys
 through `OpenAiChatClient.chat`; its server, model and recap switch
-(`character_server`, `character_server_state`, `character_recaps`) are
+(`companion_server`, `companion_server_state`, `companion_recaps`) are
 separate from translation's, are moved and forgotten with server edits
 in `ServerSettings`, travel in the settings backup archive, and are not
 liseur-sync settings.
@@ -2033,7 +2034,7 @@ liseur-sync settings.
   scope, app-issued session refs (`S1`…), and eligible passage text. Never
   `Locator.text.before/after`, chapter titles, notes, recap prose, or the
   model's malformed reply. Book text and the name sit in
-  `CharacterPrompt`'s unclosable data blocks, as in `TranslationPrompt`.
+  `CompanionPrompt`'s unclosable data blocks, as in `TranslationPrompt`.
   `InvestigationTest` and `RecapTest` capture every request and assert
   that no chapter-5-or-later sentinel leaves.
 - `Investigation` runs JSON actions (`search`, `read`) over ordinary chat
@@ -2056,7 +2057,7 @@ liseur-sync settings.
   names and aliases are kept only if they appear in the passages it
   cites; a lookup uses them to pick seed passages, never sends their
   prose.
-- `characters.db` (`CharacterDatabase`, separate from `liseur.db`) keys
+- `companion.db` (`CompanionDatabase`, separate from `liseur.db`) keys
   recaps by book URL, content sha (`BookFingerprintStore`), unit key,
   server, model and `Recap.FORMAT`. Without a content sha nothing is
   queued or saved. Rows under another identity are ignored and dropped,

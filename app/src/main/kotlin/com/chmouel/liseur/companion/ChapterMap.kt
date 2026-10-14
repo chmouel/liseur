@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 /** A contents entry: an href with its fragment, already normalised, and the entries under it. */
 data class TocNode(val href: String, val children: List<TocNode> = emptyList())

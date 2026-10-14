@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -76,8 +76,8 @@ import org.readium.r2.shared.publication.Locator
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-internal fun CharacterSheet(
-    panel: CharacterPanel<Locator>,
+internal fun CompanionSheet(
+    panel: CompanionPanel<Locator>,
     onSource: (Passage<Locator>) -> Unit,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
@@ -100,7 +100,7 @@ internal fun CharacterSheet(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             val view = panel.view
-            val profile = (view as? CharacterView.Profile)?.profile
+            val profile = (view as? CompanionView.Profile)?.profile
             val title = profile?.name ?: panel.name ?: panel.selection
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
@@ -112,13 +112,13 @@ internal fun CharacterSheet(
                 )
                 panel.also?.let {
                     Text(
-                        stringResource(R.string.character_also_from, it),
+                        stringResource(R.string.companion_also_from, it),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Text(
-                    stringResource(R.string.character_scope),
+                    stringResource(R.string.companion_scope),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -131,19 +131,19 @@ internal fun CharacterSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when (view) {
-                    CharacterView.Setup -> Message(R.string.character_setup) {
-                        Button(onClick = onSetUp) { Text(stringResource(R.string.character_setup_action)) }
+                    CompanionView.Setup -> Message(R.string.companion_setup) {
+                        Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
                     }
-                    CharacterView.FirstChapter -> Message(R.string.character_first_chapter)
-                    CharacterView.Unplaced -> Message(R.string.character_unplaced)
-                    CharacterView.NotAName -> Message(R.string.character_not_a_name)
-                    CharacterView.Insufficient -> Message(
-                        stringResource(R.string.character_insufficient, panel.name ?: panel.selection),
+                    CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
+                    CompanionView.Unplaced -> Message(R.string.companion_unplaced)
+                    CompanionView.NotAName -> Message(R.string.companion_not_a_name)
+                    CompanionView.Insufficient -> Message(
+                        stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
                     ) { Retry(onRetry) }
-                    is CharacterView.Loading -> Loading(view.stage, onCancel)
-                    is CharacterView.Failed -> Message(failureText(view.failure)) { Retry(onRetry) }
-                    is CharacterView.Ambiguous -> Ambiguous(view.candidates, onChoose)
-                    is CharacterView.Profile -> Profile(view.profile, onSource)
+                    is CompanionView.Loading -> Loading(view.stage, onCancel)
+                    is CompanionView.Failed -> Message(failureText(view.failure)) { Retry(onRetry) }
+                    is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
+                    is CompanionView.Profile -> Profile(view.profile, onSource)
                 }
             }
         }
@@ -152,7 +152,7 @@ internal fun CharacterSheet(
 
 /** Shown over the book while a source is on screen, with the two ways back. */
 @Composable
-internal fun CharacterPeekBar(
+internal fun CompanionPeekBar(
     theme: ReaderTheme,
     returning: Boolean,
     onReturn: () -> Unit,
@@ -168,7 +168,7 @@ internal fun CharacterPeekBar(
             TextButton(onClick = onReturn, enabled = !returning) {
                 Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = null, tint = theme.background)
                 Text(
-                    stringResource(R.string.character_peek_return),
+                    stringResource(R.string.companion_peek_return),
                     color = theme.background,
                     modifier = Modifier.padding(start = 8.dp),
                 )
@@ -176,7 +176,7 @@ internal fun CharacterPeekBar(
             TextButton(onClick = onShow, enabled = !returning) {
                 Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = theme.background)
                 Text(
-                    stringResource(R.string.character_peek_show),
+                    stringResource(R.string.companion_peek_show),
                     color = theme.background,
                     modifier = Modifier.padding(start = 8.dp),
                 )
@@ -196,18 +196,18 @@ private fun Message(text: String, action: @Composable () -> Unit = {}) {
 
 @Composable
 private fun Retry(onRetry: () -> Unit) {
-    OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.character_retry)) }
+    OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.companion_retry)) }
 }
 
 @Composable
-private fun Loading(stage: CharacterView.Stage, onCancel: () -> Unit) {
+private fun Loading(stage: CompanionView.Stage, onCancel: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         BusyIndicator(Modifier.size(24.dp))
         Text(
             stringResource(
                 when (stage) {
-                    CharacterView.Stage.READING -> R.string.character_loading_reading
-                    CharacterView.Stage.ASKING -> R.string.character_loading_asking
+                    CompanionView.Stage.READING -> R.string.companion_loading_reading
+                    CompanionView.Stage.ASKING -> R.string.companion_loading_asking
                 },
             ),
             style = MaterialTheme.typography.bodyLarge,
@@ -218,24 +218,24 @@ private fun Loading(stage: CharacterView.Stage, onCancel: () -> Unit) {
 }
 
 @Composable
-private fun failureText(failure: CharacterFailure): String = stringResource(
+private fun failureText(failure: CompanionFailure): String = stringResource(
     when (failure) {
-        CharacterFailure.CANCELLED -> R.string.character_failed_cancelled
-        CharacterFailure.KEY -> R.string.character_failed_key
-        CharacterFailure.RATE_LIMITED -> R.string.character_failed_rate_limited
-        CharacterFailure.LOCAL_NETWORK -> R.string.character_failed_local_network
-        CharacterFailure.NETWORK -> R.string.character_failed_network
-        CharacterFailure.MODEL_MISSING -> R.string.character_failed_model_missing
-        CharacterFailure.SERVER -> R.string.character_failed_server
-        CharacterFailure.MALFORMED -> R.string.character_failed_malformed
-        CharacterFailure.LIMIT -> R.string.character_failed_limit
-        CharacterFailure.UNREADABLE -> R.string.character_failed_unreadable
+        CompanionFailure.CANCELLED -> R.string.companion_failed_cancelled
+        CompanionFailure.KEY -> R.string.companion_failed_key
+        CompanionFailure.RATE_LIMITED -> R.string.companion_failed_rate_limited
+        CompanionFailure.LOCAL_NETWORK -> R.string.companion_failed_local_network
+        CompanionFailure.NETWORK -> R.string.companion_failed_network
+        CompanionFailure.MODEL_MISSING -> R.string.companion_failed_model_missing
+        CompanionFailure.SERVER -> R.string.companion_failed_server
+        CompanionFailure.MALFORMED -> R.string.companion_failed_malformed
+        CompanionFailure.LIMIT -> R.string.companion_failed_limit
+        CompanionFailure.UNREADABLE -> R.string.companion_failed_unreadable
     },
 )
 
 @Composable
 private fun Ambiguous(candidates: List<Candidate<Locator>>, onChoose: (Candidate<Locator>) -> Unit) {
-    Text(stringResource(R.string.character_ambiguous), style = MaterialTheme.typography.bodyLarge)
+    Text(stringResource(R.string.companion_ambiguous), style = MaterialTheme.typography.bodyLarge)
     SectionCard {
         candidates.forEachIndexed { index, candidate ->
             if (index > 0) CardDivider()
@@ -263,7 +263,7 @@ private fun AliasPills(aliases: List<Alias<Locator>>, onSource: (Passage<Locator
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = stringResource(R.string.character_aliases),
+                text = stringResource(R.string.companion_aliases),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -309,9 +309,9 @@ private fun AliasPills(aliases: List<Alias<Locator>>, onSource: (Passage<Locator
 }
 
 @Composable
-private fun Profile(profile: CharacterAnswer.Profile<Locator>, onSource: (Passage<Locator>) -> Unit) {
+private fun Profile(profile: CompanionAnswer.Profile<Locator>, onSource: (Passage<Locator>) -> Unit) {
     if (profile.identity.isNotEmpty()) {
-        SectionCard(title = R.string.character_identity) {
+        SectionCard(title = R.string.companion_identity) {
             profile.identity.forEachIndexed { index, claim ->
                 if (index > 0) CardDivider()
                 ClaimItem(key = "id-$index", text = claim.text, sources = claim.sources, onSource = onSource)
@@ -319,7 +319,7 @@ private fun Profile(profile: CharacterAnswer.Profile<Locator>, onSource: (Passag
         }
     }
     if (profile.backstory.isNotEmpty()) {
-        SectionCard(title = R.string.character_backstory) {
+        SectionCard(title = R.string.companion_backstory) {
             profile.backstory.forEachIndexed { index, claim ->
                 if (index > 0) CardDivider()
                 ClaimItem(key = "back-$index", text = claim.text, sources = claim.sources, onSource = onSource)
@@ -327,7 +327,7 @@ private fun Profile(profile: CharacterAnswer.Profile<Locator>, onSource: (Passag
         }
     }
     if (profile.relationships.isNotEmpty()) {
-        SectionCard(title = R.string.character_relationships) {
+        SectionCard(title = R.string.companion_relationships) {
             profile.relationships.forEachIndexed { index, relation ->
                 if (index > 0) CardDivider()
                 ClaimItem(
@@ -442,7 +442,7 @@ private fun SourceToggleChip(
 ) {
     val eInk = LocalEInk.current
     val summary = chapterSummary(passages)
-    val countLabel = pluralStringResource(R.plurals.character_sources_count, passages.size, passages.size)
+    val countLabel = pluralStringResource(R.plurals.companion_sources_count, passages.size, passages.size)
     val label = if (passages.size == 1) summary else "$countLabel · $summary"
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -484,9 +484,9 @@ private fun chapterSummary(passages: List<Passage<Locator>>): String {
     val ranges = passages.map { it.range }.distinct().sortedWith(compareBy({ it.lo }, { it.hi }))
     return ranges.map { range ->
         if (range.lo == range.hi) {
-            stringResource(R.string.character_source_chapter, range.lo + 1)
+            stringResource(R.string.companion_source_chapter, range.lo + 1)
         } else {
-            stringResource(R.string.character_source_chapters, range.lo + 1, range.hi + 1)
+            stringResource(R.string.companion_source_chapters, range.lo + 1, range.hi + 1)
         }
     }.joinToString(", ")
 }
@@ -496,9 +496,9 @@ private fun chapterSummary(passages: List<Passage<Locator>>): String {
 private fun Quote(passage: Passage<Locator>, onSource: (Passage<Locator>) -> Unit) {
     val where = passage.range.let {
         if (it.lo == it.hi) {
-            stringResource(R.string.character_source_chapter, it.lo + 1)
+            stringResource(R.string.companion_source_chapter, it.lo + 1)
         } else {
-            stringResource(R.string.character_source_chapters, it.lo + 1, it.hi + 1)
+            stringResource(R.string.companion_source_chapters, it.lo + 1, it.hi + 1)
         }
     }
     val rule = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
@@ -509,7 +509,7 @@ private fun Quote(passage: Passage<Locator>, onSource: (Passage<Locator>) -> Uni
             .clip(RoundedCornerShape(6.dp))
             .clickable(
                 role = Role.Button,
-                onClickLabel = stringResource(R.string.character_source_open),
+                onClickLabel = stringResource(R.string.companion_source_open),
             ) { onSource(passage) }
             .padding(vertical = 6.dp, horizontal = 4.dp),
     ) {

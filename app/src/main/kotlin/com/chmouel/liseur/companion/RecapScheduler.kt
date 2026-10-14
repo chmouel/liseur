@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** How recaps are written: the identity they are saved under and the chat that writes them. */
-data class RecapSetup(val identity: RecapIdentity, val chat: CharacterChat)
+data class RecapSetup(val identity: RecapIdentity, val chat: CompanionChat)
 
 /** Whether recaps are on, and with what; [setup] is null until a server and model are chosen. */
 data class RecapSettings(val enabled: Boolean, val setup: RecapSetup?)
@@ -170,12 +170,12 @@ class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatal
         repeat(2) { attempt ->
             val reply = setup.chat.reply(messages) {
                 if (!allowed()) throw CancellationException("No longer allowed")
-                if (++requests > MAX_REQUESTS) throw CharacterError.TooManyRequests()
+                if (++requests > MAX_REQUESTS) throw CompanionError.TooManyRequests()
             }
             Recaps.parse(reply, batch)?.let { return it }
             if (attempt == 0) messages = listOf(messages[0], ChatMessage("user", user + "\n\n" + Recaps.correction("not_json")))
         }
-        throw CharacterError.Malformed()
+        throw CompanionError.Malformed()
     }
 
     private companion object {

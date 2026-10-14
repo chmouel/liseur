@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import android.util.Log
 import androidx.room.ColumnInfo
@@ -63,7 +63,7 @@ data class RecapQueueRow(
 )
 
 @Dao
-interface CharacterRecapDao {
+interface CompanionRecapDao {
     @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl")
     suspend fun recaps(bookUrl: String): List<ChapterRecapRow>
 
@@ -165,11 +165,11 @@ data class RecapLength(
     version = 1,
     exportSchema = true,
 )
-abstract class CharacterDatabase : RoomDatabase() {
-    abstract fun recaps(): CharacterRecapDao
+abstract class CompanionDatabase : RoomDatabase() {
+    abstract fun recaps(): CompanionRecapDao
 
     companion object {
-        const val NAME = "characters.db"
+        const val NAME = "companion.db"
 
         val MIGRATIONS = emptyArray<androidx.room.migration.Migration>()
     }
@@ -221,8 +221,8 @@ interface RecapBook {
  * asked before the removal must not be saved after it; so does turning
  * recaps off, through [ticket].
  */
-class CharacterStore(
-    private val database: CharacterDatabase,
+class CompanionStore(
+    private val database: CompanionDatabase,
     /** Which of these book URLs the library still holds. */
     private val present: suspend (List<String>) -> List<String>,
     private val now: () -> Long = System::currentTimeMillis,
@@ -314,7 +314,7 @@ class CharacterStore(
     ) : RecapBook {
         private fun fenced() = epochs[bookUrl] != epoch
 
-        override fun ticket(): Long = this@CharacterStore.ticket()
+        override fun ticket(): Long = this@CompanionStore.ticket()
 
         override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit): Boolean {
             val row = dao.recap(bookUrl, unit.key) ?: return false
@@ -419,6 +419,6 @@ class CharacterStore(
         const val MAX_CHARACTERS = 20_000_000L
         const val MAX_PARTS = 2_000
         private const val BATCH = 500
-        private const val TAG = "CharacterStore"
+        private const val TAG = "CompanionStore"
     }
 }

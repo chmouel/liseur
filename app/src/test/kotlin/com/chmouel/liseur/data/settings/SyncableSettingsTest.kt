@@ -155,7 +155,7 @@ class SyncableSettingsTest {
             "app.translation_server_state",
             "app.translation_gemini_model",
             "app.translation_target",
-            // Character profiles send book text to this device's own server.
+            // The reading companion sends book text to this device's own server.
             "app.character_server",
             "app.character_server_state",
             "app.character_recaps",

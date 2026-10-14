@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -56,32 +56,32 @@ import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
 
-/** Characters' row in Settings: the server and model profiles use. */
+/** The reading companion's row in Settings: the server and model it uses. */
 @Composable
-internal fun CharacterSettingsEntry(server: CharacterServer, onClick: () -> Unit) {
+internal fun CompanionSettingsEntry(server: CompanionServer, onClick: () -> Unit) {
     val chosen by server.chosenServer.collectAsState(initial = null)
     val model by server.chosenModel.collectAsState(initial = "")
     ConnectionRow(
         icon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null) },
-        title = stringResource(R.string.character_settings_title),
+        title = stringResource(R.string.companion_settings_title),
         subtitle = chosen?.takeIf { model.isNotBlank() }?.let {
-            stringResource(R.string.character_settings_entry_summary, it.name, model)
+            stringResource(R.string.companion_settings_entry_summary, it.name, model)
         } ?: stringResource(R.string.read_aloud_settings_entry_missing),
         onClick = onClick,
     )
 }
 
 /**
- * Characters' own screen: which listed server and model describe
+ * The reading companion's own screen: which listed server and model describe
  * characters, and whether chapters are recapped in the background. Kept
  * apart from translation's, so each can use a different model.
  * [servicesPage] is the Services page, opened in place.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun CharacterSettingsScreen(
-    server: CharacterServer,
-    store: CharacterStore,
+internal fun CompanionSettingsScreen(
+    server: CompanionServer,
+    store: CompanionStore,
     onBack: () -> Unit,
     servicesPage: @Composable (onBack: () -> Unit) -> Unit,
 ) {
@@ -102,7 +102,7 @@ internal fun CharacterSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeTopAppBar(
-                title = { Text(stringResource(R.string.character_settings_title)) },
+                title = { Text(stringResource(R.string.companion_settings_title)) },
                 navigationIcon = { PaneBackButton(onBack) },
                 scrollBehavior = scrollBehavior,
             )
@@ -118,22 +118,22 @@ internal fun CharacterSettingsScreen(
                     .padding(bottom = 32.dp),
             ) {
                 Text(
-                    stringResource(R.string.character_settings_intro),
+                    stringResource(R.string.companion_settings_intro),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 val listed = servers.readable.orEmpty()
                 ServiceRow(
                     icon = Icons.Outlined.Dns,
-                    overline = stringResource(R.string.character_settings_server),
-                    headline = chosen?.name ?: stringResource(R.string.character_settings_server_none),
-                    supporting = chosen?.host ?: stringResource(R.string.character_settings_server_none_detail),
-                    changeLabel = stringResource(R.string.character_settings_server_change),
+                    overline = stringResource(R.string.companion_settings_server),
+                    headline = chosen?.name ?: stringResource(R.string.companion_settings_server_none),
+                    supporting = chosen?.host ?: stringResource(R.string.companion_settings_server_none_detail),
+                    changeLabel = stringResource(R.string.companion_settings_server_change),
                     onClick = { picking = true },
                 )
                 if (picking) {
                     ServiceSheet(
-                        title = stringResource(R.string.character_settings_server),
+                        title = stringResource(R.string.companion_settings_server),
                         options = listed.map { connection ->
                             ServiceOption(
                                 selected = connection.id == chosen?.id,
@@ -146,7 +146,7 @@ internal fun CharacterSettingsScreen(
                                 },
                             )
                         },
-                        manageDetail = if (listed.isEmpty()) stringResource(R.string.character_settings_manage_detail) else null,
+                        manageDetail = if (listed.isEmpty()) stringResource(R.string.companion_settings_manage_detail) else null,
                         onManage = {
                             picking = false
                             managing = true
@@ -155,16 +155,16 @@ internal fun CharacterSettingsScreen(
                     )
                 }
                 chosen?.let { connection -> ModelField(server, connection.url) }
-                SettingsGroup(title = stringResource(R.string.character_settings_recaps_group)) {
+                SettingsGroup(title = stringResource(R.string.companion_settings_recaps_group)) {
                     SwitchRow(
-                        title = stringResource(R.string.character_settings_recaps),
-                        subtitle = stringResource(R.string.character_settings_recaps_summary),
+                        title = stringResource(R.string.companion_settings_recaps),
+                        subtitle = stringResource(R.string.companion_settings_recaps_summary),
                         checked = recaps,
                         onCheckedChange = { on -> scope.launch { server.setRecaps(on, store) } },
                     )
                 }
                 Text(
-                    stringResource(R.string.character_settings_privacy),
+                    stringResource(R.string.companion_settings_privacy),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 16.dp),
@@ -175,7 +175,7 @@ internal fun CharacterSettingsScreen(
 }
 
 @Composable
-private fun ModelField(server: CharacterServer, url: String) {
+private fun ModelField(server: CompanionServer, url: String) {
     val stored by server.chosenModel.collectAsState(initial = "")
     val allowed = SpeechLocalNetworkPrompt(server.localNetwork, url)
     val origin = ServerConnections.originOf(url).orEmpty()
@@ -211,7 +211,7 @@ private fun ModelField(server: CharacterServer, url: String) {
     }
     Box(Modifier.padding(top = 16.dp)) {
         ListedField(
-            title = stringResource(R.string.character_settings_model),
+            title = stringResource(R.string.companion_settings_model),
             placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
             loading = stringResource(R.string.read_aloud_settings_server_models_loading),
             stored = stored,

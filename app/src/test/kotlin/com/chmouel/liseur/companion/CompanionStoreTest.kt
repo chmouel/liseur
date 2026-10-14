@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
@@ -18,17 +18,17 @@ import org.robolectric.annotation.Config
 
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
-class CharacterStoreTest {
-    private lateinit var db: CharacterDatabase
+class CompanionStoreTest {
+    private lateinit var db: CompanionDatabase
     private val library = mutableSetOf(BOOK, OTHER)
     private var clock = 1_000L
 
     @get:Rule
-    val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), CharacterDatabase::class.java)
+    val helper = MigrationTestHelper(InstrumentationRegistry.getInstrumentation(), CompanionDatabase::class.java)
 
     @Before
     fun open() {
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CharacterDatabase::class.java)
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CompanionDatabase::class.java)
             .allowMainThreadQueries()
             .build()
     }
@@ -36,7 +36,7 @@ class CharacterStoreTest {
     @After
     fun close() = db.close()
 
-    private fun store(maxRecaps: Int = 100, maxCharacters: Long = 1_000_000, maxParts: Int = 100) = CharacterStore(
+    private fun store(maxRecaps: Int = 100, maxCharacters: Long = 1_000_000, maxParts: Int = 100) = CompanionStore(
         database = db,
         present = { urls -> urls.filter { it in library } },
         now = { clock++ },
@@ -48,7 +48,7 @@ class CharacterStoreTest {
     @Test
     fun `the first version of the database matches its exported schema`() {
         helper.createDatabase("characters-schema-test", 1).close()
-        helper.runMigrationsAndValidate("characters-schema-test", 1, true, *CharacterDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate("characters-schema-test", 1, true, *CompanionDatabase.MIGRATIONS).close()
     }
 
     @Test

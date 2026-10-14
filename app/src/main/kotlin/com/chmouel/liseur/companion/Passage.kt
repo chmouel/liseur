@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import java.security.MessageDigest
 import java.text.Normalizer

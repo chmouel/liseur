@@ -18,8 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
-import com.chmouel.liseur.characters.CharacterSettingsScreen
-import com.chmouel.liseur.characters.CharacterViewModel
+import com.chmouel.liseur.companion.CompanionSettingsScreen
+import com.chmouel.liseur.companion.CompanionViewModel
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.providers.ServicesScreen
@@ -103,8 +103,8 @@ class ReaderActivity : FragmentActivity() {
         ReaderViewModel.factory(open.url, open.id)
     }
 
-    private val characterViewModel: CharacterViewModel by viewModels {
-        CharacterViewModel.factory(checkNotNull(target).id)
+    private val companionViewModel: CompanionViewModel by viewModels {
+        CompanionViewModel.factory(checkNotNull(target).id)
     }
 
     /**
@@ -454,17 +454,17 @@ class ReaderActivity : FragmentActivity() {
                                         }
                                     }
                                 }
-                                val characters = remember(s.publication) {
-                                    characterViewModel.attach(s.publication)
-                                    readerCharacters()
+                                val companion = remember(s.publication) {
+                                    companionViewModel.attach(s.publication)
+                                    readerCompanion()
                                 }
-                                LaunchedEffect(viewModel, characterViewModel) {
-                                    characterViewModel.setLanguage(
+                                LaunchedEffect(viewModel, companionViewModel) {
+                                    companionViewModel.setLanguage(
                                         resources.configuration.locales[0].getDisplayLanguage(Locale.ENGLISH),
                                     )
-                                    viewModel.onPlaceShown = characterViewModel::shown
+                                    viewModel.onPlaceShown = companionViewModel::shown
                                     viewModel.peek.map { it?.origin }.distinctUntilChanged()
-                                        .collect(characterViewModel::peeking)
+                                        .collect(companionViewModel::peeking)
                                 }
                                 ReaderScreen(
                                     publication = s.publication,
@@ -644,7 +644,7 @@ class ReaderActivity : FragmentActivity() {
                                     onClearTranslations = {
                                         container.clearBookTranslationsLater(checkNotNull(target).id)
                                     },
-                                    characters = characters,
+                                    companion = companion,
                                 )
                             }
                         }
@@ -699,16 +699,16 @@ class ReaderActivity : FragmentActivity() {
         }
     }
 
-    private fun readerCharacters() = ReaderCharacters(
-        panel = characterViewModel.panel,
+    private fun readerCompanion() = ReaderCompanion(
+        panel = companionViewModel.panel,
         peek = viewModel.peek,
-        open = characterViewModel::open,
-        retry = characterViewModel::retry,
-        cancel = characterViewModel::cancel,
-        choose = characterViewModel::choose,
-        hide = characterViewModel::hide,
-        reveal = characterViewModel::reveal,
-        close = characterViewModel::close,
+        open = companionViewModel::open,
+        retry = companionViewModel::retry,
+        cancel = companionViewModel::cancel,
+        choose = companionViewModel::choose,
+        hide = companionViewModel::hide,
+        reveal = companionViewModel::reveal,
+        close = companionViewModel::close,
         startPeek = viewModel::startPeek,
         onUserTurn = viewModel::onUserTurn,
         endPeek = viewModel::endPeek,
@@ -717,9 +717,9 @@ class ReaderActivity : FragmentActivity() {
         returnFailed = viewModel::returnFailed,
         showsPlace = viewModel::showsPlace,
         settings = { back ->
-            CharacterSettingsScreen(
-                container.characterServer,
-                container.characterStore,
+            CompanionSettingsScreen(
+                container.companionServer,
+                container.companionStore,
                 back,
                 servicesPage = { leave -> ServicesScreen(container.serverConnections, container.serviceAccounts, leave) },
             )

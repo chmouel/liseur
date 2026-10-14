@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import org.json.JSONArray
 import org.json.JSONException
@@ -7,7 +7,7 @@ import org.json.JSONObject
 data class ChatMessage(val role: String, val content: String)
 
 /** A chat completion: one reply to [messages], with [beforeRequest] run before every HTTP request it makes. */
-fun interface CharacterChat {
+fun interface CompanionChat {
     suspend fun reply(messages: List<ChatMessage>, beforeRequest: () -> Unit): String
 }
 
@@ -26,27 +26,27 @@ data class Alias<P>(val name: String, val sources: List<Passage<P>>)
 
 data class Candidate<P>(val name: String, val description: String, val sources: List<Passage<P>>)
 
-sealed interface CharacterAnswer<out P> {
+sealed interface CompanionAnswer<out P> {
     data class Profile<P>(
         val name: String,
         val aliases: List<Alias<P>>,
         val identity: List<Claim<P>>,
         val backstory: List<Claim<P>>,
         val relationships: List<Relationship<P>>,
-    ) : CharacterAnswer<P>
+    ) : CompanionAnswer<P>
 
-    data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CharacterAnswer<P>
+    data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CompanionAnswer<P>
 
     /** The earlier chapters do not say enough about the name. */
-    data object Insufficient : CharacterAnswer<Nothing>
+    data object Insufficient : CompanionAnswer<Nothing>
 }
 
-sealed class CharacterError(message: String) : Exception(message) {
+sealed class CompanionError(message: String) : Exception(message) {
     /** The model's reply could not be used, even after being told why. */
-    class Malformed : CharacterError("The model sent no usable answer")
+    class Malformed : CompanionError("The model sent no usable answer")
 
     /** The lookup made as many requests as one may. */
-    class TooManyRequests : CharacterError("The lookup made too many requests")
+    class TooManyRequests : CompanionError("The lookup made too many requests")
 }
 
 data class InvestigationLimits(
@@ -67,7 +67,7 @@ data class InvestigationLimits(
  * shown. Supporting quotes are the passages' own text, never the model's.
  */
 class Investigation<P>(
-    private val chat: CharacterChat,
+    private val chat: CompanionChat,
     private val scope: AskingScope,
     passages: List<Passage<P>>,
     /** The language profiles are written in, by its English name. */
@@ -82,7 +82,7 @@ class Investigation<P>(
      * first selected when [name] is a candidate it turned out to be
      * ambiguous between. [hints] come from recaps.
      */
-    suspend fun run(name: String, also: String? = null, hints: List<RecapHint> = emptyList()): CharacterAnswer<P> =
+    suspend fun run(name: String, also: String? = null, hints: List<RecapHint> = emptyList()): CompanionAnswer<P> =
         Session(name, also).run(hints)
 
     private fun mentioning(phrase: String): List<Int> {
@@ -121,28 +121,28 @@ class Investigation<P>(
         private var corrected = false
         private var finishing = false
 
-        suspend fun run(hints: List<RecapHint>): CharacterAnswer<P> {
+        suspend fun run(hints: List<RecapHint>): CompanionAnswer<P> {
             val asked = listOfNotNull(name, also)
             val mentions = asked.flatMap(::mentioning).distinct().sorted()
             val hinted = hintedFor(asked, hints)
-            if (mentions.isEmpty() && hinted.isEmpty()) return CharacterAnswer.Insufficient
-            history += ChatMessage("system", CharacterPrompt.system(language, limits))
+            if (mentions.isEmpty() && hinted.isEmpty()) return CompanionAnswer.Insufficient
+            history += ChatMessage("system", CompanionPrompt.system(language, limits))
             history += ChatMessage("user", seed(mentions, hinted))
             while (true) {
                 val reply = request()
                 when (val parsed = parse(reply)) {
                     is Parsed.Invalid -> {
-                        if (corrected) throw CharacterError.Malformed()
+                        if (corrected) throw CompanionError.Malformed()
                         corrected = true
                         val last = history.removeAt(history.lastIndex)
-                        history += last.copy(content = last.content + "\n\n" + CharacterPrompt.correction(parsed.code, finishing))
+                        history += last.copy(content = last.content + "\n\n" + CompanionPrompt.correction(parsed.code, finishing))
                     }
                     is Parsed.Actions -> {
                         rounds++
                         history += ChatMessage("assistant", parsed.canonical)
                         val results = execute(parsed.actions)
                         finishing = rounds >= limits.rounds || operations >= limits.operations || source >= limits.sourceCharacters
-                        history += ChatMessage("user", results + if (finishing) "\n\n" + CharacterPrompt.FINISH else "")
+                        history += ChatMessage("user", results + if (finishing) "\n\n" + CompanionPrompt.FINISH else "")
                     }
                     is Parsed.Answer -> return typed(parsed.answer)
                 }
@@ -151,10 +151,10 @@ class Investigation<P>(
 
         // Built from this lookup's own passages, so of its type.
         @Suppress("UNCHECKED_CAST")
-        private fun typed(answer: CharacterAnswer<*>) = answer as CharacterAnswer<P>
+        private fun typed(answer: CompanionAnswer<*>) = answer as CompanionAnswer<P>
 
         private suspend fun request(): String = chat.reply(history.toList()) {
-            if (++requests > limits.requests) throw CharacterError.TooManyRequests()
+            if (++requests > limits.requests) throw CompanionError.TooManyRequests()
         }
 
         private fun seed(mentions: List<Int>, hinted: List<Int>): String {
@@ -174,7 +174,7 @@ class Investigation<P>(
                 }
             }
             val blocks = chosen.joinToString("\n") { show(it) }
-            return CharacterPrompt.seed(name, also, scope, limits) + "\n\n" + blocks
+            return CompanionPrompt.seed(name, also, scope, limits) + "\n\n" + blocks
         }
 
         // The first mention in each chapter (from latest to earliest so recent chapters lead), then the second, and so on.
@@ -212,7 +212,7 @@ class Investigation<P>(
         private fun show(i: Int): String {
             shown += i
             source += eligible[i].text.length
-            return CharacterPrompt.block(refOf(i), eligible[i].range, eligible[i].text)
+            return CompanionPrompt.block(refOf(i), eligible[i].range, eligible[i].text)
         }
 
         private fun execute(actions: List<Action>): String {
@@ -259,7 +259,7 @@ class Investigation<P>(
                 }
                 snipped += i
                 source += snippet.length
-                out.append(CharacterPrompt.block(refOf(i), eligible[i].range, snippet)).append('\n')
+                out.append(CompanionPrompt.block(refOf(i), eligible[i].range, snippet)).append('\n')
             }
         }
 
@@ -299,7 +299,7 @@ class Investigation<P>(
                 return actions(json.optJSONArray("actions"))
             }
             return when (json.optString("answer")) {
-                "insufficient" -> Parsed.Answer(CharacterAnswer.Insufficient)
+                "insufficient" -> Parsed.Answer(CompanionAnswer.Insufficient)
                 "profile" -> profile(json)
                 "ambiguous" -> ambiguous(json)
                 else -> Parsed.Invalid("unknown_reply")
@@ -396,7 +396,7 @@ class Investigation<P>(
                     if (aliases.none { PassageText.fold(it.name) == PassageText.fold(alias) }) aliases += Alias(alias, cited)
                 }
             }
-            return Parsed.Answer(CharacterAnswer.Profile(name, aliases, identity, backstory, relationships))
+            return Parsed.Answer(CompanionAnswer.Profile(name, aliases, identity, backstory, relationships))
         }
 
         private fun ambiguous(json: JSONObject): Parsed {
@@ -414,7 +414,7 @@ class Investigation<P>(
                 }
             }
             if (candidates.size < 2) return Parsed.Invalid("bad_candidates")
-            return Parsed.Answer(CharacterAnswer.Ambiguous(candidates))
+            return Parsed.Answer(CompanionAnswer.Ambiguous(candidates))
         }
     }
 
@@ -429,7 +429,7 @@ class Investigation<P>(
 
         data class Actions(val actions: List<Action>, val canonical: String) : Parsed
 
-        data class Answer(val answer: CharacterAnswer<*>) : Parsed
+        data class Answer(val answer: CompanionAnswer<*>) : Parsed
     }
 
     private companion object {

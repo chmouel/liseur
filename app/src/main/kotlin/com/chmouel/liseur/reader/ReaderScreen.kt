@@ -227,7 +227,7 @@ import com.chmouel.liseur.reader.progress.BookScreenEstimate
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.SectionScreenProgress
 import com.chmouel.liseur.reader.progress.SectionScreens
-import com.chmouel.liseur.characters.CharacterPeekBar
+import com.chmouel.liseur.companion.CompanionPeekBar
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.OpeningRestoration
 import com.chmouel.liseur.reader.progress.OpeningRestorationVerdict
@@ -491,7 +491,7 @@ fun ReaderScreen(
     // Forgets this book's saved translations, here and on the account; null where nothing is saved.
     onClearTranslations: (() -> Unit)? = null,
     // Who a selected name is, from the chapters before; null leaves the action out.
-    characters: ReaderCharacters? = null,
+    companion: ReaderCompanion? = null,
 ) {
     var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
     val navigatorNow by rememberUpdatedState(navigator)
@@ -1205,7 +1205,7 @@ fun ReaderScreen(
                 // following the voice and the move is saved once the
                 // voice is paused.
                 followedAt = Long.MIN_VALUE
-                characters?.onUserTurn?.invoke()
+                companion?.onUserTurn?.invoke()
                 moves.issue(
                     from = from?.restorePoint(),
                     to = to?.destination(),
@@ -1412,7 +1412,7 @@ fun ReaderScreen(
                 // source peek, whose place is never saved.
                 if (event == NavigatorPositionEvent.PREFERENCE_REFLOW ||
                     event == NavigatorPositionEvent.TTS_FOLLOW ||
-                    characters?.peek?.value != null
+                    companion?.peek?.value != null
                 ) {
                     heldPlace.retire()
                 } else {
@@ -2430,8 +2430,8 @@ fun ReaderScreen(
      * page still too: a decision taken about a page that has moved on is
      * a decision about nothing.
      */
-    val characterPanel = characters?.panel?.collectAsStateWithLifecycle()?.value
-    val characterPeek = characters?.peek?.collectAsStateWithLifecycle()?.value
+    val companionPanel = companion?.panel?.collectAsStateWithLifecycle()?.value
+    val companionPeek = companion?.peek?.collectAsStateWithLifecycle()?.value
     val canAutoScroll = autoScrollArmed &&
         !autoScrollPaused &&
         effectiveScrolling &&
@@ -2451,8 +2451,8 @@ fun ReaderScreen(
         defineWord == null &&
         jumpBack == null &&
         catchUp == null &&
-        characterPanel?.visible != true &&
-        characterPeek == null &&
+        companionPanel?.visible != true &&
+        companionPeek == null &&
         // A picture over the page is modal to a finger and to a screen
         // reader; it has to be modal to the clock as well, or the book
         // scrolls on underneath it and the reader comes back somewhere
@@ -2467,7 +2467,7 @@ fun ReaderScreen(
     LaunchedEffect(autoScrollArmed) {
         autoScrollPaused = false
         if (autoScrollArmed) {
-            characters?.endPeek?.invoke()
+            companion?.endPeek?.invoke()
             sheet = ReaderSheet.NONE
             chromeVisible = false
             autoScrollControlsPoke += 1
@@ -2727,7 +2727,7 @@ fun ReaderScreen(
                 // Nor while the page follows the voice reading it aloud,
                 // whose place is listening's to save, nor while peeking
                 // at a source.
-                if (moved && !autoScrollRunning && !listeningPlayingNow && characters?.peek?.value == null) {
+                if (moved && !autoScrollRunning && !listeningPlayingNow && companion?.peek?.value == null) {
                     // A finger on a scrolled page moves the reader
                     // without a `go` for anything to count, so the one
                     // place that notices says so. Held open for as long
@@ -2859,7 +2859,7 @@ fun ReaderScreen(
                 // navigator's report of it would be taken for following.
                 object : InputListener {
                     override fun onDrag(event: DragEvent): Boolean {
-                        if (!isPinching()) characters?.onUserTurn?.invoke()
+                        if (!isPinching()) companion?.onUserTurn?.invoke()
                         if (listeningPlayingNow && !isPinching()) {
                             lastDragAt = SystemClock.elapsedRealtime()
                             followDetached = true
@@ -2899,7 +2899,7 @@ fun ReaderScreen(
     // first.
     BackHandler(enabled = wayBack != null) { wayBack?.let(goBack) }
     val returnToAsking: () -> Unit = {
-        characters?.let { lookups ->
+        companion?.let { lookups ->
             navigatorNow?.let { nav ->
                 effectScope.launch {
                     heldPlace.retire()
@@ -2909,7 +2909,7 @@ fun ReaderScreen(
         }
     }
     // Back, while a source is shown, goes back to where the reader asked.
-    BackHandler(enabled = characterPeek != null) { returnToAsking() }
+    BackHandler(enabled = companionPeek != null) { returnToAsking() }
     ScreenBrightness(brightness = prefs.brightness)
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
@@ -3618,12 +3618,12 @@ fun ReaderScreen(
                 .then(behindViewer),
         ) {
             if (!showingEnd) {
-                characterPeek?.let { peek ->
-                    CharacterPeekBar(
+                companionPeek?.let { peek ->
+                    CompanionPeekBar(
                         theme = readingTheme,
                         returning = peek.phase == SourcePeek.Phase.RETURNING,
                         onReturn = returnToAsking,
-                        onShow = { characters?.reveal?.invoke() },
+                        onShow = { companion?.reveal?.invoke() },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -4246,7 +4246,7 @@ fun ReaderScreen(
                 offset = active.popupOffset(),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, characters) {
+                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, companion) {
                     SelectionActions(
                         onHighlight = { tint ->
                             onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
@@ -4260,7 +4260,7 @@ fun ReaderScreen(
                             searchFor = active.text
                             dismissSelection()
                         },
-                        onCharacter = characters?.let { lookups ->
+                        onCompanion = companion?.let { lookups ->
                             {
                                 lookups.open(active.text, active.locator, pageTranslated)
                                 dismissSelection()
@@ -4441,7 +4441,7 @@ fun ReaderScreen(
         )
     }
 
-    characters?.let { CharacterPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
+    companion?.let { CompanionPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
 
     translatePassage?.let { passage ->
         translate.Sheet(

@@ -101,10 +101,10 @@ data class ServerTranslationState(
 }
 
 /**
- * Character profiles' state on one listed server: the model chosen for
+ * The reading companion's state on one listed server: the model chosen for
  * them, and whether that model refused a temperature.
  */
-data class ServerCharacterState(
+data class ServerCompanionState(
     val model: String? = null,
     val noTemperature: Boolean = false,
 ) {
@@ -144,14 +144,14 @@ internal object ServerSettings {
     /** Translation's model and options on each server, by server id. */
     val TRANSLATION_STATE = stringPreferencesKey(TRANSLATION_STATE_NAME)
 
-    const val CHARACTER_SERVER_NAME = "character_server"
-    const val CHARACTER_STATE_NAME = "character_server_state"
+    const val COMPANION_SERVER_NAME = "companion_server"
+    const val COMPANION_STATE_NAME = "companion_server_state"
 
     /** The server character profiles use, by id. */
-    val CHARACTER_SERVER = stringPreferencesKey(CHARACTER_SERVER_NAME)
+    val COMPANION_SERVER = stringPreferencesKey(COMPANION_SERVER_NAME)
 
-    /** Character profiles' model on each server, by server id. */
-    val CHARACTER_STATE = stringPreferencesKey(CHARACTER_STATE_NAME)
+    /** The reading companion's model on each server, by server id. */
+    val COMPANION_STATE = stringPreferencesKey(COMPANION_STATE_NAME)
 
     /** Servers whose read-aloud model and voice are still to be chosen from their lists; never backed up. */
     val READ_ALOUD_UNSETTLED = stringSetPreferencesKey("read_aloud_unsettled_servers")
@@ -180,7 +180,7 @@ internal object ServerSettings {
         val ids = servers.map { it.id }.toSet()
         requireListed(ids, decodeStates(p[READ_ALOUD_STATE]).keys, p[READ_ALOUD_SERVER])
         requireTranslationListed(ids, decodeTranslationStates(p[TRANSLATION_STATE]).keys, p[TRANSLATION_SERVER])
-        requireCharactersListed(ids, decodeCharacterStates(p[CHARACTER_STATE]).keys, p[CHARACTER_SERVER])
+        requireCompanionListed(ids, decodeCompanionStates(p[COMPANION_STATE]).keys, p[COMPANION_SERVER])
         ServerList.Readable(servers)
     } catch (_: IllegalArgumentException) {
         ServerList.Unreadable
@@ -196,9 +196,9 @@ internal object ServerSettings {
         if (translation != null && translation !in ids) invalid("Translation uses an unlisted server")
     }
 
-    private fun requireCharactersListed(ids: Set<String>, states: Set<String>, server: String?) {
-        if (!ids.containsAll(states)) invalid("Character state for an unlisted server")
-        if (server != null && server !in ids) invalid("Character profiles use an unlisted server")
+    private fun requireCompanionListed(ids: Set<String>, states: Set<String>, server: String?) {
+        if (!ids.containsAll(states)) invalid("Companion state for an unlisted server")
+        if (server != null && server !in ids) invalid("The reading companion uses an unlisted server")
     }
 
     /** Read aloud's state per server; empty when the servers cannot be read. */
@@ -315,8 +315,8 @@ internal object ServerSettings {
         }
     }.toString()
 
-    /** Character profiles' state per server in [json]; throws [IllegalArgumentException] for anything malformed. */
-    fun decodeCharacterStates(json: String?): Map<String, ServerCharacterState> {
+    /** The reading companion's state per server in [json]; throws [IllegalArgumentException] for anything malformed. */
+    fun decodeCompanionStates(json: String?): Map<String, ServerCompanionState> {
         if (json == null) return emptyMap()
         val root = try {
             JSONObject(json)
@@ -327,7 +327,7 @@ internal object ServerSettings {
             root.keys().forEach { id ->
                 if (ServerConnection.idOf(id) != id) invalid("Invalid character state id")
                 val entry = root.opt(id) as? JSONObject ?: invalid("Malformed character state")
-                val state = ServerCharacterState(
+                val state = ServerCompanionState(
                     model = entry.optionalString("model"),
                     noTemperature = when (val raw = entry.opt("no_temperature")) {
                         null -> false
@@ -340,7 +340,7 @@ internal object ServerSettings {
         }
     }
 
-    fun encodeCharacterStates(states: Map<String, ServerCharacterState>): String = JSONObject().apply {
+    fun encodeCompanionStates(states: Map<String, ServerCompanionState>): String = JSONObject().apply {
         states.toSortedMap().forEach { (id, state) ->
             if (state.isEmpty) return@forEach
             put(
@@ -353,9 +353,9 @@ internal object ServerSettings {
         }
     }.toString()
 
-    /** Character profiles' state per server; empty when the servers cannot be read. */
-    fun characterStates(p: Preferences): Map<String, ServerCharacterState> = try {
-        decodeCharacterStates(p[CHARACTER_STATE])
+    /** The reading companion's state per server; empty when the servers cannot be read. */
+    fun companionStates(p: Preferences): Map<String, ServerCompanionState> = try {
+        decodeCompanionStates(p[COMPANION_STATE])
     } catch (_: IllegalArgumentException) {
         emptyMap()
     }
@@ -447,14 +447,14 @@ internal object ServerSettings {
             if (ServerConnection.idOf(id) != id) invalid("Invalid translation server")
             if (ids != null && id !in ids) invalid("Translation uses an unlisted server")
         }
-        if (values.has(CHARACTER_STATE_NAME)) {
-            val states = decodeCharacterStates(values.get(CHARACTER_STATE_NAME) as? String ?: invalid("Malformed character state"))
-            if (ids != null && !ids.containsAll(states.keys)) invalid("Character state for an unlisted server")
+        if (values.has(COMPANION_STATE_NAME)) {
+            val states = decodeCompanionStates(values.get(COMPANION_STATE_NAME) as? String ?: invalid("Malformed character state"))
+            if (ids != null && !ids.containsAll(states.keys)) invalid("Companion state for an unlisted server")
         }
-        if (values.has(CHARACTER_SERVER_NAME)) {
-            val id = values.get(CHARACTER_SERVER_NAME) as? String ?: invalid("Malformed character server")
+        if (values.has(COMPANION_SERVER_NAME)) {
+            val id = values.get(COMPANION_SERVER_NAME) as? String ?: invalid("Malformed character server")
             if (ServerConnection.idOf(id) != id) invalid("Invalid character server")
-            if (ids != null && id !in ids) invalid("Character profiles use an unlisted server")
+            if (ids != null && id !in ids) invalid("The reading companion uses an unlisted server")
         }
         // An archive with a server list ignores the older single server's keys.
         if (servers != null) return
@@ -496,7 +496,7 @@ internal object ServerSettings {
 
     private val SERVER_KEYS = listOf(
         SERVERS_NAME, READ_ALOUD_STATE_NAME, READ_ALOUD_SERVER_NAME, TRANSLATION_STATE_NAME, TRANSLATION_SERVER_NAME,
-        CHARACTER_STATE_NAME, CHARACTER_SERVER_NAME, LEGACY_URL_NAME,
+        COMPANION_STATE_NAME, COMPANION_SERVER_NAME, LEGACY_URL_NAME,
     )
 
     /**
@@ -523,14 +523,14 @@ internal object ServerSettings {
         } catch (e: IllegalArgumentException) {
             if (replaced) emptyMap() else throw e
         }.toMutableMap()
-        val characterStates = try {
-            decodeCharacterStates(p[CHARACTER_STATE])
+        val companionStates = try {
+            decodeCompanionStates(p[COMPANION_STATE])
         } catch (e: IllegalArgumentException) {
             if (replaced) emptyMap() else throw e
         }.toMutableMap()
         if (replaced) {
-            characterStates.keys.retainAll(ids)
-            if (p[CHARACTER_SERVER]?.let { it !in ids } == true) p.remove(CHARACTER_SERVER)
+            companionStates.keys.retainAll(ids)
+            if (p[COMPANION_SERVER]?.let { it !in ids } == true) p.remove(COMPANION_SERVER)
             states.keys.retainAll(ids)
             translationStates.keys.retainAll(ids)
             if (p[READ_ALOUD_SERVER]?.let { it !in ids } == true) {
@@ -544,9 +544,9 @@ internal object ServerSettings {
         }
         requireListed(ids, states.keys, p[READ_ALOUD_SERVER])
         requireTranslationListed(ids, translationStates.keys, p[TRANSLATION_SERVER])
-        requireCharactersListed(ids, characterStates.keys, p[CHARACTER_SERVER])
+        requireCompanionListed(ids, companionStates.keys, p[COMPANION_SERVER])
         p[READ_ALOUD_STATE] = encodeStates(states)
-        if (characterStates.isEmpty()) p.remove(CHARACTER_STATE) else p[CHARACTER_STATE] = encodeCharacterStates(characterStates)
+        if (companionStates.isEmpty()) p.remove(COMPANION_STATE) else p[COMPANION_STATE] = encodeCompanionStates(companionStates)
         if (translationStates.isEmpty()) p.remove(TRANSLATION_STATE) else p[TRANSLATION_STATE] = encodeTranslationStates(translationStates)
         val unsettled = p[READ_ALOUD_UNSETTLED].orEmpty().intersect(ids)
         if (unsettled.isEmpty()) p.remove(READ_ALOUD_UNSETTLED) else p[READ_ALOUD_UNSETTLED] = unsettled
@@ -586,7 +586,7 @@ internal class ServerEdit private constructor(
     val states: MutableMap<String, ServerSpeechState>,
     val unsettled: MutableSet<String>,
     val translationStates: MutableMap<String, ServerTranslationState>,
-    val characterStates: MutableMap<String, ServerCharacterState>,
+    val companionStates: MutableMap<String, ServerCompanionState>,
 ) {
     /** Drops the server [id], what each feature kept on it, and their use of it. */
     fun forget(id: String): Boolean {
@@ -594,8 +594,8 @@ internal class ServerEdit private constructor(
         states.remove(id)
         unsettled.remove(id)
         translationStates.remove(id)
-        characterStates.remove(id)
-        if (p[ServerSettings.CHARACTER_SERVER] == id) p.remove(ServerSettings.CHARACTER_SERVER)
+        companionStates.remove(id)
+        if (p[ServerSettings.COMPANION_SERVER] == id) p.remove(ServerSettings.COMPANION_SERVER)
         if (p[ServerSettings.READ_ALOUD_SERVER] == id) {
             p.remove(ServerSettings.READ_ALOUD_SERVER)
             if (p[ServerSettings.PROVIDER] == ServerSettings.SERVER_PROVIDER) p.remove(ServerSettings.PROVIDER)
@@ -616,8 +616,8 @@ internal class ServerEdit private constructor(
         translationStates.remove(id)?.copy(noTemperature = false)?.takeUnless { it.isEmpty }?.let { translationStates[newId] = it }
         if (p[ServerSettings.READ_ALOUD_SERVER] == id) p[ServerSettings.READ_ALOUD_SERVER] = newId
         if (p[ServerSettings.TRANSLATION_SERVER] == id) p[ServerSettings.TRANSLATION_SERVER] = newId
-        characterStates.remove(id)?.copy(noTemperature = false)?.takeUnless { it.isEmpty }?.let { characterStates[newId] = it }
-        if (p[ServerSettings.CHARACTER_SERVER] == id) p[ServerSettings.CHARACTER_SERVER] = newId
+        companionStates.remove(id)?.copy(noTemperature = false)?.takeUnless { it.isEmpty }?.let { companionStates[newId] = it }
+        if (p[ServerSettings.COMPANION_SERVER] == id) p[ServerSettings.COMPANION_SERVER] = newId
     }
 
     fun save() {
@@ -629,10 +629,10 @@ internal class ServerEdit private constructor(
         } else {
             p[ServerSettings.TRANSLATION_STATE] = ServerSettings.encodeTranslationStates(translationStates)
         }
-        if (characterStates.isEmpty()) {
-            p.remove(ServerSettings.CHARACTER_STATE)
+        if (companionStates.isEmpty()) {
+            p.remove(ServerSettings.COMPANION_STATE)
         } else {
-            p[ServerSettings.CHARACTER_STATE] = ServerSettings.encodeCharacterStates(characterStates)
+            p[ServerSettings.COMPANION_STATE] = ServerSettings.encodeCompanionStates(companionStates)
         }
     }
 
@@ -645,7 +645,7 @@ internal class ServerEdit private constructor(
                 ServerSettings.states(p).toMutableMap(),
                 p[ServerSettings.READ_ALOUD_UNSETTLED].orEmpty().toMutableSet(),
                 ServerSettings.translationStates(p).toMutableMap(),
-                ServerSettings.characterStates(p).toMutableMap(),
+                ServerSettings.companionStates(p).toMutableMap(),
             )
         }
     }

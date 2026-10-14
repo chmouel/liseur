@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 /**
  * What a character lookup says to the model. Book text and the selected
@@ -6,7 +6,7 @@ package com.chmouel.liseur.characters
  * their own broken so they cannot close one early; everything else here
  * is fixed text and numbers.
  */
-internal object CharacterPrompt {
+internal object CompanionPrompt {
     private const val BOOK_OPEN = "<book"
     private const val BOOK_CLOSE = "</book>"
     private const val NAME_OPEN = "<name>"

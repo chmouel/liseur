@@ -1,8 +1,8 @@
 package com.chmouel.liseur.reader
 
 import androidx.compose.runtime.Composable
-import com.chmouel.liseur.characters.Candidate
-import com.chmouel.liseur.characters.CharacterPanel
+import com.chmouel.liseur.companion.Candidate
+import com.chmouel.liseur.companion.CompanionPanel
 import kotlinx.coroutines.flow.StateFlow
 import org.readium.r2.shared.publication.Locator
 
@@ -11,8 +11,8 @@ import org.readium.r2.shared.publication.Locator
  * the panel from the character lookups, and the peek at a source from the
  * reader's own view model, which keeps the asking place saved meanwhile.
  */
-class ReaderCharacters(
-    val panel: StateFlow<CharacterPanel<Locator>?>,
+class ReaderCompanion(
+    val panel: StateFlow<CompanionPanel<Locator>?>,
     val peek: StateFlow<SourcePeek?>,
     val open: (selection: String, place: Locator, translated: Boolean) -> Unit,
     val retry: () -> Unit,
@@ -29,6 +29,6 @@ class ReaderCharacters(
     val returnArrived: (Int) -> Unit,
     val returnFailed: (Int) -> Unit,
     val showsPlace: (place: Locator, here: Locator) -> Boolean,
-    /** Characters' settings, opened in place over the book. */
+    /** The reading companion's settings, opened in place over the book. */
     val settings: @Composable (onBack: () -> Unit) -> Unit,
 )

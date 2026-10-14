@@ -1,7 +1,7 @@
 package com.chmouel.liseur
 
-import com.chmouel.liseur.characters.CharacterSettingsEntry
-import com.chmouel.liseur.characters.CharacterSettingsScreen
+import com.chmouel.liseur.companion.CompanionSettingsEntry
+import com.chmouel.liseur.companion.CompanionSettingsScreen
 import android.app.ActivityOptions
 import android.content.Intent
 import android.content.BroadcastReceiver
@@ -486,7 +486,7 @@ private fun LiseurApp(
                             },
                             intelligenceRows = {
                                 context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
-                                CharacterSettingsEntry(context.container.characterServer, onClick = { openPage(Route.Characters) })
+                                CompanionSettingsEntry(context.container.companionServer, onClick = { openPage(Route.ReadingCompanion) })
                                 ServicesEntry(onClick = { openPage(Route.Services) })
                             },
                         )
@@ -500,10 +500,10 @@ private fun LiseurApp(
                         context.container.translate.SettingsScreen(onBack = back)
                     }
 
-                    Route.Characters -> {
-                        CharacterSettingsScreen(
-                            server = context.container.characterServer,
-                            store = context.container.characterStore,
+                    Route.ReadingCompanion -> {
+                        CompanionSettingsScreen(
+                            server = context.container.companionServer,
+                            store = context.container.companionStore,
                             onBack = back,
                             servicesPage = { leave ->
                                 ServicesScreen(context.container.serverConnections, context.container.serviceAccounts, leave)

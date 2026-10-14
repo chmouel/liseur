@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import android.util.Log
 import com.chmouel.liseur.data.settings.AppSettings
@@ -25,51 +25,51 @@ import kotlinx.coroutines.flow.map
  * The server and model character profiles use, as chosen now, with
  * [generation] moving on when the server's address or key changes.
  */
-data class CharacterChoice(val serverId: String, val url: String, val model: String, val origin: String, val generation: Int)
+data class CompanionChoice(val serverId: String, val url: String, val model: String, val origin: String, val generation: Int)
 
 /**
- * Character profiles' access to the server the reader chose for them.
- * Each lookup and each recapped chapter keeps the [CharacterChoice] it
+ * The reading companion's access to the server the reader chose for them.
+ * Each lookup and each recapped chapter keeps the [CompanionChoice] it
  * started with, and a request made after it changed fails with
  * [TranslationError.Changed] rather than mixing two servers or models.
  */
-class CharacterServer internal constructor(
+class CompanionServer internal constructor(
     private val connections: ServerConnections,
     private val settings: AppSettingsRepository,
     private val client: OpenAiChatClient = OpenAiChatClient(),
 ) {
     /** The current choice; null until a listed server and a model on it are chosen. */
     @OptIn(ExperimentalCoroutinesApi::class)
-    val choice: Flow<CharacterChoice?> = settings.settings
+    val choice: Flow<CompanionChoice?> = settings.settings
         .map(::chosen)
         .distinctUntilChanged()
         .flatMapLatest { c ->
-            if (c == null) flowOf(null) else connections.generation(c.origin).map { CharacterChoice(c.serverId, c.url, c.model, c.origin, it) }
+            if (c == null) flowOf(null) else connections.generation(c.origin).map { CompanionChoice(c.serverId, c.url, c.model, c.origin, it) }
         }
         .distinctUntilChanged()
 
     private data class Chosen(val serverId: String, val url: String, val model: String, val origin: String)
 
     private fun chosen(s: AppSettings): Chosen? {
-        val server = s.characterServerConnection ?: return null
-        val model = s.characterModel?.takeIf { it.isNotBlank() } ?: return null
+        val server = s.companionServerConnection ?: return null
+        val model = s.companionModel?.takeIf { it.isNotBlank() } ?: return null
         val base = OpenAiTts.baseUrl(server.url) ?: return null
         return Chosen(server.id, server.url, model, ServerKeys.origin(base))
     }
 
     /** The choice as it stands, read once. */
-    suspend fun current(): CharacterChoice? = choice.first()
+    suspend fun current(): CompanionChoice? = choice.first()
 
     /** Whether background recaps are on. */
-    val recapsEnabled: Flow<Boolean> = settings.settings.map { it.characterRecaps }.distinctUntilChanged()
+    val recapsEnabled: Flow<Boolean> = settings.settings.map { it.companionRecaps }.distinctUntilChanged()
 
     /** A chat bound to [choice]: every request goes to that server and model, or fails. */
-    fun chat(choice: CharacterChoice): CharacterChat = CharacterChat { messages, beforeRequest ->
+    fun chat(choice: CompanionChoice): CompanionChat = CompanionChat { messages, beforeRequest ->
         val base = OpenAiTts.baseUrl(choice.url) ?: throw TranslationError.NotSetUp()
         if (current() != choice) throw TranslationError.Changed()
         if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()
         val generation = connections.generation(choice.origin)
-        val noTemperature = settings.settings.first().characterStates[choice.serverId]?.let { it.noTemperature && it.model == choice.model } == true
+        val noTemperature = settings.settings.first().companionStates[choice.serverId]?.let { it.noTemperature && it.model == choice.model } == true
         client.chat(
             base,
             connections.key(choice.origin),
@@ -83,7 +83,7 @@ class CharacterServer internal constructor(
             onTemperatureRefused = {
                 // The answer came back; failing to remember this only means the next request retries.
                 try {
-                    settings.setCharacterServerModel(choice.url, choice.model, noTemperature = true)
+                    settings.setCompanionServerModel(choice.url, choice.model, noTemperature = true)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -97,22 +97,22 @@ class CharacterServer internal constructor(
     val servers: Flow<ServerList> = connections.servers
 
     /** The listed server chosen for character profiles, and the model on it, for the settings screen. */
-    val chosenServer: Flow<ServerConnection?> = settings.settings.map { it.characterServerConnection }.distinctUntilChanged()
+    val chosenServer: Flow<ServerConnection?> = settings.settings.map { it.companionServerConnection }.distinctUntilChanged()
 
-    val chosenModel: Flow<String> = settings.settings.map { it.characterModel.orEmpty() }.distinctUntilChanged()
+    val chosenModel: Flow<String> = settings.settings.map { it.companionModel.orEmpty() }.distinctUntilChanged()
 
     internal val localNetwork get() = connections.localNetwork
 
     /** Moves on when a server's address or key changes on the Services page. */
     fun generation(origin: String): StateFlow<Int> = connections.generation(origin)
 
-    suspend fun select(id: String) = settings.selectCharacterServer(id)
+    suspend fun select(id: String) = settings.selectCompanionServer(id)
 
-    suspend fun setModel(url: String, model: String) = settings.setCharacterServerModel(url, model)
+    suspend fun setModel(url: String, model: String) = settings.setCompanionServerModel(url, model)
 
     /** Turns background recaps on or off; off forgets every waiting chapter and stops the one under way. */
-    suspend fun setRecaps(enabled: Boolean, store: CharacterStore) {
-        settings.setCharacterRecaps(enabled)
+    suspend fun setRecaps(enabled: Boolean, store: CompanionStore) {
+        settings.setCompanionRecaps(enabled)
         if (!enabled) store.stopRecaps()
     }
 
@@ -128,6 +128,6 @@ class CharacterServer internal constructor(
     }
 
     private companion object {
-        const val TAG = "CharacterServer"
+        const val TAG = "CompanionServer"
     }
 }

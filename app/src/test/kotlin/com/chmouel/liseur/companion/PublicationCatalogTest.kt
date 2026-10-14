@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider

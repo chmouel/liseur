@@ -21,7 +21,7 @@ sealed interface Route {
     data object ReadingNavigation : Route
     data object ReadAloud : Route
     data object Translation : Route
-    data object Characters : Route
+    data object ReadingCompanion : Route
     data object Services : Route
     data object HiddenBooks : Route
     data object ServerAccount : Route
@@ -45,7 +45,7 @@ private val Route.tag: String
         Route.ReadingNavigation -> "ReadingNavigation"
         Route.ReadAloud -> "ReadAloud"
         Route.Translation -> "Translation"
-        Route.Characters -> "Characters"
+        Route.ReadingCompanion -> "ReadingCompanion"
         Route.Services -> "Services"
         Route.HiddenBooks -> "HiddenBooks"
         Route.ServerAccount -> "ServerAccount"
@@ -58,7 +58,7 @@ private val Route.tag: String
 
 private val objectRoutes: Map<String, Route> = listOf(
     Route.Library, Route.Settings, Route.SettingsBackup, Route.ReadingAppearance,
-    Route.ReadingNavigation, Route.ReadAloud, Route.Translation, Route.Characters, Route.Services,
+    Route.ReadingNavigation, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
     Route.About, Route.Stats,
 ).associateBy { it.tag }
@@ -119,7 +119,7 @@ fun MutableList<Route>.pop() {
 val Route.isSettingsPage: Boolean
     get() = when (this) {
         Route.ReadingAppearance, Route.ReadingNavigation, Route.ReadAloud,
-        Route.Translation, Route.Characters, Route.Services, Route.SettingsBackup,
+        Route.Translation, Route.ReadingCompanion, Route.Services, Route.SettingsBackup,
         Route.HiddenBooks, Route.About, Route.ServerAccount,
         -> true
         else -> false

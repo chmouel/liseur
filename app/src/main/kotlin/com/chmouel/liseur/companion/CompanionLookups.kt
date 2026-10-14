@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
@@ -11,28 +11,28 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /** What the character panel shows. */
-sealed interface CharacterView<out P> {
+sealed interface CompanionView<out P> {
     /** No server or model is chosen for character profiles yet. */
-    data object Setup : CharacterView<Nothing>
+    data object Setup : CompanionView<Nothing>
 
     /** The reader asked in the first chapter: there is nothing before it. */
-    data object FirstChapter : CharacterView<Nothing>
+    data object FirstChapter : CompanionView<Nothing>
 
     /** The chapter the reader asked in could not be told, so nothing can be shown safely. */
-    data object Unplaced : CharacterView<Nothing>
+    data object Unplaced : CompanionView<Nothing>
 
     /** The selection is too long to be a name. */
-    data object NotAName : CharacterView<Nothing>
+    data object NotAName : CompanionView<Nothing>
 
-    data class Loading(val stage: Stage) : CharacterView<Nothing>
+    data class Loading(val stage: Stage) : CompanionView<Nothing>
 
-    data class Failed(val failure: CharacterFailure) : CharacterView<Nothing>
+    data class Failed(val failure: CompanionFailure) : CompanionView<Nothing>
 
-    data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CharacterView<P>
+    data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CompanionView<P>
 
-    data object Insufficient : CharacterView<Nothing>
+    data object Insufficient : CompanionView<Nothing>
 
-    data class Profile<P>(val profile: CharacterAnswer.Profile<P>) : CharacterView<P>
+    data class Profile<P>(val profile: CompanionAnswer.Profile<P>) : CompanionView<P>
 
     enum class Stage {
         /** Finding the earlier chapters' text in the book. */
@@ -44,7 +44,7 @@ sealed interface CharacterView<out P> {
 }
 
 /** Why a lookup has no answer to show; each can be tried again. */
-enum class CharacterFailure {
+enum class CompanionFailure {
     CANCELLED,
     KEY,
     RATE_LIMITED,
@@ -64,11 +64,11 @@ enum class CharacterFailure {
  * back, or choosing between candidates, asks about the same chapters.
  * [visible] is false while a source is shown in the book.
  */
-data class CharacterPanel<P>(
+data class CompanionPanel<P>(
     val selection: String,
     val name: String?,
     val scope: AskingScope?,
-    val view: CharacterView<P>,
+    val view: CompanionView<P>,
     val visible: Boolean = true,
     /** The name first selected, while a candidate it was ambiguous between is shown. */
     val also: String? = null,
@@ -85,13 +85,13 @@ data class CharacterPanel<P>(
  * recap hints that produced them, so tapping the same character again in
  * the same chapter is instant; an explicit [retry] bypasses the cache.
  */
-class CharacterLookups<P>(
+class CompanionLookups<P>(
     private val scope: CoroutineScope,
     private val catalog: suspend () -> BookCatalog<P>,
-    private val choice: suspend () -> CharacterChoice?,
-    private val chatFor: (CharacterChoice) -> CharacterChat,
-    private val hints: suspend (CharacterChoice, AskingScope, List<Passage<P>>) -> List<RecapHint>,
-    private val aside: suspend (suspend () -> CharacterAnswer<P>) -> CharacterAnswer<P>,
+    private val choice: suspend () -> CompanionChoice?,
+    private val chatFor: (CompanionChoice) -> CompanionChat,
+    private val hints: suspend (CompanionChoice, AskingScope, List<Passage<P>>) -> List<RecapHint>,
+    private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
     private val language: () -> String,
     private val limits: InvestigationLimits = InvestigationLimits(),
     private val log: (Throwable) -> Unit = {},
@@ -107,13 +107,13 @@ class CharacterLookups<P>(
         val hints: List<RecapHint>,
     )
 
-    private val cache = object : LinkedHashMap<CacheKey, CharacterAnswer<P>>(CACHE_LIMIT, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, CharacterAnswer<P>>): Boolean =
+    private val cache = object : LinkedHashMap<CacheKey, CompanionAnswer<P>>(CACHE_LIMIT, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, CompanionAnswer<P>>): Boolean =
             size > CACHE_LIMIT
     }
 
-    private val _panel = MutableStateFlow<CharacterPanel<P>?>(null)
-    val panel: StateFlow<CharacterPanel<P>?> = _panel.asStateFlow()
+    private val _panel = MutableStateFlow<CompanionPanel<P>?>(null)
+    val panel: StateFlow<CompanionPanel<P>?> = _panel.asStateFlow()
 
     private var job: Job? = null
 
@@ -121,7 +121,7 @@ class CharacterLookups<P>(
     fun open(selection: String, place: P, translated: Boolean) {
         job?.cancel()
         val name = PassageText.name(selection)
-        _panel.value = CharacterPanel(selection, name, null, CharacterView.Loading(CharacterView.Stage.READING))
+        _panel.value = CompanionPanel(selection, name, null, CompanionView.Loading(CompanionView.Stage.READING))
         job = scope.launch {
             val asked = try {
                 catalog().scopeOf(place, translated)
@@ -129,14 +129,14 @@ class CharacterLookups<P>(
                 throw e
             } catch (e: Exception) {
                 log(e)
-                show(CharacterView.Failed(CharacterFailure.UNREADABLE))
+                show(CompanionView.Failed(CompanionFailure.UNREADABLE))
                 return@launch
             }
             _panel.update { it?.copy(scope = asked) }
             when {
-                asked == null -> show(CharacterView.Unplaced)
-                !asked.hasEarlier -> show(CharacterView.FirstChapter)
-                name == null -> show(CharacterView.NotAName)
+                asked == null -> show(CompanionView.Unplaced)
+                !asked.hasEarlier -> show(CompanionView.FirstChapter)
+                name == null -> show(CompanionView.NotAName)
                 else -> ask(asked, name, null, useCache = true)
             }
         }
@@ -147,7 +147,7 @@ class CharacterLookups<P>(
 
     /** A server or model was chosen: a panel waiting on setup asks now. */
     fun setUp() {
-        if (_panel.value?.view == CharacterView.Setup) rerun(useCache = true)
+        if (_panel.value?.view == CompanionView.Setup) rerun(useCache = true)
     }
 
     /** Looks up [candidate] instead, afresh but in the same chapters. */
@@ -163,14 +163,14 @@ class CharacterLookups<P>(
         val name = panel.name ?: return
         if (!asked.hasEarlier) return
         job?.cancel()
-        show(CharacterView.Loading(CharacterView.Stage.READING))
+        show(CompanionView.Loading(CompanionView.Stage.READING))
         job = scope.launch { ask(asked, name, panel.also, useCache) }
     }
 
     fun cancel() {
-        if (_panel.value?.view !is CharacterView.Loading) return
+        if (_panel.value?.view !is CompanionView.Loading) return
         job?.cancel()
-        show(CharacterView.Failed(CharacterFailure.CANCELLED))
+        show(CompanionView.Failed(CompanionFailure.CANCELLED))
     }
 
     /** Hides the panel while a source is shown, keeping what it says. */
@@ -187,7 +187,7 @@ class CharacterLookups<P>(
         _panel.value = null
     }
 
-    private fun show(view: CharacterView<P>) {
+    private fun show(view: CompanionView<P>) {
         _panel.update { it?.copy(view = view) }
     }
 
@@ -197,10 +197,10 @@ class CharacterLookups<P>(
         repeat(2) { attempt ->
             val chosen = choice()
             if (chosen == null) {
-                show(CharacterView.Setup)
+                show(CompanionView.Setup)
                 return
             }
-            show(CharacterView.Loading(CharacterView.Stage.READING))
+            show(CompanionView.Loading(CompanionView.Stage.READING))
             try {
                 val book = catalog()
                 val passages = book.passagesBefore(asked)
@@ -218,48 +218,48 @@ class CharacterLookups<P>(
                 )
                 val cached = if (useCache) synchronized(cache) { cache[key] } else null
                 val answer = cached ?: aside {
-                    show(CharacterView.Loading(CharacterView.Stage.ASKING))
+                    show(CompanionView.Loading(CompanionView.Stage.ASKING))
                     Investigation(chatFor(chosen), asked, passages, lang, limits).run(name, also, offered)
                 }.also { fresh ->
-                    if (fresh is CharacterAnswer.Profile || fresh is CharacterAnswer.Ambiguous) {
+                    if (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous) {
                         synchronized(cache) { cache[key] = fresh }
                     }
                 }
                 show(
                     when (answer) {
-                        is CharacterAnswer.Profile -> CharacterView.Profile(answer)
-                        is CharacterAnswer.Ambiguous -> CharacterView.Ambiguous(answer.candidates)
-                        CharacterAnswer.Insufficient -> CharacterView.Insufficient
+                        is CompanionAnswer.Profile -> CompanionView.Profile(answer)
+                        is CompanionAnswer.Ambiguous -> CompanionView.Ambiguous(answer.candidates)
+                        CompanionAnswer.Insufficient -> CompanionView.Insufficient
                     },
                 )
                 return
             } catch (e: CancellationException) {
                 throw e
             } catch (e: TranslationError.Changed) {
-                if (attempt == 1) show(CharacterView.Failed(CharacterFailure.SERVER))
+                if (attempt == 1) show(CompanionView.Failed(CompanionFailure.SERVER))
             } catch (e: TranslationError.NotSetUp) {
-                show(CharacterView.Setup)
+                show(CompanionView.Setup)
                 return
             } catch (e: Exception) {
                 log(e)
-                show(CharacterView.Failed(failureOf(e)))
+                show(CompanionView.Failed(failureOf(e)))
                 return
             }
         }
     }
 
-    private fun failureOf(e: Exception): CharacterFailure = when (e) {
-        is CharacterError.Malformed -> CharacterFailure.MALFORMED
-        is CharacterError.TooManyRequests -> CharacterFailure.LIMIT
-        is TranslationError.InvalidKey -> CharacterFailure.KEY
-        is TranslationError.RateLimited -> CharacterFailure.RATE_LIMITED
-        is TranslationError.LocalNetworkBlocked -> CharacterFailure.LOCAL_NETWORK
-        is TranslationError.Network -> CharacterFailure.NETWORK
-        is TranslationError.ModelNotFound -> CharacterFailure.MODEL_MISSING
+    private fun failureOf(e: Exception): CompanionFailure = when (e) {
+        is CompanionError.Malformed -> CompanionFailure.MALFORMED
+        is CompanionError.TooManyRequests -> CompanionFailure.LIMIT
+        is TranslationError.InvalidKey -> CompanionFailure.KEY
+        is TranslationError.RateLimited -> CompanionFailure.RATE_LIMITED
+        is TranslationError.LocalNetworkBlocked -> CompanionFailure.LOCAL_NETWORK
+        is TranslationError.Network -> CompanionFailure.NETWORK
+        is TranslationError.ModelNotFound -> CompanionFailure.MODEL_MISSING
         is TranslationError.Malformed, is TranslationError.Empty, is TranslationError.Truncated,
-        is TranslationError.Refused -> CharacterFailure.MALFORMED
-        is TranslationError -> CharacterFailure.SERVER
-        else -> CharacterFailure.UNREADABLE
+        is TranslationError.Refused -> CompanionFailure.MALFORMED
+        is TranslationError -> CompanionFailure.SERVER
+        else -> CompanionFailure.UNREADABLE
     }
 
     private companion object {

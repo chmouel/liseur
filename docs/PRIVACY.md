@@ -52,7 +52,7 @@ All of this stays in the app's own private storage:
   A passage translated in the sheet is not saved.
 - Which books you left translated, and between which two languages, so
   they open translated. Tapping Stop or deleting the book removes it.
-- If you turn on background chapter recaps for character profiles, the
+- If you turn on background chapter recaps for the reading companion, the
   short recaps your chosen server wrote of the chapters you finished,
   and the chapters still waiting for one. They are kept for the book
   they came from, the oldest going first past a fixed limit. Deleting
@@ -188,13 +188,13 @@ service, the passage goes to that service under its own terms and
 privacy policy. [Local AI servers](LOCAL_AI_SERVERS.md) explains how to
 run a translation server on your own computer.
 
-### A server, for character profiles
+### A server, for the reading companion
 
-Selecting a name in the reader and tapping Character asks a server on the
+Selecting a name in the reader and tapping Ask companion asks a server on the
 External services and API keys page that speaks OpenAI's chat API who
 that character is, from the chapters before the one you are reading.
 Nothing is sent until you choose that server and a model in Settings,
-Characters, and Liseur then asks it for its list of models the same way
+Intelligence, Reading companion, and Liseur then asks it for its list of models the same way
 as for translation. A lookup sends the name you selected, how many
 chapters the book has and how many come before yours, and passages from
 those earlier chapters only: the ones that mention the name with the

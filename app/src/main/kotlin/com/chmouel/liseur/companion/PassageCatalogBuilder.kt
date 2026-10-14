@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 /** One text element as the content iterator gives it: its file, the selector naming it, its text, where it is. */
 data class SourceElement<P>(val href: String, val selector: String?, val text: String, val place: P)

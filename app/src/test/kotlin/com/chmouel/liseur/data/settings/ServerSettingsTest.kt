@@ -656,7 +656,7 @@ class ServerSettingsTest {
         assertEquals(before, repo.settings.first())
     }
 
-    // -- Character profiles -----------------------------------------------
+    // -- Reading companion ------------------------------------------------
 
     @Test
     fun `character profiles keep their own server and model, apart from translation`() = runTest {
@@ -664,51 +664,51 @@ class ServerSettingsTest {
         val id = repo.add("OpenRouter", OPENROUTER)
         repo.selectTranslationServer(id)
         repo.setTranslationServerModel(OPENROUTER, "gpt-4o-mini")
-        assertTrue(repo.selectCharacterServer(id))
-        repo.setCharacterServerModel(OPENROUTER, " gpt-5 ")
-        repo.setCharacterRecaps(true)
+        assertTrue(repo.selectCompanionServer(id))
+        repo.setCompanionServerModel(OPENROUTER, " gpt-5 ")
+        repo.setCompanionRecaps(true)
 
         val s = repo.settings.first()
-        assertEquals(id, s.characterServerConnection?.id)
-        assertEquals("gpt-5", s.characterModel)
+        assertEquals(id, s.companionServerConnection?.id)
+        assertEquals("gpt-5", s.companionModel)
         assertEquals("gpt-4o-mini", s.translationModels[id])
-        assertTrue(s.characterRecaps)
+        assertTrue(s.companionRecaps)
     }
 
     @Test
     fun `a new address takes character profiles with it, and deleting it forgets them`() = runTest {
         val repo = repo()
         val id = repo.add("Kokoro", KOKORO)
-        repo.selectCharacterServer(id)
-        repo.setCharacterServerModel(KOKORO, "llama", noTemperature = true)
+        repo.selectCompanionServer(id)
+        repo.setCompanionServerModel(KOKORO, "llama", noTemperature = true)
 
         repo.updateServer(id, "Kokoro", MOVED)
         val moved = repo.settings.first()
-        assertEquals(MOVED_ID, moved.characterServer)
-        assertEquals(ServerCharacterState("llama"), moved.characterStates[MOVED_ID])
+        assertEquals(MOVED_ID, moved.companionServer)
+        assertEquals(ServerCompanionState("llama"), moved.companionStates[MOVED_ID])
 
         assertTrue(repo.deleteServer(MOVED_ID))
         val deleted = repo.settings.first()
-        assertNull(deleted.characterServer)
-        assertTrue(deleted.characterStates.isEmpty())
+        assertNull(deleted.companionServer)
+        assertTrue(deleted.companionStates.isEmpty())
     }
 
     @Test
     fun `an archive keeps character profiles' server, model and recaps`() = runTest {
         val source = repo()
         val id = source.add("OpenRouter", OPENROUTER)
-        source.selectCharacterServer(id)
-        source.setCharacterServerModel(OPENROUTER, "gpt-5")
-        source.setCharacterRecaps(true)
+        source.selectCompanionServer(id)
+        source.setCompanionServerModel(OPENROUTER, "gpt-5")
+        source.setCompanionRecaps(true)
         val archive = source.backupValues()
 
         val destination = AppSettingsRepository(PreferenceDataStoreFactory.create { folder.newFile("other.preferences_pb") })
         destination.restoreBackupValues(archive)
 
         val s = destination.settings.first()
-        assertEquals(OPENROUTER_ID, s.characterServerConnection?.id)
-        assertEquals("gpt-5", s.characterModel)
-        assertTrue(s.characterRecaps)
+        assertEquals(OPENROUTER_ID, s.companionServerConnection?.id)
+        assertEquals("gpt-5", s.companionModel)
+        assertTrue(s.companionRecaps)
     }
 
     @Test
@@ -718,9 +718,9 @@ class ServerSettingsTest {
         val before = repo.settings.first()
 
         val broken = listOf(
-            JSONObject().put(ServerSettings.CHARACTER_SERVER_NAME, OPENROUTER_ID),
-            JSONObject().put(ServerSettings.CHARACTER_STATE_NAME, """{"$OPENROUTER_ID":{"model":"x"}}"""),
-            JSONObject().put(ServerSettings.CHARACTER_STATE_NAME, "{"),
+            JSONObject().put(ServerSettings.COMPANION_SERVER_NAME, OPENROUTER_ID),
+            JSONObject().put(ServerSettings.COMPANION_STATE_NAME, """{"$OPENROUTER_ID":{"model":"x"}}"""),
+            JSONObject().put(ServerSettings.COMPANION_STATE_NAME, "{"),
         )
         for (archive in broken) {
             try {

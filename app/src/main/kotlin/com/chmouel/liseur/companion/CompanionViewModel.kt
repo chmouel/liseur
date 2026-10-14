@@ -1,4 +1,4 @@
-package com.chmouel.liseur.characters
+package com.chmouel.liseur.companion
 
 import android.util.Log
 import androidx.lifecycle.Lifecycle
@@ -31,16 +31,16 @@ import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
 /**
- * Character profiles and background chapter recaps for the open book.
+ * The reading companion for the open book: character profiles and background chapter recaps.
  *
  * Scoped to the reader activity, so it lives exactly as long as the book
  * is open: closing the book cancels any lookup and any recap under way,
  * and what was queued waits in the database for the next opening.
  */
-class CharacterViewModel(
+class CompanionViewModel(
     private val bookUrl: String,
-    private val server: CharacterServer,
-    private val store: CharacterStore,
+    private val server: CompanionServer,
+    private val store: CompanionStore,
     private val books: BookDao,
     private val fingerprints: BookFingerprintStore,
 ) : ViewModel() {
@@ -54,7 +54,7 @@ class CharacterViewModel(
     private val pendingShown = mutableListOf<Pair<Locator, Boolean>>()
     private var lastOrigin: Locator? = null
 
-    private val choice: StateFlow<CharacterChoice?> = server.choice
+    private val choice: StateFlow<CompanionChoice?> = server.choice
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val foreground: StateFlow<Boolean> = ProcessLifecycleOwner.get().lifecycle.currentStateFlow
@@ -76,7 +76,7 @@ class CharacterViewModel(
             }
             .stateIn(viewModelScope, SharingStarted.Eagerly, RecapSettings(false, null))
 
-    private val lookups = CharacterLookups(
+    private val lookups = CompanionLookups(
         scope = viewModelScope,
         catalog = { catalog.await() },
         choice = { server.current() },
@@ -87,7 +87,7 @@ class CharacterViewModel(
         log = { Log.w(TAG, "Character lookup failed: ${it.javaClass.simpleName}") },
     )
 
-    val panel: StateFlow<CharacterPanel<Locator>?> = lookups.panel
+    val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
 
     init {
         viewModelScope.launch {
@@ -186,7 +186,7 @@ class CharacterViewModel(
 
     fun close() = lookups.close()
 
-    private suspend fun hints(chosen: CharacterChoice, asked: AskingScope, passages: List<Passage<Locator>>): List<RecapHint> {
+    private suspend fun hints(chosen: CompanionChoice, asked: AskingScope, passages: List<Passage<Locator>>): List<RecapHint> {
         val sha = contentSha.value ?: return emptyList()
         val opened = catalog.await()
         val identity = RecapIdentity(sha, chosen.serverId, chosen.model, Recaps.FORMAT)
@@ -203,20 +203,20 @@ class CharacterViewModel(
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        Log.w(TAG, "Character recaps: ${e.javaClass.simpleName}")
+        Log.w(TAG, "Companion recaps: ${e.javaClass.simpleName}")
         null
     }
 
     companion object {
-        private const val TAG = "Characters"
+        private const val TAG = "Companion"
 
         fun factory(bookUrl: String): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val container = checkNotNull(this[APPLICATION_KEY]).container
-                CharacterViewModel(
+                CompanionViewModel(
                     bookUrl = bookUrl,
-                    server = container.characterServer,
-                    store = container.characterStore,
+                    server = container.companionServer,
+                    store = container.companionStore,
                     books = container.database.bookDao(),
                     fingerprints = container.bookFingerprints,
                 )

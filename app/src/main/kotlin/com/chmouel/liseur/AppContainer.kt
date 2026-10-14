@@ -3,8 +3,8 @@ package com.chmouel.liseur
 import android.content.Context
 import androidx.room.Room
 import androidx.room.withTransaction
-import com.chmouel.liseur.characters.CharacterDatabase
-import com.chmouel.liseur.characters.CharacterStore
+import com.chmouel.liseur.companion.CompanionDatabase
+import com.chmouel.liseur.companion.CompanionStore
 import com.chmouel.liseur.data.AndroidNetworkAvailability
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
@@ -253,23 +253,23 @@ class AppContainer(context: Context) {
         }
     }
 
-    private val characterStoreOpening = lazy {
-        CharacterStore(
-            database = Room.databaseBuilder(context, CharacterDatabase::class.java, CharacterDatabase.NAME)
-                .addMigrations(*CharacterDatabase.MIGRATIONS)
+    private val companionStoreOpening = lazy {
+        CompanionStore(
+            database = Room.databaseBuilder(context, CompanionDatabase::class.java, CompanionDatabase.NAME)
+                .addMigrations(*CompanionDatabase.MIGRATIONS)
                 .build(),
             present = { urls -> database.bookDao().presentUrls(urls) },
         ).also { store -> applicationScope.launch { store.tidy() } }
     }
 
-    /** Character profiles' chapter recaps, kept apart from the library and its backups. */
-    val characterStore: CharacterStore by characterStoreOpening
+    /** The reading companion's chapter recaps, kept apart from the library and its backups. */
+    val companionStore: CompanionStore by companionStoreOpening
 
     init {
-        val saved = context.getDatabasePath(CharacterDatabase.NAME)
+        val saved = context.getDatabasePath(CompanionDatabase.NAME)
         applicationScope.launch {
             database.invalidationTracker.createFlow("books").conflate().collect {
-                if (characterStoreOpening.isInitialized() || saved.exists()) characterStore.sweep()
+                if (companionStoreOpening.isInitialized() || saved.exists()) companionStore.sweep()
                 delay(SWEEP_SPACING_MS)
             }
         }
@@ -826,8 +826,8 @@ class AppContainer(context: Context) {
     }
 
     /** The server and model chosen for character profiles. */
-    internal val characterServer: com.chmouel.liseur.characters.CharacterServer by lazy {
-        com.chmouel.liseur.characters.CharacterServer(serverConnections, appSettings)
+    internal val companionServer: com.chmouel.liseur.companion.CompanionServer by lazy {
+        com.chmouel.liseur.companion.CompanionServer(serverConnections, appSettings)
     }
 
     /** The build's own accounts on the Services page, such as the Play build's Gemini key. */
