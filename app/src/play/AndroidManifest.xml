@@ -2,11 +2,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Gemini Nano runs in AICore; the reading companion offers it only where AICore is installed. -->
-    <queries>
-        <package android:name="com.google.android.aicore" />
-    </queries>
-
     <application>
         <!--
             ML Kit would start with every launch of the app. It is started

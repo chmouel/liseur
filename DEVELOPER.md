@@ -22,9 +22,9 @@ Manager package list).
 There are two product flavors. `foss` is the build F-Droid reproduces
 and the GitHub release carries. `play` adds Gemini's read-aloud voices,
 Gemini translation and the reading companion on Gemini, which send book
-text to a non-free Google service, and Google's ML Kit translator and
-the companion on Gemini Nano, which keep book text on the phone but use
-proprietary SDKs with their own diagnostics. They ship only
+text to a non-free Google service, and Google's ML Kit translator,
+which keeps book text on the phone but uses a proprietary SDK with its
+own diagnostics. They ship only
 on Google Play. Their code lives under
 `app/src/play/` and `app/src/testPlay/`; the `foss` APK has none of their
 code, strings or endpoints. Read aloud, translation and the reading companion themselves, on the
@@ -723,8 +723,7 @@ not in the console.
 ML Kit translation changes the Play declarations, so update them in the
 console before the first release that carries it. Data safety must list
 what Google's [ML Kit Android data disclosure](https://developers.google.com/ml-kit/android-data-disclosure)
-names for every feature, which covers `com.google.mlkit:translate` and
-`com.google.mlkit:genai-prompt`:
+names for every feature, which covers `com.google.mlkit:translate`:
 device and app information, per-installation identifiers, performance
 metrics, API configuration, input and output sizes, events and error
 codes, collected for diagnostics and analytics, encrypted in transit and
@@ -2024,29 +2023,20 @@ liseur-sync settings.
   lists them per flavor: `foss` has only `ServerCompanionService`, `play`
   adds `GeminiCompanionService` (the reader's Gemini key through
   `GeminiTranslationClient.chat`, model in `companion_gemini_model`,
-  fenced on the key's generation) and `NanoCompanionService` (Gemini Nano
-  through ML Kit's Prompt API). A provider this build lacks, such as one
-  restored from a Play backup on F-Droid, reads as not set up rather than
-  falling back. Choosing a listed server clears `companion_provider`.
-- A choice carries its `CompanionLimits`. Servers and Gemini use the
-  defaults below; Nano reads about 4,000 tokens at once, so it gets 3
-  rounds, 6 operations, 5,000 characters of source, 5 requests, a
-  3,000-character first request and 6,000-character recap batches. It
-  counts tokens before each request and fails with
-  `CompanionError.TooLong` rather than have the model read part of what
-  it was sent. Nano takes one turn, so `NanoPrompt` writes earlier turns
-  into the prompt.
-- A reply cut off at the output limit gets one `too_long` correction
-  asking for a shorter answer. A failed lookup or recap logs the error
-  class and, for `CompanionError.Malformed`, the fixed codes of the rules
-  broken (never text). Replies may hold a lone item where a list is asked
-  for, so they read either (`JSONObject.items`).
-- Nano is offered only where AICore (`com.google.android.aicore`) is
-  installed, found with a package query. ML Kit is started (`MlKit.initialize`;
-  its startup provider is removed in the `play` manifest) and asked for
-  Nano's status only once Nano is the chosen service, so a reader who
-  never picks it never starts the SDK. It cannot be tested on an
-  emulator.
+  fenced on the key's generation). A provider this build lacks, such as
+  one restored from a Play backup on F-Droid or the removed Gemini Nano
+  (`nano`), reads as not set up rather than falling back. Choosing a
+  listed server clears `companion_provider`.
+- A choice carries its `CompanionLimits`; servers and Gemini use the
+  defaults below. A reply cut off at the output limit gets one
+  `too_long` correction asking for a shorter answer. A failed lookup or
+  recap logs the error class and, for `CompanionError.Malformed`, the
+  fixed codes of the rules broken (never text). Replies may hold a lone
+  item where a list is asked for, so they read either
+  (`JSONObject.items`).
+- Gemini Nano (ML Kit's Prompt API) was tried and removed: about 4,000
+  tokens in and 17 tokens a second out made a lookup take 35 to 50
+  seconds, and it kept breaking the reply format in new ways.
 
 - Chapters come from the contents, not from files (`ChapterMap`).
   Top-level entries are chapters and a lone wrapper entry is looked
@@ -2705,8 +2695,7 @@ what lets it sync a book that came off an SD card.
   Read aloud and translation with a server are in both and talk only to
   the server the user sets. Device translation uses Android's own
   `TranslationManager`, not ML Kit, so it needs no Google Play services.
-  ML Kit (translation, and the Prompt API for the companion on Gemini
-  Nano) is the one deliberate exception, Play only
+  ML Kit translation is the one deliberate exception, Play only
   (`playImplementation`): a proprietary SDK that pulls in Play services
   client libraries, Firebase components and datatransport. Book text
   stays on the phone, but once the service is chosen the SDK logs

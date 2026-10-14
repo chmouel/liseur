@@ -73,17 +73,4 @@
     <string name="companion_provider_gemini_summary">Gemini de Google, avec votre clé API. Le texte du livre est envoyé à Google.</string>
     <string name="companion_gemini_key_missing">Ajoutez votre clé API Gemini dans la page Services externes et clés API pour que le compagnon de lecture utilise Gemini.</string>
     <string name="companion_gemini_privacy">Le texte des chapitres précédents est envoyé à Google avec votre clé Gemini, et des chapitres entiers si les résumés en arrière-plan sont activés. Google peut facturer ces requêtes.</string>
-    <string name="companion_provider_nano">Gemini Nano sur ce téléphone</string>
-    <string name="companion_provider_nano_summary">Le petit modèle de Google, exécuté sur le téléphone. Le texte du livre reste sur le téléphone.</string>
-    <string name="companion_nano_privacy">Le texte du livre reste sur le téléphone. ML Kit envoie à Google des diagnostics d\'utilisation.</string>
-    <string name="companion_nano_ready">Gemini Nano est prêt sur ce téléphone.</string>
-    <string name="companion_nano_downloadable">Android doit télécharger Gemini Nano avant que le compagnon puisse l\'utiliser.</string>
-    <string name="companion_nano_download">Télécharger</string>
-    <string name="companion_nano_downloading">Téléchargement de Gemini Nano…</string>
-    <string name="companion_nano_download_size">%1$s sur %2$s</string>
-    <string name="companion_nano_download_so_far">%1$s téléchargés</string>
-    <string name="companion_nano_download_waiting">En attente du démarrage du téléchargement par Android.</string>
-    <string name="companion_nano_download_failed">Le téléchargement n\'a pas abouti. Réessayez.</string>
-    <string name="companion_nano_unavailable">Gemini Nano n\'est pas disponible sur ce téléphone pour le moment.</string>
-    <string name="companion_nano_note">Gemini Nano lit beaucoup moins de texte à la fois que le modèle d\'un serveur : les recherches lisent moins de passages et peuvent trouver moins. Il ne fonctionne que lorsque Liseur est ouvert.</string>
 </resources>

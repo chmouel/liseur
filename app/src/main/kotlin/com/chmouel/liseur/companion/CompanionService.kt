@@ -21,7 +21,7 @@ internal data class ServiceHeading(val icon: ImageVector, val headline: String, 
 
 /**
  * Something the reading companion can ask: a listed server, or in the
- * Play build Gemini on the reader's key or Gemini Nano on the phone.
+ * Play build Gemini on the reader's key.
  */
 internal interface CompanionService {
     val id: String

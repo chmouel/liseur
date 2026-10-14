@@ -73,17 +73,4 @@
     <string name="companion_provider_gemini_summary">Googles Gemini mit deinem API-Schlüssel. Buchtext wird an Google gesendet.</string>
     <string name="companion_gemini_key_missing">Füge deinen Gemini-API-Schlüssel auf der Seite Externe Dienste und API-Schlüssel hinzu, damit der Lesebegleiter Gemini nutzen kann.</string>
     <string name="companion_gemini_privacy">Text aus früheren Kapiteln wird mit deinem Gemini-Schlüssel an Google gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Google kann diese Anfragen berechnen.</string>
-    <string name="companion_provider_nano">Gemini Nano auf diesem Telefon</string>
-    <string name="companion_provider_nano_summary">Googles kleines Modell, auf dem Telefon ausgeführt. Buchtext bleibt auf dem Telefon.</string>
-    <string name="companion_nano_privacy">Buchtext bleibt auf dem Telefon. ML Kit sendet Google Nutzungsdiagnosen.</string>
-    <string name="companion_nano_ready">Gemini Nano ist auf diesem Telefon bereit.</string>
-    <string name="companion_nano_downloadable">Android muss Gemini Nano herunterladen, bevor der Begleiter es nutzen kann.</string>
-    <string name="companion_nano_download">Herunterladen</string>
-    <string name="companion_nano_downloading">Gemini Nano wird heruntergeladen…</string>
-    <string name="companion_nano_download_size">%1$s von %2$s</string>
-    <string name="companion_nano_download_so_far">%1$s heruntergeladen</string>
-    <string name="companion_nano_download_waiting">Warten, bis Android den Download startet.</string>
-    <string name="companion_nano_download_failed">Der Download wurde nicht abgeschlossen. Versuche es erneut.</string>
-    <string name="companion_nano_unavailable">Gemini Nano ist auf diesem Telefon derzeit nicht verfügbar.</string>
-    <string name="companion_nano_note">Gemini Nano liest auf einmal viel weniger Text als das Modell eines Servers, daher lesen Suchen weniger Stellen und finden womöglich weniger. Es funktioniert nur, solange Liseur geöffnet ist.</string>
 </resources>

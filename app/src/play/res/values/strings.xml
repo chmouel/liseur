@@ -79,17 +79,4 @@
     <string name="companion_provider_gemini_summary">Google\'s Gemini, on your API key. Book text is sent to Google.</string>
     <string name="companion_gemini_key_missing">Add your Gemini API key on the External services and API keys page for the reading companion to use Gemini.</string>
     <string name="companion_gemini_privacy">Book text from earlier chapters is sent to Google on your Gemini key, and whole chapters once background recaps are on. Google may charge for these requests.</string>
-    <string name="companion_provider_nano">Gemini Nano on this phone</string>
-    <string name="companion_provider_nano_summary">Google\'s small model, run on the phone. Book text stays on the phone.</string>
-    <string name="companion_nano_privacy">Book text stays on the phone. ML Kit sends Google usage diagnostics.</string>
-    <string name="companion_nano_ready">Gemini Nano is ready on this phone.</string>
-    <string name="companion_nano_downloadable">Android needs to download Gemini Nano before the companion can use it.</string>
-    <string name="companion_nano_download">Download</string>
-    <string name="companion_nano_downloading">Downloading Gemini Nano…</string>
-    <string name="companion_nano_download_size">%1$s of %2$s</string>
-    <string name="companion_nano_download_so_far">%1$s downloaded</string>
-    <string name="companion_nano_download_waiting">Waiting for Android to start the download.</string>
-    <string name="companion_nano_download_failed">The download did not finish. Try again.</string>
-    <string name="companion_nano_unavailable">Gemini Nano is not available on this phone right now.</string>
-    <string name="companion_nano_note">Gemini Nano reads far less at once than a server\'s model, so lookups read fewer passages and may find less. It works only while Liseur is open.</string>
 </resources>

@@ -73,17 +73,4 @@
     <string name="companion_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。书籍文本会发送给 Google。</string>
     <string name="companion_gemini_key_missing">请在“外部服务和 API 密钥”页面添加你的 Gemini API 密钥，阅读伴侣才能使用 Gemini。</string>
     <string name="companion_gemini_privacy">前面章节的文本会使用你的 Gemini 密钥发送给 Google；开启后台摘要后会发送整章内容。Google 可能对这些请求收费。</string>
-    <string name="companion_provider_nano">本机上的 Gemini Nano</string>
-    <string name="companion_provider_nano_summary">Google 的小型模型，在手机上运行。书籍文本保留在手机上。</string>
-    <string name="companion_nano_privacy">书籍文本保留在手机上。ML Kit 会向 Google 发送使用诊断数据。</string>
-    <string name="companion_nano_ready">Gemini Nano 已在本机就绪。</string>
-    <string name="companion_nano_downloadable">Android 需要先下载 Gemini Nano，阅读伴侣才能使用它。</string>
-    <string name="companion_nano_download">下载</string>
-    <string name="companion_nano_downloading">正在下载 Gemini Nano…</string>
-    <string name="companion_nano_download_size">%1$s / %2$s</string>
-    <string name="companion_nano_download_so_far">已下载 %1$s</string>
-    <string name="companion_nano_download_waiting">正在等待 Android 开始下载。</string>
-    <string name="companion_nano_download_failed">下载未完成。请重试。</string>
-    <string name="companion_nano_unavailable">Gemini Nano 目前在本机不可用。</string>
-    <string name="companion_nano_note">Gemini Nano 一次能读取的文本远少于服务器上的模型，因此查找读取的段落更少，找到的信息也可能更少。它仅在 Liseur 打开时工作。</string>
 </resources>

@@ -73,17 +73,4 @@
     <string name="companion_provider_gemini_summary">Gemini от Google с вашим ключом API. Текст книги отправляется в Google.</string>
     <string name="companion_gemini_key_missing">Добавьте ключ API Gemini на странице «Внешние сервисы и ключи API», чтобы помощник при чтении мог использовать Gemini.</string>
     <string name="companion_gemini_privacy">Текст предыдущих глав отправляется в Google с вашим ключом Gemini, а при включённых фоновых пересказах — целые главы. Google может брать плату за эти запросы.</string>
-    <string name="companion_provider_nano">Gemini Nano на этом телефоне</string>
-    <string name="companion_provider_nano_summary">Небольшая модель Google, работающая на телефоне. Текст книги остаётся на телефоне.</string>
-    <string name="companion_nano_privacy">Текст книги остаётся на телефоне. ML Kit отправляет Google диагностику использования.</string>
-    <string name="companion_nano_ready">Gemini Nano готова на этом телефоне.</string>
-    <string name="companion_nano_downloadable">Android должен загрузить Gemini Nano, прежде чем помощник сможет её использовать.</string>
-    <string name="companion_nano_download">Загрузить</string>
-    <string name="companion_nano_downloading">Загрузка Gemini Nano…</string>
-    <string name="companion_nano_download_size">%1$s из %2$s</string>
-    <string name="companion_nano_download_so_far">Загружено: %1$s</string>
-    <string name="companion_nano_download_waiting">Ожидание, пока Android начнёт загрузку.</string>
-    <string name="companion_nano_download_failed">Загрузка не завершилась. Попробуйте ещё раз.</string>
-    <string name="companion_nano_unavailable">Gemini Nano сейчас недоступна на этом телефоне.</string>
-    <string name="companion_nano_note">Gemini Nano читает за раз гораздо меньше текста, чем модель на сервере, поэтому поиск просматривает меньше отрывков и может найти меньше. Она работает, только пока Liseur открыт.</string>
 </resources>

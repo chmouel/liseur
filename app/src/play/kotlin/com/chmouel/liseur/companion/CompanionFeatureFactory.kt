@@ -4,9 +4,8 @@ import android.content.Context
 import com.chmouel.liseur.AppContainer
 
 /**
- * The Play build's reading companion asks a listed server, Gemini on the
- * reader's key, or Gemini Nano on phones that have it. A listed server
- * stays the default.
+ * The Play build's reading companion asks a listed server or Gemini on
+ * the reader's key. A listed server stays the default.
  */
 internal object CompanionFeatureFactory {
     fun create(context: Context, container: AppContainer): CompanionServer = CompanionServer(
@@ -14,7 +13,6 @@ internal object CompanionFeatureFactory {
         server = ServerCompanionService(container.serverConnections, container.appSettings),
         others = listOf(
             GeminiCompanionService(container.serviceAccounts.gemini, container.appSettings),
-            NanoCompanionService(context, container.appSettings),
         ),
     )
 }

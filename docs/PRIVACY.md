@@ -11,9 +11,8 @@ title: Liseur Privacy Policy
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers of its own, and the developer collects
 nothing about you. The one exception is Google's ML Kit in the Google
-Play build, used by a translator and by Gemini Nano for the reading
-companion, which reports diagnostics to Google once you choose either;
-it is described below. Its
+Play build, used by a translator, which reports diagnostics to Google
+once you choose it; it is described below. Its
 source code is public at
 <https://github.com/chmouel/liseur>, so every claim on this page can be
 checked rather than taken on trust.
@@ -318,22 +317,6 @@ passages from earlier chapters and the same whole chapters, to that
 address over HTTPS, together with your key and the model you picked.
 Requests are billed to your key under Google's terms, and Google's
 retention policy for the Gemini API applies to them.
-
-### Gemini Nano on this phone, for the reading companion (Google Play build only)
-
-On phones that have it, the Google Play build can run the reading
-companion on Gemini Nano, a model that Android's AICore service runs on
-the device. The F-Droid and GitHub builds do not contain it. To decide
-whether to offer it, the companion settings look for AICore among the
-apps installed on the phone; that check stays on the phone. Nothing else
-of it runs until you choose it as the companion's service.
-
-With Gemini Nano, the passages and chapters a lookup or recap uses stay
-on your device. If the model is not on the phone yet, Android downloads
-it from Google when you tap Download; Liseur does not make that
-request. Once you choose it, the same Google SDK as the translator above
-sends Google the same kind of diagnostic and usage data, as described in
-that section.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
