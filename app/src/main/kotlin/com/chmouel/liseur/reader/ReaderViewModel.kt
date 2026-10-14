@@ -655,8 +655,19 @@ class ReaderViewModel(
     /**
      * Told every place the reader is shown, and whether they got there by
      * reading on, so character recaps know which chapters are finished.
+     * One attached after the book opened is told the place now shown.
      */
     var onPlaceShown: (Locator, Boolean) -> Unit = { _, _ -> }
+        set(value) {
+            field = value
+            shownPlace?.let { value(it, false) }
+        }
+    private var shownPlace: Locator? = null
+
+    private fun placeShown(place: Locator, movement: Boolean) {
+        shownPlace = place
+        onPlaceShown(place, movement)
+    }
 
     fun syncThisBook() {
         // A choice already on screen is the question being asked; a
@@ -1515,7 +1526,7 @@ class ReaderViewModel(
             sessions.onReaderReady()
             lastLocator?.let { _progress.value = progressAt(it) }
             (lastLocator ?: publication.readingOrder.firstOrNull()?.let { publication.locatorFromLink(it) })
-                ?.let { onPlaceShown(it, false) }
+                ?.let { placeShown(it, false) }
             viewModelScope.launch {
                 // Listening is neither reading time nor reading pace, even
                 // with the reader in front: the page turn that ends it must
@@ -1628,7 +1639,7 @@ class ReaderViewModel(
                 // place stays where the reader asked.
                 lastLocator = prepared
                 _progress.value = progressAt(prepared)
-                onPlaceShown(prepared, false)
+                placeShown(prepared, false)
                 return
             }
         }
@@ -1637,7 +1648,7 @@ class ReaderViewModel(
         val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true &&
             bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } != true
         lastLocator = prepared
-        onPlaceShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
+        placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
         val stable = bookPositions?.resolve(prepared)
         _progress.value = progressAt(prepared, stable)
         // Readium recalculates totalProgression for a different viewport,
@@ -2190,7 +2201,7 @@ class ReaderViewModel(
         if (!peek.returnedBy(generation)) return
         lastLocator = peek.origin
         _progress.value = progressAt(peek.origin)
-        onPlaceShown(peek.origin, false)
+        placeShown(peek.origin, false)
         endPeek()
     }
 
