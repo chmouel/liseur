@@ -40,8 +40,9 @@ import androidx.sqlite.execSQL
         BookOrbitStatusAgreement::class,
         RemoteStatsDay::class,
         RemoteStatsWindow::class,
+        GlossaryEntry::class,
     ],
-    version = 66,
+    version = 67,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -77,8 +78,23 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitPositionTraversalDao(): BookOrbitPositionTraversalDao
     abstract fun bookOrbitStatusAgreementDao(): BookOrbitStatusAgreementDao
     abstract fun remoteStatsDao(): RemoteStatsDao
+    abstract fun glossaryDao(): GlossaryDao
 
     companion object {
+        val MIGRATION_66_67 = object : Migration(66, 67) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `translation_glossary` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`book_url` TEXT NOT NULL, `term` TEXT NOT NULL, `aliases` TEXT NOT NULL, " +
+                        "`translation` TEXT NOT NULL, `note` TEXT NOT NULL, `target` TEXT NOT NULL, " +
+                        "`enabled` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_translation_glossary_book_url` ON `translation_glossary` (`book_url`)",
+                )
+            }
+        }
+
         val MIGRATION_65_66 = object : Migration(65, 66) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE reading_progress ADD COLUMN peak_progression REAL")
@@ -1938,6 +1954,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_63_64,
             MIGRATION_64_65,
             MIGRATION_65_66,
+            MIGRATION_66_67,
         )
     }
 }

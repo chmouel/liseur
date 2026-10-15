@@ -4,6 +4,7 @@ import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -90,7 +91,9 @@ class MigrationTest {
         }
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
-        val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB).build()
+        val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67)
+            .build()
         try {
             val dao = db.readingProgressDao()
             val migrated = dao.get("book")!!
@@ -157,6 +160,57 @@ class MigrationTest {
                     assertTrue(cursor.isNull(4))
                 }
             }
+        }
+    }
+
+    @Test
+    fun `the glossary table arrives empty and keeps a book's entries`() {
+        helper.createDatabase(TEST_DB, 66).close()
+        helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val dao = db.glossaryDao()
+            runBlocking {
+                assertTrue(dao.all("book").isEmpty())
+                dao.upsert(GlossaryEntry(bookUrl = "book", term = "bob", translation = "Robert", updatedAt = 1))
+                dao.upsert(GlossaryEntry(bookUrl = "book", term = "Ann", updatedAt = 1))
+                dao.upsert(GlossaryEntry(bookUrl = "other", term = "Cid", updatedAt = 1))
+                assertEquals(setOf("Ann", "bob"), dao.all("book").map { it.term }.toSet())
+                val ann = dao.all("book").single { it.term == "Ann" }
+                dao.upsert(ann.copy(enabled = false))
+                assertEquals(false, dao.all("book").single { it.term == "Ann" }.enabled)
+                dao.delete(ann.id)
+                assertEquals(listOf("bob"), dao.all("book").map { it.term })
+            }
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `existing schema-67 glossary entries survive opening the database`() {
+        helper.createDatabase(TEST_DB, 67).use { db ->
+            db.execSQL(
+                """
+                INSERT INTO translation_glossary (
+                    book_url, term, aliases, translation, note, target, enabled, updated_at
+                ) VALUES ('book', 'bob', '', 'Robert', '', '', 1, 1)
+                """.trimIndent(),
+            )
+        }
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val entry = runBlocking { db.glossaryDao().all("book").single() }
+            assertEquals("bob", entry.term)
+            assertEquals("Robert", entry.translation)
+        } finally {
+            db.close()
         }
     }
 
@@ -1690,6 +1744,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 66
+        const val LATEST = 67
     }
 }
