@@ -644,6 +644,7 @@ internal fun errorSentence(error: TranslationError, name: String, source: String
     is TranslationError.Truncated -> stringResource(R.string.translation_truncated, name)
     is TranslationError.DeviceFailed -> stringResource(R.string.translation_device_failed)
     is TranslationError.ModelNotFound -> stringResource(R.string.translation_model_not_found, error.model)
+    is TranslationError.NoEndpoint -> stringResource(R.string.translation_no_endpoint, name)
     is TranslationError.Service, is TranslationError.Malformed, is TranslationError.Changed, is TranslationError.Failed ->
         stringResource(R.string.translation_failed, name)
 }

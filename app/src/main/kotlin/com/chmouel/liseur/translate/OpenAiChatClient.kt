@@ -276,8 +276,10 @@ internal object OpenAiChat {
     /**
      * A failed request to [model], when it was one, from its status and
      * reply. A 404 is the model missing only when the reply says so, as
-     * Ollama's "model not found" and OpenAI's `model_not_found` do; a
-     * server with no such route answers 404 too.
+     * Ollama's "model not found" and OpenAI's `model_not_found` do; one
+     * without an OpenAI-style error object is the route missing, as a
+     * wrong address gets, and one with any other error, such as
+     * OpenRouter's data policy, is the service's own failure.
      */
     fun errorFor(code: Int, body: String, model: String? = null): TranslationError {
         val said = TranslationError.serverMessage(body)
@@ -285,8 +287,15 @@ internal object OpenAiChat {
             code == 401 || code == 403 -> TranslationError.InvalidKey(code, said)
             code == 429 || code == 402 -> TranslationError.RateLimited(code, said)
             code == 404 && model != null && missingModel(body) -> TranslationError.ModelNotFound(model, said)
+            code == 404 && model != null && !hasErrorObject(body) -> TranslationError.NoEndpoint(said)
             else -> TranslationError.Service(code, said)
         }
+    }
+
+    private fun hasErrorObject(body: String): Boolean = try {
+        JSONObject(body.trim()).optJSONObject("error") != null
+    } catch (_: JSONException) {
+        false
     }
 
     private fun missingModel(body: String): Boolean {

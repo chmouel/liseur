@@ -188,7 +188,10 @@ class OpenAiChatClientTest {
         assertEquals("gpt-9", expect<TranslationError.ModelNotFound> { runBlocking { client.translate(base, "k", "gpt-9", "en", "fr", "x") } }.model)
         // A server with no chat endpoint there.
         server.enqueue(MockResponse.Builder().code(404).body("404 page not found").build())
-        assertEquals(404, expect<TranslationError.Service> { runBlocking { client.translate(base, null, "m", "en", "fr", "x") } }.code)
+        expect<TranslationError.NoEndpoint> { runBlocking { client.translate(base, null, "m", "en", "fr", "x") } }
+        // Z.ai's, asked at a path it does not serve.
+        server.enqueue(json("""{"timestamp":"2026-10-15T17:42:08.807+00:00","status":404,"error":"Not Found","path":"/v4/v1/chat/completions"}""", 404))
+        expect<TranslationError.NoEndpoint> { runBlocking { client.translate(base, "k", "glm-4.7", "en", "fr", "x") } }
         // OpenRouter's 404 for a data policy names no missing model.
         server.enqueue(json("""{"error":{"message":"No endpoints found matching your data policy (Free model publication)","code":404}}""", 404))
         assertEquals(404, expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x") } }.code)
@@ -445,5 +448,8 @@ class OpenAiChatClientTest {
         // Without the model asked for, a 404 cannot name it.
         assertTrue(OpenAiChat.errorFor(404, """{"error":{"code":"model_not_found"}}""") is TranslationError.Service)
         assertTrue(OpenAiChat.errorFor(404, """{"error":{"code":"model_not_found"}}""", "m") is TranslationError.ModelNotFound)
+        // A list or a check without a model is not told a chat endpoint is missing.
+        assertTrue(OpenAiChat.errorFor(404, "Not Found") is TranslationError.Service)
+        assertTrue(OpenAiChat.errorFor(404, "Not Found", "m") is TranslationError.NoEndpoint)
     }
 }

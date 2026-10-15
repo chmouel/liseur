@@ -92,7 +92,7 @@ data class FailureDetails(
                     is TranslationError.Service -> e.code
                     is TranslationError.InvalidKey -> e.code
                     is TranslationError.RateLimited -> e.code
-                    is TranslationError.ModelNotFound -> 404
+                    is TranslationError.ModelNotFound, is TranslationError.NoEndpoint -> 404
                     else -> null
                 },
                 serverMessage = (e as? TranslationError)?.serverMessage,

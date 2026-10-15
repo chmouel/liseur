@@ -1837,7 +1837,10 @@ reader behavior.
   rather than following them. Refusal, empty, quota, malformed, refused
   key, unreachable and a model the server does not have (a 404 whose
   reply says so, `TranslationError.ModelNotFound`) are told apart
-  (`TranslationError`). Each request runs under the connection's
+  (`TranslationError`). A chat 404 without an OpenAI-style error object
+  is `NoEndpoint` and opens the server settings; structured service
+  failures such as OpenRouter's data policy remain service errors.
+  Each request runs under the connection's
   generation (`TranslationRequests`): a key or address change while it
   is out discards the reply and asks again. Each attempt checks the
   server it actually used, since a retry may be on another one after a

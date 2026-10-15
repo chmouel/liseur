@@ -29,6 +29,10 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
     class ModelNotFound(val model: String, override val serverMessage: String? = null) :
         TranslationError("The server has no such model")
 
+    /** Nothing answers chat completions at the server's address: the address is likely wrong. */
+    class NoEndpoint(override val serverMessage: String? = null) :
+        TranslationError("The server has no chat endpoint at this address")
+
     /** The model declined, or a safety filter held the answer back. */
     class Refused : TranslationError("The service declined to translate")
     class Empty : TranslationError("The service sent an empty translation")

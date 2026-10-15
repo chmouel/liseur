@@ -1381,6 +1381,7 @@
     <string name="translation_failed">%1$s couldn\'t translate this passage.</string>
     <string name="translation_device_failed">This phone\'s translator couldn\'t translate this passage.</string>
     <string name="translation_model_not_found">The server has no model named %1$s. Check its name or download it first.</string>
+    <string name="translation_no_endpoint">%1$s has no chat endpoint at this address. Check the server\'s address.</string>
     <string name="translation_too_long">Select a shorter passage to translate.</string>
     <string name="translation_same">The passage is already in %1$s.</string>
     <string name="translation_same_choose">This passage is already in %1$s. Choose a language to translate it into.</string>

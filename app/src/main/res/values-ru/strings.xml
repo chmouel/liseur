@@ -1421,6 +1421,7 @@
     <string name="translation_failed">%1$s не смог перевести этот отрывок.</string>
     <string name="translation_device_failed">Переводчик этого телефона не смог перевести этот отрывок.</string>
     <string name="translation_model_not_found">На сервере нет модели %1$s. Проверьте её название или сначала загрузите её.</string>
+    <string name="translation_no_endpoint">У %1$s нет точки доступа чата по этому адресу. Проверьте адрес сервера.</string>
     <string name="translation_too_long">Выделите отрывок покороче.</string>
     <string name="translation_same">Этот отрывок уже на этом языке: %1$s.</string>
     <string name="translation_same_choose">Этот отрывок уже на этом языке: %1$s. Выберите язык, на который его перевести.</string>

@@ -1337,6 +1337,7 @@
     <string name="translation_failed">%1$s konnte diesen Abschnitt nicht übersetzen.</string>
     <string name="translation_device_failed">Der Übersetzer dieses Telefons konnte diesen Abschnitt nicht übersetzen.</string>
     <string name="translation_model_not_found">Der Server hat kein Modell namens %1$s. Prüfe den Namen oder lade es zuerst herunter.</string>
+    <string name="translation_no_endpoint">%1$s hat unter dieser Adresse keinen Chat-Endpunkt. Prüfe die Serveradresse.</string>
     <string name="translation_too_long">Wähle einen kürzeren Abschnitt zum Übersetzen.</string>
     <string name="translation_same">Der Abschnitt ist bereits auf %1$s.</string>
     <string name="translation_same_choose">Der Abschnitt ist bereits auf %1$s. Wähle eine Sprache, in die er übersetzt werden soll.</string>

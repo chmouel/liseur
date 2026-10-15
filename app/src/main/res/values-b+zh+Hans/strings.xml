@@ -1276,6 +1276,7 @@
     <string name="translation_failed">%1$s 无法翻译这段文字。</string>
     <string name="translation_device_failed">本机翻译无法翻译这段文字。</string>
     <string name="translation_model_not_found">服务器上没有名为 %1$s 的模型。请检查名称，或先下载该模型。</string>
+    <string name="translation_no_endpoint">%1$s 在此地址上没有聊天接口。请检查服务器地址。</string>
     <string name="translation_too_long">请选择较短的文字进行翻译。</string>
     <string name="translation_same">这段文字已经是%1$s。</string>
     <string name="translation_same_choose">这段文字已经是%1$s。请选择要翻译成的语言。</string>

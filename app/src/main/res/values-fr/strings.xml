@@ -1325,6 +1325,7 @@
     <string name="translation_failed">%1$s n\'a pas pu traduire ce passage.</string>
     <string name="translation_device_failed">Le traducteur de ce téléphone n\'a pas pu traduire ce passage.</string>
     <string name="translation_model_not_found">Le serveur n\'a pas de modèle nommé %1$s. Vérifiez son nom ou téléchargez-le d\'abord.</string>
+    <string name="translation_no_endpoint">%1$s n\'a pas de point d\'accès de chat à cette adresse. Vérifiez l\'adresse du serveur.</string>
     <string name="translation_too_long">Sélectionnez un passage plus court à traduire.</string>
     <string name="translation_same">Ce passage est déjà dans cette langue : %1$s.</string>
     <string name="translation_same_choose">Ce passage est déjà dans cette langue : %1$s. Choisissez une langue dans laquelle le traduire.</string>

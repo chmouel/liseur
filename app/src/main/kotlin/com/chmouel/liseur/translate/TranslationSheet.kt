@@ -417,7 +417,7 @@ private fun failure(
         is TranslationError.NotDownloaded -> notDownloaded(source, target, hasDownloads, onDownload)
         is TranslationError.Unsupported -> unsupported(source, target, onSettings)
         is TranslationError.NotSetUp -> Body.Message(text, settings) { onSettings(false) }
-        is TranslationError.InvalidKey ->
+        is TranslationError.InvalidKey, is TranslationError.NoEndpoint ->
             Body.Message(text, stringResource(R.string.translation_open_services), error = true) { onSettings(true) }
         // Retrying a missing model cannot help until it is pulled or another is chosen.
         is TranslationError.LocalNetworkBlocked, is TranslationError.ModelNotFound ->
