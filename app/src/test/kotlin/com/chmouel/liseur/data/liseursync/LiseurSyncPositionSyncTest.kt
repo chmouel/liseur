@@ -158,6 +158,35 @@ class LiseurSyncPositionSyncTest {
         assertEquals(0.75, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
     }
 
+    @Test
+    fun `a pending page cannot advance the cursor after the account is restored`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/changes")) return json("""{"ops":[]}""")
+                runBlocking {
+                    val connected = db.remoteServerDao().get()!!
+                    db.remoteServerDao().upsert(
+                        connected.copy(addedAt = connected.addedAt + 1, syncCursorSeq = 0),
+                    )
+                }
+                return json(
+                    """{"ops":[${op(seq = 9, progression = 0.75)}],
+                        "has_more":false,"high_water":9}""".trimIndent(),
+                )
+            }
+        }
+
+        val identity = LiveIdentity.from(db.remoteServerDao().get()!!)
+        sync().refresh(identity, setOf(LiveTopic.POSITIONS))
+
+        assertEquals(0L, db.remoteServerDao().get()!!.syncCursorSeq)
+        assertNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(listOf("/v1/changes?since=0&limit=500"), requests().map { it.target })
+    }
+
     // -- Records this device cannot read -----------------------------------
     //
     // A server that writes a null progression — as one did, four times

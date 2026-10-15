@@ -493,6 +493,8 @@ class LiseurSyncPositionSync(
         val peerId: String,
         /** The server's own name for this device, when it said one. */
         val deviceId: String?,
+        /** The local connection stamp used to reject replies from before a restore. */
+        val connectionStamp: Long,
         /**
          * This device, as this device knows itself.
          *
@@ -530,6 +532,7 @@ class LiseurSyncPositionSync(
             credentials = credentials,
             peerId = server.accountKey,
             deviceId = server.accountId,
+            connectionStamp = server.addedAt,
             deviceKey = deviceKey(),
             cursorSeq = server.syncCursorSeq,
             login = server.username?.takeIf { it.isNotBlank() } ?: "liseur-sync",
@@ -560,6 +563,7 @@ class LiseurSyncPositionSync(
             credentials = credentials,
             peerId = server.accountKey,
             deviceId = server.accountId,
+            connectionStamp = server.addedAt,
             deviceKey = deviceKey(),
             cursorSeq = server.syncCursorSeq,
             login = server.username?.takeIf { it.isNotBlank() } ?: "liseur-sync",
@@ -2330,7 +2334,7 @@ class LiseurSyncPositionSync(
 
     private suspend fun sameAccount(account: Account): Boolean = serverDao.get()?.let {
         it.accountKey == account.accountKey && it.credentials == account.credentials &&
-            it.accountId == account.deviceId
+            it.accountId == account.deviceId && it.addedAt == account.connectionStamp
     } == true
 
     /**
