@@ -15,7 +15,10 @@ internal object AccountBackup {
         put("baseUrl", server.baseUrl)
         put("catalogUrl", server.catalogUrl ?: JSONObject.NULL)
         put("username", server.username ?: JSONObject.NULL)
-        put("accountId", server.accountId ?: JSONObject.NULL)
+        put(
+            "accountId",
+            server.accountId.takeUnless { server.kind == ServerKind.LISEUR_SYNC } ?: JSONObject.NULL,
+        )
         put("userId", server.userId ?: JSONObject.NULL)
         put("liseurAccountId", server.liseurAccountId ?: JSONObject.NULL)
         put("orbitSessionId", server.orbitSessionId ?: JSONObject.NULL)
@@ -27,7 +30,8 @@ internal object AccountBackup {
         put("canReadInsights", server.canReadInsights)
         put("canAdmin", server.canAdmin)
         mapOf("password" to server.passwordCipher, "apiKey" to server.apiKeyCipher,
-            "koboToken" to server.koboTokenCipher, "liseurToken" to server.liseurTokenCipher,
+            "koboToken" to server.koboTokenCipher,
+            "liseurToken" to server.liseurTokenCipher.takeUnless { server.kind == ServerKind.LISEUR_SYNC },
             "orbitAccess" to server.orbitAccessCipher, "orbitRefresh" to server.orbitRefreshCipher,
         ).forEach { (name, cipher) ->
             put(name, cipher?.let { CredentialCipher.decrypt(it) ?: throw UnreadableCredentialException() } ?: JSONObject.NULL)
@@ -52,22 +56,26 @@ internal object AccountBackup {
         val base = requireNotNull(text("baseUrl"))
         validateUrl(base)
         val catalog = text("catalogUrl")?.also(::validateUrl)
+        val accountId = if (kind == ServerKind.LISEUR_SYNC) null else text("accountId")
+        val liseurToken = text("liseurToken")?.also { require(it.isNotEmpty()) }
+            ?.takeUnless { kind == ServerKind.LISEUR_SYNC }
+            ?.let(seal)
         val server = RemoteServer(
             kind = kind, baseUrl = base, catalogUrl = catalog, username = text("username"),
-            passwordCipher = secret("password"), apiKeyCipher = secret("apiKey"), accountId = text("accountId"),
+            passwordCipher = secret("password"), apiKeyCipher = secret("apiKey"), accountId = accountId,
             userId = int("userId"), koboTokenCipher = secret("koboToken"),
             canDownload = bool("canDownload"), canManageLibrary = bool("canManageLibrary"),
             canUpload = bool("canUpload"), canDelete = bool("canDelete"), canReadInsights = bool("canReadInsights"),
             canAdmin = bool("canAdmin"), addedAt = System.currentTimeMillis(),
             catalogSyncedAt = null, positionSyncedAt = null, syncToken = null,
-            liseurTokenCipher = secret("liseurToken"), liseurAccountId = text("liseurAccountId"),
+            liseurTokenCipher = liseurToken, liseurAccountId = text("liseurAccountId"),
             orbitAccessCipher = secret("orbitAccess"), orbitRefreshCipher = secret("orbitRefresh"),
             orbitAccessExpires = number("orbitAccessExpires"), orbitSessionId = int("orbitSessionId"),
         )
         require(when (kind) {
             ServerKind.CALIBRE -> server.username != null && server.passwordCipher != null
             ServerKind.KOMGA -> server.apiKeyCipher != null
-            ServerKind.LISEUR_SYNC -> server.liseurTokenCipher != null
+            ServerKind.LISEUR_SYNC -> server.accountId == null && server.liseurTokenCipher == null
             ServerKind.BOOKORBIT -> server.orbitAccessCipher != null && server.orbitRefreshCipher != null
             ServerKind.CUSTOM -> server.passwordCipher == null || server.username != null
         })

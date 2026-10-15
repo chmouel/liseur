@@ -1417,10 +1417,10 @@
     <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus. Jedes Buch kann das im ⋮-Menü des Readers ändern.</string>
     <string name="companion_settings_privacy">Text aus früheren Kapiteln wird an den gewählten Server gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Der Anbieter kann diese Anfragen berechnen.</string>
     <string name="settings_backup_include_connections">Konten, Dienste und Passwörter einschließen</string>
-    <string name="settings_backup_connections_replace">Gespeicherte Bibliotheks- und KOReader-Konten, Diensteinstellungen und Zugangsdaten werden automatisch ersetzt.</string>
+    <string name="settings_backup_connections_replace">Gespeicherte Bibliotheks- und KOReader-Konten, Diensteinstellungen und Zugangsdaten werden automatisch ersetzt. Das %1$s-Token wird nicht kopiert; richte dieses Konto nach der Wiederherstellung erneut ein.</string>
     <string name="settings_backup_password_title">Backup-Passwort</string>
     <string name="settings_backup_password_confirm">Backup-Passwort bestätigen</string>
-    <string name="settings_backup_password_export">Wähle ein Passwort zum Verschlüsseln der Konten und Zugangsdaten. Du benötigst es zur Wiederherstellung. Lesedaten, Einstellungen, Dienstadressen und Schriftarten bleiben unverschlüsselt.</string>
+    <string name="settings_backup_password_export">Wähle ein Passwort zum Verschlüsseln der Konten und Zugangsdaten. Du benötigst es zur Wiederherstellung. Lesedaten, Einstellungen, Dienstadressen und Schriftarten bleiben unverschlüsselt. Das %1$s-Token wird nicht kopiert; richte dieses Konto nach der Wiederherstellung erneut ein.</string>
     <string name="settings_backup_password_restore">Gib das Passwort dieses Backups ein. Konten und Zugangsdaten werden ohne Anmeldung ersetzt.</string>
     <string name="settings_backup_password_error">Falsches Passwort oder beschädigte verschlüsselte Daten. Versuche es erneut.</string>
     <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht mehr gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>

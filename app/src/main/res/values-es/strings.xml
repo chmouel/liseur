@@ -1405,10 +1405,10 @@
     <string name="companion_settings_recaps_summary">Cuando pasas el final de un capítulo, se resume en segundo plano para que las búsquedas posteriores encuentren pasajes antes. Desactivado por defecto. Cada libro puede cambiarlo desde el menú ⋮ del lector.</string>
     <string name="companion_settings_privacy">El texto de los capítulos anteriores se envía al servidor elegido, y capítulos enteros si los resúmenes en segundo plano están activados. Su proveedor puede cobrar por estas solicitudes.</string>
     <string name="settings_backup_include_connections">Incluir cuentas, servicios y contraseñas</string>
-    <string name="settings_backup_connections_replace">Las cuentas de biblioteca y KOReader, la configuración de servicios y las credenciales guardadas se reemplazarán automáticamente.</string>
+    <string name="settings_backup_connections_replace">Las cuentas de biblioteca y KOReader, la configuración de servicios y las credenciales guardadas se reemplazarán automáticamente. El token de %1$s no se copia; vuelve a configurar esa cuenta después de restaurar.</string>
     <string name="settings_backup_password_title">Contraseña de la copia</string>
     <string name="settings_backup_password_confirm">Confirmar contraseña</string>
-    <string name="settings_backup_password_export">Elige una contraseña para cifrar las cuentas y credenciales. La necesitarás para restaurarlas. Los datos de lectura, los ajustes, las direcciones de los servicios y las fuentes seguirán sin cifrar.</string>
+    <string name="settings_backup_password_export">Elige una contraseña para cifrar las cuentas y credenciales. La necesitarás para restaurarlas. Los datos de lectura, los ajustes, las direcciones de los servicios y las fuentes seguirán sin cifrar. El token de %1$s no se copia; vuelve a configurar esa cuenta después de restaurar.</string>
     <string name="settings_backup_password_restore">Introduce la contraseña de esta copia. Las cuentas y credenciales se reemplazarán sin iniciar sesión.</string>
     <string name="settings_backup_password_error">Contraseña incorrecta o datos cifrados dañados. Inténtalo de nuevo.</string>
     <string name="settings_backup_error_credential">Ya no se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>

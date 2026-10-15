@@ -73,6 +73,9 @@ class ConnectionBackupRepositoryTest {
             keys.set("https://voice.example:443", "service-key")
             val values = app.backupValues()
             val payload = repository.export()
+            val backedUpAccount = payload.getJSONObject("account")
+            assertTrue(backedUpAccount.isNull("accountId"))
+            assertTrue(backedUpAccount.isNull("liseurToken"))
             ConnectionBackupRepository.validate(payload, values)
             assertFalse(payload.toString().contains("not-portable"))
             CredentialCipher.keyForTesting = newKey()
@@ -87,8 +90,10 @@ class ConnectionBackupRepositoryTest {
             services.addListener { owners += it }
             repository.prepareRestore(payload, values)()
             val restored = account.current()!!
-            assertEquals(RemoteCredentials.Bearer("device-token"), restored.credentials)
-            assertNotEquals(source.liseurTokenCipher, restored.liseurTokenCipher)
+            assertNull(restored.accountId)
+            assertNull(restored.credentials)
+            assertNull(restored.liseurTokenCipher)
+            assertEquals("user", restored.liseurAccountId)
             assertEquals(0L, restored.syncCursorSeq)
             assertEquals(0L, restored.annotationCursorSeq)
             assertNull(restored.syncToken)

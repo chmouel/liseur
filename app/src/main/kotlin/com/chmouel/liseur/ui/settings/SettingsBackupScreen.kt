@@ -116,7 +116,10 @@ fun SettingsBackupScreen(
                     } else { "" }) + (if (ready.preview.companionRecapCount > 0) {
                         "\n\n" + stringResource(R.string.settings_backup_companion_preview, ready.preview.companionRecapCount)
                     } else { "" }) + (if (ready.preview.includesConnections) {
-                        "\n\n" + stringResource(R.string.settings_backup_connections_replace)
+                        "\n\n" + stringResource(
+                            R.string.settings_backup_connections_replace,
+                            stringResource(R.string.server_kind_liseur_sync),
+                        )
                     } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
@@ -347,7 +350,16 @@ private fun BackupPasswordDialog(
         title = { Text(stringResource(R.string.settings_backup_password_title)) },
         text = {
             Column {
-                Text(stringResource(if (exporting) R.string.settings_backup_password_export else R.string.settings_backup_password_restore))
+                Text(
+                    if (exporting) {
+                        stringResource(
+                            R.string.settings_backup_password_export,
+                            stringResource(R.string.server_kind_liseur_sync),
+                        )
+                    } else {
+                        stringResource(R.string.settings_backup_password_restore)
+                    },
+                )
                 OutlinedTextField(
                     value = password, onValueChange = { password = it }, enabled = !busy,
                     label = { Text(stringResource(R.string.settings_backup_password_title)) },

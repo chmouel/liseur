@@ -165,6 +165,8 @@ The unchecked “Include accounts, services and passwords” option adds the lib
 account, KOReader pairing, service API keys and (in Play) the Gemini key. It
 requires a password entered twice. Only the connection payload is encrypted;
 reading data, service addresses, settings and fonts remain ordinary ZIP entries.
+A liseur-sync device token is not copied because it belongs to one server device;
+the restored account must be paired again.
 AES-256-GCM uses a fresh 12-byte nonce and a key derived with
 PBKDF2-HMAC-SHA256, a fresh 32-byte salt and 600,000 iterations. The payload
 records its encryption version and parameters. Passwords are held in memory;
