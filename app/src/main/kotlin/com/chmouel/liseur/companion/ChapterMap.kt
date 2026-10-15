@@ -24,6 +24,16 @@ data class ChapterRange(val lo: Int, val hi: Int) {
 data class ReadPoint(val resource: Int, val element: Int)
 
 /**
+ * Whether everything eligible up to this point is eligible up to [other]
+ * too, no read point meaning none of the asking chapter.
+ */
+fun ReadPoint?.notAfter(other: ReadPoint?): Boolean = when {
+    this == null -> true
+    other == null -> false
+    else -> resource < other.resource || (resource == other.resource && element <= other.element)
+}
+
+/**
  * Where a lookup was asked from: chapters numbered below [lo] may be
  * used, and [count] is the book's chapter count. With [until], so may
  * the text before that point in reading order, the asking chapter's

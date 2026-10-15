@@ -131,9 +131,11 @@ data class CompanionPanel<P>(
  * panel cancels the request in flight. [aside] runs a lookup with the
  * book's background recaps paused, and [hints] reads what saved recaps
  * say about the chapters a scope allows. Completed answers are cached for
- * the open book under the server, model, asking scope, name and
- * recap hints that produced them, so tapping the same character again in
- * the same chapter is instant; an explicit [retry] bypasses the cache.
+ * the open book under the server, model, asking chapter, name, recap
+ * hints and the passages naming the character that produced them, and
+ * reused further on in the same chapter while no new passage names it,
+ * so tapping the same character again is instant; an explicit [retry]
+ * bypasses the cache.
  */
 class CompanionLookups<P>(
     private val scope: CoroutineScope,
@@ -144,6 +146,8 @@ class CompanionLookups<P>(
     private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
     private val log: (Throwable) -> Unit = {},
 ) {
+    // The scope is kept without its read point: within a chapter, the
+    // mentions the answer was seeded with stand for where it was asked.
     private data class CacheKey(
         val serverId: String,
         val model: String,
@@ -152,10 +156,13 @@ class CompanionLookups<P>(
         val name: String,
         val also: String?,
         val hints: List<RecapHint>,
+        val mentions: List<String>,
     )
 
-    private val cache = object : LinkedHashMap<CacheKey, CompanionAnswer<P>>(CACHE_LIMIT, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, CompanionAnswer<P>>): Boolean =
+    private class Cached<P>(val until: ReadPoint?, val answer: CompanionAnswer<P>)
+
+    private val cache = object : LinkedHashMap<CacheKey, Cached<P>>(CACHE_LIMIT, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, Cached<P>>): Boolean =
             size > CACHE_LIMIT
     }
 
@@ -267,22 +274,30 @@ class CompanionLookups<P>(
                     return
                 }
                 val offered = hints(chosen, asked, passages)
+                val investigation = Investigation(recorded, asked, passages, chosen.limits.investigation)
                 val key = CacheKey(
                     serverId = chosen.serverId,
                     model = chosen.model,
                     generation = chosen.generation,
-                    scope = asked,
+                    scope = asked.copy(until = null),
                     name = PassageText.fold(name),
                     also = also?.let(PassageText::fold),
                     hints = offered,
+                    mentions = investigation.mentions(name, also),
                 )
-                val cached = if (useCache) synchronized(cache) { cache[key] } else null
+                // An answer from further on may rest on text not yet read
+                // here, so only one from this point or earlier is reused.
+                val cached = if (useCache) {
+                    synchronized(cache) { cache[key] }?.takeIf { it.until.notAfter(asked.until) }?.answer
+                } else {
+                    null
+                }
                 val answer = cached ?: aside {
                     show(CompanionView.Loading(CompanionView.Stage.ASKING))
-                    Investigation(recorded, asked, passages, chosen.limits.investigation).run(name, also, offered)
+                    investigation.run(name, also, offered)
                 }.also { fresh ->
-                    if (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous) {
-                        synchronized(cache) { cache[key] = fresh }
+                    if (cached == null && (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous)) {
+                        synchronized(cache) { cache[key] = Cached(asked.until, fresh) }
                     }
                 }
                 show(

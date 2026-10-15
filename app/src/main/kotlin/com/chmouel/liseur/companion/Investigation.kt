@@ -96,6 +96,10 @@ class Investigation<P>(
     suspend fun run(name: String, also: String? = null, hints: List<RecapHint> = emptyList()): CompanionAnswer<P> =
         Session(name, also).run(hints)
 
+    /** The refs of the eligible passages [run] would seed with for [name] and [also]. */
+    fun mentions(name: String, also: String? = null): List<String> =
+        listOfNotNull(name, also).flatMap(::mentioning).distinct().sorted().map { eligible[it].ref }
+
     private fun mentioning(phrase: String): List<Int> {
         val needle = PassageText.fold(phrase).takeIf { it.isNotEmpty() } ?: return emptyList()
         val exact = eligible.indices.filter { PassageText.hasWords(eligible[it].folded, needle) }

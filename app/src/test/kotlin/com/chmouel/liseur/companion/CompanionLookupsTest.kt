@@ -366,7 +366,7 @@ class CompanionLookupsTest {
     }
 
     @Test
-    fun `asking for the same character in the same chapter reuses the answer until retry or a different chapter`() = runTest {
+    fun `asking for the same character in the same chapter reuses the answer until it is named again, retry or a different chapter`() = runTest {
         val lookups = lookups()
         lookups.open("Mira", place = 400, translated = false)
         advanceUntilIdle()
@@ -379,15 +379,30 @@ class CompanionLookupsTest {
         assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals(1, requests.size)
 
-        // Different chapter (chapter 6 instead of chapter 5): asks afresh because chapter 5 is now eligible.
-        lookups.open("Mira", place = 500, translated = false)
+        // Further on, past a passage naming her: asks afresh.
+        lookups.open("Mira", place = 402, translated = false)
         advanceUntilIdle()
         assertEquals(2, requests.size)
 
-        // Explicit retry bypasses the cache.
+        // Further still, past a passage that does not name her: reused.
+        lookups.open("Mira", place = 403, translated = false)
+        advanceUntilIdle()
+        assertTrue(view(lookups) is CompanionView.Profile)
+        assertEquals(2, requests.size)
+
+        // Explicit retry bypasses the cache, and its answer, made at 403,
+        // is not reused back at 402, where its last passage is not yet read.
         lookups.retry()
         advanceUntilIdle()
         assertEquals(3, requests.size)
+        lookups.open("Mira", place = 402, translated = false)
+        advanceUntilIdle()
+        assertEquals(4, requests.size)
+
+        // Different chapter (chapter 6 instead of chapter 5): asks afresh because chapter 5 is now eligible.
+        lookups.open("Mira", place = 500, translated = false)
+        advanceUntilIdle()
+        assertEquals(5, requests.size)
     }
 
     private companion object {

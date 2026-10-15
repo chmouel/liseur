@@ -2168,6 +2168,11 @@ liseur-sync settings.
   Every claim must cite refs sent in this lookup; the quotes shown are
   the local passages, never model text. One corrective request with a
   fixed error code, then a retryable error.
+  Answers are cached per open book under the asking chapter (without its
+  read point) and the refs of the eligible passages naming the character.
+  A cached answer is reused only at its own read point or further on, so
+  it never rests on text the reader has not reached; a new passage naming
+  the character asks again.
 - Recaps are opt-in and only a retrieval index. `RecapScheduler` queues
   a chapter when `READER_MOVEMENT` crosses from it into the next one (no
   jumps, no backfill), runs one batch at a time while the app is in the
