@@ -73,5 +73,5 @@
     <string name="companion_provider_gemini_summary">Gemini de Google, avec votre clé API. Le texte du livre est envoyé à Google.</string>
     <string name="companion_gemini_key_missing">Ajoutez votre clé API Gemini dans la page Services externes et clés API pour que le compagnon de lecture utilise Gemini.</string>
     <string name="companion_gemini_model_recommended">Recommandé pour le compagnon de lecture</string>
-    <string name="companion_gemini_privacy">Le texte des chapitres précédents est envoyé à Google avec votre clé Gemini, et des chapitres entiers si les résumés en arrière-plan sont activés. Google peut facturer ces requêtes.</string>
+    <string name="companion_gemini_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé à Google avec votre clé Gemini, et des chapitres entiers si les résumés en arrière-plan sont activés. Google peut facturer ces requêtes.</string>
 </resources>

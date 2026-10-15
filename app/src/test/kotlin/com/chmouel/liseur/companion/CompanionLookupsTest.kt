@@ -37,12 +37,12 @@ class CompanionLookupsTest {
         override suspend fun scopeOf(place: Int, translated: Boolean): AskingScope? {
             if (place == UNREADABLE_PLACE) throw IOException("unreadable")
             if (place < 0) return null
-            return AskingScope(lo = place / 100, count = 8)
+            return AskingScope(lo = place / 100, count = 8, until = ReadPoint(place / 100, place % 100))
         }
 
         override suspend fun passagesBefore(scope: AskingScope): List<Passage<Int>> {
             asked += scope
-            return book.filter { Eligibility.allows(scope, it.range) }
+            return book.filter { Eligibility.allows(scope, it) }
         }
 
         override suspend fun passagesOf(unit: Int): List<Passage<Int>> = book.filter { it.range.hi == unit }
@@ -53,9 +53,9 @@ class CompanionLookupsTest {
     private var replies: suspend (List<ChatMessage>) -> String = { profileFor(it) }
     private val requests = mutableListOf<List<ChatMessage>>()
 
-    private fun TestScope.lookups() = CompanionLookups(
+    private fun TestScope.lookups(bookCatalog: BookCatalog<Int> = catalog) = CompanionLookups(
         scope = this,
-        catalog = { catalog },
+        catalog = { bookCatalog },
         choice = { choice },
         chatFor = { chosen ->
             chats += chosen
@@ -100,7 +100,7 @@ class CompanionLookupsTest {
 
         val profile = (view(lookups) as CompanionView.Profile).profile
         assertTrue(profile.identity.single().sources.all { it.range.hi < 4 })
-        assertEquals(AskingScope(4, 8), lookups.panel.value?.scope)
+        assertEquals(AskingScope(4, 8, ReadPoint(4, 0)), lookups.panel.value?.scope)
         assertEquals("Chapter 1", lookups.panel.value?.titles?.first())
         val sent = requests.flatten().joinToString("\n") { it.content }
         assertFalse(sent.contains("LATER"))
@@ -108,10 +108,10 @@ class CompanionLookupsTest {
     }
 
     @Test
-    fun `the first chapter, an unknown chapter and a long selection ask nobody`() = runTest {
+    fun `the start of the book, an unknown chapter and a long selection ask nobody`() = runTest {
         val lookups = lookups()
 
-        lookups.open("Mira", place = 5, translated = false)
+        lookups.open("Mira", place = 0, translated = false)
         advanceUntilIdle()
         assertEquals(CompanionView.FirstChapter, view(lookups))
 
@@ -128,6 +128,34 @@ class CompanionLookupsTest {
         assertEquals(CompanionFailure.UNREADABLE, failure(lookups))
 
         assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `the first paragraph shows the start notice even with a positive element index`() = runTest {
+        val firstParagraph = object : BookCatalog<Int> by catalog {
+            override suspend fun passagesBefore(scope: AskingScope): List<Passage<Int>> =
+                listOf(passage(0, 0, "Tobin arrives.").copy(end = 5)).filter { Eligibility.allows(scope, it) }
+        }
+        val lookups = lookups(firstParagraph)
+
+        lookups.open("Tobin", place = 5, translated = false)
+        advanceUntilIdle()
+
+        assertEquals(CompanionView.FirstChapter, view(lookups))
+        assertTrue(requests.isEmpty())
+    }
+
+    @Test
+    fun `the first chapter asks about the text before the selection only`() = runTest {
+        val lookups = lookups()
+
+        lookups.open("Tobin", place = 2, translated = false)
+        advanceUntilIdle()
+
+        assertTrue(view(lookups) is CompanionView.Profile)
+        val sent = requests.flatten().joinToString("\n") { it.content }
+        assertTrue(sent.contains("Tobin the elder"))
+        assertFalse(sent.contains("mends nets"))
     }
 
     @Test
@@ -171,7 +199,7 @@ class CompanionLookupsTest {
         lookups.retry()
         advanceUntilIdle()
         assertTrue(view(lookups) is CompanionView.Profile)
-        assertEquals(listOf(AskingScope(4, 8), AskingScope(4, 8)), catalog.asked)
+        assertEquals(listOf(AskingScope(4, 8, ReadPoint(4, 0)), AskingScope(4, 8, ReadPoint(4, 0))), catalog.asked)
     }
 
     @Test
@@ -203,7 +231,7 @@ class CompanionLookupsTest {
         assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals("Tobin the elder", lookups.panel.value?.name)
         assertEquals("Tobin", lookups.panel.value?.also)
-        assertEquals(AskingScope(3, 8), lookups.panel.value?.scope)
+        assertEquals(AskingScope(3, 8, ReadPoint(3, 0)), lookups.panel.value?.scope)
         // A fresh history: the system prompt and the seed only.
         assertEquals(2, requests[before].size)
     }
@@ -346,7 +374,7 @@ class CompanionLookupsTest {
 
         // Same chapter, case/whitespace variant: served from the cache without another server request.
         lookups.close()
-        lookups.open("  mira ", place = 402, translated = false)
+        lookups.open("  mira ", place = 400, translated = false)
         advanceUntilIdle()
         assertTrue(view(lookups) is CompanionView.Profile)
         assertEquals(1, requests.size)
@@ -372,6 +400,7 @@ class CompanionLookupsTest {
             text = text,
             range = ChapterRange(chapter, chapter),
             place = chapter * 100 + ordinal,
+            end = ordinal,
         )
     }
 }

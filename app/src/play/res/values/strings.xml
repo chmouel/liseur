@@ -79,5 +79,5 @@
     <string name="companion_provider_gemini_summary">Google\'s Gemini, on your API key. Book text is sent to Google.</string>
     <string name="companion_gemini_key_missing">Add your Gemini API key on the External services and API keys page for the reading companion to use Gemini.</string>
     <string name="companion_gemini_model_recommended">Recommended for the reading companion</string>
-    <string name="companion_gemini_privacy">Book text from earlier chapters is sent to Google on your Gemini key, and whole chapters once background recaps are on. Google may charge for these requests.</string>
+    <string name="companion_gemini_privacy">Book text before your selected paragraph is sent to Google on your Gemini key, and whole chapters once background recaps are on. Google may charge for these requests.</string>
 </resources>

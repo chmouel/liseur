@@ -73,5 +73,5 @@
     <string name="companion_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。书籍文本会发送给 Google。</string>
     <string name="companion_gemini_key_missing">请在“外部服务和 API 密钥”页面添加你的 Gemini API 密钥，阅读伴侣才能使用 Gemini。</string>
     <string name="companion_gemini_model_recommended">推荐用于阅读伴侣</string>
-    <string name="companion_gemini_privacy">前面章节的文本会使用你的 Gemini 密钥发送给 Google；开启后台摘要后会发送整章内容。Google 可能对这些请求收费。</string>
+    <string name="companion_gemini_privacy">所选段落之前的书籍文本会使用你的 Gemini 密钥发送给 Google；开启后台摘要后会发送整章内容。Google 可能对这些请求收费。</string>
 </resources>

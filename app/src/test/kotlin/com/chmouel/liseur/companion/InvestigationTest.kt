@@ -143,6 +143,39 @@ class InvestigationTest {
     }
 
     @Test
+    fun `the asking chapter is read up to the selection and no further`() = runTest {
+        val current = listOf(
+            passage(4, 0, "Chapter 5 begins. Osric arrives at dawn."),
+            passage(4, 1, "Osric bows to Mira. $SENTINEL selected"),
+            passage(4, 2, "Osric leaves at dusk. $SENTINEL after"),
+            passage(4, 3, "Osric, unplaced. $SENTINEL unknown").copy(end = null),
+        )
+        val chat = FakeChat { messages -> profile(holding(messages, "Osric arrives")) }
+        val scope = chapter5.copy(until = ReadPoint(resource = 4, element = 1))
+
+        val answer = investigation(chat, scope = scope, passages = book.take(12) + current).run("Osric")
+
+        assertTrue(answer is CompanionAnswer.Profile)
+        assertEquals(1, chat.requests.size)
+        assertTrue(chat.sent().contains("Osric arrives at dawn."))
+        assertFalse(chat.sent().contains(SENTINEL))
+        assertTrue(chat.sent().contains("chapters 1 to 4 and this chapter up to the selection"))
+    }
+
+    @Test
+    fun `a first chapter lookup asks about the text before the selection`() = runTest {
+        val chat = FakeChat { messages -> profile(shown(messages).take(1)) }
+        val scope = AskingScope(0, 8, ReadPoint(resource = 0, element = 2))
+
+        val answer = investigation(chat, scope = scope).run("Mira")
+
+        assertTrue(answer is CompanionAnswer.Profile)
+        assertTrue(chat.sent().contains("keeps the ledger"))
+        assertFalse(chat.sent().contains("The river is high"))
+        assertFalse(chat.sent().contains("Chapter 2 opens"))
+    }
+
+    @Test
     fun `recap hints help find passages but later chapters' recaps are not used`() = runTest {
         val chat = FakeChat { messages -> profile(shown(messages).take(1)) }
         val hints = listOf(
@@ -501,6 +534,7 @@ class InvestigationTest {
                 text = text,
                 range = range,
                 place = chapter * 100 + ordinal,
+                end = ordinal,
             )
     }
 }

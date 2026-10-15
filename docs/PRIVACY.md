@@ -205,16 +205,16 @@ run a translation server on your own computer.
 
 Selecting a name in the reader and tapping Ask companion asks a server on the
 External services and API keys page that speaks OpenAI's chat API who
-that character is, from the chapters before the one you are reading.
+that character is, from the book up to your selection.
 Nothing is sent until you choose that server and a model in Settings,
 Intelligence, Reading companion, and Liseur then asks it for its list of models the same way
 as for translation. A lookup sends the name you selected, how many
 chapters the book has and how many come before yours, and passages from
-those earlier chapters only: the ones that mention the name with the
-paragraphs around them, then the ones the model asks to search or read,
-up to 64,000 characters of book text in all. Nothing from the chapter
-you are in or any later chapter is sent, not even the sentence around
-your selection. The model, and your API key if you entered one, go
+the earlier chapters and from your chapter up to the paragraph you
+selected in: the ones that mention the name with the paragraphs around
+them, then the ones the model asks to search or read, up to 64,000
+characters of book text in all. Nothing from the paragraph you selected
+in or anything after it is sent. The model, and your API key if you entered one, go
 with every request. No book title, file, identifier or precise reading
 position goes with it, and the recaps
 described below are only used on the phone to find passages; their
@@ -323,7 +323,7 @@ companion. Opening the model list on that screen asks
 `generativelanguage.googleapis.com` which text models the key can use,
 carrying only your key. From then on, lookups and background chapter
 recaps send exactly what is described above for a server, the same
-passages from earlier chapters and the same whole chapters, to that
+passages from the book up to your selection and the same whole chapters, to that
 address over HTTPS, together with your key and the model you picked.
 Requests are billed to your key under Google's terms, and Google's
 retention policy for the Gemini API applies to them.

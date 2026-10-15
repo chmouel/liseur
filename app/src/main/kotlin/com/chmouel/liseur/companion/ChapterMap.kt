@@ -16,21 +16,41 @@ data class ChapterRange(val lo: Int, val hi: Int) {
 }
 
 /**
- * Where a lookup was asked from: only chapters numbered below [lo] may be
- * used, and [count] is the book's chapter count.
+ * Where the selection a lookup was asked about starts: the reading-order
+ * [resource] holding it, and the first element in document order
+ * ([ResourceOutline.span]) of what holds it there. 0 when it cannot be
+ * told within the resource, so nothing of that resource lies before it.
  */
-data class AskingScope(val lo: Int, val count: Int) {
-    /** Whether any chapter at all lies before the one asked from. */
-    val hasEarlier: Boolean get() = lo > 0
+data class ReadPoint(val resource: Int, val element: Int)
+
+/**
+ * Where a lookup was asked from: chapters numbered below [lo] may be
+ * used, and [count] is the book's chapter count. With [until], so may
+ * the text before that point in reading order, the asking chapter's
+ * own up to the selection.
+ */
+data class AskingScope(val lo: Int, val count: Int, val until: ReadPoint? = null) {
+    /** Whether any text at all may lie before the place asked from. */
+    val hasEarlier: Boolean get() = lo > 0 || (until != null && (until.resource > 0 || until.element > 0))
 }
 
 /**
  * The single gate between the book and anything sent away: text is
  * eligible only when every chapter it may belong to lies strictly before
- * the chapter asked from.
+ * the chapter asked from, or when it ends, in reading order, before the
+ * scope's [AskingScope.until]. Text whose place in the selection's own
+ * resource is unknown never passes the second test.
  */
 object Eligibility {
     fun allows(scope: AskingScope, range: ChapterRange): Boolean = range.hi < scope.lo
+
+    fun allows(scope: AskingScope, passage: Passage<*>): Boolean {
+        if (allows(scope, passage.range)) return true
+        val until = scope.until ?: return false
+        if (passage.resource < until.resource) return true
+        val end = passage.end ?: return false
+        return passage.resource == until.resource && end < until.element
+    }
 }
 
 /**

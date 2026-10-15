@@ -262,6 +262,10 @@ class CompanionLookups<P>(
             try {
                 val book = catalog()
                 val passages = book.passagesBefore(asked)
+                if (asked.lo == 0 && passages.isEmpty()) {
+                    show(CompanionView.FirstChapter)
+                    return
+                }
                 val offered = hints(chosen, asked, passages)
                 val key = CacheKey(
                     serverId = chosen.serverId,

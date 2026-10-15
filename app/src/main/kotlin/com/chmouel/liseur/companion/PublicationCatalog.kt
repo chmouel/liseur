@@ -32,13 +32,18 @@ class PublicationCatalog(private val publication: Publication) : BookCatalog<Loc
         val listed = readingOrder.indices.filter { readingOrder[it] == path }
         val resource = listed.firstOrNull() ?: return@withContext null
         val selector = place.locations.otherLocations[CSS_SELECTOR] as? String
-        val range = lock.withLock { builder.rangeOf(resource, selector.takeUnless { translated }) }
-        AskingScope(range.lo, map.chapterCount)
+        // A translated page, or a file listed twice, cannot place the selection inside its file.
+        val located = selector.takeUnless { translated || listed.size > 1 }
+        lock.withLock {
+            val range = builder.rangeOf(resource, selector.takeUnless { translated })
+            AskingScope(range.lo, map.chapterCount, ReadPoint(resource, builder.startOf(resource, located)))
+        }
     }
 
     override suspend fun passagesBefore(scope: AskingScope): List<Passage<Locator>> = withContext(Dispatchers.IO) {
         lock.withLock {
-            while (!finished && (builder.current < 0 || map.floorFrom(builder.current) < scope.lo)) {
+            val through = scope.until?.resource ?: -1
+            while (!finished && (builder.current < 0 || map.floorFrom(builder.current) < scope.lo || builder.current <= through)) {
                 val iterator = elements ?: checkNotNull(publication.content()) { "No content service" }.iterator()
                     .also { elements = it }
                 val element = iterator.nextOrNull()
@@ -48,7 +53,7 @@ class PublicationCatalog(private val publication: Publication) : BookCatalog<Loc
                 }
                 source(element)?.let { walked += builder.add(it) }
             }
-            walked.filter { Eligibility.allows(scope, it.range) }
+            walked.filter { Eligibility.allows(scope, it) }
         }
     }
 

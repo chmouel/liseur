@@ -47,6 +47,7 @@ class PassageCatalogBuilder<P>(
                 text = text,
                 range = range,
                 place = element.place,
+                end = span?.last,
             )
         }
     }
@@ -61,6 +62,14 @@ class PassageCatalogBuilder<P>(
         val span = selector?.let { located?.span(it) }
         return map.range(at, span?.first, span?.last, located?.anchors(map.anchorsIn(at)) ?: emptyMap())
     }
+
+    /**
+     * Where [selector] starts in [at], in document order, for the point a
+     * lookup may read up to; 0, before everything in the file, when it
+     * cannot be found.
+     */
+    suspend fun startOf(at: Int, selector: String?): Int =
+        selector?.let { outlineAt(at)?.span(it)?.first } ?: 0
 
     /** The outline of a resource asked about, parsed once and kept for the next ask about it. */
     private suspend fun outlineAt(at: Int): ResourceOutline? {

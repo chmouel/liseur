@@ -38,7 +38,7 @@ sealed interface CompanionAnswer<out P> {
 
     data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CompanionAnswer<P>
 
-    /** The earlier chapters do not say enough about the name. */
+    /** The book up to the selection does not say enough about the name. */
     data object Insufficient : CompanionAnswer<Nothing>
 }
 
@@ -85,7 +85,7 @@ class Investigation<P>(
     passages: List<Passage<P>>,
     private val limits: InvestigationLimits = InvestigationLimits(),
 ) {
-    private val eligible = passages.filter { Eligibility.allows(scope, it.range) }
+    private val eligible = passages.filter { Eligibility.allows(scope, it) }
     private val positions = eligible.withIndex().associate { it.value.ref to it.index }
 
     /**
@@ -359,7 +359,7 @@ class Investigation<P>(
                 val i = byIssued[refs.optString(k).trim()] ?: return null
                 if (i !in shown && i !in snipped) return null
                 val passage = eligible[i]
-                if (!Eligibility.allows(scope, passage.range)) return null
+                if (!Eligibility.allows(scope, passage)) return null
                 if (passage !in found) found += passage
             }
             return found

@@ -4306,8 +4306,17 @@ fun ReaderScreen(
                         },
                         onCompanion = companion?.let { lookups ->
                             {
-                                lookups.open(active.text, active.locator, pageTranslated)
-                                dismissSelection()
+                                // Readium's locator does not say where in its file the
+                                // selection is; ask the page while the selection is live.
+                                val nav = navigator.takeIf { tappedSelection == null }
+                                val translated = pageTranslated
+                                effectScope.launch {
+                                    val block = nav?.let { SelectionBlock.selector(it, active.locator.href.toString()) }
+                                    if (nav != null && navigatorNow !== nav) return@launch
+                                    if ((tappedSelection ?: selection) !== active || pageTranslated != translated) return@launch
+                                    lookups.open(active.text, SelectionBlock.place(active.locator, block), translated)
+                                    dismissSelection()
+                                }
                             }
                         },
                         onLookUp = {

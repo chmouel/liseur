@@ -2130,13 +2130,24 @@ liseur-sync settings.
   element that cannot be located, a repeated spine resource, entries out
   of reading order) gets the whole range of chapters it might belong to,
   `[lo, hi]`. A book with no usable contents is one chapter.
-- `Eligibility.allows` (`hi < asking.lo`) is the single gate between the
-  book and the network. The asking scope is frozen when the panel opens
-  (on a translated page it is the resource's lowest chapter) and is kept
-  through sources, Return and candidate reruns. Every seed passage,
-  search hit, read excerpt, recap hint and recap batch passes the gate,
-  so text that might be in the asking chapter is withheld rather than
-  guessed at.
+- `Eligibility.allows` is the single gate between the book and the
+  network. A passage passes when `hi < asking.lo`, or, for lookups, when
+  it ends in reading order before the scope's `ReadPoint`: the
+  selection's resource and the document-order start of the element
+  holding it. Readium's selection locator has no `cssSelector`, so the
+  reader asks the page for the selection's block (`SelectionBlock`) when
+  the companion is opened, and adds it only to the locator handed to the
+  companion. A passage in that
+  resource whose element end is unknown does not pass, and the
+  selection's own paragraph never does. On a
+  translated page, with a missing or unknown selector, or in a resource
+  listed twice, the point is the start of the resource. The asking scope
+  is frozen when the panel opens (on a translated page its chapter is the
+  resource's lowest) and is kept through sources, Return and candidate
+  reruns. Every seed passage, search hit, read excerpt, recap hint and
+  recap batch passes the gate. Recaps never carry a read point, so they
+  only see earlier chapters. A lookup at the very start of the book shows
+  the first-chapter notice without a request.
 - Only these go into a request body: the selected name, the numeric
   scope, app-issued session refs (`S1`…), and eligible passage text. Never
   `Locator.text.before/after`, chapter titles, notes, recap prose, or the
@@ -2150,7 +2161,8 @@ liseur-sync settings.
   completions: at most 6 rounds, 12 operations, 64,000 characters of
   unique source text and 10 HTTP requests, then one final request. The
   first request shows up to 20,000 characters: mentions taken in turn
-  from each earlier chapter, each with the paragraph before and after;
+  from each eligible chapter, latest first (so the asking chapter's text
+  before the selection leads), each with the paragraph before and after;
   `read` adds two paragraphs on each side. A name absent from eligible
   text is insufficient without any request.
   Every claim must cite refs sent in this lookup; the quotes shown are

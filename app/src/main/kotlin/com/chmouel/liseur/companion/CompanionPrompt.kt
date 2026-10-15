@@ -46,9 +46,14 @@ internal object CompanionPrompt {
 
     fun seed(name: String, also: String?, scope: AskingScope, limits: InvestigationLimits): String {
         val first = also?.let { " The reader selected $NAME_OPEN${safe(it)}$NAME_CLOSE, which may mean several characters." } ?: ""
+        val read = when {
+            scope.until == null -> "has read chapters 1 to ${scope.lo}; you are shown passages from those chapters only. "
+            scope.lo == 0 -> "has read this chapter up to the selection; you are shown passages from that text only. "
+            else -> "has read ${if (scope.lo == 1) "chapter 1" else "chapters 1 to ${scope.lo}"} and this chapter up to the selection; " +
+                "you are shown passages from that text only. "
+        }
         return "Describe the character $NAME_OPEN${safe(name)}$NAME_CLOSE.$first\n" +
-            "The reader is in chapter ${scope.lo + 1} of ${scope.count} and has read chapters 1 to ${scope.lo}; " +
-            "you are shown passages from those chapters only. " +
+            "The reader is in chapter ${scope.lo + 1} of ${scope.count} and $read" +
             "Up to ${limits.sourceCharacters} characters of passages can be shown in all.\n" +
             "Passages that name the character, with the ones around them:"
     }

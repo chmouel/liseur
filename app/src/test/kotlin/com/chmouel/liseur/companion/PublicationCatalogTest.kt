@@ -42,18 +42,43 @@ class PublicationCatalogTest {
     private fun texts(passages: List<Passage<*>>) = passages.joinToString("\n") { it.text }
 
     @Test
-    fun `asking in chapter 5 reaches chapters 1 to 4 and nothing of 5 or later`() = runBlocking {
+    fun `asking in chapter 5 reaches the book up to the selection and nothing from it on`() = runBlocking {
         val catalog = open()
         assertEquals(6, catalog.map.chapterCount)
 
         val all = catalog.passagesBefore(AskingScope(6, 6))
         val section2 = all.first { "FIVEB" in it.text }
         val scope = catalog.scopeOf(section2.place, translated = false)!!
-        assertEquals(AskingScope(4, 6), scope)
+        assertEquals(4, scope.lo)
+        assertEquals(4, scope.until!!.resource)
 
         val sent = texts(catalog.passagesBefore(scope))
-        for (token in listOf("ONE", "TWO", "THREE", "FOUR")) assertTrue("$token missing", "Mira $token" in sent)
-        for (token in listOf("FIVEA", "FIVEB", "SIX")) assertFalse("$token leaked", token in sent)
+        for (token in listOf("ONE", "TWO", "THREE", "FOUR", "FIVEA")) assertTrue("$token missing", "Mira $token" in sent)
+        for (token in listOf("FIVEB", "SIX")) assertFalse("$token leaked", token in sent)
+
+        // Chapters alone, as recaps ask, still stop before chapter 5.
+        assertFalse("FIVEA" in texts(catalog.passagesBefore(AskingScope(4, 6))))
+    }
+
+    @Test
+    fun `a selection reaches the paragraphs before it in its own file and not its own`() = runBlocking {
+        val catalog = open()
+        val ledger = catalog.passagesBefore(AskingScope(6, 6)).first { "ledger" in it.text }
+        val scope = catalog.scopeOf(ledger.place, translated = false)!!
+        assertEquals(0, scope.lo)
+        assertTrue(scope.hasEarlier)
+        assertEquals("Mira ONE walks to the mill.", texts(catalog.passagesBefore(scope)))
+
+        // A translated page, or a selector that cannot be found, starts at the file.
+        assertTrue(catalog.passagesBefore(catalog.scopeOf(ledger.place, translated = true)!!).isEmpty())
+        val unknown = ledger.place.copy(
+            locations = ledger.place.locations.copy(
+                otherLocations = ledger.place.locations.otherLocations + ("cssSelector" to "#nowhere"),
+            ),
+        )
+        val lost = catalog.scopeOf(unknown, translated = false)!!
+        assertEquals(ReadPoint(0, 0), lost.until)
+        assertFalse(lost.hasEarlier)
     }
 
     @Test
@@ -74,15 +99,17 @@ class PublicationCatalogTest {
         // A translated page cannot place the selection inside its file.
         val translated = catalog.scopeOf(all.first { "THREE" in it.text }.place, translated = true)!!
         assertEquals(1, translated.lo)
-        assertFalse("TWO" in texts(catalog.passagesBefore(translated)))
+        val withheld = texts(catalog.passagesBefore(translated))
+        assertTrue("Mira ONE" in withheld)
+        assertFalse("TWO" in withheld)
     }
 
     @Test
-    fun `the first chapter has nothing before it`() = runBlocking {
+    fun `the first paragraph of the book has nothing before it`() = runBlocking {
         val catalog = open()
         val first = catalog.passagesBefore(AskingScope(6, 6)).first { "ONE" in it.text }
         val scope = catalog.scopeOf(first.place, translated = false)!!
-        assertFalse(scope.hasEarlier)
+        assertEquals(0, scope.lo)
         assertTrue(catalog.passagesBefore(scope).isEmpty())
     }
 
@@ -95,9 +122,12 @@ class PublicationCatalogTest {
 
         val scope = catalog.scopeOf(all.first { "THREE" in it.text }.place, translated = false)!!
         assertEquals(1, scope.lo)
+        assertFalse("TWO" in texts(catalog.passagesBefore(AskingScope(scope.lo, scope.count))))
+        // The text before the selection is reachable whatever its chapter.
         val sent = texts(catalog.passagesBefore(scope))
         assertTrue("Mira ONE" in sent)
-        assertFalse("TWO" in sent)
+        assertTrue("Mira TWO" in sent)
+        assertFalse("THREE" in sent)
 
         // From chapter 4 on, the whole file lies before and is reachable.
         val four = catalog.scopeOf(all.first { "FOUR" in it.text }.place, translated = false)!!

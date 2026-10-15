@@ -9,7 +9,8 @@ import java.text.Normalizer
  * [ref] names it stably within one catalog format; [hash] tells a stored
  * ref whose text has since changed. [range] is the chapters it may belong
  * to and [place] what the reader navigates to, which never leaves the
- * phone.
+ * phone. [end] is the last element in document order of what holds it in
+ * its resource, or null when that is not known; it never leaves either.
  */
 data class Passage<P>(
     val ref: String,
@@ -18,6 +19,7 @@ data class Passage<P>(
     val text: String,
     val range: ChapterRange,
     val place: P,
+    val end: Int? = null,
     /** [text] folded for matching, surrounded by spaces so whole-word checks need no allocation. */
     val folded: String = " ${PassageText.fold(text)} ",
 )
