@@ -313,7 +313,7 @@
     <string name="server_no_download_right_custom">Ce catalogue n\'offre aucun livre à télécharger.</string>
     <string name="server_no_download_right_liseur_sync">Ce jeton n\'est pas autorisé à lire la bibliothèque — les jetons d\'avant que liseur-sync serve des livres ne peuvent pas la parcourir. Créez-en un neuf avec la portée library-read, ou déconnectez-vous et reconnectez-vous, puis vérifiez à nouveau.</string>
     <string name="server_no_download_right_bookorbit">Ce compte ne peut pas télécharger de livres depuis BookOrbit. Un administrateur peut accorder l\'autorisation de téléchargement, puis vérifiez à nouveau.</string>
-    <string name="server_token_storage_note">Votre jeton d\'appareil est conservé uniquement sur cet appareil, chiffré. Il est envoyé à votre serveur chaque fois que Liseur lui parle. Révoquez-le sur le serveur si vous perdez le téléphone.</string>
+    <string name="server_token_storage_note">Votre jeton d\'appareil est conservé sur cet appareil, chiffré. Il est envoyé à votre serveur chaque fois que Liseur lui parle. Révoquez-le sur le serveur si vous perdez le téléphone.</string>
     <string name="server_bookorbit_storage_note">Votre mot de passe n\'est pas conservé. Il est échangé une fois contre une session que Liseur renouvelle seul et stocke chiffrée sur cet appareil. Se déconnecter de BookOrbit la révoque.</string>
     <string name="server_bookorbit_password_help">BookOrbit ne fournit pas de clé séparée aux applications : c\'est donc le mot de passe de votre compte. Il est échangé contre une session de courte durée et jamais conservé.</string>
     <string name="server_sync_on">Votre position de lecture vous suivra entre les appareils.</string>
@@ -326,10 +326,10 @@
     <string name="calibre_token">Jeton ou URL de sync Kobo</string>
     <string name="calibre_save_token">Enregistrer le jeton</string>
     <string name="calibre_token_help">Liseur le récupère normalement pour vous. Si les positions de lecture ne se synchronisent pas, collez ici l\'URL de sync Kobo depuis la page de profil calibre-web.</string>
-    <string name="server_password_storage_note">Votre mot de passe est conservé uniquement sur cet appareil, chiffré. Il est envoyé à votre serveur chaque fois que Liseur lui parle, comme ce type de serveur l\'exige.</string>
-    <string name="server_custom_storage_note">Tout ce que vous saisissez ici est conservé uniquement sur cet appareil, chiffré. Le mot de passe du catalogue est envoyé à votre catalogue chaque fois que Liseur lui parle ; le mot de passe de sync KOReader ne quitte jamais ce téléphone — seule une valeur dérivée est envoyée.</string>
-    <string name="server_custom_kosync_storage_note">Tout ce que vous saisissez ici est conservé uniquement sur cet appareil, chiffré. Le mot de passe de sync KOReader ne quitte jamais ce téléphone — seule une valeur dérivée est envoyée.</string>
-    <string name="server_api_key_storage_note">Votre clé API est conservée uniquement sur cet appareil, chiffrée. Elle est envoyée à votre serveur chaque fois que Liseur lui parle. Révoquez-la dans Komga si vous perdez le téléphone.</string>
+    <string name="server_password_storage_note">Votre mot de passe est conservé sur cet appareil, chiffré. Il est envoyé à votre serveur chaque fois que Liseur lui parle, comme ce type de serveur l\'exige.</string>
+    <string name="server_custom_storage_note">Tout ce que vous saisissez ici est conservé sur cet appareil, chiffré. Le mot de passe du catalogue est envoyé à votre catalogue chaque fois que Liseur lui parle ; le mot de passe de sync KOReader ne quitte jamais ce téléphone — seule une valeur dérivée est envoyée.</string>
+    <string name="server_custom_kosync_storage_note">Tout ce que vous saisissez ici est conservé sur cet appareil, chiffré. Le mot de passe de sync KOReader ne quitte jamais ce téléphone — seule une valeur dérivée est envoyée.</string>
+    <string name="server_api_key_storage_note">Votre clé API est conservée sur cet appareil, chiffrée. Elle est envoyée à votre serveur chaque fois que Liseur lui parle. Révoquez-la dans Komga si vous perdez le téléphone.</string>
     <string name="book_on_server">Sur le serveur</string>
     <string name="book_not_downloaded">Ce livre est encore sur le serveur.</string>
     <string name="close">Fermer</string>
@@ -844,7 +844,7 @@
     <string name="settings_backup_error_size">Cette sauvegarde est trop volumineuse pour être restaurée.</string>
     <string name="settings_backup_error_storage">Impossible de préparer la sauvegarde dans le stockage de l’appareil.</string>
     <string name="settings_backup_error_restore">Impossible de restaurer la sauvegarde.</string>
-    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos réglages, polices, annotations, positions de lecture et résumés du compagnon.</string>
+    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos réglages, polices, annotations, positions de lecture, résumés du compagnon, comptes et services.</string>
     <string name="settings_library_help_title">Serveurs de livres</string>
     <string name="settings_library_help_body" formatted="true">Un serveur de livres — calibre-web, Komga, liseur-sync ou un catalogue OPDS — détient votre bibliothèque : Liseur la parcourt et télécharge depuis elle, et garde votre place à jour là où le serveur le permet. Une connexion OPDS Personnalisée peut s\'associer à un serveur de sync KOReader pour les positions de lecture. Un seul serveur est connecté à la fois.\n\nliseur-sync est celui qui garde aussi à jour les livres qui n\'étaient que sur ce téléphone : un fichier d\'une carte SD synchronise aussi sa position. Hébergez le vôtre depuis %1$s.</string>
     <string name="settings_account_detail">Parcourir et télécharger depuis un serveur calibre-web, Komga, liseur-sync ou OPDS, et garder votre place à jour — OPDS via un serveur de sync KOReader associé.</string>
@@ -1404,4 +1404,13 @@
     <string name="companion_settings_recaps">Résumer les chapitres pendant la lecture</string>
     <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer depuis le menu ⋮ du lecteur.</string>
     <string name="companion_settings_privacy">Le texte des chapitres précédents est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
+    <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
+    <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>
+    <string name="settings_backup_password_title">Mot de passe de sauvegarde</string>
+    <string name="settings_backup_password_confirm">Confirmer le mot de passe</string>
+    <string name="settings_backup_password_export">Choisissez un mot de passe pour chiffrer les comptes et les identifiants. Il sera nécessaire à la restauration. Les données de lecture, les réglages, les adresses des services et les polices restent non chiffrés.</string>
+    <string name="settings_backup_password_restore">Saisissez le mot de passe de cette sauvegarde. Les comptes et les identifiants seront remplacés sans nouvelle connexion.</string>
+    <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
+    <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut plus être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
+    <string name="settings_backup_error_export_password_lost">Le mot de passe de la sauvegarde a été perdu pendant le choix du fichier ; rien n’a été enregistré. Exportez à nouveau.</string>
 </resources>

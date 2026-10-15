@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -304,9 +305,9 @@ private fun LiseurApp(
     val readerPreferences = remember(context) { context.container.readerPreferences }
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
-    val settingsZipBackup = rememberSettingsZipBackup(
+    val settingsZipBackup by rememberUpdatedState(rememberSettingsZipBackup(
         active = backStack.lastOrNull() == Route.SettingsBackup,
-    )
+    ))
     // Closing the backup screen first cancels whatever it was doing, the
     // same whether it is closed by its arrow or by Back.
     val back: () -> Unit = {

@@ -87,6 +87,12 @@ class KosyncAccountRepository(
 
     suspend fun current(): KosyncPeer? = dao.get()
 
+    /** Restores the derived auth key without a network probe or old peer agreements. */
+    internal suspend fun restoreBackup(peer: KosyncPeer?) {
+        disconnect()
+        if (peer != null) dao.upsert(peer)
+    }
+
     /**
      * Pairs with a kosync server, proving the credentials work before
      * anything is stored.

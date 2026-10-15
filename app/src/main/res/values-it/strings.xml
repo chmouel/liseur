@@ -313,7 +313,7 @@
     <string name="server_no_download_right_custom">Questo catalogo non offre libri da scaricare.</string>
     <string name="server_no_download_right_liseur_sync">Questo token non può leggere la libreria — i token di prima che liseur-sync servisse i libri non possono sfogliarla. Generane uno nuovo con lo scope library-read, oppure disconnettiti e accedi di nuovo, poi controlla di nuovo.</string>
     <string name="server_no_download_right_bookorbit">Questo account non può scaricare libri da BookOrbit. Un amministratore può concedere il permesso di download, poi controlla di nuovo.</string>
-    <string name="server_token_storage_note">Il token del dispositivo resta solo su questo dispositivo, crittografato. Viene inviato al server ogni volta che Liseur ci parla. Revocalo sul server se perdi il telefono.</string>
+    <string name="server_token_storage_note">Il token del dispositivo resta su questo dispositivo, crittografato. Viene inviato al server ogni volta che Liseur ci parla. Revocalo sul server se perdi il telefono.</string>
     <string name="server_bookorbit_storage_note">La password non viene conservata. Viene scambiata una volta con una sessione che Liseur rinnova da solo e conserva cifrata su questo dispositivo. Disconnettersi da BookOrbit la revoca.</string>
     <string name="server_bookorbit_password_help">BookOrbit non offre alle app alcuna chiave separata, quindi questa è la password del tuo account. Viene scambiata con una sessione di breve durata e mai conservata.</string>
     <string name="server_sync_on">La posizione di lettura ti seguirà tra i dispositivi.</string>
@@ -326,10 +326,10 @@
     <string name="calibre_token">Token o URL di sync Kobo</string>
     <string name="calibre_save_token">Salva token</string>
     <string name="calibre_token_help">Di solito Liseur lo recupera da solo. Se le posizioni di lettura non si sincronizzano, incolla qui l\'URL di sync Kobo dalla pagina del profilo calibre-web.</string>
-    <string name="server_password_storage_note">La password resta solo su questo dispositivo, crittografata. Viene inviata al server ogni volta che Liseur ci parla, come richiede questo tipo di server.</string>
-    <string name="server_custom_storage_note">Tutto ciò che digiti qui resta solo su questo dispositivo, crittografato. La password del catalogo viene inviata al catalogo ogni volta che Liseur ci parla; la password di sync KOReader non lascia mai questo telefono — viene inviato solo un valore derivato.</string>
-    <string name="server_custom_kosync_storage_note">Tutto ciò che digiti qui resta solo su questo dispositivo, crittografato. La password di sync KOReader non lascia mai questo telefono — viene inviato solo un valore derivato.</string>
-    <string name="server_api_key_storage_note">La chiave API resta solo su questo dispositivo, crittografata. Viene inviata al server ogni volta che Liseur ci parla. Revocala in Komga se perdi il telefono.</string>
+    <string name="server_password_storage_note">La password resta su questo dispositivo, crittografata. Viene inviata al server ogni volta che Liseur ci parla, come richiede questo tipo di server.</string>
+    <string name="server_custom_storage_note">Tutto ciò che digiti qui resta su questo dispositivo, crittografato. La password del catalogo viene inviata al catalogo ogni volta che Liseur ci parla; la password di sync KOReader non lascia mai questo telefono — viene inviato solo un valore derivato.</string>
+    <string name="server_custom_kosync_storage_note">Tutto ciò che digiti qui resta su questo dispositivo, crittografato. La password di sync KOReader non lascia mai questo telefono — viene inviato solo un valore derivato.</string>
+    <string name="server_api_key_storage_note">La chiave API resta su questo dispositivo, crittografata. Viene inviata al server ogni volta che Liseur ci parla. Revocala in Komga se perdi il telefono.</string>
     <string name="book_on_server">Sul server</string>
     <string name="book_not_downloaded">Questo libro è ancora sul server.</string>
     <string name="close">Chiudi</string>
@@ -844,7 +844,7 @@
     <string name="settings_backup_error_size">Il backup è troppo grande per essere ripristinato.</string>
     <string name="settings_backup_error_storage">Impossibile preparare il backup nella memoria del dispositivo.</string>
     <string name="settings_backup_error_restore">Impossibile ripristinare il backup.</string>
-    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma il resto non è stato applicato. Controlla impostazioni, caratteri, annotazioni, posizioni di lettura e riepiloghi del compagno.</string>
+    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma il resto non è stato applicato. Controlla impostazioni, caratteri, annotazioni, posizioni di lettura, riepiloghi del compagno, account e servizi.</string>
     <string name="settings_library_help_title">Server dei libri</string>
     <string name="settings_library_help_body" formatted="true">Un server dei libri — calibre-web, Komga, liseur-sync o un catalogo OPDS — tiene la tua libreria: Liseur la sfoglia e scarica da essa, e tiene il tuo posto allineato dove il server lo supporta. Una connessione OPDS Personalizzata può abbinarsi a un server di sync KOReader per le posizioni di lettura. Si collega un solo server alla volta.\n\nliseur-sync è quello che tiene allineati anche i libri arrivati solo da questo telefono: anche un file da una scheda SD sincronizza la posizione. Installane uno tuo da %1$s.</string>
     <string name="settings_account_detail">Sfoglia e scarica da un server calibre-web, Komga, liseur-sync o OPDS, e tieni il tuo posto allineato — OPDS tramite un server di sync KOReader abbinato.</string>
@@ -1404,4 +1404,13 @@
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
     <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo dal menu ⋮ del lettore.</string>
     <string name="companion_settings_privacy">Il testo dei capitoli precedenti viene inviato al server scelto, e capitoli interi se i riassunti in background sono attivi. Il suo fornitore può addebitare queste richieste.</string>
+    <string name="settings_backup_include_connections">Includi account, servizi e password</string>
+    <string name="settings_backup_connections_replace">Gli account della biblioteca e di KOReader, le impostazioni dei servizi e le credenziali salvate saranno sostituiti automaticamente.</string>
+    <string name="settings_backup_password_title">Password del backup</string>
+    <string name="settings_backup_password_confirm">Conferma la password</string>
+    <string name="settings_backup_password_export">Scegli una password per cifrare account e credenziali. Servirà per ripristinarli. I dati di lettura, le impostazioni, gli indirizzi dei servizi e i caratteri restano non cifrati.</string>
+    <string name="settings_backup_password_restore">Inserisci la password di questo backup. Account e credenziali saranno sostituiti senza effettuare l’accesso.</string>
+    <string name="settings_backup_password_error">Password errata o dati cifrati danneggiati. Riprova.</string>
+    <string name="settings_backup_error_credential">Una credenziale salvata di un account o di KOReader non è più leggibile su questo dispositivo. Accedi di nuovo, oppure esporta senza account e password.</string>
+    <string name="settings_backup_error_export_password_lost">La password del backup è andata persa durante la scelta del file, quindi non è stato salvato nulla. Esporta di nuovo.</string>
 </resources>

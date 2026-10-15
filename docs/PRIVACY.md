@@ -323,6 +323,24 @@ Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
 else.
 
+## Manual ZIP backups
+
+Backups exported from Settings include reading data, companion recaps, fonts,
+settings and service addresses. They exclude passwords, tokens and API keys by
+default. If you check “Include accounts, services and passwords”, Liseur also
+includes your library account, KOReader pairing, service API keys and, in the
+Google Play build, your Gemini key. These credentials are encrypted with a
+backup password you choose, using AES-256-GCM and PBKDF2-HMAC-SHA256 with a
+random salt and 600,000 iterations. Only this connection payload is encrypted;
+the other ZIP contents remain readable. Keep the password to restore the
+credentials; Liseur does not save or send it anywhere.
+
+Restoring such a backup replaces saved library and KOReader accounts, service
+configuration and credentials without contacting the servers to sign in.
+Credentials are encrypted again with the new device’s Keystore. Sync cursors,
+acknowledgements and queued work are not transferred. Backups without
+credentials leave existing accounts and API keys alone.
+
 ## Android backup
 
 Liseur takes part in Android's standard backup, so your library, reading

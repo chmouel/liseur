@@ -214,6 +214,23 @@ class RemoteAccountRepository(
 
     suspend fun current(): RemoteServer? = dao.get()
 
+    /** Replaces the saved account offline, retiring even the same account's old agreements. */
+    internal suspend fun restoreBackup(server: RemoteServer?) {
+        changingAccount {
+            inTransaction {
+                val previous = dao.get()
+                retireForAccountSwitch()
+                if (server == null) dao.delete() else dao.upsert(server.copy(
+                    addedAt = nextConnectionStamp(previous?.addedAt ?: 0),
+                    orbitEpoch = nextConnectionStamp(previous?.orbitEpoch ?: 0),
+                ))
+            }
+            val restored = dao.get()
+            if (restored == null) bookOrbit?.clear() else adoptBookOrbit(restored)
+        }
+        relinkUploads()
+    }
+
     suspend fun credentials(): RemoteCredentials? = dao.get()?.credentials
 
     /** Reads the account into the cache, so the first cover need not wait. */

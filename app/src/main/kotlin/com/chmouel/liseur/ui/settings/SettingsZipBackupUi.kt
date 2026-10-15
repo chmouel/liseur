@@ -7,7 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
 import androidx.lifecycle.viewModelScope
@@ -43,9 +45,9 @@ data class SettingsZipBackupUi(
     val bookProgress: BookExportProgress?,
     val exportBooks: () -> Unit,
     val cancelBookExport: () -> Unit,
-    val export: () -> Unit,
+    val export: (CharArray?) -> Unit,
     val restore: () -> Unit,
-    val confirmRestore: () -> Unit,
+    val confirmRestore: (CharArray?) -> Unit,
     val dismissPreview: () -> Unit,
     val close: () -> Unit,
 )
@@ -75,25 +77,84 @@ private data class SettingsBackupState(
     val bookProgress: BookExportProgress? = null,
 )
 
+/** What a document returned by the export picker becomes. */
+internal enum class PickedExport { RUN, ABANDON, DISCARD }
+
+/**
+ * A plain export still runs when the app was recreated behind the picker. An
+ * encrypted one has then lost its in-memory password, so it is abandoned rather
+ * than written without the connections the user asked for.
+ */
+internal fun pickedExport(pending: Boolean, needsPassword: Boolean, hasPassword: Boolean, available: Boolean) = when {
+    !pending || !available -> PickedExport.DISCARD
+    needsPassword && !hasPassword -> PickedExport.ABANDON
+    else -> PickedExport.RUN
+}
+
 private class SettingsBackupViewModel(
     private val repository: SettingsBackupRepository,
     private val bookExport: BookExportRepository,
+    /** Holds only whether an export is pending and needs a password; never the password itself. */
+    private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
     private var activeOperation: Job? = null
     private var closing = false
+    private var exportPassword: CharArray? = null
+
+    fun prepareExport(password: CharArray?) {
+        discardPassword()
+        exportPassword = password
+        savedState[EXPORT_PENDING] = true
+        savedState[EXPORT_NEEDS_PASSWORD] = password != null
+    }
+
+    fun discardPassword() {
+        wipePassword()
+        savedState[EXPORT_PENDING] = false
+        savedState[EXPORT_NEEDS_PASSWORD] = false
+    }
+
+    private fun wipePassword() {
+        exportPassword?.fill('\u0000')
+        exportPassword = null
+    }
 
     override fun onCleared() {
+        wipePassword()
         viewModelScope.launch(NonCancellable) { repository.discardProcessInspections() }
     }
 
-    fun export(uri: Uri) = runBusy {
-        _state.update {
-            it.copy(status = when (val result = repository.exportTo(uri)) {
-                is SettingsBackupExportResult.Exported -> SettingsBackupUiStatus.Exported(result.fonts, result.annotations)
-                is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
-            })
+    fun export(uri: Uri) {
+        val action = pickedExport(
+            pending = savedState[EXPORT_PENDING] ?: false,
+            needsPassword = savedState[EXPORT_NEEDS_PASSWORD] ?: false,
+            hasPassword = exportPassword != null,
+            available = !closing && !_state.value.busy,
+        )
+        val password = exportPassword
+        exportPassword = null
+        savedState[EXPORT_PENDING] = false
+        savedState[EXPORT_NEEDS_PASSWORD] = false
+        if (action != PickedExport.RUN) {
+            password?.fill('\u0000')
+            discardExport(uri)
+            if (action == PickedExport.ABANDON) {
+                _state.update { it.copy(status = SettingsBackupUiStatus.Failed(SettingsBackupFailure.EXPORT_PASSWORD_LOST)) }
+            }
+            return
+        }
+        runBusy {
+            try {
+                val result = repository.exportTo(uri, password)
+                _state.update {
+                    it.copy(status = when (result) {
+                        is SettingsBackupExportResult.Exported -> SettingsBackupUiStatus.Exported(result.fonts, result.annotations)
+                        is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
+                    })
+                }
+            } finally { password?.fill('\u0000') }
         }
     }
 
@@ -134,14 +195,21 @@ private class SettingsBackupViewModel(
         }
     }
 
-    fun confirmRestore() {
-        val archiveId = _state.value.preview?.archiveId ?: return
+    fun confirmRestore(password: CharArray?) {
+        val archiveId = _state.value.preview?.archiveId
+        if (archiveId == null || closing || _state.value.busy) {
+            password?.fill('\u0000')
+            return
+        }
         runBusy {
-            _state.update { it.copy(preview = null) }
+            // A retry must not keep showing the previous attempt's wrong-password status.
+            _state.update { it.copy(status = null) }
             withContext(NonCancellable) {
-                val result = repository.restore(archiveId)
+                val result = try { repository.restore(archiveId, password) }
+                finally { password?.fill('\u0000') }
                 _state.update {
                     it.copy(
+                        preview = if (result == SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD)) it.preview else null,
                         status = when (result) {
                             is SettingsBackupRestoreResult.Restored -> SettingsBackupUiStatus.Restored(
                                 result.fontsImported,
@@ -170,6 +238,7 @@ private class SettingsBackupViewModel(
     }
 
     fun close() {
+        discardPassword()
         if (closing) return
         closing = true
         _state.update { it.copy(busy = true) }
@@ -200,10 +269,13 @@ private class SettingsBackupViewModel(
     }
 
     companion object {
+        private const val EXPORT_PENDING = "export_pending"
+        private const val EXPORT_NEEDS_PASSWORD = "export_needs_password"
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = checkNotNull(this[APPLICATION_KEY])
-                SettingsBackupViewModel(app.container.settingsBackup, app.container.bookExport)
+                SettingsBackupViewModel(app.container.settingsBackup, app.container.bookExport, createSavedStateHandle())
             }
         }
     }
@@ -218,8 +290,8 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
     }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) {
         if (it != null) {
-            if (active) model.export(it) else model.discardExport(it)
-        }
+            if (active) model.export(it) else { model.discardPassword(); model.discardExport(it) }
+        } else model.discardPassword()
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
         if (it != null && active) model.inspect(it)
@@ -234,7 +306,8 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         bookProgress = state.bookProgress,
         exportBooks = { folder.launch(null) },
         cancelBookExport = model::cancelBookExport,
-        export = {
+        export = { password ->
+            model.prepareExport(password)
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
             save.launch("liseur-backup-$date.zip")
         },

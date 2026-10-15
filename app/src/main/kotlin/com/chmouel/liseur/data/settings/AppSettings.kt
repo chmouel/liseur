@@ -559,9 +559,16 @@ class AppSettingsRepository(
      * device's, is rejected with nothing changed; one from before servers
      * were listed has its single server brought into the list.
      */
-    suspend fun restoreBackupValues(values: JSONObject) {
+    suspend fun restoreBackupValues(values: JSONObject, replaceServices: Boolean = false) {
         ServerSettings.validateBackup(values)
         store.edit {
+            if (replaceServices) {
+                it.asMap().keys.filter { key ->
+                    key.name in APP_BACKUP_TYPES && (key.name == ServerSettings.SERVERS_NAME ||
+                        key.name.startsWith("read_aloud_") || key.name.startsWith("speech_") ||
+                        key.name.startsWith("translation_") || key.name.startsWith("companion_"))
+                }.forEach { key -> it.remove(key) }
+            }
             values.applyBackupJson(it, APP_BACKUP_TYPES)
             if (values.has("volume_keys_mode") || values.has("volume_keys_turn_pages")) {
                 if (!values.has("volume_keys_mode")) {

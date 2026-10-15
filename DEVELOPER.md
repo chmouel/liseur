@@ -144,7 +144,8 @@ without it the release build is simply unsigned.
 
 Backups are ZIP files with a versioned `manifest.json`, `settings.json` and
 `annotations.json`, `positions.json`, and `companion.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
-Version 4 adds completed companion chapter recaps; version 3 reading-position archives,
+Version 5 adds an optional password-encrypted `connections.enc.json` payload.
+Version 4 companion-recap archives, version 3 reading-position archives,
 version 2 annotation archives, and version 1 settings-only archives remain readable.
 Annotation export uses indexed keyset pages and a size-bounded staging file;
 reading-position export pages through its URL primary key. Annotation and
@@ -158,8 +159,24 @@ Negative timestamps and
 legacy timestamp conversions that would overflow are rejected.
 The manifest records each payload entry's size and SHA-256 checksum. The
 settings payload uses explicit allowlists for the app and reader preference
-stores; account credentials, server connections, sync metadata, and transient
-notices are not included. Unset keys remain absent so restoring a backup
+stores. Library and KOReader credentials are excluded by default; service
+addresses and feature settings are included, but API keys are excluded.
+The unchecked “Include accounts, services and passwords” option adds the library
+account, KOReader pairing, service API keys and (in Play) the Gemini key. It
+requires a password entered twice. Only the connection payload is encrypted;
+reading data, service addresses, settings and fonts remain ordinary ZIP entries.
+AES-256-GCM uses a fresh 12-byte nonce and a key derived with
+PBKDF2-HMAC-SHA256, a fresh 32-byte salt and 600,000 iterations. The payload
+records its encryption version and parameters. Passwords are held in memory;
+staging files contain only encrypted credentials. Restore previews automatic
+account replacement and asks for the backup password once. Authentication and
+validation finish before any restored data is written; an incorrect password
+allows retry without changing existing data. Account lifecycle repositories
+retire replaced state without network login, and credentials are re-encrypted
+with the destination Keystore. Sync cursors, acknowledgements and pending work
+are excluded. Expired or revoked credentials may still need a later sign-in.
+Backups without the encrypted payload leave accounts and API keys untouched.
+Transient notices are excluded. Unset keys remain absent so restoring a backup
 leaves destination values alone when the archive did not store that setting.
 Custom font entry names retain their content-based identifiers.
 
@@ -194,7 +211,7 @@ versions are rejected. Font files are passed through the normal font importer,
 so its validation and installation limits still apply. Settings are written
 to two independent DataStores, so a storage failure can leave a partial
 restore. An annotation storage failure after settings were applied is also
-reported as a partial restore, as is a position or companion storage failure.
+reported as a partial restore, as is a position, companion or connection storage failure.
 
 The same screen offers a separate folder export for all offline EPUBs, including
 imports, watched-folder books, hidden books, and archived books. Copies use

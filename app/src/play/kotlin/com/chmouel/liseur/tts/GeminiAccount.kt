@@ -19,6 +19,10 @@ internal class GeminiAccount(private val keys: ApiKeyStore, private val connecti
 
     suspend fun key(): String? = keys.get()
 
+    suspend fun restoreKey(key: String?) {
+        if (key == null) keys.clear() else keys.set(key)
+    }
+
     /** Saves [key]; features using the old one hear of it first. */
     fun commitKey(key: String, done: (Boolean) -> Unit) = connections.commitKey(OWNER, { keys.set(key) }, done)
 

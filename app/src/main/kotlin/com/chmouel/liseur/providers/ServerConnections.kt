@@ -218,6 +218,27 @@ internal class ServerConnections(
         }.await()
     }
 
+    /** Replaces all keys of the old and restored service lists under the usual change guard. */
+    suspend fun restoreCredentials(values: JSONObject, restoredKeys: Map<String, String>, restore: suspend () -> Unit) {
+        ServerSettings.validateBackup(values)
+        scope.async {
+            lock.withLock {
+                val owners = settings.settings.first().servers.readable.orEmpty()
+                    .mapNotNullTo(mutableSetOf()) { originOf(it.url) }
+                owners += ServerSettings.decodeServers(values.getString(ServerSettings.SERVERS_NAME))
+                    .mapNotNull { originOf(it.url) }
+                owners += restoredKeys.keys
+                owners += "gemini"
+                changing(owners) {
+                    restore()
+                    owners.filter { it != "gemini" }.forEach { owner ->
+                        restoredKeys[owner]?.let { keys.set(owner, it) } ?: keys.clear(owner)
+                    }
+                }
+            }
+        }.await()
+    }
+
     /**
      * How many models the server at [url] lists, asked with its key: that
      * it answers and takes the key, whatever it is used for.

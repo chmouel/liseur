@@ -305,6 +305,36 @@ class RemoteAccountRepositoryTest {
         assertNull(db.bookDao().getByUrl(replaced)!!.remoteUuid)
     }
 
+    @Test
+    fun `restoring the same bookorbit account from a backup links its uploads again`() = runTest {
+        val repository = repositoryUsing(db.remoteServerDao(), BookOrbitSetup()) { _, sha256 ->
+            sha256 == "a".repeat(64)
+        }
+        repository.connectBookOrbit(BASE, "reader", "hunter2")
+        val server = repository.current()!!
+        val remoteUuid = com.chmouel.liseur.data.bookorbit.BookOrbitScope
+            .remoteId(server.baseUrl, server.accountId!!, 113)
+        val url = "file:///local/one.epub"
+        db.bookOrbitBindingDao().write(
+            BookOrbitBinding(
+                accountKey = server.accountKey, bookUrl = url, bookId = 113, fileId = 352,
+                fileFormat = "epub", fileSize = 100, fileName = null,
+                state = BookOrbitBindingState.DOWNLOADED.name, updatedAt = 1,
+                localSha256 = "a".repeat(64),
+            ),
+        )
+        db.bookDao().upsert(
+            Book(
+                url = url, title = url, author = null, coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, localUri = url, remoteUuid = remoteUuid,
+            ),
+        )
+
+        repository.restoreBackup(server)
+
+        assertEquals(remoteUuid, db.bookDao().getByUrl(url)!!.remoteUuid)
+    }
+
     /** A BookOrbit server that answers capability refreshes in its own shape. */
     private class BookOrbitSetup : ServerSetup {
         override suspend fun connect(

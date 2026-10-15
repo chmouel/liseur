@@ -1,5 +1,8 @@
 package com.chmouel.liseur.ui.settings
 
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +17,8 @@ import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.LinearProgressIndicator
 import com.chmouel.liseur.data.library.BookExportResult
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,6 +29,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -47,7 +60,33 @@ fun SettingsBackupScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-    backup.preview?.let { ready ->
+    var includeConnections by remember { mutableStateOf(false) }
+    var passwordMode by remember { mutableStateOf<String?>(null) }
+    // A wrong password shows only for an attempt made since the restore dialog opened.
+    var restoreAttempted by remember { mutableStateOf(false) }
+    LaunchedEffect(backup.preview) {
+        if (passwordMode == "restore" && backup.preview == null) passwordMode = null
+    }
+    passwordMode?.let { mode ->
+        BackupPasswordDialog(
+            exporting = mode == "export",
+            busy = backup.busy,
+            failed = restoreAttempted &&
+                (backup.status as? SettingsBackupUiStatus.Failed)?.failure == SettingsBackupFailure.PASSWORD,
+            onDismiss = { if (!backup.busy) passwordMode = null },
+            onConfirm = { password ->
+                if (mode == "export") {
+                    passwordMode = null
+                    backup.export(password)
+                } else {
+                    restoreAttempted = true
+                    backup.confirmRestore(password)
+                }
+            },
+        )
+    }
+
+    backup.preview?.takeIf { passwordMode == null }?.let { ready ->
         val settingCount = pluralStringResource(
             R.plurals.settings_backup_setting_count,
             ready.preview.settingCount,
@@ -76,6 +115,8 @@ fun SettingsBackupScreen(
                         "\n\n" + pluralStringResource(R.plurals.settings_backup_positions_preview, ready.preview.positionCount, ready.preview.positionCount)
                     } else { "" }) + (if (ready.preview.companionRecapCount > 0) {
                         "\n\n" + stringResource(R.string.settings_backup_companion_preview, ready.preview.companionRecapCount)
+                    } else { "" }) + (if (ready.preview.includesConnections) {
+                        "\n\n" + stringResource(R.string.settings_backup_connections_replace)
                     } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
@@ -92,7 +133,12 @@ fun SettingsBackupScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = backup.confirmRestore, enabled = !backup.busy) {
+                TextButton(onClick = {
+                    if (ready.preview.includesConnections) {
+                        restoreAttempted = false
+                        passwordMode = "restore"
+                    } else backup.confirmRestore(null)
+                }, enabled = !backup.busy) {
                     Text(stringResource(R.string.settings_backup_restore_action))
                 }
             },
@@ -132,12 +178,23 @@ fun SettingsBackupScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Row(
+                    Modifier.fillMaxWidth().toggleable(value = includeConnections, enabled = !backup.busy, role = Role.Checkbox,
+                        onValueChange = { includeConnections = it })
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = includeConnections, onCheckedChange = null, enabled = !backup.busy)
+                    Text(stringResource(R.string.settings_backup_include_connections), Modifier.padding(start = 12.dp))
+                }
                 BackupActionRow(
                     icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
                     title = stringResource(R.string.settings_backup_export),
                     subtitle = stringResource(R.string.settings_backup_export_detail),
                     enabled = !backup.busy,
-                    onClick = backup.export,
+                    onClick = {
+                        if (includeConnections) passwordMode = "export" else backup.export(null)
+                    },
                 )
                 BackupActionRow(
                     icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
@@ -269,5 +326,53 @@ private val SettingsBackupFailure.message: Int
         SettingsBackupFailure.UNSUPPORTED_VERSION -> R.string.settings_backup_error_version
         SettingsBackupFailure.TOO_LARGE -> R.string.settings_backup_error_size
         SettingsBackupFailure.STORAGE -> R.string.settings_backup_error_storage
+        SettingsBackupFailure.PASSWORD -> R.string.settings_backup_password_error
         SettingsBackupFailure.RESTORE -> R.string.settings_backup_error_restore
+        SettingsBackupFailure.UNREADABLE_CREDENTIAL -> R.string.settings_backup_error_credential
+        SettingsBackupFailure.EXPORT_PASSWORD_LOST -> R.string.settings_backup_error_export_password_lost
     }
+
+@Composable
+private fun BackupPasswordDialog(
+    exporting: Boolean,
+    busy: Boolean,
+    failed: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (CharArray) -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    var confirmation by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.settings_backup_password_title)) },
+        text = {
+            Column {
+                Text(stringResource(if (exporting) R.string.settings_backup_password_export else R.string.settings_backup_password_restore))
+                OutlinedTextField(
+                    value = password, onValueChange = { password = it }, enabled = !busy,
+                    label = { Text(stringResource(R.string.settings_backup_password_title)) },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                if (exporting) OutlinedTextField(
+                    value = confirmation, onValueChange = { confirmation = it }, enabled = !busy,
+                    label = { Text(stringResource(R.string.settings_backup_password_confirm)) },
+                    singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                if (failed && !exporting) Text(
+                    stringResource(R.string.settings_backup_password_error), color = MaterialTheme.colorScheme.error,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = !busy && password.isNotEmpty() && (!exporting || password == confirmation),
+                onClick = { onConfirm(password.toCharArray()); password = ""; confirmation = "" },
+            ) { Text(stringResource(if (exporting) R.string.settings_backup_export else R.string.settings_backup_restore_action)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}

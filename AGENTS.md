@@ -50,6 +50,9 @@ support; do not add `org.jetbrains.kotlin.android`.
 
 ## Emulator and phone safety
 
+Use `make emulator` to start the emulator in the background. Use `make run-bg`
+to build, install, and launch the app on it without opening scrcpy.
+
 Emulators are disposable: install, wipe, seed, rotate, drive with `adb`, and
 write test data with `run-as` as needed. Use `SERIAL=` or `adb -s` whenever
 more than one device is attached. Treat any serial that is not

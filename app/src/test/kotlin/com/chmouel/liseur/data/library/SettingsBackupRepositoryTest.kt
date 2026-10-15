@@ -875,7 +875,7 @@ class SettingsBackupRepositoryTest {
         ZipFile(File(uri.path!!)).use { zip ->
             assertTrue(zip.getEntry("annotations.json") != null)
             val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
-            assertEquals(4, manifest.getInt("format"))
+            assertEquals(5, manifest.getInt("format"))
         }
 
         db.annotationDao().deleteForBook("source-book")
@@ -1044,6 +1044,117 @@ class SettingsBackupRepositoryTest {
         url = url, title = "A book", author = "An author", coverPath = null, source = null,
         addedAt = 0, lastOpenedAt = null,
     )
+
+    @Test
+    fun `an unreadable saved credential fails the encrypted export with its own reason`() = runTest {
+        val app = AppSettingsRepository(store("unreadable-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("unreadable-reader.preferences_pb"))
+        val repository = SettingsBackupRepository(
+            context, app, reader, UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            exportConnections = { throw com.chmouel.liseur.data.remote.UnreadableCredentialException() },
+        )
+        val uri = Uri.fromFile(File(folder.root, "unreadable.zip"))
+        assertEquals(
+            SettingsBackupExportResult.Failed(SettingsBackupFailure.UNREADABLE_CREDENTIAL),
+            repository.exportTo(uri, "backup password".toCharArray()),
+        )
+    }
+
+    @Test
+    fun `encrypted restore authenticates before writes and can retry without inspecting again`() = runTest {
+        val app = AppSettingsRepository(store("encrypted-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("encrypted-reader.preferences_pb"))
+        val payload = JSONObject().put("version", 1).put("account", JSONObject.NULL)
+            .put("kosync", JSONObject.NULL).put("keys", JSONObject()).put("gemini", "secret-gemini")
+        var applied = 0
+        var failAfterWrite = false
+        var failPreparation = false
+        val repository = SettingsBackupRepository(
+            context, app, reader, UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            exportConnections = { payload },
+            prepareConnectionRestore = { restored, values ->
+                if (failPreparation) throw IOException("Keystore unavailable")
+                suspend {
+                assertEquals("secret-gemini", restored.getString("gemini"))
+                applied++
+                app.restoreBackupValues(values)
+                if (failAfterWrite) throw IOException("Storage failed")
+                }
+            },
+        )
+        app.setThemeMode(ThemeMode.DARK)
+        val uri = Uri.fromFile(File(folder.root, "encrypted.zip"))
+        assertTrue(repository.exportTo(uri, "backup password".toCharArray()) is SettingsBackupExportResult.Exported)
+        ZipFile(File(uri.path!!)).use { zip ->
+            val encrypted = zip.getInputStream(zip.getEntry("connections.enc.json")).readBytes().toString(Charsets.UTF_8)
+            assertFalse(encrypted.contains("secret-gemini"))
+        }
+        app.setThemeMode(ThemeMode.LIGHT)
+        val ready = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertTrue(ready.preview.includesConnections)
+        assertEquals(0, applied)
+        context.cacheDir.listFiles().orEmpty().filter { it.name.startsWith("settings-backup-") }.forEach { directory ->
+            directory.walkTopDown().filter { it.isFile }.forEach { file ->
+                assertFalse(file.readText().contains("secret-gemini"))
+            }
+        }
+        val cancelled = repository.inspect(uri) as SettingsBackupInspection.Ready
+        repository.discardInspection(cancelled.archiveId)
+        assertEquals(0, applied)
+        assertEquals(SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD), repository.restore(ready.archiveId))
+        assertEquals(SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD),
+            repository.restore(ready.archiveId, "wrong".toCharArray()))
+        assertEquals(0, applied)
+        assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
+        assertTrue(repository.restore(ready.archiveId, "backup password".toCharArray()) is SettingsBackupRestoreResult.Restored)
+        assertEquals(1, applied)
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        val plainUri = Uri.fromFile(File(folder.root, "plain.zip"))
+        assertTrue(repository.exportTo(plainUri) is SettingsBackupExportResult.Exported)
+        ZipFile(File(plainUri.path!!)).use { assertEquals(null, it.getEntry("connections.enc.json")) }
+        assertTrue(restore(repository, plainUri) is SettingsBackupRestoreResult.Restored)
+        assertEquals(1, applied)
+        failAfterWrite = true
+        app.setThemeMode(ThemeMode.LIGHT)
+        val retry = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored,
+            repository.restore(retry.archiveId, "backup password".toCharArray()))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        failPreparation = true
+        app.setThemeMode(ThemeMode.LIGHT)
+        val unprepared = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE),
+            repository.restore(unprepared.archiveId, "backup password".toCharArray()))
+        assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `invalid decrypted connections are rejected before writes`() = runTest {
+        val app = AppSettingsRepository(store("invalid-encrypted-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("invalid-encrypted-reader.preferences_pb"))
+        val settings = JSONObject().put("app", JSONObject().put("theme_mode", "dark").put("ai_servers", "[]"))
+            .put("reader", JSONObject())
+        val invalid = JSONObject().put("version", 1).put("account", JSONObject.NULL)
+            .put("kosync", JSONObject.NULL).put("keys", JSONObject()).put("gemini", 123)
+        val encrypted = BackupEncryption.encrypt(invalid.toString().toByteArray(), "password".toCharArray())
+        val uri = Uri.fromFile(archive("invalid-connections.zip", settings, mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to "{\"format\":1,\"application\":\"liseur\",\"positions\":[]}".toByteArray(),
+            "companion.json" to "{\"format\":1,\"application\":\"liseur\",\"recaps\":[]}".toByteArray(),
+            "connections.enc.json" to encrypted,
+        ), format = 5))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val ready = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            repository.restore(ready.archiveId, "password".toCharArray()))
+        assertEquals(ThemeMode.SYSTEM, app.settings.first().themeMode)
+    }
 
     private fun repository(
         app: AppSettingsRepository,

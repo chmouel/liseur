@@ -14,8 +14,8 @@ import java.io.File
 
 /**
  * One API key a speech service is used with, encrypted with a Keystore key in a file under no_backup:
- * outside Auto Backup, device transfer and the settings export, so it
- * never leaves the device. A key that can no longer be decrypted (the
+ * outside Auto Backup and device transfer. Manual backups include it only
+ * when the reader opts into password encryption. A key that can no longer be decrypted (the
  * Keystore was reset) counts as no key. Reads, saves and removals take
  * turns, so a removal cannot be undone by a save that was still being
  * written.
@@ -60,7 +60,7 @@ class ApiKeyStore(
     }
 
     suspend fun clear() = locked {
-        file.delete()
+        check(!file.exists() || file.delete()) { "Could not remove the API key" }
         mutableConfigured.value = false
     }
 

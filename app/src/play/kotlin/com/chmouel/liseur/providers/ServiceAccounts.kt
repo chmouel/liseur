@@ -16,6 +16,10 @@ import com.chmouel.liseur.ui.settings.SettingsGroup
 internal class ServiceAccounts(context: Context, connections: ServerConnections) {
     val gemini = GeminiAccount(ApiKeyStore.gemini(context), connections)
 
+    suspend fun backupKey(): String? = gemini.key()
+
+    suspend fun restoreKey(key: String?) = gemini.restoreKey(key)
+
     /** The accounts' rows at the top of the Services page. */
     @Composable
     fun Rows() {

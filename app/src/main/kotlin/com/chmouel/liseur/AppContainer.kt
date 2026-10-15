@@ -374,7 +374,16 @@ class AppContainer(context: Context) {
         ),
         companion = CompanionBackupRepository({ companionStore }, database.bookDao(), ::companionStoreExists),
         restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
+        exportConnections = { connectionBackup.export() },
+        prepareConnectionRestore = { payload, values -> connectionBackup.prepareRestore(payload, values) },
     )
+
+    private val connectionBackup by lazy {
+        com.chmouel.liseur.data.library.ConnectionBackupRepository(
+            remoteAccount, kosyncAccount, appSettings, serverConnections, serviceAccounts,
+            beforeReplace = { bookDownloads.cancelAll(com.chmouel.liseur.data.calibre.BulkStopReason.ACCOUNT_CHANGED) },
+        )
+    }
 
     val bookExport = BookExportRepository(context.applicationContext, database.bookDao())
 

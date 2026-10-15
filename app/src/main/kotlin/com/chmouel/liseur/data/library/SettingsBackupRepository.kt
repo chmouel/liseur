@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Log
+import com.chmouel.liseur.data.remote.UnreadableCredentialException
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.APP_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.AutoScrollPreference
@@ -57,6 +58,11 @@ enum class SettingsBackupFailure {
     TOO_LARGE,
     STORAGE,
     RESTORE,
+    PASSWORD,
+    /** A saved account credential can no longer be read on this device. */
+    UNREADABLE_CREDENTIAL,
+    /** The app was recreated behind the file picker, losing the in-memory backup password. */
+    EXPORT_PASSWORD_LOST,
 }
 
 data class SettingsBackupPreview(
@@ -67,6 +73,7 @@ data class SettingsBackupPreview(
     val matchedAnnotationBooks: Int = 0,
     val positionCount: Int = 0,
     val companionRecapCount: Int = 0,
+    val includesConnections: Boolean = false,
 )
 
 sealed interface SettingsBackupInspection {
@@ -94,7 +101,7 @@ sealed interface SettingsBackupRestoreResult {
     data object PartiallyRestored : SettingsBackupRestoreResult
 }
 
-/** Versioned archive for settings, fonts, annotations, positions, and companion recaps. */
+/** Versioned archive for reading data, settings, fonts, and optional encrypted connections. */
 class SettingsBackupRepository(
     private val context: Context,
     private val appSettings: AppSettingsRepository,
@@ -104,11 +111,13 @@ class SettingsBackupRepository(
     private val positions: ReadingPositionBackupRepository,
     private val companion: CompanionBackupRepository,
     /** Writes the app settings of an archive; the app also ends what used a server the archive replaces. */
-    private val restoreAppSettings: suspend (JSONObject) -> Unit = appSettings::restoreBackupValues,
+    private val restoreAppSettings: suspend (JSONObject) -> Unit = { appSettings.restoreBackupValues(it) },
+    private val exportConnections: suspend () -> JSONObject = { error("Connection backup unavailable") },
+    private val prepareConnectionRestore: (JSONObject, JSONObject) -> (suspend () -> Unit) = { _, _ -> error("Connection restore unavailable") },
 ) {
     private val operationMutex = Mutex()
 
-    suspend fun exportTo(target: Uri): SettingsBackupExportResult = withContext(Dispatchers.IO) {
+    suspend fun exportTo(target: Uri, password: CharArray? = null): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
         var completed = false
         var annotationFile: File? = null
@@ -118,7 +127,20 @@ class SettingsBackupRepository(
             val settings = JSONObject()
                 .put("app", appSettings.backupValues())
                 .put("reader", readerPreferences.backupValues())
+            if (password != null && !settings.getJSONObject("app").has(ServerSettings.SERVERS_NAME)) {
+                settings.getJSONObject("app").put(ServerSettings.SERVERS_NAME, "[]")
+            }
             canonicalizeBackupSettings(settings)
+            val connectionBytes = password?.let {
+                val payload = try {
+                    exportConnections()
+                } catch (e: UnreadableCredentialException) {
+                    throw BackupFailureException(SettingsBackupFailure.UNREADABLE_CREDENTIAL)
+                }
+                ConnectionBackupRepository.validate(payload, settings.getJSONObject("app"))
+                val plaintext = payload.toString().toByteArray(Charsets.UTF_8)
+                try { BackupEncryption.encrypt(plaintext, it) } finally { plaintext.fill(0) }
+            }
             val settingsBytes = settings.toString().toByteArray(Charsets.UTF_8)
             if (settingsBytes.size > MAX_SETTINGS_BYTES) {
                 return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
@@ -157,7 +179,8 @@ class SettingsBackupRepository(
             listed += annotationMetadata
             listed += positionMetadata
             listed += companionMetadata
-            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size + companionMetadata.size
+            connectionBytes?.let { listed += EntryMetadata(CONNECTIONS_PATH, it.size.toLong(), sha256(it)) }
+            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size + companionMetadata.size + (connectionBytes?.size ?: 0)
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
@@ -207,6 +230,7 @@ class SettingsBackupRepository(
                 writeFileEntry(zip, ANNOTATIONS_PATH, stagedAnnotations)
                 writeFileEntry(zip, POSITIONS_PATH, stagedPositions)
                 writeFileEntry(zip, COMPANION_PATH, stagedCompanion)
+                connectionBytes?.let { writeEntry(zip, CONNECTIONS_PATH, it) }
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
                     val actual = writeFileEntry(zip, expected.path, font.file)
@@ -257,6 +281,9 @@ class SettingsBackupRepository(
                     val annotationPreview = annotations.previewContents(decodeAnnotations(result.entries))
                     val positionContents = decodePositions(result.entries)
                     val companionContents = decodeCompanion(result.entries)
+                    result.entries[CONNECTIONS_PATH]?.let {
+                        BackupEncryption.validate(readStagedBytes(it.file, BackupEncryption.MAX_BYTES))
+                    }
                     val index = JSONObject().put(
                         "entries",
                         JSONArray().also { values ->
@@ -282,6 +309,7 @@ class SettingsBackupRepository(
                             matchedAnnotationBooks = annotationPreview.matchedBooks,
                             positionCount = positionContents.size,
                             companionRecapCount = companionContents.size,
+                            includesConnections = CONNECTIONS_PATH in result.entries,
                         ),
                         result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
                     )
@@ -302,10 +330,11 @@ class SettingsBackupRepository(
         }
     }
 
-    suspend fun restore(archiveId: String): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
+    suspend fun restore(archiveId: String, password: CharArray? = null): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
         val archive = readStagedArchive(archiveId)
             ?: return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+        var retainForRetry = false
         try {
             val settings = try {
                 decodeSettings(archive.entries.getValue(SETTINGS_PATH).file).also(::validateSettings)
@@ -335,9 +364,37 @@ class SettingsBackupRepository(
                 return@withContext SettingsBackupRestoreResult.Failed(e.failure)
             }
 
+            val connections = archive.entries[CONNECTIONS_PATH]?.let { entry ->
+                val plaintext = try {
+                    if (password == null) throw IllegalArgumentException("Password required")
+                    BackupEncryption.decrypt(readStagedBytes(entry.file, BackupEncryption.MAX_BYTES), password)
+                } catch (e: Exception) {
+                    retainForRetry = true
+                    return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD)
+                }
+                try {
+                    JSONObject(plaintext.toString(Charsets.UTF_8)).also {
+                        ConnectionBackupRepository.validate(it, settings.getJSONObject("app"))
+                    }
+                } catch (e: Exception) {
+                    return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+                } finally { plaintext.fill(0) }
+            }
+
+            val applyConnections = try {
+                connections?.let { prepareConnectionRestore(it, settings.getJSONObject("app")) }
+            } catch (e: Exception) {
+                return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
+            }
             var appSettingsRestored = false
             try {
-                restoreAppSettings(settings.getJSONObject("app"))
+                // Once a connection restore begins, any failure may follow durable writes.
+                if (applyConnections != null) {
+                    appSettingsRestored = true
+                    applyConnections()
+                } else {
+                    restoreAppSettings(settings.getJSONObject("app"))
+                }
                 appSettingsRestored = true
                 readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
             } catch (e: CancellationException) {
@@ -407,7 +464,7 @@ class SettingsBackupRepository(
                 companionRecapsAdded,
             )
         } finally {
-            removeStaging(archive.stagingDirectory)
+            if (!retainForRetry) removeStaging(archive.stagingDirectory)
         }
         }
     }
@@ -457,7 +514,7 @@ class SettingsBackupRepository(
             if (!file.isFile) return null
             entries[path] = StagedEntry(file, file.length(), "", displayName)
         }
-        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH) && !it.startsWith("fonts/") }) {
+        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH) && !it.startsWith("fonts/") }) {
             return null
         }
         return ArchiveResult.Valid(directory, entries)
@@ -524,7 +581,7 @@ class SettingsBackupRepository(
                     if (
                         entry.isDirectory ||
                         !safePath(path) ||
-                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH) && !path.startsWith("fonts/") ||
+                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH) && !path.startsWith("fonts/") ||
                         path in entries ||
                         entries.size >= MAX_ARCHIVE_ENTRIES
                     ) {
@@ -536,6 +593,7 @@ class SettingsBackupRepository(
                         ANNOTATIONS_PATH -> MAX_ANNOTATIONS_BYTES
                         POSITIONS_PATH -> MAX_POSITIONS_BYTES
                         COMPANION_PATH -> MAX_COMPANION_BYTES
+                        CONNECTIONS_PATH -> BackupEncryption.MAX_BYTES
                         else -> MAX_ENTRY_BYTES
                     }
                     val staged = stageEntry(
@@ -578,7 +636,7 @@ class SettingsBackupRepository(
             if (manifest.opt("application") != "liseur") {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.opt("format") !in setOf(1, 2, 3, FORMAT)) {
+            if (manifest.opt("format") !in setOf(1, 2, 3, 4, FORMAT)) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
             if ((manifest.optInt("format") >= 2) != (ANNOTATIONS_PATH in entries)) {
@@ -588,6 +646,9 @@ class SettingsBackupRepository(
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
             if ((manifest.optInt("format") >= 4) != (COMPANION_PATH in entries)) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            if (manifest.optInt("format") < 5 && CONNECTIONS_PATH in entries) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
             val listed = manifest.optJSONArray("entries")
@@ -982,11 +1043,12 @@ class SettingsBackupRepository(
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")
-        private const val FORMAT = 4
+        private const val FORMAT = 5
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"
         private const val ANNOTATIONS_PATH = "annotations.json"
         private const val POSITIONS_PATH = "positions.json"
+        private const val CONNECTIONS_PATH = "connections.enc.json"
         private const val COMPANION_PATH = "companion.json"
         // JSON trees expand well beyond their file size during inspection and restore.
         private const val MAX_READING_DATA_BYTES = 4L * 1024 * 1024
@@ -997,9 +1059,9 @@ class SettingsBackupRepository(
         private const val MAX_MANIFEST_BYTES = 1024L * 1024
         private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS
         private const val MAX_ENTRY_BYTES = UserFontRepository.MAX_BYTES
-        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 5
+        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 6
         private const val MAX_TOTAL_BYTES =
-            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES
+            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES + BackupEncryption.MAX_BYTES
         private const val BUFFER_SIZE = 32 * 1024
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")
