@@ -94,4 +94,6 @@ The Reading section it landed in later moved behind a row of its own,
 so the chip row is now in **Settings -> Reading & navigation**
 (`ui/settings/ReadingNavigationScreen.kt`), still directly under
 "Volume keys turn pages" and still not in Reading appearance. See
-`docs/adr/0001-advanced-reading-menu.md`.
+`docs/adr/0001-advanced-reading-menu.md`. Both rows have since moved
+together into that screen's Advanced section, since a reader sets them
+once when setting up the app.

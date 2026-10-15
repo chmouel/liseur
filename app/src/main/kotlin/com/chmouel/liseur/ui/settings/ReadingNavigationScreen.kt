@@ -131,15 +131,6 @@ fun ReadingNavigationScreen(
                     .padding(bottom = 32.dp),
             ) {
                 SettingsGroup(stringResource(R.string.settings_reading)) {
-                    ChipRow(
-                        title = stringResource(R.string.settings_volume_keys),
-                        subtitle = stringResource(R.string.settings_volume_keys_detail),
-                        options = VolumeKeyMode.entries,
-                        selected = settings.volumeKeyMode,
-                        label = { stringResource(it.label) },
-                        onSelected = onVolumeKeyMode,
-                    )
-                    RowDivider()
                     SwitchRow(
                         title = stringResource(R.string.settings_resume),
                         subtitle = stringResource(R.string.settings_resume_detail),
@@ -229,6 +220,15 @@ fun ReadingNavigationScreen(
                     onExpandedChange = { advancedOpen = it },
                 ) {
                     PageTurnStyleRow(selected = pageTurnStyle, onSelected = onPageTurnStyle)
+                    RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_volume_keys),
+                        subtitle = stringResource(R.string.settings_volume_keys_detail),
+                        options = VolumeKeyMode.entries,
+                        selected = settings.volumeKeyMode,
+                        label = { stringResource(it.label) },
+                        onSelected = onVolumeKeyMode,
+                    )
                     RowDivider()
                     ChipRow(
                         title = stringResource(R.string.settings_tap_zones),
