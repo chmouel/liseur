@@ -792,7 +792,10 @@
     <string name="settings_section_expanded">Развёрнуто</string>
     <string name="settings_section_collapsed">Свёрнуто</string>
     <string name="settings_volume_keys">Клавиши громкости листают страницы</string>
-    <string name="settings_volume_keys_detail">Громкость вниз — вперёд, громкость вверх — назад.</string>
+    <string name="settings_volume_keys_detail">Выберите, перелистывать ли страницы клавишами громкости и в каком направлении.</string>
+    <string name="settings_volume_keys_on">Включено</string>
+    <string name="settings_volume_keys_off">Выключено</string>
+    <string name="settings_volume_keys_reversed">Наоборот</string>
     <string name="settings_tap_zones">Стороны перелистывания</string>
     <string name="settings_tap_zones_detail">Какая сторона страницы при нажатии листает вперёд. «Поменять» ставит вперёд под другой большой палец — для удержания телефона другой рукой: в большинстве книг левая сторона идёт дальше, правая — назад, а в книге справа налево наоборот. Середина по-прежнему открывает меню, клавиши громкости не меняются, а у книги, читаемой прокруткой, сторон для нажатия нет.</string>
     <string name="tap_zones_standard">Обычные</string>

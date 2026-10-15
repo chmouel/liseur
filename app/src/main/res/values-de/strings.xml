@@ -753,7 +753,10 @@
     <string name="settings_section_expanded">Ausgeklappt</string>
     <string name="settings_section_collapsed">Eingeklappt</string>
     <string name="settings_volume_keys">Lautstärketasten blättern</string>
-    <string name="settings_volume_keys_detail">Leiser geht vorwärts, lauter geht zurück.</string>
+    <string name="settings_volume_keys_detail">Lege fest, ob die Lautstärketasten umblättern und in welche Richtung.</string>
+    <string name="settings_volume_keys_on">Ein</string>
+    <string name="settings_volume_keys_off">Aus</string>
+    <string name="settings_volume_keys_reversed">Umgekehrt</string>
     <string name="settings_tap_zones">Umblätterseiten</string>
     <string name="settings_tap_zones_detail">Welche Seite der Seite vorwärts blättert, wenn du tippst. Vertauscht legt das Vorwärtsblättern unter den anderen Daumen, wenn du das Handy in der anderen Hand hältst: in den meisten Büchern geht links weiter und rechts zurück, und in einem von rechts nach links gelesenen Buch ist es umgekehrt. Die Mitte öffnet weiterhin das Menü, die Lautstärketasten bleiben unverändert, und ein durch Scrollen gelesenes Buch hat keine Seiten zum Tippen.</string>
     <string name="tap_zones_standard">Standard</string>

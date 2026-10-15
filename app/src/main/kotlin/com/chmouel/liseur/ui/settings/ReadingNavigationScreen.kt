@@ -54,6 +54,7 @@ import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.TapZones
+import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.WiktionaryEditions
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
@@ -83,7 +84,7 @@ fun ReadingNavigationScreen(
     settings: AppSettings,
     pageTurnStyle: PageTurnStyle,
     vendorName: String?,
-    onVolumeKeys: (Boolean) -> Unit,
+    onVolumeKeyMode: (VolumeKeyMode) -> Unit,
     onTapZones: (TapZones) -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
@@ -130,11 +131,13 @@ fun ReadingNavigationScreen(
                     .padding(bottom = 32.dp),
             ) {
                 SettingsGroup(stringResource(R.string.settings_reading)) {
-                    SwitchRow(
+                    ChipRow(
                         title = stringResource(R.string.settings_volume_keys),
                         subtitle = stringResource(R.string.settings_volume_keys_detail),
-                        checked = settings.volumeKeysTurnPages,
-                        onCheckedChange = onVolumeKeys,
+                        options = VolumeKeyMode.entries,
+                        selected = settings.volumeKeyMode,
+                        label = { stringResource(it.label) },
+                        onSelected = onVolumeKeyMode,
                     )
                     RowDivider()
                     SwitchRow(
@@ -557,6 +560,13 @@ private val EInkMode.label: Int
         EInkMode.AUTO -> R.string.eink_auto
         EInkMode.ON -> R.string.eink_on
         EInkMode.OFF -> R.string.eink_off
+    }
+
+private val VolumeKeyMode.label: Int
+    get() = when (this) {
+        VolumeKeyMode.ON -> R.string.settings_volume_keys_on
+        VolumeKeyMode.OFF -> R.string.settings_volume_keys_off
+        VolumeKeyMode.REVERSED -> R.string.settings_volume_keys_reversed
     }
 
 /** Internal: the Settings row summarises the current side in its subtitle. */

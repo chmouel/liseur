@@ -21,8 +21,52 @@ class AppSettingsRepositoryTest {
     @get:Rule
     val folder = TemporaryFolder()
 
-    private fun store() =
-        PreferenceDataStoreFactory.create { folder.newFile("app.preferences_pb") }
+    private fun store(name: String = "app.preferences_pb") =
+        PreferenceDataStoreFactory.create { folder.newFile(name) }
+
+    @Test
+    fun `volume key mode is on by default`() = runTest {
+        assertEquals(VolumeKeyMode.ON, AppSettings().volumeKeyMode)
+        assertEquals(VolumeKeyMode.ON, AppSettingsRepository(store()).settings.first().volumeKeyMode)
+    }
+
+    @Test
+    fun `legacy volume key preference maps to on or off`() = runTest {
+        listOf(
+            true to VolumeKeyMode.ON,
+            false to VolumeKeyMode.OFF,
+        ).forEach { (enabled, expected) ->
+            val store = store("volume-keys-$enabled.preferences_pb")
+            store.edit { it[booleanPreferencesKey("volume_keys_turn_pages")] = enabled }
+
+            assertEquals(expected, AppSettingsRepository(store).settings.first().volumeKeyMode)
+        }
+    }
+
+    @Test
+    fun `volume key mode persists and removes the legacy preference`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+
+        VolumeKeyMode.entries.forEach { mode ->
+            repo.setVolumeKeyMode(mode)
+
+            assertEquals(mode, repo.settings.first().volumeKeyMode)
+            assertEquals(mode.id, store.data.first()[stringPreferencesKey("volume_keys_mode")])
+            assertNull(store.data.first()[booleanPreferencesKey("volume_keys_turn_pages")])
+        }
+    }
+
+    @Test
+    fun `legacy volume key preference is exported as a mode`() = runTest {
+        val store = store()
+        store.edit { it[booleanPreferencesKey("volume_keys_turn_pages")] = false }
+
+        val backup = AppSettingsRepository(store).backupValues()
+
+        assertEquals("off", backup.getString("volume_keys_mode"))
+        assertFalse(backup.has("volume_keys_turn_pages"))
+    }
 
     @Test
     fun `pinch to resize is on by default in app settings`() {

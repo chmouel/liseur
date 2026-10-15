@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontImport
 import com.chmouel.liseur.data.settings.UserFontRepository
+import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
@@ -725,6 +726,7 @@ class SettingsBackupRepository(
         }
         validateIds(app, mapOf(
             "theme_mode" to setOf("system", "light", "dark"),
+            "volume_keys_mode" to VolumeKeyMode.entries.map { it.id }.toSet(),
             "tap_zones" to setOf("standard", "swapped"),
             "library_sort" to setOf("recent", "title", "author", "added", "series"),
             "eink_mode" to setOf("auto", "on", "off"),

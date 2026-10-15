@@ -777,7 +777,10 @@
     <string name="settings_section_expanded">Expanded</string>
     <string name="settings_section_collapsed">Collapsed</string>
     <string name="settings_volume_keys">Volume keys turn pages</string>
-    <string name="settings_volume_keys_detail">Volume down goes forward, volume up goes back.</string>
+    <string name="settings_volume_keys_detail">Choose whether volume keys turn pages and which direction they turn.</string>
+    <string name="settings_volume_keys_on">On</string>
+    <string name="settings_volume_keys_off">Off</string>
+    <string name="settings_volume_keys_reversed">Reversed</string>
     <string name="settings_tap_zones">Page-turn sides</string>
     <string name="settings_tap_zones_detail">Which side of the page turns forward when you tap it. Swapped puts the forward turn under the other thumb, for holding the phone in the other hand: in most books the left of the page goes on and the right goes back, and in a book that reads right to left it is the other way about. The middle still opens the menu, the volume keys are unchanged, and a book read by scrolling has no sides to tap.</string>
     <string name="tap_zones_standard">Standard</string>

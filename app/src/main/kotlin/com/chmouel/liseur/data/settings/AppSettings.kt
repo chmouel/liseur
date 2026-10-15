@@ -85,6 +85,27 @@ enum class EInkMode(val id: String) {
     }
 }
 
+/** How physical volume keys move through a book. */
+enum class VolumeKeyMode(val id: String) {
+    ON("on"),
+    OFF("off"),
+    REVERSED("reversed"),
+    ;
+
+    /** Direction for a volume key, or null when it should control system volume. */
+    fun forwardFor(isVolumeDown: Boolean): Boolean? = when (this) {
+        ON -> isVolumeDown
+        OFF -> null
+        REVERSED -> !isVolumeDown
+    }
+
+    companion object {
+        val Default = ON
+
+        fun fromId(id: String?): VolumeKeyMode = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 /**
  * Which side of a paginated page turns forward.
  *
@@ -105,8 +126,8 @@ enum class EInkMode(val id: String) {
  * actually occurs. See `docs/adr/0009-tap-zone-customization.md`.
  *
  * The centre and the top strip still reveal the chrome under both, the
- * volume keys still go forward on down, and a book read by scrolling has
- * no page sides to tap in the first place.
+ * default volume-key mode still goes forward on down, and a book read by
+ * scrolling has no page sides to tap in the first place.
  */
 enum class TapZones(val id: String) {
     STANDARD("standard"),
@@ -151,7 +172,8 @@ enum class DefinitionTarget(val id: String) {
  * @param dynamicColor Take the palette from the wallpaper (Android 12+).
  *   On by default where the system can do it; the hand-made palette is
  *   what you get back by turning it off, and what older phones always get.
- * @param volumeKeysTurnPages Volume keys page forward and back while reading.
+ * @param volumeKeyMode Whether volume keys move through the book, and in
+ *   which direction.
  * @param tapZones Which side of a paginated page turns forward.
  * @param pinchToResize A two-finger pinch on the page changes the reading
  *   font size. On by default; it is here for a grip that produces stray
@@ -232,7 +254,7 @@ enum class DefinitionTarget(val id: String) {
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
     val dynamicColor: Boolean = true,
-    val volumeKeysTurnPages: Boolean = true,
+    val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.Default,
     val tapZones: TapZones = TapZones.Default,
     val pinchToResize: Boolean = true,
     val resumeLastBook: Boolean = true,
@@ -372,7 +394,8 @@ class AppSettingsRepository(
     private object Keys {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
-        val VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
+        val LEGACY_VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
+        val VOLUME_KEY_MODE = stringPreferencesKey("volume_keys_mode")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
         val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
@@ -410,6 +433,13 @@ class AppSettingsRepository(
         val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
         val COMPANION_GEMINI_MODEL = stringPreferencesKey(COMPANION_GEMINI_MODEL_NAME)
     }
+
+    private fun Preferences.volumeKeyMode(): VolumeKeyMode =
+        this[Keys.VOLUME_KEY_MODE]?.let { VolumeKeyMode.fromId(it) }
+            ?: this[Keys.LEGACY_VOLUME_KEYS]?.let {
+                if (it) VolumeKeyMode.ON else VolumeKeyMode.OFF
+            }
+            ?: VolumeKeyMode.Default
 
     /**
      * The catalog address whose part-read notice has been put away.
@@ -451,7 +481,7 @@ class AppSettingsRepository(
         AppSettings(
             themeMode = ThemeMode.fromId(p[Keys.THEME_MODE]),
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
-            volumeKeysTurnPages = p[Keys.VOLUME_KEYS] ?: true,
+            volumeKeyMode = p.volumeKeyMode(),
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
@@ -508,7 +538,20 @@ class AppSettingsRepository(
     suspend fun current(): AppSettings = settings.first()
 
     /** Stored, user-facing preferences only; account and transient state stay private. */
-    suspend fun backupValues(): JSONObject = store.data.first().backupJson(APP_BACKUP_TYPES.keys)
+    suspend fun backupValues(): JSONObject {
+        val stored = store.data.first()
+        val storedMode = stored[Keys.VOLUME_KEY_MODE]
+        val legacyEnabled = stored[Keys.LEGACY_VOLUME_KEYS]
+        return stored.backupJson(APP_BACKUP_TYPES.keys).apply {
+            remove("volume_keys_turn_pages")
+            if (storedMode == null && legacyEnabled != null) {
+                put(
+                    "volume_keys_mode",
+                    if (legacyEnabled) VolumeKeyMode.ON.id else VolumeKeyMode.OFF.id,
+                )
+            }
+        }
+    }
 
     /**
      * Applies validated allowlisted values in one DataStore edit. An
@@ -520,6 +563,17 @@ class AppSettingsRepository(
         ServerSettings.validateBackup(values)
         store.edit {
             values.applyBackupJson(it, APP_BACKUP_TYPES)
+            if (values.has("volume_keys_mode") || values.has("volume_keys_turn_pages")) {
+                if (!values.has("volume_keys_mode")) {
+                    it[Keys.VOLUME_KEY_MODE] =
+                        if (it[Keys.LEGACY_VOLUME_KEYS] == true) {
+                            VolumeKeyMode.ON.id
+                        } else {
+                            VolumeKeyMode.OFF.id
+                        }
+                }
+                it.remove(Keys.LEGACY_VOLUME_KEYS)
+            }
             ServerSettings.restoreLegacy(it, values, serverName)
             ServerSettings.settleRestore(it, values)
         }
@@ -545,8 +599,11 @@ class AppSettingsRepository(
         store.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
-    suspend fun setVolumeKeysTurnPages(enabled: Boolean) {
-        store.edit { it[Keys.VOLUME_KEYS] = enabled }
+    suspend fun setVolumeKeyMode(mode: VolumeKeyMode) {
+        store.edit {
+            it[Keys.VOLUME_KEY_MODE] = mode.id
+            it.remove(Keys.LEGACY_VOLUME_KEYS)
+        }
     }
 
     suspend fun setTapZones(zones: TapZones) {
@@ -1031,7 +1088,8 @@ class AppSettingsRepository(
 
 internal val APP_BACKUP_TYPES = mapOf(
     "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
-    "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "tap_zones" to BackupValueType.STRING,
+    "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "volume_keys_mode" to BackupValueType.STRING,
+    "tap_zones" to BackupValueType.STRING,
     "pinch_to_resize" to BackupValueType.BOOLEAN, "resume_last_book" to BackupValueType.BOOLEAN,
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,
     "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,

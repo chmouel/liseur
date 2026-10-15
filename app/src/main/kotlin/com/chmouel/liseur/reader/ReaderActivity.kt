@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.UploadPolicy
+import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.readingCssFor
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import org.readium.r2.shared.publication.Layout
@@ -86,7 +87,7 @@ class ReaderActivity : FragmentActivity() {
      * Read once and kept: the key handler runs on every press, and reading
      * it from DataStore there would be both slow and pointlessly async.
      */
-    private var volumeKeysTurnPages = true
+    private var volumeKeyMode = VolumeKeyMode.Default
 
     /**
      * Whether a book is being read aloud, playing or paused. The volume
@@ -95,7 +96,7 @@ class ReaderActivity : FragmentActivity() {
     private var readingAloud = false
 
     private val volumeKeysPage: Boolean
-        get() = volumeKeysTurnPages && !readingAloud
+        get() = volumeKeyMode != VolumeKeyMode.OFF && !readingAloud
 
     private val viewModel: ReaderViewModel by viewModels {
         val open = checkNotNull(target)
@@ -186,7 +187,7 @@ class ReaderActivity : FragmentActivity() {
         // Reading is what the app should come back to next time it opens.
         lifecycleScope.launch { container.sessionState.setLeftFromReader(true) }
         lifecycleScope.launch {
-            container.appSettings.settings.collect { volumeKeysTurnPages = it.volumeKeysTurnPages }
+            container.appSettings.settings.collect { volumeKeyMode = it.volumeKeyMode }
         }
         lifecycleScope.launch {
             container.readAloud.session.map { it != null }.distinctUntilChanged().collect {
@@ -819,10 +820,10 @@ class ReaderActivity : FragmentActivity() {
     /**
      * Hardware keys turn pages, like the Kindle app's optional setting.
      *
-     * Volume is what an e-ink reader's page buttons send, and what the
-     * setting is named after, so it stays behind that setting. Media
-     * keys are deliberately not handled: a reader listening to something
-     * while they read still wants the next track.
+     * Volume is what an e-ink reader's page buttons send, and the setting
+     * chooses their direction in both paginated and scrolling reading.
+     * Media keys are deliberately not handled: a reader listening to
+     * something while they read still wants the next track.
      *
      * The rest come from a keyboard, a cover or a D-pad, the things
      * tablets and e-ink readers get attached to, and are only taken on a
@@ -842,6 +843,11 @@ class ReaderActivity : FragmentActivity() {
         val turner = pageTurner ?: return super.onKeyDown(keyCode, event)
         if (keyCode in VOLUME_KEYS) {
             if (!volumeKeysPage) return super.onKeyDown(keyCode, event)
+            val forward = volumeKeyMode.forwardFor(
+                isVolumeDown = keyCode == KeyEvent.KEYCODE_VOLUME_DOWN,
+            ) ?: return super.onKeyDown(keyCode, event)
+            turner.turn(forward)
+            return true
         } else if (!isWideEnoughForKeyboardPaging) {
             return super.onKeyDown(keyCode, event)
         }
@@ -922,7 +928,6 @@ class ReaderActivity : FragmentActivity() {
 
         /** Keys that mean "on" whichever way the book reads. */
         private val FORWARD_KEYS = setOf(
-            KeyEvent.KEYCODE_VOLUME_DOWN,
             KeyEvent.KEYCODE_PAGE_DOWN,
             KeyEvent.KEYCODE_DPAD_DOWN,
             KeyEvent.KEYCODE_SPACE,
@@ -930,7 +935,6 @@ class ReaderActivity : FragmentActivity() {
 
         /** Keys that mean "back" whichever way the book reads. */
         private val BACK_KEYS = setOf(
-            KeyEvent.KEYCODE_VOLUME_UP,
             KeyEvent.KEYCODE_PAGE_UP,
             KeyEvent.KEYCODE_DPAD_UP,
         )

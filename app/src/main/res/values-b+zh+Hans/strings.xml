@@ -769,7 +769,10 @@
     <string name="settings_section_expanded">已展开</string>
     <string name="settings_section_collapsed">已折叠</string>
     <string name="settings_volume_keys">音量键翻页</string>
-    <string name="settings_volume_keys_detail">音量减键前进，音量加键后退。</string>
+    <string name="settings_volume_keys_detail">选择是否使用音量键翻页，以及翻页方向。</string>
+    <string name="settings_volume_keys_on">开启</string>
+    <string name="settings_volume_keys_off">关闭</string>
+    <string name="settings_volume_keys_reversed">反向</string>
     <string name="settings_tap_zones">翻页区域</string>
     <string name="settings_tap_zones_detail">点按时页面哪一侧向前翻。选择“互换”可将向前翻页置于另一只拇指下，方便换手拿手机：多数图书中页面左侧向前、右侧向后，而在从右向左阅读的书里则相反。中间区域仍打开菜单，音量键不受影响，滚动阅读的书没有可点按的侧边。</string>
     <string name="tap_zones_standard">标准</string>

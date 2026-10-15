@@ -742,7 +742,10 @@
     <string name="settings_section_expanded">Espanso</string>
     <string name="settings_section_collapsed">Compresso</string>
     <string name="settings_volume_keys">I tasti volume girano le pagine</string>
-    <string name="settings_volume_keys_detail">Volume giù va avanti, volume su torna indietro.</string>
+    <string name="settings_volume_keys_detail">Scegli se usare i tasti volume per girare le pagine e in quale direzione.</string>
+    <string name="settings_volume_keys_on">Attivo</string>
+    <string name="settings_volume_keys_off">Disattivo</string>
+    <string name="settings_volume_keys_reversed">Invertito</string>
     <string name="settings_tap_zones">Lati di svolta pagina</string>
     <string name="settings_tap_zones_detail">Quale lato della pagina va avanti quando lo tocchi. Invertito mette la svolta in avanti sotto l\'altro pollice, per tenere il telefono con l\'altra mano: nella maggior parte dei libri la sinistra della pagina va avanti e la destra torna indietro, e in un libro che si legge da destra a sinistra è al contrario. Il centro apre ancora il menu, i tasti volume non cambiano, e un libro letto a scorrimento non ha lati da toccare.</string>
     <string name="tap_zones_standard">Standard</string>

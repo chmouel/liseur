@@ -26,6 +26,7 @@ import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.fonts.SfntFixtures
@@ -233,6 +234,51 @@ class SettingsBackupRepositoryTest {
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
+    }
+
+    @Test
+    fun `volume key modes are backed up and legacy Boolean archives restore`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val sourceApp = AppSettingsRepository(store("volume-mode-source-app.preferences_pb"))
+        sourceApp.setVolumeKeyMode(VolumeKeyMode.REVERSED)
+        val sourceReader = ReaderPreferencesRepository(store("volume-mode-source-reader.preferences_pb"))
+        val backup = File(folder.root, "volume-mode.zip")
+        assertEquals(
+            SettingsBackupExportResult.Exported(0),
+            repository(sourceApp, sourceReader, fonts).exportTo(Uri.fromFile(backup)),
+        )
+        val exported = ZipFile(backup).use { zip ->
+            JSONObject(
+                zip.getInputStream(zip.getEntry("settings.json")).bufferedReader().use {
+                    it.readText()
+                },
+            ).getJSONObject("app")
+        }
+        assertEquals("reversed", exported.getString("volume_keys_mode"))
+        assertFalse(exported.has("volume_keys_turn_pages"))
+
+        val targetApp = AppSettingsRepository(store("volume-mode-target-app.preferences_pb"))
+        val targetReader = ReaderPreferencesRepository(store("volume-mode-target-reader.preferences_pb"))
+        val targetRepository = repository(targetApp, targetReader, fonts)
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0),
+            restore(targetRepository, Uri.fromFile(backup)),
+        )
+        assertEquals(VolumeKeyMode.REVERSED, targetApp.settings.first().volumeKeyMode)
+
+        val legacy = archive(
+            "legacy-volume-mode.zip",
+            JSONObject()
+                .put("app", JSONObject().put("volume_keys_turn_pages", false))
+                .put("reader", JSONObject()),
+        )
+
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0),
+            restore(targetRepository, Uri.fromFile(legacy)),
+        )
+        assertEquals(VolumeKeyMode.OFF, targetApp.settings.first().volumeKeyMode)
     }
 
     @Test
@@ -598,6 +644,7 @@ class SettingsBackupRepositoryTest {
         val reader = ReaderPreferencesRepository(store("invalid-encoded-reader.preferences_pb"))
         val invalidAppSettings = listOf(
             JSONObject().put("library_filters", "future_filter"),
+            JSONObject().put("volume_keys_mode", "sideways"),
             JSONObject().put(
                 "highlight_tints_offered",
                 org.json.JSONArray().put("MAGENTA"),

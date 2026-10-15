@@ -742,7 +742,10 @@
     <string name="settings_section_expanded">Développé</string>
     <string name="settings_section_collapsed">Réduit</string>
     <string name="settings_volume_keys">Les touches de volume tournent les pages</string>
-    <string name="settings_volume_keys_detail">Volume bas avance, volume haut recule.</string>
+    <string name="settings_volume_keys_detail">Choisissez si les touches de volume tournent les pages et dans quel sens.</string>
+    <string name="settings_volume_keys_on">Activé</string>
+    <string name="settings_volume_keys_off">Désactivé</string>
+    <string name="settings_volume_keys_reversed">Inversé</string>
     <string name="settings_tap_zones">Côtés pour tourner la page</string>
     <string name="settings_tap_zones_detail">Quel côté de la page avance quand vous le touchez. Inversé place l\'avance sous l\'autre pouce, pour tenir le téléphone de l\'autre main : dans la plupart des livres, la gauche de la page avance et la droite recule, et dans un livre qui se lit de droite à gauche c\'est l\'inverse. Le milieu ouvre encore le menu, les touches de volume ne changent pas, et un livre lu par défilement n\'a pas de côtés à toucher.</string>
     <string name="tap_zones_standard">Standard</string>

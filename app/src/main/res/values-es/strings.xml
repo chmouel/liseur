@@ -742,7 +742,10 @@
     <string name="settings_section_expanded">Expandido</string>
     <string name="settings_section_collapsed">Plegado</string>
     <string name="settings_volume_keys">Las teclas de volumen pasan página</string>
-    <string name="settings_volume_keys_detail">Bajar el volumen avanza, subir el volumen retrocede.</string>
+    <string name="settings_volume_keys_detail">Elige si las teclas de volumen pasan página y en qué dirección.</string>
+    <string name="settings_volume_keys_on">Activadas</string>
+    <string name="settings_volume_keys_off">Desactivadas</string>
+    <string name="settings_volume_keys_reversed">Invertidas</string>
     <string name="settings_tap_zones">Lados de paso de página</string>
     <string name="settings_tap_zones_detail">Qué lado de la página avanza al tocarlo. Intercambiados pone el avance bajo el otro pulgar, para sujetar el teléfono con la otra mano: en la mayoría de los libros la izquierda de la página avanza y la derecha retrocede, y en un libro que se lee de derecha a izquierda es al revés. El centro sigue abriendo el menú, las teclas de volumen no cambian, y un libro leído desplazando no tiene lados que tocar.</string>
     <string name="tap_zones_standard">Estándar</string>

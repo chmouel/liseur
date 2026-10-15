@@ -53,7 +53,7 @@ book it puts forward back on the right. Both reorderings at once are the
 standard layout again, which is why the function is an equality and not
 a pair of branches.
 
-It lives in `AppSettings` beside `volumeKeysTurnPages` and `scrollMode`,
+It lives in `AppSettings` beside `volumeKeyMode` and `scrollMode`,
 reaches the reader as a `StateFlow` on `ReaderViewModel`, and is read
 through a lambda so that changing it does not tear down and rebuild the
 navigator's input listeners.
