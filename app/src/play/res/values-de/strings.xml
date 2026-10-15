@@ -22,8 +22,8 @@
     <string name="read_aloud_settings_voice_hear">Stimme anhören</string>
     <string name="read_aloud_provider_gemini_summary">Die Online-Stimmen von Google, abgerechnet über deinen Gemini-API-Schlüssel.</string>
     <string name="services_gemini_key">Gemini-API-Schlüssel</string>
-    <string name="services_gemini_key_missing">Füge einen Schlüssel aus Google AI Studio ein, um mit Gemini vorzulesen oder zu übersetzen. Anfragen werden über diesen Schlüssel abgerechnet.</string>
-    <string name="services_gemini_privacy">Text, der mit Gemini vorgelesen oder übersetzt wird, wird an Google gesendet.</string>
+    <string name="services_gemini_key_missing">Erstelle einen Schlüssel in Google AI Studio und füge ihn hier ein. Wird für Vorlesen, Übersetzen und den Lesebegleiter genutzt.</string>
+    <string name="services_gemini_privacy">An Gemini gesendeter Text geht an Google. Bei einem kostenlosen Schlüssel kann Google ihn zur Verbesserung seiner Produkte nutzen, und Menschen können ihn prüfen.</string>
     <string name="translation_provider_gemini_summary">Gemini von Google, mit deinem API-Schlüssel. Abschnitte werden an Google gesendet.</string>
     <string name="translation_gemini_key_refused">Google hat den Gemini-API-Schlüssel abgelehnt.</string>
     <string name="translation_gemini_key_missing">Füge deinen Gemini-API-Schlüssel auf der Seite Externe Dienste und API-Schlüssel hinzu, um mit Gemini zu übersetzen.</string>

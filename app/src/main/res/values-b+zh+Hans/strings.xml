@@ -1039,6 +1039,8 @@
     <string name="read_aloud_settings_key_hint">粘贴你的密钥</string>
     <string name="read_aloud_settings_key_replace">粘贴新密钥以替换</string>
     <string name="read_aloud_settings_key_clear">移除密钥</string>
+    <string name="read_aloud_settings_key_get">获取密钥</string>
+    <string name="read_aloud_settings_key_paste">粘贴</string>
     <string name="read_aloud_settings_voice">声音</string>
     <string name="read_aloud_previous_sentence">上一句</string>
     <string name="read_aloud_next_sentence">下一句</string>

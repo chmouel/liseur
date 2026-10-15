@@ -1166,6 +1166,8 @@
     <string name="read_aloud_settings_key_hint">Вставьте ключ</string>
     <string name="read_aloud_settings_key_replace">Вставьте новый ключ, чтобы заменить его</string>
     <string name="read_aloud_settings_key_clear">Удалить ключ</string>
+    <string name="read_aloud_settings_key_get">Получить ключ</string>
+    <string name="read_aloud_settings_key_paste">Вставить</string>
     <string name="read_aloud_settings_voice">Голос</string>
     <string name="read_aloud_previous_sentence">Предыдущее предложение</string>
     <string name="read_aloud_next_sentence">Следующее предложение</string>

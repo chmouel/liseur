@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -25,9 +28,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
@@ -77,9 +83,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -87,6 +95,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
@@ -806,18 +815,42 @@ internal fun KeyRow(
     failed: Boolean,
     onKey: (owner: String, key: String, done: (Boolean) -> Unit) -> Unit,
     onClear: (owner: String) -> Unit,
+    keyUrl: String? = null,
     focusRequester: FocusRequester = remember { FocusRequester() },
     // Plain remember on purpose: a key half pasted must not outlive the
     // screen in saved instance state.
     draft: KeyDraft = remember { KeyDraft() },
 ) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboard.current
     val focus = LocalFocusManager.current
+    val uriHandler = LocalUriHandler.current
+    val scope = rememberCoroutineScope()
     val save by rememberUpdatedState(onKey)
     LaunchedEffect(owner) { draft.follow(owner, save) }
     DisposableEffect(Unit) { onDispose { draft.commit(save) } }
 
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (keyUrl != null) {
+                TextButton(
+                    onClick = { runCatching { uriHandler.openUri(keyUrl) } },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                ) {
+                    Text(stringResource(R.string.read_aloud_settings_key_get))
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
         Text(
             text = when {
                 owner == null -> stringResource(R.string.read_aloud_settings_key_needs_url)
@@ -840,10 +873,46 @@ internal fun KeyRow(
             isError = failed,
             placeholder = {
                 Text(
-                    stringResource(
+                    text = stringResource(
                         if (configured) R.string.read_aloud_settings_key_replace else R.string.read_aloud_settings_key_hint,
                     ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+            },
+            trailingIcon = if (owner != null) {
+                {
+                    val typed = draft.text.isNotBlank()
+                    IconButton(
+                        onClick = {
+                            if (typed) {
+                                draft.commit(save)
+                                focus.clearFocus()
+                            } else {
+                                // Read only on this tap: the clipboard is the reader's, not ours to watch.
+                                scope.launch {
+                                    val text = clipboard.getClipEntry()?.clipData
+                                        ?.takeIf { it.itemCount > 0 }
+                                        ?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
+                                    if (!text.isNullOrEmpty()) {
+                                        draft.edit(text, owner)
+                                        draft.commit(save)
+                                        focus.clearFocus()
+                                    }
+                                }
+                            }
+                        },
+                    ) {
+                        Icon(
+                            imageVector = if (typed) Icons.Outlined.Check else Icons.Outlined.ContentPaste,
+                            contentDescription = stringResource(
+                                if (typed) R.string.save else R.string.read_aloud_settings_key_paste,
+                            ),
+                        )
+                    }
+                }
+            } else {
+                null
             },
             supportingText = if (failed) {
                 { Text(stringResource(R.string.read_aloud_settings_key_not_saved)) }
@@ -865,23 +934,26 @@ internal fun KeyRow(
                 },
             ),
         )
-        if (privacy != null || (configured && owner != null)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = privacy.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                if (configured && owner != null) {
-                    TextButton(
-                        onClick = {
-                            draft.clear()
-                            onClear(owner)
-                        },
-                    ) {
-                        Text(stringResource(R.string.read_aloud_settings_key_clear))
-                    }
+        if (privacy != null) {
+            Text(
+                text = privacy,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (configured && owner != null) {
+            Row(
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                TextButton(
+                    onClick = {
+                        draft.clear()
+                        onClear(owner)
+                    },
+                ) {
+                    Text(stringResource(R.string.read_aloud_settings_key_clear))
                 }
             }
         }

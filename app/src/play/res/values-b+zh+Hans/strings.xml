@@ -22,8 +22,8 @@
     <string name="read_aloud_settings_voice_hear">试听此声音</string>
     <string name="read_aloud_provider_gemini_summary">Google 的在线语音，费用记在你的 Gemini API 密钥上。</string>
     <string name="services_gemini_key">Gemini API 密钥</string>
-    <string name="services_gemini_key_missing">粘贴 Google AI Studio 的密钥，即可用 Gemini 朗读或翻译。请求费用由该密钥承担。</string>
-    <string name="services_gemini_privacy">用 Gemini 朗读或翻译的文字会发送给 Google。</string>
+    <string name="services_gemini_key_missing">在 Google AI Studio 中创建密钥并粘贴到这里。用于朗读、翻译和阅读伴侣。</string>
+    <string name="services_gemini_privacy">发送给 Gemini 的文字会发送给 Google。使用免费密钥时，Google 可能用这些内容改进其产品，并可能由人工审阅。</string>
     <string name="translation_provider_gemini_summary">Google 的 Gemini，使用你的 API 密钥。文字会发送给 Google。</string>
     <string name="translation_gemini_key_refused">Google 拒绝了该 Gemini API 密钥。</string>
     <string name="translation_gemini_key_missing">在“外部服务和 API 密钥”页面添加你的 Gemini API 密钥，即可用 Gemini 翻译。</string>

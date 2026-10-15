@@ -35,7 +35,12 @@ internal class ServiceAccounts(context: Context, connections: ServerConnections)
                 failed = failure == GeminiAccount.OWNER,
                 onKey = { _, key, done -> gemini.commitKey(key, done) },
                 onClear = { gemini.commitKeyRemoval() },
+                keyUrl = KEY_PAGE,
             )
         }
+    }
+
+    private companion object {
+        const val KEY_PAGE = "https://aistudio.google.com/apikey"
     }
 }

@@ -1094,6 +1094,8 @@
     <string name="read_aloud_settings_key_hint">Schlüssel einfügen</string>
     <string name="read_aloud_settings_key_replace">Neuen Schlüssel einfügen, um ihn zu ersetzen</string>
     <string name="read_aloud_settings_key_clear">Schlüssel entfernen</string>
+    <string name="read_aloud_settings_key_get">Schlüssel holen</string>
+    <string name="read_aloud_settings_key_paste">Einfügen</string>
     <string name="read_aloud_settings_voice">Stimme</string>
     <string name="read_aloud_previous_sentence">Vorheriger Satz</string>
     <string name="read_aloud_next_sentence">Nächster Satz</string>

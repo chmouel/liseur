@@ -1082,6 +1082,8 @@
     <string name="read_aloud_settings_key_hint">Incolla la tua chiave</string>
     <string name="read_aloud_settings_key_replace">Incolla una nuova chiave per sostituirla</string>
     <string name="read_aloud_settings_key_clear">Rimuovi la chiave</string>
+    <string name="read_aloud_settings_key_get">Ottieni una chiave</string>
+    <string name="read_aloud_settings_key_paste">Incolla</string>
     <string name="read_aloud_settings_voice">Voce</string>
     <string name="read_aloud_previous_sentence">Frase precedente</string>
     <string name="read_aloud_next_sentence">Frase successiva</string>

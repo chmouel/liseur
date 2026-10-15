@@ -22,8 +22,8 @@
     <string name="read_aloud_settings_voice_hear">Ascolta questa voce</string>
     <string name="read_aloud_provider_gemini_summary">Le voci online di Google, addebitate alla tua chiave API Gemini.</string>
     <string name="services_gemini_key">Chiave API Gemini</string>
-    <string name="services_gemini_key_missing">Incolla una chiave di Google AI Studio per leggere ad alta voce o tradurre con Gemini. Le richieste sono addebitate a quella chiave.</string>
-    <string name="services_gemini_privacy">Il testo letto ad alta voce o tradotto con Gemini viene inviato a Google.</string>
+    <string name="services_gemini_key_missing">Crea una chiave in Google AI Studio e incollala qui. Usata per la lettura ad alta voce, la traduzione e il compagno di lettura.</string>
+    <string name="services_gemini_privacy">Il testo inviato a Gemini va a Google. Con una chiave gratuita, Google può usarlo per migliorare i suoi prodotti e delle persone possono esaminarlo.</string>
     <string name="translation_provider_gemini_summary">Gemini di Google, con la tua chiave API. I passaggi vengono inviati a Google.</string>
     <string name="translation_gemini_key_refused">Google ha rifiutato la chiave API Gemini.</string>
     <string name="translation_gemini_key_missing">Aggiungi la tua chiave API Gemini nella pagina Servizi esterni e chiavi API per tradurre con Gemini.</string>

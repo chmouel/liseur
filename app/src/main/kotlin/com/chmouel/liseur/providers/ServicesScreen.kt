@@ -493,6 +493,7 @@ private fun ServerScreen(
                 failed = owner != null && keyFailure == owner,
                 onKey = { origin, key, done -> connections.commitKey(origin, key, done) },
                 onClear = { origin -> connections.commitKeyRemoval(origin) },
+                keyUrl = inUse?.keyUrl,
                 focusRequester = keyFocus,
                 draft = keyDraft,
             )

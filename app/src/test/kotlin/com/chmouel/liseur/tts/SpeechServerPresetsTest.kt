@@ -1,7 +1,9 @@
 package com.chmouel.liseur.tts
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpeechServerPresetsTest {
@@ -12,6 +14,12 @@ class SpeechServerPresetsTest {
             // A self-hosted example is the server's own address; /v1 is added to it.
             val expected = if (preset.example) "${preset.url}/v1" else preset.url
             assertEquals(expected, OpenAiTts.baseUrl(preset.url).toString())
+            if (preset.example) {
+                assertNull(preset.keyUrl)
+            } else {
+                assertNotNull(preset.keyUrl)
+                assertTrue(preset.keyUrl!!.startsWith("https://"))
+            }
         }
     }
 

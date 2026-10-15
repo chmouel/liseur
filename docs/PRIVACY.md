@@ -163,7 +163,10 @@ and, if you entered one for that server, your API key. No book title, file, iden
 or reading position goes with it. Who else can see
 that text depends on the server and the network you chose; a plain
 `http://` address is not encrypted. With a hosted service, the text goes
-to that service under its own terms and privacy policy.
+to that service under its own terms and privacy policy. "Get a key" on
+the API key row opens that service's key page in your browser (Liseur
+sends nothing there), and the paste button inside the field reads your
+clipboard once when tapped.
 
 ### This phone's translator, for translation
 
@@ -248,6 +251,15 @@ of the voice, to `generativelanguage.googleapis.com` over HTTPS,
 together with your key and the voice you picked. Nothing else goes with
 it: no book title, no file, no identifier, no reading position. Requests
 are billed to your key under Google's terms.
+
+"Get a key" next to the key field opens Google AI Studio's key page in
+your browser; Liseur itself sends nothing there. "Paste" reads your
+clipboard once, when you tap it, and saves what it holds as the key.
+Under [Google's terms](https://ai.google.dev/gemini-api/terms), unpaid
+requests may be used to improve its products and reviewed by people.
+Requests through a project with active billing are not used for product
+improvement. The paid-service data terms also apply to unpaid use in the
+European Economic Area, Switzerland, and the United Kingdom.
 
 Each request asks Google not to store it (`store: false`). That turns off
 the optional storage of the request on Google's side; it does not change

@@ -1598,7 +1598,10 @@ reader behavior.
   The key, address, name and a typed model save on Done, on focus loss
   (`Modifier.onLeaving`) and on dispose; key saves go through
   `KeyCommits` in submission order and a `KeyDraft` belongs to the
-  server shown when it was started. Server and model commits run in the
+  server shown when it was started. `KeyRow` has a paste button that
+  reads the clipboard only when tapped, a save button for typed keys,
+  and a "Get a key" link to the hosted service's key page.
+  Server and model commits run in the
   service's scope under one lock with a generation counter, so a
   superseded model choice or one for a previous server never writes; the
   write itself runs in `ServerConnections.unlessChanged`, so a key or

@@ -1082,6 +1082,8 @@
     <string name="read_aloud_settings_key_hint">Collez votre clé</string>
     <string name="read_aloud_settings_key_replace">Collez une nouvelle clé pour la remplacer</string>
     <string name="read_aloud_settings_key_clear">Supprimer la clé</string>
+    <string name="read_aloud_settings_key_get">Obtenir une clé</string>
+    <string name="read_aloud_settings_key_paste">Coller</string>
     <string name="read_aloud_settings_voice">Voix</string>
     <string name="read_aloud_previous_sentence">Phrase précédente</string>
     <string name="read_aloud_next_sentence">Phrase suivante</string>

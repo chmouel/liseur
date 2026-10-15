@@ -1126,6 +1126,8 @@
     <string name="read_aloud_settings_key_hint">Paste your key</string>
     <string name="read_aloud_settings_key_replace">Paste a new key to replace it</string>
     <string name="read_aloud_settings_key_clear">Remove key</string>
+    <string name="read_aloud_settings_key_get">Get a key</string>
+    <string name="read_aloud_settings_key_paste">Paste</string>
     <string name="read_aloud_settings_voice">Voice</string>
     <string name="read_aloud_previous_sentence">Previous sentence</string>
     <string name="read_aloud_next_sentence">Next sentence</string>
