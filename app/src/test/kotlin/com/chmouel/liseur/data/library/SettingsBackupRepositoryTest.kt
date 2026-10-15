@@ -22,12 +22,15 @@ import com.chmouel.liseur.companion.RecapQueueRow
 import com.chmouel.liseur.companion.Recaps
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.domain.BackedUpBook
 import com.chmouel.liseur.domain.encodeAnnotationBackup
+import com.chmouel.liseur.data.remote.AccountBackup
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.VoicePreference
@@ -834,7 +837,7 @@ class SettingsBackupRepositoryTest {
         val backup = archive("partial.zip", payload)
 
         assertEquals(
-            SettingsBackupRestoreResult.PartiallyRestored,
+            SettingsBackupRestoreResult.PartiallyRestored(),
             restore(repository(app, reader, fonts), Uri.fromFile(backup)),
         )
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
@@ -1002,7 +1005,7 @@ class SettingsBackupRepositoryTest {
             ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
             companion = companionBackup(),
         )
-        assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored(), restore(repository, Uri.fromFile(file)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertTrue(db.annotationDao().all().isEmpty())
         assertTrue(requested.isEmpty())
@@ -1033,7 +1036,7 @@ class SettingsBackupRepositoryTest {
             ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
             companion = CompanionBackupRepository({ throw IOException("storage failed") }, db.bookDao(), storeExists = { true }),
         )
-        assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored(), restore(repository, Uri.fromFile(file)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertEquals(0.5, db.readingProgressDao().get("local-book")!!.totalProgression!!, 0.0)
     }
@@ -1090,7 +1093,10 @@ class SettingsBackupRepositoryTest {
         )
         app.setThemeMode(ThemeMode.DARK)
         val uri = Uri.fromFile(File(folder.root, "encrypted.zip"))
-        assertTrue(repository.exportTo(uri, "backup password".toCharArray()) is SettingsBackupExportResult.Exported)
+        assertEquals(
+            SettingsBackupExportResult.Exported(0, 0),
+            repository.exportTo(uri, "backup password".toCharArray()),
+        )
         ZipFile(File(uri.path!!)).use { zip ->
             val encrypted = zip.getInputStream(zip.getEntry("connections.enc.json")).readBytes().toString(Charsets.UTF_8)
             assertFalse(encrypted.contains("secret-gemini"))
@@ -1112,18 +1118,21 @@ class SettingsBackupRepositoryTest {
             repository.restore(ready.archiveId, "wrong".toCharArray()))
         assertEquals(0, applied)
         assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
-        assertTrue(repository.restore(ready.archiveId, "backup password".toCharArray()) is SettingsBackupRestoreResult.Restored)
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0),
+            repository.restore(ready.archiveId, "backup password".toCharArray()),
+        )
         assertEquals(1, applied)
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         val plainUri = Uri.fromFile(File(folder.root, "plain.zip"))
-        assertTrue(repository.exportTo(plainUri) is SettingsBackupExportResult.Exported)
+        assertEquals(SettingsBackupExportResult.Exported(0), repository.exportTo(plainUri))
         ZipFile(File(plainUri.path!!)).use { assertEquals(null, it.getEntry("connections.enc.json")) }
-        assertTrue(restore(repository, plainUri) is SettingsBackupRestoreResult.Restored)
+        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(repository, plainUri))
         assertEquals(1, applied)
         failAfterWrite = true
         app.setThemeMode(ThemeMode.LIGHT)
         val retry = repository.inspect(uri) as SettingsBackupInspection.Ready
-        assertEquals(SettingsBackupRestoreResult.PartiallyRestored,
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored(),
             repository.restore(retry.archiveId, "backup password".toCharArray()))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         failPreparation = true
@@ -1132,6 +1141,56 @@ class SettingsBackupRepositoryTest {
         assertEquals(SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE),
             repository.restore(unprepared.archiveId, "backup password".toCharArray()))
         assertEquals(ThemeMode.LIGHT, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `only backups containing a liseur sync account need a new pairing`() = runTest {
+        val app = AppSettingsRepository(store("pairing-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("pairing-reader.preferences_pb"))
+        val account = RemoteServer(
+            kind = ServerKind.LISEUR_SYNC,
+            baseUrl = "https://library.example",
+            username = "reader",
+            passwordCipher = null,
+            apiKeyCipher = null,
+            accountId = "device",
+            userId = null,
+            koboTokenCipher = null,
+            canDownload = true,
+            addedAt = 10,
+            catalogSyncedAt = null,
+            positionSyncedAt = null,
+            syncToken = null,
+        )
+        val payload = JSONObject()
+            .put("version", 1)
+            .put("account", AccountBackup.encode(account))
+            .put("kosync", JSONObject.NULL)
+            .put("keys", JSONObject())
+            .put("gemini", JSONObject.NULL)
+        val repository = SettingsBackupRepository(
+            context,
+            app,
+            reader,
+            UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            exportConnections = { payload },
+            prepareConnectionRestore = { _, _ -> suspend {} },
+        )
+        val uri = Uri.fromFile(File(folder.root, "pairing.zip"))
+
+        assertEquals(
+            SettingsBackupExportResult.Exported(0, 0, liseurSyncNeedsPairing = true),
+            repository.exportTo(uri, "backup password".toCharArray()),
+        )
+        val preview = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertTrue(preview.preview.includesConnections)
+        assertEquals(
+            SettingsBackupRestoreResult.Restored(0, 0, 0, liseurSyncNeedsPairing = true),
+            repository.restore(preview.archiveId, "backup password".toCharArray()),
+        )
     }
 
     @Test

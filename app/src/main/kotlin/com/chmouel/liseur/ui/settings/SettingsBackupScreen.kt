@@ -116,10 +116,7 @@ fun SettingsBackupScreen(
                     } else { "" }) + (if (ready.preview.companionRecapCount > 0) {
                         "\n\n" + stringResource(R.string.settings_backup_companion_preview, ready.preview.companionRecapCount)
                     } else { "" }) + (if (ready.preview.includesConnections) {
-                        "\n\n" + stringResource(
-                            R.string.settings_backup_connections_replace,
-                            stringResource(R.string.server_kind_liseur_sync),
-                        )
+                        "\n\n" + stringResource(R.string.settings_backup_connections_replace)
                     } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
@@ -234,11 +231,21 @@ fun SettingsBackupScreen(
                 }
                 backup.status?.let { status ->
                     val message = when (status) {
-                        is SettingsBackupUiStatus.Exported -> pluralStringResource(
-                            R.plurals.settings_backup_exported,
-                            status.fonts,
-                            status.fonts,
-                        ) + " " + stringResource(R.string.settings_backup_annotation_count, status.annotations)
+                        is SettingsBackupUiStatus.Exported -> listOfNotNull(
+                            pluralStringResource(
+                                R.plurals.settings_backup_exported,
+                                status.fonts,
+                                status.fonts,
+                            ) + " " + stringResource(R.string.settings_backup_annotation_count, status.annotations),
+                            if (status.liseurSyncNeedsPairing) {
+                                stringResource(
+                                    R.string.settings_backup_liseur_sync_exported_notice,
+                                    stringResource(R.string.server_kind_liseur_sync),
+                                )
+                            } else {
+                                null
+                            },
+                        ).joinToString(" ")
                         is SettingsBackupUiStatus.Restored -> {
                             val restoredFonts = if (status.fontsImported > 0) {
                                 pluralStringResource(
@@ -285,12 +292,29 @@ fun SettingsBackupScreen(
                                 } else {
                                     null
                                 },
+                                if (status.liseurSyncNeedsPairing) {
+                                    stringResource(
+                                        R.string.settings_backup_liseur_sync_restored_notice,
+                                        stringResource(R.string.server_kind_liseur_sync),
+                                    )
+                                } else {
+                                    null
+                                },
                             ).joinToString(" ")
                         }
                         is SettingsBackupUiStatus.Failed ->
                             stringResource(status.failure.message)
-                        SettingsBackupUiStatus.PartiallyRestored ->
-                            stringResource(R.string.settings_backup_error_partial)
+                        is SettingsBackupUiStatus.PartiallyRestored -> listOfNotNull(
+                            stringResource(R.string.settings_backup_error_partial),
+                            if (status.liseurSyncNeedsPairing) {
+                                stringResource(
+                                    R.string.settings_backup_liseur_sync_restored_notice,
+                                    stringResource(R.string.server_kind_liseur_sync),
+                                )
+                            } else {
+                                null
+                            },
+                        ).joinToString(" ")
                         is SettingsBackupUiStatus.BooksExported -> when (val result = status.result) {
                             is BookExportResult.Completed -> stringResource(
                                 R.string.books_export_result,
@@ -349,12 +373,11 @@ private fun BackupPasswordDialog(
         onDismissRequest = { if (!busy) onDismiss() },
         title = { Text(stringResource(R.string.settings_backup_password_title)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     if (exporting) {
                         stringResource(
                             R.string.settings_backup_password_export,
-                            stringResource(R.string.server_kind_liseur_sync),
                         )
                     } else {
                         stringResource(R.string.settings_backup_password_restore)

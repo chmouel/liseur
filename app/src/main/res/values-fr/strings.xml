@@ -1405,10 +1405,12 @@
     <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer depuis le menu ⋮ du lecteur.</string>
     <string name="companion_settings_privacy">Le texte des chapitres précédents est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
     <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
-    <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement. Le jeton de %1$s n’est pas copié ; configurez ce compte à nouveau après la restauration.</string>
+    <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>
+    <string name="settings_backup_liseur_sync_exported_notice">Cette sauvegarde contient un compte %1$s. Associez-le à nouveau après la restauration.</string>
+    <string name="settings_backup_liseur_sync_restored_notice">Associez à nouveau le compte %1$s pour reprendre la synchronisation.</string>
     <string name="settings_backup_password_title">Mot de passe de sauvegarde</string>
     <string name="settings_backup_password_confirm">Confirmer le mot de passe</string>
-    <string name="settings_backup_password_export">Choisissez un mot de passe pour chiffrer les comptes et les identifiants. Il sera nécessaire à la restauration. Les données de lecture, les réglages, les adresses des services et les polices restent non chiffrés. Le jeton de %1$s n’est pas copié ; configurez ce compte à nouveau après la restauration.</string>
+    <string name="settings_backup_password_export">Choisissez un mot de passe pour chiffrer les comptes et les identifiants. Il sera nécessaire à la restauration. Les données de lecture, les réglages, les adresses des services et les polices restent non chiffrés.</string>
     <string name="settings_backup_password_restore">Saisissez le mot de passe de cette sauvegarde. Les comptes et les identifiants seront remplacés sans nouvelle connexion.</string>
     <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
     <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut plus être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>

@@ -207,7 +207,7 @@ class KosyncPositionSync(
         var applied = false
         var accountMatches = false
         inTransaction {
-            if (kosyncDao.get()?.accountKey != account.peerId) return@inTransaction
+            if (!sameAccount(account)) return@inTransaction
             accountMatches = true
             applied = progressDao.applyPeerPull(
                 bookUrl = bookUrl,
@@ -286,6 +286,7 @@ class KosyncPositionSync(
         val credentials: KosyncCredentials,
         /** The key this partner's per-book agreements are stored under. */
         val peerId: String,
+        val connectionStamp: Long,
         val login: String,
     )
 
@@ -297,6 +298,7 @@ class KosyncPositionSync(
             baseUrl = peer.baseUrl,
             credentials = credentials,
             peerId = peer.accountKey,
+            connectionStamp = peer.addedAt,
             login = peer.username,
         )
     }
@@ -343,6 +345,7 @@ class KosyncPositionSync(
             baseUrl = peer.baseUrl,
             credentials = credentials,
             peerId = peer.accountKey,
+            connectionStamp = peer.addedAt,
             login = peer.username,
         )
 
@@ -599,9 +602,14 @@ class KosyncPositionSync(
      */
     private suspend fun forAccount(account: Account, work: suspend () -> Unit) {
         inTransaction {
-            if (kosyncDao.get()?.accountKey == account.peerId) work()
+            if (sameAccount(account)) work()
         }
     }
+
+    private suspend fun sameAccount(account: Account): Boolean =
+        kosyncDao.get()?.let {
+            it.accountKey == account.peerId && it.addedAt == account.connectionStamp
+        } == true
 
     /**
      * Which books this pairing is responsible for.

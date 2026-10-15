@@ -930,12 +930,6 @@ class RemoteAccountRepository(
         )
     }
 
-    /** A monotonic-enough persisted stamp, including same-millisecond reconnects. */
-    private fun nextConnectionStamp(previous: Long): Long {
-        val now = System.currentTimeMillis()
-        return if (now > previous) now else previous + 1
-    }
-
     /**
      * Moves what the same account had agreed under its previous key to
      * the key it will have from now on, or keeps the previous key.
@@ -1220,3 +1214,7 @@ class RemoteAccountRepository(
         const val SQL_CHUNK = 900
     }
 }
+
+/** A monotonic-enough persisted stamp, including same-millisecond reconnects. */
+internal fun nextConnectionStamp(previous: Long, now: Long = System.currentTimeMillis()): Long =
+    if (now > previous) now else previous + 1

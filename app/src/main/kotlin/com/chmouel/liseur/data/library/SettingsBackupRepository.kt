@@ -29,6 +29,7 @@ import com.chmouel.liseur.domain.decodeAnnotationBackup
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.data.remote.ServerKind
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -82,7 +83,11 @@ sealed interface SettingsBackupInspection {
 }
 
 sealed interface SettingsBackupExportResult {
-    data class Exported(val fonts: Int, val annotations: Int = 0) : SettingsBackupExportResult
+    data class Exported(
+        val fonts: Int,
+        val annotations: Int = 0,
+        val liseurSyncNeedsPairing: Boolean = false,
+    ) : SettingsBackupExportResult
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupExportResult
 }
 
@@ -95,10 +100,11 @@ sealed interface SettingsBackupRestoreResult {
         val annotationsAlreadyPresent: Int = 0,
         val positionsRestored: Int = 0,
         val companionRecapsAdded: Int = 0,
+        val liseurSyncNeedsPairing: Boolean = false,
     ) : SettingsBackupRestoreResult
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupRestoreResult
-    data object PartiallyRestored : SettingsBackupRestoreResult
+    data class PartiallyRestored(val liseurSyncNeedsPairing: Boolean = false) : SettingsBackupRestoreResult
 }
 
 /** Versioned archive for reading data, settings, fonts, and optional encrypted connections. */
@@ -131,6 +137,7 @@ class SettingsBackupRepository(
                 settings.getJSONObject("app").put(ServerSettings.SERVERS_NAME, "[]")
             }
             canonicalizeBackupSettings(settings)
+            var liseurSyncNeedsPairing = false
             val connectionBytes = password?.let {
                 val payload = try {
                     exportConnections()
@@ -138,6 +145,8 @@ class SettingsBackupRepository(
                     throw BackupFailureException(SettingsBackupFailure.UNREADABLE_CREDENTIAL)
                 }
                 ConnectionBackupRepository.validate(payload, settings.getJSONObject("app"))
+                liseurSyncNeedsPairing =
+                    payload.optJSONObject("account")?.optString("kind") == ServerKind.LISEUR_SYNC.name
                 val plaintext = payload.toString().toByteArray(Charsets.UTF_8)
                 try { BackupEncryption.encrypt(plaintext, it) } finally { plaintext.fill(0) }
             }
@@ -240,7 +249,7 @@ class SettingsBackupRepository(
                 }
             }
             completed = true
-            SettingsBackupExportResult.Exported(fonts.size, annotationCount)
+            SettingsBackupExportResult.Exported(fonts.size, annotationCount, liseurSyncNeedsPairing)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BackupFailureException) {
@@ -380,6 +389,8 @@ class SettingsBackupRepository(
                     return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
                 } finally { plaintext.fill(0) }
             }
+            val liseurSyncNeedsPairing =
+                connections?.optJSONObject("account")?.optString("kind") == ServerKind.LISEUR_SYNC.name
 
             val applyConnections = try {
                 connections?.let { prepareConnectionRestore(it, settings.getJSONObject("app")) }
@@ -402,7 +413,7 @@ class SettingsBackupRepository(
             } catch (e: Exception) {
                 Log.w(TAG, "Settings restore failed", e)
                 return@withContext if (appSettingsRestored) {
-                    SettingsBackupRestoreResult.PartiallyRestored
+                    SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
                 } else {
                     SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
                 }
@@ -433,7 +444,7 @@ class SettingsBackupRepository(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Font restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
             }
             val annotationResult = try {
                 annotations.importContents(annotationContents)
@@ -441,7 +452,7 @@ class SettingsBackupRepository(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Annotation restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
             }
             val restoredPositions = try {
                 positions.restore(positionContents)
@@ -449,7 +460,7 @@ class SettingsBackupRepository(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Reading position restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
             }
             val companionRecapsAdded = try {
                 if (companionContents.isEmpty()) 0 else companion.restore(companionContents)
@@ -457,11 +468,11 @@ class SettingsBackupRepository(
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Companion restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
             }
             SettingsBackupRestoreResult.Restored(
                 imported, present, failures, annotationResult.added, annotationResult.alreadyHere, restoredPositions,
-                companionRecapsAdded,
+                companionRecapsAdded, liseurSyncNeedsPairing,
             )
         } finally {
             if (!retainForRetry) removeStaging(archive.stagingDirectory)

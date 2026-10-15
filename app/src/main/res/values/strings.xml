@@ -1461,10 +1461,12 @@
     <string name="companion_settings_recaps_summary">When you read past the end of a chapter, it is summarised in the background so later lookups find passages faster. Off by default. Each book can change it from the reader\'s ⋮ menu.</string>
     <string name="companion_settings_privacy">Book text from earlier chapters is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
     <string name="settings_backup_include_connections">Include accounts, services and passwords</string>
-    <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically. The %1$s token is not copied, so set up that account again after restoring.</string>
+    <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically.</string>
+    <string name="settings_backup_liseur_sync_exported_notice">This backup contains a %1$s account. Pair it again after restoring.</string>
+    <string name="settings_backup_liseur_sync_restored_notice">Pair the %1$s account again to resume syncing.</string>
     <string name="settings_backup_password_title">Backup password</string>
     <string name="settings_backup_password_confirm">Confirm backup password</string>
-    <string name="settings_backup_password_export">Choose a password to encrypt accounts and credentials. You will need it to restore them. Reading data, settings, service addresses and fonts remain unencrypted. The %1$s token is not copied, so set up that account again after restoring.</string>
+    <string name="settings_backup_password_export">Choose a password to encrypt accounts and credentials. You will need it to restore them. Reading data, settings, service addresses and fonts remain unencrypted.</string>
     <string name="settings_backup_password_restore">Enter the password used to encrypt this backup. Accounts and credentials will be replaced without signing in.</string>
     <string name="settings_backup_password_error">Incorrect password or damaged encrypted data. Try again.</string>
     <string name="settings_backup_error_credential">A saved account or KOReader credential can no longer be read on this device. Sign in again, or export without accounts and passwords.</string>

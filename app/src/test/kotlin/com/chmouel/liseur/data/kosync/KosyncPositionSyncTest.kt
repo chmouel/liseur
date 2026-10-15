@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.kosync
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
@@ -22,7 +23,9 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import java.io.File
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
@@ -737,6 +740,27 @@ class KosyncPositionSyncTest {
         assertNull(db.syncPeerStateDao().get(BOOK, key))
     }
 
+    @Test
+    fun `a response from before restore cannot recreate agreements for the same pairing`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        val original = db.kosyncPeerDao().get()!!
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                runBlocking { repository().restoreBackup(original) }
+                return progress(0.6)
+            }
+        }
+
+        assertTrue(sync().previewBook(BOOK) is PreviewOutcome.Ready)
+
+        val restored = db.kosyncPeerDao().get()!!
+        assertEquals(original.accountKey, restored.accountKey)
+        assertTrue(restored.addedAt > original.addedAt)
+        assertNull(db.syncPeerStateDao().get(BOOK, original.accountKey))
+        assertEquals(1, server.requestCount)
+    }
+
     // -- Preview ---------------------------------------------------------------
 
     @Test
@@ -805,6 +829,7 @@ class KosyncPositionSyncTest {
             },
             networkAvailability = { online },
             now = { NOW },
+            inTransaction = { work -> db.withTransaction { work() } },
         )
     }
 
@@ -813,6 +838,7 @@ class KosyncPositionSyncTest {
         peerStateDao = db.syncPeerStateDao(),
         client = client,
         now = { NOW },
+        inTransaction = { work -> db.withTransaction { work() } },
     )
 
     /**

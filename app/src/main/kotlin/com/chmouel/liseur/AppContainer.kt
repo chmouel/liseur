@@ -562,6 +562,7 @@ class AppContainer(context: Context) {
         dao = database.kosyncPeerDao(),
         peerStateDao = database.syncPeerStateDao(),
         reporting = syncReporting,
+        inTransaction = { work -> database.withTransaction { work() } },
     )
 
     val kosyncSync = KosyncPositionSync(

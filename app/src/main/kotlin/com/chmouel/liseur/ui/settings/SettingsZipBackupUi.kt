@@ -53,7 +53,7 @@ data class SettingsZipBackupUi(
 )
 
 sealed interface SettingsBackupUiStatus {
-    data class Exported(val fonts: Int, val annotations: Int) : SettingsBackupUiStatus
+    data class Exported(val fonts: Int, val annotations: Int, val liseurSyncNeedsPairing: Boolean) : SettingsBackupUiStatus
     data class Restored(
         val fontsImported: Int,
         val fontsAlreadyPresent: Int,
@@ -62,10 +62,11 @@ sealed interface SettingsBackupUiStatus {
         val annotationsAlreadyPresent: Int,
         val positionsRestored: Int,
         val companionRecapsAdded: Int,
+        val liseurSyncNeedsPairing: Boolean,
     ) : SettingsBackupUiStatus
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupUiStatus
-    data object PartiallyRestored : SettingsBackupUiStatus
+    data class PartiallyRestored(val liseurSyncNeedsPairing: Boolean) : SettingsBackupUiStatus
     data class BooksExported(val result: BookExportResult) : SettingsBackupUiStatus
     data class BooksExportCancelled(val counts: BookExportProgress) : SettingsBackupUiStatus
 }
@@ -150,7 +151,8 @@ private class SettingsBackupViewModel(
                 val result = repository.exportTo(uri, password)
                 _state.update {
                     it.copy(status = when (result) {
-                        is SettingsBackupExportResult.Exported -> SettingsBackupUiStatus.Exported(result.fonts, result.annotations)
+                        is SettingsBackupExportResult.Exported ->
+                            SettingsBackupUiStatus.Exported(result.fonts, result.annotations, result.liseurSyncNeedsPairing)
                         is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
                     })
                 }
@@ -219,11 +221,12 @@ private class SettingsBackupViewModel(
                                 result.annotationsAlreadyPresent,
                                 result.positionsRestored,
                                 result.companionRecapsAdded,
+                                result.liseurSyncNeedsPairing,
                             )
                             is SettingsBackupRestoreResult.Failed ->
                                 SettingsBackupUiStatus.Failed(result.failure)
-                            SettingsBackupRestoreResult.PartiallyRestored ->
-                                SettingsBackupUiStatus.PartiallyRestored
+                            is SettingsBackupRestoreResult.PartiallyRestored ->
+                                SettingsBackupUiStatus.PartiallyRestored(result.liseurSyncNeedsPairing)
                         },
                     )
                 }

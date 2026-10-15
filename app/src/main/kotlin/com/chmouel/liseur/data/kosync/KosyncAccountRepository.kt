@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.remote.RemoteResult
 import com.chmouel.liseur.data.remote.SetupFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncReporting
+import com.chmouel.liseur.data.remote.nextConnectionStamp
 import kotlinx.coroutines.flow.Flow
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -81,16 +82,24 @@ class KosyncAccountRepository(
     private val reporting: SyncReporting = SyncReporting(),
     private val client: KosyncClient = KosyncClient(),
     private val now: () -> Long = System::currentTimeMillis,
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
 ) : KosyncPairing {
 
     val peer: Flow<KosyncPeer?> = dao.observe()
 
     suspend fun current(): KosyncPeer? = dao.get()
 
-    /** Restores the derived auth key without a network probe or old peer agreements. */
+    /** Restores the auth key without a network probe, old agreements, or the old connection stamp. */
     internal suspend fun restoreBackup(peer: KosyncPeer?) {
-        disconnect()
-        if (peer != null) dao.upsert(peer)
+        inTransaction {
+            val previous = dao.get()
+            previous?.let { forget(it) }
+            dao.delete()
+            if (peer != null) {
+                val stamp = nextConnectionStamp(maxOf(previous?.addedAt ?: 0, peer.addedAt), now())
+                dao.upsert(peer.copy(addedAt = stamp))
+            }
+        }
     }
 
     /**
@@ -188,14 +197,17 @@ class KosyncAccountRepository(
 
     override suspend fun adopt(pairing: ProvedKosyncPairing) {
         val fresh = pairing.peer
-        // A different account's agreements are somebody else's: signing
-        // in as a new user strands them rather than adopting them, the
-        // same rule every other kind of server follows.
-        val old = dao.get()
-        if (old != null && old.accountKey != fresh.accountKey) {
-            forget(old)
+        inTransaction {
+            // A different account's agreements are somebody else's:
+            // signing in as a new user strands them rather than adopting
+            // them, the same rule every other kind of server follows.
+            val old = dao.get()
+            if (old != null && old.accountKey != fresh.accountKey) {
+                forget(old)
+            }
+            val stamp = nextConnectionStamp(maxOf(old?.addedAt ?: 0, fresh.addedAt), now())
+            dao.upsert(fresh.copy(addedAt = stamp))
         }
-        dao.upsert(fresh)
     }
 
     override suspend fun forget() = disconnect()
@@ -206,8 +218,10 @@ class KosyncAccountRepository(
      * because it means nothing once the server is no longer talked to.
      */
     suspend fun disconnect() {
-        dao.get()?.let { forget(it) }
-        dao.delete()
+        inTransaction {
+            dao.get()?.let { forget(it) }
+            dao.delete()
+        }
     }
 
     private suspend fun forget(peer: KosyncPeer) {
