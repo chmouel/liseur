@@ -14,6 +14,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/** What the server said when asked whether a newly saved key works. */
+internal enum class KeyCheck {
+    CHECKING,
+    VALID,
+    REFUSED,
+}
+
 /**
  * Saves and removals of API keys, run in the service's own [scope] so
  * one submitted as the screen closes still completes. They run in the

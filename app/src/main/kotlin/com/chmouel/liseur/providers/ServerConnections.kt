@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.settings.ServerChange
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.tts.KeyCheck
 import com.chmouel.liseur.tts.KeyCommits
 import com.chmouel.liseur.tts.OpenAiTts
 import com.chmouel.liseur.tts.OpenAiTtsClient
@@ -69,6 +70,7 @@ internal class ServerConnections(
 
     private val listeners = CopyOnWriteArrayList<(String) -> Unit>()
     private val generations = ConcurrentHashMap<String, MutableStateFlow<Int>>()
+    private val checks = ConcurrentHashMap<String, MutableStateFlow<KeyCheck?>>()
 
     /** Has [listener] told of a change to an owner's address or key, before it is made. */
     fun addListener(listener: (owner: String) -> Unit) {
@@ -78,7 +80,12 @@ internal class ServerConnections(
     /** Moves on with every change to [owner]'s servers or key. */
     fun generation(owner: String): StateFlow<Int> = mutable(owner).asStateFlow()
 
+    /** How [owner]'s last saved key fared when checked, until [owner] changes again. */
+    fun keyCheck(owner: String): StateFlow<KeyCheck?> = mutableCheck(owner).asStateFlow()
+
     private fun mutable(owner: String) = generations.getOrPut(owner) { MutableStateFlow(0) }
+
+    private fun mutableCheck(owner: String) = checks.getOrPut(owner) { MutableStateFlow(null) }
 
     // Held by a change while it is written and by a write made from a reply, so neither runs inside the other.
     private val writes = Mutex()
@@ -86,12 +93,18 @@ internal class ServerConnections(
     private suspend fun <T> changing(owners: Set<String>, block: suspend () -> T): T {
         owners.forEach { owner -> listeners.forEach { it(owner) } }
         // Moved on before as well as after, so nothing asked while the change is written is kept.
-        owners.forEach { owner -> mutable(owner).update { it + 1 } }
+        owners.forEach { owner ->
+            mutable(owner).update { it + 1 }
+            mutableCheck(owner).value = null
+        }
         return writes.withLock {
             try {
                 block()
             } finally {
-                owners.forEach { owner -> mutable(owner).update { it + 1 } }
+                owners.forEach { owner ->
+                    mutable(owner).update { it + 1 }
+                    mutableCheck(owner).value = null
+                }
             }
         }
     }
@@ -110,15 +123,74 @@ internal class ServerConnections(
     suspend fun key(origin: String): String? = keys.get(origin)
 
     /** Runs [op] on [owner]'s key after every key change before it; the features hear of it first. */
-    fun commitKey(owner: String, op: suspend () -> Unit, done: (Boolean) -> Unit = {}) =
-        keyCommits.submit(owner, { changing(setOf(owner)) { op() } }, done)
+    fun commitKey(
+        owner: String,
+        op: suspend () -> Unit,
+        afterSave: (generation: Int) -> Unit = {},
+        done: (Boolean) -> Unit = {},
+    ) = keyCommits.submit(
+        owner,
+        {
+            changing(setOf(owner)) { op() }
+            afterSave(mutable(owner).value)
+        },
+        done,
+    )
 
-    /** Saves [key] for every server on [origin]. */
-    fun commitKey(origin: String, key: String, done: (Boolean) -> Unit) =
-        commitKey(origin, { keys.set(origin, key) }, done)
+    /** Saves [key] for every server on [origin], and checks it against [url] when given. */
+    fun commitKey(origin: String, key: String, url: String? = null, done: (Boolean) -> Unit = {}) = commitKey(
+        origin,
+        op = { keys.set(origin, key) },
+        afterSave = { generation ->
+            val base = url?.let(OpenAiTts::baseUrl)?.takeIf { ServerKeys.origin(it) == origin }
+            if (base != null) {
+                checkKey(
+                    owner = origin,
+                    generation = generation,
+                    validate = {
+                        if (localNetwork.blocks(base.toString())) throw SpeechError.LocalNetworkBlocked()
+                        client.allModels(base, key)
+                    },
+                )
+            }
+        },
+        done = done,
+    )
+
+    /**
+     * Checks the key saved at [generation] of [owner] with [validate],
+     * which throws [SpeechError] when refused or unreachable, and calls
+     * [onAccepted] when the server either accepts the key or cannot be
+     * reached right now. Dropped when [owner] moves on first.
+     */
+    fun checkKey(
+        owner: String,
+        generation: Int,
+        validate: suspend () -> Unit,
+        onAccepted: suspend () -> Unit = {},
+    ) = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        unlessChanged(owner, generation) {
+            mutableCheck(owner).value = KeyCheck.CHECKING
+        } ?: return@launch
+        val outcome = try {
+            validate()
+            KeyCheck.VALID
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: SpeechError.InvalidKey) {
+            KeyCheck.REFUSED
+        } catch (_: Exception) {
+            null
+        }
+        unlessChanged(owner, generation) {
+            mutableCheck(owner).value = outcome
+            if (outcome != KeyCheck.REFUSED) onAccepted()
+        }
+    }
 
     /** Removes the key of the servers on [origin]; other origins keep theirs. */
-    fun commitKeyRemoval(origin: String, done: (Boolean) -> Unit = {}) = commitKey(origin, { keys.clear(origin) }, done)
+    fun commitKeyRemoval(origin: String, done: (Boolean) -> Unit = {}) =
+        commitKey(origin, { keys.clear(origin) }, done = done)
 
     private val savedDrafts = MutableStateFlow<Map<String, String>>(emptyMap())
 

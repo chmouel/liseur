@@ -1036,6 +1036,8 @@
 
     <!-- Read aloud -->
     <string name="read_aloud_settings_key_saved">此设备上已保存密钥。</string>
+    <string name="read_aloud_settings_key_checking">已保存在此设备上 · 正在验证…</string>
+    <string name="read_aloud_settings_key_connected">已保存在此设备上 · 服务器可访问</string>
     <string name="read_aloud_settings_key_hint">粘贴你的密钥</string>
     <string name="read_aloud_settings_key_replace">粘贴新密钥以替换</string>
     <string name="read_aloud_settings_key_clear">移除密钥</string>

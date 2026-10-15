@@ -815,6 +815,7 @@ internal fun KeyRow(
     failed: Boolean,
     onKey: (owner: String, key: String, done: (Boolean) -> Unit) -> Unit,
     onClear: (owner: String) -> Unit,
+    check: KeyCheck? = null,
     keyUrl: String? = null,
     focusRequester: FocusRequester = remember { FocusRequester() },
     // Plain remember on purpose: a key half pasted must not outlive the
@@ -851,15 +852,33 @@ internal fun KeyRow(
                 }
             }
         }
-        Text(
-            text = when {
-                owner == null -> stringResource(R.string.read_aloud_settings_key_needs_url)
-                configured -> stringResource(R.string.read_aloud_settings_key_saved)
-                else -> missing
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (owner != null && configured && check == KeyCheck.VALID) {
+                Icon(
+                    imageVector = Icons.Outlined.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(
+                text = when {
+                    owner == null -> stringResource(R.string.read_aloud_settings_key_needs_url)
+                    !configured -> missing
+                    check == KeyCheck.CHECKING -> stringResource(R.string.read_aloud_settings_key_checking)
+                    check == KeyCheck.VALID -> stringResource(R.string.read_aloud_settings_key_connected)
+                    check == KeyCheck.REFUSED -> stringResource(R.string.read_aloud_settings_server_refused)
+                    else -> stringResource(R.string.read_aloud_settings_key_saved)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (owner != null && configured && check == KeyCheck.REFUSED) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
         OutlinedTextField(
             value = draft.text,
             onValueChange = { draft.edit(it, owner) },

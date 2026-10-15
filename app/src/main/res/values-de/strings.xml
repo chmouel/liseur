@@ -1091,6 +1091,8 @@
 
     <!-- Read aloud -->
     <string name="read_aloud_settings_key_saved">Auf diesem Gerät ist ein Schlüssel gespeichert.</string>
+    <string name="read_aloud_settings_key_checking">Auf diesem Gerät gespeichert · Wird geprüft…</string>
+    <string name="read_aloud_settings_key_connected">Auf diesem Gerät gespeichert · Server erreichbar</string>
     <string name="read_aloud_settings_key_hint">Schlüssel einfügen</string>
     <string name="read_aloud_settings_key_replace">Neuen Schlüssel einfügen, um ihn zu ersetzen</string>
     <string name="read_aloud_settings_key_clear">Schlüssel entfernen</string>

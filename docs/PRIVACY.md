@@ -167,6 +167,8 @@ to that service under its own terms and privacy policy. "Get a key" on
 the API key row opens that service's key page in your browser (Liseur
 sends nothing there), and the paste button inside the field reads your
 clipboard once when tapped.
+Saving a key checks it against that server's models endpoint, sending
+the key without any book text.
 
 ### This phone's translator, for translation
 
@@ -260,6 +262,8 @@ requests may be used to improve its products and reviewed by people.
 Requests through a project with active billing are not used for product
 improvement. The paid-service data terms also apply to unpaid use in the
 European Economic Area, Switzerland, and the United Kingdom.
+Saving a Gemini key checks it against Google's models endpoint, sending
+the key without any book text.
 
 Each request asks Google not to store it (`store: false`). That turns off
 the optional storage of the request on Google's side; it does not change

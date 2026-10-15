@@ -2,17 +2,21 @@ package com.chmouel.liseur.providers
 
 import android.app.Application
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.chmouel.liseur.data.remote.LocalNetworkAccess
 import com.chmouel.liseur.data.security.SecretCipher
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerChange
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.tts.KeyCheck
 import com.chmouel.liseur.tts.ServerKeys
+import com.chmouel.liseur.tts.SpeechError
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -41,6 +45,7 @@ class ServerConnectionsTest {
 
     private lateinit var scope: CoroutineScope
     private lateinit var settings: AppSettingsRepository
+    private lateinit var keys: ServerKeys
     private lateinit var connections: ServerConnections
     private val told = CopyOnWriteArrayList<String>()
 
@@ -51,7 +56,8 @@ class ServerConnectionsTest {
         val cipher = SecretCipher("test").apply {
             keyForTesting = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         }
-        connections = ServerConnections(settings, ServerKeys(folder.newFolder("keys"), cipher), scope = scope)
+        keys = ServerKeys(folder.newFolder("keys"), cipher)
+        connections = ServerConnections(settings, keys, scope = scope)
         connections.addListener { told += it }
     }
 
@@ -242,6 +248,133 @@ class ServerConnectionsTest {
         told.clear()
         assertEquals(ServerChange.Saved(id), update(id, "", SPEECH))
         assertTrue(told.isEmpty())
+    }
+
+    @Test
+    fun aDraftKeyIsNeverCheckedAgainstAnotherOrigin(): Unit = runBlocking {
+        val checked = CopyOnWriteArrayList<String?>()
+        val localNetwork = object : LocalNetworkAccess {
+            override val required = true
+            override val granted = false
+            override suspend fun blocks(url: String?): Boolean {
+                checked += url
+                return true
+            }
+        }
+        val guarded = ServerConnections(settings, keys, localNetwork = localNetwork, scope = scope)
+        val saved = CompletableDeferred<Boolean>()
+        guarded.commitKey(origin(SPEECH), "secret", ELSEWHERE) { saved.complete(it) }
+        assertTrue(withTimeout(WAIT) { saved.await() })
+        assertEquals("secret", guarded.key(origin(SPEECH)))
+        assertTrue(checked.isEmpty())
+        assertEquals(null, guarded.keyCheck(origin(SPEECH)).value)
+
+        val sameOrigin = CompletableDeferred<Boolean>()
+        guarded.commitKey(origin(SPEECH), "replacement", CHAT) { sameOrigin.complete(it) }
+        assertTrue(withTimeout(WAIT) { sameOrigin.await() })
+        assertEquals(listOf(CHAT), checked.toList())
+        assertEquals(null, guarded.keyCheck(origin(SPEECH)).value)
+    }
+
+    @Test
+    fun aSavedKeyIsCheckedAndOnlyAcceptedOrOfflineKeysRunOnAccepted(): Unit = runBlocking {
+        var accepted = 0
+        var check: Job? = null
+        val gate = CompletableDeferred<Unit>()
+        val saved = CompletableDeferred<Boolean>()
+        connections.commitKey(
+            owner = "gemini",
+            op = {},
+            afterSave = { gen ->
+                check = connections.checkKey(
+                    owner = "gemini",
+                    generation = gen,
+                    validate = { gate.await() },
+                    onAccepted = { accepted++ },
+                )
+            },
+            done = { saved.complete(it) },
+        )
+        assertTrue(withTimeout(WAIT) { saved.await() })
+        assertEquals(KeyCheck.CHECKING, connections.keyCheck("gemini").value)
+
+        gate.complete(Unit)
+        withTimeout(WAIT) { check!!.join() }
+        assertEquals(KeyCheck.VALID, connections.keyCheck("gemini").value)
+        assertEquals(1, accepted)
+
+        // A refused key marks REFUSED and skips onAccepted.
+        val refusedSaved = CompletableDeferred<Boolean>()
+        connections.commitKey(
+            owner = "gemini",
+            op = {},
+            afterSave = { gen ->
+                check = connections.checkKey(
+                    owner = "gemini",
+                    generation = gen,
+                    validate = { throw SpeechError.InvalidKey(401) },
+                    onAccepted = { accepted++ },
+                )
+            },
+            done = { refusedSaved.complete(it) },
+        )
+        assertTrue(withTimeout(WAIT) { refusedSaved.await() })
+        withTimeout(WAIT) { check!!.join() }
+        assertEquals(KeyCheck.REFUSED, connections.keyCheck("gemini").value)
+        assertEquals(1, accepted)
+
+        // Offline/network failure clears the check state back to null and still runs onAccepted.
+        val offlineSaved = CompletableDeferred<Boolean>()
+        connections.commitKey(
+            owner = "gemini",
+            op = {},
+            afterSave = { gen ->
+                check = connections.checkKey(
+                    owner = "gemini",
+                    generation = gen,
+                    validate = { throw SpeechError.Network(java.io.IOException("offline")) },
+                    onAccepted = { accepted++ },
+                )
+            },
+            done = { offlineSaved.complete(it) },
+        )
+        assertTrue(withTimeout(WAIT) { offlineSaved.await() })
+        withTimeout(WAIT) { check!!.join() }
+        assertEquals(null, connections.keyCheck("gemini").value)
+        assertEquals(2, accepted)
+    }
+
+    @Test
+    fun aKeyCheckSupersededByRemovalIsDropped(): Unit = runBlocking {
+        var accepted = 0
+        var check: Job? = null
+        val gate = CompletableDeferred<Unit>()
+        val saved = CompletableDeferred<Boolean>()
+        connections.commitKey(
+            owner = "gemini",
+            op = {},
+            afterSave = { gen ->
+                check = connections.checkKey(
+                    owner = "gemini",
+                    generation = gen,
+                    validate = { gate.await() },
+                    onAccepted = { accepted++ },
+                )
+            },
+            done = { saved.complete(it) },
+        )
+        assertTrue(withTimeout(WAIT) { saved.await() })
+        assertEquals(KeyCheck.CHECKING, connections.keyCheck("gemini").value)
+
+        val removed = CompletableDeferred<Boolean>()
+        connections.commitKeyRemoval("gemini") { removed.complete(it) }
+        assertTrue(withTimeout(WAIT) { removed.await() })
+        assertEquals(null, connections.keyCheck("gemini").value)
+
+        gate.complete(Unit)
+        withTimeout(WAIT) { check!!.join() }
+        assertEquals(null, connections.keyCheck("gemini").value)
+        assertEquals(0, accepted)
     }
 
     private companion object {

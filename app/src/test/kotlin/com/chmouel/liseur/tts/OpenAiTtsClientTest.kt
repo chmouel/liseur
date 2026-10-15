@@ -459,6 +459,19 @@ class OpenAiTtsClientTest {
     }
 
     @Test
+    fun `checking a key requires a successful models response`(): Unit = runBlocking {
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(MockResponse(code = 405))
+        server.enqueue(MockResponse(code = 401))
+        server.enqueue(MockResponse(code = 200, body = """{"data":[]}"""))
+
+        expect<SpeechError.Service> { OpenAiTtsClient().allModels(base, "k") }
+        expect<SpeechError.Service> { OpenAiTtsClient().allModels(base, "k") }
+        expect<SpeechError.InvalidKey> { OpenAiTtsClient().allModels(base, "k") }
+        assertEquals(emptyList<SpeechModel>(), OpenAiTtsClient().allModels(base, "k"))
+    }
+
+    @Test
     fun `only models that look like they speak are offered, unless none does`() {
         fun ids(vararg ids: String) = ids.map(::SpeechModel)
         assertEquals(

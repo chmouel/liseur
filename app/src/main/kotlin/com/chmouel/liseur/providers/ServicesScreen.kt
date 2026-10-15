@@ -483,6 +483,9 @@ private fun ServerScreen(
             val keyConfigured by remember(owner) {
                 owner?.let(connections::keyConfigured) ?: MutableStateFlow(false)
             }.collectAsState()
+            val keyCheck by remember(owner) {
+                owner?.let(connections::keyCheck) ?: MutableStateFlow(null)
+            }.collectAsState()
             val keyFailure by connections.keyFailure.collectAsState()
             KeyRow(
                 title = stringResource(R.string.read_aloud_settings_server_key),
@@ -491,8 +494,9 @@ private fun ServerScreen(
                 owner = owner,
                 configured = keyConfigured,
                 failed = owner != null && keyFailure == owner,
-                onKey = { origin, key, done -> connections.commitKey(origin, key, done) },
+                onKey = { origin, key, done -> connections.commitKey(origin, key, committedUrl, done) },
                 onClear = { origin -> connections.commitKeyRemoval(origin) },
+                check = keyCheck,
                 keyUrl = inUse?.keyUrl,
                 focusRequester = keyFocus,
                 draft = keyDraft,

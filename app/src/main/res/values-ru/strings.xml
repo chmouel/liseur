@@ -1163,6 +1163,8 @@
 
     <!-- Read aloud -->
     <string name="read_aloud_settings_key_saved">На этом устройстве сохранён ключ.</string>
+    <string name="read_aloud_settings_key_checking">Сохранён на устройстве · Проверка…</string>
+    <string name="read_aloud_settings_key_connected">Сохранён на устройстве · Сервер доступен</string>
     <string name="read_aloud_settings_key_hint">Вставьте ключ</string>
     <string name="read_aloud_settings_key_replace">Вставьте новый ключ, чтобы заменить его</string>
     <string name="read_aloud_settings_key_clear">Удалить ключ</string>

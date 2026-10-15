@@ -1079,6 +1079,8 @@
 
     <!-- Read aloud -->
     <string name="read_aloud_settings_key_saved">Hay una clave guardada en este dispositivo.</string>
+    <string name="read_aloud_settings_key_checking">Guardada en este dispositivo · Comprobando…</string>
+    <string name="read_aloud_settings_key_connected">Guardada en este dispositivo · Servidor accesible</string>
     <string name="read_aloud_settings_key_hint">Pega tu clave</string>
     <string name="read_aloud_settings_key_replace">Pega una clave nueva para sustituirla</string>
     <string name="read_aloud_settings_key_clear">Quitar la clave</string>

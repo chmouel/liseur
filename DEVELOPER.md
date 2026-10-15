@@ -1601,7 +1601,10 @@ reader behavior.
   server shown when it was started. `KeyRow` has a paste button that
   reads the clipboard only when tapped, a save button for typed keys,
   and a "Get a key" link to the hosted service's key page.
-  Server and model commits run in the
+  Newly saved keys are checked against `/models`; results are fenced
+  on the owner's generation, and a draft key is checked only against
+  a URL on its own origin. Success reports "Server reached", since some
+  services list models without authenticating the key. Server and model commits run in the
   service's scope under one lock with a generation counter, so a
   superseded model choice or one for a previous server never writes; the
   write itself runs in `ServerConnections.unlessChanged`, so a key or

@@ -250,7 +250,10 @@ class OpenAiTtsClient(
      * check that the server answers and takes the key. Throws [SpeechError].
      */
     suspend fun allModels(base: HttpUrl, apiKey: String?): List<SpeechModel> =
-        execute(request(base, "models", apiKey).get().build()) { modelList(it, base) }
+        execute(request(base, "models", apiKey).get().build()) {
+            if (!it.isSuccessful) throw errorFor(it)
+            modelList(it, base)
+        }
 
     /**
      * The server's own voice list, every page of it, or null when it has

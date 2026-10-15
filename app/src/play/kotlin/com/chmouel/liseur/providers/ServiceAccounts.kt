@@ -25,6 +25,7 @@ internal class ServiceAccounts(context: Context, connections: ServerConnections)
     fun Rows() {
         val configured by gemini.configured.collectAsState()
         val failure by gemini.keyFailure.collectAsState()
+        val check by gemini.keyCheck.collectAsState()
         SettingsGroup(stringResource(R.string.read_aloud_provider_gemini)) {
             KeyRow(
                 title = stringResource(R.string.services_gemini_key),
@@ -35,6 +36,7 @@ internal class ServiceAccounts(context: Context, connections: ServerConnections)
                 failed = failure == GeminiAccount.OWNER,
                 onKey = { _, key, done -> gemini.commitKey(key, done) },
                 onClear = { gemini.commitKeyRemoval() },
+                check = check,
                 keyUrl = KEY_PAGE,
             )
         }

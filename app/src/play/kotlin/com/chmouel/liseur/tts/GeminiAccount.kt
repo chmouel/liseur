@@ -8,11 +8,18 @@ import kotlinx.coroutines.flow.StateFlow
  * feature that asks Gemini. One instance per app, as whether a key is
  * saved is known per store.
  */
-internal class GeminiAccount(private val keys: ApiKeyStore, private val connections: ServerConnections) {
+internal class GeminiAccount(
+    private val keys: ApiKeyStore,
+    private val connections: ServerConnections,
+    private val validate: suspend (String) -> Unit = { GeminiTtsClient().models(it) },
+) {
     val configured: StateFlow<Boolean> = keys.configured
 
     /** [OWNER] when the last key save or removal failed. */
     val keyFailure: StateFlow<String?> = connections.keyFailure
+
+    /** How the last saved key fared when checked with Gemini. */
+    val keyCheck: StateFlow<KeyCheck?> = connections.keyCheck(OWNER)
 
     /** Moves on with every key change. */
     val generation: StateFlow<Int> = connections.generation(OWNER)
@@ -23,8 +30,22 @@ internal class GeminiAccount(private val keys: ApiKeyStore, private val connecti
         if (key == null) keys.clear() else keys.set(key)
     }
 
-    /** Saves [key]; features using the old one hear of it first. */
-    fun commitKey(key: String, done: (Boolean) -> Unit) = connections.commitKey(OWNER, { keys.set(key) }, done)
+    /**
+     * Saves [key] and checks it with Gemini; features using the old one
+     * hear of it first.
+     */
+    fun commitKey(key: String, done: (Boolean) -> Unit) = connections.commitKey(
+        OWNER,
+        op = { keys.set(key) },
+        afterSave = { generation ->
+            connections.checkKey(
+                owner = OWNER,
+                generation = generation,
+                validate = { validate(key) },
+            )
+        },
+        done = done,
+    )
 
     fun commitKeyRemoval() = connections.commitKey(OWNER, { keys.clear() })
 

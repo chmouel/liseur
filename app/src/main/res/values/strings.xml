@@ -1123,6 +1123,8 @@
 
     <!-- Read aloud -->
     <string name="read_aloud_settings_key_saved">A key is saved on this device.</string>
+    <string name="read_aloud_settings_key_checking">Saved on this device · Checking…</string>
+    <string name="read_aloud_settings_key_connected">Saved on this device · Server reached</string>
     <string name="read_aloud_settings_key_hint">Paste your key</string>
     <string name="read_aloud_settings_key_replace">Paste a new key to replace it</string>
     <string name="read_aloud_settings_key_clear">Remove key</string>
