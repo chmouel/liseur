@@ -123,17 +123,29 @@ object OpenAiTts {
     /**
      * The OpenAI-style API root from what the reader typed, which the
      * `models` and `audio/...` paths are added to. A bare `host:port` is
-     * taken as http, and an address with no `v1` in its path gets one, so a
-     * self-hosted server's own address works as well as a hosted service's
-     * API root, such as `/v1/openai`. Null when it is no http(s) address.
+     * taken as http, and an address with no API version in its path gets
+     * `v1`, so a self-hosted server's own address works as well as a hosted
+     * service's API root, such as `/v1/openai`, Z.ai's `/api/paas/v4` or
+     * Gemini's `/v1beta/openai`. Null when it is no http(s) address.
      */
-    fun baseUrl(input: String): HttpUrl? {
+    fun baseUrl(input: String): HttpUrl? = normalized(input) { segments -> segments.none { VERSION.matches(it) } }
+
+    /**
+     * The address a listed server is saved under: [baseUrl] as it was
+     * before a version other than `v1` was recognised, kept so saved
+     * servers, backups and synced settings still match their ids.
+     */
+    fun identityUrl(input: String): HttpUrl? = normalized(input) { segments -> "v1" !in segments }
+
+    private val VERSION = Regex("v\\d+[a-z0-9]*")
+
+    private fun normalized(input: String, addV1: (List<String>) -> Boolean): HttpUrl? {
         var text = input.trim()
         if (text.isEmpty()) return null
         if (!text.contains("://")) text = "http://$text"
         val url = text.toHttpUrlOrNull() ?: return null
         val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
-        if ("v1" !in segments) segments.add("v1")
+        if (addV1(segments)) segments.add("v1")
         return url.newBuilder()
             .encodedPath("/")
             .apply { segments.forEach { addPathSegment(it) } }

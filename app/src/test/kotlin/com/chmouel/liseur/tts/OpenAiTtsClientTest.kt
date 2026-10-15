@@ -252,6 +252,14 @@ class OpenAiTtsClientTest {
         assertEquals("https://tts.example.com/v1", OpenAiTts.baseUrl("https://tts.example.com/v1/").toString())
         assertEquals("https://example.com/kokoro/v1", OpenAiTts.baseUrl("https://example.com/kokoro").toString())
         assertEquals("https://api.example.com/v1/openai", OpenAiTts.baseUrl("https://api.example.com/v1/openai").toString())
+        // An API root under another version is used as it is.
+        assertEquals("https://api.z.ai/api/paas/v4", OpenAiTts.baseUrl("https://api.z.ai/api/paas/v4/").toString())
+        assertEquals(
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            OpenAiTts.baseUrl("https://generativelanguage.googleapis.com/v1beta/openai").toString(),
+        )
+        // A word that only starts with a v is no version.
+        assertEquals("https://example.com/voices/v1", OpenAiTts.baseUrl("https://example.com/voices").toString())
         assertNull(OpenAiTts.baseUrl(""))
         assertNull(OpenAiTts.baseUrl("   "))
         assertNull(OpenAiTts.baseUrl("ftp://pi.lan"))

@@ -136,6 +136,20 @@ class ServerSettingsTest {
     }
 
     @Test
+    fun `a server under a version other than v1 keeps the id it was saved under`() {
+        // As a phone saved Z.ai before such versions were recognised.
+        val id = "https://api.z.ai/api/paas/v4/v1"
+        assertEquals(id, ServerConnection.idOf("https://api.z.ai/api/paas/v4/"))
+        val p = mutablePreferencesOf(
+            ServerSettings.SERVERS to """[{"id":"$id","name":"ZAI","url":"https://api.z.ai/api/paas/v4/"}]""",
+            ServerSettings.TRANSLATION_SERVER to id,
+            ServerSettings.TRANSLATION_STATE to """{"$id":{"model":"glm-4.7"}}""",
+        )
+        assertEquals(listOf(id), ServerSettings.servers(p).readable?.map { it.id })
+        assertEquals("glm-4.7", ServerSettings.translationStates(p)[id]?.model)
+    }
+
+    @Test
     fun `state or a read-aloud choice for a server not listed cannot be read and is kept`() = runTest {
         val dangling = listOf(
             Pair(ServerSettings.READ_ALOUD_STATE, """{"$OPENROUTER_ID":{"model":"tts"}}"""),

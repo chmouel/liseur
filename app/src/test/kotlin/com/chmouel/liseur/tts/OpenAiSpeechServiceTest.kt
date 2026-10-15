@@ -345,6 +345,23 @@ class OpenAiSpeechServiceTest {
     }
 
     @Test
+    fun aVersionedServerKeepsItsRememberedVoiceScope(): Unit = runBlocking {
+        val a = server()
+        val url = a.web.url("/api/paas/v4").toString()
+        val service = service()
+        saveUrl(service, url)
+        settings.setSpeechServerModelAndVoice(url, "custom", "narrator")
+        val savedScope = VoiceScope("openai", "$url/v1", "custom")
+
+        assertTrue(service.remember(savedScope, "fr", "conteur"))
+        settings.setSpeechServerModelAndVoice(url, "custom", "narrator")
+        val catalogue = service.catalogue(settings.settings.first())!!
+
+        assertEquals(savedScope, catalogue.scope)
+        assertTrue(catalogue.voices.any { it.id == "conteur" })
+    }
+
+    @Test
     fun aFailedVoiceListKeepsTheSavedAndRememberedVoicesAndSaysSo(): Unit = runBlocking {
         val a = server()
         val service = service()

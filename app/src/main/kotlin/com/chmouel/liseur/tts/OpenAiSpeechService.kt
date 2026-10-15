@@ -262,7 +262,7 @@ internal class OpenAiSpeechService(
     private fun scopeOf(s: AppSettings): VoiceScope? = scopeOf(s.speechServerUrl, s.speechServerModel)
 
     private fun scopeOf(url: String?, model: String?): VoiceScope? {
-        val base = OpenAiTts.baseUrl(url.orEmpty()) ?: return null
+        val base = OpenAiTts.identityUrl(url.orEmpty()) ?: return null
         return VoiceScope(id, base.toString(), model?.trim()?.takeIf { it.isNotEmpty() } ?: return null)
     }
 

@@ -1515,7 +1515,12 @@ reader behavior.
   `DeviceVoices.toSpeechPcm` converts to 24 kHz mono 16-bit. One
   `TextToSpeech` is shared and shut down after a minute idle.
   Requests go to `<root>/audio/speech`, where `/v1` is added to an
-  address whose path has none, asking for `response_format: "wav"`.
+  address whose path has no API version (`v1`, `v4`, `v1beta`, …), so
+  Z.ai's `/api/paas/v4` and Gemini's `/v1beta/openai` are used as typed.
+  A listed server's id and remembered voice scope keep the older rule
+  (`/v1` added unless the path has `v1`), so saved servers, backups and
+  synced settings still match.
+  Requests ask for `response_format: "wav"`.
   A 400/422 whose message names `response_format` (OpenRouter takes
   only mp3 or pcm) is asked again for `mp3`, and that (root, model)
   then asks mp3 first, once it worked. Error messages are read from

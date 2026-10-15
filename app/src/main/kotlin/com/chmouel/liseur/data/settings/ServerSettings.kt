@@ -28,7 +28,7 @@ data class ServerConnection(val id: String, val name: String, val url: String) {
 
     companion object {
         /** The id of the server at [url], or null when it is not a server address. */
-        fun idOf(url: String): String? = OpenAiTts.baseUrl(url)?.toString()
+        fun idOf(url: String): String? = OpenAiTts.identityUrl(url)?.toString()
     }
 }
 

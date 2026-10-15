@@ -195,6 +195,14 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `a versioned API root is asked as it is`(): Unit = runBlocking {
+        server.enqueue(json(completion("Bonjour.")))
+        val zai = OpenAiTts.baseUrl(server.url("/api/paas/v4/").toString())!!
+        assertEquals("Bonjour.", client.translate(zai, "k", "glm-4.7", "en", "fr", "Good morning."))
+        assertEquals("/api/paas/v4/chat/completions", server.takeRequest().url.encodedPath)
+    }
+
+    @Test
     fun `no key, no authorization header`(): Unit = runBlocking {
         server.enqueue(json(completion("ok")))
         client.translate(base, null, "m", null, "en", "x")
