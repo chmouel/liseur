@@ -1298,9 +1298,21 @@
     <string name="translation_options_temperature">Temperature</string>
     <string name="translation_options_temperature_detail">At 0 the same passage gets the same wording every time. Higher values vary it.</string>
     <string name="translation_options_temperature_refused">This model refuses a temperature, so none is sent.</string>
-    <string name="translation_options_context">Send the sentence before</string>
-    <string name="translation_options_context_detail">When a page is translated, each sentence goes with the one before it, which helps with pronouns and names.</string>
-    <string name="translation_options_context_gemma">TranslateGemma translates each sentence on its own and never gets the one before.</string>
+    <string name="translation_options_context">Send earlier text</string>
+    <string name="translation_options_context_detail">When a page is translated, each sentence goes with some of the book\'s text before it, as much as the Translation settings allow. It helps with pronouns and names.</string>
+    <string name="translation_options_context_gemma">TranslateGemma translates each sentence on its own and never gets the text before it.</string>
+    <string name="translation_settings_context">Earlier text for page translation</string>
+    <string name="translation_settings_context_detail">When a page is translated, each sentence goes with some of the book\'s text before it, from the same chapter. It helps the model tell who is speaking and what pronouns refer to. More text sends more of the book to the service, which can be slower or cost more.</string>
+    <string name="translation_context_off">Off</string>
+    <string name="translation_context_small">Small</string>
+    <string name="translation_context_standard">Standard</string>
+    <string name="translation_context_large">Large</string>
+    <string name="translation_context_off_detail">Only the sentence being translated</string>
+    <plurals name="translation_context_limit">
+        <item quantity="one">Up to %1$d sentence, %2$s characters</item>
+        <item quantity="other">Up to %1$d sentences, %2$s characters</item>
+    </plurals>
+    <string name="translation_context_unused">The service chosen now translates each sentence on its own, so this setting has no effect.</string>
     <string name="translation_options_instructions">Extra instructions</string>
     <string name="translation_options_instructions_detail">Added to the request for every passage.</string>
     <string name="translation_options_instructions_hint">Use the informal tu. Keep character names as written.</string>

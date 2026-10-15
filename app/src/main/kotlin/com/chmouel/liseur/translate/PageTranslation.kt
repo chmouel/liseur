@@ -1,5 +1,6 @@
 package com.chmouel.liseur.translate
 
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -74,6 +75,13 @@ interface SentenceTranslator {
 
     /** Where the text goes now, for "Translated by %s."; null for the device. */
     val destination: String?
+
+    /**
+     * How much of the book's earlier text [identity] takes with a
+     * sentence: [TranslationContextSize.OFF] for a service that uses none.
+     * Null leaves the caller's own context as it is.
+     */
+    suspend fun contextSize(identity: String): TranslationContextSize? = null
 
     /**
      * [sentence] translated, with [context] as the sentence before it, and

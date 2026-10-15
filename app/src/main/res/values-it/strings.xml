@@ -1242,9 +1242,21 @@
     <string name="translation_options_temperature">Temperatura</string>
     <string name="translation_options_temperature_detail">A 0 lo stesso passaggio riceve sempre la stessa traduzione. Valori più alti la fanno variare.</string>
     <string name="translation_options_temperature_refused">Questo modello rifiuta la temperatura, quindi non viene inviata.</string>
-    <string name="translation_options_context">Invia la frase precedente</string>
-    <string name="translation_options_context_detail">Quando si traduce una pagina, ogni frase viene inviata con quella precedente, il che aiuta con pronomi e nomi.</string>
-    <string name="translation_options_context_gemma">TranslateGemma traduce ogni frase da sola e non riceve mai la precedente.</string>
+    <string name="translation_options_context">Invia il testo precedente</string>
+    <string name="translation_options_context_detail">Quando si traduce una pagina, ogni frase viene inviata con parte del testo del libro che la precede, quanto consentono le impostazioni di traduzione. Aiuta con pronomi e nomi.</string>
+    <string name="translation_options_context_gemma">TranslateGemma traduce ogni frase da sola e non riceve mai il testo precedente.</string>
+    <string name="translation_settings_context">Testo precedente per la traduzione di pagina</string>
+    <string name="translation_settings_context_detail">Quando si traduce una pagina, ogni frase viene inviata con parte del testo che la precede, dello stesso capitolo. Il modello capisce meglio chi parla e a chi si riferiscono i pronomi. Più testo invia al servizio una parte maggiore del libro, il che può essere più lento o costare di più.</string>
+    <string name="translation_context_off">Disattivato</string>
+    <string name="translation_context_small">Breve</string>
+    <string name="translation_context_standard">Standard</string>
+    <string name="translation_context_large">Ampio</string>
+    <string name="translation_context_off_detail">Solo la frase da tradurre</string>
+    <plurals name="translation_context_limit">
+        <item quantity="one">Fino a %1$d frase, %2$s caratteri</item>
+        <item quantity="other">Fino a %1$d frasi, %2$s caratteri</item>
+    </plurals>
+    <string name="translation_context_unused">Il servizio scelto traduce ogni frase da sola, quindi questa impostazione non ha effetto.</string>
     <string name="translation_options_instructions">Istruzioni aggiuntive</string>
     <string name="translation_options_instructions_detail">Aggiunte alla richiesta per ogni passaggio.</string>
     <string name="translation_options_instructions_hint">Dare del tu. Lasciare i nomi dei personaggi come sono.</string>

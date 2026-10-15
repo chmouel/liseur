@@ -1334,9 +1334,23 @@
     <string name="translation_options_temperature">Температура</string>
     <string name="translation_options_temperature_detail">При 0 один и тот же отрывок всегда переводится одинаково. Чем выше значение, тем разнообразнее формулировки.</string>
     <string name="translation_options_temperature_refused">Эта модель не принимает температуру, поэтому она не отправляется.</string>
-    <string name="translation_options_context">Отправлять предыдущее предложение</string>
-    <string name="translation_options_context_detail">При переводе страницы каждое предложение отправляется вместе с предыдущим, это помогает с местоимениями и именами.</string>
-    <string name="translation_options_context_gemma">TranslateGemma переводит каждое предложение отдельно и не получает предыдущее.</string>
+    <string name="translation_options_context">Отправлять предыдущий текст</string>
+    <string name="translation_options_context_detail">При переводе страницы каждое предложение отправляется вместе с частью предшествующего текста книги, в пределах настроек перевода. Это помогает с местоимениями и именами.</string>
+    <string name="translation_options_context_gemma">TranslateGemma переводит каждое предложение отдельно и не получает предшествующий текст.</string>
+    <string name="translation_settings_context">Предыдущий текст при переводе страницы</string>
+    <string name="translation_settings_context_detail">При переводе страницы каждое предложение отправляется вместе с частью предшествующего текста из той же главы. Так модели легче понять, кто говорит и к кому относятся местоимения. Чем больше текста, тем больше книги уходит в сервис, а перевод может стать медленнее или дороже.</string>
+    <string name="translation_context_off">Выключено</string>
+    <string name="translation_context_small">Мало</string>
+    <string name="translation_context_standard">Стандартно</string>
+    <string name="translation_context_large">Много</string>
+    <string name="translation_context_off_detail">Только переводимое предложение</string>
+    <plurals name="translation_context_limit">
+        <item quantity="one">До %1$d предложения, %2$s символов</item>
+        <item quantity="few">До %1$d предложений, %2$s символов</item>
+        <item quantity="many">До %1$d предложений, %2$s символов</item>
+        <item quantity="other">До %1$d предложения, %2$s символов</item>
+    </plurals>
+    <string name="translation_context_unused">Выбранный сервис переводит каждое предложение отдельно, поэтому эта настройка ни на что не влияет.</string>
     <string name="translation_options_instructions">Дополнительные инструкции</string>
     <string name="translation_options_instructions_detail">Добавляются к запросу для каждого отрывка.</string>
     <string name="translation_options_instructions_hint">Обращаться на «ты». Оставлять имена персонажей без изменений.</string>

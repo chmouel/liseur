@@ -53,6 +53,13 @@ internal interface TranslationService {
     fun model(s: AppSettings): String? = null
 
     /**
+     * Whether a page sentence it translates under [s] goes with the
+     * book's text before it. A service that would drop it, or translate
+     * it too, says no, so none is gathered and none keys its answers.
+     */
+    fun usesContext(s: AppSettings): Boolean = false
+
+    /**
      * The languages it translates [source] into, with their state; null
      * when it takes any language. [source] is null for a detected one.
      */

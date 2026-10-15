@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.ServerTranslationState
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -66,6 +67,16 @@ class PageIdentityTest {
         assertEquals(server(plain), server(refused))
         val warmer = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small", temperature = 0.7)))
         assertEquals(server(warmer), server(warmer.copy(translationStates = mapOf(id to ServerTranslationState(model = "small", temperature = 0.7, noTemperature = true)))))
+    }
+
+    @Test
+    fun `the earlier text sent joins the identity last, only when some is sent`() {
+        val off = pageIdentity(settings(), "gemini", "flash", "fr", "en")
+        assertEquals(off, pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.OFF))
+        val standard = pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.STANDARD)
+        assertEquals(off + "\u0000context=standard", standard)
+        assertNotEquals(standard, pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.LARGE))
+        assertEquals("gemini", pageIdentityService(standard))
     }
 
     @Test

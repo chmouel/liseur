@@ -2265,7 +2265,9 @@ fun ReaderScreen(
         return startPageTranslation(
             open = {
                 shared?.translations?.takeIf { it.acquire() }
-                    ?: translate.openPage(source, target)?.let { SentenceTranslations(it, pageTranslations) }
+                    ?: translate.openPage(source, target)?.let {
+                        SentenceTranslations(it, pageTranslations, TranslatedPages.preceding(publication, source))
+                    }
             },
             close = SentenceTranslations::release,
             prepare = { SpokenPassage.startingPoint(nav, selection) },

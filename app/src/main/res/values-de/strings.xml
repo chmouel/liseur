@@ -1254,9 +1254,21 @@
     <string name="translation_options_temperature">Temperatur</string>
     <string name="translation_options_temperature_detail">Bei 0 wird derselbe Abschnitt immer gleich übersetzt. Höhere Werte variieren die Formulierung.</string>
     <string name="translation_options_temperature_refused">Dieses Modell lehnt eine Temperatur ab, daher wird keine gesendet.</string>
-    <string name="translation_options_context">Vorherigen Satz mitsenden</string>
-    <string name="translation_options_context_detail">Beim Übersetzen einer Seite wird jeder Satz mit dem vorherigen gesendet, was bei Pronomen und Namen hilft.</string>
-    <string name="translation_options_context_gemma">TranslateGemma übersetzt jeden Satz einzeln und erhält nie den vorherigen.</string>
+    <string name="translation_options_context">Vorherigen Text mitsenden</string>
+    <string name="translation_options_context_detail">Beim Übersetzen einer Seite wird jeder Satz mit einem Teil des vorangehenden Buchtexts gesendet, so viel die Übersetzungseinstellungen erlauben. Das hilft bei Pronomen und Namen.</string>
+    <string name="translation_options_context_gemma">TranslateGemma übersetzt jeden Satz einzeln und erhält nie den vorangehenden Text.</string>
+    <string name="translation_settings_context">Vorheriger Text bei der Seitenübersetzung</string>
+    <string name="translation_settings_context_detail">Beim Übersetzen einer Seite wird jeder Satz mit einem Teil des vorangehenden Texts aus demselben Kapitel gesendet. So erkennt das Modell besser, wer spricht und worauf sich Pronomen beziehen. Mehr Text schickt mehr vom Buch an den Dienst, was langsamer oder teurer sein kann.</string>
+    <string name="translation_context_off">Aus</string>
+    <string name="translation_context_small">Klein</string>
+    <string name="translation_context_standard">Standard</string>
+    <string name="translation_context_large">Groß</string>
+    <string name="translation_context_off_detail">Nur der zu übersetzende Satz</string>
+    <plurals name="translation_context_limit">
+        <item quantity="one">Bis zu %1$d Satz, %2$s Zeichen</item>
+        <item quantity="other">Bis zu %1$d Sätze, %2$s Zeichen</item>
+    </plurals>
+    <string name="translation_context_unused">Der gewählte Dienst übersetzt jeden Satz einzeln, daher hat diese Einstellung keine Wirkung.</string>
     <string name="translation_options_instructions">Zusätzliche Anweisungen</string>
     <string name="translation_options_instructions_detail">Werden jeder Anfrage für einen Abschnitt hinzugefügt.</string>
     <string name="translation_options_instructions_hint">Duzen. Namen der Figuren unverändert lassen.</string>

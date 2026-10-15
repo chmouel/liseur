@@ -1821,7 +1821,7 @@ reader behavior.
   model, Gemini included, is asked at temperature 0 unless a server's
   Advanced options say otherwise. A server model named TranslateGemma
   (`translategemma:4b` on Ollama, for example) is asked instead in the
-  single user message it was trained on, without the previous sentence,
+  single user message it was trained on, without the earlier text,
   which it would translate too; it translates instruction-like passages
   rather than following them. Refusal, empty, quota, malformed, refused
   key, unreachable and a model the server does not have (a 404 whose
@@ -1837,7 +1837,7 @@ reader behavior.
   `translation_server_state`, apart from its read-aloud model, and
   Gemini's is `translation_gemini_model`. The same per-server entry
   holds the Advanced options (`ServerTranslationState`): temperature,
-  whether the previous sentence goes with page sentences, the reader's
+  whether earlier text goes with page sentences, the reader's
   extra instructions (added to the system prompt, or before
   TranslateGemma's request), `max_tokens` and Ollama's `keep_alive`.
   Each is stored only once set. The temperature is always sent, 0 unless
@@ -1879,8 +1879,8 @@ reader behavior.
   ahead of the last walked sentence on screen or already passed, restarts
   the walk when the reader jumps elsewhere, and asks one sentence at a
   time through a `TranslationRun` (one device `Translator` per run;
-  network services get the previous sentence as context they must not
-  translate). A reader who goes past everything walked in the same
+  network services get earlier text as context they must not
+  translate, below). A reader who goes past everything walked in the same
   chapter is caught up with: the walk passes over the sentences the page
   says are behind the screen without asking for them. Changing the
   service in settings rebinds the run at the
@@ -1888,6 +1888,31 @@ reader behavior.
   answered it. Errors that
   concern one sentence skip it; key, quota, pair and pack errors halt the
   run with an action on `PageTranslationBar`.
+- The context a page sentence goes with is a window of the book's own
+  earlier text, `translation_context` (`TranslationContextSize`: Off,
+  Small 4 sentences/2,000 characters, Standard 8/4,000 by default,
+  Large 16/8,000; both limits apply, separators included). It is
+  device-local and backed up, never synced. `SentenceTranslations` builds
+  it per sentence and per answering identity
+  (`SentenceTranslator.contextSize`), so the page and the voice send the
+  same text and share one request whoever asks first, and a start or a
+  jump mid-chapter still gets context. `PrecedingSentences` reads the
+  sentence's resource from its start with the same cursor and tokenizer
+  as the page (`TranslatedPages.preceding`), off the main thread, and
+  indexes each sentence by selector, text and the text before it.
+  A sentence takes the first place with that key and gets only what
+  comes strictly before it, so a repeat that cannot be told apart gets
+  less context, never itself or later text. It keeps the last two
+  resources walked and walks no further than the furthest sentence
+  asked about.
+  `TranslationContext.window` keeps the nearest whole sentences that fit,
+  a space within an element and a line break between elements, or the
+  end of one oversized sentence. Only Gemini and server chat models that
+  are not TranslateGemma take it (`TranslationService.usesContext`); a
+  server's Advanced context switch turned off still sends none. The
+  window stops at the resource: two chapters in one XHTML file share
+  it. A resource that cannot be read, or a sentence not found in it,
+  falls back to the caller's sentence before.
 - Page translation replies are saved in `translations.db`
   (`translate/SavedTranslations.kt`), a Room database of its own so the
   backup allowlists, which name `liseur.db`, leave it out. A row is keyed
@@ -1897,7 +1922,11 @@ reader behavior.
   change a reply once any is set, never `keep_alive`; never a display
   name or key), the context and the sentence. Bump
   `TranslationPrompt.VERSION` when the prompt changes, or its
-  TranslateGemma version when that prompt does. A run is opened with the
+  TranslateGemma version when that prompt does. The context window
+  (below) joins `pageIdentity` last as `context=<size>`, only for a
+  service that sends it, so changing the wording of the prompt's context
+  rule changes the identities that use it without a version bump, and a
+  setup sending none keeps its saved pages. A run is opened with the
   settings its identity was read from and asks with those, never the
   settings of the moment, so an answer always belongs to its identity.
   Its retries are judged by that binding too: a settings change while a
@@ -2009,7 +2038,9 @@ reader behavior.
   from the same Readium locators, so the same words in two places never
   share a translation or audio. `SpeechCache`'s `prepare` stage
   (`TranslatedSpeech`) translates each source sentence of a request with
-  the one before it as context. For the request's first sentence that is
+  the one before it as context, which `SentenceTranslations` replaces
+  with the page's context window wherever it finds the sentence in its
+  resource. For the request's first sentence that is
   the sentence the read-ahead passed when it fetched the request. A
   request it did not fetch gets the one the voice asked for just before
   (`SpeechObserver.previousOf`), only when the request's Readium `before`

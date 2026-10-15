@@ -19,6 +19,13 @@ import kotlinx.coroutines.ensureActive
  * leaves in the original is shared with the voice until that sentence is
  * retried or the page walk ends.
  *
+ * The text that goes with a sentence is the book's own before it, found
+ * by [preceding] from where the sentence is and cut to what the
+ * answering service takes ([SentenceTranslator.contextSize]), so the
+ * page and the voice send the same whoever asks first. Without
+ * [preceding], or where it cannot find the sentence, the caller's
+ * sentence before goes instead.
+ *
  * Held by [acquire] and [release]: it starts held once, by whoever
  * opened it, and closes the translator when the last holder lets go.
  * Main thread only, like the page and the voice.
@@ -26,6 +33,7 @@ import kotlinx.coroutines.ensureActive
 class SentenceTranslations(
     val translator: SentenceTranslator,
     private val cache: PageTranslationCache,
+    private val preceding: PrecedingText? = null,
 ) {
     private data class PageFailure(
         val scope: PageFailureScope,
@@ -120,7 +128,8 @@ class SentenceTranslations(
     private suspend fun resolve(sentence: PageSentence, context: String?, identity: String): Translated {
         pageFailureFor(sentence)?.let { throw it }
         acceptedFor(sentence, identity)?.let { return it }
-        val key = sentence.text to context
+        // What is sent, so the page and the voice asking for one place share the request.
+        val key = sentence.text to contextFor(sentence, context, identity)
         while (true) {
             val pending = inflight[key]
             if (pending != null) {
@@ -136,7 +145,7 @@ class SentenceTranslations(
             val mine = CompletableDeferred<Translated>()
             inflight[key] = mine
             try {
-                val answer = translated(sentence.text, context)
+                val answer = translated(sentence, context)
                 mine.complete(answer)
                 return settled(sentence, answer)
             } catch (e: CancellationException) {
@@ -203,17 +212,28 @@ class SentenceTranslations(
         }
     }
 
-    private suspend fun translated(text: String, context: String?): Translated {
-        fun keyOf(identity: String) = listOf(identity, context.orEmpty(), text).joinToString("\u0000")
+    /** The text [identity] is given before [sentence]: the book's own, or [fallback] where that is not known. */
+    private suspend fun contextFor(sentence: PageSentence, fallback: String?, identity: String): String? {
+        val size = translator.contextSize(identity) ?: return fallback
+        if (size.sentences <= 0) return null
+        val earlier = preceding?.before(sentence, size.sentences) ?: return fallback
+        return TranslationContext.window(earlier, size)
+    }
+
+    private suspend fun translated(sentence: PageSentence, fallback: String?): Translated {
+        val text = sentence.text
+        fun keyOf(identity: String, context: String?) = listOf(identity, context.orEmpty(), text).joinToString("\u0000")
         var identity = translator.answering()
-        var lookup = cache.get(keyOf(identity))
+        var context = contextFor(sentence, fallback, identity)
+        var lookup = cache.get(keyOf(identity, context))
         var answer: Translated? = null
         while (answer == null) {
             // Settings changed during the lookup: what was found answers for the service before.
             val current = translator.answering()
             if (current != identity) {
                 identity = current
-                lookup = cache.get(keyOf(identity))
+                context = contextFor(sentence, fallback, identity)
+                lookup = cache.get(keyOf(identity, context))
                 continue
             }
             lookup.translation?.let { return Translated(it, identity) }
@@ -234,7 +254,7 @@ class SentenceTranslations(
             )
         }
         // Filed under what answered, and only while that is still what the settings choose.
-        if (translator.answering() == answer.by) cache.put(keyOf(answer.by), answer.text, lookup.stamp)
+        if (translator.answering() == answer.by) cache.put(keyOf(answer.by, context), answer.text, lookup.stamp)
         return answer
     }
 

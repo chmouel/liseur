@@ -5,6 +5,8 @@ import com.chmouel.liseur.reader.chrome.attachedWebViews
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.translate.PageReader
+import com.chmouel.liseur.translate.PrecedingSentences
+import com.chmouel.liseur.translate.PrecedingText
 import com.chmouel.liseur.translate.PageSentence
 import com.chmouel.liseur.translate.PageSentences
 import com.chmouel.liseur.translate.PageTranslation
@@ -61,6 +63,18 @@ internal object TranslatedPages {
             SpeechKey.sentenceAt(text.text, locator)
         }
     }
+
+    /**
+     * The book's sentences before one, read from the start of its chapter
+     * file the way [sentences] reads them, for the text a translation
+     * takes with it.
+     */
+    fun preceding(publication: Publication, source: String?): PrecedingText = PrecedingSentences(open = { href ->
+        publication.readingOrder
+            .firstOrNull { ResourceAddress.canonicalPath(it.url().toString()) == href }
+            ?.let { publication.locatorFromLink(it) }
+            ?.let { sentences(publication, it, source) }
+    })
 
     /** What names a place the walk starts from: its chapter and element. */
     fun key(place: Locator): String =

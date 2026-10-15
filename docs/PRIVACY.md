@@ -123,7 +123,7 @@ fails then, and opening the screen makes no request.
 
 Reading aloud a book you are reading translated in the page reads the
 translation. Each sentence goes first to the translation service you
-chose, as page translation sends it, with the sentence before it, a few
+chose, as page translation sends it, with the book's text before it, a few
 sentences ahead of the voice; then its translation goes to the speech
 service you chose for reading aloud, as described below for that
 service, in place of the book's words. This carries on with the screen
@@ -191,7 +191,14 @@ instructions, they go with every request to that server. No book title,
 file, identifier or reading position goes with it. Who else can see that
 text depends on the server and the network you chose; with a hosted
 service, the passage goes to that service under its own terms and
-privacy policy. [Local AI servers](LOCAL_AI_SERVERS.md) explains how to
+privacy policy. When you translate a page in the reader, each sentence
+goes the same way, with some of the book's text before it from the same
+chapter, as set by "Earlier text for page translation" in Settings,
+Translation: by default up to 8 sentences and 4,000 characters, and
+some of it may come from before the place you started translating. Set
+it to Off, or turn off the server's Advanced option to send earlier
+text, and only the sentence goes. TranslateGemma models never get it.
+[Local AI servers](LOCAL_AI_SERVERS.md) explains how to
 run a translation server on your own computer.
 
 ### A server, for the reading companion
@@ -269,7 +276,9 @@ English sentence. When you tap Translate on a passage, Liseur sends that
 passage, up to 2,000 characters, with its language and the language you
 want, to the same address over HTTPS, together with your key and the
 model you picked. No book title, file, identifier or reading position
-goes with it. Requests are billed to your key under Google's terms, and
+goes with it. A page translated in the reader sends each sentence with
+some of the book's text before it, as described for a server above.
+Requests are billed to your key under Google's terms, and
 Google's retention policy for the Gemini API applies to them. A
 passage's translation is shown on screen and is never written to
 storage; sentences translated in the page are saved on your device as

@@ -1242,9 +1242,21 @@
     <string name="translation_options_temperature">Température</string>
     <string name="translation_options_temperature_detail">À 0, un même passage est toujours traduit de la même façon. Plus haut, la formulation varie.</string>
     <string name="translation_options_temperature_refused">Ce modèle refuse une température, aucune n\'est donc envoyée.</string>
-    <string name="translation_options_context">Envoyer la phrase précédente</string>
-    <string name="translation_options_context_detail">Quand une page est traduite, chaque phrase est envoyée avec celle qui la précède, ce qui aide pour les pronoms et les noms.</string>
-    <string name="translation_options_context_gemma">TranslateGemma traduit chaque phrase seule et ne reçoit jamais la précédente.</string>
+    <string name="translation_options_context">Envoyer le texte précédent</string>
+    <string name="translation_options_context_detail">Quand une page est traduite, chaque phrase est envoyée avec une partie du texte qui la précède dans le livre, autant que les réglages de traduction le permettent. Cela aide pour les pronoms et les noms.</string>
+    <string name="translation_options_context_gemma">TranslateGemma traduit chaque phrase seule et ne reçoit jamais le texte qui la précède.</string>
+    <string name="translation_settings_context">Texte précédent pour la traduction de page</string>
+    <string name="translation_settings_context_detail">Quand une page est traduite, chaque phrase est envoyée avec une partie du texte qui la précède, dans le même chapitre. Le modèle comprend mieux qui parle et à qui renvoient les pronoms. Plus de texte envoie davantage du livre au service, ce qui peut être plus lent ou coûter plus cher.</string>
+    <string name="translation_context_off">Désactivé</string>
+    <string name="translation_context_small">Court</string>
+    <string name="translation_context_standard">Standard</string>
+    <string name="translation_context_large">Long</string>
+    <string name="translation_context_off_detail">Seulement la phrase à traduire</string>
+    <plurals name="translation_context_limit">
+        <item quantity="one">Jusqu’à %1$d phrase, %2$s caractères</item>
+        <item quantity="other">Jusqu’à %1$d phrases, %2$s caractères</item>
+    </plurals>
+    <string name="translation_context_unused">Le service choisi traduit chaque phrase seule : ce réglage n’a aucun effet.</string>
     <string name="translation_options_instructions">Instructions supplémentaires</string>
     <string name="translation_options_instructions_detail">Ajoutées à la demande pour chaque passage.</string>
     <string name="translation_options_instructions_hint">Utiliser le tutoiement. Garder les noms des personnages tels quels.</string>

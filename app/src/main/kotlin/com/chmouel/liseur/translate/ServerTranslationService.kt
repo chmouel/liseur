@@ -59,6 +59,11 @@ internal class ServerTranslationService(
     override fun model(s: AppSettings): String? =
         s.translationServerConnection?.let { s.translationModels[it.id] }?.takeIf { it.isNotBlank() }
 
+    override fun usesContext(s: AppSettings): Boolean {
+        val model = model(s) ?: return false
+        return !TranslationPrompt.isTranslateGemma(model) && tuning(s).context != false
+    }
+
     /** How the reader asked for the chosen server to be asked; all defaults when untouched. */
     private fun tuning(s: AppSettings): ServerTranslationState =
         s.translationServerConnection?.let { s.translationStates[it.id] } ?: ServerTranslationState()

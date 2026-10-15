@@ -62,6 +62,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServiceOption
 import com.chmouel.liseur.providers.ServiceRow
 import com.chmouel.liseur.providers.ServiceSheet
@@ -231,11 +232,82 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, configured)
                 }
+                ContextGroup(feature)
                 feature.saved?.let { SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync) }
             }
         }
     }
 }
+
+/**
+ * How much of the book's earlier text goes with each sentence of a
+ * translated page, with a note when the service chosen now takes none.
+ */
+@Composable
+private fun ContextGroup(feature: ServiceTranslate) {
+    val chosen by feature.context.collectAsState(initial = TranslationContextSize.Default)
+    val takes by feature.takesContext.collectAsState(initial = true)
+    val scope = rememberCoroutineScope()
+    val numbers = NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0])
+    SettingsGroup(stringResource(R.string.translation_settings_context)) {
+        Text(
+            text = stringResource(R.string.translation_settings_context_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        for (size in TranslationContextSize.entries) {
+            val selected = size == chosen
+            ListItem(
+                modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) {
+                    scope.launch { feature.setContext(size) }
+                },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = {
+                    Text(
+                        stringResource(size.label),
+                        color = if (selected) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                    )
+                },
+                supportingContent = {
+                    Text(
+                        if (size == TranslationContextSize.OFF) {
+                            stringResource(R.string.translation_context_off_detail)
+                        } else {
+                            pluralStringResource(
+                                R.plurals.translation_context_limit,
+                                size.sentences,
+                                size.sentences,
+                                numbers.format(size.characters),
+                            )
+                        },
+                    )
+                },
+                trailingContent = if (selected) {
+                    { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                } else {
+                    null
+                },
+            )
+        }
+        if (!takes) {
+            Text(
+                text = stringResource(R.string.translation_context_unused),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+private val TranslationContextSize.label: Int
+    get() = when (this) {
+        TranslationContextSize.OFF -> R.string.translation_context_off
+        TranslationContextSize.SMALL -> R.string.translation_context_small
+        TranslationContextSize.STANDARD -> R.string.translation_context_standard
+        TranslationContextSize.LARGE -> R.string.translation_context_large
+    }
 
 /** Every service, each listed server by name in place of the server kind, then the way to the Services page. */
 @Composable

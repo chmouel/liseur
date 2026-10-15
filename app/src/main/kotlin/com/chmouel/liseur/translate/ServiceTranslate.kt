@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.providers.ServicesScreen
@@ -80,6 +81,14 @@ internal class ServiceTranslate(
         return listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, identityOptions(s), s.translationGeminiModel)
     }
 
+    /** How much of the book's earlier text goes with each sentence of a page, for the services that take it. */
+    val context: Flow<TranslationContextSize> = settings.settings.map { it.translationContext }.distinctUntilChanged()
+
+    suspend fun setContext(size: TranslationContextSize) = settings.setTranslationContext(size)
+
+    /** Whether the service chosen now sends the book's earlier text with a sentence. */
+    val takesContext: Flow<Boolean> = settings.settings.map { resolve(it).usesContext(it) }.distinctUntilChanged()
+
     /** The language the reader picked to translate into; null follows the app's. */
     val target: Flow<String?> = settings.settings.map { it.translationTarget }.distinctUntilChanged()
 
@@ -114,6 +123,7 @@ internal class ServiceTranslate(
             destination: String?,
             val owner: String?,
             var choice: List<Any?>,
+            val context: TranslationContextSize,
         ) {
             var destination by mutableStateOf(destination)
         }
@@ -122,14 +132,14 @@ internal class ServiceTranslate(
             // One read, so the service and the identity it is known by come from the same settings.
             val s = settings.settings.first()
             val service = resolve(s)
-            return Triple(service, pageIdentity(s, service.id, service.model(s), source, target), s)
+            return Triple(service, pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s)), s)
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
         suspend fun bind(): Bound {
             val (service, identity, s) = wanted()
             val destination = service.destination(s)
-            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s), chosen(s))
+            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s), chosen(s), contextOf(service, s))
         }
 
         var bound by mutableStateOf(bind())
@@ -154,6 +164,9 @@ internal class ServiceTranslate(
             override val destination get() = bound.destination
 
             override suspend fun answering() = rebound().identity
+
+            override suspend fun contextSize(identity: String) =
+                rebound().takeIf { it.identity == identity }?.context ?: TranslationContextSize.OFF
 
             override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
                 var moved = false
@@ -228,18 +241,31 @@ internal class ServiceTranslate(
     }
 }
 
+/** How much earlier text [service] takes with a sentence under [s]: none when it uses no context. */
+internal fun contextOf(service: TranslationService, s: AppSettings): TranslationContextSize =
+    if (service.usesContext(s)) s.translationContext else TranslationContextSize.OFF
+
 /**
  * What a page translation by [service] with [model] depends on, written to
  * be kept across versions: the server by its address, never its name, its
  * key, or a model another service would use. The server's options that
  * change a translation join it only once set, so a page translated before
- * they existed keeps its identity.
+ * they existed keeps its identity. How much earlier text goes with a
+ * sentence, [context], joins last, and only for a service that sends it.
  */
-internal fun pageIdentity(s: AppSettings, service: String, model: String?, source: String?, target: String): String {
+internal fun pageIdentity(
+    s: AppSettings,
+    service: String,
+    model: String?,
+    source: String?,
+    target: String,
+    context: TranslationContextSize = TranslationContextSize.OFF,
+): String {
     val server = s.translationServerConnection?.takeIf { service == ServerSettings.SERVER_PROVIDER }
     val fields = listOf(IDENTITY_VERSION, TranslationPrompt.version(model), service, server?.id, model, source, target)
-    val tuned = server?.let { identityOptions(s, model) }
-    return (if (tuned == null) fields else fields + tuned).joinToString("\u0000") { it?.toString().orEmpty() }
+    val tuned = server?.let { identityOptions(s, model) }.orEmpty()
+    val window = listOfNotNull(context.takeIf { it != TranslationContextSize.OFF }?.let { "context=${it.id}" })
+    return (fields + tuned + window).joinToString("\u0000") { it?.toString().orEmpty() }
 }
 
 /**

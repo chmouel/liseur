@@ -1195,9 +1195,20 @@
     <string name="translation_options_temperature">温度</string>
     <string name="translation_options_temperature_detail">为 0 时，同一段文字每次的译文都相同。数值越高，措辞变化越多。</string>
     <string name="translation_options_temperature_refused">此模型不接受温度参数，因此不会发送。</string>
-    <string name="translation_options_context">发送前一句</string>
-    <string name="translation_options_context_detail">翻译整页时，每句会连同前一句一起发送，有助于处理代词和名字。</string>
-    <string name="translation_options_context_gemma">TranslateGemma 逐句单独翻译，从不接收前一句。</string>
+    <string name="translation_options_context">发送前文</string>
+    <string name="translation_options_context_detail">翻译整页时，每句会连同书中它之前的一部分文字一起发送，长度以翻译设置为准。有助于处理代词和名字。</string>
+    <string name="translation_options_context_gemma">TranslateGemma 逐句单独翻译，从不接收前文。</string>
+    <string name="translation_settings_context">整页翻译的前文</string>
+    <string name="translation_settings_context_detail">翻译整页时，每句会连同同一章节中它之前的一部分文字一起发送，帮助模型分辨谁在说话、代词指代谁。前文越多，发送给服务的书中内容越多，速度可能更慢，费用也可能更高。</string>
+    <string name="translation_context_off">关闭</string>
+    <string name="translation_context_small">少</string>
+    <string name="translation_context_standard">标准</string>
+    <string name="translation_context_large">多</string>
+    <string name="translation_context_off_detail">只发送要翻译的句子</string>
+    <plurals name="translation_context_limit">
+        <item quantity="other">最多 %1$d 句，%2$s 个字符</item>
+    </plurals>
+    <string name="translation_context_unused">当前选择的服务逐句单独翻译，此设置不起作用。</string>
     <string name="translation_options_instructions">附加说明</string>
     <string name="translation_options_instructions_detail">会添加到每段文字的请求中。</string>
     <string name="translation_options_instructions_hint">使用“你”而不是“您”。人物名字保持原样。</string>

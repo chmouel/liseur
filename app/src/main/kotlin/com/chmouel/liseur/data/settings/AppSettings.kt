@@ -293,6 +293,7 @@ data class AppSettings(
     val translationStates: Map<String, ServerTranslationState> = emptyMap(),
     val translationGeminiModel: String? = null,
     val translationTarget: String? = null,
+    val translationContext: TranslationContextSize = TranslationContextSize.Default,
     val companionServer: String? = null,
     val companionStates: Map<String, ServerCompanionState> = emptyMap(),
     val companionRecaps: Boolean = false,
@@ -365,6 +366,27 @@ enum class UploadPolicy(val id: String) {
     }
 }
 
+/**
+ * How much of the book's own text, just before a sentence, goes with it
+ * when a page is translated by a model that can use it: at most
+ * [sentences] earlier sentences of the same chapter file, and at most
+ * [characters] of them. More helps a model with who speaks and what a
+ * word means, and sends more of the book.
+ */
+enum class TranslationContextSize(val id: String, val sentences: Int, val characters: Int) {
+    OFF("off", 0, 0),
+    SMALL("small", 4, 2_000),
+    STANDARD("standard", 8, 4_000),
+    LARGE("large", 16, 8_000),
+    ;
+
+    companion object {
+        val Default = STANDARD
+
+        fun fromId(id: String?): TranslationContextSize = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
     produceMigrations = { context -> listOf(LegacySpeechServerMigration(serverNamer(context))) },
@@ -429,6 +451,7 @@ class AppSettingsRepository(
         val READ_ALOUD_VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
         val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
+        val TRANSLATION_CONTEXT = stringPreferencesKey(TRANSLATION_CONTEXT_NAME)
         val COMPANION_RECAPS = booleanPreferencesKey(COMPANION_RECAPS_NAME)
         val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
         val COMPANION_GEMINI_MODEL = stringPreferencesKey(COMPANION_GEMINI_MODEL_NAME)
@@ -527,6 +550,7 @@ class AppSettingsRepository(
             translationStates = ServerSettings.translationStates(p),
             translationGeminiModel = p[Keys.TRANSLATION_GEMINI_MODEL],
             translationTarget = p[Keys.TRANSLATION_TARGET],
+            translationContext = TranslationContextSize.fromId(p[Keys.TRANSLATION_CONTEXT]),
             companionServer = p[ServerSettings.COMPANION_SERVER],
             companionStates = ServerSettings.companionStates(p),
             companionRecaps = p[Keys.COMPANION_RECAPS] ?: false,
@@ -956,6 +980,11 @@ class AppSettingsRepository(
     /** Stores the language passages are translated into; null follows the app's language again. */
     suspend fun setTranslationTarget(tag: String?) = setOrRemove(Keys.TRANSLATION_TARGET, tag.orEmpty())
 
+    /** Stores how much earlier text goes with each sentence of a translated page. */
+    suspend fun setTranslationContext(size: TranslationContextSize) {
+        store.edit { it[Keys.TRANSLATION_CONTEXT] = size.id }
+    }
+
     /** Changes read aloud's state on the server at [url], if it is still listed there. */
     private suspend fun editSpeechServer(url: String, change: (ServerSpeechState) -> ServerSpeechState) {
         val id = ServerConnection.idOf(url) ?: return
@@ -1123,6 +1152,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     ServerSettings.TRANSLATION_STATE_NAME to BackupValueType.STRING,
     TRANSLATION_GEMINI_MODEL_NAME to BackupValueType.STRING,
     TRANSLATION_TARGET_NAME to BackupValueType.STRING,
+    TRANSLATION_CONTEXT_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_SERVER_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_STATE_NAME to BackupValueType.STRING,
     COMPANION_RECAPS_NAME to BackupValueType.BOOLEAN,
@@ -1133,6 +1163,7 @@ internal val APP_BACKUP_TYPES = mapOf(
 private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
+private const val TRANSLATION_CONTEXT_NAME = "translation_context"
 private const val COMPANION_RECAPS_NAME = "companion_recaps"
 private const val COMPANION_PROVIDER_NAME = "companion_provider"
 private const val COMPANION_GEMINI_MODEL_NAME = "companion_gemini_model"
