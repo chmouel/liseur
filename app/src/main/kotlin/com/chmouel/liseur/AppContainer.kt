@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingPositionBackupRepository
 import com.chmouel.liseur.data.library.SettingsBackupRepository
+import com.chmouel.liseur.data.library.CompanionBackupRepository
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.library.permissionSafeAssetRetriever
@@ -262,14 +263,18 @@ class AppContainer(context: Context) {
         ).also { store -> applicationScope.launch { store.tidy() } }
     }
 
-    /** The reading companion's chapter recaps, kept apart from the library and its backups. */
+    /** The reading companion's chapter recaps, kept apart from the library database. */
     val companionStore: CompanionStore by companionStoreOpening
 
+    private val companionStoreFile = context.getDatabasePath(CompanionDatabase.NAME)
+
+    /** Whether recaps may exist, without creating a store for a phone that never used the companion. */
+    private fun companionStoreExists() = companionStoreOpening.isInitialized() || companionStoreFile.exists()
+
     init {
-        val saved = context.getDatabasePath(CompanionDatabase.NAME)
         applicationScope.launch {
             database.invalidationTracker.createFlow("books").conflate().collect {
-                if (companionStoreOpening.isInitialized() || saved.exists()) companionStore.sweep()
+                if (companionStoreExists()) companionStore.sweep()
                 delay(SWEEP_SPACING_MS)
             }
         }
@@ -367,6 +372,7 @@ class AppContainer(context: Context) {
             finishedState = finishedState,
             inTransaction = { work -> database.withTransaction { work() } },
         ),
+        companion = CompanionBackupRepository({ companionStore }, database.bookDao(), ::companionStoreExists),
         restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
     )
 

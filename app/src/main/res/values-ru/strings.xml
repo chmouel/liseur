@@ -852,11 +852,13 @@
     <string name="books_export_error_library">Не удалось прочитать библиотеку для экспорта.</string>
     <string name="books_export_error_folder">Не удалось экспортировать в эту папку. Выберите папку с разрешением на запись.</string>
     <string name="settings_backup_title">Резервное копирование и восстановление</string>
-    <string name="settings_backup_detail">Сохраните настройки, пользовательские шрифты, позиции чтения, выделения, заметки и закладки в ZIP-копии.</string>
+    <string name="settings_backup_detail">Сохраните настройки, пользовательские шрифты, позиции чтения, выделения, заметки, закладки и сводки помощника в ZIP-копии.</string>
     <string name="settings_backup_export">Экспортировать резервную копию</string>
-    <string name="settings_backup_export_detail">Создайте ZIP-файл с датой, настройками, шрифтами, позициями чтения и аннотациями.</string>
+    <string name="settings_backup_export_detail">Создайте ZIP-файл с датой, настройками, шрифтами, позициями чтения, аннотациями и сводками помощника.</string>
     <string name="settings_backup_restore">Восстановить резервную копию</string>
     <string name="settings_backup_restore_detail">Просмотрите содержимое резервной копии перед восстановлением.</string>
+    <string name="settings_backup_companion_preview">Сводки глав: %1$d. Для книг в этой библиотеке будут добавлены недостающие сводки помощника; существующие сохранятся.</string>
+    <string name="settings_backup_companion_restored">Добавлено сводок глав помощника: %1$d.</string>
     <string name="settings_backup_preview_title">Восстановить эту резервную копию?</string>
     <string name="settings_backup_preview_body">Эта копия содержит %1$s, %2$s и %3$s. Сохранённые настройки будут применены; аннотации будут добавлены без замены существующих отметок.</string>
     <string name="settings_backup_restore_action">Восстановить</string>
@@ -904,7 +906,7 @@
     <string name="settings_backup_error_size">Копия слишком велика для восстановления.</string>
     <string name="settings_backup_error_storage">Не удалось подготовить копию в хранилище устройства.</string>
     <string name="settings_backup_error_restore">Не удалось восстановить резервную копию.</string>
-    <string name="settings_backup_error_partial">Часть копии восстановлена, но остальное применить не удалось. Проверьте настройки, шрифты, аннотации и позиции чтения.</string>
+    <string name="settings_backup_error_partial">Часть копии восстановлена, но остальное применить не удалось. Проверьте настройки, шрифты, аннотации, позиции чтения и сводки помощника.</string>
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг — calibre-web, Komga, liseur-sync или каталог OPDS — хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync — тот, что также синхронизирует книги, появившиеся только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения — для OPDS через связанный сервер синхронизации KOReader.</string>

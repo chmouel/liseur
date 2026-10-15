@@ -44,12 +44,19 @@ fun decodeReadingPositionBackup(text: String): List<BackedUpReadingPosition> {
 }
 
 /** Position replacement requires an unambiguous metadata match when the URL changed. */
-fun matchBackedUpReadingPosition(position: BackedUpReadingPosition, known: List<KnownBook>): String {
-    if (known.any { it.bookId == position.bookId }) return position.bookId
-    val title = position.title?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return position.bookId
-    val author = position.author?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
+fun matchBackedUpReadingPosition(position: BackedUpReadingPosition, known: List<KnownBook>): String =
+    matchBackedUpBookUrl(position.bookId, position.title, position.author, known) ?: position.bookId
+
+/**
+ * The library book a backed-up [bookId] belongs to: the same URL, or else the
+ * one book whose title and author match. Null when none or several match.
+ */
+fun matchBackedUpBookUrl(bookId: String, title: String?, author: String?, known: List<KnownBook>): String? {
+    if (known.any { it.bookId == bookId }) return bookId
+    val wantedTitle = title?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return null
+    val wantedAuthor = author?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
     return known.singleOrNull {
-        it.title.trim().lowercase(Locale.ROOT) == title &&
-            it.author?.trim()?.lowercase(Locale.ROOT)?.takeIf { value -> value.isNotEmpty() } == author
-    }?.bookId ?: position.bookId
+        it.title.trim().lowercase(Locale.ROOT) == wantedTitle &&
+            it.author?.trim()?.lowercase(Locale.ROOT)?.takeIf { value -> value.isNotEmpty() } == wantedAuthor
+    }?.bookId
 }

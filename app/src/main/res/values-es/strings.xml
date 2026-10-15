@@ -802,11 +802,13 @@
     <string name="books_export_error_library">No se pudo leer la biblioteca para exportarla.</string>
     <string name="books_export_error_folder">No se pudo exportar a esta carpeta. Elige una carpeta con permiso de escritura.</string>
     <string name="settings_backup_title">Copia de seguridad y restauración</string>
-    <string name="settings_backup_detail">Guarda ajustes, fuentes personalizadas, posiciones de lectura, resaltados, notas y marcadores en una copia ZIP.</string>
+    <string name="settings_backup_detail">Guarda ajustes, fuentes personalizadas, posiciones de lectura, resaltados, notas, marcadores y resúmenes del compañero en una copia ZIP.</string>
     <string name="settings_backup_export">Exportar copia</string>
-    <string name="settings_backup_export_detail">Crea un archivo ZIP fechado con tus ajustes, fuentes, posiciones de lectura y anotaciones.</string>
+    <string name="settings_backup_export_detail">Crea un archivo ZIP fechado con tus ajustes, fuentes, posiciones de lectura, anotaciones y resúmenes del compañero.</string>
     <string name="settings_backup_restore">Restaurar copia</string>
     <string name="settings_backup_restore_detail">Previsualiza una copia antes de aplicarla.</string>
+    <string name="settings_backup_companion_preview">Resúmenes de capítulos: %1$d. Se añadirán los resúmenes del compañero que falten para los libros de esta biblioteca; se conservarán los existentes.</string>
+    <string name="settings_backup_companion_restored">Resúmenes de capítulos del compañero añadidos: %1$d.</string>
     <string name="settings_backup_preview_title">¿Restaurar esta copia?</string>
     <string name="settings_backup_preview_body">Esta copia contiene %1$s, %2$s y %3$s. Se aplicarán los ajustes guardados; las anotaciones se añadirán sin reemplazar las marcas existentes.</string>
     <string name="settings_backup_restore_action">Restaurar</string>
@@ -842,7 +844,7 @@
     <string name="settings_backup_error_size">La copia es demasiado grande para restaurarla.</string>
     <string name="settings_backup_error_storage">No se pudo preparar la copia en el almacenamiento del dispositivo.</string>
     <string name="settings_backup_error_restore">No se pudo restaurar la copia.</string>
-    <string name="settings_backup_error_partial">Se restauró parte de la copia, pero no se pudo aplicar el resto. Revisa los ajustes, fuentes, anotaciones y posiciones de lectura.</string>
+    <string name="settings_backup_error_partial">Se restauró parte de la copia, pero no se pudo aplicar el resto. Revisa los ajustes, fuentes, anotaciones, posiciones de lectura y resúmenes del compañero.</string>
     <string name="settings_library_help_title">Servidores de libros</string>
     <string name="settings_library_help_body" formatted="true">Un servidor de libros — calibre-web, Komga, liseur-sync o un catálogo OPDS — guarda tu biblioteca: Liseur la explora y descarga de ella, y mantiene tu lugar al día donde el servidor lo permite. Una conexión OPDS personalizada puede emparejarse con un servidor de sincronización KOReader para las posiciones de lectura. Solo se conecta un servidor a la vez.\n\nliseur-sync es el que también mantiene al día los libros que no vinieron de ningún sitio más que de este teléfono: un archivo de una tarjeta SD sincroniza también su posición. Monta el tuyo desde %1$s.</string>
     <string name="settings_account_detail">Explora y descarga desde un servidor calibre-web, Komga, liseur-sync u OPDS, y mantén tu lugar al día — OPDS a través de un servidor de sincronización KOReader emparejado.</string>

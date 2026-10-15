@@ -143,12 +143,18 @@ without it the release build is simply unsigned.
 ## Settings backup archive
 
 Backups are ZIP files with a versioned `manifest.json`, `settings.json` and
-`annotations.json` and `positions.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
-Version 3 includes reading positions; version 2 annotation archives and version 1 settings-only archives remain readable.
+`annotations.json`, `positions.json`, and `companion.json` payloads, and optional `fonts/<sha256>.(ttf|otf)` entries.
+Version 4 adds completed companion chapter recaps; version 3 reading-position archives,
+version 2 annotation archives, and version 1 settings-only archives remain readable.
 Annotation export uses indexed keyset pages and a size-bounded staging file;
 reading-position export pages through its URL primary key. Annotation and
 position payloads have a combined 4 MiB limit, enforced before JSON decoding,
-to bound the memory used by inspection and restore. Negative timestamps and
+to bound the memory used by inspection and restore. Companion recaps are exported
+in keyset pages, most recently used first, with a separate 16 MiB payload limit:
+export stops before the first recap that would pass it, so a large recap store
+leaves out its least recently used recaps instead of failing the backup. A phone
+with no companion database exports an empty recap list without creating one.
+Negative timestamps and
 legacy timestamp conversions that would overflow are rejected.
 The manifest records each payload entry's size and SHA-256 checksum. The
 settings payload uses explicit allowlists for the app and reader preference
@@ -157,7 +163,7 @@ notices are not included. Unset keys remain absent so restoring a backup
 leaves destination values alone when the archive did not store that setting.
 Custom font entry names retain their content-based identifiers.
 
-The Backup and restore screen previews settings, fonts, reading positions, annotations, and
+The Backup and restore screen previews settings, fonts, reading positions, annotations, companion recaps, and
 matching library books before restore. The same Restore action also accepts
 older annotation-only JSON files. Restoring annotations adds missing marks,
 preserves existing ones, and requests sync for books with newly added marks.
@@ -172,13 +178,23 @@ than their declared version are rejected. Ambiguous or duplicate target matches
 retain the original URLs instead of replacing another book’s position.
 Completed position writes request
 sync even if a later write fails.
+Restoring companion recaps adds missing chapters for books already in the library,
+matching by URL or an unambiguous title and author. Missing books, ambiguous matches,
+and multiple source books matching the same target are skipped. Existing recaps are
+preserved, subject to the companion store's usual size limits, and the restored
+count only includes recaps still kept after trimming. Content hashes, chapter
+keys, timestamps, and provider provenance travel with each recap. Export and
+restore skip recaps in another recap format; the reader still ignores recaps
+whose content hash belongs to another file.
+Unfinished batches, waiting chapters, and per-book recap switches are not exported.
+Older archives leave companion recaps unchanged.
 Unknown optional JSON fields are ignored; malformed
 known fields, unsafe or duplicate paths, checksum mismatches, and unsupported
 versions are rejected. Font files are passed through the normal font importer,
 so its validation and installation limits still apply. Settings are written
 to two independent DataStores, so a storage failure can leave a partial
 restore. An annotation storage failure after settings were applied is also
-reported as a partial restore.
+reported as a partial restore, as is a position or companion storage failure.
 
 The same screen offers a separate folder export for all offline EPUBs, including
 imports, watched-folder books, hidden books, and archived books. Copies use
@@ -2114,7 +2130,8 @@ liseur-sync settings.
   for another content sha or format are ignored and dropped; unfinished
   parts stay per server and model, since batch sizes differ. The store
   trims to fixed limits, removed books are swept, and the
-  database is outside the backup allowlist. Bump `PassageText.VERSION`
+  database is outside the automatic Android backup allowlist; completed
+  recaps are included in the user-exported ZIP backup. Bump `PassageText.VERSION`
   when refs or passage splitting change, and the recap prompt version
   in `Recap` when the prompt or its JSON change.
 - Following a supporting passage is a peek (`SourcePeek` in

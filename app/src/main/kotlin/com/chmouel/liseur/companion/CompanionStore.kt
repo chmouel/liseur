@@ -86,6 +86,22 @@ interface CompanionRecapDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putRecap(row: ChapterRecapRow)
 
+    @Query(
+        "SELECT * FROM chapter_recap WHERE format = :format " +
+            "ORDER BY used_at DESC, book_url, unit_key LIMIT 50",
+    )
+    suspend fun firstBackupPage(format: Int): List<ChapterRecapRow>
+
+    @Query(
+        "SELECT * FROM chapter_recap WHERE format = :format AND (used_at < :usedAt OR (used_at = :usedAt AND " +
+            "(book_url > :bookUrl OR (book_url = :bookUrl AND unit_key > :unitKey)))) " +
+            "ORDER BY used_at DESC, book_url, unit_key LIMIT 50",
+    )
+    suspend fun nextBackupPage(format: Int, usedAt: Long, bookUrl: String, unitKey: String): List<ChapterRecapRow>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restoreRecap(row: ChapterRecapRow): Long
+
     @Query("DELETE FROM chapter_recap WHERE book_url = :bookUrl AND (content_sha != :sha OR format != :format)")
     suspend fun forgetOtherRecaps(bookUrl: String, sha: String, format: Int)
 
@@ -176,8 +192,8 @@ data class RecapLength(
 
 /**
  * Kept apart from `liseur.db`: the backup rules name that file only, so
- * recaps, which can always be written again and hold paraphrased book
- * text, are neither backed up nor synced.
+ * recaps stay outside automatic Android backups and sync. Completed
+ * recaps can be carried in the user-exported ZIP backup.
  */
 @Database(
     entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class],
@@ -269,6 +285,33 @@ class CompanionStore(
     private val writes = Mutex()
     private val epochs = ConcurrentHashMap<String, Long>()
     private val stops = ConcurrentHashMap<String, Long>()
+
+    /**
+     * Completed recaps in the current format, most recently used first, the
+     * order [trim] keeps them in. Stops at the first row [write] declines.
+     */
+    internal suspend fun exportRecaps(write: suspend (ChapterRecapRow) -> Boolean) = writes.withLock {
+        database.withTransaction {
+            var page = dao.firstBackupPage(Recaps.FORMAT)
+            while (page.isNotEmpty()) {
+                for (row in page) if (!write(row)) return@withTransaction
+                val last = page.last()
+                page = dao.nextBackupPage(Recaps.FORMAT, last.usedAt, last.bookUrl, last.unitKey)
+            }
+        }
+    }
+
+    /** Adds the missing [rows] for books still in the library; returns how many [trim] kept. */
+    internal suspend fun restoreRecaps(rows: List<ChapterRecapRow>): Int = writes.withLock {
+        database.withTransaction {
+            val kept = rows.map { it.bookUrl }.distinct().chunked(BATCH).flatMap { present(it) }.toSet()
+            val inserted = rows.filter { row ->
+                row.bookUrl in kept && row.format == Recaps.FORMAT && dao.restoreRecap(row) != -1L
+            }
+            trim()
+            inserted.count { dao.recap(it.bookUrl, it.unitKey) != null }
+        }
+    }
 
     /** The book at [bookUrl], whose file hashes to [contentSha], for one opening of it. */
     fun forBook(bookUrl: String, contentSha: String): BookRecaps =

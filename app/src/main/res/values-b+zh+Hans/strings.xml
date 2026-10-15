@@ -829,11 +829,13 @@
     <string name="books_export_error_library">无法读取书库以进行导出。</string>
     <string name="books_export_error_folder">无法打开此文件夹进行导出。请选择可写入的文件夹。</string>
     <string name="settings_backup_title">备份与恢复</string>
-    <string name="settings_backup_detail">将设置、自定义字体、阅读进度、标注、批注和书签保存为 ZIP 备份。</string>
+    <string name="settings_backup_detail">将设置、自定义字体、阅读进度、标注、批注、书签和阅读伴侣摘要保存为 ZIP 备份。</string>
     <string name="settings_backup_export">导出备份</string>
-    <string name="settings_backup_export_detail">创建带日期的 ZIP 文件，包含您的设置、字体、阅读进度和批注。</string>
+    <string name="settings_backup_export_detail">创建带日期的 ZIP 文件，包含设置、字体、阅读进度、批注和阅读伴侣摘要。</string>
     <string name="settings_backup_restore">恢复备份</string>
     <string name="settings_backup_restore_detail">应用前预览备份。</string>
+    <string name="settings_backup_companion_preview">章节摘要：%1$d。将为此书库中的书籍添加缺失的阅读伴侣摘要，并保留现有摘要。</string>
+    <string name="settings_backup_companion_restored">已添加阅读伴侣章节摘要：%1$d。</string>
     <string name="settings_backup_preview_title">恢复此备份？</string>
     <string name="settings_backup_preview_body">此备份包含 %1$s、%2$s 和 %3$s。已保存的设置将被应用；批注将被添加，但不会替换现有的标注。</string>
     <string name="settings_backup_restore_action">恢复</string>
@@ -845,7 +847,7 @@
     <string name="settings_backup_error_size">此备份过大，无法恢复。</string>
     <string name="settings_backup_error_storage">无法在设备存储中准备备份。</string>
     <string name="settings_backup_error_restore">无法恢复此备份。</string>
-    <string name="settings_backup_error_partial">备份的一部分已恢复，但其余部分无法应用。请检查您的设置、字体、批注和阅读进度。</string>
+    <string name="settings_backup_error_partial">备份的一部分已恢复，但其余部分无法应用。请检查您的设置、字体、批注、阅读进度和阅读伴侣摘要。</string>
     <string name="settings_library_help_title">图书服务器</string>
     <string name="settings_library_help_body">图书服务器——calibre-web、Komga、liseur-sync 或 OPDS 书库——存放着您的书库：Liseur 浏览并从中下载图书，并在服务器支持时同步您的阅读进度。自定义 OPDS 连接可搭配 KOReader 同步服务器以同步阅读位置。同一时间只能连接一台服务器。\n\nliseur-sync 还能同步仅来自本机的图书：从 SD 卡导入的文件也会同步其位置。您可以在 %1$s 上自建。</string>
     <string name="settings_account_detail">从 calibre-web、Komga、liseur-sync 或 OPDS 服务器浏览和下载，并同步您的阅读进度——OPDS 通过配对的 KOReader 同步服务器实现。</string>

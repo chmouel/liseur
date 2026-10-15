@@ -12,6 +12,14 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import androidx.room.Room
+import com.chmouel.liseur.companion.ChapterRecap
+import com.chmouel.liseur.companion.ChapterRecapRow
+import com.chmouel.liseur.companion.CompanionDatabase
+import com.chmouel.liseur.companion.CompanionStore
+import com.chmouel.liseur.companion.RecapIdentity
+import com.chmouel.liseur.companion.RecapPartRow
+import com.chmouel.liseur.companion.RecapQueueRow
+import com.chmouel.liseur.companion.Recaps
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingProgress
@@ -60,16 +68,162 @@ class SettingsBackupRepositoryTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var db: LiseurDatabase
+    private lateinit var companionDb: CompanionDatabase
+    private lateinit var companionStore: CompanionStore
     private val requested = mutableListOf<String>()
 
     @Before
     fun open() {
         db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).build()
+        companionDb = Room.inMemoryDatabaseBuilder(context, CompanionDatabase::class.java).build()
+        companionStore = CompanionStore(companionDb, present = { db.bookDao().presentUrls(it) })
     }
 
     @After
     fun close() {
         db.close()
+        companionDb.close()
+    }
+
+    @Test
+    fun `ZIP round trip restores companion recaps across pages and changed URLs without replacing existing recaps`() = runTest {
+        val app = AppSettingsRepository(store("companion-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("companion-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val source = "file:///source.epub"
+        val destination = "file:///destination.epub"
+        db.bookDao().upsert(book(source))
+        val sha = "a".repeat(64)
+        val rows = (0..54).map { unit ->
+            ChapterRecapRow(source, "unit-$unit", unit, sha, "server", "model", Recaps.FORMAT,
+                ChapterRecap(listOf("Chapter $unit summary"), emptyList()).encode(), 100, 200)
+        }
+        rows.forEach { companionDb.recaps().putRecap(it) }
+        companionDb.recaps().putPart(RecapPartRow(source, "unfinished", 0, 2, sha, "server", "model", Recaps.FORMAT, "{}", 100))
+        companionDb.recaps().enqueue(RecapQueueRow(source, "queued", 55, sha, 100))
+        val uri = Uri.fromFile(File(folder.root, "companion.zip"))
+        assertEquals(SettingsBackupExportResult.Exported(0), repository.exportTo(uri))
+        ZipFile(File(uri.path!!)).use { zip ->
+            val contents = zip.getInputStream(zip.getEntry("companion.json")).bufferedReader().readText()
+            assertEquals(55, JSONObject(contents).getJSONArray("recaps").length())
+            assertFalse(contents.contains("unfinished"))
+            assertFalse(contents.contains("queued"))
+        }
+        companionDb.recaps().forgetRecaps(listOf(source))
+        companionDb.recaps().forgetParts(listOf(source))
+        companionDb.recaps().forgetQueued(listOf(source))
+        db.bookDao().deleteByUrls(listOf(source))
+        db.bookDao().upsert(book(destination))
+        val existing = rows.first().copy(bookUrl = destination, json = ChapterRecap.EMPTY.encode(), savedAt = 300)
+        companionDb.recaps().putRecap(existing)
+        val preview = repository.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(55, preview.preview.companionRecapCount)
+        val restored = repository.restore(preview.archiveId) as SettingsBackupRestoreResult.Restored
+        assertEquals(54, restored.companionRecapsAdded)
+        assertEquals(existing, companionDb.recaps().recap(destination, existing.unitKey))
+        assertEquals(rows.drop(1).map { it.copy(bookUrl = destination) }.toSet(),
+            companionDb.recaps().recaps(destination).filterNot { it.unitKey == existing.unitKey }.toSet())
+        assertEquals(0, (restore(repository, uri) as SettingsBackupRestoreResult.Restored).companionRecapsAdded)
+        val identity = RecapIdentity(sha, "another-server", "another-model", Recaps.FORMAT)
+        assertEquals(55, companionStore.forBook(destination, sha).recaps(identity).size)
+        val differentSha = "b".repeat(64)
+        assertTrue(companionStore.forBook(destination, differentSha).recaps(identity.copy(contentSha = differentSha)).isEmpty())
+    }
+
+    @Test
+    fun `malformed companion data is rejected before changing settings`() = runTest {
+        val app = AppSettingsRepository(store("bad-companion-app.preferences_pb"))
+        app.setThemeMode(ThemeMode.DARK)
+        val reader = ReaderPreferencesRepository(store("bad-companion-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val settings = JSONObject().put("app", JSONObject().put("theme_mode", "light")).put("reader", JSONObject())
+        val file = archive("bad-companion.zip", settings, mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+            "companion.json" to """{"format":1,"application":"liseur","recaps":[{"book_id":"book"}]}""".toByteArray(),
+        ), format = 4)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repository.inspect(Uri.fromFile(file)))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `companion restore skips missing ambiguous and colliding book matches`() = runTest {
+        val sha = "a".repeat(64)
+        fun recap(book: String, title: String) = com.chmouel.liseur.domain.BackedUpCompanionRecap(
+            ChapterRecapRow(book, "unit", 0, sha, "server", "model", Recaps.FORMAT, ChapterRecap.EMPTY.encode(), 100, 200),
+            title, "An author",
+        )
+        db.bookDao().upsert(book("destination").copy(title = "Matching"))
+        db.bookDao().upsert(book("duplicate-1").copy(title = "Ambiguous"))
+        db.bookDao().upsert(book("duplicate-2").copy(title = "Ambiguous"))
+        val backup = companionBackup()
+        assertEquals(0, backup.restore(listOf(
+            recap("missing", "Missing"), recap("ambiguous", "Ambiguous"),
+            recap("source-1", "Matching"), recap("source-2", "Matching"),
+        )))
+        assertEquals(0, companionDb.recaps().recapCount())
+        assertEquals(0, backup.restore(listOf(recap("destination", "Matching").let {
+            it.copy(recap = it.recap.copy(format = Recaps.FORMAT + 1))
+        })))
+    }
+
+    @Test
+    fun `companion export keeps the most recently used recaps within its budget and still exports everything else`() = runTest {
+        val app = AppSettingsRepository(store("budget-app.preferences_pb"))
+        app.setThemeMode(ThemeMode.DARK)
+        val reader = ReaderPreferencesRepository(store("budget-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        db.bookDao().upsert(book("book"))
+        db.readingProgressDao().upsert(ReadingProgress("book", "{}", 0.4, updatedAt = 12))
+        db.annotationDao().upsert(BookAnnotation("note", "book", AnnotationKind.BOOK_NOTE.name, "", note = "Kept", createdAt = 1))
+        // 30 recaps of about 600 kB each pass the 16 MiB companion budget.
+        val budget = 16L * 1024 * 1024
+        val summary = "résumé ".repeat(85_000)
+        (0 until 30).forEach { unit ->
+            companionDb.recaps().putRecap(ChapterRecapRow("book", "unit-$unit", unit, "a".repeat(64), "server", "model",
+                Recaps.FORMAT, ChapterRecap(listOf(summary), emptyList()).encode(), 100, usedAt = unit.toLong()))
+        }
+        companionDb.recaps().putRecap(ChapterRecapRow("book", "old-format", 99, "a".repeat(64), "server", "model",
+            Recaps.FORMAT + 1, ChapterRecap.EMPTY.encode(), 100, usedAt = 1_000))
+        val uri = Uri.fromFile(File(folder.root, "budget.zip"))
+        assertEquals(SettingsBackupExportResult.Exported(0, 1), repository.exportTo(uri))
+        ZipFile(File(uri.path!!)).use { zip ->
+            val entry = zip.getEntry("companion.json")
+            assertTrue(entry.size <= budget)
+            val recaps = JSONObject(zip.getInputStream(entry).bufferedReader().readText()).getJSONArray("recaps")
+            assertTrue(recaps.length() in 1 until 30)
+            assertEquals((29 downTo 30 - recaps.length()).toList(), List(recaps.length()) { recaps.getJSONObject(it).getInt("unit") })
+            fun text(path: String) = zip.getInputStream(zip.getEntry(path)).bufferedReader().readText()
+            assertEquals(1, JSONObject(text("positions.json")).getJSONArray("positions").length())
+            assertTrue(text("annotations.json").contains("Kept"))
+            assertTrue(text("settings.json").contains("dark"))
+        }
+
+        val tiny = folder.newFile("bounded-companion.json")
+        companionBackup().writeContents(tiny, 100)
+        assertEquals(0, JSONObject(tiny.readText()).getJSONArray("recaps").length())
+    }
+
+    @Test
+    fun `companion export without a companion store writes no recaps and opens nothing`() = runTest {
+        val backup = CompanionBackupRepository({ error("store opened") }, db.bookDao(), storeExists = { false })
+        val file = folder.newFile("no-companion.json")
+        backup.writeContents(file, 100)
+        assertEquals(0, JSONObject(file.readText()).getJSONArray("recaps").length())
+    }
+
+    @Test
+    fun `companion inspection rejects oversized payloads`() = runTest {
+        val app = AppSettingsRepository(store("large-companion-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("large-companion-reader.preferences_pb"))
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val file = archive("large-companion.zip", settings, mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+            "companion.json" to ByteArray(16 * 1024 * 1024 + 1) { ' '.code.toByte() },
+        ), format = 4)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.TOO_LARGE),
+            repository(app, reader, UserFontRepository(context, this, loadCheck = { true })).inspect(Uri.fromFile(file)))
     }
 
     @Test
@@ -141,6 +295,8 @@ class SettingsBackupRepositoryTest {
             1 to mapOf("annotations.json" to annotations),
             1 to mapOf("positions.json" to positions),
             2 to mapOf("annotations.json" to annotations, "positions.json" to positions),
+            3 to mapOf("annotations.json" to annotations, "positions.json" to positions,
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray()),
         )
         cases.forEachIndexed { index, (version, entries) ->
             val file = archive("old-payload-$index.zip", payload, entries, format = version)
@@ -719,7 +875,7 @@ class SettingsBackupRepositoryTest {
         ZipFile(File(uri.path!!)).use { zip ->
             assertTrue(zip.getEntry("annotations.json") != null)
             val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
-            assertEquals(3, manifest.getInt("format"))
+            assertEquals(4, manifest.getInt("format"))
         }
 
         db.annotationDao().deleteForBook("source-book")
@@ -800,7 +956,7 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
-    fun `version one settings backups preserve destination annotations and positions`() = runTest {
+    fun `older settings backups preserve destination annotations positions and companion recaps`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
         val app = AppSettingsRepository(store("version-one-app.preferences_pb"))
@@ -810,8 +966,17 @@ class SettingsBackupRepositoryTest {
         val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
         val position = ReadingProgress("local-book", "{}", 0.4, updatedAt = 12)
         db.readingProgressDao().upsert(position)
-        val file = archive("version-one.zip", payload)
-        assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(repository(app, reader, fonts), Uri.fromFile(file)))
+        val recap = ChapterRecapRow("local-book", "chapter", 0, "a".repeat(64), "server", "model", Recaps.FORMAT,
+            ChapterRecap.EMPTY.encode(), 100, 200)
+        companionDb.recaps().putRecap(recap)
+        for (version in 1..3) {
+            val entries = linkedMapOf<String, ByteArray>()
+            if (version >= 2) entries["annotations.json"] = encodeAnnotationBackup(emptyList()).toByteArray()
+            if (version >= 3) entries["positions.json"] = """{"format":1,"application":"liseur","positions":[]}""".toByteArray()
+            val file = archive("version-$version.zip", payload, entries, format = version)
+            assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(repository(app, reader, fonts), Uri.fromFile(file)))
+            assertEquals(recap, companionDb.recaps().recap("local-book", "chapter"))
+        }
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertEquals(mark, db.annotationDao().byId(mark.id))
         assertEquals(position, db.readingProgressDao().get("local-book"))
@@ -835,12 +1000,45 @@ class SettingsBackupRepositoryTest {
             context, app, reader, fonts,
             AnnotationBackupRepository(context, failingDao, db.bookDao(), requested::add),
             ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companion = companionBackup(),
         )
         assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
         assertTrue(db.annotationDao().all().isEmpty())
         assertTrue(requested.isEmpty())
     }
+
+    @Test
+    fun `companion storage failure is reported as a partial restore after settings and positions`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("companion-failure-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("companion-failure-reader.preferences_pb"))
+        db.bookDao().upsert(book("local-book"))
+        val payload = JSONObject().put("app", JSONObject().put("theme_mode", "dark")).put("reader", JSONObject())
+        val positions = """{"format":1,"application":"liseur","positions":[{"book_id":"local-book","locator":null,"progression":0.5,"read_at":10}]}"""
+        val recap = JSONObject().put("book_id", "local-book").put("unit_key", "chapter").put("unit", 0)
+            .put("content_sha", "a".repeat(64)).put("server_id", "server").put("model", "model")
+            .put("recap_format", Recaps.FORMAT).put("json", ChapterRecap.EMPTY.encode()).put("saved_at", 1).put("used_at", 2)
+        val companion = JSONObject().put("format", 1).put("application", "liseur")
+            .put("recaps", org.json.JSONArray().put(recap))
+        val file = archive("companion-failure.zip", payload, mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to positions.toByteArray(),
+            "companion.json" to companion.toString().toByteArray(),
+        ), format = 4)
+        val repository = SettingsBackupRepository(
+            context, app, reader, fonts,
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companion = CompanionBackupRepository({ throw IOException("storage failed") }, db.bookDao(), storeExists = { true }),
+        )
+        assertEquals(SettingsBackupRestoreResult.PartiallyRestored, restore(repository, Uri.fromFile(file)))
+        assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+        assertEquals(0.5, db.readingProgressDao().get("local-book")!!.totalProgression!!, 0.0)
+    }
+
+    private fun companionBackup() = CompanionBackupRepository({ companionStore }, db.bookDao(), storeExists = { true })
 
     private fun book(url: String) = Book(
         url = url, title = "A book", author = "An author", coverPath = null, source = null,
@@ -855,6 +1053,7 @@ class SettingsBackupRepositoryTest {
         context, app, reader, fonts,
         AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
         ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+        companion = companionBackup(),
     )
 
     private suspend fun restore(

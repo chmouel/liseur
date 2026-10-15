@@ -74,6 +74,8 @@ fun SettingsBackupScreen(
                         ),
                     ) + (if (ready.preview.positionCount > 0) {
                         "\n\n" + pluralStringResource(R.plurals.settings_backup_positions_preview, ready.preview.positionCount, ready.preview.positionCount)
+                    } else { "" }) + (if (ready.preview.companionRecapCount > 0) {
+                        "\n\n" + stringResource(R.string.settings_backup_companion_preview, ready.preview.companionRecapCount)
                     } else { "" }) + (if (ready.preview.annotationCount > 0) {
                         "\n\n" + stringResource(
                             R.string.import_preview_body,
@@ -209,6 +211,9 @@ fun SettingsBackupScreen(
                                 stringResource(R.string.settings_backup_restored_settings),
                                 if (status.positionsRestored > 0) {
                                     pluralStringResource(R.plurals.settings_backup_positions_restored, status.positionsRestored, status.positionsRestored)
+                                } else { null },
+                                if (status.companionRecapsAdded > 0) {
+                                    stringResource(R.string.settings_backup_companion_restored, status.companionRecapsAdded)
                                 } else { null },
                                 restoredFonts,
                                 alreadyInstalled,

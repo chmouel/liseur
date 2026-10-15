@@ -802,11 +802,13 @@
     <string name="books_export_error_library">Impossibile leggere la libreria per l’esportazione.</string>
     <string name="books_export_error_folder">Impossibile esportare in questa cartella. Scegli una cartella con permesso di scrittura.</string>
     <string name="settings_backup_title">Backup e ripristino</string>
-    <string name="settings_backup_detail">Salva impostazioni, caratteri personalizzati, posizioni di lettura, evidenziazioni, note e segnalibri in un backup ZIP.</string>
+    <string name="settings_backup_detail">Salva impostazioni, caratteri personalizzati, posizioni di lettura, evidenziazioni, note, segnalibri e riepiloghi del compagno in un backup ZIP.</string>
     <string name="settings_backup_export">Esporta backup</string>
-    <string name="settings_backup_export_detail">Crea un file ZIP datato con impostazioni, caratteri, posizioni di lettura e annotazioni.</string>
+    <string name="settings_backup_export_detail">Crea un file ZIP datato con impostazioni, caratteri, posizioni di lettura, annotazioni e riepiloghi del compagno.</string>
     <string name="settings_backup_restore">Ripristina backup</string>
     <string name="settings_backup_restore_detail">Visualizza il contenuto di un backup prima di applicarlo.</string>
+    <string name="settings_backup_companion_preview">Riepiloghi dei capitoli: %1$d. I riepiloghi mancanti del compagno saranno aggiunti per i libri di questa biblioteca; quelli esistenti saranno conservati.</string>
+    <string name="settings_backup_companion_restored">Riepiloghi dei capitoli del compagno aggiunti: %1$d.</string>
     <string name="settings_backup_preview_title">Ripristinare questo backup?</string>
     <string name="settings_backup_preview_body">Il backup contiene %1$s, %2$s e %3$s. Le impostazioni salvate verranno applicate; le annotazioni verranno aggiunte senza sostituire i segni esistenti.</string>
     <string name="settings_backup_restore_action">Ripristina</string>
@@ -842,7 +844,7 @@
     <string name="settings_backup_error_size">Il backup è troppo grande per essere ripristinato.</string>
     <string name="settings_backup_error_storage">Impossibile preparare il backup nella memoria del dispositivo.</string>
     <string name="settings_backup_error_restore">Impossibile ripristinare il backup.</string>
-    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma il resto non è stato applicato. Controlla impostazioni, caratteri, annotazioni e posizioni di lettura.</string>
+    <string name="settings_backup_error_partial">Una parte del backup è stata ripristinata, ma il resto non è stato applicato. Controlla impostazioni, caratteri, annotazioni, posizioni di lettura e riepiloghi del compagno.</string>
     <string name="settings_library_help_title">Server dei libri</string>
     <string name="settings_library_help_body" formatted="true">Un server dei libri — calibre-web, Komga, liseur-sync o un catalogo OPDS — tiene la tua libreria: Liseur la sfoglia e scarica da essa, e tiene il tuo posto allineato dove il server lo supporta. Una connessione OPDS Personalizzata può abbinarsi a un server di sync KOReader per le posizioni di lettura. Si collega un solo server alla volta.\n\nliseur-sync è quello che tiene allineati anche i libri arrivati solo da questo telefono: anche un file da una scheda SD sincronizza la posizione. Installane uno tuo da %1$s.</string>
     <string name="settings_account_detail">Sfoglia e scarica da un server calibre-web, Komga, liseur-sync o OPDS, e tieni il tuo posto allineato — OPDS tramite un server di sync KOReader abbinato.</string>

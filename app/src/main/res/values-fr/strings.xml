@@ -802,11 +802,13 @@
     <string name="books_export_error_library">Impossible de lire la bibliothèque pour l’export.</string>
     <string name="books_export_error_folder">Impossible d’exporter dans ce dossier. Choisissez un dossier accessible en écriture.</string>
     <string name="settings_backup_title">Sauvegarde et restauration</string>
-    <string name="settings_backup_detail">Enregistrez les réglages, polices personnalisées, positions de lecture, surlignages, notes et signets dans une sauvegarde ZIP.</string>
+    <string name="settings_backup_detail">Enregistrez les réglages, polices personnalisées, positions de lecture, surlignages, notes, signets et résumés du compagnon dans une sauvegarde ZIP.</string>
     <string name="settings_backup_export">Exporter la sauvegarde</string>
-    <string name="settings_backup_export_detail">Créez un fichier ZIP daté avec vos réglages, polices, positions de lecture et annotations.</string>
+    <string name="settings_backup_export_detail">Créez un fichier ZIP daté avec vos réglages, polices, positions de lecture, annotations et résumés du compagnon.</string>
     <string name="settings_backup_restore">Restaurer une sauvegarde</string>
     <string name="settings_backup_restore_detail">Prévisualisez une sauvegarde avant de l’appliquer.</string>
+    <string name="settings_backup_companion_preview">Résumés de chapitres : %1$d. Les résumés manquants du compagnon seront ajoutés pour les livres de cette bibliothèque ; les résumés existants sont conservés.</string>
+    <string name="settings_backup_companion_restored">Résumés de chapitres du compagnon ajoutés : %1$d.</string>
     <string name="settings_backup_preview_title">Restaurer cette sauvegarde ?</string>
     <string name="settings_backup_preview_body">Cette sauvegarde contient %1$s, %2$s et %3$s. Les paramètres enregistrés seront appliqués ; les annotations seront ajoutées sans remplacer les marques existantes.</string>
     <string name="settings_backup_restore_action">Restaurer</string>
@@ -842,7 +844,7 @@
     <string name="settings_backup_error_size">Cette sauvegarde est trop volumineuse pour être restaurée.</string>
     <string name="settings_backup_error_storage">Impossible de préparer la sauvegarde dans le stockage de l’appareil.</string>
     <string name="settings_backup_error_restore">Impossible de restaurer la sauvegarde.</string>
-    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos réglages, polices, annotations et positions de lecture.</string>
+    <string name="settings_backup_error_partial">Une partie de la sauvegarde a été restaurée, mais le reste n’a pas pu être appliqué. Vérifiez vos réglages, polices, annotations, positions de lecture et résumés du compagnon.</string>
     <string name="settings_library_help_title">Serveurs de livres</string>
     <string name="settings_library_help_body" formatted="true">Un serveur de livres — calibre-web, Komga, liseur-sync ou un catalogue OPDS — détient votre bibliothèque : Liseur la parcourt et télécharge depuis elle, et garde votre place à jour là où le serveur le permet. Une connexion OPDS Personnalisée peut s\'associer à un serveur de sync KOReader pour les positions de lecture. Un seul serveur est connecté à la fois.\n\nliseur-sync est celui qui garde aussi à jour les livres qui n\'étaient que sur ce téléphone : un fichier d\'une carte SD synchronise aussi sa position. Hébergez le vôtre depuis %1$s.</string>
     <string name="settings_account_detail">Parcourir et télécharger depuis un serveur calibre-web, Komga, liseur-sync ou OPDS, et garder votre place à jour — OPDS via un serveur de sync KOReader associé.</string>

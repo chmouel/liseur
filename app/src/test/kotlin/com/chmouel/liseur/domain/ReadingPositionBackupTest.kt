@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ReadingPositionBackupTest {
@@ -23,5 +24,15 @@ class ReadingPositionBackupTest {
     @Test
     fun `an unchanged URL keeps its position even when display metadata changed`() {
         assertEquals("old", matchBackedUpReadingPosition(position, listOf(KnownBook("old", "Edited title", "Edited author"))))
+    }
+
+    @Test
+    fun `backed-up book URL matching returns null when no single book matches`() {
+        assertNull(matchBackedUpBookUrl("old", "Poems", "Blake", emptyList()))
+        assertNull(matchBackedUpBookUrl("old", " ", "Blake", listOf(KnownBook("new", " ", "Blake"))))
+        assertNull(matchBackedUpBookUrl("old", "Poems", "Blake", listOf(
+            KnownBook("one", "Poems", "Blake"), KnownBook("two", "Poems", "Blake"),
+        )))
+        assertEquals("new", matchBackedUpBookUrl("old", "Poems", " ", listOf(KnownBook("new", "poems", null))))
     }
 }

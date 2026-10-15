@@ -222,6 +222,21 @@ class CompanionStoreTest {
         assertEquals(listOf(UNIT_2), other.recaps(IDENTITY).map { it.unit })
     }
 
+    @Test
+    fun `restored recaps count only those kept after trimming`() = runTest {
+        val store = store(maxRecaps = 2)
+        fun row(book: String, key: String, usedAt: Long, format: Int = Recaps.FORMAT) =
+            ChapterRecapRow(book, key, 0, SHA, "server", "model", format, "{}", 1, usedAt)
+        db.recaps().putRecap(row(BOOK, "existing", 5_000))
+        val added = store.restoreRecaps(listOf(
+            row(BOOK, "older", 10), row(BOOK, "newer", 20), row(BOOK, "existing", 30),
+            row("file:///gone.epub", "missing", 40), row(BOOK, "format", 50, Recaps.FORMAT + 1),
+        ))
+        assertEquals(1, added)
+        assertEquals(setOf("existing", "newer"), db.recaps().recaps(BOOK).map { it.unitKey }.toSet())
+        assertEquals(5_000L, db.recaps().recap(BOOK, "existing")!!.usedAt)
+    }
+
     private companion object {
         const val BOOK = "file:///book.epub"
         const val OTHER = "file:///other.epub"

@@ -6,7 +6,7 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 14 October 2026
+**Last updated:** 15 October 2026
 
 Liseur is an open-source ebook reader. It has no account, no advertising,
 no analytics and no trackers of its own, and the developer collects
@@ -59,8 +59,9 @@ All of this stays in the app's own private storage:
   the new one on the phone; nothing more is sent. They are kept for the book
   they came from, the oldest going first past a fixed limit. Deleting
   the book deletes them, and turning recaps off stops the work and drops
-  the waiting chapters. They are not backed up and not synced. Character
-  profiles themselves are not saved.
+  the waiting chapters. They are not automatically backed up or synced.
+  Completed recaps are included in ZIP backups you export from Settings.
+  Character profiles themselves are not saved.
 - Which books you turned background recaps on or off for from the
   reader's menu, overriding the setting. Deleting the book removes it.
   It is not backed up and not synced.

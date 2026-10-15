@@ -813,11 +813,13 @@
     <string name="books_export_error_library">Die Bibliothek konnte für den Export nicht gelesen werden.</string>
     <string name="books_export_error_folder">In diesen Ordner konnte nicht exportiert werden. Wähle einen beschreibbaren Ordner.</string>
     <string name="settings_backup_title">Sichern und Wiederherstellen</string>
-    <string name="settings_backup_detail">Einstellungen, eigene Schriftarten, Lesepositionen, Markierungen, Notizen und Lesezeichen in einer ZIP-Sicherung speichern.</string>
+    <string name="settings_backup_detail">Einstellungen, eigene Schriftarten, Lesepositionen, Markierungen, Notizen, Lesezeichen und Begleiter-Zusammenfassungen in einer ZIP-Sicherung speichern.</string>
     <string name="settings_backup_export">Sicherung exportieren</string>
-    <string name="settings_backup_export_detail">Eine datierte ZIP-Datei mit Einstellungen, Schriftarten, Lesepositionen und Anmerkungen erstellen.</string>
+    <string name="settings_backup_export_detail">Eine datierte ZIP-Datei mit Einstellungen, Schriftarten, Lesepositionen, Anmerkungen und Begleiter-Zusammenfassungen erstellen.</string>
     <string name="settings_backup_restore">Sicherung wiederherstellen</string>
     <string name="settings_backup_restore_detail">Zeige den Inhalt einer Sicherung vor dem Anwenden an.</string>
+    <string name="settings_backup_companion_preview">Kapitelzusammenfassungen: %1$d. Fehlende Begleiter-Zusammenfassungen werden für Bücher in dieser Bibliothek hinzugefügt; vorhandene bleiben erhalten.</string>
+    <string name="settings_backup_companion_restored">Hinzugefügte Kapitelzusammenfassungen des Begleiters: %1$d.</string>
     <string name="settings_backup_preview_title">Diese Sicherung wiederherstellen?</string>
     <string name="settings_backup_preview_body">Diese Sicherung enthält %1$s, %2$s und %3$s. Gespeicherte Einstellungen werden angewendet; Anmerkungen werden hinzugefügt, ohne vorhandene Markierungen zu ersetzen.</string>
     <string name="settings_backup_restore_action">Wiederherstellen</string>
@@ -853,7 +855,7 @@
     <string name="settings_backup_error_size">Diese Sicherung ist zu groß, um sie wiederherzustellen.</string>
     <string name="settings_backup_error_storage">Die Sicherung konnte nicht im Gerätespeicher vorbereitet werden.</string>
     <string name="settings_backup_error_restore">Die Sicherung konnte nicht wiederhergestellt werden.</string>
-    <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, der Rest konnte nicht angewendet werden. Prüfe Einstellungen, Schriftarten, Anmerkungen und Lesepositionen.</string>
+    <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, aber der Rest konnte nicht angewendet werden. Prüfe Einstellungen, Schriftarten, Anmerkungen, Lesepositionen und Begleiter-Zusammenfassungen.</string>
     <string name="settings_library_help_title">Buchserver</string>
     <string name="settings_library_help_body" formatted="true">Ein Buchserver — calibre-web, Komga, liseur-sync oder ein OPDS-Katalog — hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync ist der, der auch Bücher mitführt, die nur von diesem Handy kamen: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
     <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten — OPDS über einen gekoppelten KOReader-Sync-Server.</string>
