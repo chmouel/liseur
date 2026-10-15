@@ -229,7 +229,10 @@ class KomgaSyncRepository(
         var accountMatches = false
         inTransaction {
             val current = serverDao.get()
-            if (current?.accountKey != server.accountKey || current.baseUrl != server.baseUrl) {
+            if (current?.accountKey != server.accountKey ||
+                current.baseUrl != server.baseUrl ||
+                current.addedAt != server.addedAt
+            ) {
                 return@inTransaction
             }
             val stored = progressDao.get(bookUrl) ?: return@inTransaction
@@ -370,7 +373,7 @@ class KomgaSyncRepository(
             // in again. A half-finished run leaves the old time standing,
             // so whatever is waiting on it knows to come back.
             inTransaction {
-                if (serverDao.get()?.accountKey == server.accountKey) {
+                if (stillConnected(server)) {
                     serverDao.setPositionSyncedAt(now)
                 }
             }
@@ -605,7 +608,7 @@ class KomgaSyncRepository(
         }
         var outcome = BookOutcome()
         inTransaction {
-            if (serverDao.get()?.accountKey == server.accountKey) {
+            if (stillConnected(server)) {
                 outcome = write(server, bookUrl, stored, remote, decision)
             }
         }
@@ -613,7 +616,9 @@ class KomgaSyncRepository(
     }
 
     private suspend fun stillConnected(server: RemoteServer): Boolean =
-        serverDao.get()?.accountKey == server.accountKey
+        serverDao.get()?.let {
+            it.accountKey == server.accountKey && it.addedAt == server.addedAt
+        } == true
 
     /**
      * Writes only while [server] is still the connected account, asking
@@ -621,7 +626,7 @@ class KomgaSyncRepository(
      */
     private suspend fun forAccount(server: RemoteServer, work: suspend () -> Unit) {
         inTransaction {
-            if (serverDao.get()?.accountKey == server.accountKey) work()
+            if (stillConnected(server)) work()
         }
     }
 

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.komga
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
@@ -17,7 +18,9 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.SyncSnapshot
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
@@ -76,6 +79,7 @@ class KomgaSyncRepositoryTest {
                 progressDao = db.readingProgressDao(),
             ),
             device = DeviceIdentityRepository(context),
+            inTransaction = { work -> db.withTransaction { work() } },
         )
     }
 
@@ -258,6 +262,32 @@ class KomgaSyncRepositoryTest {
         generateSequence { server.takeRequest(1, java.util.concurrent.TimeUnit.SECONDS) }.toList()
 
     // -- Pulling ----------------------------------------------------------
+
+    @Test
+    fun `a response from before restoring the same account cannot restore its old position`() = runTest {
+        connect()
+        val original = db.remoteServerDao().get()!!
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.target.substringBefore("?") == "/api/v1/books/$bookId") {
+                    runBlocking {
+                        val current = db.remoteServerDao().get()!!
+                        db.remoteServerDao().upsert(current.copy(addedAt = current.addedAt + 1))
+                    }
+                    return json(bookJson(page = 40, completed = false, readDate = "2024-06-01T10:00:00Z"))
+                }
+                return json(progressionJson(locatorJson("OEBPS/ch3.xhtml", 0.5, 0.31)))
+            }
+        }
+
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+
+        val restored = db.remoteServerDao().get()!!
+        assertEquals(original.accountKey, restored.accountKey)
+        assertTrue(restored.addedAt > original.addedAt)
+        assertNull(restored.positionSyncedAt)
+        assertNull(db.readingProgressDao().get(bookUrl))
+    }
 
     @Test
     fun `a position read on another device arrives with the exact place`() = runTest {

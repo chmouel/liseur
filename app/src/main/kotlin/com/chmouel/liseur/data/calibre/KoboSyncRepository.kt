@@ -4,6 +4,7 @@ import android.util.Log
 import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.ReadingProgressDao
@@ -127,14 +128,16 @@ class KoboSyncRepository(
             is RemoteResult.Ok -> asked.value
         }
         if (remote != null) {
-            progressDao.persistPending(
-                bookUrl = bookUrl,
-                progression = remote.progression,
-                status = remote.status.wireName,
-                remoteUpdatedAt = remote.updatedAt,
-                account = account,
-                now = System.currentTimeMillis(),
-            )
+            forAccount(server) {
+                progressDao.persistPending(
+                    bookUrl = bookUrl,
+                    progression = remote.progression,
+                    status = remote.status.wireName,
+                    remoteUpdatedAt = remote.updatedAt,
+                    account = account,
+                    now = System.currentTimeMillis(),
+                )
+            }
         }
         val stored = progressDao.get(bookUrl)
         return PreviewOutcome.Ready(
@@ -209,7 +212,10 @@ class KoboSyncRepository(
         var accountMatches = false
         inTransaction {
             val current = serverDao.get()
-            if (current?.accountKey != server.accountKey || current.koboToken != server.koboToken) {
+            if (current?.accountKey != server.accountKey ||
+                current.koboToken != server.koboToken ||
+                current.addedAt != server.addedAt
+            ) {
                 return@inTransaction
             }
             val stored = progressDao.get(bookUrl) ?: return@inTransaction
@@ -249,9 +255,9 @@ class KoboSyncRepository(
 
         val outcome = apply(
             base = "${server.baseUrl}/kobo/$token",
+            server = server,
             uuid = uuid,
             bookUrl = bookUrl,
-            account = server.accountKey,
             stored = stored,
             decision = SyncDecision.Push(stored.asReadingState()),
         )
@@ -278,7 +284,7 @@ class KoboSyncRepository(
 
         // Anything the server has to say is written down and the token
         // moved past it in one step, before a single decision is made.
-        val reported = when (val landed = land(base, server, account)) {
+        val reported = when (val landed = land(base, server)) {
             is RemoteResult.Ok -> landed.value
             is RemoteResult.Failed -> {
                 Log.i(TAG, "Could not read reading positions: ${landed.reason.label}")
@@ -293,7 +299,7 @@ class KoboSyncRepository(
         var pulled = 0
         var pushed = 0
         for (candidate in books) {
-            val outcome = reconcileBook(base, account, candidate, reported)
+            val outcome = reconcileBook(base, server, candidate, reported)
             when (outcome.moved) {
                 SyncMove.PULLED -> pulled++
                 SyncMove.PUSHED -> pushed++
@@ -334,7 +340,7 @@ class KoboSyncRepository(
             // in again. A half-finished run leaves the old time standing,
             // so whatever is waiting on it knows to come back.
             inTransaction {
-                if (serverDao.get()?.accountKey == server.accountKey) {
+                if (stillConnected(server)) {
                     serverDao.setPositionSyncedAt(now)
                 }
             }
@@ -358,9 +364,9 @@ class KoboSyncRepository(
      */
     private suspend fun land(
         base: String,
-        server: com.chmouel.liseur.data.db.RemoteServer,
-        account: String,
+        server: RemoteServer,
     ): RemoteResult<Map<String, ReadingState>> {
+        val account = server.accountKey
         val page = when (val pulled = client.pullReadingStates(base, server.syncToken)) {
             is RemoteResult.Ok -> pulled.value
             is RemoteResult.Failed -> return pulled
@@ -373,7 +379,7 @@ class KoboSyncRepository(
         inTransaction {
             // Signing out while this was in flight retires everything the
             // old account knew, so writing it now would bring it back.
-            if (serverDao.get()?.accountKey != account) {
+            if (!stillConnected(server)) {
                 changed = true
                 return@inTransaction
             }
@@ -406,10 +412,11 @@ class KoboSyncRepository(
      */
     private suspend fun reconcileBook(
         base: String,
-        account: String,
+        server: RemoteServer,
         book: Book,
         landed: Map<String, ReadingState>,
     ): BookOutcome {
+        val account = server.accountKey
         val uuid = book.remoteUuid ?: return BookOutcome()
         var stored = progressDao.get(book.url)
         var remote = landed[book.url] ?: stored?.pendingStateFor(account)
@@ -420,7 +427,7 @@ class KoboSyncRepository(
             when (val asked = client.readState(base, uuid)) {
                 is RemoteResult.Failed -> return BookOutcome(failure = asked.reason, unreachable = asked.unreachable)
                 is RemoteResult.Ok -> remote = asked.value?.also {
-                    forAccount(account) {
+                    forAccount(server) {
                         progressDao.persistPending(
                             bookUrl = book.url,
                             progression = it.progression,
@@ -448,28 +455,29 @@ class KoboSyncRepository(
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
         )
-        return apply(base, uuid, book.url, account, stored, decision)
+        return apply(base, server, uuid, book.url, stored, decision)
     }
 
     private suspend fun apply(
         base: String,
+        server: RemoteServer,
         uuid: String,
         bookUrl: String,
-        account: String,
         stored: ReadingProgress?,
         decision: SyncDecision,
     ): BookOutcome {
+        val account = server.accountKey
         // Pushing talks to the server and so cannot be held inside a
         // transaction; the rest is local, and belongs to an account that
         // may have gone, so it is asked about and done in one go.
         if (decision is SyncDecision.Push) {
-            if (!stillConnected(account)) return BookOutcome()
+            if (!stillConnected(server)) return BookOutcome()
             val sent = stored?.localRevision ?: 0
             return when (val pushed = client.pushState(base, uuid, decision.state)) {
                 is RemoteResult.Failed -> BookOutcome(failure = pushed.reason, unreachable = pushed.unreachable)
                 is RemoteResult.Ok -> {
                     var acked = false
-                    forAccount(account) {
+                    forAccount(server) {
                         progressDao.ackPush(
                             bookUrl = bookUrl,
                             sentRevision = sent,
@@ -486,20 +494,22 @@ class KoboSyncRepository(
         }
         var outcome = BookOutcome()
         inTransaction {
-            if (stillConnected(account)) {
+            if (stillConnected(server)) {
                 outcome = write(bookUrl, account, stored, decision)
             }
         }
         return outcome
     }
 
-    private suspend fun stillConnected(account: String): Boolean =
-        serverDao.get()?.accountKey == account
+    private suspend fun stillConnected(server: RemoteServer): Boolean =
+        serverDao.get()?.let {
+            it.accountKey == server.accountKey && it.addedAt == server.addedAt
+        } == true
 
-    /** Writes only while [account] is still connected, in one go. */
-    private suspend fun forAccount(account: String, work: suspend () -> Unit) {
+    /** Writes only while [server] is still connected, in one go. */
+    private suspend fun forAccount(server: RemoteServer, work: suspend () -> Unit) {
         inTransaction {
-            if (stillConnected(account)) work()
+            if (stillConnected(server)) work()
         }
     }
 
