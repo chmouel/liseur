@@ -18,6 +18,7 @@ class GeminiTranslationTest {
 
     @Before
     fun start() {
+        Thinking.forget()
         server = MockWebServer()
         server.start(InetAddress.getByName("127.0.0.1"), 0)
     }
@@ -62,6 +63,66 @@ class GeminiTranslationTest {
         val body = JSONObject(request.body!!.utf8())
         assertTrue("into English (en)" in body.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).getString("text"))
         assertEquals(0, body.getJSONObject("generationConfig").getInt("temperature"))
+        assertEquals("minimal", body.getJSONObject("generationConfig").getJSONObject("thinkingConfig").getString("thinkingLevel"))
+    }
+
+    @Test
+    fun `a model that refuses the lowest thinking level is asked with no thinking budget`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse.Builder().code(400)
+                .body("""{"error":{"code":400,"message":"Thinking level MINIMAL is not supported for this model.","status":"INVALID_ARGUMENT"}}""").build(),
+        )
+        server.enqueue(MockResponse.Builder().code(200).body(reply("Hello")).build())
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+
+        assertEquals("Hello", client.translate("k", "gemini-flash-latest", "fr", "en", "Bonjour"))
+
+        server.takeRequest()
+        val config = JSONObject(server.takeRequest().body!!.utf8()).getJSONObject("generationConfig")
+        assertEquals(0, config.getJSONObject("thinkingConfig").getInt("thinkingBudget"))
+        assertTrue(!config.getJSONObject("thinkingConfig").has("thinkingLevel"))
+        assertEquals(0, config.getInt("temperature"))
+    }
+
+    @Test
+    fun `a model that must think uses low effort and remembers it`(): Unit = runBlocking {
+        repeat(2) {
+            server.enqueue(MockResponse.Builder().code(400).body("""{"error":{"message":"This thinking option is unsupported"}}""").build())
+        }
+        repeat(2) { server.enqueue(MockResponse.Builder().code(200).body(reply("Hello")).build()) }
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+
+        repeat(2) { assertEquals("Hello", client.translate("k", "m", "fr", "en", "Bonjour")) }
+
+        server.takeRequest()
+        server.takeRequest()
+        repeat(2) {
+            val config = JSONObject(server.takeRequest().body!!.utf8()).getJSONObject("generationConfig").getJSONObject("thinkingConfig")
+            assertEquals("low", config.getString("thinkingLevel"))
+            assertTrue(!config.has("thinkingBudget"))
+        }
+        assertEquals(4, server.requestCount)
+    }
+
+    @Test
+    fun `thinking retries recheck the request guard before sending`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse.Builder().code(400)
+                .body("""{"error":{"message":"Thinking level MINIMAL is not supported for this model."}}""").build(),
+        )
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        var attempts = 0
+
+        expect<TranslationError.Changed> {
+            runBlocking {
+                client.chat("k", "m", listOf("user" to "q")) {
+                    if (++attempts == 2) throw TranslationError.Changed()
+                }
+            }
+        }
+
+        assertEquals(2, attempts)
+        assertEquals(1, server.requestCount)
     }
 
     @Test

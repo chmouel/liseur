@@ -14,9 +14,14 @@ import org.json.JSONObject
 
 /**
  * An OpenAI-compatible server's chat completions, asked to translate,
- * and its list of models that answer in text.
+ * and its list of models that answer in text. A server known to take a
+ * way of turning thinking off is asked with it, as [Thinking] says;
+ * [thinking] gives those ways for a server.
  */
-class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client()) {
+class OpenAiChatClient(
+    private val client: OkHttpClient = TranslationHttp.client(),
+    private val thinking: (HttpUrl) -> List<JSONObject> = Thinking::openAiCompatible,
+) {
     /**
      * [passage] translated by [model], with [context] as the text before it
      * when there is one. TranslateGemma is asked in its own format, which
@@ -100,21 +105,41 @@ class OpenAiChatClient(private val client: OkHttpClient = TranslationHttp.client
         onTemperatureRefused: suspend () -> Unit,
         beforeRequest: () -> Unit = {},
     ): String {
-        beforeRequest()
-        val first = complete(base, apiKey, body)
-        val refused = first is ChatReply.Failure && first.code == 400 && body.has("temperature") &&
-            first.body.contains("temperature", ignoreCase = true)
-        val reply = if (refused) {
-            body.remove("temperature")
-            beforeRequest()
-            complete(base, apiKey, body).also { if (it is ChatReply.Text) onTemperatureRefused() }
-        } else {
-            first
+        val hadTemperature = body.has("temperature")
+        val reply = Thinking.climb(
+            "$base|$model",
+            thinking(base),
+            { it is ChatReply.Failure && Thinking.refused(it.code, it.body) },
+            { it is ChatReply.Text },
+        ) { way ->
+            way?.keys()?.forEach { body.put(it, way.get(it)) }
+            try {
+                ask(base, apiKey, body, beforeRequest)
+            } finally {
+                way?.keys()?.forEach { body.remove(it) }
+            }
         }
+        if (reply is ChatReply.Text && hadTemperature && !body.has("temperature")) onTemperatureRefused()
         return when (reply) {
             is ChatReply.Text -> reply.text
             is ChatReply.Failure -> throw OpenAiChat.errorFor(reply.code, reply.body, model)
         }
+    }
+
+    private suspend fun ask(
+        base: HttpUrl,
+        apiKey: String?,
+        body: JSONObject,
+        beforeRequest: () -> Unit,
+    ): ChatReply {
+        beforeRequest()
+        val first = complete(base, apiKey, body)
+        val refused = first is ChatReply.Failure && first.code == 400 && body.has("temperature") &&
+            first.body.contains("temperature", ignoreCase = true)
+        if (!refused) return first
+        body.remove("temperature")
+        beforeRequest()
+        return complete(base, apiKey, body)
     }
 
     private suspend fun complete(base: HttpUrl, apiKey: String?, body: JSONObject): ChatReply {

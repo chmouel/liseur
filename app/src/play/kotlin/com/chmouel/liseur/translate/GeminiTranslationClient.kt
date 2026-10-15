@@ -41,9 +41,31 @@ class GeminiTranslationClient(
             )
             // Translation wants the likeliest wording, and the same sentence then gets the same translation.
             .put("generationConfig", JSONObject().put("temperature", 0))
-            .toString()
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
-        return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::reply)
+        return unthinking(model, body) { TranslationHttp.execute(client, request(url, apiKey).post(it.toRequestBody(JSON)).build(), ::reply) }
+    }
+
+    /**
+     * What [send] answers for [body] with the first of [Thinking.GEMINI]
+     * [model] does not refuse, or with none. [beforeRequest] guards
+     * every attempt, including retries with another thinking option.
+     */
+    private suspend fun unthinking(model: String, body: JSONObject, beforeRequest: () -> Unit = {}, send: suspend (String) -> String): String {
+        val config = body.getJSONObject("generationConfig")
+        return Thinking.climb(
+            "gemini|$model",
+            Thinking.GEMINI,
+            { it.exceptionOrNull().let { e -> e is TranslationError.Service && Thinking.refused(e.code, e.serverMessage) } },
+            { it.isSuccess },
+        ) { way ->
+            if (way == null) config.remove("thinkingConfig") else config.put("thinkingConfig", way)
+            beforeRequest()
+            try {
+                Result.success(send(body.toString()))
+            } catch (e: TranslationError) {
+                Result.failure(e)
+            }
+        }.getOrThrow()
     }
 
     /**
@@ -53,10 +75,9 @@ class GeminiTranslationClient(
      * [TranslationError]; cancelling the caller cancels the request.
      */
     suspend fun chat(apiKey: String, model: String, messages: List<Pair<String, String>>, beforeRequest: () -> Unit = {}): String {
-        val body = GeminiTranslation.chatBody(messages).toString()
+        val body = GeminiTranslation.chatBody(messages)
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
-        beforeRequest()
-        return TranslationHttp.execute(client, request(url, apiKey).post(body.toRequestBody(JSON)).build(), ::answer)
+        return unthinking(model, body, beforeRequest) { TranslationHttp.execute(client, request(url, apiKey).post(it.toRequestBody(JSON)).build(), ::answer) }
     }
 
     /** The models the key can use that write text, by id, sorted. Throws [TranslationError]. */

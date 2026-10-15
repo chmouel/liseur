@@ -22,6 +22,7 @@ class OpenAiChatClientTest {
 
     @Before
     fun start() {
+        Thinking.forget()
         server = MockWebServer()
         server.start(InetAddress.getByName("127.0.0.1"), 0)
     }
@@ -171,6 +172,114 @@ class OpenAiChatClientTest {
         expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x", temperature = null) } }
         assertEquals(1, server.requestCount)
         assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("temperature"))
+    }
+
+    @Test
+    fun `thinking is turned off only where a service is known to take it`() {
+        val zai = Thinking.openAiCompatible(OpenAiTts.baseUrl("https://api.z.ai/api/paas/v4/")!!)
+        assertEquals("disabled", zai[0].getJSONObject("thinking").getString("type"))
+        assertEquals("low", zai[1].getString("reasoning_effort"))
+        assertTrue(Thinking.openAiCompatible(OpenAiTts.baseUrl("http://192.168.1.10:11434")!!).isEmpty())
+    }
+
+    @Test
+    fun `a model that refuses a way of not thinking is asked the next, and that one is kept`(): Unit = runBlocking {
+        Thinking.forget()
+        val ways = listOf(JSONObject().put("thinking", "off"), JSONObject().put("reasoning_effort", "low"))
+        val client = OpenAiChatClient(thinking = { ways })
+        server.enqueue(json("""{"error":{"code":"1210","message":"This model always engages in thinking"}}""", 400))
+        server.enqueue(json(completion("Il pleut.")))
+        server.enqueue(json(completion("Il neige.")))
+        var counted = 0
+
+        assertEquals("Il pleut.", client.chat(base, "k", "glm", listOf("user" to "It rains."), beforeRequest = { counted++ }))
+        assertEquals("Il neige.", client.translate(base, "k", "glm", "en", "fr", "It snows."))
+
+        assertEquals(2, counted)
+        val first = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals("off", first.getString("thinking"))
+        val second = JSONObject(server.takeRequest().body!!.utf8())
+        assertFalse(second.has("thinking"))
+        assertEquals("low", second.getString("reasoning_effort"))
+        assertEquals(0, second.getInt("temperature"))
+        assertEquals("low", JSONObject(server.takeRequest().body!!.utf8()).getString("reasoning_effort"))
+    }
+
+    @Test
+    fun `a request refused with every way and with none keeps nothing`(): Unit = runBlocking {
+        Thinking.forget()
+        val client = OpenAiChatClient(thinking = { listOf(JSONObject().put("thinking", "off")) })
+        repeat(2) { server.enqueue(json("""{"error":{"message":"thinking is unsupported"}}""", 400)) }
+        server.enqueue(json(completion("Il pleut.")))
+
+        expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x") } }
+        assertEquals("Il pleut.", client.translate(base, "k", "m", "en", "fr", "It rains."))
+
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("thinking"))
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("thinking"))
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("thinking"))
+    }
+
+    @Test
+    fun `a temperature refusal is remembered when a thinking retry finally succeeds`(): Unit = runBlocking {
+        val client = OpenAiChatClient(thinking = { listOf(JSONObject().put("thinking", "off")) })
+        server.enqueue(json("""{"error":{"message":"temperature is unsupported"}}""", 400))
+        server.enqueue(json("""{"error":{"message":"thinking is unsupported"}}""", 400))
+        server.enqueue(json(completion("Bonjour.")))
+        var refused = 0
+
+        assertEquals("Bonjour.", client.translate(base, "k", "m", "en", "fr", "Hello.", onTemperatureRefused = { refused++ }))
+
+        assertEquals(1, refused)
+        assertEquals(0, JSONObject(server.takeRequest().body!!.utf8()).getInt("temperature"))
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("temperature"))
+        val last = JSONObject(server.takeRequest().body!!.utf8())
+        assertFalse(last.has("temperature"))
+        assertFalse(last.has("thinking"))
+    }
+
+    @Test
+    fun `thinking retries recheck the request guard before sending`(): Unit = runBlocking {
+        val client = OpenAiChatClient(thinking = { listOf(JSONObject().put("thinking", "off")) })
+        server.enqueue(json("""{"error":{"message":"thinking is unsupported"}}""", 400))
+        var attempts = 0
+
+        expect<TranslationError.Changed> {
+            runBlocking {
+                client.chat(base, "k", "m", listOf("user" to "q"), beforeRequest = {
+                    if (++attempts == 2) throw TranslationError.Changed()
+                })
+            }
+        }
+
+        assertEquals(2, attempts)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `unrelated bad requests do not retry thinking options`(): Unit = runBlocking {
+        val client = OpenAiChatClient(thinking = { listOf(JSONObject().put("thinking", "off")) })
+        server.enqueue(json("""{"error":{"message":"messages too long"}}""", 400))
+
+        expect<TranslationError.Service> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x") } }
+
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a failed request does not remember a thinking option`(): Unit = runBlocking {
+        val ways = listOf(JSONObject().put("thinking", "off"), JSONObject().put("reasoning_effort", "low"))
+        val client = OpenAiChatClient(thinking = { ways })
+        server.enqueue(json("""{"error":{"message":"thinking is unsupported"}}""", 400))
+        server.enqueue(json("""{"error":{"message":"invalid key"}}""", 401))
+        server.enqueue(json(completion("Bonjour.")))
+
+        expect<TranslationError.InvalidKey> { runBlocking { client.translate(base, "k", "m", "en", "fr", "x") } }
+        assertEquals("Bonjour.", client.translate(base, "new-key", "m", "en", "fr", "Hello."))
+
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("thinking"))
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("reasoning_effort"))
+        assertTrue(JSONObject(server.takeRequest().body!!.utf8()).has("thinking"))
     }
 
     @Test

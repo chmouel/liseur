@@ -1830,7 +1830,18 @@ reader behavior.
   (Ollama, LM Studio) may load the model first; setting those up is
   covered in [docs/LOCAL_AI_SERVERS.md](docs/LOCAL_AI_SERVERS.md). Every
   model, Gemini included, is asked at temperature 0 unless a server's
-  Advanced options say otherwise. A server model named TranslateGemma
+  Advanced options say otherwise. Thinking is turned off where a service
+  is known to take a way of doing it (`Thinking`), for translation and
+  the companion alike: Z.ai, OpenAI, Gemini (its own API and its
+  OpenAI-compatible one), Groq, DeepInfra and OpenRouter, recognized by
+  host. Each has a ladder of fields, the most thorough first and the
+  lowest effort last for a model that always thinks (GLM-5.3, gpt-oss).
+  A 400 or 422 naming thinking or reasoning asks the next rung, then
+  without any. Only a successful response remembers the rung in memory
+  for as long as the app runs. Other servers, Ollama and local ones
+  included, are asked as before. Every attempt checks the service's
+  generation and counts against the companion's request bound.
+  A server model named TranslateGemma
   (`translategemma:4b` on Ollama, for example) is asked instead in the
   single user message it was trained on, without the earlier text,
   which it would translate too; it translates instruction-like passages
