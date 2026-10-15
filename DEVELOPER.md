@@ -2101,7 +2101,11 @@ liseur-sync settings.
   where choosing Gemini when no model was ever stored saves the
   recommended `gemini-3.1-flash-lite` (marked so in the list), while a
   reader already on Gemini keeps the shared default,
-  fenced on the key's generation). A provider this build lacks, such as
+  fenced on the key's generation). Saving a Gemini key when no AI server
+  is listed validates it against Gemini's models endpoint and, once
+  accepted (or when offline), selects Gemini for the reading companion
+  (with `gemini-3.1-flash-lite`) and for reading aloud whenever those
+  features have no provider chosen yet. A provider this build lacks, such as
   one restored from a Play backup on F-Droid or the removed Gemini Nano
   (`nano`), reads as not set up rather than falling back. Choosing a
   listed server clears `companion_provider`.

@@ -985,6 +985,29 @@ class AppSettingsRepository(
         }
     }
 
+    /**
+     * Chooses [id] for the reading companion and for reading aloud when a
+     * Gemini key is saved and no AI server is listed yet, unless the
+     * reader already picked a provider for that feature. Stores
+     * [companionModel] as the companion's Gemini model when none was ever
+     * stored.
+     */
+    suspend fun adoptGeminiDefaults(id: String, companionModel: String) {
+        store.edit {
+            val servers = ServerSettings.servers(it).readable ?: return@edit
+            if (servers.isNotEmpty()) return@edit
+            if (it[Keys.COMPANION_PROVIDER] == null && it[ServerSettings.COMPANION_SERVER] == null) {
+                if (it[Keys.COMPANION_GEMINI_MODEL].isNullOrBlank()) {
+                    it[Keys.COMPANION_GEMINI_MODEL] = companionModel
+                }
+                it[Keys.COMPANION_PROVIDER] = id
+            }
+            if (it[Keys.READ_ALOUD_PROVIDER] == null && it[ServerSettings.READ_ALOUD_SERVER] == null) {
+                it[Keys.READ_ALOUD_PROVIDER] = id
+            }
+        }
+    }
+
     /** Stores the Gemini model the reading companion uses; blank goes back to the default. */
     suspend fun setCompanionGeminiModel(name: String) = setOrRemove(Keys.COMPANION_GEMINI_MODEL, name)
 

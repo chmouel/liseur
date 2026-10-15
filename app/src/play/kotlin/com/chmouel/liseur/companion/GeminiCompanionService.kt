@@ -150,7 +150,7 @@ internal class GeminiCompanionService(
         }
     }
 
-    private companion object {
+    internal companion object {
         // The key of the one list there is, as a menu tells lists apart by address.
         const val MODELS = "gemini"
 

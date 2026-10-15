@@ -1,5 +1,6 @@
 package com.chmouel.liseur.tts
 
+import com.chmouel.liseur.companion.GeminiCompanionService
 import com.chmouel.liseur.providers.ServerConnections
 import kotlinx.coroutines.flow.StateFlow
 
@@ -32,7 +33,8 @@ internal class GeminiAccount(
 
     /**
      * Saves [key] and checks it with Gemini; features using the old one
-     * hear of it first.
+     * hear of it first, and unset features adopt Gemini once the key is
+     * accepted (or when the network cannot be reached to check it).
      */
     fun commitKey(key: String, done: (Boolean) -> Unit) = connections.commitKey(
         OWNER,
@@ -42,6 +44,7 @@ internal class GeminiAccount(
                 owner = OWNER,
                 generation = generation,
                 validate = { validate(key) },
+                onAccepted = { connections.adoptGeminiDefaults(OWNER, GeminiCompanionService.RECOMMENDED_MODEL) },
             )
         },
         done = done,

@@ -44,6 +44,58 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
+    fun `saving a Gemini key adopts Gemini for the companion and voice only when no server or provider is set`() = runTest {
+        val fresh = AppSettingsRepository(store("gemini-fresh.preferences_pb"))
+        fresh.adoptGeminiDefaults("gemini", "gemini-3.1-flash-lite")
+        val adopted = fresh.settings.first()
+        assertEquals("gemini", adopted.companionProvider)
+        assertEquals("gemini-3.1-flash-lite", adopted.companionGeminiModel)
+        assertEquals("gemini", adopted.readAloudProvider)
+
+        // With an AI server already listed, neither provider is touched.
+        val withServer = AppSettingsRepository(store("gemini-server.preferences_pb"))
+        withServer.addServer("Local", "http://127.0.0.1:11434/v1")
+        withServer.adoptGeminiDefaults("gemini", "gemini-3.1-flash-lite")
+        val untouched = withServer.settings.first()
+        assertNull(untouched.companionProvider)
+        assertNull(untouched.companionGeminiModel)
+        assertNull(untouched.readAloudProvider)
+
+        // When one feature already has a provider chosen, only the unset one adopts Gemini.
+        val voiceChosen = AppSettingsRepository(store("gemini-voice.preferences_pb"))
+        voiceChosen.setReadAloudProvider("device")
+        voiceChosen.setCompanionGeminiModel("custom-model")
+        voiceChosen.adoptGeminiDefaults("gemini", "gemini-3.1-flash-lite")
+        val partial = voiceChosen.settings.first()
+        assertEquals("device", partial.readAloudProvider)
+        assertEquals("gemini", partial.companionProvider)
+        assertEquals("custom-model", partial.companionGeminiModel)
+
+        val companionChosen = AppSettingsRepository(store("gemini-companion.preferences_pb"))
+        companionChosen.setCompanionProvider("gemini")
+        companionChosen.adoptGeminiDefaults("gemini", "gemini-3.1-flash-lite")
+        val existing = companionChosen.settings.first()
+        assertEquals("gemini", existing.companionProvider)
+        assertNull(existing.companionGeminiModel)
+        assertEquals("gemini", existing.readAloudProvider)
+    }
+
+    @Test
+    fun `saving a Gemini key leaves unreadable server settings untouched`() = runTest {
+        val store = store()
+        store.edit { it[ServerSettings.SERVERS] = "[" }
+        val repo = AppSettingsRepository(store)
+
+        repo.adoptGeminiDefaults("gemini", "recommended")
+
+        val settings = repo.settings.first()
+        assertNull(settings.companionProvider)
+        assertNull(settings.companionGeminiModel)
+        assertNull(settings.readAloudProvider)
+        assertEquals("[", store.data.first()[ServerSettings.SERVERS])
+    }
+
+    @Test
     fun `volume key mode is on by default`() = runTest {
         assertEquals(VolumeKeyMode.ON, AppSettings().volumeKeyMode)
         assertEquals(VolumeKeyMode.ON, AppSettingsRepository(store()).settings.first().volumeKeyMode)

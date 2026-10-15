@@ -188,6 +188,10 @@ internal class ServerConnections(
         }
     }
 
+    /** Adopts [owner] for the companion and read aloud when no server is listed and neither was chosen yet. */
+    suspend fun adoptGeminiDefaults(owner: String, companionModel: String) =
+        settings.adoptGeminiDefaults(owner, companionModel)
+
     /** Removes the key of the servers on [origin]; other origins keep theirs. */
     fun commitKeyRemoval(origin: String, done: (Boolean) -> Unit = {}) =
         commitKey(origin, { keys.clear(origin) }, done = done)
