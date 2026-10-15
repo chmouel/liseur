@@ -761,6 +761,31 @@ class KosyncPositionSyncTest {
         assertEquals(1, server.requestCount)
     }
 
+    @Test
+    fun `a delayed read after same-pairing restore cannot upload stale progress`() = runTest {
+        pair()
+        db.bookDao().upsert(book())
+        record(progression = 0.4)
+        val original = db.kosyncPeerDao().get()!!
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.method == "GET") {
+                    runBlocking { repository().restoreBackup(original) }
+                    return progress(0.6)
+                }
+                return json("{}")
+            }
+        }
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(BOOK))
+
+        val restored = db.kosyncPeerDao().get()!!
+        assertEquals(original.accountKey, restored.accountKey)
+        assertTrue(restored.addedAt > original.addedAt)
+        assertNull(db.syncPeerStateDao().get(BOOK, original.accountKey))
+        assertTrue(requests().none { it.method == "PUT" })
+    }
+
     // -- Preview ---------------------------------------------------------------
 
     @Test

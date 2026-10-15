@@ -554,6 +554,7 @@ class KosyncPositionSync(
             is SyncDecision.Push -> {
                 val revision = stored?.localRevision ?: return BookOutcome()
                 val progression = decision.state.progression ?: return BookOutcome()
+                if (!sameAccount(account)) return BookOutcome()
                 val sent = client.putProgress(
                     rootUrl = account.baseUrl,
                     credentials = account.credentials,
