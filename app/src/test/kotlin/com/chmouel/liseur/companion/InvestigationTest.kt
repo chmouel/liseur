@@ -194,6 +194,100 @@ class InvestigationTest {
     // -- Answers ---------------------------------------------------------
 
     @Test
+    fun `insufficient automatically retrieves unseen mentions before answering`() = runTest {
+        val many = (0 until 40).map { passage(0, it, "Mira keeps ledger number $it. " + "Details. ".repeat(70)) }
+        val unsafe = passage(3, 99, "Mira $SENTINEL", range = ChapterRange(3, 4))
+        val chat = FakeChat { messages ->
+            if (requests.size == 1) """{"answer":"insufficient"}"""
+            else profile(holding(messages, "ledger number 39").take(1))
+        }
+
+        val answer = investigation(chat, passages = many + book.filter { it.range.lo >= 4 } + unsafe).run("Mira")
+
+        assertTrue(answer is CompanionAnswer.Profile)
+        assertEquals(2, chat.requests.size)
+        assertFalse(chat.requests.first().last().content.contains("ledger number 39"))
+        assertTrue(chat.requests.last().last().content.contains("ledger number 39"))
+        assertNothingLater(chat)
+    }
+
+    @Test
+    fun `repeated insufficient answers exhaust fresh evidence without resending passages`() = runTest {
+        val many = (0 until 40).map { passage(0, it, "Mira keeps ledger number $it. " + "Details. ".repeat(70)) }
+        val chat = FakeChat { """{"answer":"insufficient"}""" }
+
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat, passages = many).run("Mira"))
+
+        assertEquals(2, chat.requests.size)
+        val refs = Regex("ref=\"(S[0-9]+)\"").findAll(chat.requests.last().joinToString("\n") { it.content })
+            .map { it.groupValues[1] }.toList()
+        assertEquals(40, refs.size)
+        assertEquals(refs.size, refs.distinct().size)
+    }
+
+    @Test
+    fun `insufficient with all evidence already shown makes no extra request`() = runTest {
+        val chat = FakeChat { """{"answer":"insufficient"}""" }
+
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat).run("Mira"))
+
+        assertEquals(1, chat.requests.size)
+    }
+
+    @Test
+    fun `automatic batches stop at the request cap with a final answer instruction`() = runTest {
+        val many = (0 until 40).map { passage(0, it, "Mira keeps ledger number $it. " + "Details. ".repeat(70)) }
+        val chat = FakeChat { """{"answer":"insufficient"}""" }
+        val limits = InvestigationLimits(seedCharacters = 2_000, requests = 3)
+
+        assertEquals(CompanionAnswer.Insufficient, investigation(chat, passages = many, limits = limits).run("Mira"))
+
+        assertEquals(3, chat.requests.size)
+        assertTrue(chat.requests.last().last().content.endsWith(CompanionPrompt.FINISH))
+        val blocks = Regex("<book[^>]*>\n(.*?)\n</book>", RegexOption.DOT_MATCHES_ALL)
+            .findAll(chat.requests.last().joinToString("\n") { it.content }).map { it.groupValues[1] }.toList()
+        assertTrue(blocks.sumOf { it.length } <= 6_000)
+        assertEquals(blocks.size, blocks.distinct().size)
+    }
+
+    @Test
+    fun `fallback completes snippets and retains the original selection for candidate lookups`() = runTest {
+        val many = (0 until 40).map { passage(0, it, "Mira keeps ledger number $it. " + "Details. ".repeat(70)) }
+        val chat = FakeChat { messages ->
+            when (requests.size) {
+                1 -> actions(search("Mira"))
+                2 -> """{"answer":"insufficient"}"""
+                else -> profile(holding(messages, "ledger number 39").take(1))
+            }
+        }
+
+        val answer = investigation(chat, passages = many).run("Ledger Keeper", also = "Mira")
+
+        assertTrue(answer is CompanionAnswer.Profile)
+        assertEquals(3, chat.requests.size)
+        val snippets = Regex("ref=\"(S[0-9]+)\"").findAll(chat.requests[1].last().content)
+            .map { it.groupValues[1] }.toList()
+        assertTrue(snippets.isNotEmpty())
+        for (ref in snippets) assertTrue(chat.requests.last().last().content.contains("ref=\"$ref\""))
+        assertTrue(chat.requests.last().last().content.contains(many.last().text))
+    }
+
+    @Test
+    fun `automatic follow up respects exhausted request operation round and source budgets`() = runTest {
+        val many = (0 until 40).map { passage(0, it, "Mira keeps ledger number $it. " + "Details. ".repeat(70)) }
+        for (limits in listOf(
+            InvestigationLimits(requests = 1),
+            InvestigationLimits(operations = 0),
+            InvestigationLimits(rounds = 0),
+            InvestigationLimits(seedCharacters = 600, sourceCharacters = 600),
+        )) {
+            val chat = FakeChat { """{"answer":"insufficient"}""" }
+            assertEquals(CompanionAnswer.Insufficient, investigation(chat, passages = many, limits = limits).run("Mira"))
+            assertEquals(1, chat.requests.size)
+        }
+    }
+
+    @Test
     fun `the first request shows mentions from every earlier chapter with the passages around them`() = runTest {
         // Chapters 1 and 4 name Mira constantly; chapters 2 and 3 once, between two quiet paragraphs.
         fun talkative(chapter: Int) = (0 until 30).map { passage(chapter, it, "Mira speaks in chapter ${chapter + 1}, line $it.") }

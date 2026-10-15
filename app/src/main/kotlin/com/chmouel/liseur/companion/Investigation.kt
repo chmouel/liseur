@@ -164,7 +164,10 @@ class Investigation<P>(
                         finishing = rounds >= limits.rounds || operations >= limits.operations || source >= limits.sourceCharacters
                         history += ChatMessage("user", results + if (finishing) "\n\n" + CompanionPrompt.FINISH else "")
                     }
-                    is Parsed.Answer -> return typed(parsed.answer)
+                    is Parsed.Answer -> {
+                        if (parsed.answer == CompanionAnswer.Insufficient && supplement(mentions)) continue
+                        return typed(parsed.answer)
+                    }
                 }
             }
         }
@@ -175,6 +178,37 @@ class Investigation<P>(
 
         private suspend fun request(): String = chat.reply(history.toList()) {
             if (++requests > limits.requests) throw CompanionError.TooManyRequests()
+        }
+
+        private fun supplement(mentions: List<Int>): Boolean {
+            if (finishing || requests >= limits.requests || rounds >= limits.rounds ||
+                operations >= limits.operations || source >= limits.sourceCharacters
+            ) return false
+            var budget = minOf(limits.seedCharacters, limits.sourceCharacters - source)
+            val chosen = sortedSetOf<Int>()
+            for (anchor in acrossChapters(mentions).filterNot { it in shown }) {
+                val group = around(anchor, READ_CONTEXT, READ_WINDOW).filterNot { it in shown || it in chosen }
+                for (candidate in listOf(group, listOf(anchor).filterNot { it in chosen })) {
+                    val length = candidate.sumOf { eligible[it].text.length }
+                    if (length <= budget) {
+                        budget -= length
+                        chosen += candidate
+                        break
+                    }
+                }
+            }
+            if (chosen.isEmpty()) return false
+            rounds++
+            operations++
+            val blocks = chosen.joinToString("\n") { show(it) }
+            finishing = rounds >= limits.rounds || operations >= limits.operations || source >= limits.sourceCharacters ||
+                requests >= limits.requests - 1
+            history += ChatMessage("assistant", """{"answer":"insufficient"}""")
+            history += ChatMessage(
+                "user",
+                CompanionPrompt.SUPPLEMENT + "\n\n" + blocks + if (finishing) "\n\n" + CompanionPrompt.FINISH else "",
+            )
+            return true
         }
 
         private fun seed(mentions: List<Int>, hinted: List<Int>): String {

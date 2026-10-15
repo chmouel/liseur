@@ -2173,6 +2173,11 @@ liseur-sync settings.
   A cached answer is reused only at its own read point or further on, so
   it never rests on text the reader has not reached; a new passage naming
   the character asks again.
+  If the model answers insufficient while matching passages remain
+  unseen, the app supplies more passages and asks again automatically.
+  These batches share the lookup's existing round, operation, source-text
+  and request limits. With no further evidence that fits, the insufficient
+  answer stands; text at or after the selection remains excluded.
 - Recaps are opt-in and only a retrieval index. `RecapScheduler` queues
   a chapter when `READER_MOVEMENT` crosses from it into the next one (no
   jumps, no backfill), runs one batch at a time while the app is in the

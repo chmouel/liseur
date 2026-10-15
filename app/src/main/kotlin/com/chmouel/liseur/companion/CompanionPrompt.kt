@@ -65,6 +65,10 @@ internal object CompanionPrompt {
 
     const val FINISH = "The investigation limit is reached. Reply now with a final answer: profile, ambiguous or insufficient."
 
+    const val SUPPLEMENT = "Here are additional passages mentioning the selected character, with surrounding context where it fits. " +
+        "Reconsider your answer using this evidence and the passages already shown. " +
+        "Cite supporting refs for every claim. If the evidence still says too little, answer insufficient."
+
     /** Says only which rule a reply broke, by a fixed code, never quoting it. */
     fun correction(code: String, finishing: Boolean): String =
         "Your last reply could not be used ($code). Reply with exactly one JSON object as the instructions describe" +
