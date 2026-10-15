@@ -85,6 +85,7 @@ internal fun CompanionSheet(
     onCancel: () -> Unit,
     onChoose: (Candidate<Locator>) -> Unit,
     onSetUp: () -> Unit,
+    onChooseModel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(
@@ -144,7 +145,7 @@ internal fun CompanionSheet(
                             stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
                         ) { Retry(onRetry) }
                         is CompanionView.Loading -> Loading(view.stage, onCancel)
-                        is CompanionView.Failed -> Message(failureText(view.failure)) { Retry(onRetry) }
+                        is CompanionView.Failed -> FailureMessage(view, onRetry, onChooseModel)
                         is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
                         is CompanionView.Profile -> Profile(view.profile, onSource)
                     }
@@ -220,23 +221,6 @@ private fun Loading(stage: CompanionView.Stage, onCancel: () -> Unit) {
     }
     TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
 }
-
-@Composable
-private fun failureText(failure: CompanionFailure): String = stringResource(
-    when (failure) {
-        CompanionFailure.CANCELLED -> R.string.companion_failed_cancelled
-        CompanionFailure.KEY -> R.string.companion_failed_key
-        CompanionFailure.RATE_LIMITED -> R.string.companion_failed_rate_limited
-        CompanionFailure.LOCAL_NETWORK -> R.string.companion_failed_local_network
-        CompanionFailure.NETWORK -> R.string.companion_failed_network
-        CompanionFailure.MODEL_MISSING -> R.string.companion_failed_model_missing
-        CompanionFailure.SERVER -> R.string.companion_failed_server
-        CompanionFailure.MALFORMED -> R.string.companion_failed_malformed
-        CompanionFailure.LIMIT -> R.string.companion_failed_limit
-        CompanionFailure.TOO_LONG -> R.string.companion_failed_too_long
-        CompanionFailure.UNREADABLE -> R.string.companion_failed_unreadable
-    },
-)
 
 @Composable
 private fun Ambiguous(candidates: List<Candidate<Locator>>, onChoose: (Candidate<Locator>) -> Unit) {

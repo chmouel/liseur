@@ -71,6 +71,7 @@ internal fun CompanionPanelHost(
             onCancel = companion.cancel,
             onChoose = companion.choose,
             onSetUp = { settingsOpen = true },
+            onChooseModel = { settingsOpen = true },
             onDismiss = companion.close,
         )
     }

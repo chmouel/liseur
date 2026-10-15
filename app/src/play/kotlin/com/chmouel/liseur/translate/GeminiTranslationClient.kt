@@ -182,12 +182,14 @@ internal object GeminiTranslation {
     )
 
     fun errorFor(code: Int, body: String): TranslationError {
-        val (status, reasons) = describe(body.take(TranslationHttp.MAX_ERROR_BYTES.toInt()))
+        val bounded = body.take(TranslationHttp.MAX_ERROR_BYTES.toInt())
+        val (status, reasons) = describe(bounded)
+        val said = TranslationError.serverMessage(bounded)
         return when {
-            code == 429 || status == "RESOURCE_EXHAUSTED" -> TranslationError.RateLimited(code)
+            code == 429 || status == "RESOURCE_EXHAUSTED" -> TranslationError.RateLimited(code, said)
             code == 401 || code == 403 || status == "UNAUTHENTICATED" ||
-                reasons.any { it.startsWith("API_KEY_") } -> TranslationError.InvalidKey(code)
-            else -> TranslationError.Service(code)
+                reasons.any { it.startsWith("API_KEY_") } -> TranslationError.InvalidKey(code, said)
+            else -> TranslationError.Service(code, said)
         }
     }
 

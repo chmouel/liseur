@@ -1,21 +1,33 @@
 package com.chmouel.liseur.translate
 
 import java.io.IOException
+import org.json.JSONArray
+import org.json.JSONException
+import org.json.JSONObject
 
 /** Why a passage could not be translated. Messages never carry the key, the passage or its translation. */
 sealed class TranslationError(message: String, cause: Throwable? = null) : Exception(message, cause) {
+    /**
+     * What the server said about a refused request, for showing the
+     * reader on demand; kept out of [message] so logs never carry it.
+     */
+    open val serverMessage: String? get() = null
+
     /** [code] is null when the key could not even be sent. */
-    class InvalidKey(code: Int? = null) : TranslationError(
+    class InvalidKey(val code: Int? = null, override val serverMessage: String? = null) : TranslationError(
         code?.let { "The service rejected the API key (HTTP $it)" } ?: "The API key cannot be sent",
     )
-    class RateLimited(code: Int) : TranslationError("Quota or rate limit reached (HTTP $code)")
+    class RateLimited(val code: Int, override val serverMessage: String? = null) :
+        TranslationError("Quota or rate limit reached (HTTP $code)")
     class LocalNetworkBlocked : TranslationError("Local network access is not allowed")
     class Network(cause: IOException) :
         TranslationError("The service could not be reached (${cause.javaClass.simpleName})", cause)
-    class Service(val code: Int) : TranslationError("The service answered HTTP $code")
+    class Service(val code: Int, override val serverMessage: String? = null) :
+        TranslationError("The service answered HTTP $code")
 
     /** The server has no [model] by that name: misspelled, or not downloaded yet. */
-    class ModelNotFound(val model: String) : TranslationError("The server has no such model")
+    class ModelNotFound(val model: String, override val serverMessage: String? = null) :
+        TranslationError("The server has no such model")
 
     /** The model declined, or a safety filter held the answer back. */
     class Refused : TranslationError("The service declined to translate")
@@ -42,4 +54,34 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
 
     /** A translator on the phone other than the system's did not answer; named by its service. */
     class Failed(reason: String) : TranslationError("The translator failed: $reason")
+
+    companion object {
+        const val MAX_SERVER_MESSAGE = 4_000
+
+        /**
+         * The readable part of an error reply: `error.message` (or a bare
+         * `message` or `detail`) when the body is JSON with one, else the
+         * body itself, trimmed and bounded; null when there is nothing.
+         */
+        fun serverMessage(body: String): String? {
+            val trimmed = body.trim()
+            val parsed = try {
+                val root = when {
+                    trimmed.startsWith("[") -> JSONArray(trimmed).optJSONObject(0)
+                    trimmed.startsWith("{") -> JSONObject(trimmed)
+                    else -> null
+                }
+                root?.let { r ->
+                    val error = r.opt("error")
+                    (error as? JSONObject)?.optString("message")?.takeIf { it.isNotBlank() }
+                        ?: (error as? String)?.takeIf { it.isNotBlank() }
+                        ?: r.optString("message").takeIf { it.isNotBlank() }
+                        ?: (r.opt("detail") as? String)?.takeIf { it.isNotBlank() }
+                }
+            } catch (_: JSONException) {
+                null
+            }
+            return (parsed ?: trimmed).trim().take(MAX_SERVER_MESSAGE).ifEmpty { null }
+        }
+    }
 }

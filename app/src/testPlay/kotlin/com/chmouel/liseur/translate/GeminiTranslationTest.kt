@@ -111,6 +111,21 @@ class GeminiTranslationTest {
     }
 
     @Test
+    fun `what Gemini said is kept, in either error shape`() {
+        assertEquals(
+            "Developer instruction is not enabled for models/gemma-3-1b-it",
+            GeminiTranslation.errorFor(
+                400,
+                """{"error":{"code":400,"message":"Developer instruction is not enabled for models/gemma-3-1b-it","status":"INVALID_ARGUMENT"}}""",
+            ).serverMessage,
+        )
+        assertEquals(
+            "Quota exceeded",
+            GeminiTranslation.errorFor(429, """[{"error":{"code":429,"message":"Quota exceeded","status":"RESOURCE_EXHAUSTED"}}]""").serverMessage,
+        )
+    }
+
+    @Test
     fun `thoughts are not part of the translation`() {
         val text = JSONObject(reply("Hel", "lo")).apply {
             getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts")

@@ -279,11 +279,14 @@ internal object OpenAiChat {
      * Ollama's "model not found" and OpenAI's `model_not_found` do; a
      * server with no such route answers 404 too.
      */
-    fun errorFor(code: Int, body: String, model: String? = null): TranslationError = when {
-        code == 401 || code == 403 -> TranslationError.InvalidKey(code)
-        code == 429 || code == 402 -> TranslationError.RateLimited(code)
-        code == 404 && model != null && missingModel(body) -> TranslationError.ModelNotFound(model)
-        else -> TranslationError.Service(code)
+    fun errorFor(code: Int, body: String, model: String? = null): TranslationError {
+        val said = TranslationError.serverMessage(body)
+        return when {
+            code == 401 || code == 403 -> TranslationError.InvalidKey(code, said)
+            code == 429 || code == 402 -> TranslationError.RateLimited(code, said)
+            code == 404 && model != null && missingModel(body) -> TranslationError.ModelNotFound(model, said)
+            else -> TranslationError.Service(code, said)
+        }
     }
 
     private fun missingModel(body: String): Boolean {

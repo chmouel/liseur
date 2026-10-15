@@ -2031,7 +2031,15 @@ liseur-sync settings.
   defaults below. A reply cut off at the output limit gets one
   `too_long` correction asking for a shorter answer. A failed lookup or
   recap logs the error class and, for `CompanionError.Malformed`, the
-  fixed codes of the rules broken (never text). Replies may hold a lone
+  fixed codes of the rules broken (never text). A failed lookup's panel
+  also explains it, offers another model when one might help, and keeps
+  `FailureDetails` for a details dialog the reader can copy: host,
+  model, error class, HTTP status, the server's error message
+  (`TranslationError.serverMessage`, never part of `message`), the
+  rules broken, the start of the model's last reply, and the requests
+  sent. These stay in the panel only; they are never logged, cached,
+  saved or sent. A failed panel asks again when the choice changes.
+  Replies may hold a lone
   item where a list is asked for, so they read either
   (`JSONObject.items`).
 - Gemini Nano (ML Kit's Prompt API) was tried and removed: about 4,000

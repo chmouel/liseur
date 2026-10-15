@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.net.URI
 
 /** What the character panel shows. */
 sealed interface CompanionView<out P> {
@@ -26,7 +27,7 @@ sealed interface CompanionView<out P> {
 
     data class Loading(val stage: Stage) : CompanionView<Nothing>
 
-    data class Failed(val failure: CompanionFailure) : CompanionView<Nothing>
+    data class Failed(val failure: CompanionFailure, val details: FailureDetails? = null) : CompanionView<Nothing>
 
     data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CompanionView<P>
 
@@ -53,9 +54,55 @@ enum class CompanionFailure {
     MODEL_MISSING,
     SERVER,
     MALFORMED,
+    REFUSED,
     LIMIT,
     TOO_LONG,
     UNREADABLE,
+}
+
+/**
+ * What is known about a failed lookup, shown to the reader on request.
+ * It stays in the panel: it is never logged, cached, saved or sent.
+ */
+data class FailureDetails(
+    /** The host asked, or null when no service was reached. */
+    val host: String? = null,
+    val model: String? = null,
+    /** The exception's class and its fixed message, which never holds book text or replies. */
+    val error: String,
+    val status: Int? = null,
+    /** What the server said about refusing the request, bounded. */
+    val serverMessage: String? = null,
+    /** The fixed codes of the reply rules the model broke, each once, in the order first broken. */
+    val rules: List<String> = emptyList(),
+    /** The start of the model's last unusable reply. */
+    val reply: String? = null,
+    /** Requests sent before the lookup failed. */
+    val requests: Int = 0,
+) {
+    companion object {
+        const val REPLY_SNIPPET = 600
+
+        fun of(e: Throwable, choice: CompanionChoice? = null, requests: Int = 0, lastReply: String? = null): FailureDetails =
+            FailureDetails(
+                host = choice?.let { runCatching { URI(it.url).host }.getOrNull() ?: it.url },
+                model = choice?.model,
+                error = e.javaClass.simpleName + (e.message?.let { ": $it" } ?: ""),
+                status = when (e) {
+                    is TranslationError.Service -> e.code
+                    is TranslationError.InvalidKey -> e.code
+                    is TranslationError.RateLimited -> e.code
+                    is TranslationError.ModelNotFound -> 404
+                    else -> null
+                },
+                serverMessage = (e as? TranslationError)?.serverMessage,
+                rules = (e as? CompanionError.Malformed)?.code?.split('+')?.filter { it.isNotEmpty() }?.distinct().orEmpty(),
+                reply = lastReply?.takeIf { e is CompanionError.Malformed }?.trim()?.let {
+                    if (it.length > REPLY_SNIPPET) it.take(REPLY_SNIPPET) + "…" else it
+                }?.ifEmpty { null },
+                requests = requests,
+            )
+    }
 }
 
 /**
@@ -132,7 +179,7 @@ class CompanionLookups<P>(
                 throw e
             } catch (e: Exception) {
                 log(e)
-                show(CompanionView.Failed(CompanionFailure.UNREADABLE))
+                show(CompanionView.Failed(CompanionFailure.UNREADABLE, FailureDetails.of(e)))
                 return@launch
             }
             _panel.update { it?.copy(scope = asked, titles = titles) }
@@ -148,9 +195,16 @@ class CompanionLookups<P>(
     /** Asks again about what the panel holds, in the same chapters. */
     fun retry() = rerun(useCache = false)
 
-    /** A server or model was chosen: a panel waiting on setup asks now. */
+    /**
+     * A server or model was chosen: a panel waiting on setup asks now, and
+     * one that failed asks again, as the reader may have switched model
+     * after it did.
+     */
     fun setUp() {
-        if (_panel.value?.view == CompanionView.Setup) rerun(useCache = true)
+        val view = _panel.value?.view
+        if (view == CompanionView.Setup || (view is CompanionView.Failed && view.failure != CompanionFailure.CANCELLED)) {
+            rerun(useCache = true)
+        }
     }
 
     /** Looks up [candidate] instead, afresh but in the same chapters. */
@@ -204,6 +258,7 @@ class CompanionLookups<P>(
                 return
             }
             show(CompanionView.Loading(CompanionView.Stage.READING))
+            val recorded = Recorded { chatFor(chosen) }
             try {
                 val book = catalog()
                 val passages = book.passagesBefore(asked)
@@ -220,7 +275,7 @@ class CompanionLookups<P>(
                 val cached = if (useCache) synchronized(cache) { cache[key] } else null
                 val answer = cached ?: aside {
                     show(CompanionView.Loading(CompanionView.Stage.ASKING))
-                    Investigation(chatFor(chosen), asked, passages, chosen.limits.investigation).run(name, also, offered)
+                    Investigation(recorded, asked, passages, chosen.limits.investigation).run(name, also, offered)
                 }.also { fresh ->
                     if (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous) {
                         synchronized(cache) { cache[key] = fresh }
@@ -237,13 +292,13 @@ class CompanionLookups<P>(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: TranslationError.Changed) {
-                if (attempt == 1) show(CompanionView.Failed(CompanionFailure.SERVER))
+                if (attempt == 1) show(CompanionView.Failed(CompanionFailure.SERVER, FailureDetails.of(e, chosen, recorded.requests)))
             } catch (e: TranslationError.NotSetUp) {
                 show(CompanionView.Setup)
                 return
             } catch (e: Exception) {
                 log(e)
-                show(CompanionView.Failed(failureOf(e)))
+                show(CompanionView.Failed(failureOf(e), FailureDetails.of(e, chosen, recorded.requests, recorded.last)))
                 return
             }
         }
@@ -258,10 +313,29 @@ class CompanionLookups<P>(
         is TranslationError.LocalNetworkBlocked -> CompanionFailure.LOCAL_NETWORK
         is TranslationError.Network -> CompanionFailure.NETWORK
         is TranslationError.ModelNotFound -> CompanionFailure.MODEL_MISSING
-        is TranslationError.Malformed, is TranslationError.Empty, is TranslationError.Truncated,
-        is TranslationError.Refused -> CompanionFailure.MALFORMED
+        is TranslationError.Refused -> CompanionFailure.REFUSED
+        is TranslationError.Malformed, is TranslationError.Empty, is TranslationError.Truncated -> CompanionFailure.MALFORMED
         is TranslationError -> CompanionFailure.SERVER
         else -> CompanionFailure.UNREADABLE
+    }
+
+    /** A chat that counts the requests it lets go and keeps its last reply, for [FailureDetails]. */
+    private class Recorded(make: () -> CompanionChat) : CompanionChat {
+        private val chat by lazy(make)
+
+        @Volatile var requests = 0
+            private set
+
+        @Volatile var last: String? = null
+            private set
+
+        override suspend fun reply(messages: List<ChatMessage>, beforeRequest: () -> Unit): String {
+            last = null
+            return chat.reply(messages) {
+                beforeRequest()
+                requests++
+            }.also { last = it }
+        }
     }
 
     private companion object {

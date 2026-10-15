@@ -88,6 +88,10 @@ class CompanionLookupsTest {
 
     private fun view(lookups: CompanionLookups<Int>) = lookups.panel.value?.view
 
+    private fun failure(lookups: CompanionLookups<Int>) = (view(lookups) as? CompanionView.Failed)?.failure
+
+    private fun details(lookups: CompanionLookups<Int>) = (view(lookups) as CompanionView.Failed).details!!
+
     @Test
     fun `a name asked in chapter 5 is answered from chapters 1 to 4 only`() = runTest {
         val lookups = lookups()
@@ -121,7 +125,7 @@ class CompanionLookupsTest {
 
         lookups.open("Mira", place = UNREADABLE_PLACE, translated = false)
         advanceUntilIdle()
-        assertEquals(CompanionView.Failed(CompanionFailure.UNREADABLE), view(lookups))
+        assertEquals(CompanionFailure.UNREADABLE, failure(lookups))
 
         assertTrue(requests.isEmpty())
     }
@@ -220,7 +224,7 @@ class CompanionLookupsTest {
         changes = 2
         lookups.retry()
         advanceUntilIdle()
-        assertEquals(CompanionView.Failed(CompanionFailure.SERVER), view(lookups))
+        assertEquals(CompanionFailure.SERVER, failure(lookups))
     }
 
     @Test
@@ -233,18 +237,88 @@ class CompanionLookupsTest {
             TranslationError.ModelNotFound("m") to CompanionFailure.MODEL_MISSING,
             TranslationError.Service(500) to CompanionFailure.SERVER,
             TranslationError.Truncated() to CompanionFailure.MALFORMED,
+            TranslationError.Refused() to CompanionFailure.REFUSED,
         )
         val lookups = lookups()
         for ((error, failure) in cases) {
             replies = { throw error }
             lookups.open("Mira", place = 400, translated = false)
             advanceUntilIdle()
-            assertEquals(CompanionView.Failed(failure), view(lookups))
+            assertEquals(failure, failure(lookups))
         }
         replies = { "not json at all" }
         lookups.retry()
         advanceUntilIdle()
-        assertEquals(CompanionView.Failed(CompanionFailure.MALFORMED), view(lookups))
+        assertEquals(CompanionFailure.MALFORMED, failure(lookups))
+    }
+
+    @Test
+    fun `an unusable reply is described with the rules it broke, its start, the model and the requests`() = runTest {
+        replies = { "not json at all" }
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+
+        val details = details(lookups)
+        assertEquals("ai.example", details.host)
+        assertEquals("m", details.model)
+        assertEquals(listOf("not_json"), details.rules)
+        assertEquals("not json at all", details.reply)
+        assertEquals(2, details.requests)
+        assertNull(details.status)
+        assertTrue(details.error.startsWith("Malformed"))
+
+        replies = { "x".repeat(5_000) }
+        lookups.retry()
+        advanceUntilIdle()
+        assertEquals(FailureDetails.REPLY_SNIPPET + 1, details(lookups).reply?.length)
+    }
+
+    @Test
+    fun `a refused request keeps the status and what the server said, and no reply`() = runTest {
+        replies = { throw TranslationError.Service(400, "response_format is not supported") }
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+
+        val details = details(lookups)
+        assertEquals(CompanionFailure.SERVER, failure(lookups))
+        assertEquals(400, details.status)
+        assertEquals("response_format is not supported", details.serverMessage)
+        assertTrue(details.rules.isEmpty())
+        assertNull(details.reply)
+        assertEquals(1, details.requests)
+    }
+
+    @Test
+    fun `a failed lookup asks again once the model changes, a cancelled one does not`() = runTest {
+        replies = { throw TranslationError.ModelNotFound("m") }
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertEquals(CompanionFailure.MODEL_MISSING, failure(lookups))
+
+        replies = { profileFor(it) }
+        choice = CompanionChoice("s1", "https://ai.example/v1", "other", "https://ai.example", 0)
+        lookups.setUp()
+        advanceUntilIdle()
+        assertTrue(view(lookups) is CompanionView.Profile)
+
+        val started = CompletableDeferred<Unit>()
+        replies = {
+            started.complete(Unit)
+            awaitCancellation()
+        }
+        lookups.retry()
+        runCurrent()
+        started.await()
+        lookups.cancel()
+        runCurrent()
+        val before = requests.size
+        lookups.setUp()
+        advanceUntilIdle()
+        assertEquals(CompanionFailure.CANCELLED, failure(lookups))
+        assertEquals(before, requests.size)
     }
 
     @Test

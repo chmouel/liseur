@@ -258,6 +258,29 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `what the server said is kept apart from the message`(): Unit = runBlocking {
+        server.enqueue(json("""{"error":{"message":"response_format json_object is not supported by this model"}}""", 400))
+        val refused = expect<TranslationError.Service> { runBlocking { client.chat(base, "k", "m", listOf("user" to "x")) } }
+        assertEquals("response_format json_object is not supported by this model", refused.serverMessage)
+        assertFalse(refused.message.orEmpty().contains("json_object"))
+
+        server.enqueue(MockResponse.Builder().code(502).body("  Bad Gateway\n").build())
+        assertEquals("Bad Gateway", expect<TranslationError.Service> { runBlocking { client.chat(base, "k", "m", listOf("user" to "x")) } }.serverMessage)
+
+        server.enqueue(json("""{"detail":"Model is loading"}""", 503))
+        assertEquals("Model is loading", expect<TranslationError.Service> { runBlocking { client.chat(base, "k", "m", listOf("user" to "x")) } }.serverMessage)
+
+        server.enqueue(json("", 500))
+        assertNull(expect<TranslationError.Service> { runBlocking { client.chat(base, "k", "m", listOf("user" to "x")) } }.serverMessage)
+
+        server.enqueue(MockResponse.Builder().code(500).body("x".repeat(10_000)).build())
+        assertEquals(
+            TranslationError.MAX_SERVER_MESSAGE,
+            expect<TranslationError.Service> { runBlocking { client.chat(base, "k", "m", listOf("user" to "x")) } }.serverMessage?.length,
+        )
+    }
+
+    @Test
     fun `a server that cannot list models is not an error`(): Unit = runBlocking {
         server.enqueue(json("", 404))
         assertEquals(emptyList<TextModel>(), client.textModels(base, null))
