@@ -72,5 +72,6 @@
     <string name="translation_mlkit_delete_target">%1$s es tu idioma de traducción. Para volver a traducir a este idioma, tendrás que descargarlo de nuevo.</string>
     <string name="companion_provider_gemini_summary">Gemini de Google, con tu clave de API. El texto del libro se envía a Google.</string>
     <string name="companion_gemini_key_missing">Añade tu clave de API de Gemini en la página Servicios externos y claves de API para que el compañero de lectura use Gemini.</string>
+    <string name="companion_gemini_model_recommended">Recomendado para el compañero de lectura</string>
     <string name="companion_gemini_privacy">El texto de los capítulos anteriores se envía a Google con tu clave de Gemini, y capítulos enteros si los resúmenes en segundo plano están activados. Google puede cobrar por estas solicitudes.</string>
 </resources>

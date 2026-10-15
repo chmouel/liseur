@@ -92,7 +92,7 @@ internal class GeminiCompanionService(
             icon = Icons.Outlined.AutoAwesome,
             headline = stringResource(R.string.read_aloud_provider_gemini),
             supporting = stringResource(R.string.companion_provider_gemini_summary),
-            onClick = { pick { settings.setCompanionProvider(id) } },
+            onClick = { pick { settings.chooseCompanionGemini(id, RECOMMENDED_MODEL) } },
         ),
     )
 
@@ -145,6 +145,7 @@ internal class GeminiCompanionService(
                 listing = listing,
                 onSave = { name -> commit { settings.setCompanionGeminiModel(name) } },
                 onRetry = { asked++ },
+                detail = { id -> if (id == RECOMMENDED_MODEL) stringResource(R.string.companion_gemini_model_recommended) else null },
             )
         }
     }
@@ -152,5 +153,12 @@ internal class GeminiCompanionService(
     private companion object {
         // The key of the one list there is, as a menu tells lists apart by address.
         const val MODELS = "gemini"
+
+        /**
+         * Follows the companion's JSON actions and citations more reliably
+         * than the translation default, in the maintainer's testing. Stored
+         * when Gemini is first chosen, so earlier users keep their default.
+         */
+        const val RECOMMENDED_MODEL = "gemini-2.5-flash-lite"
     }
 }

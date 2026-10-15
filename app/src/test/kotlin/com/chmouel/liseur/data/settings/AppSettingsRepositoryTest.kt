@@ -25,6 +25,25 @@ class AppSettingsRepositoryTest {
         PreferenceDataStoreFactory.create { folder.newFile(name) }
 
     @Test
+    fun `choosing Gemini for the companion stores the recommended model only when none was stored`() = runTest {
+        val fresh = AppSettingsRepository(store("fresh.preferences_pb"))
+        fresh.chooseCompanionGemini("gemini", "recommended")
+        assertEquals("gemini", fresh.settings.first().companionProvider)
+        assertEquals("recommended", fresh.settings.first().companionGeminiModel)
+
+        val chosen = AppSettingsRepository(store("chosen.preferences_pb"))
+        chosen.setCompanionGeminiModel("mine")
+        chosen.chooseCompanionGemini("gemini", "recommended")
+        assertEquals("mine", chosen.settings.first().companionGeminiModel)
+
+        // Already on Gemini with the default: stays on the default.
+        val using = AppSettingsRepository(store("using.preferences_pb"))
+        using.setCompanionProvider("gemini")
+        using.chooseCompanionGemini("gemini", "recommended")
+        assertNull(using.settings.first().companionGeminiModel)
+    }
+
+    @Test
     fun `volume key mode is on by default`() = runTest {
         assertEquals(VolumeKeyMode.ON, AppSettings().volumeKeyMode)
         assertEquals(VolumeKeyMode.ON, AppSettingsRepository(store()).settings.first().volumeKeyMode)

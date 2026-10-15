@@ -971,6 +971,20 @@ class AppSettingsRepository(
         store.edit { it[Keys.COMPANION_PROVIDER] = id }
     }
 
+    /**
+     * Has the companion use the service [id], storing [model] as its
+     * Gemini model when the service is newly chosen and none was ever
+     * stored. Someone already on it keeps the default they had.
+     */
+    suspend fun chooseCompanionGemini(id: String, model: String) {
+        store.edit {
+            if (it[Keys.COMPANION_PROVIDER] != id && it[Keys.COMPANION_GEMINI_MODEL].isNullOrBlank()) {
+                it[Keys.COMPANION_GEMINI_MODEL] = model
+            }
+            it[Keys.COMPANION_PROVIDER] = id
+        }
+    }
+
     /** Stores the Gemini model the reading companion uses; blank goes back to the default. */
     suspend fun setCompanionGeminiModel(name: String) = setOrRemove(Keys.COMPANION_GEMINI_MODEL, name)
 

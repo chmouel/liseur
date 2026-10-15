@@ -2092,6 +2092,9 @@ liseur-sync settings.
   lists them per flavor: `foss` has only `ServerCompanionService`, `play`
   adds `GeminiCompanionService` (the reader's Gemini key through
   `GeminiTranslationClient.chat`, model in `companion_gemini_model`,
+  where choosing Gemini when no model was ever stored saves the
+  recommended `gemini-2.5-flash-lite` (marked so in the list), while a
+  reader already on Gemini keeps the shared default,
   fenced on the key's generation). A provider this build lacks, such as
   one restored from a Play backup on F-Droid or the removed Gemini Nano
   (`nano`), reads as not set up rather than falling back. Choosing a
