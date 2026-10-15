@@ -159,6 +159,6 @@ internal class GeminiCompanionService(
          * than the translation default, in the maintainer's testing. Stored
          * when Gemini is first chosen, so earlier users keep their default.
          */
-        const val RECOMMENDED_MODEL = "gemini-2.5-flash-lite"
+        const val RECOMMENDED_MODEL = "gemini-3.1-flash-lite"
     }
 }
