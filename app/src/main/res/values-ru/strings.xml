@@ -1517,7 +1517,7 @@
     <string name="companion_settings_model">Модель</string>
     <string name="companion_settings_recaps_group">Фоновые пересказы</string>
     <string name="companion_settings_recaps">Пересказывать главы во время чтения</string>
-    <string name="companion_settings_recaps_summary">Когда вы дочитываете главу, она пересказывается в фоне, чтобы следующие поиски быстрее находили отрывки. По умолчанию выключено. Для каждой книги это можно изменить в меню ⋮ читалки.</string>
+    <string name="companion_settings_recaps_summary">Когда вы дочитываете главу, она пересказывается в фоне, чтобы следующие поиски быстрее находили отрывки. По умолчанию выключено. Для каждой книги это можно изменить в читалке: Aa, Дополнительно.</string>
     <string name="companion_settings_privacy">Текст книги до выделенного абзаца отправляется на выбранный сервер, а при включённых фоновых пересказах — целые главы. Его поставщик может брать плату за эти запросы.</string>
     <string name="settings_backup_include_connections">Включить аккаунты, сервисы и пароли</string>
     <string name="settings_backup_connections_replace">Сохранённые аккаунты библиотеки и KOReader, настройки сервисов и учётные данные будут автоматически заменены.</string>

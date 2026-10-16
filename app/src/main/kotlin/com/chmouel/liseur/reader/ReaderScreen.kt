@@ -49,7 +49,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.DropdownMenu
@@ -126,12 +125,7 @@ import androidx.core.content.ContextCompat
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.material3.Checkbox
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.toggleableState
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageSwap
@@ -4062,11 +4056,10 @@ fun ReaderScreen(
                                 }
                             }
                         // Actions that start something from the first
-                        // sentence on screen, and this book's background
-                        // recaps; reading settings stay in Aa. Hidden when
-                        // none applies.
-                        val recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value
-                        if (codexEnabled || translateFromHere != null || readAloudFromHere != null || recapsHere != null) {
+                        // sentence on screen; reading settings, this
+                        // book's background recaps among them, stay in Aa.
+                        // Hidden when none applies.
+                        if (codexEnabled || translateFromHere != null || readAloudFromHere != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4125,18 +4118,6 @@ fun ReaderScreen(
                                                 moreOpen = false
                                                 chromeVisible = false
                                                 action()
-                                            },
-                                        )
-                                    }
-                                    if (recapsHere != null) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.companion_settings_recaps)) },
-                                            leadingIcon = { Icon(Icons.Outlined.Summarize, contentDescription = null) },
-                                            trailingIcon = { Checkbox(checked = recapsHere, onCheckedChange = null) },
-                                            onClick = { companion?.setRecapsHere?.invoke(!recapsHere) },
-                                            modifier = Modifier.semantics {
-                                                toggleableState = ToggleableState(recapsHere)
-                                                role = Role.Checkbox
                                             },
                                         )
                                     }
@@ -4608,6 +4589,8 @@ fun ReaderScreen(
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
             onClearTranslations = onClearTranslations?.let { { clearingTranslations = true } },
+            recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value,
+            onRecapsHereChanged = { companion?.setRecapsHere?.invoke(it) },
             // Back to typography, not back to the book: this sheet was
             // reached from there, and that is where the reader left off.
             onDismiss = { sheet = ReaderSheet.TYPOGRAPHY },

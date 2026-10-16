@@ -230,8 +230,8 @@ open on screen and you read on from the end of one chapter into the
 next, Liseur sends the whole chapter you just finished to the same
 server, in parts of about 12,000 characters, and keeps the short recap
 it writes back. Chapters you skip, or that you read before turning
-recaps on, are not sent. The reader's menu turns recaps on or off for
-the book you are reading, whatever the setting says. Requests to a hosted service may be charged
+recaps on, are not sent. The reader's Aa > Advanced sheet turns recaps on or off
+for the book you are reading, whatever the setting says. Requests to a hosted service may be charged
 to your account there. A model may also know a well-known book from
 its training and let something from later in it slip into its answer;
 Liseur asks it not to, and shows next to every statement the passage

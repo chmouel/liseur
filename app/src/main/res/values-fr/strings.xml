@@ -1419,7 +1419,7 @@
     <string name="companion_settings_model">Modèle</string>
     <string name="companion_settings_recaps_group">Résumés en arrière-plan</string>
     <string name="companion_settings_recaps">Résumer les chapitres pendant la lecture</string>
-    <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer depuis le menu ⋮ du lecteur.</string>
+    <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer dans Aa, Avancé, dans le lecteur.</string>
     <string name="companion_settings_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
     <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
     <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>

@@ -1419,7 +1419,7 @@
     <string name="companion_settings_model">Modello</string>
     <string name="companion_settings_recaps_group">Riassunti in background</string>
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
-    <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo dal menu ⋮ del lettore.</string>
+    <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo in Aa, Avanzate, nel lettore.</string>
     <string name="companion_settings_privacy">Il testo del libro prima del paragrafo selezionato viene inviato al server scelto, e capitoli interi se i riassunti in background sono attivi. Il suo fornitore può addebitare queste richieste.</string>
     <string name="settings_backup_include_connections">Includi account, servizi e password</string>
     <string name="settings_backup_connections_replace">Gli account della biblioteca e di KOReader, le impostazioni dei servizi e le credenziali salvate saranno sostituiti automaticamente.</string>

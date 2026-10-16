@@ -112,6 +112,10 @@ fun AdvancedSheet(
     // Null where there is nothing saved to forget, or no account to
     // forget it from.
     onClearTranslations: (() -> Unit)? = null,
+    // Whether this book is recapped in the background as it is read.
+    // Null while the companion has no server and model chosen.
+    recapsHere: Boolean? = null,
+    onRecapsHereChanged: (Boolean) -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
@@ -177,6 +181,9 @@ fun AdvancedSheet(
                 enabled = keepScreenOn,
                 onChanged = onKeepScreenOnChanged,
             )
+            recapsHere?.let { enabled ->
+                RecapsHereToggle(enabled = enabled, onChanged = onRecapsHereChanged)
+            }
             JustThisBookToggle(
                 enabled = typographyIsOwn,
                 onChanged = onTypographyIsOwnChanged,
@@ -203,6 +210,32 @@ private fun KeepScreenOnToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
         Column(Modifier.weight(1f)) {
             Text(
                 text = stringResource(R.string.settings_keep_screen_on),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = null)
+    }
+}
+
+/**
+ * This book's background chapter recaps, overriding the companion
+ * setting for it alone. Offered only once a server and model are chosen.
+ */
+@Composable
+private fun RecapsHereToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = enabled,
+                role = Role.Switch,
+                onValueChange = onChanged,
+            ),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.companion_settings_recaps),
                 style = MaterialTheme.typography.bodyLarge,
             )
         }

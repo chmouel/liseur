@@ -2246,8 +2246,8 @@ liseur-sync settings.
   names and aliases are kept only if they appear in the passages it
   cites; a lookup uses them to pick seed passages, never sends their
   prose.
-- The recap switch is the default for every book; the reader's ⋮ menu
-  overrides it for the open book (shown only once a server and model are
+- The recap switch is the default for every book; a switch in the
+  reader's Aa > Advanced sheet overrides it for the open book (shown only once a server and model are
   chosen). The override is a `recap_choice` row in `companion.db`, so it
   is not backed up or synced and is swept with the book. Turning a book
   off drops its waiting chapters and bumps a per-book counter folded into

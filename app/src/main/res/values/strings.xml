@@ -1475,7 +1475,7 @@
     <string name="companion_settings_model">Model</string>
     <string name="companion_settings_recaps_group">Background recaps</string>
     <string name="companion_settings_recaps">Recap chapters as you read</string>
-    <string name="companion_settings_recaps_summary">When you read past the end of a chapter, it is summarised in the background so later lookups find passages faster. Off by default. Each book can change it from the reader\'s ⋮ menu.</string>
+    <string name="companion_settings_recaps_summary">When you read past the end of a chapter, it is summarised in the background so later lookups find passages faster. Off by default. Each book can change it under Aa, Advanced in the reader.</string>
     <string name="companion_settings_privacy">Book text before your selected paragraph is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
     <string name="settings_backup_include_connections">Include accounts, services and passwords</string>
     <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically.</string>
