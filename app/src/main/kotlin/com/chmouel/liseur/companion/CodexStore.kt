@@ -57,6 +57,9 @@ interface CodexDao {
     @Query("SELECT unit FROM codex_unit WHERE book_url = :bookUrl ORDER BY unit")
     suspend fun completed(bookUrl: String): List<Int>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM codex_unit WHERE book_url = :bookUrl AND unit = :unit)")
+    suspend fun isCompleted(bookUrl: String, unit: Int): Boolean
+
     @Query("SELECT * FROM codex_unit WHERE book_url = :bookUrl AND unit < :ceiling AND unit > :after ORDER BY unit LIMIT 50")
     suspend fun units(bookUrl: String, ceiling: Int, after: Int): List<CodexUnitRow>
 
@@ -110,7 +113,7 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
     suspend fun save(book: CodexBookRow, unit: Int, stats: Map<String, CodexStats>, passages: List<Passage<Locator>>) = database.withTransaction {
         check(dao.book(book.bookUrl) == book && book.bookUrl in present(listOf(book.bookUrl))) { "Book changed or removed" }
         require(unit in 0 until book.total && passages.all { it.range.hi == unit })
-        if (unit in dao.completed(book.bookUrl)) return@withTransaction
+        if (dao.isCompleted(book.bookUrl, unit)) return@withTransaction
         dao.putPassages(CodexIndex.withSplitContinuity(passages).map { run ->
             val it = run.passage
             CodexPassageRow(book.bookUrl, it.ref, unit, it.range.lo, it.resource, it.text, run.folded, run.ownEnd, it.place.toJSON().toString(), it.end)
