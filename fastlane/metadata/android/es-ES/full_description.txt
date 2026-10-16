@@ -1,16 +1,16 @@
-Lee EPUB a tu manera: sigue el texto mientras se lee en voz alta, traduce páginas sobre la marcha o pregunta por personajes y acontecimientos. Liseur reúne en una biblioteca los libros de tu teléfono, catálogos OPDS, calibre-web, Komga, BookOrbit y liseur-sync.
+Lee EPUB a tu manera: sigue el texto mientras se lee en voz alta, traduce páginas o pregunta por personajes y acontecimientos. Liseur reúne libros del teléfono y de catálogos OPDS, calibre-web, Komga, BookOrbit y liseur-sync en una biblioteca.
 
 Lectura en voz alta
 
-Escucha cualquier EPUB con resaltado de frases y paso automático de página. Las voces de Android pueden leer sin conexión si tienes instalada una voz compatible que funcione sin conexión. Elige voces por idioma, ajusta la velocidad, sigue escuchando con la pantalla apagada o activa un temporizador de apagado. Conecta un servidor de voz compatible con OpenAI, incluso uno de tu red local. La versión de Google Play también ofrece voces Gemini con tu propia clave de API.
+Escucha cualquier EPUB con resaltado de frases y paso automático de página. Las voces de Android pueden leer sin conexión si tienes instalada una voz compatible que funcione sin conexión. Elige voces por idioma, ajusta la velocidad, sigue escuchando con la pantalla apagada o activa un temporizador de apagado. Conecta un servidor de voz compatible con OpenAI, incluso uno de tu red local.
 
 Traducción
 
-Traduce una selección o lee el libro página a página en otro idioma. Liseur guarda las frases traducidas en el teléfono para que estén listas cuando vuelvas a una página. Usa el traductor del dispositivo de Android, un servicio compatible con OpenAI en tu red o alojado en internet, o Gemini o Google ML Kit en la versión de Google Play. Lee en voz alta las páginas traducidas en el idioma de destino y consulta palabras sin salir de la página.
+Traduce una selección o lee el libro página a página en otro idioma. Liseur guarda las frases traducidas en el teléfono para que estén listas cuando vuelvas a una página. Usa el traductor del dispositivo de Android o un servicio compatible con OpenAI en tu red o alojado en internet. Lee en voz alta las páginas traducidas en el idioma de destino y consulta palabras sin salir de la página.
 
 Compañero de lectura y Codex
 
-Pregunta al compañero de lectura por personajes y acontecimientos. Los perfiles de personajes usan pasajes anteriores al texto seleccionado, incluidos capítulos anteriores y pasajes previos del capítulo actual. Los fragmentos de las fuentes muestran de dónde sale la información. Activa los resúmenes de capítulos en segundo plano para cada libro. Usa un servicio compatible con OpenAI; la versión de Google Play también admite Gemini con tu propia clave de API.
+Pregunta al compañero de lectura por personajes y acontecimientos. Los perfiles de personajes usan pasajes anteriores al texto seleccionado, incluidos capítulos anteriores y pasajes previos del capítulo actual. Los fragmentos de las fuentes muestran de dónde sale la información. Activa los resúmenes de capítulos en segundo plano para cada libro. Usa un servicio compatible con OpenAI.
 
 Codex crea en el dispositivo un índice consultable de personas, lugares y grupos, y muestra qué nombres aparecen juntos en capítulos anteriores. No necesita un servicio de IA ni una clave de API.
 
@@ -26,6 +26,6 @@ Sincroniza las posiciones de lectura con calibre-web, Komga, BookOrbit o liseur-
 
 Privacidad
 
-Sin anuncios. No necesitas una cuenta para leer libros guardados en el dispositivo. El traductor del sistema Android y Codex procesan el texto del libro en el teléfono. Google ML Kit también traduce en el dispositivo y envía diagnósticos de uso a Google. Si eliges un servicio en línea para traducir, usar el compañero de lectura o leer en voz alta, Liseur envía texto al proveedor que hayas elegido. Las consultas opcionales al diccionario contactan con Wiktionary; Project Gutenberg recibe conexiones cuando exploras su catálogo.
+Sin anuncios. Lee libros guardados en tu dispositivo sin cuenta. El traductor del sistema Android y Codex procesan el texto en el teléfono. Si eliges un servicio en línea para traducir, usar el compañero de lectura o leer en voz alta, Liseur envía texto al proveedor elegido. El diccionario opcional contacta con Wiktionary; Project Gutenberg recibe conexiones cuando exploras su catálogo.
 
 Licencia MIT. Código fuente e incidencias: https://github.com/chmouel/liseur

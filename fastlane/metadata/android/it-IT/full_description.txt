@@ -2,15 +2,15 @@ Leggi gli EPUB come preferisci: segui il testo mentre viene letto ad alta voce, 
 
 Lettura ad alta voce
 
-Ascolta qualsiasi EPUB con le frasi evidenziate e il cambio pagina automatico. Le voci Android possono leggere offline se è installata una voce compatibile che funziona senza rete. Scegli le voci per lingua, regola la velocità, continua ad ascoltare a schermo spento o imposta un timer di spegnimento. Collega un server vocale compatibile con OpenAI, anche sulla tua rete locale. La versione Google Play offre anche le voci Gemini con la tua chiave API.
+Ascolta qualsiasi EPUB con le frasi evidenziate e il cambio pagina automatico. Le voci Android possono leggere offline se è installata una voce compatibile che funziona senza rete. Scegli le voci per lingua, regola la velocità, continua ad ascoltare a schermo spento o imposta un timer di spegnimento. Collega un server vocale compatibile con OpenAI, anche sulla tua rete locale.
 
 Traduzione
 
-Traduci una selezione oppure leggi il libro pagina per pagina in un’altra lingua. Liseur salva le frasi tradotte sul telefono, così sono pronte quando torni a una pagina. Usa il traduttore Android sul dispositivo, un servizio compatibile con OpenAI sulla tua rete o ospitato online, oppure Gemini o Google ML Kit nella versione Google Play. Fai leggere ad alta voce le pagine tradotte nella lingua di destinazione e cerca le parole senza uscire dalla pagina.
+Traduci una selezione oppure leggi il libro pagina per pagina in un’altra lingua. Liseur salva le frasi tradotte sul telefono, così sono pronte quando torni a una pagina. Usa il traduttore Android sul dispositivo o un servizio compatibile con OpenAI sulla tua rete o ospitato online. Fai leggere ad alta voce le pagine tradotte nella lingua di destinazione e cerca le parole senza uscire dalla pagina.
 
 Compagno di lettura e Codex
 
-Chiedi al compagno di lettura informazioni su personaggi ed eventi. I profili dei personaggi usano i passaggi che precedono il testo selezionato, compresi i capitoli precedenti e i passaggi precedenti del capitolo corrente. Gli estratti delle fonti mostrano da dove provengono le informazioni. Attiva i riepiloghi dei capitoli in background per ogni libro. Usa un servizio compatibile con OpenAI; la versione Google Play supporta anche Gemini con la tua chiave API.
+Chiedi al compagno di lettura informazioni su personaggi ed eventi. I profili dei personaggi usano i passaggi che precedono il testo selezionato, compresi i capitoli precedenti e i passaggi precedenti del capitolo corrente. Gli estratti delle fonti mostrano da dove provengono le informazioni. Attiva i riepiloghi dei capitoli in background per ogni libro. Usa un servizio compatibile con OpenAI.
 
 Codex crea sul dispositivo un indice consultabile di persone, luoghi e gruppi e mostra quali nomi compaiono insieme nei capitoli precedenti. Non richiede un servizio di IA né una chiave API.
 
@@ -26,6 +26,6 @@ Sincronizza le posizioni di lettura con calibre-web, Komga, BookOrbit o liseur-s
 
 Privacy
 
-Senza pubblicità. Non serve un account per leggere i libri salvati sul dispositivo. Il traduttore di sistema Android e Codex elaborano il testo dei libri sul telefono. Anche Google ML Kit traduce sul dispositivo e invia a Google dati diagnostici sull’utilizzo. Se scegli un servizio online per la traduzione, il compagno di lettura o la lettura vocale, Liseur invia il testo al provider selezionato. Le ricerche facoltative nel dizionario contattano Wiktionary; Project Gutenberg viene contattato quando sfogli il catalogo.
+Senza pubblicità. Leggi libri sul dispositivo senza account. Il traduttore Android e Codex elaborano il testo sul telefono. Se scegli un servizio online per traduzione, compagno di lettura o lettura vocale, Liseur invia il testo al servizio scelto. Il dizionario facoltativo contatta Wiktionary; sfogliando il catalogo, contatti Project Gutenberg.
 
 Licenza MIT. Codice sorgente e issue tracker: https://github.com/chmouel/liseur

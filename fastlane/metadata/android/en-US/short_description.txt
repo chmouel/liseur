@@ -1,1 +1,1 @@
-Read, translate, and listen to EPUBs with a companion and character index.
+EPUBs: AI, read-aloud, translation, character guides and automatic mind maps.

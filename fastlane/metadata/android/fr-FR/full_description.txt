@@ -1,31 +1,31 @@
-Lisez vos EPUB à votre façon : suivez le texte pendant la lecture à voix haute, traduisez au fil des pages ou posez des questions sur les personnages et les événements. Liseur rassemble dans une bibliothèque les livres de votre téléphone, des catalogues OPDS, de calibre-web, Komga, BookOrbit et liseur-sync.
+Lisez vos EPUB à votre façon : suivez le texte pendant la lecture à voix haute, traduisez au fil des pages ou posez des questions sur les personnages et événements. Liseur réunit les livres de votre téléphone, des catalogues OPDS, calibre-web, Komga, BookOrbit et liseur-sync dans une bibliothèque.
 
 Lecture à voix haute
 
-Écoutez n’importe quel EPUB avec le surlignage des phrases et le changement automatique de page. Les voix Android peuvent lire hors ligne si une voix compatible utilisable hors ligne est installée. Choisissez les voix par langue, réglez la vitesse, continuez l’écoute écran éteint ou programmez une minuterie de veille. Connectez un serveur vocal compatible avec OpenAI, y compris sur votre réseau local. La version Google Play propose aussi des voix Gemini avec votre propre clé API.
+Écoutez tout EPUB avec surlignage des phrases et changement automatique de page. Les voix Android peuvent lire hors ligne si une voix compatible est installée. Choisissez une voix par langue, réglez la vitesse, écoutez écran éteint ou programmez une minuterie. Connectez un serveur vocal compatible avec OpenAI, y compris sur votre réseau local.
 
 Traduction
 
-Traduisez une sélection ou lisez un livre page par page dans une autre langue. Liseur enregistre les phrases traduites sur votre téléphone pour les retrouver en revenant à une page. Utilisez le traducteur Android sur l’appareil, un service compatible avec OpenAI sur votre réseau ou hébergé en ligne, ou Gemini ou Google ML Kit dans la version Google Play. Faites lire les pages traduites dans la langue cible et cherchez des mots sans quitter la page.
+Traduisez une sélection ou lisez un livre page par page dans une autre langue. Liseur enregistre les phrases traduites pour les retrouver à votre retour. Utilisez le traducteur Android sur l’appareil ou un service compatible avec OpenAI sur votre réseau ou en ligne. Écoutez les pages traduites dans la langue cible et cherchez des mots sans quitter la page.
 
 Compagnon de lecture et Codex
 
-Interrogez le compagnon de lecture sur les personnages et les événements. Les profils de personnages s’appuient sur les passages qui précèdent le texte sélectionné, y compris les chapitres précédents et les passages antérieurs du chapitre en cours. Les extraits de source indiquent d’où viennent les informations. Activez les résumés de chapitres en arrière-plan pour chaque livre. Utilisez un service compatible avec OpenAI ; la version Google Play prend aussi en charge Gemini avec votre propre clé API.
+Interrogez le compagnon de lecture sur les personnages et événements. Les profils s’appuient sur les passages précédant la sélection, dans les chapitres précédents et le chapitre en cours. Les extraits indiquent les sources. Activez les résumés de chapitres en arrière-plan. Utilisez un service compatible avec OpenAI.
 
 Codex crée sur l’appareil un index consultable des personnes, des lieux et des groupes, et indique quels noms apparaissent ensemble dans les chapitres précédents. Il n’a besoin ni d’un service d’IA ni d’une clé API.
 
 Votre lecteur
 
-Choisissez l’affichage paginé ou le défilement continu, réglez la typographie, les marges et la luminosité, puis utilisez les thèmes clair, sépia, sombre ou noir. Ajoutez des surlignages, des notes et des signets, recherchez dans tout le texte et ouvrez les notes de bas de page dans une fenêtre. Importez vos polices ou utilisez celles fournies et celles de l’éditeur. Le mode e-ink désactive les animations et permet de contrôler le rafraîchissement sur les appareils Onyx.
+Choisissez l’affichage paginé ou le défilement continu, réglez la typographie, les marges et la luminosité, puis utilisez un thème clair, sépia, sombre ou noir. Ajoutez surlignages, notes et signets, cherchez dans le texte et ouvrez les notes de bas de page dans une fenêtre. Importez vos polices ou utilisez celles fournies et celles de l’éditeur. Le mode e-ink désactive les animations et contrôle le rafraîchissement sur Onyx.
 
 Votre bibliothèque et la synchronisation
 
-Parcourez les dossiers locaux et les cartes SD, regroupez les livres en séries ou trouvez des livres gratuits dans le catalogue Project Gutenberg intégré. Les widgets d’écran d’accueil affichent le livre en cours ou une étagère de couvertures. Sauvegardez les réglages, les polices, les positions de lecture et les annotations dans un fichier ZIP.
+Parcourez les dossiers locaux et les cartes SD, regroupez les livres en séries ou trouvez des livres gratuits dans le catalogue Project Gutenberg intégré. Les widgets affichent le livre en cours ou une étagère de couvertures. Sauvegardez réglages, polices, positions de lecture et annotations dans un fichier ZIP.
 
-Synchronisez les positions de lecture avec calibre-web, Komga, BookOrbit ou liseur-sync. Associez n’importe quel catalogue OPDS à un serveur de synchronisation KOReader. Avec liseur-sync, sauvegardez les réglages par appareil et consultez les statistiques de lecture sur plusieurs appareils.
+Synchronisez les positions de lecture avec calibre-web, Komga, BookOrbit ou liseur-sync. Associez un catalogue OPDS à un serveur KOReader. Avec liseur-sync, sauvegardez les réglages par appareil et consultez les statistiques de lecture sur plusieurs appareils.
 
 Confidentialité
 
-Sans publicité. Aucun compte n’est nécessaire pour lire les livres stockés sur votre appareil. Le traducteur système d’Android et Codex traitent le texte des livres sur le téléphone. Google ML Kit traduit également sur l’appareil et envoie des diagnostics d’utilisation à Google. Si vous choisissez un service en ligne pour la traduction, le compagnon de lecture ou la lecture à voix haute, Liseur envoie du texte au fournisseur choisi. Les recherches facultatives dans le dictionnaire contactent Wiktionary ; Project Gutenberg est contacté lorsque vous parcourez son catalogue.
+Sans publicité. Aucun compte n’est requis pour lire les livres sur votre appareil. Le traducteur Android et Codex traitent le texte sur le téléphone. Si vous choisissez un service en ligne pour traduire, le compagnon de lecture ou la lecture à voix haute, Liseur envoie du texte au fournisseur choisi. Le dictionnaire facultatif contacte Wiktionary ; Project Gutenberg est contacté lorsque vous parcourez son catalogue.
 
 Licence MIT. Code source et suivi des problèmes : https://github.com/chmouel/liseur
