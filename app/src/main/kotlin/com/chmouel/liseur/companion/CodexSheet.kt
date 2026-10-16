@@ -49,6 +49,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.BusyBar
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
@@ -88,7 +89,7 @@ internal fun CodexSheet(
             }
             CodexScanProgress(progress, controller)
             if (panel.placing) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
+                BusyBar()
             } else if (panel.ceiling == null) {
                 Text(stringResource(R.string.codex_unplaced))
             } else {
@@ -117,7 +118,7 @@ internal fun CodexSheet(
                             }
                             HorizontalDivider()
                         }
-                        if (detail.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                        if (detail.loading) item { BusyBar() }
                         if (detail.failed) item {
                             Text(stringResource(R.string.codex_failed))
                             TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_retry)) }
@@ -155,7 +156,7 @@ internal fun CodexSheet(
                             if (panel.graphFailed) item {
                                 Text(stringResource(R.string.codex_failed))
                                 TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.codex_retry)) }
-                            } else if (graph == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                            } else if (graph == null) item { BusyBar() }
                             else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
                             else {
                                 item { Text(stringResource(R.string.codex_graph_hint), style = MaterialTheme.typography.bodySmall) }
@@ -224,7 +225,7 @@ private fun CodexScanProgress(progress: CodexProgress, controller: CodexViewMode
         if (progress.total > 0) {
             Text(stringResource(R.string.codex_progress, progress.completed, progress.total), style = MaterialTheme.typography.bodySmall)
             LinearProgressIndicator(progress = { progress.completed.toFloat() / progress.total }, modifier = Modifier.fillMaxWidth())
-        } else if (progress.stage == CodexStage.PREPARING) LinearProgressIndicator(Modifier.fillMaxWidth())
+        } else if (progress.stage == CodexStage.PREPARING) BusyBar()
         when (progress.stage) {
             CodexStage.PREPARING, CodexStage.SCANNING -> TextButton(onClick = controller::pause) { Text(stringResource(R.string.codex_pause)) }
             CodexStage.PAUSED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.codex_resume)) }
