@@ -23,7 +23,9 @@ class CodexLayoutTest {
     @Test fun `dots stay far enough apart to tap`() {
         val nodes = (0 until 25).map { CodexNode("Name $it", 10, setOf(0, 1)) }
         val dense = codexGraph(nodes, 3)
-        for (graph in listOf(dense, dense.copy(edges = emptyList()))) {
+        // One linked pair frames the map and pushes the 23 others outside it before clamping.
+        val oneLink = CodexGraph(nodes, listOf(CodexEdge(0, 1, 2)), 2, 2)
+        for (graph in listOf(dense, dense.copy(edges = emptyList()), oneLink)) {
             val positions = codexLayout(graph)
             val closest = positions.indices.flatMap { a -> (a + 1 until positions.size).map { b -> a to b } }
                 .minOf { (a, b) -> hypot(positions[a].first - positions[b].first, positions[a].second - positions[b].second) }

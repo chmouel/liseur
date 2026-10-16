@@ -483,22 +483,25 @@ internal fun codexLayout(graph: CodexGraph): List<Pair<Float, Float>> {
         y[i] = (y[i] - top) / height * 0.76 + 0.08
     }
     // The spring layout can still stack dots; push close pairs apart so each stays tappable.
+    // Clamping comes first, so dots pressed onto the same edge are checked before the loop ends.
+    fun clamp() { for (i in 0 until n) { x[i] = x[i].coerceIn(0.06, 0.94); y[i] = y[i].coerceIn(0.05, 0.95) } }
     for (round in 0 until 100) {
+        clamp()
         var moved = false
         for (a in 0 until n) for (b in a + 1 until n) {
             var vx = x[a] - x[b]
             var vy = y[a] - y[b]
-            var distance = sqrt(vx * vx + vy * vy)
+            val distance = sqrt(vx * vx + vy * vy)
             if (distance >= MIN_NODE_GAP) continue
-            if (distance < 1e-6) { vx = cos(a + b.toDouble()); vy = sin(a + b.toDouble()); distance = 1.0 }
+            if (distance < 1e-6) { vx = cos(a + b.toDouble()); vy = sin(a + b.toDouble()) } else { vx /= distance; vy /= distance }
             val push = (MIN_NODE_GAP - distance) / 2
-            x[a] += vx / distance * push; y[a] += vy / distance * push
-            x[b] -= vx / distance * push; y[b] -= vy / distance * push
+            x[a] += vx * push; y[a] += vy * push
+            x[b] -= vx * push; y[b] -= vy * push
             moved = true
         }
-        for (i in 0 until n) { x[i] = x[i].coerceIn(0.06, 0.94); y[i] = y[i].coerceIn(0.05, 0.95) }
         if (!moved) break
     }
+    clamp()
     return (0 until n).map { x[it].toFloat() to y[it].toFloat() }
 }
 
