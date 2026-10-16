@@ -365,7 +365,7 @@ class CodexStoreTest {
             assertFalse(vm.panel.value?.detail?.more == true)
 
             vm.close()
-            vm.open(chapterTwo, translated = false, selection = "“Tobin,”")
+            vm.open(chapterTwo, translated = false, selection = "“Tobin’s,”")
             awaitCondition { vm.panel.value?.detail?.loading == false && vm.panel.value?.detail?.passages?.isNotEmpty() == true }
             assertEquals("Tobin", vm.panel.value?.query)
             assertEquals("Tobin", vm.panel.value?.detail?.name)

@@ -126,7 +126,7 @@ class CodexViewModel(
         detailJob?.cancel()
         graphJob?.cancel()
         paused = false
-        val name = selection?.let(PassageText::name)
+        val name = selection?.let(PassageText::name)?.let(CodexExtractor::storedName)
         val query = name ?: selection?.trim().orEmpty()
         _panel.value = CodexPanel(
             ceiling = ceiling,

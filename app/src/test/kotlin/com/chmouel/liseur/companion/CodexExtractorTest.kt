@@ -67,6 +67,15 @@ class CodexExtractorTest {
     }
 
     @Test
+    fun `a selected name opens the form the scan stores`() {
+        assertEquals("Xiulan", CodexExtractor.storedName("Xiulan’s"))
+        assertEquals("Artagnan", CodexExtractor.storedName("d’Artagnan"))
+        assertEquals("King's Landing", CodexExtractor.storedName("King’s Landing’s"))
+        assertEquals("O'Brien", CodexExtractor.storedName("O’Brien"))
+        assertEquals("Gabriele D'Annunzio", CodexExtractor.storedName("Gabriele D'Annunzio"))
+    }
+
+    @Test
     fun `compound names preserve internal possessives and strip trailing ones`() {
         for (apostrophe in listOf("'", "’")) {
             val name = "King${apostrophe}s Landing"

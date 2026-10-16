@@ -137,6 +137,18 @@ object CodexExtractor {
     }
 
     /**
+     * A selected [name] in the form a scan stores it, so a long press on
+     * "Xiulan’s" or "d’Artagnan" opens "Xiulan" or "Artagnan" while
+     * "King's Landing" and "O'Brien" keep their apostrophes.
+     */
+    fun storedName(name: String): String {
+        val parts = Normalizer.normalize(name, Normalizer.Form.NFC).replace('’', '\'').split(' ').toMutableList()
+        parts[0] = parts[0].replace(ELISION, "")
+        parts[parts.lastIndex] = parts.last().replace(POSSESSIVE, "")
+        return parts.joinToString(" ").trim().takeIf { PassageText.fold(it).isNotEmpty() } ?: name
+    }
+
+    /**
      * The form of [token] stored in the codex, or null when it cannot be
      * part of a name: a contraction, too short, not capitalized, ALL-CAPS
      * shouting, or a stopword.
