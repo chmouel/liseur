@@ -72,11 +72,15 @@ interface CodexDao {
     @Query("SELECT DISTINCT unit FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) BETWEEN 1 AND own_end ORDER BY unit")
     suspend fun mentionUnits(bookUrl: String, ceiling: Int, needle: String): List<Int>
 
+    // One passage per shared chapter: the first holding both names, else the
+    // first holding [needle]. Grouped once, as API 26's SQLite has no window functions.
     @Query(
-        "SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) BETWEEN 1 AND own_end " +
-            "AND unit IN (SELECT unit FROM codex_passage WHERE book_url = :bookUrl AND lo = unit AND instr(folded, :other) BETWEEN 1 AND own_end) " +
-            "AND rowid = (SELECT p2.rowid FROM codex_passage p2 WHERE p2.book_url = :bookUrl AND p2.unit = codex_passage.unit AND p2.lo = p2.unit AND instr(p2.folded, :needle) BETWEEN 1 AND p2.own_end ORDER BY (instr(p2.folded, :other) NOT BETWEEN 1 AND p2.own_end), p2.rowid LIMIT 1) " +
-            "ORDER BY unit, rowid LIMIT 50 OFFSET :offset",
+        "WITH hits AS (SELECT rowid AS id, unit, instr(folded, :other) BETWEEN 1 AND own_end AS paired FROM codex_passage " +
+            "WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) BETWEEN 1 AND own_end), " +
+            "picks AS (SELECT unit, coalesce(min(CASE WHEN paired THEN id END), min(id)) AS id FROM hits GROUP BY unit) " +
+            "SELECT codex_passage.* FROM codex_passage JOIN picks ON codex_passage.rowid = picks.id " +
+            "WHERE picks.unit IN (SELECT unit FROM codex_passage WHERE book_url = :bookUrl AND lo = unit AND instr(folded, :other) BETWEEN 1 AND own_end) " +
+            "ORDER BY codex_passage.unit, codex_passage.rowid LIMIT 50 OFFSET :offset",
     )
     suspend fun sharedMentions(bookUrl: String, ceiling: Int, needle: String, other: String, offset: Int): List<CodexPassageRow>
 
