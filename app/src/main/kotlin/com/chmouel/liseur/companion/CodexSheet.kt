@@ -146,7 +146,11 @@ internal fun CodexSheet(
                         LazyColumn(Modifier.weight(1f), state = namesList) {
                             if (entries.isEmpty()) item {
                                 Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
-                                Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
+                                // Only a finished scan with no names at all points at the script;
+                                // a search matching nothing, or a scan just begun, does not.
+                                if (panel.entries.isEmpty() && progress.stage == CodexStage.COMPLETE) {
+                                    Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
+                                }
                             }
                             items(entries, key = { it.name }) { entry ->
                                 ListItem(
