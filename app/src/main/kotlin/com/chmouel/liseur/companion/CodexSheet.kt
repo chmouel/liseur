@@ -9,13 +9,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -42,6 +42,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -67,6 +68,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -348,7 +350,7 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
     val paint = remember(textColor) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = textColor.toArgb(); textAlign = Paint.Align.CENTER } }
     val density = LocalDensity.current
     fun labels(size: Size): Map<Int, Rect> = with(density) {
-        paint.textSize = 11.dp.toPx()
+        paint.textSize = 11.sp.toPx()
         codexLabels(
             centers = positions.map { Offset(it.first * size.width, it.second * size.height) },
             widths = graph.nodes.map { paint.measureText(it.name.take(22)) },
@@ -417,7 +419,9 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
                 var focused by remember { mutableStateOf(false) }
                 Box(
                     Modifier
-                        .offset(maxWidth * positions[i].first - 24.dp, maxHeight * positions[i].second - 24.dp)
+                        // The canvas is not mirrored right to left, so neither are its buttons.
+                        .align(AbsoluteAlignment.TopLeft)
+                        .absoluteOffset(maxWidth * positions[i].first - 24.dp, maxHeight * positions[i].second - 24.dp)
                         .size(48.dp)
                         .onFocusChanged { focused = it.isFocused }
                         .then(if (focused) Modifier.border(2.dp, color, CircleShape) else Modifier)
