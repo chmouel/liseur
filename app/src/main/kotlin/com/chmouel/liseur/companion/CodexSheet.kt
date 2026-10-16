@@ -198,9 +198,10 @@ internal fun CodexSheet(
 }
 
 /**
- * Where [terms] occur in [text], compared the way passage lookup compares
- * them ([PassageText.fold]), so O’Brien matches O'Brien and a decomposed
- * accent matches a composed one. Ranges index the original [text].
+ * Where [terms] occur in [text] as whole words, compared the way passage
+ * lookup compares them ([PassageText.fold]), so O’Brien matches O'Brien,
+ * a decomposed accent matches a composed one, and Ann does not light up
+ * inside Anna. Ranges index the original [text].
  */
 internal fun highlightRanges(text: String, terms: List<String>): List<IntRange> {
     val folded = StringBuilder(text.length)
@@ -228,16 +229,23 @@ internal fun highlightRanges(text: String, terms: List<String>): List<IntRange> 
     return terms.flatMap { term ->
         val needle = PassageText.fold(term)
         if (needle.isEmpty()) return@flatMap emptyList()
+        // Whole words, as passage lookup has it, except in scripts written without spaces.
+        val spaced = PassageText.pattern(needle) != needle
         buildList {
             var from = 0
             while (true) {
                 val match = folded.indexOf(needle, from)
                 if (match < 0) break
-                var end = ends[match + needle.length - 1]
+                val stop = match + needle.length
+                if (spaced && (match > 0 && folded[match - 1] != ' ' || stop < folded.length && folded[stop] != ' ')) {
+                    from = match + 1
+                    continue
+                }
+                var end = ends[stop - 1]
                 // Combining accents after the last letter belong to it.
                 while (end < text.length && Character.getType(text[end]) == Character.NON_SPACING_MARK.toInt()) end++
                 add(starts[match] until end)
-                from = match + needle.length
+                from = stop
             }
         }
     }.sortedBy { it.first }

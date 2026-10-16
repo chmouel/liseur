@@ -61,4 +61,10 @@ class CodexLayoutTest {
         assertEquals(listOf("O’Brien", "Élisabeth", "E\u0301lisabeth"), found)
         assertTrue(highlightRanges(text, listOf("", "'")).isEmpty())
     }
+
+    @Test fun `excerpt highlights whole names only`() {
+        val text = "Then Anna told Ann about Annette and Ann."
+        assertEquals(listOf(15 until 18, 37 until 40), highlightRanges(text, listOf("Ann")))
+        assertEquals(listOf(2 until 4), highlightRanges("他说李明来了", listOf("李明")))
+    }
 }
