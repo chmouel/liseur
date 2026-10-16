@@ -194,7 +194,7 @@ class CodexViewModel(
                                 if (now - lastRefresh >= 250 || unit == ceiling - 1) {
                                     lastRefresh = now
                                     // The scan walks on IO; job bookkeeping stays on the main thread.
-                                    withContext(Dispatchers.Main.immediate) { refresh(settled = unit == ceiling - 1) }
+                                    withContext(Dispatchers.Main.immediate) { refresh(committed = true) }
                                 }
                             }
                         }
@@ -221,8 +221,8 @@ class CodexViewModel(
         }
     }
 
-    /** [settled]: the last chapter below the ceiling just committed, so relationships are final even if names are not new. */
-    private suspend fun refresh(settled: Boolean = false) {
+    /** [committed]: a chapter below the ceiling just committed, so shared chapters may have moved even if no name changed. */
+    private suspend fun refresh(committed: Boolean = false) {
         val book = identity ?: return
         val before = _panel.value ?: return
         val ceiling = before.ceiling ?: return
@@ -233,7 +233,7 @@ class CodexViewModel(
             // The previous map stays up until its replacement is ready.
             _panel.update { it?.copy(entries = entries, graphFailed = false) }
             if (current.relationships) rebuildGraph()
-        } else if (current.relationships && !current.graphFailed && (settled || current.graph == null && graphJob?.isActive != true)) {
+        } else if (current.relationships && !current.graphFailed && (committed || current.graph == null && graphJob?.isActive != true)) {
             rebuildGraph()
         }
         topUpDetail()

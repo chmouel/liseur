@@ -305,6 +305,36 @@ class CodexStoreTest {
         }
     }
 
+    @Test fun `a chapter that adds no names still updates relationships before the scan stops`() {
+        val reached = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val ticks = AtomicInteger()
+        val clock = {
+            when (val tick = ticks.getAndIncrement()) {
+                0 -> 1_000L
+                1 -> { reached.countDown(); release.await(10, TimeUnit.SECONDS); 2_000L }
+                2 -> 3_000L
+                else -> error("scan stopped at tick $tick")
+            }
+        }
+        val pairs = (0 until 6).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" }
+        val chapters = listOf(pairs, "<p>Rain.</p>", "<p>Mira waited. Tobin slept.</p>", "<p>Dusk.</p>", "<p>End.</p>")
+        withViewModel(chapters, clock) { vm, _ ->
+            vm.open(chapter("five"), translated = false)
+            awaitCondition { reached.count == 0L && vm.panel.value?.entries?.isNotEmpty() == true }
+            vm.showGraph()
+            // One shared chapter is not yet a relationship.
+            awaitCondition { vm.panel.value?.graph?.edges?.isEmpty() == true }
+            val names = vm.panel.value?.entries
+
+            // Chapter three names nobody new but puts both in it; the scan then stops before the last chapter.
+            release.countDown()
+            awaitCondition { vm.progress.value.stage == CodexStage.FAILED }
+            assertEquals(names, vm.panel.value?.entries)
+            awaitCondition { vm.panel.value?.graph?.edges?.singleOrNull()?.weight == 2 }
+        }
+    }
+
     @Test fun `the names tab stops relationship rebuilds and returning rebuilds without clearing the map`() {
         val reached = CountDownLatch(1)
         val release = CountDownLatch(1)
@@ -396,7 +426,7 @@ class CodexStoreTest {
     }
 
     private fun writeVmEpub(target: File, chapters: List<String>) {
-        val names = chapters.indices.map { listOf("one", "two", "three", "four")[it] }
+        val names = chapters.indices.map { listOf("one", "two", "three", "four", "five")[it] }
         ZipOutputStream(target.outputStream()).use { zip ->
             val mimetype = "application/epub+zip".toByteArray()
             zip.setMethod(ZipOutputStream.STORED)
