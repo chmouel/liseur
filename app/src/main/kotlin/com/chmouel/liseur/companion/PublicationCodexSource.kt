@@ -62,6 +62,9 @@ class PublicationCodexSource(private val publication: Publication, val map: Chap
                     pending.getOrPut(passage.range.hi) { mutableListOf() }.add(passage)
                 }
             }
+            // Nothing after a passage surely in chapter k can belong before it, so chapters
+            // sharing one file commit as the walk leaves them rather than at the file's end.
+            passages.lastOrNull()?.let { flush(it.range.lo) }
         }
         for (resource in verified + 1 until readingOrder.size) html(resource)
         flush(map.chapterCount)

@@ -56,6 +56,9 @@ data class CodexPanel(
     val graphRequested: Boolean = false,
     /** The relationships query failed; the scan itself is unaffected. */
     val graphFailed: Boolean = false,
+    /** The relationships tab is showing; kept here, with [search], across a peek. */
+    val relationships: Boolean = false,
+    val search: String = query,
 )
 
 /** The local codex belongs to the open reader, independently of any AI provider. */
@@ -190,7 +193,7 @@ class CodexViewModel(
                                 if (now - lastRefresh >= 250 || unit == ceiling - 1) {
                                     lastRefresh = now
                                     // The scan walks on IO; job bookkeeping stays on the main thread.
-                                    withContext(Dispatchers.Main.immediate) { refresh() }
+                                    withContext(Dispatchers.Main.immediate) { refresh(settled = unit == ceiling - 1) }
                                 }
                             }
                         }
@@ -217,7 +220,8 @@ class CodexViewModel(
         }
     }
 
-    private suspend fun refresh() {
+    /** [settled]: the last chapter below the ceiling just committed, so relationships are final even if names are not new. */
+    private suspend fun refresh(settled: Boolean = false) {
         val book = identity ?: return
         val before = _panel.value ?: return
         val ceiling = before.ceiling ?: return
@@ -227,7 +231,7 @@ class CodexViewModel(
         if (entries != current.entries) {
             _panel.update { it?.copy(entries = entries, graph = null, graphFailed = false) }
             if (current.graphRequested) showGraph(entries)
-        } else if (current.graphRequested && current.graph == null && !current.graphFailed && graphJob?.isActive != true) {
+        } else if (current.graphRequested && !current.graphFailed && (settled || current.graph == null && graphJob?.isActive != true)) {
             showGraph(entries)
         }
         topUpDetail()
@@ -242,7 +246,14 @@ class CodexViewModel(
         if (detail.scanned < ceiling && _progress.value.completed > detail.scanned) loadMore(quiet = true)
     }
 
-    fun showGraph() = showGraph(_panel.value?.entries)
+    fun showGraph() {
+        _panel.update { it?.copy(relationships = true) }
+        showGraph(_panel.value?.entries)
+    }
+
+    fun showNames() = _panel.update { it?.copy(relationships = false) }
+
+    fun search(text: String) = _panel.update { it?.copy(search = text) }
 
     private fun showGraph(entries: List<CodexEntry>?) {
         _panel.update { it?.copy(graphRequested = true, graphFailed = false) }
@@ -255,7 +266,8 @@ class CodexViewModel(
             try {
                 val graph = store.graph(book, ceiling, currentEntries)
                 _panel.update { current ->
-                    if (current?.ceiling == ceiling && current.entries == currentEntries) current.copy(graph = graph) else current
+                    // An unchanged graph keeps its instance, and with it a half-chosen pair.
+                    if (current?.ceiling == ceiling && current.entries == currentEntries && current.graph != graph) current.copy(graph = graph) else current
                 }
             } catch (e: CancellationException) {
                 throw e

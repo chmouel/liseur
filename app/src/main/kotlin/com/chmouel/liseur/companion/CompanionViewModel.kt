@@ -100,7 +100,8 @@ class CompanionViewModel(
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
 
-    fun hasChoice(): Boolean = choice.value != null
+    /** Read from settings rather than [choice], which reports none until it first loads. */
+    suspend fun hasChoice(): Boolean = server.current() != null
 
     /** Whether background recaps are on; null until a server and model are chosen. */
     val recapsHere: StateFlow<Boolean?> = combine(choice, recapsOn) { chosen, on -> on.takeIf { chosen != null } }

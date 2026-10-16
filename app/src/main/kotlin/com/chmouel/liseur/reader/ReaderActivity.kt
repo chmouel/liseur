@@ -692,12 +692,14 @@ class ReaderActivity : FragmentActivity() {
         panel = companionViewModel.panel,
         peek = viewModel.peek,
         open = { selection, place, translated ->
-            if (!companionViewModel.hasChoice() && codexViewModel.enabled.value) {
-                companionViewModel.close()
-                codexViewModel.open(place, translated, selection)
-            } else {
-                codexViewModel.close()
-                companionViewModel.open(selection, place, translated)
+            lifecycleScope.launch {
+                if (!companionViewModel.hasChoice() && codexViewModel.enabled.value) {
+                    companionViewModel.close()
+                    codexViewModel.open(place, translated, selection)
+                } else {
+                    codexViewModel.close()
+                    companionViewModel.open(selection, place, translated)
+                }
             }
         },
         retry = companionViewModel::retry,

@@ -184,6 +184,43 @@ class PublicationCatalogTest {
         }
     }
 
+    @Test
+    fun `codex commits chapters sharing one file as the walk leaves them`() = runBlocking {
+        val epub = File(folder.root, "one-file.epub")
+        writeBook(
+            epub,
+            spine = listOf("all", "last"),
+            contents = """
+                  <li><a href="all.xhtml">One</a></li>
+                  <li><a href="all.xhtml#c2">Two</a></li>
+                  <li><a href="all.xhtml#c3">Three</a></li>
+                  <li><a href="last.xhtml">Four</a></li>""",
+            pages = mapOf(
+                "all" to page(
+                    "<p>Mira ONE walks to the mill.</p>",
+                    "<h1 id=\"c2\">Two</h1>",
+                    "<p>Mira TWO meets Tobin.</p>",
+                    "<h1 id=\"c3\">Three</h1>",
+                    "<p>Mira THREE crosses the river.</p>",
+                ),
+                "last" to null,
+            ),
+        )
+        val publication = openPublication(epub)
+        try {
+            val completed = mutableListOf<Int>()
+            try {
+                PublicationCodexSource(publication, PublicationCatalog(publication).map).scan(0) { unit, _ -> completed += unit }
+                org.junit.Assert.fail("Unreadable resources must fail the scan")
+            } catch (_: IllegalStateException) {
+                // The scan fails at the missing file, after the shared file's first chapters were kept.
+                assertEquals(listOf(0, 1), completed)
+            }
+        } finally {
+            publication.close()
+        }
+    }
+
     private suspend fun openPublication(epub: File): Publication {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val http = DefaultHttpClient()
@@ -200,6 +237,34 @@ class PublicationCatalogTest {
         </body></html>"""
 
     private fun writeEpub(target: File, missingAnchor: Boolean, missingFile: Boolean = false) {
+        val anchor = if (missingAnchor) "nowhere" else "c3"
+        writeBook(
+            target,
+            spine = listOf("one", "two", "four", "five-a", "five-b", "six"),
+            contents = """
+                  <li><a href="one.xhtml">One</a></li>
+                  <li><a href="two.xhtml">Two</a></li>
+                  <li><a href="two.xhtml#$anchor">Three</a></li>
+                  <li><a href="four.xhtml">Four</a></li>
+                  <li><a href="five-a.xhtml">Five</a><ol><li><a href="five-b.xhtml">Section 2</a></li></ol></li>
+                  <li><a href="six.xhtml">Six</a></li>""",
+            pages = mapOf(
+                "one" to page("<p>Mira ONE walks to the mill.</p>", "<p>Mira ONE keeps the ledger.</p>"),
+                "two" to page(
+                    "<p>Mira TWO meets Tobin.</p>",
+                    "<h1 id=\"c3\">Three</h1>",
+                    "<p>Mira THREE crosses the river.</p>",
+                ),
+                "four" to page("<p>Mira FOUR reads a letter.</p>"),
+                "five-a" to page("<p>Mira FIVEA learns the secret.</p>"),
+                "five-b" to page("<p>Mira FIVEB keeps it.</p>").takeUnless { missingFile },
+                "six" to page("<p>Mira SIX leaves.</p>"),
+            ),
+        )
+    }
+
+    /** An EPUB of [spine] files; a null page is listed but left out of the archive. */
+    private fun writeBook(target: File, spine: List<String>, contents: String, pages: Map<String, String?>) {
         ZipOutputStream(target.outputStream()).use { zip ->
             val mimetype = "application/epub+zip".toByteArray()
             zip.setMethod(ZipOutputStream.STORED)
@@ -227,7 +292,6 @@ class PublicationCatalogTest {
                   </rootfiles>
                 </container>""",
             )
-            val files = listOf("one", "two", "four", "five-a", "five-b", "six")
             put(
                 "OEBPS/content.opf",
                 """<?xml version="1.0" encoding="UTF-8"?>
@@ -240,40 +304,21 @@ class PublicationCatalogTest {
                   </metadata>
                   <manifest>
                     <item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>
-                    ${files.joinToString("\n") { """<item id="$it" href="$it.xhtml" media-type="application/xhtml+xml"/>""" }}
+                    ${spine.joinToString("\n") { """<item id="$it" href="$it.xhtml" media-type="application/xhtml+xml"/>""" }}
                   </manifest>
                   <spine>
-                    ${files.joinToString("\n") { """<itemref idref="$it"/>""" }}
+                    ${spine.joinToString("\n") { """<itemref idref="$it"/>""" }}
                   </spine>
                 </package>""",
             )
-            val anchor = if (missingAnchor) "nowhere" else "c3"
             put(
                 "OEBPS/nav.xhtml",
                 """<?xml version="1.0" encoding="UTF-8"?>
                 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body>
-                <nav epub:type="toc"><ol>
-                  <li><a href="one.xhtml">One</a></li>
-                  <li><a href="two.xhtml">Two</a></li>
-                  <li><a href="two.xhtml#$anchor">Three</a></li>
-                  <li><a href="four.xhtml">Four</a></li>
-                  <li><a href="five-a.xhtml">Five</a><ol><li><a href="five-b.xhtml">Section 2</a></li></ol></li>
-                  <li><a href="six.xhtml">Six</a></li>
+                <nav epub:type="toc"><ol>$contents
                 </ol></nav></body></html>""",
             )
-            put("OEBPS/one.xhtml", page("<p>Mira ONE walks to the mill.</p>", "<p>Mira ONE keeps the ledger.</p>"))
-            put(
-                "OEBPS/two.xhtml",
-                page(
-                    "<p>Mira TWO meets Tobin.</p>",
-                    "<h1 id=\"c3\">Three</h1>",
-                    "<p>Mira THREE crosses the river.</p>",
-                ),
-            )
-            put("OEBPS/four.xhtml", page("<p>Mira FOUR reads a letter.</p>"))
-            put("OEBPS/five-a.xhtml", page("<p>Mira FIVEA learns the secret.</p>"))
-            if (!missingFile) put("OEBPS/five-b.xhtml", page("<p>Mira FIVEB keeps it.</p>"))
-            put("OEBPS/six.xhtml", page("<p>Mira SIX leaves.</p>"))
+            for ((name, body) in pages) if (body != null) put("OEBPS/$name.xhtml", body)
         }
     }
 }

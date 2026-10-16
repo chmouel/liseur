@@ -141,10 +141,10 @@ class CodexIndex private constructor(
  * The co-occurrence graph of the names this index holds, over the
  * passages [scope] allows: nodes are the most frequent names first met
  * before the scope's chapter, and an edge between two names is the number
- * of chapters naming both. Nothing is stored; mention sets are computed
- * from the passages each time, as the companion's searches are. Passages
- * with uncertain chapter membership cannot establish a shared chapter
- * and are excluded from mention sets.
+ * of chapters naming both. The app reads the graph from [CodexStore]'s
+ * queries; this in-memory version states the same rules for the tests.
+ * Passages with uncertain chapter membership cannot establish a shared
+ * chapter and are excluded from mention sets.
  */
 fun <P> CodexIndex.graph(
     passages: List<Passage<P>>,

@@ -30,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +66,8 @@ internal fun CodexSheet(
     controller: CodexViewModel,
     onSource: (Passage<Locator>) -> Unit,
 ) {
-    var tab by rememberSaveable { mutableStateOf(0) }
-    var search by rememberSaveable(panel.query) { mutableStateOf(panel.query) }
+    val tab = if (panel.relationships) 1 else 0
+    val search = panel.search
     val detail = panel.detail
     LiseurModalBottomSheet(
         onDismissRequest = controller::close,
@@ -132,11 +131,11 @@ internal fun CodexSheet(
                     }
                 } else {
                     PrimaryTabRow(selectedTabIndex = tab) {
-                        Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(stringResource(R.string.codex_names)) })
-                        Tab(selected = tab == 1, onClick = { tab = 1; controller.showGraph() }, text = { Text(stringResource(R.string.codex_relationships)) })
+                        Tab(selected = tab == 0, onClick = controller::showNames, text = { Text(stringResource(R.string.codex_names)) })
+                        Tab(selected = tab == 1, onClick = controller::showGraph, text = { Text(stringResource(R.string.codex_relationships)) })
                     }
                     if (tab == 0) {
-                        OutlinedTextField(value = search, onValueChange = { search = it }, singleLine = true,
+                        OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
                         val entries = remember(panel.entries, search) { panel.entries.filter { it.name.contains(search, ignoreCase = true) } }
                         LazyColumn(Modifier.weight(1f)) {

@@ -188,11 +188,14 @@ internal fun CompanionPeekBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         ) {
-            TextButton(onClick = onReturn, enabled = !returning) {
+            // The way back gives up width first, so the other button never wraps letter by letter.
+            TextButton(onClick = onReturn, enabled = !returning, modifier = Modifier.weight(1f, fill = false)) {
                 Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = null, tint = theme.background)
                 Text(
                     stringResource(R.string.companion_peek_return),
                     color = theme.background,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
@@ -201,6 +204,7 @@ internal fun CompanionPeekBar(
                 Text(
                     stringResource(showLabel),
                     color = theme.background,
+                    maxLines = 1,
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }

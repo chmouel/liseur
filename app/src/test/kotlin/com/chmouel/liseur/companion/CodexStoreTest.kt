@@ -91,6 +91,25 @@ class CodexStoreTest {
         assertEquals(listOf(CodexEdge(0, 1, 2)), store.graph(book, 2, store.entries(book, 2)).edges)
     }
 
+    @Test fun `compound and accented names match their variants in details and graph edges`() = runTest {
+        for ((canonical, variant) in listOf(
+            "King's Landing" to "King’s Landing",
+            "Gabriele D'Annunzio" to "Gabriele D’Annunzio",
+            "Élisabeth" to "E\u0301lisabeth",
+            "O'Brien" to "O’Brien",
+        )) {
+            // A new identity each time: completed chapters are never written again.
+            val book = CodexBookRow("book", "sha:$canonical", 5)
+            store.prepare(book)
+            for ((unit, name) in listOf(canonical, variant).withIndex()) {
+                val text = "They reached $name. At dawn, Tobin waited."
+                store.save(book, unit, CodexExtractor.extract("$text ".repeat(5)), listOf(passage(unit, text)))
+            }
+            assertEquals(canonical, listOf(0, 1), store.mentions(book, 2, canonical, "Tobin", 0).map { it.range.hi })
+            assertEquals(canonical, listOf(CodexEdge(0, 1, 2)), store.graph(book, 2, store.entries(book, 2)).edges)
+        }
+    }
+
     @Test fun `a cut passage shows only names starting in its own text, and unspaced scripts match inside words`() = runTest {
         store.prepare(book)
         val parts = listOf("Mira waited by the door. Elder", "Chen came. Tobin smiled.")
