@@ -1,44 +1,31 @@
-Liseur ist ein EPUB-Reader für Android auf Basis von Readium. Er liest Bücher aus lokalen Ordnern, kann sie dir vorlesen und ist außerdem ein Client für calibre-web, Komga, BookOrbit, liseur-sync und OPDS-Kataloge. Bücher aus allen Quellen landen im selben Regal.
+Lies EPUBs auf deine Art: Folge dem Text, während er vorgelesen wird, übersetze beim Lesen eine Seite oder frage nach Figuren und Ereignissen. Liseur vereint Bücher vom Handy, aus OPDS-Katalogen, calibre-web, Komga, BookOrbit und liseur-sync in einer Bibliothek.
 
 Vorlesen
 
-Liseur liest dir jedes Buch vor, hebt dabei den gerade gesprochenen Satz hervor und blättert selbst weiter. Standardmäßig nutzt es die Stimmen, die schon auf deinem Handy sind: Das funktioniert offline, und der Text bleibt auf dem Gerät. Für andere Stimmen kannst du einen Sprachserver verbinden, einen eigenen wie Kokoro oder einen gehosteten Dienst wie OpenAI, Mistral oder Groq.
+Höre jedes EPUB mit Satzmarkierung und automatischem Umblättern. Android-Stimmen können offline vorlesen, wenn eine kompatible Offline-Stimme installiert ist. Wähle Stimmen nach Sprache, passe die Geschwindigkeit an, höre bei ausgeschaltetem Bildschirm weiter oder stelle einen Einschlaftimer ein. Verbinde einen OpenAI-kompatiblen Sprachserver, auch im eigenen Netzwerk. Die Google-Play-Version bietet außerdem Gemini-Stimmen mit deinem eigenen API-Schlüssel.
 
-* Liest bei ausgeschaltetem Bildschirm weiter, mit Steuerung in der Benachrichtigung
-* Geschwindigkeit von 0,75× bis 2×
-* Schlaf-Timer oder Stopp am Kapitelende
-* Merkt sich die gewählte Stimme für jede Sprache
+Übersetzung
 
-Lesen
+Übersetze eine Auswahl oder lies ein Buch Seite für Seite in einer anderen Sprache. Liseur speichert übersetzte Sätze auf deinem Handy, damit sie beim nächsten Besuch der Seite wieder bereitstehen. Nutze den Android-Übersetzer auf dem Gerät, einen OpenAI-kompatiblen Dienst im eigenen Netzwerk oder online gehostet oder in der Google-Play-Version Gemini oder Google ML Kit. Lass übersetzte Seiten in der Zielsprache vorlesen und schlage Wörter nach, ohne die Seite zu verlassen.
 
-* Blättern oder fortlaufendes Scrollen, pro Buch oder für die ganze Bibliothek
-* Mitgelieferte Schriften (Literata, Vollkorn, Atkinson Hyperlegible, Inter), die des Verlags oder eigene
-* Themen Hell, Sepia, Dunkel und Schwarz
-* Einstellbare Ränder, Zeilenabstand und Helligkeit
-* Automatisches Scrollen, das über Kapitelgrenzen weiterläuft
-* Fußzeile mit Seitenzahl, Rest des Kapitels und geschätzter Restlesezeit
-* E-Ink-Modus ohne Animationen, mit Refresh-Steuerung auf Onyx-Geräten
-* Markierungen in sechs Farben, Notizen und Lesezeichen, als Markdown exportierbar
-* Volltextsuche
-* Fußnoten öffnen sich in einem Popup
-* Wörterbuch über Wiktionary (standardmäßig aus) oder eine installierte Wörterbuch-App
+Lesehilfe und Codex
 
-Bibliothek
+Frage die Lesehilfe nach Figuren und Ereignissen. Figurenprofile nutzen Text vor der ausgewählten Stelle, darunter frühere Kapitel und frühere Passagen im aktuellen Kapitel. Quellenpassagen zeigen, woher die Informationen stammen. Aktiviere für jedes Buch Zusammenfassungen von Kapiteln im Hintergrund. Nutze einen OpenAI-kompatiblen Dienst; die Google-Play-Version unterstützt außerdem Gemini mit deinem eigenen API-Schlüssel.
 
-* Lokale Ordner, auch auf der SD-Karte
-* Reihen in Lesereihenfolge gruppiert, fehlende Bände werden angezeigt
-* Eingebauter Project-Gutenberg-Browser
-* Startbildschirm-Widgets für das aktuelle Buch und die Lesezeit
-* ZIP-Sicherung von Einstellungen, Schriften, Lesepositionen und Anmerkungen
+Codex erstellt auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Dafür ist kein KI-Dienst und kein API-Schlüssel nötig.
 
-Synchronisation
+Dein Lesegerät
 
-* Leseposition wird über calibre-web (Kobo-Sync), Komga, BookOrbit oder liseur-sync synchronisiert
-* Eine benutzerdefinierte Verbindung kombiniert einen beliebigen OPDS-Katalog mit einem beliebigen KOReader-Sync-Server (kosync)
-* Mit liseur-sync: Sicherung der Einstellungen pro Gerät und Lesestatistiken über alle Geräte
+Wähle paginierte Seiten oder fortlaufendes Scrollen, passe Schrift, Ränder und Helligkeit an und nutze helle, Sepia-, dunkle oder schwarze Themen. Füge Markierungen, Notizen und Lesezeichen hinzu, durchsuche den gesamten Text und öffne Fußnoten in einem Popup. Importiere eigene Schriften oder nutze mitgelieferte und vom Verlag bereitgestellte Schriften. Der E-Ink-Modus schaltet Animationen aus und unterstützt die Aktualisierungssteuerung auf Onyx-Geräten.
+
+Bibliothek und Synchronisierung
+
+Durchsuche lokale Ordner und SD-Karten, gruppiere Bücher in Reihen oder finde kostenlose Bücher im integrierten Project-Gutenberg-Katalog. Startbildschirm-Widgets zeigen dein aktuelles Buch oder ein Regal mit Buchcovern. Sichere Einstellungen, Schriften, Lesepositionen und Anmerkungen in einer ZIP-Datei.
+
+Synchronisiere Lesepositionen mit calibre-web, Komga, BookOrbit oder liseur-sync. Verbinde jeden OPDS-Katalog mit einem KOReader-Sync-Server. Mit liseur-sync kannst du Einstellungen pro Gerät sichern und Lesestatistiken auf mehreren Geräten ansehen.
 
 Datenschutz
 
-Keine Werbung, keine Tracker, keine Nutzungsanalyse, kein Konto. Liseur verbindet sich nur mit den Buch- und Sprachservern, die du hinzufügst, mit der Wörterbuch-Seite, wenn du sie einschaltest, und mit Project Gutenberg, wenn du dort stöberst. Keine Google-Play-Dienste und keine proprietären Bibliotheken.
+Keine Werbung. Für das Lesen von Büchern auf deinem Gerät ist kein Konto erforderlich. Androids Systemübersetzer und Codex verarbeiten Buchtext auf deinem Gerät. Google ML Kit übersetzt ebenfalls auf dem Gerät und sendet Nutzungsdiagnosen an Google. Wenn du für Übersetzung, Lesehilfe oder Sprachwiedergabe einen Onlinedienst auswählst, sendet Liseur Text an diesen Anbieter. Optionale Wörterbuchabfragen kontaktieren Wiktionary; Project Gutenberg wird beim Durchsuchen des Katalogs kontaktiert.
 
-MIT-Lizenz. Quellcode und Issue-Tracker: https://github.com/chmouel/liseur
+MIT-lizenziert. Quellcode und Issue-Tracker: https://github.com/chmouel/liseur

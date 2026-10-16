@@ -1,1 +1,1 @@
-EPUB-Reader mit Vorlesefunktion und Client für calibre-web, Komga und OPDS
+EPUBs lesen, übersetzen und anhören – mit Lesehilfe und Figurenindex.

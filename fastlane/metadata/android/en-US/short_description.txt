@@ -1,1 +1,1 @@
-EPUB reader that reads aloud, and a client for calibre-web, Komga and OPDS
+Read, translate, and listen to EPUBs with a companion and character index.

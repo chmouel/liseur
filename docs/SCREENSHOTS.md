@@ -1,9 +1,8 @@
 # Screenshots
 
-Every screen Liseur has a picture of, captured with `hack/screenshots`
-against an emulator carrying a shelf of [Standard Ebooks](https://standardebooks.org)
-editions (public domain, cover art included). The README shows three of
-them; the rest are here.
+Screenshots captured on an emulator with a shelf of [Standard Ebooks](https://standardebooks.org)
+editions (public domain, cover art included). The README shows a few; the rest
+are here.
 
 ## Reading
 
@@ -36,6 +35,21 @@ them; the rest are here.
   <tr>
     <td align="center"><sub>Read aloud, following the sentence on the page.</sub></td>
     <td></td>
+    <td></td>
+  </tr>
+</table>
+
+## Reading companion and Codex
+
+<table>
+  <tr>
+    <td width="33%"><img src="screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
+    <td width="33%"><img src="screenshots/26-codex-relationships.png" alt="Codex map of character relationships across chapters"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Character profiles with passages that support them.</sub></td>
+    <td align="center"><sub>Names connected by the chapters they share.</sub></td>
     <td></td>
   </tr>
 </table>
@@ -152,6 +166,6 @@ library covers. The combined-cover and reading stats widgets were removed.
 
 ---
 
-These are captured, not composed: `hack/screenshots --setup` builds the
-demo shelf, reads a book part-way, marks it up, and photographs the
+Most screenshots are captured with `hack/screenshots --setup`, which builds
+the demo shelf, reads a book part-way, marks it up, and photographs the
 result. See the header of that script for how to run it.

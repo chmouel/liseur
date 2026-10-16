@@ -31,6 +31,16 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
     <td align="center"><sub>Distraction-free page with notes and bookmarks.</sub></td>
     <td align="center"><sub>Read aloud with device voices or your own speech server.</sub></td>
   </tr>
+  <tr>
+    <td><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
+    <td><img src="docs/screenshots/26-codex-relationships.png" alt="Codex map of character relationships across chapters"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Character profiles grounded in earlier passages.</sub></td>
+    <td align="center"><sub>See which characters appear together across chapters.</sub></td>
+    <td></td>
+  </tr>
 </table>
 
 <sub><a href="docs/SCREENSHOTS.md">More screenshots</a> here</sub>
@@ -54,6 +64,13 @@ selected passage can be translated by Android's own translator on the
 phone, or by a server you add, and from there the page itself can be
 translated sentence by sentence as you read.
 
+The reading companion answers questions about characters and events using
+the passages before the selected text. Character profiles show their source
+passages, and optional background recaps summarize finished chapters. Codex
+builds a searchable index of people, places and groups on your device, and
+shows which names appear together in earlier chapters. The companion uses a
+server you configure; Codex runs on your phone.
+
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, BookOrbit, liseur-sync, or any OPDS catalog. Series are grouped into stacks tracking
 reading order, progress, and missing volumes. "Download all books" fills the
@@ -72,9 +89,11 @@ With liseur-sync you get extras, like a per-device settings backup, and better i
 Two home-screen widgets show the current book cover or a paged shelf of your
 library covers. Tap a cover to read. Neither needs configuration.
 
-No trackers, no analytics, no ads, no subscriptions. Liseur only talks to the
-servers and dictionary sources you configure. See the
-[privacy policy](https://chmouel.github.io/liseur/PRIVACY).
+Liseur has no ads or account, and its own code has no trackers or analytics.
+It connects to services you choose for book sync, speech, translation and the
+reading companion. Browsing Project Gutenberg and using an online dictionary
+also makes network requests. See the
+[privacy policy](https://chmouel.github.io/liseur/PRIVACY) for details.
 
 ## Install
 

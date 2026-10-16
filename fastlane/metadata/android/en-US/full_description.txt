@@ -1,44 +1,31 @@
-Liseur is an EPUB reader for Android built on the Readium toolkit. It opens books from local folders, can read them aloud to you, and is also a client for calibre-web, Komga, BookOrbit, liseur-sync and OPDS catalogs. Books from every source show up on the same shelf.
+Read EPUBs your way: follow the text as it reads aloud, translate a page as you go, or ask about characters and events. Liseur brings books from your phone, OPDS catalogs, calibre-web, Komga, BookOrbit and liseur-sync into one library.
 
 Read aloud
 
-Liseur reads any book to you, highlighting each sentence and turning the page as it goes. By default it uses the voices already on your phone, so it works offline and the text stays on the device. For other voices, you can connect a speech server: one you run yourself, such as Kokoro, or a hosted service like OpenAI, Mistral or Groq.
+Listen to any EPUB with sentence highlighting and automatic page turns. Android voices can read offline when a compatible offline voice is installed. Choose voices by language, adjust the speed, keep listening with the screen off, or set a sleep timer. Connect an OpenAI-compatible speech server, including one on your own network. The Google Play build also offers Gemini voices with your own API key.
 
-* Keeps reading with the screen off, with controls in the notification
-* Speed from 0.75× to 2×
-* Sleep timer, or stop at the end of the chapter
-* Remembers the voice you picked for each language
+Translation
 
-Reading
+Translate a selection or read a book page by page in another language. Liseur saves translated sentences on your phone, so they are ready when you return to a page. Use Android's on-device translator, an OpenAI-compatible service on your network or hosted online, or, in the Google Play build, Gemini or Google ML Kit. Read translated pages aloud in the target language and look up words without leaving the page.
 
-* Paginated or continuous scroll, per book or for the whole library
-* Bundled fonts (Literata, Vollkorn, Atkinson Hyperlegible, Inter), the publisher's fonts, or fonts you import
-* Light, sepia, dark and black themes
-* Adjustable margins, line spacing and brightness
-* Auto-scroll that continues across chapters
-* Footer with the page number, what is left of the chapter and estimated time left
-* E-ink mode without animations, with refresh control on Onyx devices
-* Highlights in six colours, notes and bookmarks, exportable as Markdown
-* Full-text search
-* Footnotes open in a popup
-* Dictionary lookup through Wiktionary (off by default) or an installed dictionary app
+Reading companion and Codex
 
-Library
+Ask the reading companion about characters and events. Character profiles use passages before the selected text, including earlier chapters and earlier passages in the current chapter; source excerpts show where details come from. Turn on background chapter recaps for each book. Use an OpenAI-compatible service; the Google Play build also supports Gemini with your own API key.
 
-* Local folders, including the SD card
-* Series grouped in reading order, with missing volumes shown
-* Built-in Project Gutenberg browser
-* Home-screen widgets for the current book and reading time
-* ZIP backup of settings, fonts, reading positions and annotations
+Codex builds a searchable, on-device index of people, places and groups, and shows which names appear together in earlier chapters. It needs no AI service or API key.
 
-Sync
+Your reader
 
-* Reading position syncs through calibre-web (Kobo sync), Komga, BookOrbit or liseur-sync
-* A Custom connection pairs any OPDS catalog with any KOReader sync (kosync) server
-* With liseur-sync: settings backup per device and reading statistics across devices
+Choose paginated pages or continuous scroll, adjust type, margins and brightness, and use light, sepia, dark or black themes. Add highlights, notes and bookmarks, search the full text, and open footnotes in a popup. Import your own fonts or use the bundled and publisher fonts. E-ink mode turns off animations and supports refresh controls on Onyx devices.
+
+Your library and sync
+
+Browse local folders and SD cards, group books into series, or find free books in the built-in Project Gutenberg catalog. Home-screen widgets show your current book or a shelf of covers. Back up settings, fonts, reading positions and annotations in a ZIP file.
+
+Sync reading positions with calibre-web, Komga, BookOrbit or liseur-sync. Connect any OPDS catalog to a KOReader sync server. With liseur-sync, back up settings per device and see reading statistics across devices.
 
 Privacy
 
-No ads, trackers, analytics or account. Liseur only connects to the book and speech servers you add, to the dictionary site if you turn it on, and to Project Gutenberg when you browse it. It does not use Google Play services or any proprietary library.
+No ads. You do not need an account to read books on your device. Android's system translator and Codex process book text on your phone. Google ML Kit also translates on-device, and sends usage diagnostics to Google. When you choose an online service for translation, the reading companion or speech, Liseur sends text to that provider. Optional dictionary lookups contact Wiktionary; browsing the catalog also contacts Project Gutenberg.
 
 MIT licensed. Source code and issue tracker: https://github.com/chmouel/liseur

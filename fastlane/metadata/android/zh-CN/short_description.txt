@@ -1,1 +1,1 @@
-会朗读的 EPUB 阅读器，可与您自己的 calibre-web、Komga 或 OPDS 书库服务器同步。
+阅读、翻译和收听 EPUB，并使用阅读伴侣与人物索引。

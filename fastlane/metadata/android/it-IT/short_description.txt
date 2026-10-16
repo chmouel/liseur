@@ -1,1 +1,1 @@
-Lettore EPUB che legge ad alta voce e client per calibre-web, Komga e OPDS
+Leggi, traduci e ascolta EPUB con un compagno e un indice dei personaggi.
