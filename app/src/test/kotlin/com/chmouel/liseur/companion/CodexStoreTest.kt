@@ -321,6 +321,35 @@ class CodexStoreTest {
         }
     }
 
+    @Test fun `the names tab stops relationship rebuilds and returning rebuilds without clearing the map`() {
+        val reached = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val ticks = AtomicInteger()
+        val clock = {
+            if (ticks.getAndIncrement() == 0) { reached.countDown(); release.await(10, TimeUnit.SECONDS) }
+            1_000L
+        }
+        val one = (0 until 6).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" }
+        val two = (0 until 6).joinToString("\n") { "<p>At dusk, Mira greeted Fenna ($it).</p>" }
+        withViewModel(listOf(one, two, "<p>Rain.</p>"), clock) { vm, _ ->
+            vm.open(chapter("three"), translated = false)
+            awaitCondition { reached.count == 0L && vm.panel.value?.ceiling == 2 }
+            vm.showGraph()
+            awaitCondition { vm.panel.value?.graph != null }
+            val early = vm.panel.value?.graph
+            vm.showNames()
+
+            release.countDown()
+            awaitCondition { vm.progress.value.stage == CodexStage.COMPLETE && vm.panel.value?.entries?.any { it.name == "Fenna" } == true }
+            repeat(10) { shadowOf(Looper.getMainLooper()).idle(); delay(20) }
+            assertSame(early, vm.panel.value?.graph)
+
+            vm.showGraph()
+            assertSame(early, vm.panel.value?.graph)
+            awaitCondition { vm.panel.value?.graph?.nodes?.any { it.name == "Fenna" } == true }
+        }
+    }
+
     @Test fun `view model preserves completed stage across reopen paginates details and closes when disabled`() {
         val paragraphs = (0 until 55).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" }
         withViewModel(listOf(paragraphs, "<p>At dusk, Fenna waited.</p>")) { vm, settings ->

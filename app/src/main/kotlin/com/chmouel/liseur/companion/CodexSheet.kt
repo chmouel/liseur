@@ -237,7 +237,9 @@ private fun CodexScanProgress(progress: CodexProgress, controller: CodexViewMode
 @Composable
 private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
     val positions = remember(graph) { codexLayout(graph) }
-    var selected by remember(graph) { mutableStateOf<Int?>(null) }
+    // By name, so a graph rebuilt as the scan goes on keeps a half-chosen pair.
+    var selectedName by remember { mutableStateOf<String?>(null) }
+    fun selected(): Int? = selectedName?.let { name -> graph.nodes.indexOfFirst { it.name == name }.takeIf { it >= 0 } }
     val color = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface
     val paint = remember(textColor) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = textColor.toArgb(); textAlign = Paint.Align.CENTER } }
@@ -251,8 +253,8 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
             gap = 10.dp.toPx(),
             dot = 9.dp.toPx(),
             bounds = size,
-            order = codexLabelOrder(graph, selected),
-            force = selected,
+            order = codexLabelOrder(graph, selected()),
+            force = selected(),
         )
     }
     Canvas(Modifier.fillMaxWidth().height(320.dp).pointerInput(graph) {
@@ -262,15 +264,15 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
                 ?: positions.indices.minByOrNull { i ->
                     (Offset(positions[i].first * canvas.width, positions[i].second * canvas.height) - tap).getDistanceSquared()
                 }?.takeIf { i -> (Offset(positions[i].first * canvas.width, positions[i].second * canvas.height) - tap).getDistance() <= 28.dp.toPx() }
-            val previous = selected
+            val previous = selected()
             if (hit != null && previous != null && hit != previous) {
                 onPair(graph.nodes[previous].name, graph.nodes[hit].name)
-                selected = null
-            } else selected = hit.takeUnless { it == previous }
+                selectedName = null
+            } else selectedName = hit.takeUnless { it == previous }?.let { graph.nodes[it].name }
         }
     }) {
         fun point(i: Int) = Offset(positions[i].first * size.width, positions[i].second * size.height)
-        val focus = selected
+        val focus = selected()
         graph.edges.forEach {
             val near = focus == null || it.a == focus || it.b == focus
             drawLine(color.copy(alpha = if (near) 0.3f else 0.1f), point(it.a), point(it.b), (1f + 3f * it.weight / graph.maxWeight).dp.toPx())

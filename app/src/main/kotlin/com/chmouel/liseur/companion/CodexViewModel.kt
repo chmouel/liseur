@@ -53,7 +53,6 @@ data class CodexPanel(
     val entries: List<CodexEntry> = emptyList(),
     val graph: CodexGraph? = null,
     val detail: CodexDetail? = null,
-    val graphRequested: Boolean = false,
     /** The relationships query failed; the scan itself is unaffected. */
     val graphFailed: Boolean = false,
     /** The relationships tab is showing; kept here, with [search], across a peek. */
@@ -84,6 +83,8 @@ class CodexViewModel(
     private var opening: Job? = null
     private var detailJob: Job? = null
     private var graphJob: Job? = null
+    /** Names changed while [graphJob] was building; it runs once more instead of restarting. */
+    private var graphStale = false
     private val scanLock = Mutex()
     private var foreground = true
     private var lastRefresh = 0L
@@ -229,10 +230,11 @@ class CodexViewModel(
         val current = _panel.value ?: return
         if (current.ceiling != ceiling) return
         if (entries != current.entries) {
-            _panel.update { it?.copy(entries = entries, graph = null, graphFailed = false) }
-            if (current.graphRequested) showGraph(entries)
-        } else if (current.graphRequested && !current.graphFailed && (settled || current.graph == null && graphJob?.isActive != true)) {
-            showGraph(entries)
+            // The previous map stays up until its replacement is ready.
+            _panel.update { it?.copy(entries = entries, graphFailed = false) }
+            if (current.relationships) rebuildGraph()
+        } else if (current.relationships && !current.graphFailed && (settled || current.graph == null && graphJob?.isActive != true)) {
+            rebuildGraph()
         }
         topUpDetail()
     }
@@ -247,35 +249,39 @@ class CodexViewModel(
     }
 
     fun showGraph() {
-        _panel.update { it?.copy(relationships = true) }
-        showGraph(_panel.value?.entries)
+        _panel.update { it?.copy(relationships = true, graphFailed = false) }
+        rebuildGraph()
     }
 
     fun showNames() = _panel.update { it?.copy(relationships = false) }
 
     fun search(text: String) = _panel.update { it?.copy(search = text) }
 
-    private fun showGraph(entries: List<CodexEntry>?) {
-        _panel.update { it?.copy(graphRequested = true, graphFailed = false) }
-        val panel = _panel.value ?: return
-        val ceiling = panel.ceiling ?: return
-        val currentEntries = entries ?: panel.entries
-        val book = identity ?: return
-        graphJob?.cancel()
+    /** Builds the relationships from the current names; while one build runs, later changes queue a single rerun. */
+    private fun rebuildGraph() {
+        if (graphJob?.isActive == true) {
+            graphStale = true
+            return
+        }
         graphJob = viewModelScope.launch {
-            try {
-                val graph = store.graph(book, ceiling, currentEntries)
-                _panel.update { current ->
-                    // An unchanged graph keeps its instance, and with it a half-chosen pair.
-                    if (current?.ceiling == ceiling && current.entries == currentEntries && current.graph != graph) current.copy(graph = graph) else current
+            do {
+                graphStale = false
+                val panel = _panel.value ?: return@launch
+                val ceiling = panel.ceiling ?: return@launch
+                val book = identity ?: return@launch
+                try {
+                    val graph = store.graph(book, ceiling, panel.entries)
+                    _panel.update { current ->
+                        // An unchanged graph keeps its instance.
+                        if (current?.ceiling == ceiling && current.graph != graph) current.copy(graph = graph, graphFailed = false) else current
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    _panel.update { current -> if (current?.ceiling == ceiling) current.copy(graphFailed = true) else current }
+                    return@launch
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                _panel.update { current ->
-                    if (current?.ceiling == ceiling && current.entries == currentEntries) current.copy(graphFailed = true) else current
-                }
-            }
+            } while (graphStale && _panel.value?.relationships == true)
         }
     }
 
