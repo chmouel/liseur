@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "cecc8ae7eedf3a30e942912df1de91ab",
+    "identityHash": "17339f22de1ea61ae9b4d7bba2dea72a",
     "entities": [
       {
         "tableName": "chapter_recap",
@@ -292,7 +292,7 @@
       },
       {
         "tableName": "codex_passage",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `ref` TEXT NOT NULL, `unit` INTEGER NOT NULL, `lo` INTEGER NOT NULL, `resource` INTEGER NOT NULL, `text` TEXT NOT NULL, `folded` TEXT NOT NULL, `locator` TEXT NOT NULL, `end` INTEGER, PRIMARY KEY(`book_url`, `ref`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`book_url` TEXT NOT NULL, `ref` TEXT NOT NULL, `unit` INTEGER NOT NULL, `lo` INTEGER NOT NULL, `resource` INTEGER NOT NULL, `text` TEXT NOT NULL, `folded` TEXT NOT NULL, `own_end` INTEGER NOT NULL, `locator` TEXT NOT NULL, `end` INTEGER, PRIMARY KEY(`book_url`, `ref`))",
         "fields": [
           {
             "fieldPath": "bookUrl",
@@ -337,6 +337,12 @@
             "notNull": true
           },
           {
+            "fieldPath": "ownEnd",
+            "columnName": "own_end",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
             "fieldPath": "locator",
             "columnName": "locator",
             "affinity": "TEXT",
@@ -371,7 +377,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cecc8ae7eedf3a30e942912df1de91ab')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '17339f22de1ea61ae9b4d7bba2dea72a')"
     ]
   }
 }

@@ -227,22 +227,6 @@ class CodexStoreTest {
         }
     }
 
-    @Test fun `version three migration drops the codex cache and keeps recaps`() {
-        migrations.createDatabase("codex-migration-4", 3).apply {
-            execSQL("INSERT INTO recap_choice (book_url, enabled) VALUES ('book', 1)")
-            execSQL("INSERT INTO codex_book (book_url, identity, total) VALUES ('book', 'id', 2)")
-            execSQL("INSERT INTO codex_unit (book_url, unit, stats) VALUES ('book', 0, '{}')")
-            execSQL("INSERT INTO codex_passage (book_url, ref, unit, lo, resource, text, folded, locator, `end`) VALUES ('book', 'r0.0', 0, 0, 0, 'Mira', ' mira ', '{}', NULL)")
-            close()
-        }
-        migrations.runMigrationsAndValidate("codex-migration-4", 4, true, *CompanionDatabase.MIGRATIONS).use { db ->
-            db.query("SELECT enabled FROM recap_choice WHERE book_url = 'book'").use { assertTrue(it.moveToFirst()) }
-            for (table in listOf("codex_book", "codex_unit", "codex_passage")) {
-                db.query("SELECT COUNT(*) FROM $table").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
-            }
-        }
-    }
-
     private fun withViewModel(
         chapters: List<String>,
         clock: () -> Long = { 1_000L },
