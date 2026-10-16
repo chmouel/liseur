@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
@@ -52,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.BusyBar
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
@@ -253,6 +255,11 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
     fun selected(): Int? = selectedName?.let { name -> graph.nodes.indexOfFirst { it.name == name }.takeIf { it >= 0 } }
     val color = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface
+    // E-paper has few greys and rounds a faint line to white: lines are a
+    // mid grey, a chosen name's links full ink and the rest dashed, and
+    // labels are cut out of the lines crossing them.
+    val eInk = LocalEInk.current
+    val paper = MaterialTheme.colorScheme.surface
     val paint = remember(textColor) { Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = textColor.toArgb(); textAlign = Paint.Align.CENTER } }
     val density = LocalDensity.current
     fun labels(size: Size): Map<Int, Rect> = with(density) {
@@ -286,13 +293,31 @@ private fun CodexMap(graph: CodexGraph, onPair: (String, String?) -> Unit) {
         val focus = selected()
         graph.edges.forEach {
             val near = focus == null || it.a == focus || it.b == focus
-            drawLine(color.copy(alpha = if (near) 0.3f else 0.1f), point(it.a), point(it.b), (1f + 3f * it.weight / graph.maxWeight).dp.toPx())
+            val alpha = when {
+                !eInk -> if (near) 0.3f else 0.1f
+                focus == null -> 0.5f
+                near -> 1f
+                else -> 0.3f
+            }
+            val dash = if (eInk && !near) PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx())) else null
+            drawLine(color.copy(alpha = alpha), point(it.a), point(it.b), (1f + 3f * it.weight / graph.maxWeight).dp.toPx(), pathEffect = dash)
         }
         val placed = labels(size)
         graph.nodes.forEachIndexed { i, _ -> drawCircle(color, if (focus == i) 9.dp.toPx() else 5.dp.toPx(), point(i)) }
         drawIntoCanvas { canvas ->
             placed.forEach { (i, box) ->
-                canvas.nativeCanvas.drawText(graph.nodes[i].name.take(22), box.center.x, box.top - paint.fontMetrics.ascent, paint)
+                val name = graph.nodes[i].name.take(22)
+                val baseline = box.top - paint.fontMetrics.ascent
+                if (eInk) {
+                    val fill = paint.color
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 4.dp.toPx()
+                    paint.color = paper.toArgb()
+                    canvas.nativeCanvas.drawText(name, box.center.x, baseline, paint)
+                    paint.style = Paint.Style.FILL
+                    paint.color = fill
+                }
+                canvas.nativeCanvas.drawText(name, box.center.x, baseline, paint)
             }
         }
     }

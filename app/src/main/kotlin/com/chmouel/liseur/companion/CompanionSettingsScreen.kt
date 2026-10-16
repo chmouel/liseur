@@ -41,8 +41,8 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
+import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
-import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.launch
@@ -146,19 +146,24 @@ internal fun CompanionSettingsScreen(
                     )
                 }
                 selected?.SettingsRows(onManageServices = { managing = true })
-                SettingsGroup(title = stringResource(R.string.companion_settings_recaps_group)) {
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    Text(
+                        text = stringResource(R.string.companion_settings_recaps_group),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
+                    )
                     SwitchRow(
                         title = stringResource(R.string.companion_settings_recaps),
                         subtitle = stringResource(R.string.companion_settings_recaps_summary),
                         checked = recaps,
                         onCheckedChange = { on -> scope.launch { server.setRecaps(on, store) } },
                     )
-                }
-                SettingsExpandableGroup(
-                    title = stringResource(R.string.settings_advanced),
-                    expanded = advancedOpen,
-                    onExpandedChange = { advancedOpen = it },
-                ) {
+                    RowDivider()
                     SwitchRow(
                         title = stringResource(R.string.codex_settings_enabled),
                         subtitle = stringResource(R.string.codex_settings_summary),
