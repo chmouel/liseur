@@ -46,8 +46,9 @@ import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
@@ -3651,6 +3652,7 @@ fun ReaderScreen(
                             { if (codexPanel != null) companion?.codex?.reveal() else companion?.reveal?.invoke() }
                         } else null,
                         showLabel = if (codexPanel != null) R.string.codex_title else R.string.companion_peek_show,
+                        showIcon = if (codexPanel != null) Icons.Outlined.Hub else Icons.Outlined.PersonSearch,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -4077,7 +4079,7 @@ fun ReaderScreen(
                                     if (codexEnabled) {
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.codex_title)) },
-                                            leadingIcon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null) },
+                                            leadingIcon = { Icon(Icons.Outlined.Hub, contentDescription = null) },
                                             onClick = {
                                                 moreOpen = false
                                                 val lookups = companion

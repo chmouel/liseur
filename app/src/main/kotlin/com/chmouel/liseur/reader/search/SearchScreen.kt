@@ -22,7 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -213,7 +213,7 @@ private fun CodexPill(theme: ReaderTheme, onClick: () -> Unit) {
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             Icon(
-                imageVector = Icons.Outlined.PersonSearch,
+                imageVector = Icons.Outlined.Hub,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
             )

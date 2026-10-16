@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -179,6 +180,7 @@ internal fun CompanionPeekBar(
     onShow: (() -> Unit)?,
     modifier: Modifier = Modifier,
     showLabel: Int = R.string.companion_peek_show,
+    showIcon: ImageVector = Icons.Outlined.PersonSearch,
 ) {
     ChromePill(theme = theme, modifier = modifier) {
         Row(
@@ -195,7 +197,7 @@ internal fun CompanionPeekBar(
                 )
             }
             if (onShow != null) TextButton(onClick = onShow, enabled = !returning) {
-                Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = theme.background)
+                Icon(showIcon, contentDescription = null, tint = theme.background)
                 Text(
                     stringResource(showLabel),
                     color = theme.background,
