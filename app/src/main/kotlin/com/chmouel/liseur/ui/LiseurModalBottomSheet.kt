@@ -1,5 +1,12 @@
 package com.chmouel.liseur.ui
 
+import android.os.Build
+import android.view.KeyEvent
+import android.view.View
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
+import androidx.activity.compose.BackHandler
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,9 +27,13 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -31,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import androidx.core.view.doOnAttach
 import com.chmouel.liseur.ui.theme.SystemBarIcons
 import com.chmouel.liseur.ui.theme.isDarkSurface
 
@@ -50,6 +62,11 @@ import com.chmouel.liseur.ui.theme.isDarkSurface
  *
  * A sheet opened from another sheet passes a transparent [scrimColor], as
  * the one below already dims the page. E-paper has no scrim to pass.
+ *
+ * [onBack], when set, takes Back instead of dismissing: a sheet with a
+ * page inside it steps back to the previous page. It is a parameter
+ * rather than a `BackHandler` in [content] because the e-paper popup is a
+ * window of its own that takes Back before any handler inside it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +77,7 @@ fun LiseurModalBottomSheet(
     containerColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     scrimColor: Color = BottomSheetDefaults.ScrimColor,
+    onBack: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val eInk = LocalEInk.current
@@ -83,6 +101,8 @@ fun LiseurModalBottomSheet(
                 // a black clock on a black status bar (#225). Said here,
                 // inside the sheet's own window, it moves with the paper.
                 SystemBarIcons(dark = isDarkSurface(containerColor))
+                // Inside the sheet: it is a window of its own, so Back reaches it first.
+                BackHandler(enabled = onBack != null) { onBack?.invoke() }
                 content()
             },
         )
@@ -105,11 +125,19 @@ fun LiseurModalBottomSheet(
     // A popup's alignment is relative to the layout it is called from,
     // not the window. Called from inside scrolling content, the bottom of
     // that content is usually below the screen, and the sheet with it.
+    //
+    // The popup would answer Back with the same dismissal as an outside
+    // click, before any BackHandler inside it hears of it, so Back is taken
+    // on the popup's own window instead. Before Android 9 there is no hook
+    // for a key nothing handled, and Back keeps closing the whole sheet.
+    val back by rememberUpdatedState(onBack ?: onDismissRequest)
+    val ownBack = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
     Popup(
         popupPositionProvider = WindowBottomPosition,
         onDismissRequest = onDismissRequest,
-        properties = PopupProperties(focusable = true, clippingEnabled = false),
+        properties = PopupProperties(focusable = true, dismissOnBackPress = !ownBack, clippingEnabled = false),
     ) {
+        if (ownBack) PopupBack { back() }
         Surface(
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             color = containerColor,
@@ -133,6 +161,48 @@ fun LiseurModalBottomSheet(
                 content()
             }
         }
+    }
+}
+
+/**
+ * Back on the popup's window: through its back callbacks where predictive
+ * back is on (Android 13 and later, as the manifest opts in), and as a key
+ * no view handled otherwise. Only one of the two ever sees a given press.
+ */
+@RequiresApi(Build.VERSION_CODES.P)
+@Composable
+private fun PopupBack(onBack: () -> Unit) {
+    val view = LocalView.current
+    val current by rememberUpdatedState(onBack)
+    DisposableEffect(view) {
+        val keys = View.OnUnhandledKeyEventListener { _, event ->
+            if (event.keyCode != KeyEvent.KEYCODE_BACK && event.keyCode != KeyEvent.KEYCODE_ESCAPE) {
+                return@OnUnhandledKeyEventListener false
+            }
+            if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) current()
+            true
+        }
+        view.addOnUnhandledKeyEventListener(keys)
+        var unregister: (() -> Unit)? = null
+        var disposed = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            view.doOnAttach { if (!disposed) unregister = PopupBackApi33.register(it) { current() } }
+        }
+        onDispose {
+            disposed = true
+            view.removeOnUnhandledKeyEventListener(keys)
+            unregister?.invoke()
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private object PopupBackApi33 {
+    fun register(view: View, onBack: () -> Unit): (() -> Unit)? {
+        val dispatcher = view.findOnBackInvokedDispatcher() ?: return null
+        val callback = OnBackInvokedCallback { onBack() }
+        dispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback)
+        return { dispatcher.unregisterOnBackInvokedCallback(callback) }
     }
 }
 

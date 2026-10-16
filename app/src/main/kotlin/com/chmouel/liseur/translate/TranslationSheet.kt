@@ -3,7 +3,6 @@ package com.chmouel.liseur.translate
 import android.content.ClipData
 import android.os.Build
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -187,8 +186,8 @@ internal fun TranslationSheet(
     LiseurModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onBack = if (picking != null) ({ picking = null }) else null,
     ) {
-        BackHandler(enabled = picking != null) { picking = null }
         Column(
             Modifier
                 .align(Alignment.CenterHorizontally)

@@ -1,7 +1,6 @@
 package com.chmouel.liseur.companion
 
 import android.graphics.Paint
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -72,9 +71,8 @@ internal fun CodexSheet(
     LiseurModalBottomSheet(
         onDismissRequest = controller::close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onBack = if (detail != null) controller::back else null,
     ) {
-        // Inside the sheet: it is a window of its own, so Back reaches it first.
-        BackHandler(enabled = detail != null, onBack = controller::back)
         Column(
             Modifier
                 .align(Alignment.CenterHorizontally)
