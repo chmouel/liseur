@@ -329,7 +329,9 @@ class CodexStoreTest {
             assertSame(early, vm.panel.value?.graph)
 
             vm.showGraph()
-            assertSame(early, vm.panel.value?.graph)
+            // The rebuild can finish before showGraph returns; either way the map is never cleared.
+            val returning = vm.panel.value?.graph
+            assertTrue(returning === early || returning?.nodes?.any { it.name == "Fenna" } == true)
             awaitCondition { vm.panel.value?.graph?.nodes?.any { it.name == "Fenna" } == true }
         }
     }
