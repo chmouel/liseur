@@ -195,6 +195,17 @@ class CodexIndexTest {
     }
 
     @Test
+    fun `a cut passage is credited only with names starting in its own text`() {
+        val parts = listOf("Mira waited by the door. Elder", "Chen came. Tobin smiled.").mapIndexed { part, piece ->
+            passage(0, piece).copy(ref = PassageText.ref(0, 0, part))
+        }
+        val runs = CodexIndex.withSplitContinuity(parts)
+        assertEquals(listOf(true, false), runs.map { it.mentions("Elder Chen") })
+        assertEquals(listOf(false, true), runs.map { it.mentions("Tobin") })
+        assertEquals(listOf(false, true), runs.map { it.mentions("Chen") })
+    }
+
+    @Test
     fun `shared units say where a bond can be read`() {
         assertEquals(listOf(0, 1, 2), sharedUnits("Mira", "Tobin", passages, AskingScope(4, 6)))
         assertEquals(emptyList<Int>(), sharedUnits("Mira", "Wren", passages, AskingScope(4, 6)))

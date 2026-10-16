@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -43,8 +45,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Locator
 import kotlin.math.cos
 import kotlin.math.sin
@@ -61,12 +70,21 @@ internal fun CodexSheet(
     var tab by rememberSaveable { mutableStateOf(0) }
     var search by rememberSaveable(panel.query) { mutableStateOf(panel.query) }
     val detail = panel.detail
-    BackHandler(enabled = detail != null, onBack = controller::back)
     LiseurModalBottomSheet(
         onDismissRequest = controller::close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(Modifier.fillMaxWidth().fillMaxHeight(0.9f).padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Inside the sheet: it is a window of its own, so Back reaches it first.
+        BackHandler(enabled = detail != null, onBack = controller::back)
+        Column(
+            Modifier
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = contentWidthCap(windowWidth()))
+                .fillMaxWidth()
+                .fillMaxHeight(0.9f)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.codex_title), style = MaterialTheme.typography.headlineMedium)
                 TextButton(onClick = controller::close) { Text(stringResource(R.string.close)) }
@@ -88,7 +106,17 @@ internal fun CodexSheet(
                                 val chapter = panel.titles.getOrNull(passage.range.hi)
                                     ?: stringResource(R.string.codex_chapter, passage.range.hi + 1)
                                 Text(chapter, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                Text(passage.text, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    highlightedExcerpt(
+                                        passage.text,
+                                        listOfNotNull(detail.name, detail.other),
+                                        SpanStyle(
+                                            background = MaterialTheme.colorScheme.secondaryContainer,
+                                            fontWeight = FontWeight.SemiBold,
+                                        ),
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
                             }
                             HorizontalDivider()
                         }
@@ -127,7 +155,10 @@ internal fun CodexSheet(
                     } else {
                         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             val graph = panel.graph
-                            if (graph == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                            if (panel.graphFailed) item {
+                                Text(stringResource(R.string.codex_failed))
+                                TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.codex_retry)) }
+                            } else if (graph == null) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                             else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
                             else {
                                 item { Text(stringResource(R.string.codex_graph_hint), style = MaterialTheme.typography.bodySmall) }
@@ -147,6 +178,31 @@ internal fun CodexSheet(
                 }
             }
         }
+    }
+}
+
+private fun highlightedExcerpt(text: String, terms: List<String>, style: SpanStyle): AnnotatedString {
+    val matches = terms.flatMap { term ->
+        if (term.isEmpty()) return@flatMap emptyList()
+        buildList {
+            var start = 0
+            while (start < text.length) {
+                val match = text.indexOf(term, startIndex = start, ignoreCase = true)
+                if (match < 0) break
+                add(match until match + term.length)
+                start = match + term.length
+            }
+        }
+    }.sortedBy { it.first }
+    return buildAnnotatedString {
+        var cursor = 0
+        for (match in matches) {
+            if (match.first < cursor) continue
+            append(text.substring(cursor, match.first))
+            withStyle(style) { append(text.substring(match.first, match.last + 1)) }
+            cursor = match.last + 1
+        }
+        append(text.substring(cursor))
     }
 }
 

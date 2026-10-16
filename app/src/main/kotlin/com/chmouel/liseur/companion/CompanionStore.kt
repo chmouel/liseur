@@ -198,7 +198,7 @@ data class RecapLength(
 @Database(
     entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class,
         CodexBookRow::class, CodexUnitRow::class, CodexPassageRow::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class CompanionDatabase : RoomDatabase() {
@@ -227,7 +227,18 @@ abstract class CompanionDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** Codex passages gain where their own text ends; the derived cache is dropped and rescanned. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `codex_passage`")
+                db.execSQL("DELETE FROM `codex_unit`")
+                db.execSQL("DELETE FROM `codex_book`")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `codex_passage` (`book_url` TEXT NOT NULL, `ref` TEXT NOT NULL, `unit` INTEGER NOT NULL, `lo` INTEGER NOT NULL, `resource` INTEGER NOT NULL, `text` TEXT NOT NULL, `folded` TEXT NOT NULL, `own_end` INTEGER NOT NULL, `locator` TEXT NOT NULL, `end` INTEGER, PRIMARY KEY(`book_url`, `ref`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_passage_book_url_unit` ON `codex_passage` (`book_url`, `unit`)")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }
 

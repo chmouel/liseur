@@ -102,8 +102,10 @@ object PassageText {
      * like do not put spaces between words, so a [needle] in one of them
      * is matched anywhere.
      */
-    fun hasWords(padded: String, needle: String): Boolean =
-        if (needle.any(::unspaced)) padded.contains(needle) else padded.contains(" $needle ")
+    fun hasWords(padded: String, needle: String): Boolean = padded.contains(pattern(needle))
+
+    /** What [hasWords] looks for in padded folded text: the folded [needle] between spaces, or bare in a script without them. */
+    fun pattern(needle: String): String = if (needle.any(::unspaced)) needle else " $needle "
 
     private fun unspaced(c: Char): Boolean = when (Character.UnicodeScript.of(c.code)) {
         Character.UnicodeScript.HAN,

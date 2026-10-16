@@ -35,6 +35,8 @@ data class CodexPassageRow(
     val resource: Int,
     val text: String,
     val folded: String,
+    /** The last 1-based position in [folded] where a match may start; after it lies only the next part's run-on. */
+    @ColumnInfo(name = "own_end") val ownEnd: Int,
     val locator: String,
     val end: Int?,
 ) {
@@ -64,16 +66,16 @@ interface CodexDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putPassages(passages: List<CodexPassageRow>)
 
-    @Query("SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND instr(folded, :needle) > 0 ORDER BY unit, rowid LIMIT 50 OFFSET :offset")
+    @Query("SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND instr(folded, :needle) BETWEEN 1 AND own_end ORDER BY unit, rowid LIMIT 50 OFFSET :offset")
     suspend fun mentions(bookUrl: String, ceiling: Int, needle: String, offset: Int): List<CodexPassageRow>
 
-    @Query("SELECT DISTINCT unit FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) > 0 ORDER BY unit")
+    @Query("SELECT DISTINCT unit FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) BETWEEN 1 AND own_end ORDER BY unit")
     suspend fun mentionUnits(bookUrl: String, ceiling: Int, needle: String): List<Int>
 
     @Query(
-        "SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) > 0 " +
-            "AND unit IN (SELECT unit FROM codex_passage WHERE book_url = :bookUrl AND lo = unit AND instr(folded, :other) > 0) " +
-            "AND rowid = (SELECT p2.rowid FROM codex_passage p2 WHERE p2.book_url = :bookUrl AND p2.unit = codex_passage.unit AND p2.lo = p2.unit AND instr(p2.folded, :needle) > 0 ORDER BY (instr(p2.folded, :other) = 0), p2.rowid LIMIT 1) " +
+        "SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit < :ceiling AND lo = unit AND instr(folded, :needle) BETWEEN 1 AND own_end " +
+            "AND unit IN (SELECT unit FROM codex_passage WHERE book_url = :bookUrl AND lo = unit AND instr(folded, :other) BETWEEN 1 AND own_end) " +
+            "AND rowid = (SELECT p2.rowid FROM codex_passage p2 WHERE p2.book_url = :bookUrl AND p2.unit = codex_passage.unit AND p2.lo = p2.unit AND instr(p2.folded, :needle) BETWEEN 1 AND p2.own_end ORDER BY (instr(p2.folded, :other) NOT BETWEEN 1 AND p2.own_end), p2.rowid LIMIT 1) " +
             "ORDER BY unit, rowid LIMIT 50 OFFSET :offset",
     )
     suspend fun sharedMentions(bookUrl: String, ceiling: Int, needle: String, other: String, offset: Int): List<CodexPassageRow>
@@ -105,8 +107,9 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
         check(dao.book(book.bookUrl) == book && book.bookUrl in present(listOf(book.bookUrl))) { "Book changed or removed" }
         require(unit in 0 until book.total && passages.all { it.range.hi == unit })
         if (unit in dao.completed(book.bookUrl)) return@withTransaction
-        dao.putPassages(CodexIndex.withSplitContinuity(passages).map {
-            CodexPassageRow(book.bookUrl, it.ref, unit, it.range.lo, it.resource, it.text, it.folded, it.place.toJSON().toString(), it.end)
+        dao.putPassages(CodexIndex.withSplitContinuity(passages).map { run ->
+            val it = run.passage
+            CodexPassageRow(book.bookUrl, it.ref, unit, it.range.lo, it.resource, it.text, run.folded, run.ownEnd, it.place.toJSON().toString(), it.end)
         })
         dao.putUnit(CodexUnitRow(book.bookUrl, unit, encode(stats)))
     }
@@ -154,7 +157,7 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
 
     companion object {
         const val FORMAT = 1
-        private fun needle(name: String) = " ${PassageText.fold(name)} "
+        private fun needle(name: String) = PassageText.pattern(PassageText.fold(name))
         internal fun encode(stats: Map<String, CodexStats>): String = JSONObject().apply {
             stats.forEach { (name, value) -> put(name, JSONArray().put(value.occurrences).put(value.speechHits)) }
         }.toString()

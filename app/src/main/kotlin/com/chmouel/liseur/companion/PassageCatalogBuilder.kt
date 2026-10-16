@@ -27,7 +27,7 @@ class PassageCatalogBuilder<P>(
     private var askedResource = -1
     private var askedOutline: ResourceOutline? = null
 
-    /** The reading-order index of the last element added, or -1 before any. */
+    /** The reading-order index of the last element added, or `firstResource - 1` before any. */
     val current: Int get() = resource
 
     /** The passages [element] makes, possibly none. */

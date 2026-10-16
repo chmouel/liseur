@@ -54,6 +54,8 @@ data class CodexPanel(
     val graph: CodexGraph? = null,
     val detail: CodexDetail? = null,
     val graphRequested: Boolean = false,
+    /** The relationships query failed; the scan itself is unaffected. */
+    val graphFailed: Boolean = false,
 )
 
 /** The local codex belongs to the open reader, independently of any AI provider. */
@@ -105,24 +107,37 @@ class CodexViewModel(
 
     fun open(place: Locator, translated: Boolean, selection: String? = null) {
         if (!enabled.value) return
+        val opened = catalog ?: return
+        start(null, List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection) { opened.scopeOf(place, translated)?.lo }
+    }
+
+    fun openAt(ceiling: Int, titles: List<String?>, selection: String) {
+        if (!enabled.value) return
+        start(ceiling, titles, selection, place = null)
+    }
+
+    /** Shows a new panel; [place] resolves the ceiling when it is not already known. */
+    private fun start(ceiling: Int?, titles: List<String?>, selection: String?, place: (suspend () -> Int?)?) {
         opening?.cancel()
         detailJob?.cancel()
         graphJob?.cancel()
-        val opened = catalog ?: return
         paused = false
         val name = selection?.let(PassageText::name)
         val query = name ?: selection?.trim().orEmpty()
         _panel.value = CodexPanel(
-            ceiling = null,
-            titles = List(opened.map.chapterCount) { opened.map.titleOf(it) },
+            ceiling = ceiling,
+            titles = titles,
+            placing = place != null,
             query = query,
             detail = name?.let { CodexDetail(it) },
         )
         opening = viewModelScope.launch {
             try {
-                val ceiling = opened.scopeOf(place, translated)?.lo
-                _panel.update { it?.copy(ceiling = ceiling, placing = false) }
-                if (ceiling == null) return@launch
+                if (place != null) {
+                    val placed = place()
+                    _panel.update { it?.copy(ceiling = placed, placing = false) }
+                    if (placed == null) return@launch
+                }
                 if (identity != null) {
                     refresh()
                     if (_panel.value?.detail?.passages?.isEmpty() == true) loadMore()
@@ -133,30 +148,6 @@ class CodexViewModel(
             } catch (_: Exception) {
                 _progress.update { it.copy(stage = CodexStage.FAILED) }
             }
-        }
-    }
-
-    fun openAt(ceiling: Int, titles: List<String?>, selection: String) {
-        if (!enabled.value) return
-        opening?.cancel()
-        detailJob?.cancel()
-        graphJob?.cancel()
-        paused = false
-        val name = PassageText.name(selection)
-        val query = name ?: selection.trim()
-        _panel.value = CodexPanel(
-            ceiling = ceiling,
-            titles = titles,
-            placing = false,
-            query = query,
-            detail = name?.let { CodexDetail(it) },
-        )
-        viewModelScope.launch {
-            if (identity != null) {
-                refresh()
-                if (_panel.value?.detail?.passages?.isEmpty() == true) loadMore()
-            }
-            if (!paused) resume()
         }
     }
 
@@ -192,10 +183,15 @@ class CodexViewModel(
                             val stats = withContext(Dispatchers.Default) { CodexExtractor.extract(unitText(passages)) }
                             store.save(book, unit, stats, passages)
                             _progress.update { it.copy(completed = it.completed + 1) }
-                            val now = clock()
-                            if (now - lastRefresh >= 250) {
-                                lastRefresh = now
-                                refresh()
+                            // Chapters at or past the ceiling cannot change what the panel shows.
+                            val ceiling = _panel.value?.ceiling
+                            if (ceiling != null && unit < ceiling) {
+                                val now = clock()
+                                if (now - lastRefresh >= 250 || unit == ceiling - 1) {
+                                    lastRefresh = now
+                                    // The scan walks on IO; job bookkeeping stays on the main thread.
+                                    withContext(Dispatchers.Main.immediate) { refresh() }
+                                }
                             }
                         }
                     }
@@ -226,9 +222,14 @@ class CodexViewModel(
         val before = _panel.value ?: return
         val ceiling = before.ceiling ?: return
         val entries = store.entries(book, ceiling)
-        if (_panel.value?.ceiling != ceiling) return
-        _panel.update { it?.copy(entries = entries, graph = null) }
-        if (_panel.value?.graphRequested == true) showGraph(entries)
+        val current = _panel.value ?: return
+        if (current.ceiling != ceiling) return
+        if (entries != current.entries) {
+            _panel.update { it?.copy(entries = entries, graph = null, graphFailed = false) }
+            if (current.graphRequested) showGraph(entries)
+        } else if (current.graphRequested && current.graph == null && !current.graphFailed && graphJob?.isActive != true) {
+            showGraph(entries)
+        }
         topUpDetail()
     }
 
@@ -244,7 +245,7 @@ class CodexViewModel(
     fun showGraph() = showGraph(_panel.value?.entries)
 
     private fun showGraph(entries: List<CodexEntry>?) {
-        _panel.update { it?.copy(graphRequested = true) }
+        _panel.update { it?.copy(graphRequested = true, graphFailed = false) }
         val panel = _panel.value ?: return
         val ceiling = panel.ceiling ?: return
         val currentEntries = entries ?: panel.entries
@@ -259,7 +260,9 @@ class CodexViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                _progress.update { it.copy(stage = CodexStage.FAILED) }
+                _panel.update { current ->
+                    if (current?.ceiling == ceiling && current.entries == currentEntries) current.copy(graphFailed = true) else current
+                }
             }
         }
     }

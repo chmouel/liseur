@@ -121,12 +121,12 @@ class CodexIndex private constructor(
             return if (prune) merged.filterValues { it.occurrences >= MIN_OCCURRENCES || it.lastUnit >= unit - PRUNE_WINDOW } else merged
         }
 
-        internal fun <P> withSplitContinuity(passages: List<Passage<P>>): List<Passage<P>> = passages.mapIndexed { i, passage ->
+        internal fun <P> withSplitContinuity(passages: List<Passage<P>>): List<Continued<P>> = passages.mapIndexed { i, passage ->
             val next = passages.getOrNull(i + 1)
             val tail = if (next != null && sameElement(passage, next)) {
                 PassageText.fold(next.text).split(' ').filter { it.isNotEmpty() }.take(PassageText.MAX_NAME_WORDS - 1).joinToString(" ")
             } else ""
-            if (tail.isEmpty()) passage else passage.copy(folded = "${passage.folded}$tail ")
+            Continued(passage, if (tail.isEmpty()) passage.folded else "${passage.folded}$tail ")
         }
 
         internal fun <P> sameElement(a: Passage<P>, b: Passage<P>): Boolean =
@@ -158,8 +158,8 @@ fun <P> CodexIndex.graph(
     if (top.size < 2) return CodexGraph(emptyList(), emptyList(), 1, scope.lo)
     val eligible = CodexIndex.withSplitContinuity(passages.filter { Eligibility.allows(scope, it) && it.range.lo == it.range.hi })
     val unitSets = top.map { entry ->
-        eligible.filter { PassageText.mentions(it, entry.name) }
-            .mapTo(mutableSetOf()) { it.range.lo }
+        eligible.filter { it.mentions(entry.name) }
+            .mapTo(mutableSetOf()) { it.passage.range.lo }
     }
     val nodes = top.mapIndexed { i, entry -> CodexNode(entry.name, entry.occurrences, unitSets[i]) }
     return codexGraph(nodes, scope.lo, minEdgeWeight, maxEdges)
@@ -179,8 +179,24 @@ internal fun codexGraph(nodes: List<CodexNode>, ceiling: Int, minEdgeWeight: Int
 fun <P> sharedUnits(nameA: String, nameB: String, passages: List<Passage<P>>, scope: AskingScope): List<Int> {
     val eligible = CodexIndex.withSplitContinuity(passages.filter { Eligibility.allows(scope, it) && it.range.lo == it.range.hi })
     val unitsOf: (String) -> Set<Int> = { name ->
-        eligible.filter { PassageText.mentions(it, name) }
-            .mapTo(mutableSetOf()) { it.range.lo }
+        eligible.filter { it.mentions(name) }
+            .mapTo(mutableSetOf()) { it.passage.range.lo }
     }
     return (unitsOf(nameA) intersect unitsOf(nameB)).sorted()
+}
+
+/**
+ * A passage whose [folded] text runs on into the first words of the next
+ * part of the same element, so a name cut in two still matches. Only a
+ * match starting in the passage's own text counts, or a name wholly in the
+ * next part would be credited to an excerpt that does not show it.
+ */
+internal class Continued<P>(val passage: Passage<P>, val folded: String) {
+    /** The last place, counted as SQLite's 1-based `instr` counts code points, where a match may start. */
+    val ownEnd: Int get() = passage.folded.codePointCount(0, passage.folded.length) - 1
+
+    fun mentions(name: String): Boolean {
+        val needle = PassageText.fold(name).takeIf { it.isNotEmpty() } ?: return false
+        return folded.indexOf(PassageText.pattern(needle)) in 0 until passage.folded.length - 1
+    }
 }

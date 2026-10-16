@@ -91,6 +91,19 @@ class CodexStoreTest {
         assertEquals(listOf(CodexEdge(0, 1, 2)), store.graph(book, 2, store.entries(book, 2)).edges)
     }
 
+    @Test fun `a cut passage shows only names starting in its own text, and unspaced scripts match inside words`() = runTest {
+        store.prepare(book)
+        val parts = listOf("Mira waited by the door. Elder", "Chen came. Tobin smiled.")
+            .mapIndexed { part, text -> passage(0, text).copy(ref = PassageText.ref(0, 0, part)) }
+        store.save(book, 0, emptyMap(), parts)
+        store.save(book, 1, emptyMap(), listOf(passage(1, "李雷去了市场。")))
+        assertEquals(listOf("r0.0.0"), store.mentions(book, 2, "Elder Chen", null, 0).map { it.ref })
+        assertEquals(listOf("r0.0.1"), store.mentions(book, 2, "Tobin", null, 0).map { it.ref })
+        assertEquals(listOf("r0.0.1"), store.mentions(book, 2, "Chen", null, 0).map { it.ref })
+        assertEquals(listOf("r0.0.1"), store.mentions(book, 2, "Tobin", "Chen", 0).map { it.ref })
+        assertEquals(listOf(1), store.mentions(book, 2, "李雷", null, 0).map { it.range.hi })
+    }
+
     @Test fun `future evidence cannot change entries graphs or excerpts at an earlier scope`() = runTest {
         store.prepare(book)
         val text = "At dawn, Mira waited. At noon, Tobin waited. ".repeat(5)
@@ -195,6 +208,22 @@ class CodexStoreTest {
         }
     }
 
+    @Test fun `version three migration drops the codex cache and keeps recaps`() {
+        migrations.createDatabase("codex-migration-4", 3).apply {
+            execSQL("INSERT INTO recap_choice (book_url, enabled) VALUES ('book', 1)")
+            execSQL("INSERT INTO codex_book (book_url, identity, total) VALUES ('book', 'id', 2)")
+            execSQL("INSERT INTO codex_unit (book_url, unit, stats) VALUES ('book', 0, '{}')")
+            execSQL("INSERT INTO codex_passage (book_url, ref, unit, lo, resource, text, folded, locator, `end`) VALUES ('book', 'r0.0', 0, 0, 0, 'Mira', ' mira ', '{}', NULL)")
+            close()
+        }
+        migrations.runMigrationsAndValidate("codex-migration-4", 4, true, *CompanionDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT enabled FROM recap_choice WHERE book_url = 'book'").use { assertTrue(it.moveToFirst()) }
+            for (table in listOf("codex_book", "codex_unit", "codex_passage")) {
+                db.query("SELECT COUNT(*) FROM $table").use { it.moveToFirst(); assertEquals(0, it.getInt(0)) }
+            }
+        }
+    }
+
     private fun withViewModel(
         chapters: List<String>,
         clock: () -> Long = { 1_000L },
@@ -251,6 +280,25 @@ class CodexStoreTest {
             awaitCondition { vm.progress.value.stage == CodexStage.COMPLETE && vm.panel.value?.detail?.passages?.size == 2 }
             assertEquals(listOf(0, 1), vm.panel.value?.detail?.passages?.map { it.range.hi })
             assertFalse(vm.panel.value?.detail?.loading == true)
+        }
+    }
+
+    @Test fun `chapters past the ceiling do not refresh and an unchanged refresh keeps the relationships`() {
+        val ticks = AtomicInteger()
+        val pairs = (0 until 6).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" }
+        withViewModel(listOf(pairs, pairs, "<p>At dusk, Fenna waited.</p>"), clock = { ticks.incrementAndGet(); 1_000L }) { vm, _ ->
+            vm.open(chapter("two"), translated = false)
+            awaitCondition { vm.progress.value.stage == CodexStage.COMPLETE && vm.panel.value?.entries?.isNotEmpty() == true }
+            // Only chapter one lies below the ceiling; chapters two and three cannot change the panel.
+            assertEquals(1, ticks.get())
+
+            vm.showGraph()
+            awaitCondition { vm.panel.value?.graph != null }
+            val graph = vm.panel.value?.graph
+            vm.resume()
+            repeat(10) { shadowOf(Looper.getMainLooper()).idle(); delay(20) }
+            assertSame(graph, vm.panel.value?.graph)
+            assertFalse(vm.panel.value?.graphFailed == true)
         }
     }
 
