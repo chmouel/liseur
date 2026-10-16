@@ -5,6 +5,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
@@ -98,102 +100,118 @@ internal fun CodexSheet(
                 Text(stringResource(R.string.codex_title), style = MaterialTheme.typography.headlineMedium)
                 TextButton(onClick = controller::close) { Text(stringResource(R.string.close)) }
             }
-            CodexScanProgress(progress, controller)
-            if (panel.placing) {
-                BusyBar()
-            } else if (panel.ceiling == null) {
-                Text(stringResource(R.string.codex_unplaced))
-            } else {
-                Text(stringResource(R.string.codex_scope, panel.ceiling + 1), style = MaterialTheme.typography.bodySmall)
-                if (detail != null) {
-                    TextButton(onClick = controller::back) { Text(stringResource(R.string.back)) }
-                    Text(detail.other?.let { stringResource(R.string.codex_pair, detail.name, it) } ?: detail.name,
-                        style = MaterialTheme.typography.titleLarge)
-                    LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(detail.passages, key = { it.ref }) { passage ->
-                            Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSource(passage) }.padding(vertical = 12.dp)) {
-                                val chapter = panel.titles.getOrNull(passage.range.hi)
-                                    ?: stringResource(R.string.codex_chapter, passage.range.hi + 1)
-                                Text(chapter, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                Text(
-                                    highlightedExcerpt(
-                                        passage.text,
-                                        listOfNotNull(detail.name, detail.other),
-                                        SpanStyle(
-                                            background = MaterialTheme.colorScheme.secondaryContainer,
-                                            fontWeight = FontWeight.SemiBold,
-                                        ),
+            if (panel.placing || panel.ceiling == null) {
+                CodexScanProgress(progress, controller)
+                if (panel.placing) BusyBar() else Text(stringResource(R.string.codex_unplaced))
+            } else if (detail != null) {
+                LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    codexHeader(progress, controller, panel.ceiling)
+                    item(key = "codex:back") { TextButton(onClick = controller::back) { Text(stringResource(R.string.back)) } }
+                    item(key = "codex:name") {
+                        Text(detail.other?.let { stringResource(R.string.codex_pair, detail.name, it) } ?: detail.name,
+                            style = MaterialTheme.typography.titleLarge)
+                    }
+                    items(detail.passages, key = { it.ref }) { passage ->
+                        Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSource(passage) }.padding(vertical = 12.dp)) {
+                            val chapter = panel.titles.getOrNull(passage.range.hi)
+                                ?: stringResource(R.string.codex_chapter, passage.range.hi + 1)
+                            Text(chapter, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                highlightedExcerpt(
+                                    passage.text,
+                                    listOfNotNull(detail.name, detail.other),
+                                    SpanStyle(
+                                        background = MaterialTheme.colorScheme.secondaryContainer,
+                                        fontWeight = FontWeight.SemiBold,
                                     ),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                            HorizontalDivider()
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
                         }
-                        if (detail.loading) item { BusyBar() }
-                        if (detail.failed) item {
-                            Text(stringResource(R.string.codex_failed))
-                            TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_retry)) }
-                        }
-                        if (!detail.loading && !detail.failed && detail.passages.isEmpty()) item { Text(stringResource(R.string.codex_no_passages)) }
-                        if (detail.more && !detail.loading) item {
-                            TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_more)) }
-                        }
+                        HorizontalDivider()
                     }
-                } else {
-                    PrimaryTabRow(selectedTabIndex = tab) {
-                        Tab(selected = tab == 0, onClick = controller::showNames, text = { Text(stringResource(R.string.codex_names)) })
-                        Tab(selected = tab == 1, onClick = controller::showGraph, text = { Text(stringResource(R.string.codex_relationships)) })
+                    if (detail.loading) item { BusyBar() }
+                    if (detail.failed) item {
+                        Text(stringResource(R.string.codex_failed))
+                        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_retry)) }
                     }
-                    if (tab == 0) {
+                    if (!detail.loading && !detail.failed && detail.passages.isEmpty()) item { Text(stringResource(R.string.codex_no_passages)) }
+                    if (detail.more && !detail.loading) item {
+                        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_more)) }
+                    }
+                }
+            } else if (tab == 0) {
+                val entries = remember(panel.entries, search) {
+                    val needle = PassageText.fold(search)
+                    panel.entries.filter { PassageText.fold(it.name).contains(needle) }
+                }
+                LazyColumn(Modifier.weight(1f), state = namesList) {
+                    codexHeader(progress, controller, panel.ceiling)
+                    codexTabs(tab, controller)
+                    item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
-                        val entries = remember(panel.entries, search) {
-                            val needle = PassageText.fold(search)
-                            panel.entries.filter { PassageText.fold(it.name).contains(needle) }
+                    }
+                    if (entries.isEmpty()) item {
+                        Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
+                        // Only a finished scan with no names at all points at the script;
+                        // a search matching nothing, or a scan just begun, does not.
+                        if (panel.entries.isEmpty() && progress.stage == CodexStage.COMPLETE) {
+                            Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
                         }
-                        LazyColumn(Modifier.weight(1f), state = namesList) {
-                            if (entries.isEmpty()) item {
-                                Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
-                                // Only a finished scan with no names at all points at the script;
-                                // a search matching nothing, or a scan just begun, does not.
-                                if (panel.entries.isEmpty() && progress.stage == CodexStage.COMPLETE) {
-                                    Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                            items(entries, key = { it.name }) { entry ->
-                                ListItem(
-                                    headlineContent = { Text(entry.name) },
-                                    supportingContent = { Text(stringResource(R.string.codex_entry, kindLabel(entry.kind), entry.occurrences)) },
-                                    modifier = Modifier.clickable(role = Role.Button) { controller.detail(entry.name) },
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            val graph = panel.graph
-                            if (panel.graphFailed) item {
-                                Text(stringResource(R.string.codex_failed))
-                                TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.codex_retry)) }
-                            } else if (graph == null) item { BusyBar() }
-                            else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
-                            else {
-                                item { Text(stringResource(R.string.codex_graph_hint), style = MaterialTheme.typography.bodySmall) }
-                                item { CodexMap(graph, controller::detail) }
-                                items(graph.edges) { edge ->
-                                    val a = graph.nodes[edge.a].name
-                                    val b = graph.nodes[edge.b].name
-                                    ListItem(
-                                        headlineContent = { Text(stringResource(R.string.codex_pair, a, b)) },
-                                        supportingContent = { Text(stringResource(R.string.codex_shared, edge.weight)) },
-                                        modifier = Modifier.clickable(role = Role.Button) { controller.detail(a, b) },
-                                    )
-                                }
-                            }
+                    }
+                    items(entries, key = { it.name }) { entry ->
+                        ListItem(
+                            headlineContent = { Text(entry.name) },
+                            supportingContent = { Text(stringResource(R.string.codex_entry, kindLabel(entry.kind), entry.occurrences)) },
+                            modifier = Modifier.clickable(role = Role.Button) { controller.detail(entry.name) },
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    codexHeader(progress, controller, panel.ceiling)
+                    codexTabs(tab, controller)
+                    val graph = panel.graph
+                    if (panel.graphFailed) item {
+                        Text(stringResource(R.string.codex_failed))
+                        TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.codex_retry)) }
+                    } else if (graph == null) item { BusyBar() }
+                    else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
+                    else {
+                        item { Text(stringResource(R.string.codex_graph_hint), style = MaterialTheme.typography.bodySmall) }
+                        item { CodexMap(graph, controller::detail) }
+                        items(graph.edges) { edge ->
+                            val a = graph.nodes[edge.a].name
+                            val b = graph.nodes[edge.b].name
+                            ListItem(
+                                headlineContent = { Text(stringResource(R.string.codex_pair, a, b)) },
+                                supportingContent = { Text(stringResource(R.string.codex_shared, edge.weight)) },
+                                modifier = Modifier.clickable(role = Role.Button) { controller.detail(a, b) },
+                            )
                         }
                     }
                 }
             }
         }
+    }
+}
+
+// The scan state, scope, tabs and search scroll with the results, so a
+// short window (a phone on its side, the keyboard up) still has room to
+// show them.
+private fun LazyListScope.codexHeader(progress: CodexProgress, controller: CodexViewModel, ceiling: Int) {
+    item(key = "codex:progress") { Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) } }
+    item(key = "codex:scope") {
+        Text(stringResource(R.string.codex_scope, ceiling + 1), Modifier.padding(bottom = 10.dp), style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+private fun LazyListScope.codexTabs(tab: Int, controller: CodexViewModel) = item(key = "codex:tabs") {
+    PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(bottom = 10.dp)) {
+        Tab(selected = tab == 0, onClick = controller::showNames, text = { Text(stringResource(R.string.codex_names)) })
+        Tab(selected = tab == 1, onClick = controller::showGraph, text = { Text(stringResource(R.string.codex_relationships)) })
     }
 }
 
