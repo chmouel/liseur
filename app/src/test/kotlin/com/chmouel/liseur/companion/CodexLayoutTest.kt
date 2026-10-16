@@ -54,4 +54,11 @@ class CodexLayoutTest {
         assertReadable(focused)
         assertTrue(hidden in focused)
     }
+
+    @Test fun `excerpt highlights follow passage lookup across apostrophes and accents`() {
+        val text = "Then O’Brien met Élisabeth and E\u0301lisabeth again."
+        val found = highlightRanges(text, listOf("O'Brien", "Élisabeth")).map { text.substring(it) }
+        assertEquals(listOf("O’Brien", "Élisabeth", "E\u0301lisabeth"), found)
+        assertTrue(highlightRanges(text, listOf("", "'")).isEmpty())
+    }
 }

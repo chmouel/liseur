@@ -59,6 +59,7 @@ import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Locator
+import java.text.Normalizer
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -146,7 +147,10 @@ internal fun CodexSheet(
                     if (tab == 0) {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
-                        val entries = remember(panel.entries, search) { panel.entries.filter { it.name.contains(search, ignoreCase = true) } }
+                        val entries = remember(panel.entries, search) {
+                            val needle = PassageText.fold(search)
+                            panel.entries.filter { PassageText.fold(it.name).contains(needle) }
+                        }
                         LazyColumn(Modifier.weight(1f), state = namesList) {
                             if (entries.isEmpty()) item {
                                 Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
@@ -193,19 +197,54 @@ internal fun CodexSheet(
     }
 }
 
-private fun highlightedExcerpt(text: String, terms: List<String>, style: SpanStyle): AnnotatedString {
-    val matches = terms.flatMap { term ->
-        if (term.isEmpty()) return@flatMap emptyList()
+/**
+ * Where [terms] occur in [text], compared the way passage lookup compares
+ * them ([PassageText.fold]), so O’Brien matches O'Brien and a decomposed
+ * accent matches a composed one. Ranges index the original [text].
+ */
+internal fun highlightRanges(text: String, terms: List<String>): List<IntRange> {
+    val folded = StringBuilder(text.length)
+    val starts = ArrayList<Int>(text.length)
+    val ends = ArrayList<Int>(text.length)
+    var space = true
+    var i = 0
+    while (i < text.length) {
+        val next = i + Character.charCount(text.codePointAt(i))
+        Normalizer.normalize(text.substring(i, next).lowercase(), Normalizer.Form.NFD).forEach { c ->
+            val keep = when {
+                Character.getType(c) == Character.NON_SPACING_MARK.toInt() -> null
+                c.isLetterOrDigit() -> c.also { space = false }
+                !space -> ' '.also { space = true }
+                else -> null
+            }
+            if (keep != null) {
+                folded.append(keep)
+                starts.add(i)
+                ends.add(next)
+            }
+        }
+        i = next
+    }
+    return terms.flatMap { term ->
+        val needle = PassageText.fold(term)
+        if (needle.isEmpty()) return@flatMap emptyList()
         buildList {
-            var start = 0
-            while (start < text.length) {
-                val match = text.indexOf(term, startIndex = start, ignoreCase = true)
+            var from = 0
+            while (true) {
+                val match = folded.indexOf(needle, from)
                 if (match < 0) break
-                add(match until match + term.length)
-                start = match + term.length
+                var end = ends[match + needle.length - 1]
+                // Combining accents after the last letter belong to it.
+                while (end < text.length && Character.getType(text[end]) == Character.NON_SPACING_MARK.toInt()) end++
+                add(starts[match] until end)
+                from = match + needle.length
             }
         }
     }.sortedBy { it.first }
+}
+
+private fun highlightedExcerpt(text: String, terms: List<String>, style: SpanStyle): AnnotatedString {
+    val matches = highlightRanges(text, terms)
     return buildAnnotatedString {
         var cursor = 0
         for (match in matches) {
