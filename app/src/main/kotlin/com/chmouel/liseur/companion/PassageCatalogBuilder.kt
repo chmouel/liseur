@@ -14,9 +14,11 @@ data class SourceElement<P>(val href: String, val selector: String?, val text: S
 class PassageCatalogBuilder<P>(
     private val map: ChapterMap,
     private val readingOrder: List<String>,
+    firstResource: Int = 0,
     private val html: suspend (resource: Int) -> String?,
 ) {
-    private var resource = -1
+    private var resource = firstResource - 1
+    private var entered = false
     private var ordinal = 0
     private var outline: ResourceOutline? = null
     private var anchors: Map<String, Int> = emptyMap()
@@ -30,7 +32,7 @@ class PassageCatalogBuilder<P>(
 
     /** The passages [element] makes, possibly none. */
     suspend fun add(element: SourceElement<P>): List<Passage<P>> {
-        if (resource < 0 || readingOrder.getOrNull(resource) != element.href) {
+        if (!entered || readingOrder.getOrNull(resource) != element.href) {
             val next = readingOrder.indices.firstOrNull { it > resource && readingOrder[it] == element.href }
                 ?: return emptyList()
             enter(next)
@@ -82,6 +84,7 @@ class PassageCatalogBuilder<P>(
     }
 
     private suspend fun enter(next: Int) {
+        entered = true
         resource = next
         ordinal = 0
         outline = html(next)?.let(::ResourceOutline)

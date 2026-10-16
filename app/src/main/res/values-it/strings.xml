@@ -1432,4 +1432,38 @@
     <string name="settings_backup_password_error">Password errata o dati cifrati danneggiati. Riprova.</string>
     <string name="settings_backup_error_credential">Una credenziale salvata di un account o di KOReader non è più leggibile su questo dispositivo. Accedi di nuovo, oppure esporta senza account e password.</string>
     <string name="settings_backup_error_export_password_lost">La password del backup è andata persa durante la scelta del file, quindi non è stato salvato nulla. Esporta di nuovo.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Codice</string>
+    <string name="codex_settings_available">Codice offline disponibile</string>
+    <string name="codex_settings_enabled">Codice sul dispositivo</string>
+    <string name="codex_settings_summary">Indicizza nomi e collegamenti offline aprendo il codice. Senza IA né chiave API.</string>
+    <string name="codex_preparing">Preparazione del libro…</string>
+    <string name="codex_scanning">Analisi del libro…</string>
+    <string name="codex_paused">Analisi in pausa</string>
+    <string name="codex_complete">Libro indicizzato</string>
+    <string name="codex_failed">Impossibile leggere il codice. I capitoli completati sono salvati.</string>
+    <string name="codex_progress">Capitoli analizzati: %1$d/%2$d</string>
+    <string name="codex_pause">Sospendi analisi</string>
+    <string name="codex_resume">Riprendi analisi</string>
+    <string name="codex_retry">Riprova</string>
+    <string name="codex_unplaced">Impossibile individuare il capitolo. Riapri il codice da una posizione nota del libro.</string>
+    <string name="codex_scope">Sono mostrati solo i capitoli precedenti al capitolo %1$d.</string>
+    <string name="codex_names">Nomi</string>
+    <string name="codex_relationships">Collegamenti</string>
+    <string name="codex_search">Cerca nomi</string>
+    <string name="codex_empty">Ancora nessun nome corrispondente nei capitoli precedenti.</string>
+    <string name="codex_scripts">Il rilevamento automatico usa le maiuscole. Le lingue che non le usano non sono ancora supportate.</string>
+    <string name="codex_entry">%1$s · Menzioni: %2$d</string>
+    <string name="codex_person">Persona</string>
+    <string name="codex_place">Luogo</string>
+    <string name="codex_faction">Fazione</string>
+    <string name="codex_other">Altro</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Capitoli condivisi: %1$d</string>
+    <string name="codex_graph_hint">Seleziona due nomi sulla mappa o un collegamento sotto.</string>
+    <string name="codex_graph_empty">Continua a leggere per trovare nomi presenti in almeno due capitoli comuni.</string>
+    <string name="codex_chapter">Capitolo %1$d</string>
+    <string name="codex_more">Carica altri brani</string>
+    <string name="codex_no_passages">Nessun brano precedente trovato.</string>
 </resources>

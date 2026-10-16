@@ -13,6 +13,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.companion.CompanionSheet
+import com.chmouel.liseur.companion.CodexSheet
+import com.chmouel.liseur.companion.Passage
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -36,6 +38,9 @@ internal fun CompanionPanelHost(
 ) {
     val panel by companion.panel.collectAsStateWithLifecycle()
     val peek by companion.peek.collectAsStateWithLifecycle()
+    val codex by companion.codex.panel.collectAsStateWithLifecycle()
+    val scan by companion.codex.progress.collectAsStateWithLifecycle()
+    val codexEnabled by companion.codex.enabled.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var peeked by rememberSaveable { mutableStateOf(false) }
 
@@ -47,31 +52,47 @@ internal fun CompanionPanelHost(
         } else if (peeked) {
             peeked = false
             if (companion.panel.value?.visible == false) companion.close()
+            if (companion.codex.panel.value?.visible == false) companion.codex.close()
         }
     }
 
+    val onSource: (Passage<Locator>) -> Unit = source@{ passage ->
+        val nav = navigator ?: return@source
+        scope.launch {
+            // In scrolled reading the place on screen may be newer
+            // than the one saved; it is the place to come back to.
+            if (!progress.prepareCatchUp()) return@launch
+            val (_, fresh) = companion.startPeek() ?: return@launch
+            companion.hide()
+            companion.codex.hide()
+            if (!go(nav, passage.place, NavigatorPositionEvent.LOCAL_JUMP)) {
+                companion.reveal()
+                companion.codex.reveal()
+                if (fresh) companion.endPeek()
+            }
+        }
+    }
+    codex?.takeIf { it.visible }?.let { CodexSheet(it, scan, companion.codex, onSource) }
+
     panel?.takeIf { it.visible }?.let { shown ->
+        val ceiling = shown.scope?.lo
+        val target = (shown.view as? com.chmouel.liseur.companion.CompanionView.Profile)?.profile?.name
+            ?: shown.name
+            ?: shown.selection
         CompanionSheet(
             panel = shown,
-            onSource = { passage ->
-                val nav = navigator ?: return@CompanionSheet
-                scope.launch {
-                    // In scrolled reading the place on screen may be newer
-                    // than the one saved; it is the place to come back to.
-                    if (!progress.prepareCatchUp()) return@launch
-                    val (_, fresh) = companion.startPeek() ?: return@launch
-                    companion.hide()
-                    if (!go(nav, passage.place, NavigatorPositionEvent.LOCAL_JUMP)) {
-                        companion.reveal()
-                        if (fresh) companion.endPeek()
-                    }
-                }
-            },
+            onSource = onSource,
             onRetry = companion.retry,
             onCancel = companion.cancel,
             onChoose = companion.choose,
             onSetUp = { settingsOpen = true },
             onChooseModel = { settingsOpen = true },
+            onCodex = if (codexEnabled && ceiling != null) {
+                {
+                    companion.close()
+                    companion.codex.openAt(ceiling, shown.titles, target)
+                }
+            } else null,
             onDismiss = companion.close,
         )
     }
@@ -110,6 +131,7 @@ internal suspend fun returnFromSource(
         }
         if (arrived) {
             companion.reveal()
+            companion.codex.reveal()
             companion.returnArrived(generation)
             return
         }

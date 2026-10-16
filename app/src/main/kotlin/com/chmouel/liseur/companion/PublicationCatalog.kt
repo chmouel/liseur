@@ -21,7 +21,7 @@ import org.readium.r2.shared.util.use
 class PublicationCatalog(private val publication: Publication) : BookCatalog<Locator> {
     private val readingOrder = publication.readingOrder.map { it.url().path() }
     override val map: ChapterMap = ChapterMap.of(readingOrder, publication.tableOfContents.map(::node))
-    private val builder = PassageCatalogBuilder<Locator>(map, readingOrder, ::html)
+    private val builder = PassageCatalogBuilder<Locator>(map, readingOrder, html = ::html)
     private val walked = mutableListOf<Passage<Locator>>()
     private val lock = Mutex()
     private var elements: Content.Iterator? = null

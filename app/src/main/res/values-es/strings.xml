@@ -1432,4 +1432,38 @@
     <string name="settings_backup_password_error">Contraseña incorrecta o datos cifrados dañados. Inténtalo de nuevo.</string>
     <string name="settings_backup_error_credential">Ya no se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>
     <string name="settings_backup_error_export_password_lost">La contraseña de la copia se perdió mientras elegías el archivo, así que no se guardó nada. Vuelve a exportar.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Códice</string>
+    <string name="codex_settings_available">Códice sin conexión disponible</string>
+    <string name="codex_settings_enabled">Códice en el dispositivo</string>
+    <string name="codex_settings_summary">Indexa nombres y conexiones sin conexión al abrir el códice. Sin IA ni clave API.</string>
+    <string name="codex_preparing">Preparando el libro…</string>
+    <string name="codex_scanning">Analizando el libro…</string>
+    <string name="codex_paused">Análisis en pausa</string>
+    <string name="codex_complete">Libro indexado</string>
+    <string name="codex_failed">No se pudo leer el códice. Los capítulos completados están guardados.</string>
+    <string name="codex_progress">Capítulos analizados: %1$d/%2$d</string>
+    <string name="codex_pause">Pausar análisis</string>
+    <string name="codex_resume">Reanudar análisis</string>
+    <string name="codex_retry">Reintentar</string>
+    <string name="codex_unplaced">No se pudo localizar tu capítulo. Abre el códice desde una ubicación conocida del libro.</string>
+    <string name="codex_scope">Solo se muestran capítulos anteriores al capítulo %1$d.</string>
+    <string name="codex_names">Nombres</string>
+    <string name="codex_relationships">Conexiones</string>
+    <string name="codex_search">Buscar nombres</string>
+    <string name="codex_empty">Aún no hay nombres coincidentes en capítulos anteriores.</string>
+    <string name="codex_scripts">La detección automática depende de las mayúsculas. Los idiomas sin ellas aún no son compatibles.</string>
+    <string name="codex_entry">%1$s · Menciones: %2$d</string>
+    <string name="codex_person">Persona</string>
+    <string name="codex_place">Lugar</string>
+    <string name="codex_faction">Facción</string>
+    <string name="codex_other">Otro</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Capítulos compartidos: %1$d</string>
+    <string name="codex_graph_hint">Selecciona dos nombres en el mapa o una conexión debajo.</string>
+    <string name="codex_graph_empty">Sigue leyendo para encontrar nombres que compartan al menos dos capítulos.</string>
+    <string name="codex_chapter">Capítulo %1$d</string>
+    <string name="codex_more">Cargar más pasajes</string>
+    <string name="codex_no_passages">No se encontraron pasajes anteriores.</string>
 </resources>

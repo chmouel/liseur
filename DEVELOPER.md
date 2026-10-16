@@ -2099,6 +2099,35 @@ reader behavior.
 
 ### Reading companion
 
+The reader's ⋮ menu also opens **Codex**, a local name index and
+co-occurrence graph available in both flavors without a provider or API
+key. Opening it starts a full-book scan, including books already partly
+read. Progress and partial results appear while it runs; completed
+chapters are cached in `companion.db` and resumed after an interruption.
+Closing the panel lets the scan continue while the reader stays open;
+leaving the book or backgrounding the app pauses it. Opening Codex again
+resumes. The On-device codex switch under Advanced in Companion settings defaults on;
+turning it off cancels scanning and hides the entry, retaining the cache.
+The switch travels in settings backups, but the derived index does not.
+When no AI service is chosen and On-device codex is enabled, tapping
+Ask companion on a selection opens Codex directly on that name's earlier
+mentions (and `CompanionSheet` also offers a Codex action to inspect the
+name locally).
+
+Codex freezes the current chapter when opened and displays only earlier
+chapters, even after scanning the entire book. Counts, classification,
+ranking, excerpts and graph nodes use that same scope; uncertain chapter
+membership cannot establish a graph edge. Sources use the existing peek
+and Return behavior. The streaming scan keeps its own passage builder,
+releases committed chapters, and saves chapter statistics and their source
+passages atomically. Cache identity includes the content fingerprint,
+chapter boundaries and `CodexStore.FORMAT` plus `PassageText.VERSION`;
+bump `CodexStore.FORMAT` when extraction or codex evidence changes. Book
+removal sweeps the derived rows and stale scan handles cannot write them
+back. Capitalization-based extraction does not support scripts without
+case, and frequent German nouns can appear as candidates. This index is
+not used by the AI companion.
+
 Selecting a name and tapping Ask companion opens a character profile
 drawn only from the chapters before the one the reader asked from
 ([ADR-0051](docs/adr/0051-character-profiles-use-only-earlier-chapters.md)).

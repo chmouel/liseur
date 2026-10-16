@@ -1382,4 +1382,38 @@
     <string name="settings_backup_password_error">密码错误或加密数据已损坏，请重试。</string>
     <string name="settings_backup_error_credential">此设备已无法读取保存的账号或 KOReader 凭据。请重新登录，或在不包含账号和密码的情况下导出。</string>
     <string name="settings_backup_error_export_password_lost">选择文件时备份密码已丢失，因此未保存任何内容。请重新导出。</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">百科</string>
+    <string name="codex_settings_available">离线百科可用</string>
+    <string name="codex_settings_enabled">设备端百科</string>
+    <string name="codex_settings_summary">打开百科即可离线索引名称与联系，无需 AI 或 API 密钥。</string>
+    <string name="codex_preparing">正在准备书籍…</string>
+    <string name="codex_scanning">正在扫描书籍…</string>
+    <string name="codex_paused">扫描已暂停</string>
+    <string name="codex_complete">书籍已索引</string>
+    <string name="codex_failed">无法读取百科。已完成的章节已保存。</string>
+    <string name="codex_progress">已扫描章节：%1$d/%2$d</string>
+    <string name="codex_pause">暂停扫描</string>
+    <string name="codex_resume">继续扫描</string>
+    <string name="codex_retry">重试</string>
+    <string name="codex_unplaced">无法确定当前章节。请从书中已知位置重新打开百科。</string>
+    <string name="codex_scope">仅显示第 %1$d 章之前的内容。</string>
+    <string name="codex_names">名称</string>
+    <string name="codex_relationships">联系</string>
+    <string name="codex_search">搜索名称</string>
+    <string name="codex_empty">之前的章节中尚无匹配名称。</string>
+    <string name="codex_scripts">自动名称识别依赖大写字母，暂不支持没有大写字母的语言。</string>
+    <string name="codex_entry">%1$s · 提及次数：%2$d</string>
+    <string name="codex_person">人物</string>
+    <string name="codex_place">地点</string>
+    <string name="codex_faction">组织</string>
+    <string name="codex_other">其他</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">共同章节：%1$d</string>
+    <string name="codex_graph_hint">在图中选择两个名称，或选择下方的联系。</string>
+    <string name="codex_graph_empty">继续阅读，以发现至少在两个章节中共同出现的名称。</string>
+    <string name="codex_chapter">第 %1$d 章</string>
+    <string name="codex_more">加载更多段落</string>
+    <string name="codex_no_passages">未找到之前的段落。</string>
 </resources>

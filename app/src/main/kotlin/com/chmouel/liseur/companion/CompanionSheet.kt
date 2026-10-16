@@ -86,6 +86,7 @@ internal fun CompanionSheet(
     onChoose: (Candidate<Locator>) -> Unit,
     onSetUp: () -> Unit,
     onChooseModel: () -> Unit,
+    onCodex: (() -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(
@@ -136,18 +137,32 @@ internal fun CompanionSheet(
                 ) {
                     when (view) {
                         CompanionView.Setup -> Message(R.string.companion_setup) {
-                            Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
+                                if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
+                            }
                         }
                         CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
                         CompanionView.Unplaced -> Message(R.string.companion_unplaced)
                         CompanionView.NotAName -> Message(R.string.companion_not_a_name)
                         CompanionView.Insufficient -> Message(
                             stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
-                        ) { Retry(onRetry) }
+                        ) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Retry(onRetry)
+                                if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
+                            }
+                        }
                         is CompanionView.Loading -> Loading(view.stage, onCancel)
-                        is CompanionView.Failed -> FailureMessage(view, onRetry, onChooseModel)
+                        is CompanionView.Failed -> {
+                            FailureMessage(view, onRetry, onChooseModel)
+                            if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
+                        }
                         is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
-                        is CompanionView.Profile -> Profile(view.profile, onSource)
+                        is CompanionView.Profile -> {
+                            Profile(view.profile, onSource)
+                            if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
+                        }
                     }
                 }
             }
@@ -161,8 +176,9 @@ internal fun CompanionPeekBar(
     theme: ReaderTheme,
     returning: Boolean,
     onReturn: () -> Unit,
-    onShow: () -> Unit,
+    onShow: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    showLabel: Int = R.string.companion_peek_show,
 ) {
     ChromePill(theme = theme, modifier = modifier) {
         Row(
@@ -178,10 +194,10 @@ internal fun CompanionPeekBar(
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            TextButton(onClick = onShow, enabled = !returning) {
+            if (onShow != null) TextButton(onClick = onShow, enabled = !returning) {
                 Icon(Icons.Outlined.PersonSearch, contentDescription = null, tint = theme.background)
                 Text(
-                    stringResource(R.string.companion_peek_show),
+                    stringResource(showLabel),
                     color = theme.background,
                     modifier = Modifier.padding(start = 8.dp),
                 )

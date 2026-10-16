@@ -1444,4 +1444,38 @@
     <string name="settings_backup_password_error">Falsches Passwort oder beschädigte verschlüsselte Daten. Versuche es erneut.</string>
     <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht mehr gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>
     <string name="settings_backup_error_export_password_lost">Das Sicherungspasswort ging bei der Dateiauswahl verloren, daher wurde nichts gespeichert. Exportiere erneut.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Kodex</string>
+    <string name="codex_settings_available">Offline-Kodex verfügbar</string>
+    <string name="codex_settings_enabled">Kodex auf diesem Gerät</string>
+    <string name="codex_settings_summary">Namen und Verbindungen beim Öffnen des Kodex offline erfassen. Ohne KI oder API-Schlüssel.</string>
+    <string name="codex_preparing">Buch wird vorbereitet…</string>
+    <string name="codex_scanning">Buch wird erfasst…</string>
+    <string name="codex_paused">Erfassung pausiert</string>
+    <string name="codex_complete">Buch erfasst</string>
+    <string name="codex_failed">Kodex konnte nicht gelesen werden. Fertige Kapitel sind gespeichert.</string>
+    <string name="codex_progress">Erfasste Kapitel: %1$d/%2$d</string>
+    <string name="codex_pause">Erfassung pausieren</string>
+    <string name="codex_resume">Erfassung fortsetzen</string>
+    <string name="codex_retry">Erneut versuchen</string>
+    <string name="codex_unplaced">Kapitel nicht gefunden. Öffne den Kodex erneut an einer bekannten Stelle im Buch.</string>
+    <string name="codex_scope">Nur Kapitel vor Kapitel %1$d werden angezeigt.</string>
+    <string name="codex_names">Namen</string>
+    <string name="codex_relationships">Verbindungen</string>
+    <string name="codex_search">Namen suchen</string>
+    <string name="codex_empty">Noch keine passenden Namen in früheren Kapiteln.</string>
+    <string name="codex_scripts">Die automatische Namenserkennung nutzt Großschreibung. Sprachen ohne Großbuchstaben werden noch nicht unterstützt.</string>
+    <string name="codex_entry">%1$s · Erwähnungen: %2$d</string>
+    <string name="codex_person">Person</string>
+    <string name="codex_place">Ort</string>
+    <string name="codex_faction">Gruppe</string>
+    <string name="codex_other">Sonstiges</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Gemeinsame Kapitel: %1$d</string>
+    <string name="codex_graph_hint">Wähle zwei Namen in der Karte oder eine Verbindung darunter.</string>
+    <string name="codex_graph_empty">Lies weiter, um Namen mit mindestens zwei gemeinsamen Kapiteln zu finden.</string>
+    <string name="codex_chapter">Kapitel %1$d</string>
+    <string name="codex_more">Weitere Textstellen laden</string>
+    <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
 </resources>

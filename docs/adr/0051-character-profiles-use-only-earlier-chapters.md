@@ -31,8 +31,9 @@ one the reader asked from, and that limit is enforced on the phone:
   wording is never sent to a lookup.
 - Following a source is a peek that does not move the saved place.
 
-There is no automatic list of characters, follow-up chat, web lookup or
-recap browser.
+There is no AI-generated list of characters, follow-up chat, web lookup
+or recap browser (the on-device Codex indexes names locally under the
+same earlier-chapters ceiling without sending anything to a model).
 
 ## Consequences
 

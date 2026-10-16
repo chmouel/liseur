@@ -297,6 +297,7 @@ data class AppSettings(
     val companionServer: String? = null,
     val companionStates: Map<String, ServerCompanionState> = emptyMap(),
     val companionRecaps: Boolean = false,
+    val codexEnabled: Boolean = true,
     val companionProvider: String? = null,
     val companionGeminiModel: String? = null,
 ) {
@@ -452,6 +453,7 @@ class AppSettingsRepository(
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
         val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
         val TRANSLATION_CONTEXT = stringPreferencesKey(TRANSLATION_CONTEXT_NAME)
+        val CODEX_ENABLED = booleanPreferencesKey(CODEX_ENABLED_NAME)
         val COMPANION_RECAPS = booleanPreferencesKey(COMPANION_RECAPS_NAME)
         val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
         val COMPANION_GEMINI_MODEL = stringPreferencesKey(COMPANION_GEMINI_MODEL_NAME)
@@ -554,6 +556,7 @@ class AppSettingsRepository(
             companionServer = p[ServerSettings.COMPANION_SERVER],
             companionStates = ServerSettings.companionStates(p),
             companionRecaps = p[Keys.COMPANION_RECAPS] ?: false,
+            codexEnabled = p[Keys.CODEX_ENABLED] ?: true,
             companionProvider = p[Keys.COMPANION_PROVIDER],
             companionGeminiModel = p[Keys.COMPANION_GEMINI_MODEL],
         )
@@ -961,6 +964,10 @@ class AppSettingsRepository(
         }
     }
 
+    suspend fun setCodexEnabled(enabled: Boolean) {
+        store.edit { it[Keys.CODEX_ENABLED] = enabled }
+    }
+
     /** Turns background chapter recaps for character profiles on or off. */
     suspend fun setCompanionRecaps(enabled: Boolean) {
         store.edit { it[Keys.COMPANION_RECAPS] = enabled }
@@ -1192,6 +1199,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     TRANSLATION_CONTEXT_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_SERVER_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_STATE_NAME to BackupValueType.STRING,
+    CODEX_ENABLED_NAME to BackupValueType.BOOLEAN,
     COMPANION_RECAPS_NAME to BackupValueType.BOOLEAN,
     COMPANION_PROVIDER_NAME to BackupValueType.STRING,
     COMPANION_GEMINI_MODEL_NAME to BackupValueType.STRING,
@@ -1201,6 +1209,7 @@ private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
 private const val TRANSLATION_CONTEXT_NAME = "translation_context"
+private const val CODEX_ENABLED_NAME = "codex_enabled"
 private const val COMPANION_RECAPS_NAME = "companion_recaps"
 private const val COMPANION_PROVIDER_NAME = "companion_provider"
 private const val COMPANION_GEMINI_MODEL_NAME = "companion_gemini_model"

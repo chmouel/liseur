@@ -25,6 +25,18 @@ class AppSettingsRepositoryTest {
         PreferenceDataStoreFactory.create { folder.newFile(name) }
 
     @Test
+    fun `codex is available by default and disabling it survives settings backup`() = runTest {
+        val repo = AppSettingsRepository(store("codex.preferences_pb"))
+        assertTrue(repo.settings.first().codexEnabled)
+        repo.setCodexEnabled(false)
+        assertFalse(repo.settings.first().codexEnabled)
+        val restored = AppSettingsRepository(store("codex-restored.preferences_pb"))
+        restored.restoreBackupValues(repo.backupValues())
+        assertFalse(restored.settings.first().codexEnabled)
+        assertNull(restored.settings.first().companionProvider)
+    }
+
+    @Test
     fun `choosing Gemini for the companion stores the recommended model only when none was stored`() = runTest {
         val fresh = AppSettingsRepository(store("fresh.preferences_pb"))
         fresh.chooseCompanionGemini("gemini", "recommended")

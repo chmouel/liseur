@@ -1530,4 +1530,38 @@
     <string name="settings_backup_password_error">Неверный пароль или повреждены зашифрованные данные. Попробуйте ещё раз.</string>
     <string name="settings_backup_error_credential">Сохранённые учётные данные аккаунта или KOReader больше нельзя прочитать на этом устройстве. Войдите снова или экспортируйте без аккаунтов и паролей.</string>
     <string name="settings_backup_error_export_password_lost">Пароль резервной копии был утерян во время выбора файла, поэтому ничего не сохранено. Повторите экспорт.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Справочник</string>
+    <string name="codex_settings_available">Доступен автономный справочник</string>
+    <string name="codex_settings_enabled">Справочник на устройстве</string>
+    <string name="codex_settings_summary">Индексирует имена и связи при открытии справочника. Без ИИ и ключа API.</string>
+    <string name="codex_preparing">Подготовка книги…</string>
+    <string name="codex_scanning">Анализ книги…</string>
+    <string name="codex_paused">Анализ приостановлен</string>
+    <string name="codex_complete">Книга проиндексирована</string>
+    <string name="codex_failed">Не удалось прочитать справочник. Обработанные главы сохранены.</string>
+    <string name="codex_progress">Обработано глав: %1$d/%2$d</string>
+    <string name="codex_pause">Приостановить анализ</string>
+    <string name="codex_resume">Продолжить анализ</string>
+    <string name="codex_retry">Повторить</string>
+    <string name="codex_unplaced">Не удалось определить главу. Откройте справочник из известного места в книге.</string>
+    <string name="codex_scope">Показаны только главы до главы %1$d.</string>
+    <string name="codex_names">Имена</string>
+    <string name="codex_relationships">Связи</string>
+    <string name="codex_search">Поиск имён</string>
+    <string name="codex_empty">В предыдущих главах пока нет подходящих имён.</string>
+    <string name="codex_scripts">Автоматический поиск имён основан на заглавных буквах. Языки без них пока не поддерживаются.</string>
+    <string name="codex_entry">%1$s · Упоминаний: %2$d</string>
+    <string name="codex_person">Персонаж</string>
+    <string name="codex_place">Место</string>
+    <string name="codex_faction">Группа</string>
+    <string name="codex_other">Другое</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Общих глав: %1$d</string>
+    <string name="codex_graph_hint">Выберите два имени на карте или связь ниже.</string>
+    <string name="codex_graph_empty">Читайте дальше, чтобы найти имена, встречающиеся вместе хотя бы в двух главах.</string>
+    <string name="codex_chapter">Глава %1$d</string>
+    <string name="codex_more">Загрузить ещё отрывки</string>
+    <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
 </resources>

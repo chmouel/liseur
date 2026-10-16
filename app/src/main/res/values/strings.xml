@@ -1488,4 +1488,38 @@
     <string name="settings_backup_password_error">Incorrect password or damaged encrypted data. Try again.</string>
     <string name="settings_backup_error_credential">A saved account or KOReader credential can no longer be read on this device. Sign in again, or export without accounts and passwords.</string>
     <string name="settings_backup_error_export_password_lost">The backup password was lost while choosing the file, so nothing was saved. Export again.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Codex</string>
+    <string name="codex_settings_available">Offline codex available</string>
+    <string name="codex_settings_enabled">On-device codex</string>
+    <string name="codex_settings_summary">Index names and connections offline when you open Codex. No AI or API key needed.</string>
+    <string name="codex_preparing">Preparing book…</string>
+    <string name="codex_scanning">Scanning book…</string>
+    <string name="codex_paused">Scan paused</string>
+    <string name="codex_complete">Book indexed</string>
+    <string name="codex_failed">Could not read the codex. Completed chapters are saved.</string>
+    <string name="codex_progress">Chapters scanned: %1$d/%2$d</string>
+    <string name="codex_pause">Pause scan</string>
+    <string name="codex_resume">Resume scan</string>
+    <string name="codex_retry">Retry</string>
+    <string name="codex_unplaced">Your chapter could not be located. Open Codex again from a known place in the book.</string>
+    <string name="codex_scope">Only chapters before chapter %1$d are shown.</string>
+    <string name="codex_names">Names</string>
+    <string name="codex_relationships">Relationships</string>
+    <string name="codex_search">Search names</string>
+    <string name="codex_empty">No matching names in earlier chapters yet.</string>
+    <string name="codex_scripts">Automatic name detection relies on capitalization. Languages without uppercase letters are not supported yet.</string>
+    <string name="codex_entry">%1$s · Mentions: %2$d</string>
+    <string name="codex_person">Person</string>
+    <string name="codex_place">Place</string>
+    <string name="codex_faction">Faction</string>
+    <string name="codex_other">Other</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Shared chapters: %1$d</string>
+    <string name="codex_graph_hint">Select two names on the map, or choose a connection below.</string>
+    <string name="codex_graph_empty">Read further to find names sharing at least two chapters.</string>
+    <string name="codex_chapter">Chapter %1$d</string>
+    <string name="codex_more">Load more passages</string>
+    <string name="codex_no_passages">No earlier passages found.</string>
 </resources>

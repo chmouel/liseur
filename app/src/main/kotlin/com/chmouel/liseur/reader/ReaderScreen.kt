@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.Summarize
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
@@ -2451,6 +2452,8 @@ fun ReaderScreen(
      * a decision about nothing.
      */
     val companionPanel = companion?.panel?.collectAsStateWithLifecycle()?.value
+    val codexPanel = companion?.codex?.panel?.collectAsStateWithLifecycle()?.value
+    val codexEnabled = companion?.codex?.enabled?.collectAsStateWithLifecycle()?.value == true
     val companionPeek = companion?.peek?.collectAsStateWithLifecycle()?.value
     val canAutoScroll = autoScrollArmed &&
         !autoScrollPaused &&
@@ -2472,6 +2475,7 @@ fun ReaderScreen(
         jumpBack == null &&
         catchUp == null &&
         companionPanel?.visible != true &&
+        codexPanel?.visible != true &&
         companionPeek == null &&
         // A picture over the page is modal to a finger and to a screen
         // reader; it has to be modal to the clock as well, or the book
@@ -3643,7 +3647,10 @@ fun ReaderScreen(
                         theme = readingTheme,
                         returning = peek.phase == SourcePeek.Phase.RETURNING,
                         onReturn = returnToAsking,
-                        onShow = { companion?.reveal?.invoke() },
+                        onShow = if (codexPanel != null || companionPanel != null) {
+                            { if (codexPanel != null) companion?.codex?.reveal() else companion?.reveal?.invoke() }
+                        } else null,
+                        showLabel = if (codexPanel != null) R.string.codex_title else R.string.companion_peek_show,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -4057,7 +4064,7 @@ fun ReaderScreen(
                         // recaps; reading settings stay in Aa. Hidden when
                         // none applies.
                         val recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value
-                        if (translateFromHere != null || readAloudFromHere != null || recapsHere != null) {
+                        if (codexEnabled || translateFromHere != null || readAloudFromHere != null || recapsHere != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4067,6 +4074,25 @@ fun ReaderScreen(
                                     )
                                 }
                                 DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                                    if (codexEnabled) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.codex_title)) },
+                                            leadingIcon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null) },
+                                            onClick = {
+                                                moreOpen = false
+                                                val lookups = companion
+                                                val nav = navigatorNow
+                                                if (lookups != null && nav != null) effectScope.launch {
+                                                    val origin = lookups.peek.value?.origin
+                                                        ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                                                    if (origin != null && navigatorNow === nav) {
+                                                        lookups.close()
+                                                        lookups.codex.open(origin, pageTranslated)
+                                                    }
+                                                }
+                                            },
+                                        )
+                                    }
                                     if (translateFromHere != null && translateLanguages != null) {
                                         val target = translateLanguages.target
                                         DropdownMenuItem(
@@ -4635,6 +4661,23 @@ fun ReaderScreen(
                 searchHit = null
                 onSearchAction.clear()
             },
+            onCodex = if (codexEnabled && companion != null) {
+                { query ->
+                    searchFor = null
+                    searchHit = null
+                    onSearchAction.clear()
+                    val lookups = companion
+                    val nav = navigatorNow
+                    if (nav != null) effectScope.launch {
+                        val origin = lookups.peek.value?.origin
+                            ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                        if (origin != null && navigatorNow === nav) {
+                            lookups.close()
+                            lookups.codex.open(origin, pageTranslated, query.takeIf { it.isNotBlank() })
+                        }
+                    }
+                }
+            } else null,
         )
     }
 

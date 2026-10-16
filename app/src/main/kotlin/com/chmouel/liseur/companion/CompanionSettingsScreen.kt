@@ -41,6 +41,7 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
+import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
@@ -49,11 +50,12 @@ import kotlinx.coroutines.launch
 /** The reading companion's row in Settings: the service and model it uses. */
 @Composable
 internal fun CompanionSettingsEntry(server: CompanionServer, onClick: () -> Unit) {
+    val codex by server.codexEnabled.collectAsState(initial = true)
     val service by remember { server.selected }.collectAsState(initial = null)
     ConnectionRow(
         icon = { Icon(Icons.Outlined.PersonSearch, contentDescription = null) },
         title = stringResource(R.string.companion_settings_title),
-        subtitle = service?.summary() ?: stringResource(R.string.read_aloud_settings_entry_missing),
+        subtitle = service?.summary() ?: if (codex) stringResource(R.string.codex_settings_available) else stringResource(R.string.read_aloud_settings_entry_missing),
         onClick = onClick,
     )
 }
@@ -82,9 +84,11 @@ internal fun CompanionSettingsScreen(
     val selected by remember { server.selected }.collectAsState(initial = server.server)
     val offered by remember { server.offered }.collectAsState(initial = listOf(server.server))
     val servers by server.server.servers.collectAsState(initial = ServerList.Empty)
+    val codex by server.codexEnabled.collectAsState(initial = true)
     val recaps by remember { server.recapsEnabled }.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
+    var advancedOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -148,6 +152,18 @@ internal fun CompanionSettingsScreen(
                         subtitle = stringResource(R.string.companion_settings_recaps_summary),
                         checked = recaps,
                         onCheckedChange = { on -> scope.launch { server.setRecaps(on, store) } },
+                    )
+                }
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    SwitchRow(
+                        title = stringResource(R.string.codex_settings_enabled),
+                        subtitle = stringResource(R.string.codex_settings_summary),
+                        checked = codex,
+                        onCheckedChange = { on -> scope.launch { server.setCodexEnabled(on) } },
                     )
                 }
                 Text(

@@ -60,6 +60,10 @@ class CompanionServer internal constructor(
     /** The choice as it stands, read once. */
     suspend fun current(): CompanionChoice? = choice.first()
 
+    val codexEnabled: Flow<Boolean> = settings.settings.map { it.codexEnabled }.distinctUntilChanged()
+
+    suspend fun setCodexEnabled(enabled: Boolean) = settings.setCodexEnabled(enabled)
+
     /** Whether background recaps are on. */
     val recapsEnabled: Flow<Boolean> = settings.settings.map { it.companionRecaps }.distinctUntilChanged()
 

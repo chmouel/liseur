@@ -1432,4 +1432,38 @@
     <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
     <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut plus être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
     <string name="settings_backup_error_export_password_lost">Le mot de passe de la sauvegarde a été perdu pendant le choix du fichier ; rien n’a été enregistré. Exportez à nouveau.</string>
+
+    <!-- Offline codex -->
+    <string name="codex_title">Codex</string>
+    <string name="codex_settings_available">Codex hors ligne disponible</string>
+    <string name="codex_settings_enabled">Codex sur cet appareil</string>
+    <string name="codex_settings_summary">Indexez les noms et les liens hors ligne en ouvrant le codex. Sans IA ni clé API.</string>
+    <string name="codex_preparing">Préparation du livre…</string>
+    <string name="codex_scanning">Analyse du livre…</string>
+    <string name="codex_paused">Analyse en pause</string>
+    <string name="codex_complete">Livre indexé</string>
+    <string name="codex_failed">Impossible de lire le codex. Les chapitres terminés sont conservés.</string>
+    <string name="codex_progress">Chapitres analysés : %1$d/%2$d</string>
+    <string name="codex_pause">Suspendre</string>
+    <string name="codex_resume">Reprendre</string>
+    <string name="codex_retry">Réessayer</string>
+    <string name="codex_unplaced">Votre chapitre est introuvable. Rouvrez le codex depuis un passage identifié du livre.</string>
+    <string name="codex_scope">Seuls les chapitres avant le chapitre %1$d sont affichés.</string>
+    <string name="codex_names">Noms</string>
+    <string name="codex_relationships">Liens</string>
+    <string name="codex_search">Rechercher un nom</string>
+    <string name="codex_empty">Aucun nom correspondant dans les chapitres précédents pour le moment.</string>
+    <string name="codex_scripts">La détection automatique repose sur les majuscules. Les langues sans majuscules ne sont pas encore prises en charge.</string>
+    <string name="codex_entry">%1$s · Mentions : %2$d</string>
+    <string name="codex_person">Personne</string>
+    <string name="codex_place">Lieu</string>
+    <string name="codex_faction">Faction</string>
+    <string name="codex_other">Autre</string>
+    <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_shared">Chapitres en commun : %1$d</string>
+    <string name="codex_graph_hint">Sélectionnez deux noms sur la carte, ou un lien ci-dessous.</string>
+    <string name="codex_graph_empty">Poursuivez la lecture pour trouver des noms partageant au moins deux chapitres.</string>
+    <string name="codex_chapter">Chapitre %1$d</string>
+    <string name="codex_more">Afficher plus de passages</string>
+    <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
 </resources>

@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
+import com.chmouel.liseur.companion.CodexViewModel
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.providers.ServicesScreen
@@ -105,6 +106,10 @@ class ReaderActivity : FragmentActivity() {
 
     private val companionViewModel: CompanionViewModel by viewModels {
         CompanionViewModel.factory(checkNotNull(target).id)
+    }
+
+    private val codexViewModel: CodexViewModel by viewModels {
+        CodexViewModel.factory(checkNotNull(target).id)
     }
 
     /**
@@ -439,6 +444,7 @@ class ReaderActivity : FragmentActivity() {
                                 }
                                 val companion = remember(s.publication) {
                                     companionViewModel.attach(s.publication)
+                                    codexViewModel.attach(s.publication)
                                     readerCompanion()
                                 }
                                 LaunchedEffect(viewModel, companionViewModel) {
@@ -682,9 +688,18 @@ class ReaderActivity : FragmentActivity() {
     }
 
     private fun readerCompanion() = ReaderCompanion(
+        codex = codexViewModel,
         panel = companionViewModel.panel,
         peek = viewModel.peek,
-        open = companionViewModel::open,
+        open = { selection, place, translated ->
+            if (!companionViewModel.hasChoice() && codexViewModel.enabled.value) {
+                companionViewModel.close()
+                codexViewModel.open(place, translated, selection)
+            } else {
+                codexViewModel.close()
+                companionViewModel.open(selection, place, translated)
+            }
+        },
         retry = companionViewModel::retry,
         cancel = companionViewModel::cancel,
         choose = companionViewModel::choose,
@@ -756,6 +771,7 @@ class ReaderActivity : FragmentActivity() {
     }
 
     override fun onStop() {
+        if (target != null) codexViewModel.pause()
         ReaderPresence.closed()
         super.onStop()
     }

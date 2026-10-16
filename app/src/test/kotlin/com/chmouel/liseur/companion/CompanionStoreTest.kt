@@ -50,7 +50,7 @@ class CompanionStoreTest {
     @Test
     fun `the database migrates to its exported schema`() {
         helper.createDatabase("companion-schema-test", 1).close()
-        helper.runMigrationsAndValidate("companion-schema-test", 2, true, *CompanionDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate("companion-schema-test", 3, true, *CompanionDatabase.MIGRATIONS).close()
     }
 
     @Test

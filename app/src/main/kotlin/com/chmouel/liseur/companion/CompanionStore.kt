@@ -146,7 +146,7 @@ interface CompanionRecapDao {
 
     @Query(
         "SELECT book_url FROM chapter_recap UNION SELECT book_url FROM recap_part " +
-            "UNION SELECT book_url FROM recap_queue UNION SELECT book_url FROM recap_choice",
+            "UNION SELECT book_url FROM recap_queue UNION SELECT book_url FROM recap_choice UNION SELECT book_url FROM codex_book",
     )
     suspend fun books(): List<String>
 
@@ -196,12 +196,14 @@ data class RecapLength(
  * recaps can be carried in the user-exported ZIP backup.
  */
 @Database(
-    entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class],
-    version = 2,
+    entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class,
+        CodexBookRow::class, CodexUnitRow::class, CodexPassageRow::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class CompanionDatabase : RoomDatabase() {
     abstract fun recaps(): CompanionRecapDao
+    abstract fun codex(): CodexDao
 
     companion object {
         const val NAME = "companion.db"
@@ -216,7 +218,16 @@ abstract class CompanionDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2)
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `codex_book` (`book_url` TEXT NOT NULL, `identity` TEXT NOT NULL, `total` INTEGER NOT NULL, PRIMARY KEY(`book_url`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `codex_unit` (`book_url` TEXT NOT NULL, `unit` INTEGER NOT NULL, `stats` TEXT NOT NULL, PRIMARY KEY(`book_url`, `unit`))")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `codex_passage` (`book_url` TEXT NOT NULL, `ref` TEXT NOT NULL, `unit` INTEGER NOT NULL, `lo` INTEGER NOT NULL, `resource` INTEGER NOT NULL, `text` TEXT NOT NULL, `folded` TEXT NOT NULL, `locator` TEXT NOT NULL, `end` INTEGER, PRIMARY KEY(`book_url`, `ref`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_codex_passage_book_url_unit` ON `codex_passage` (`book_url`, `unit`)")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
     }
 }
 
@@ -282,6 +293,7 @@ class CompanionStore(
     private val maxParts: Int = MAX_PARTS,
 ) {
     private val dao = database.recaps()
+    val codex = CodexStore(database, present)
     private val writes = Mutex()
     private val epochs = ConcurrentHashMap<String, Long>()
     private val stops = ConcurrentHashMap<String, Long>()
@@ -366,6 +378,7 @@ class CompanionStore(
                     dao.forgetParts(it)
                     dao.forgetQueued(it)
                     dao.forgetChoices(it)
+                    codex.forget(it)
                 }
             }
         }

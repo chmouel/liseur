@@ -100,7 +100,9 @@ class CompanionViewModel(
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
 
-    /** Whether this book is recapped in the background; null until a server and model are chosen. */
+    fun hasChoice(): Boolean = choice.value != null
+
+    /** Whether background recaps are on; null until a server and model are chosen. */
     val recapsHere: StateFlow<Boolean?> = combine(choice, recapsOn) { chosen, on -> on.takeIf { chosen != null } }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 

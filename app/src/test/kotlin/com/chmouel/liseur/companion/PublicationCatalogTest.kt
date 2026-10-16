@@ -142,6 +142,48 @@ class PublicationCatalogTest {
         assertEquals(first.size, first.map { it.first }.distinct().size)
     }
 
+    @Test
+    fun `codex streams the same passages and resumes within shared files`() = runBlocking {
+        for (missing in listOf(false, true)) {
+            val epub = File(folder.root, "codex-$missing.epub").also { writeEpub(it, missing) }
+            val publication = openPublication(epub)
+            try {
+                val catalog = PublicationCatalog(publication)
+                val expected = catalog.passagesBefore(AskingScope(6, 6))
+                for (from in listOf(0, 2, 4)) {
+                    val units = linkedMapOf<Int, List<Passage<org.readium.r2.shared.publication.Locator>>>()
+                    PublicationCodexSource(publication, catalog.map).scan(from) { unit, passages -> units[unit] = passages }
+                    assertEquals((from until 6).toList(), units.keys.toList())
+                    for ((unit, passages) in units) {
+                        assertEquals(expected.filter { it.range.hi == unit }.map { it.ref to it.hash }, passages.map { it.ref to it.hash })
+                        assertEquals(expected.filter { it.range.hi == unit }.map { it.range }, passages.map { it.range })
+                    }
+                }
+            } finally {
+                publication.close()
+            }
+        }
+    }
+
+    @Test
+    fun `codex does not mark unreadable chapters as empty and complete`() = runBlocking {
+        val epub = File(folder.root, "unreadable.epub").also { writeEpub(it, false, missingFile = true) }
+        val publication = openPublication(epub)
+        try {
+            val completed = mutableListOf<Int>()
+            try {
+                PublicationCodexSource(publication, PublicationCatalog(publication).map).scan(0) { unit, _ -> completed += unit }
+                org.junit.Assert.fail("Unreadable resources must fail the scan")
+            } catch (_: IllegalStateException) {
+                assertTrue(completed.isNotEmpty())
+                assertFalse(4 in completed)
+                assertFalse(5 in completed)
+            }
+        } finally {
+            publication.close()
+        }
+    }
+
     private suspend fun openPublication(epub: File): Publication {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val http = DefaultHttpClient()
@@ -157,7 +199,7 @@ class PublicationCatalogTest {
         ${paragraphs.joinToString("\n")}
         </body></html>"""
 
-    private fun writeEpub(target: File, missingAnchor: Boolean) {
+    private fun writeEpub(target: File, missingAnchor: Boolean, missingFile: Boolean = false) {
         ZipOutputStream(target.outputStream()).use { zip ->
             val mimetype = "application/epub+zip".toByteArray()
             zip.setMethod(ZipOutputStream.STORED)
@@ -230,7 +272,7 @@ class PublicationCatalogTest {
             )
             put("OEBPS/four.xhtml", page("<p>Mira FOUR reads a letter.</p>"))
             put("OEBPS/five-a.xhtml", page("<p>Mira FIVEA learns the secret.</p>"))
-            put("OEBPS/five-b.xhtml", page("<p>Mira FIVEB keeps it.</p>"))
+            if (!missingFile) put("OEBPS/five-b.xhtml", page("<p>Mira FIVEB keeps it.</p>"))
             put("OEBPS/six.xhtml", page("<p>Mira SIX leaves.</p>"))
         }
     }

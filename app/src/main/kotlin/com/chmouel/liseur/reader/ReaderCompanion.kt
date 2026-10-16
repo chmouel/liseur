@@ -3,6 +3,7 @@ package com.chmouel.liseur.reader
 import androidx.compose.runtime.Composable
 import com.chmouel.liseur.companion.Candidate
 import com.chmouel.liseur.companion.CompanionPanel
+import com.chmouel.liseur.companion.CodexViewModel
 import kotlinx.coroutines.flow.StateFlow
 import org.readium.r2.shared.publication.Locator
 
@@ -12,6 +13,7 @@ import org.readium.r2.shared.publication.Locator
  * reader's own view model, which keeps the asking place saved meanwhile.
  */
 class ReaderCompanion(
+    val codex: CodexViewModel,
     val panel: StateFlow<CompanionPanel<Locator>?>,
     val peek: StateFlow<SourcePeek?>,
     val open: (selection: String, place: Locator, translated: Boolean) -> Unit,
