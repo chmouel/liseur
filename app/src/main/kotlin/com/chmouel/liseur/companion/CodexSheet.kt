@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,7 +89,8 @@ internal fun CodexSheet(
                 .widthIn(max = contentWidthCap(windowWidth()))
                 .fillMaxWidth()
                 .fillMaxHeight(0.9f)
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = 20.dp)
+                .imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
