@@ -117,13 +117,13 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
     suspend fun entries(book: CodexBookRow, ceiling: Int): List<CodexEntry> = withContext(Dispatchers.Default) {
         database.withTransaction {
             if (dao.book(book.bookUrl) != book) return@withTransaction emptyList()
-            var merged = emptyMap<String, CodexEntry>()
+            val merged = LinkedHashMap<String, CodexEntry>()
             var after = -1
             while (true) {
                 coroutineContext.ensureActive()
                 val page = dao.units(book.bookUrl, ceiling, after)
                 if (page.isEmpty()) break
-                for (row in page) merged = CodexIndex.merge(merged, row.unit, decode(row.stats), prune = false)
+                for (row in page) CodexIndex.add(merged, row.unit, decode(row.stats))
                 after = page.last().unit
             }
             merged.values.filter { it.occurrences >= CodexIndex.MIN_OCCURRENCES }

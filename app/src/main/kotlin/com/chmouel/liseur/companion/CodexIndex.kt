@@ -107,6 +107,12 @@ class CodexIndex private constructor(
             val merged = LinkedHashMap<String, CodexEntry>(
                 if (prune) entries.filterValues { it.occurrences >= MIN_OCCURRENCES || it.lastUnit >= unit - PRUNE_WINDOW } else entries,
             )
+            add(merged, unit, stats)
+            return if (prune) merged.filterValues { it.occurrences >= MIN_OCCURRENCES || it.lastUnit >= unit - PRUNE_WINDOW } else merged
+        }
+
+        /** [merge] without pruning, in place, for a read that folds many units at once. */
+        internal fun add(merged: MutableMap<String, CodexEntry>, unit: Int, stats: Map<String, CodexStats>) {
             for ((name, hits) in stats) {
                 val prev = merged[name]
                 merged[name] = CodexEntry(
@@ -118,7 +124,6 @@ class CodexIndex private constructor(
                     speechHits = (prev?.speechHits ?: 0) + hits.speechHits,
                 )
             }
-            return if (prune) merged.filterValues { it.occurrences >= MIN_OCCURRENCES || it.lastUnit >= unit - PRUNE_WINDOW } else merged
         }
 
         internal fun <P> withSplitContinuity(passages: List<Passage<P>>): List<Continued<P>> = passages.mapIndexed { i, passage ->
