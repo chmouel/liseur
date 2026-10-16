@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -65,6 +67,10 @@ internal fun CodexSheet(
     progress: CodexProgress,
     controller: CodexViewModel,
     onSource: (Passage<Locator>) -> Unit,
+    // Held by the caller: the sheet leaves the screen during a peek, and
+    // Return should land where the reader was in the list.
+    namesList: LazyListState = rememberLazyListState(),
+    detailList: LazyListState = rememberLazyListState(),
 ) {
     val tab = if (panel.relationships) 1 else 0
     val search = panel.search
@@ -98,7 +104,7 @@ internal fun CodexSheet(
                     TextButton(onClick = controller::back) { Text(stringResource(R.string.back)) }
                     Text(detail.other?.let { stringResource(R.string.codex_pair, detail.name, it) } ?: detail.name,
                         style = MaterialTheme.typography.titleLarge)
-                    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(detail.passages, key = { it.ref }) { passage ->
                             Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSource(passage) }.padding(vertical = 12.dp)) {
                                 val chapter = panel.titles.getOrNull(passage.range.hi)
@@ -137,7 +143,7 @@ internal fun CodexSheet(
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
                         val entries = remember(panel.entries, search) { panel.entries.filter { it.name.contains(search, ignoreCase = true) } }
-                        LazyColumn(Modifier.weight(1f)) {
+                        LazyColumn(Modifier.weight(1f), state = namesList) {
                             if (entries.isEmpty()) item {
                                 Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
                                 Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)

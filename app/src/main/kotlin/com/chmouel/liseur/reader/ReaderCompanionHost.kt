@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,7 +73,11 @@ internal fun CompanionPanelHost(
             }
         }
     }
-    codex?.takeIf { it.visible }?.let { CodexSheet(it, scan, companion.codex, onSource) }
+    // Out here, as the sheet leaves the screen while a source is a peek:
+    // the names reset with a new Codex, the passages with a new name.
+    val codexNames = rememberSaveable(codex != null, saver = LazyListState.Saver) { LazyListState() }
+    val codexDetail = rememberSaveable(codex?.detail?.name, codex?.detail?.other, saver = LazyListState.Saver) { LazyListState() }
+    codex?.takeIf { it.visible }?.let { CodexSheet(it, scan, companion.codex, onSource, codexNames, codexDetail) }
 
     panel?.takeIf { it.visible }?.let { shown ->
         val ceiling = shown.scope?.lo
