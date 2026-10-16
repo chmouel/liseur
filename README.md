@@ -32,14 +32,15 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
     <td align="center"><sub>Read aloud with device voices or your own speech server.</sub></td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
     <td><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
     <td><img src="docs/screenshots/26-codex-relationships.png" alt="Codex map of character relationships across chapters"></td>
     <td></td>
   </tr>
   <tr>
+    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
     <td align="center"><sub>Character profiles grounded in earlier passages.</sub></td>
     <td align="center"><sub>See which characters appear together across chapters.</sub></td>
-    <td></td>
   </tr>
 </table>
 
