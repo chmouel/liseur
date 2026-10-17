@@ -100,13 +100,13 @@ import kotlin.math.sqrt
 internal class CharacterProfiles(
     val lookup: CompanionPanel<Locator>?,
     val available: Boolean,
-    /** The saved recaps notes and pairs are read from; a change reads them again. */
-    val recaps: Any?,
+    /** This book's saved recaps, as Story reads them; notes and pairs are read from these, and again when they change. */
+    val recaps: List<SavedRecap>,
     val ask: (String) -> Unit,
-    /** What saved recaps already say of a name, or of a pair; read on the phone. */
-    val notes: suspend (name: String, other: String?) -> List<RecapNote<Locator>>,
-    /** For pairs of names, what saved recaps last say links each. */
-    val pairs: suspend (List<Pair<String, String>>) -> Map<Pair<String, String>, String>,
+    /** What [recaps] already say of a name, or of a pair; read on the phone. */
+    val notes: suspend (name: String, other: String?, recaps: List<SavedRecap>) -> List<RecapNote<Locator>>,
+    /** For pairs of names, what [recaps] last say links each. */
+    val pairs: suspend (List<Pair<String, String>>, recaps: List<SavedRecap>) -> Map<Pair<String, String>, String>,
     val retry: () -> Unit,
     val cancel: () -> Unit,
     val choose: (Candidate<Locator>) -> Unit,
@@ -205,7 +205,7 @@ internal fun CodexSheet(
                     }
                     if (pane == CharacterPane.PROFILE && profiles != null) item(key = "codex:profile") {
                         val notes by produceState(emptyList<RecapNote<Locator>>(), detail.name, detail.other, panel.scope, profiles.available, profiles.recaps) {
-                            value = profiles.notes(detail.name, detail.other)
+                            value = profiles.notes(detail.name, detail.other, profiles.recaps)
                         }
                         CharacterProfile(
                             name = detail.name,
@@ -264,7 +264,7 @@ internal fun CodexSheet(
             } else if (tab == CodexTab.RELATIONSHIPS) {
                 val linked = panel.graph?.let { graph -> graph.edges.map { graph.nodes[it.a].name to graph.nodes[it.b].name } }.orEmpty()
                 val relations by produceState(emptyMap<Pair<String, String>, String>(), linked, panel.scope, profiles?.available, profiles?.recaps) {
-                    value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.pairs?.invoke(linked).orEmpty()
+                    value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.let { it.pairs(linked, it.recaps) }.orEmpty()
                 }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     codexHeader(progress, controller, panel.ceiling, scanEnabled)

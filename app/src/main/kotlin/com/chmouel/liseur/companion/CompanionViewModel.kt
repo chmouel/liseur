@@ -315,34 +315,40 @@ class CompanionViewModel(
     private suspend fun hints(chosen: CompanionChoice, asked: AskingScope, passages: List<Passage<Locator>>): List<RecapHint> =
         Recaps.hints(savedRecaps(chosen), asked, passages)
 
-    /** The recaps saved for this book, by chapter; any server or model, as Story shows them. */
+    /** The recaps saved for this book, by chapter, touched as used by the lookup; any server or model, as Story shows them. */
     private suspend fun savedRecaps(chosen: CompanionChoice): List<Pair<Int, ChapterRecap>> {
         val sha = contentSha.value ?: return emptyList()
-        val opened = catalog.await()
         val identity = RecapIdentity(sha, chosen.serverId, chosen.model, Recaps.FORMAT)
         val saved = quietly { store.forBook(bookUrl, sha).recaps(identity) } ?: return emptyList()
+        return byChapter(saved)
+    }
+
+    private suspend fun byChapter(saved: List<SavedRecap>): List<Pair<Int, ChapterRecap>> {
+        if (saved.isEmpty()) return emptyList()
+        val opened = catalog.await()
         return saved
             // A recap saved when the chapters were cut differently is not this chapter's.
             .filter { it.unit.index < opened.map.chapterCount && opened.map.unitKey(it.unit.index) == it.unit.key }
             .mapNotNull { row -> ChapterRecap.decode(row.json)?.let { row.unit.index to it } }
     }
 
-    /**
-     * What saved recaps of the chapters before [asked] already say of
-     * [name], or of it with [other]: read on the phone, nothing is sent.
-     */
-    /** For each pair of names, what saved recaps before [asked] last say links them; sends nothing. */
-    suspend fun pairNotes(pairs: List<Pair<String, String>>, asked: AskingScope): Map<Pair<String, String>, String> {
-        val chosen = server.current() ?: return emptyMap()
-        val saved = savedRecaps(chosen).takeIf { it.isNotEmpty() } ?: return emptyMap()
+    /** For each pair of names, what [saved], this book's [recaps], say last before [asked] links them; writes and sends nothing. */
+    suspend fun pairNotes(pairs: List<Pair<String, String>>, asked: AskingScope, saved: List<SavedRecap>): Map<Pair<String, String>, String> {
+        if (server.current() == null) return emptyMap()
+        val chapters = byChapter(saved).takeIf { it.isNotEmpty() } ?: return emptyMap()
         // The latest chapter's word on them, as the one nearest the place.
-        return pairs.mapNotNull { pair -> recapClaims(saved, asked, pair.first, pair.second).lastOrNull()?.let { pair to it.second.text } }
+        return pairs.mapNotNull { pair -> recapClaims(chapters, asked, pair.first, pair.second).lastOrNull()?.let { pair to it.second.text } }
             .toMap()
     }
 
-    suspend fun notes(name: String, other: String?, asked: AskingScope): List<RecapNote<Locator>> {
-        val chosen = server.current() ?: return emptyList()
-        val claims = recapClaims(savedRecaps(chosen), asked, name, other)
+    /**
+     * What [saved], this book's [recaps], say of the chapters before
+     * [asked] about [name], or of it with [other]: read on the phone,
+     * nothing is written or sent.
+     */
+    suspend fun notes(name: String, other: String?, asked: AskingScope, saved: List<SavedRecap>): List<RecapNote<Locator>> {
+        if (server.current() == null) return emptyList()
+        val claims = recapClaims(byChapter(saved), asked, name, other)
         if (claims.isEmpty()) return emptyList()
         val opened = sources.await()
         val passages = claims.map { it.first }.distinct().associateWith { unit -> quietly { opened.passagesOf(unit) }.orEmpty() }

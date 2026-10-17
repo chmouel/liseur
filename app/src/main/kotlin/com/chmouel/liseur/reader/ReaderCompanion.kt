@@ -25,10 +25,10 @@ class ReaderCompanion(
     val open: (selection: String, place: Locator, translated: Boolean) -> Unit,
     /** Asks about a name on a character page, in the chapters Codex froze. */
     val ask: (name: String, scope: AskingScope?) -> Unit,
-    /** What saved recaps already say of a name, or of a pair, before a scope; sends nothing. */
-    val notes: suspend (name: String, other: String?, scope: AskingScope) -> List<RecapNote<Locator>>,
-    /** For the pairs on the relationships map, what saved recaps last say links each; sends nothing. */
-    val pairNotes: suspend (pairs: List<Pair<String, String>>, scope: AskingScope) -> Map<Pair<String, String>, String>,
+    /** What [recaps] already say of a name, or of a pair, before a scope; writes and sends nothing. */
+    val notes: suspend (name: String, other: String?, scope: AskingScope, saved: List<SavedRecap>) -> List<RecapNote<Locator>>,
+    /** For the pairs on the relationships map, what [recaps] last say links each; writes and sends nothing. */
+    val pairNotes: suspend (pairs: List<Pair<String, String>>, scope: AskingScope, saved: List<SavedRecap>) -> Map<Pair<String, String>, String>,
     val retry: () -> Unit,
     val cancel: () -> Unit,
     val choose: (Candidate<Locator>) -> Unit,
