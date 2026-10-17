@@ -78,10 +78,15 @@ fun recapClaims(
 ): List<Pair<Int, RecapFact>> {
     val earlier = saved.filter { (unit, _) -> unit < scope.lo }.sortedBy { it.first }
     fun RecapCharacter.keys() = names.map(::characterKey).filter { it.isNotEmpty() }
-    // The name, and every name a recap before the place gives whoever bears it.
+    // The name, and every name a recap before the place gives whoever bears it,
+    // minus any another character also bears as an alias of its own: a shared title joins no one.
     fun known(name: String): Set<String> {
         val key = characterKey(name).takeIf { it.isNotEmpty() } ?: return emptySet()
-        return earlier.flatMap { (_, recap) -> recap.characters.filter { key in it.keys() }.flatMap { it.keys() } }.toSet() + key
+        val characters = earlier.flatMap { (_, recap) -> recap.characters }
+        val given = characters.filter { key in it.keys() }.flatMap { it.keys() } + key
+        fun shared(candidate: String) =
+            characters.any { candidate in it.keys() && key !in it.keys() && characterKey(it.name) != candidate }
+        return given.filterNot(::shared).toSet()
     }
     val asked = known(name).takeIf { it.isNotEmpty() } ?: return emptyList()
     val paired = other?.let(::known)?.takeIf { it.isNotEmpty() }

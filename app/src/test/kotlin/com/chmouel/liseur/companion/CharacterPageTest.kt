@@ -112,6 +112,17 @@ class CharacterPageTest {
         assertEquals(listOf("Silver" to "Trusts him.", "Ben" to "Trusts him."), claims)
     }
 
+    @Test fun `a shared title does not join two people`() {
+        val saved = listOf(
+            0 to ChapterRecap(emptyList(), listOf(character("Silver", "Captain", facts = listOf("Has one leg.")))),
+            1 to ChapterRecap(emptyList(), listOf(character("Smollett", "Captain", facts = listOf("Commands the ship.")))),
+        )
+        val scope = AskingScope(lo = 2, count = 3)
+
+        assertEquals(listOf(0 to "Has one leg."), recapClaims(saved, scope, "Silver").map { it.first to it.second.text })
+        assertEquals(listOf(1 to "Commands the ship."), recapClaims(saved, scope, "Smollett").map { it.first to it.second.text })
+    }
+
     @Test fun `a recap's sources are the cited passages whose text is unchanged`() {
         fun passage(ref: String, text: String) = Passage(ref, PassageText.hash(text), 0, text, ChapterRange(0, 0), 0)
         val kept = passage("r0.1", "Jim ran.")
