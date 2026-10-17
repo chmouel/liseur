@@ -1432,6 +1432,8 @@
     <string name="companion_settings_recaps_group">Hintergrund-Zusammenfassungen</string>
     <string name="companion_settings_recaps">Kapitel beim Lesen zusammenfassen</string>
     <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus. Jedes Buch kann das im Reader unter Aa, Erweitert ändern.</string>
+    <string name="companion_settings_story_auto">Handlung selbstständig ergänzen</string>
+    <string name="companion_settings_story_auto_summary">Wenn der Kodex mit Handlung öffnet, wird das Kapitel vor deiner Position zusammengefasst, falls es noch keine Zusammenfassung hat, und der Überblick über die bisherige Handlung aktuell gehalten. Wird mit Erlauben im Tab Handlung eingeschaltet.</string>
     <string name="companion_settings_privacy">Text aus dem Buch vor dem ausgewählten Absatz wird an den gewählten Server gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Der Anbieter kann diese Anfragen berechnen.</string>
     <string name="settings_backup_include_connections">Konten, Dienste und Passwörter einschließen</string>
     <string name="settings_backup_connections_replace">Gespeicherte Bibliotheks- und KOReader-Konten, Diensteinstellungen und Zugangsdaten werden automatisch ersetzt.</string>
@@ -1463,6 +1465,7 @@
     <string name="codex_scope">Nur Kapitel vor Kapitel %1$d werden angezeigt.</string>
     <string name="codex_names">Namen</string>
     <string name="codex_relationships">Verbindungen</string>
+    <string name="codex_story">Handlung</string>
     <string name="codex_search">Namen suchen</string>
     <string name="codex_empty">Noch keine passenden Namen in früheren Kapiteln.</string>
     <string name="codex_scripts">Die automatische Namenserkennung nutzt Großschreibung. Sprachen ohne Großbuchstaben werden noch nicht unterstützt.</string>
@@ -1478,13 +1481,52 @@
     <string name="codex_chapter">Kapitel %1$d</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
-    <string name="story_title">Bisherige Handlung</string>
-    <string name="story_about">Von einem KI-Modell aus den vorherigen Kapiteln geschrieben. Es kann Fehler enthalten und verraten, was ein Modell anderweitig über dieses Buch weiß.</string>
+    <string name="story_about">Von einem KI-Modell aus den Zusammenfassungen der vorherigen Kapitel geschrieben. Es kann Fehler enthalten, Dinge behaupten, die nicht im Buch stehen, oder verraten, was das Modell anderweitig über dieses Buch weiß.</string>
     <string name="story_failed">Die bisherige Handlung konnte nicht gelesen werden.</string>
     <string name="story_nothing_before">Kein früheres Kapitel vorhanden.</string>
-    <string name="story_no_summary">Die Zusammenfassung dieses Kapitels enthält keinen Überblick.</string>
-    <string name="story_unreadable">Die Zusammenfassung dieses Kapitels konnte nicht gelesen werden.</string>
-    <string name="story_missing">Für dieses Kapitel gibt es keine Zusammenfassung.</string>
-    <string name="story_go">Zum Kapitel</string>
+    <string name="story_no_summary">Kein Überblick in dieser Zusammenfassung</string>
+    <string name="story_unreadable">Die Zusammenfassung ist nicht lesbar</string>
+    <string name="story_go">Zum Kapitel: %1$s</string>
     <string name="story_go_unavailable">Liseur kann nicht genau erkennen, wo dieses Kapitel beginnt.</string>
+    <string name="story_so_far">Bisher</string>
+    <string name="story_covers_first">Umfasst Kapitel 1</string>
+    <string name="story_covers">Umfasst die Kapitel 1 bis %1$d</string>
+    <string name="story_none_yet">Noch kein Überblick.</string>
+    <string name="story_none_possible">Fasse mindestens zwei frühere Kapitel zusammen, um die bisherige Handlung zu schreiben.</string>
+    <string name="story_outdated">Seitdem wurden weitere Kapitel zusammengefasst.</string>
+    <string name="story_write">Überblick schreiben</string>
+    <string name="story_update">Überblick aktualisieren</string>
+    <string name="story_updating">Überblick wird geschrieben…</string>
+    <string name="story_more">Mehr anzeigen</string>
+    <string name="story_less">Weniger anzeigen</string>
+    <string name="story_consent_title">Das vorherige Kapitel zusammenfassen?</string>
+    <string name="story_allow">Erlauben</string>
+    <string name="story_not_now">Nicht jetzt</string>
+    <string name="story_working">Kapitel %1$d wird zusammengefasst</string>
+    <string name="story_working_part">Kapitel %1$d wird zusammengefasst, Teil %2$d von %3$d</string>
+    <string name="story_writing">Überblick wird geschrieben</string>
+    <string name="story_stop">Stopp</string>
+    <string name="story_summarize">Zusammenfassen</string>
+    <string name="story_summarize_again">Erneut zusammenfassen</string>
+    <string name="story_status_missing">Noch nicht zusammengefasst</string>
+    <string name="story_status_queued">Wartet</string>
+    <string name="story_status_working">Wird zusammengefasst…</string>
+    <string name="story_status_failed">Zusammenfassen fehlgeschlagen</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">Kapitel %1$s hat noch keine Zusammenfassung</item>
+        <item quantity="other">Die Kapitel %1$s haben noch keine Zusammenfassung</item>
+    </plurals>
+    <string name="story_consent">Liseur kann den Text des Kapitels vor deiner Position an %1$s senden, um es zusammenzufassen, und dann die Kapitelzusammenfassungen senden, um die bisherige Handlung zu schreiben. Sobald du es erlaubst, erledigt Handlung das selbst.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">%d weiteres Kapitel wartet</item>
+        <item quantity="other">%d weitere Kapitel warten</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">%d fehlendes Kapitel zusammenfassen</item>
+        <item quantity="other">%d fehlende Kapitel zusammenfassen</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">Den Text von %1$d Kapitel an %2$s senden, um es zusammenzufassen?</item>
+        <item quantity="other">Den Text von %1$d Kapiteln an %2$s senden, um sie zusammenzufassen?</item>
+    </plurals>
 </resources>

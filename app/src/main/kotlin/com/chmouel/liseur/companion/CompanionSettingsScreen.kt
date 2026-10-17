@@ -86,6 +86,7 @@ internal fun CompanionSettingsScreen(
     val servers by server.server.servers.collectAsState(initial = ServerList.Empty)
     val codex by server.codexEnabled.collectAsState(initial = true)
     val recaps by remember { server.recapsEnabled }.collectAsState(initial = false)
+    val storyAuto by remember { server.storyAutoOk }.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     var advancedOpen by remember { mutableStateOf(false) }
@@ -162,6 +163,13 @@ internal fun CompanionSettingsScreen(
                         subtitle = stringResource(R.string.companion_settings_recaps_summary),
                         checked = recaps,
                         onCheckedChange = { on -> scope.launch { server.setRecaps(on, store) } },
+                    )
+                    RowDivider()
+                    SwitchRow(
+                        title = stringResource(R.string.companion_settings_story_auto),
+                        subtitle = stringResource(R.string.companion_settings_story_auto_summary),
+                        checked = storyAuto,
+                        onCheckedChange = { on -> scope.launch { server.setStoryAutoOk(on) } },
                     )
                     RowDivider()
                     SwitchRow(

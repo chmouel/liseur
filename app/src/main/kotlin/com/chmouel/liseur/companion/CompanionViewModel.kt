@@ -62,6 +62,8 @@ class CompanionViewModel(
     // What the screen reported before the scheduler started, in order.
     private val pendingShown = mutableListOf<Pair<Locator, Boolean>>()
     private var lastOrigin: Locator? = null
+    // The last place reported, kept even while untracked: placing it costs a read, done only once work needs it.
+    private var lastPlace: Locator? = null
 
     private val choice: StateFlow<CompanionChoice?> = server.choice
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -106,26 +108,22 @@ class CompanionViewModel(
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
 
-    private val _story = MutableStateFlow<StoryPanel?>(null)
-    private var storyJob: Job? = null
+    // Follows the stored switch, and is true at once on Allow so the picks it makes are accepted.
+    private val storyAllowed = MutableStateFlow(false).also { allowed ->
+        viewModelScope.launch { server.storyAutoOk.distinctUntilChanged().collect { allowed.value = it } }
+    }
+    private val storyController = MutableStateFlow<StoryController?>(null)
+    private var storyScope: AskingScope? = null
 
-    /** The story so far over the book, while it is open. */
-    val story: StateFlow<StoryPanel?> = _story.asStateFlow()
-
-    /** Whether the book has a stored recap to read in the story so far; never true without a content identity. */
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val hasStory: StateFlow<Boolean> = contentSha
-        .flatMapLatest { sha ->
-            if (sha == null) {
-                flowOf(false)
-            } else {
-                store.hasRecaps(bookUrl, sha).catch {
-                    Log.w(TAG, "No recap count for this book: ${it.javaClass.simpleName}")
-                    emit(false)
-                }
-            }
-        }
+    /** Whether Codex has a Story tab: a service is chosen and the book has a content identity. */
+    val storyAvailable: StateFlow<Boolean> = combine(choice, contentSha) { chosen, sha -> chosen != null && sha != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** The Story tab while it is on screen. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val story: StateFlow<StoryView?> = storyController
+        .flatMapLatest { it?.view ?: flowOf(null) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Read from settings rather than [choice], which reports none until it first loads. */
     suspend fun hasChoice(): Boolean = server.current() != null
@@ -170,8 +168,15 @@ class CompanionViewModel(
                 return@launch
             }
             contentSha.value = sha
-            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), opened, recapSettings, foreground)
+            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), opened, recapSettings, foreground, storyAllowed)
                 .also { it.start() }
+            storyController.value = StoryController(
+                viewModelScope, store.forBook(bookUrl, sha), opened, started, choice, storyAllowed,
+                setAllowed = {
+                    storyAllowed.value = true
+                    viewModelScope.launch { quietly { server.setStoryAutoOk(true) } }
+                },
+            ).also { controller -> storyScope?.let(controller::show) }
             placed.withLock {
                 scheduler = started
                 peeking(lastOrigin)
@@ -180,6 +185,15 @@ class CompanionViewModel(
                     started.moved(lo, movement)
                 }
                 pendingShown.clear()
+            }
+            // Work asked for while the place was untracked waits until the page on screen is placed.
+            started.tracking.collect { on ->
+                if (!on) return@collect
+                placed.withLock {
+                    val place = lastPlace ?: return@withLock
+                    val lo = quietly { opened.scopeOf(place, translated = false)?.lo } ?: return@withLock
+                    started.moved(lo, movement = false)
+                }
             }
         }
     }
@@ -194,6 +208,7 @@ class CompanionViewModel(
             // In order, so a quick run of page turns cannot be taken backwards.
             placed.withLock {
                 if (noScheduler) return@withLock
+                lastPlace = place
                 val recaps = scheduler
                 val opened = catalog.takeIf { it.isCompleted }?.getCompleted()
                 if (recaps == null || opened == null) {
@@ -201,10 +216,12 @@ class CompanionViewModel(
                     return@withLock
                 }
                 // Placing the page costs a resource read, so it is done only
-                // while a recap can be queued for this book. The check is
-                // against the same state the scheduler's gate uses, and the
-                // next emission after recaps are turned on re-syncs it.
-                if (!recapSettings.value.enabled) return@withLock
+                // while some recap or summary could be sent; otherwise the
+                // place is forgotten rather than left to go stale.
+                if (!recaps.tracking.value) {
+                    recaps.unplaced()
+                    return@withLock
+                }
                 val lo = quietly { opened.scopeOf(place, translated = false)?.lo } ?: return@withLock
                 recaps.moved(lo, movement)
             }
@@ -224,52 +241,38 @@ class CompanionViewModel(
         // slips through while it is.
         recaps.peeking(0)
         viewModelScope.launch {
-            val lo = quietly { opened.scopeOf(origin, translated = false)?.lo } ?: 0
+            // Taken as translated: the origin may be on a translated page,
+            // and that narrows what is sent rather than widening it.
+            val lo = quietly { opened.scopeOf(origin, translated = true)?.lo } ?: 0
             if (lastOrigin === origin) recaps.peeking(lo)
         }
     }
 
-    fun open(selection: String, place: Locator, translated: Boolean) {
-        closeStory()
-        lookups.open(selection, place, translated)
+    fun open(selection: String, place: Locator, translated: Boolean) = lookups.open(selection, place, translated)
+
+    /** Shows the Story tab for [scope], the place Codex was opened from. */
+    fun showStory(scope: AskingScope) {
+        storyScope = scope
+        storyController.value?.show(scope)
     }
 
-    /**
-     * Opens the story so far, frozen at [place]: the chapters known to lie
-     * before it, with their stored summaries. Reads nothing from the
-     * network and drops no recap; only the recaps shown are touched.
-     */
-    fun openStory(place: Locator, translated: Boolean) {
-        val sha = contentSha.value ?: return
-        lookups.close()
-        storyJob?.cancel()
-        _story.value = StoryPanel()
-        storyJob = viewModelScope.launch {
-            try {
-                val opened = catalog.await()
-                val scope = opened.scopeOf(place, translated)
-                val earlier = scope?.let { opened.chaptersBefore(it) }.orEmpty()
-                val book = store.forBook(bookUrl, sha)
-                val chapters = Story.chapters(opened.map, earlier, if (earlier.isEmpty()) emptyList() else book.stored())
-                _story.update { it?.copy(chapters = chapters, loading = false) }
-                quietly { book.touch(Story.shown(opened.map, chapters)) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Story so far failed: ${e.javaClass.simpleName}")
-                _story.update { it?.copy(loading = false, failed = true) }
-            }
-        }
+    /** The Story tab left the screen; the work it asked for goes on. */
+    fun hideStory() {
+        storyScope = null
+        storyController.value?.hide()
     }
 
-    fun hideStory() = _story.update { it?.copy(visible = false) }
+    fun allowStory() = storyController.value?.allow()
 
-    fun revealStory() = _story.update { it?.copy(visible = true) }
+    fun declineStory() = storyController.value?.decline()
 
-    fun closeStory() {
-        storyJob?.cancel()
-        _story.value = null
-    }
+    fun summarizeChapter(unit: Int) = storyController.value?.summarize(unit)
+
+    fun summarizeMissing() = storyController.value?.summarizeMissing()
+
+    fun writeStory() = storyController.value?.write()
+
+    fun stopStory() = storyController.value?.stop()
 
     fun retry() = lookups.retry()
 

@@ -20,6 +20,10 @@ import com.chmouel.liseur.companion.RecapIdentity
 import com.chmouel.liseur.companion.RecapPartRow
 import com.chmouel.liseur.companion.RecapQueueRow
 import com.chmouel.liseur.companion.Recaps
+import com.chmouel.liseur.companion.StorySummaries
+import com.chmouel.liseur.companion.StorySummaryRow
+import com.chmouel.liseur.companion.SummaryDep
+import com.chmouel.liseur.domain.CompanionBackupContents
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.RemoteServer
@@ -104,17 +108,24 @@ class SettingsBackupRepositoryTest {
         rows.forEach { companionDb.recaps().putRecap(it) }
         companionDb.recaps().putPart(RecapPartRow(source, "unfinished", 0, 2, sha, "server", "model", Recaps.FORMAT, "{}", 100))
         companionDb.recaps().enqueue(RecapQueueRow(source, "queued", 55, sha, 100))
+        val deps = StorySummaries.encodeDeps(rows.take(3).map { SummaryDep(it.unit, it.unitKey, true) })
+        val summary = StorySummaryRow(source, "c".repeat(64), StorySummaries.TOP, 0, 2, sha, Recaps.FORMAT,
+            StorySummaries.FORMAT, deps, "So far, three chapters.", 100, 200)
+        companionDb.recaps().putSummary(summary)
+        companionDb.recaps().putSummary(summary.copy(key = "d".repeat(64), summaryFormat = StorySummaries.FORMAT + 1))
         val uri = Uri.fromFile(File(folder.root, "companion.zip"))
         assertEquals(SettingsBackupExportResult.Exported(0), repository.exportTo(uri))
         ZipFile(File(uri.path!!)).use { zip ->
             val contents = zip.getInputStream(zip.getEntry("companion.json")).bufferedReader().readText()
             assertEquals(55, JSONObject(contents).getJSONArray("recaps").length())
+            assertEquals(1, JSONObject(contents).getJSONArray("summaries").length())
             assertFalse(contents.contains("unfinished"))
             assertFalse(contents.contains("queued"))
         }
         companionDb.recaps().forgetRecaps(listOf(source))
         companionDb.recaps().forgetParts(listOf(source))
         companionDb.recaps().forgetQueued(listOf(source))
+        companionDb.recaps().forgetSummaries(listOf(source))
         db.bookDao().deleteByUrls(listOf(source))
         db.bookDao().upsert(book(destination))
         val existing = rows.first().copy(bookUrl = destination, json = ChapterRecap.EMPTY.encode(), savedAt = 300)
@@ -126,6 +137,7 @@ class SettingsBackupRepositoryTest {
         assertEquals(existing, companionDb.recaps().recap(destination, existing.unitKey))
         assertEquals(rows.drop(1).map { it.copy(bookUrl = destination) }.toSet(),
             companionDb.recaps().recaps(destination).filterNot { it.unitKey == existing.unitKey }.toSet())
+        assertEquals(summary.copy(bookUrl = destination), companionDb.recaps().summary(destination, summary.key))
         assertEquals(0, (restore(repository, uri) as SettingsBackupRestoreResult.Restored).companionRecapsAdded)
         val identity = RecapIdentity(sha, "another-server", "another-model", Recaps.FORMAT)
         assertEquals(55, companionStore.forBook(destination, sha).recaps(identity).size)
@@ -160,14 +172,14 @@ class SettingsBackupRepositoryTest {
         db.bookDao().upsert(book("duplicate-1").copy(title = "Ambiguous"))
         db.bookDao().upsert(book("duplicate-2").copy(title = "Ambiguous"))
         val backup = companionBackup()
-        assertEquals(0, backup.restore(listOf(
+        assertEquals(0, backup.restore(CompanionBackupContents(listOf(
             recap("missing", "Missing"), recap("ambiguous", "Ambiguous"),
             recap("source-1", "Matching"), recap("source-2", "Matching"),
-        )))
+        ))))
         assertEquals(0, companionDb.recaps().recapCount())
-        assertEquals(0, backup.restore(listOf(recap("destination", "Matching").let {
+        assertEquals(0, backup.restore(CompanionBackupContents(listOf(recap("destination", "Matching").let {
             it.copy(recap = it.recap.copy(format = Recaps.FORMAT + 1))
-        })))
+        }))))
     }
 
     @Test
@@ -188,6 +200,10 @@ class SettingsBackupRepositoryTest {
         }
         companionDb.recaps().putRecap(ChapterRecapRow("book", "old-format", 99, "a".repeat(64), "server", "model",
             Recaps.FORMAT + 1, ChapterRecap.EMPTY.encode(), 100, usedAt = 1_000))
+        // Recaps fill the budget; the summary still has room.
+        companionDb.recaps().putSummary(StorySummaryRow("book", "c".repeat(64), StorySummaries.TOP, 0, 0, "a".repeat(64),
+            Recaps.FORMAT, StorySummaries.FORMAT, StorySummaries.encodeDeps(listOf(SummaryDep(0, "unit-0", true))),
+            "So far.", 100, 0))
         val uri = Uri.fromFile(File(folder.root, "budget.zip"))
         assertEquals(SettingsBackupExportResult.Exported(0, 1), repository.exportTo(uri))
         ZipFile(File(uri.path!!)).use { zip ->
@@ -196,6 +212,7 @@ class SettingsBackupRepositoryTest {
             val recaps = JSONObject(zip.getInputStream(entry).bufferedReader().readText()).getJSONArray("recaps")
             assertTrue(recaps.length() in 1 until 30)
             assertEquals((29 downTo 30 - recaps.length()).toList(), List(recaps.length()) { recaps.getJSONObject(it).getInt("unit") })
+            assertEquals(1, JSONObject(zip.getInputStream(entry).bufferedReader().readText()).getJSONArray("summaries").length())
             fun text(path: String) = zip.getInputStream(zip.getEntry(path)).bufferedReader().readText()
             assertEquals(1, JSONObject(text("positions.json")).getJSONArray("positions").length())
             assertTrue(text("annotations.json").contains("Kept"))
@@ -205,6 +222,7 @@ class SettingsBackupRepositoryTest {
         val tiny = folder.newFile("bounded-companion.json")
         companionBackup().writeContents(tiny, 100)
         assertEquals(0, JSONObject(tiny.readText()).getJSONArray("recaps").length())
+        assertEquals(0, JSONObject(tiny.readText()).getJSONArray("summaries").length())
     }
 
     @Test

@@ -1420,6 +1420,8 @@
     <string name="companion_settings_recaps_group">Riassunti in background</string>
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
     <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo in Aa, Avanzate, nel lettore.</string>
+    <string name="companion_settings_story_auto">Completa la storia da sola</string>
+    <string name="companion_settings_story_auto_summary">Quando il Codice si apre su Storia, riepiloga il capitolo prima della tua posizione se manca e tiene aggiornato il riassunto della storia finora. Si attiva con Consenti nella scheda Storia.</string>
     <string name="companion_settings_privacy">Il testo del libro prima del paragrafo selezionato viene inviato al server scelto, e capitoli interi se i riassunti in background sono attivi. Il suo fornitore può addebitare queste richieste.</string>
     <string name="settings_backup_include_connections">Includi account, servizi e password</string>
     <string name="settings_backup_connections_replace">Gli account della biblioteca e di KOReader, le impostazioni dei servizi e le credenziali salvate saranno sostituiti automaticamente.</string>
@@ -1451,6 +1453,7 @@
     <string name="codex_scope">Sono mostrati solo i capitoli precedenti al capitolo %1$d.</string>
     <string name="codex_names">Nomi</string>
     <string name="codex_relationships">Collegamenti</string>
+    <string name="codex_story">Storia</string>
     <string name="codex_search">Cerca nomi</string>
     <string name="codex_empty">Ancora nessun nome corrispondente nei capitoli precedenti.</string>
     <string name="codex_scripts">Il rilevamento automatico usa le maiuscole. Le lingue che non le usano non sono ancora supportate.</string>
@@ -1466,13 +1469,52 @@
     <string name="codex_chapter">Capitolo %1$d</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>
-    <string name="story_title">La storia finora</string>
-    <string name="story_about">Scritto da un modello di IA a partire dai capitoli precedenti. Può sbagliare e rivelare ciò che un modello sa di questo libro da altre fonti.</string>
+    <string name="story_about">Scritto da un modello di IA a partire dai riepiloghi dei capitoli precedenti. Può sbagliare, affermare cose che il libro non dice o rivelare ciò che il modello sa di questo libro da altre fonti.</string>
     <string name="story_failed">Impossibile leggere la storia finora.</string>
     <string name="story_nothing_before">Nessun capitolo precedente da mostrare.</string>
-    <string name="story_no_summary">Il riepilogo di questo capitolo non contiene un riassunto.</string>
-    <string name="story_unreadable">Impossibile leggere il riepilogo di questo capitolo.</string>
-    <string name="story_missing">Questo capitolo non ha un riepilogo.</string>
-    <string name="story_go">Vai al capitolo</string>
+    <string name="story_no_summary">Nessun riassunto in questo riepilogo</string>
+    <string name="story_unreadable">Impossibile leggere il riepilogo</string>
+    <string name="story_go">Vai al capitolo: %1$s</string>
     <string name="story_go_unavailable">Liseur non sa esattamente dove inizia questo capitolo.</string>
+    <string name="story_so_far">Finora</string>
+    <string name="story_covers_first">Copre il capitolo 1</string>
+    <string name="story_covers">Copre i capitoli da 1 a %1$d</string>
+    <string name="story_none_yet">Nessun riassunto per ora.</string>
+    <string name="story_none_possible">Riepiloga almeno due capitoli precedenti per scrivere la storia finora.</string>
+    <string name="story_outdated">Da allora sono stati riepilogati altri capitoli.</string>
+    <string name="story_write">Scrivi riassunto</string>
+    <string name="story_update">Aggiorna riassunto</string>
+    <string name="story_updating">Scrittura del riassunto…</string>
+    <string name="story_more">Mostra di più</string>
+    <string name="story_less">Mostra di meno</string>
+    <string name="story_consent_title">Riepilogare il capitolo precedente?</string>
+    <string name="story_allow">Consenti</string>
+    <string name="story_not_now">Non ora</string>
+    <string name="story_working">Riepilogo del capitolo %1$d</string>
+    <string name="story_working_part">Riepilogo del capitolo %1$d, parte %2$d di %3$d</string>
+    <string name="story_writing">Scrittura del riassunto</string>
+    <string name="story_stop">Ferma</string>
+    <string name="story_summarize">Riepiloga</string>
+    <string name="story_summarize_again">Riepiloga di nuovo</string>
+    <string name="story_status_missing">Non ancora riepilogato</string>
+    <string name="story_status_queued">In attesa</string>
+    <string name="story_status_working">Riepilogo in corso…</string>
+    <string name="story_status_failed">Riepilogo non riuscito</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">Il capitolo %1$s non ha ancora un riepilogo</item>
+        <item quantity="other">I capitoli %1$s non hanno ancora un riepilogo</item>
+    </plurals>
+    <string name="story_consent">Liseur può inviare il testo del capitolo prima della tua posizione a %1$s per riepilogarlo, poi inviare i riepiloghi dei capitoli per scrivere la storia finora. Una volta consentito, Storia lo fa da sola.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">Ancora %d capitolo in attesa</item>
+        <item quantity="other">Ancora %d capitoli in attesa</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">Riepiloga %d capitolo mancante</item>
+        <item quantity="other">Riepiloga %d capitoli mancanti</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">Inviare il testo di %1$d capitolo a %2$s per riepilogarlo?</item>
+        <item quantity="other">Inviare il testo di %1$d capitoli a %2$s per riepilogarli?</item>
+    </plurals>
 </resources>

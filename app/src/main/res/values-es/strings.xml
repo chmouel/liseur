@@ -1420,6 +1420,8 @@
     <string name="companion_settings_recaps_group">Resúmenes en segundo plano</string>
     <string name="companion_settings_recaps">Resumir capítulos mientras lees</string>
     <string name="companion_settings_recaps_summary">Cuando pasas el final de un capítulo, se resume en segundo plano para que las búsquedas posteriores encuentren pasajes antes. Desactivado por defecto. Cada libro puede cambiarlo en Aa, Avanzado, en el lector.</string>
+    <string name="companion_settings_story_auto">Completar la historia por sí sola</string>
+    <string name="companion_settings_story_auto_summary">Cuando el Códice se abre en Historia, resume el capítulo anterior a tu posición si le falta y mantiene al día la sinopsis de la historia hasta ahora. Se activa con Permitir en la pestaña Historia.</string>
     <string name="companion_settings_privacy">El texto del libro anterior al párrafo seleccionado se envía al servidor elegido, y capítulos enteros si los resúmenes en segundo plano están activados. Su proveedor puede cobrar por estas solicitudes.</string>
     <string name="settings_backup_include_connections">Incluir cuentas, servicios y contraseñas</string>
     <string name="settings_backup_connections_replace">Las cuentas de biblioteca y KOReader, la configuración de servicios y las credenciales guardadas se reemplazarán automáticamente.</string>
@@ -1451,6 +1453,7 @@
     <string name="codex_scope">Solo se muestran capítulos anteriores al capítulo %1$d.</string>
     <string name="codex_names">Nombres</string>
     <string name="codex_relationships">Conexiones</string>
+    <string name="codex_story">Historia</string>
     <string name="codex_search">Buscar nombres</string>
     <string name="codex_empty">Aún no hay nombres coincidentes en capítulos anteriores.</string>
     <string name="codex_scripts">La detección automática depende de las mayúsculas. Los idiomas sin ellas aún no son compatibles.</string>
@@ -1466,13 +1469,52 @@
     <string name="codex_chapter">Capítulo %1$d</string>
     <string name="codex_more">Cargar más pasajes</string>
     <string name="codex_no_passages">No se encontraron pasajes anteriores.</string>
-    <string name="story_title">La historia hasta ahora</string>
-    <string name="story_about">Escrito por un modelo de IA a partir de los capítulos anteriores. Puede equivocarse y revelar lo que un modelo sabe de este libro por otras fuentes.</string>
+    <string name="story_about">Escrito por un modelo de IA a partir de los resúmenes de los capítulos anteriores. Puede equivocarse, afirmar cosas que el libro no dice o revelar lo que el modelo sabe de este libro por otras fuentes.</string>
     <string name="story_failed">No se pudo leer la historia hasta ahora.</string>
     <string name="story_nothing_before">No hay capítulos anteriores que mostrar.</string>
-    <string name="story_no_summary">El resumen de este capítulo no tiene sinopsis.</string>
-    <string name="story_unreadable">No se pudo leer el resumen de este capítulo.</string>
-    <string name="story_missing">Este capítulo no tiene resumen.</string>
-    <string name="story_go">Ir al capítulo</string>
+    <string name="story_no_summary">Este resumen no tiene sinopsis</string>
+    <string name="story_unreadable">No se pudo leer el resumen</string>
+    <string name="story_go">Ir al capítulo: %1$s</string>
     <string name="story_go_unavailable">Liseur no sabe exactamente dónde empieza este capítulo.</string>
+    <string name="story_so_far">Hasta ahora</string>
+    <string name="story_covers_first">Abarca el capítulo 1</string>
+    <string name="story_covers">Abarca los capítulos 1 a %1$d</string>
+    <string name="story_none_yet">Aún no hay sinopsis.</string>
+    <string name="story_none_possible">Resume al menos dos capítulos anteriores para escribir la historia hasta ahora.</string>
+    <string name="story_outdated">Se han resumido más capítulos desde entonces.</string>
+    <string name="story_write">Escribir sinopsis</string>
+    <string name="story_update">Actualizar sinopsis</string>
+    <string name="story_updating">Escribiendo la sinopsis…</string>
+    <string name="story_more">Mostrar más</string>
+    <string name="story_less">Mostrar menos</string>
+    <string name="story_consent_title">¿Resumir el capítulo anterior?</string>
+    <string name="story_allow">Permitir</string>
+    <string name="story_not_now">Ahora no</string>
+    <string name="story_working">Resumiendo el capítulo %1$d</string>
+    <string name="story_working_part">Resumiendo el capítulo %1$d, parte %2$d de %3$d</string>
+    <string name="story_writing">Escribiendo la sinopsis</string>
+    <string name="story_stop">Detener</string>
+    <string name="story_summarize">Resumir</string>
+    <string name="story_summarize_again">Resumir de nuevo</string>
+    <string name="story_status_missing">Sin resumir</string>
+    <string name="story_status_queued">En espera</string>
+    <string name="story_status_working">Resumiendo…</string>
+    <string name="story_status_failed">No se pudo resumir</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">El capítulo %1$s aún no tiene resumen</item>
+        <item quantity="other">Los capítulos %1$s aún no tienen resumen</item>
+    </plurals>
+    <string name="story_consent">Liseur puede enviar el texto del capítulo anterior a tu posición a %1$s para resumirlo y luego enviar los resúmenes de los capítulos para escribir la historia hasta ahora. Una vez que lo permitas, Historia lo hará por sí sola.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">%d capítulo más en espera</item>
+        <item quantity="other">%d capítulos más en espera</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">Resumir %d capítulo pendiente</item>
+        <item quantity="other">Resumir %d capítulos pendientes</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">¿Enviar el texto de %1$d capítulo a %2$s para resumirlo?</item>
+        <item quantity="other">¿Enviar el texto de %1$d capítulos a %2$s para resumirlos?</item>
+    </plurals>
 </resources>

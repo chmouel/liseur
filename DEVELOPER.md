@@ -2212,7 +2212,10 @@ liseur-sync settings.
 - Only these go into a request body: the selected name, the numeric
   scope, app-issued session refs (`S1`…), and eligible passage text. Never
   `Locator.text.before/after`, chapter titles, notes, recap prose, or the
-  model's malformed reply. Book text and the name sit in
+  model's malformed reply. The one exception is Story's running summary
+  (ADR-0057): it sends the summary sentences of recaps of listed
+  chapters, in `<summary chapter="N">` blocks, with chapter numbers and
+  nothing else. Book text and the name sit in
   `CompanionPrompt`'s unclosable data blocks, as in `TranslationPrompt`.
   The profile is written in the language of the passages, so it follows
   the book rather than the app, whatever the EPUB metadata claims.
@@ -2239,11 +2242,19 @@ liseur-sync settings.
   These batches share the lookup's existing round, operation, source-text
   and request limits. With no further evidence that fits, the insufficient
   answer stands; text at or after the selection remains excluded.
-- Recaps are opt-in and only a retrieval index. `RecapScheduler` queues
-  a chapter when `READER_MOVEMENT` crosses from it into the next one (no
-  jumps, no backfill), runs one batch at a time while the app is in the
+- Background recaps are opt-in. `RecapScheduler` queues a chapter when
+  `READER_MOVEMENT` crosses from it into the next one (no jumps, no
+  backfill), runs one batch at a time while the app is in the
   foreground, stands aside for a lookup, and never sends a chapter at or
-  after the one on screen or the peek origin. Batches of about 12,000
+  after the one on screen, the peek origin, or the request's own frozen
+  ceiling. Its lanes, in order: lookups, recaps Story requested,
+  Story's summary nodes, background recaps. Requested work promotes a
+  queued background chapter, never runs a chapter twice, and background
+  work yields between batches keeping its parts. The place is tracked
+  while any companion work is pending, and work asked for while it was
+  untracked waits until `CompanionViewModel` places the last page shown,
+  never a stand-in; a change of service or model
+  clears the requested lane and `stop()` cancels Story's work. Batches of about 12,000
   characters cover every passage exactly once and are saved as parts, so
   an interruption does not pay twice; combining them is local. A recap's
   names and aliases are kept only if they appear in the passages it
@@ -2270,18 +2281,49 @@ liseur-sync settings.
   recaps are included in the user-exported ZIP backup. Bump `PassageText.VERSION`
   when refs or passage splitting change, and the recap prompt version
   in `Recap` when the prompt or its JSON change.
-- Story so far (ADR-0057) shows the stored recaps; it sends nothing.
-  The ⋮ entry appears while `CompanionStore.hasRecaps` finds a row for
-  the content sha and `Recap.FORMAT`. On open the scope is frozen from
-  the place (a peek origin counts as translated) and
-  `PublicationCatalog.chaptersBefore` lists a chapter only if its number
-  is below the asking chapter and its start is provably before the
-  place (`ChapterMap.startsBefore`), so contents listed out of reading
-  order cannot show a later chapter. A start in a file listed twice is
-  placed at its last listing. `BookRecaps.stored()` reads without
-  deleting rows of another sha or format, and only rows shown with a
-  summary are touched for trimming. Go to chapter is a peek; it is
-  withheld for a repeated file or an anchor not found in its file.
+- Story (ADR-0057) is Codex's first tab, shown only while a companion
+  service is chosen (`CompanionViewModel.storyAvailable`). Codex freezes
+  the full `AskingScope` on open (a peek origin counts as translated) and
+  keeps it through tabs, peeks and Return; `StoryController` runs while
+  the tab shows. `PublicationCatalog.chaptersBefore` lists a chapter only
+  if its number is below the asking chapter and its start is provably
+  before the place (`ChapterMap.startsBefore`); a start in a file listed
+  twice is placed at its last listing. Rows come from `BookRecaps.watch()`,
+  which drops nothing, and a recap is touched once when it first shows.
+  Go to chapter is a peek, withheld for a repeated file or an anchor not
+  found in its file.
+- Nothing is sent on Story's own until the reader taps Allow, stored as
+  `story_auto_ok` (backed up, a switch in companion settings).
+  `StoryEvents` then picks `Story.previous`, the chapter right before the
+  place when it is missing and idle, once per frozen scope per session;
+  it never reaches further back. Not now and Stop hold for that scope.
+  The story so far is written only from at least
+  `StorySummaries.MIN_RECAPS` (two) recaps; `SummaryWriter` sends nothing
+  below that.
+  Requests and summaries Story makes on its own are `automatic`; the
+  scheduler reads the consent live, refusing such work offered after it
+  is revoked and dropping and cancelling what it holds. Allow sets the
+  consent before its picks are offered, then stores it. Story is shown
+  only while Codex is on screen, so a peek starts nothing new on its own;
+  the automatic summary is written only from recaps that match a fresh
+  read of the store, as the lane drains before Room's watch delivers the
+  last one.
+  Taps on Recap, Recap missing chapters (failed ones included) and Write
+  summary always work.
+  Recap again replaces only a row that does not decode, after the new
+  one is saved.
+- The running summary (`StorySummaries`) folds chapter summaries into
+  windows of `FAN_OUT` and those into higher windows, so the top request
+  stays bounded. A node is written only when its whole window is listed,
+  keyed by a hash of its formats, content sha, level, window and ordered
+  inputs, and stores the chapters and unit keys it read; it is shown or
+  reused only when every one is still listed with the same key. Each
+  request lists only its own items without a summary, windows by their
+  span, as ranges. Nodes
+  live in `story_summary` (schema 4), fenced and swept like recaps, with
+  their own trim; the exported ZIP keeps a reserve of the recap budget
+  for them. Bump `StorySummaries.FORMAT` when the prompt or its JSON
+  change.
 - Following a supporting passage is a peek (`SourcePeek` in
   `ReaderViewModel`): the asking place stays the saved one, and nothing
   at the source is saved, synced, timed (`ReadingSessionRecorder`'s peek

@@ -1476,6 +1476,8 @@
     <string name="companion_settings_recaps_group">Background recaps</string>
     <string name="companion_settings_recaps">Recap chapters as you read</string>
     <string name="companion_settings_recaps_summary">When you read past the end of a chapter, it is summarised in the background so later lookups find passages faster. Off by default. Each book can change it under Aa, Advanced in the reader.</string>
+    <string name="companion_settings_story_auto">Fill in the story on its own</string>
+    <string name="companion_settings_story_auto_summary">When Codex opens on Story, recap the chapter before your place if it has none, and keep the summary of the story so far up to date. Turned on by Allow in the Story tab.</string>
     <string name="companion_settings_privacy">Book text before your selected paragraph is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
     <string name="settings_backup_include_connections">Include accounts, services and passwords</string>
     <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically.</string>
@@ -1507,6 +1509,7 @@
     <string name="codex_scope">Only chapters before chapter %1$d are shown.</string>
     <string name="codex_names">Names</string>
     <string name="codex_relationships">Relationships</string>
+    <string name="codex_story">Story</string>
     <string name="codex_search">Search names</string>
     <string name="codex_empty">No matching names in earlier chapters yet.</string>
     <string name="codex_scripts">Automatic name detection relies on capitalization. Languages without uppercase letters are not supported yet.</string>
@@ -1522,13 +1525,52 @@
     <string name="codex_chapter">Chapter %1$d</string>
     <string name="codex_more">Load more passages</string>
     <string name="codex_no_passages">No earlier passages found.</string>
-    <string name="story_title">Story so far</string>
-    <string name="story_about">Written by an AI model from the chapters before this one. It may be wrong, and it may give away something a model knows about this book from elsewhere.</string>
+    <string name="story_about">Written by an AI model from the recaps of earlier chapters. It may be wrong, say things the book does not, or give away something the model knows about this book from elsewhere.</string>
     <string name="story_failed">The story so far could not be read.</string>
     <string name="story_nothing_before">No earlier chapter to show.</string>
-    <string name="story_no_summary">The recap of this chapter has no summary.</string>
-    <string name="story_unreadable">The recap of this chapter could not be read.</string>
-    <string name="story_missing">This chapter has not been recapped.</string>
-    <string name="story_go">Go to chapter</string>
+    <string name="story_no_summary">No summary in this recap</string>
+    <string name="story_unreadable">The recap could not be read</string>
+    <string name="story_go">Go to chapter: %1$s</string>
     <string name="story_go_unavailable">Liseur cannot tell exactly where this chapter starts.</string>
+    <string name="story_so_far">So far</string>
+    <string name="story_covers_first">Covers chapter 1</string>
+    <string name="story_covers">Covers chapters 1 to %1$d</string>
+    <string name="story_none_yet">No summary yet.</string>
+    <string name="story_none_possible">Recap at least two earlier chapters to write the story so far.</string>
+    <string name="story_outdated">More chapters have been recapped since this was written.</string>
+    <string name="story_write">Write summary</string>
+    <string name="story_update">Update summary</string>
+    <string name="story_updating">Writing the summary…</string>
+    <string name="story_more">Show more</string>
+    <string name="story_less">Show less</string>
+    <string name="story_consent_title">Recap the chapter before this one?</string>
+    <string name="story_allow">Allow</string>
+    <string name="story_not_now">Not now</string>
+    <string name="story_working">Recapping chapter %1$d</string>
+    <string name="story_working_part">Recapping chapter %1$d, part %2$d of %3$d</string>
+    <string name="story_writing">Writing the summary</string>
+    <string name="story_stop">Stop</string>
+    <string name="story_summarize">Recap</string>
+    <string name="story_summarize_again">Recap again</string>
+    <string name="story_status_missing">Not recapped yet</string>
+    <string name="story_status_queued">Waiting</string>
+    <string name="story_status_working">Recapping…</string>
+    <string name="story_status_failed">Could not be recapped</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">Chapter %1$s has no recap yet</item>
+        <item quantity="other">Chapters %1$s have no recap yet</item>
+    </plurals>
+    <string name="story_consent">Liseur can send the text of the chapter before your place to %1$s to recap it, and send the chapter recaps to write the story so far. Once you allow it, Story does this on its own.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">%d more chapter waiting</item>
+        <item quantity="other">%d more chapters waiting</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">Recap %d missing chapter</item>
+        <item quantity="other">Recap %d missing chapters</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">Send the text of %1$d chapter to %2$s to recap it?</item>
+        <item quantity="other">Send the text of %1$d chapters to %2$s to recap them?</item>
+    </plurals>
 </resources>

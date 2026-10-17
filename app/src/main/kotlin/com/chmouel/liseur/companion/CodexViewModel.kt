@@ -44,6 +44,9 @@ data class CodexDetail(
     /** Committed chapters when [passages] were last read; later ones can only add rows after them. */
     val scanned: Int = 0,
 )
+/** Codex's tabs; Story is there only while a companion service is chosen. */
+enum class CodexTab { STORY, NAMES, RELATIONSHIPS }
+
 data class CodexPanel(
     val ceiling: Int?,
     val titles: List<String?>,
@@ -55,8 +58,10 @@ data class CodexPanel(
     val detail: CodexDetail? = null,
     /** The relationships query failed; the scan itself is unaffected. */
     val graphFailed: Boolean = false,
-    /** The relationships tab is showing; kept here, with [search], across a peek. */
-    val relationships: Boolean = false,
+    /** The tab showing; kept here, with [search], across a peek. */
+    val tab: CodexTab = CodexTab.NAMES,
+    /** Where Codex was opened from, frozen for the session; null until placed, or when known only by its chapter. */
+    val scope: AskingScope? = null,
     val search: String = query,
 )
 
@@ -109,19 +114,28 @@ class CodexViewModel(
         catalog = PublicationCatalog(publication)
     }
 
-    fun open(place: Locator, translated: Boolean, selection: String? = null) {
+    /** Opens Codex at [place]; on [story] when nothing was selected, as from the menu. */
+    fun open(place: Locator, translated: Boolean, selection: String? = null, story: Boolean = false) {
         if (!enabled.value) return
         val opened = catalog ?: return
-        start(null, List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection) { opened.scopeOf(place, translated)?.lo }
+        val tab = if (story && selection == null) CodexTab.STORY else CodexTab.NAMES
+        start(null, List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection, tab) { opened.scopeOf(place, translated) }
     }
 
-    fun openAt(ceiling: Int, titles: List<String?>, selection: String) {
+    /** Opens Codex on [selection] over the same chapters as a profile asked from [scope]. */
+    fun openAt(scope: AskingScope, titles: List<String?>, selection: String) {
         if (!enabled.value) return
-        start(ceiling, titles, selection, place = null)
+        start(scope, titles, selection, CodexTab.NAMES, place = null)
     }
 
-    /** Shows a new panel; [place] resolves the ceiling when it is not already known. */
-    private fun start(ceiling: Int?, titles: List<String?>, selection: String?, place: (suspend () -> Int?)?) {
+    /** Shows a new panel; [place] resolves the scope when it is not already known. */
+    private fun start(
+        known: AskingScope?,
+        titles: List<String?>,
+        selection: String?,
+        tab: CodexTab,
+        place: (suspend () -> AskingScope?)?,
+    ) {
         opening?.cancel()
         detailJob?.cancel()
         graphJob?.cancel()
@@ -129,17 +143,19 @@ class CodexViewModel(
         val name = selection?.let(PassageText::name)?.let(CodexExtractor::storedName)
         val query = name ?: selection?.trim().orEmpty()
         _panel.value = CodexPanel(
-            ceiling = ceiling,
+            ceiling = known?.lo,
             titles = titles,
             placing = place != null,
             query = query,
             detail = name?.let { CodexDetail(it) },
+            tab = tab,
+            scope = known,
         )
         opening = viewModelScope.launch {
             try {
                 if (place != null) {
                     val placed = place()
-                    _panel.update { it?.copy(ceiling = placed, placing = false) }
+                    _panel.update { it?.copy(ceiling = placed?.lo, scope = placed, placing = false) }
                     if (placed == null) return@launch
                 }
                 if (identity != null) {
@@ -232,8 +248,8 @@ class CodexViewModel(
         if (entries != current.entries) {
             // The previous map stays up until its replacement is ready.
             _panel.update { it?.copy(entries = entries, graphFailed = false) }
-            if (current.relationships) rebuildGraph()
-        } else if (current.relationships && !current.graphFailed && (committed || current.graph == null && graphJob?.isActive != true)) {
+            if (current.tab == CodexTab.RELATIONSHIPS) rebuildGraph()
+        } else if (current.tab == CodexTab.RELATIONSHIPS && !current.graphFailed && (committed || current.graph == null && graphJob?.isActive != true)) {
             rebuildGraph()
         }
         topUpDetail()
@@ -249,11 +265,13 @@ class CodexViewModel(
     }
 
     fun showGraph() {
-        _panel.update { it?.copy(relationships = true, graphFailed = false) }
+        _panel.update { it?.copy(tab = CodexTab.RELATIONSHIPS, graphFailed = false) }
         rebuildGraph()
     }
 
-    fun showNames() = _panel.update { it?.copy(relationships = false) }
+    fun showNames() = _panel.update { it?.copy(tab = CodexTab.NAMES) }
+
+    fun showStory() = _panel.update { it?.copy(tab = CodexTab.STORY, detail = null) }
 
     fun search(text: String) = _panel.update { it?.copy(search = text) }
 
@@ -281,7 +299,7 @@ class CodexViewModel(
                     _panel.update { current -> if (current?.ceiling == ceiling) current.copy(graphFailed = true) else current }
                     return@launch
                 }
-            } while (graphStale && _panel.value?.relationships == true)
+            } while (graphStale && _panel.value?.tab == CodexTab.RELATIONSHIPS)
         }
     }
 

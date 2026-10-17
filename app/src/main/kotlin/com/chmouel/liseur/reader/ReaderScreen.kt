@@ -44,7 +44,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Hub
@@ -2450,8 +2449,7 @@ fun ReaderScreen(
     val companionPanel = companion?.panel?.collectAsStateWithLifecycle()?.value
     val codexPanel = companion?.codex?.panel?.collectAsStateWithLifecycle()?.value
     val codexEnabled = companion?.codex?.enabled?.collectAsStateWithLifecycle()?.value == true
-    val storyPanel = companion?.story?.collectAsStateWithLifecycle()?.value
-    val hasStory = companion?.hasStory?.collectAsStateWithLifecycle()?.value == true
+    val storyAvailable = companion?.storyAvailable?.collectAsStateWithLifecycle()?.value == true
     val companionPeek = companion?.peek?.collectAsStateWithLifecycle()?.value
     val canAutoScroll = autoScrollArmed &&
         !autoScrollPaused &&
@@ -2474,7 +2472,6 @@ fun ReaderScreen(
         catchUp == null &&
         companionPanel?.visible != true &&
         codexPanel?.visible != true &&
-        storyPanel?.visible != true &&
         companionPeek == null &&
         // A picture over the page is modal to a finger and to a screen
         // reader; it has to be modal to the clock as well, or the book
@@ -3646,25 +3643,13 @@ fun ReaderScreen(
                         theme = readingTheme,
                         returning = peek.phase == SourcePeek.Phase.RETURNING,
                         onReturn = returnToAsking,
-                        onShow = if (codexPanel != null || companionPanel != null || storyPanel != null) {
+                        onShow = if (codexPanel != null || companionPanel != null) {
                             {
-                                when {
-                                    codexPanel != null -> companion?.codex?.reveal()
-                                    storyPanel != null -> companion?.revealStory?.invoke()
-                                    else -> companion?.reveal?.invoke()
-                                }
+                                if (codexPanel != null) companion?.codex?.reveal() else companion?.reveal?.invoke()
                             }
                         } else null,
-                        showLabel = when {
-                            codexPanel != null -> R.string.codex_title
-                            storyPanel != null -> R.string.story_title
-                            else -> R.string.companion_peek_show
-                        },
-                        showIcon = when {
-                            codexPanel != null -> Icons.Outlined.Hub
-                            storyPanel != null -> Icons.Outlined.AutoStories
-                            else -> Icons.Outlined.PersonSearch
-                        },
+                        showLabel = if (codexPanel != null) R.string.codex_title else R.string.companion_peek_show,
+                        showIcon = if (codexPanel != null) Icons.Outlined.Hub else Icons.Outlined.PersonSearch,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -4077,7 +4062,7 @@ fun ReaderScreen(
                         // sentence on screen; reading settings, this
                         // book's background recaps among them, stay in Aa.
                         // Hidden when none applies.
-                        if (codexEnabled || hasStory || translateFromHere != null || readAloudFromHere != null) {
+                        if (codexEnabled || translateFromHere != null || readAloudFromHere != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4096,33 +4081,14 @@ fun ReaderScreen(
                                                 val lookups = companion
                                                 val nav = navigatorNow
                                                 if (lookups != null && nav != null) effectScope.launch {
-                                                    val origin = lookups.peek.value?.origin
-                                                        ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
-                                                    if (origin != null && navigatorNow === nav) {
-                                                        lookups.close()
-                                                        lookups.closeStory()
-                                                        lookups.codex.open(origin, pageTranslated)
-                                                    }
-                                                }
-                                            },
-                                        )
-                                    }
-                                    if (hasStory) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.story_title)) },
-                                            leadingIcon = { Icon(Icons.Outlined.AutoStories, contentDescription = null) },
-                                            onClick = {
-                                                moreOpen = false
-                                                val lookups = companion
-                                                val nav = navigatorNow
-                                                if (lookups != null && nav != null) effectScope.launch {
                                                     // A peek's origin may have been on a translated
                                                     // page; placed as if it were, it shows no more.
                                                     val peekOrigin = lookups.peek.value?.origin
                                                     val origin = peekOrigin
                                                         ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
                                                     if (origin != null && navigatorNow === nav) {
-                                                        lookups.openStory(origin, peekOrigin != null || pageTranslated)
+                                                        lookups.close()
+                                                        lookups.codex.open(origin, peekOrigin != null || pageTranslated, story = storyAvailable)
                                                     }
                                                 }
                                             },
@@ -4694,12 +4660,12 @@ fun ReaderScreen(
                     val lookups = companion
                     val nav = navigatorNow
                     if (nav != null) effectScope.launch {
-                        val origin = lookups.peek.value?.origin
+                        val peekOrigin = lookups.peek.value?.origin
+                        val origin = peekOrigin
                             ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
                         if (origin != null && navigatorNow === nav) {
                             lookups.close()
-                            lookups.closeStory()
-                            lookups.codex.open(origin, pageTranslated, query.takeIf { it.isNotBlank() })
+                            lookups.codex.open(origin, peekOrigin != null || pageTranslated, query.takeIf { it.isNotBlank() })
                         }
                     }
                 }

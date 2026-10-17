@@ -67,6 +67,11 @@ class CompanionServer internal constructor(
     /** Whether background recaps are on. */
     val recapsEnabled: Flow<Boolean> = settings.settings.map { it.companionRecaps }.distinctUntilChanged()
 
+    /** Whether the reader allowed Story to send earlier chapters on its own. */
+    val storyAutoOk: Flow<Boolean> = settings.settings.map { it.storyAutoOk }.distinctUntilChanged()
+
+    suspend fun setStoryAutoOk(allowed: Boolean) = settings.setStoryAutoOk(allowed)
+
     /** A chat bound to [choice]: every request goes to that service and model, or fails. */
     fun chat(choice: CompanionChoice): CompanionChat {
         val chat = services.firstOrNull { it.id == choice.service }?.chat(choice)

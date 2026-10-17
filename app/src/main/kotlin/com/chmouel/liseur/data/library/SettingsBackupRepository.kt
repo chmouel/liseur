@@ -21,7 +21,7 @@ import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
 import com.chmouel.liseur.domain.BackedUpReadingPosition
-import com.chmouel.liseur.domain.BackedUpCompanionRecap
+import com.chmouel.liseur.domain.CompanionBackupContents
 import com.chmouel.liseur.domain.decodeCompanionBackup
 import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import com.chmouel.liseur.domain.BackupContents
@@ -317,7 +317,7 @@ class SettingsBackupRepository(
                             annotationBookCount = annotationPreview.books,
                             matchedAnnotationBooks = annotationPreview.matchedBooks,
                             positionCount = positionContents.size,
-                            companionRecapCount = companionContents.size,
+                            companionRecapCount = companionContents.recaps.size,
                             includesConnections = CONNECTIONS_PATH in result.entries,
                         ),
                         result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
@@ -775,8 +775,8 @@ class SettingsBackupRepository(
         return StagedEntry(file, size, digest.hexDigest())
     }
 
-    private fun decodeCompanion(entries: Map<String, StagedEntry>): List<BackedUpCompanionRecap> {
-        val entry = entries[COMPANION_PATH] ?: return emptyList()
+    private fun decodeCompanion(entries: Map<String, StagedEntry>): CompanionBackupContents {
+        val entry = entries[COMPANION_PATH] ?: return CompanionBackupContents()
         val text = readStagedBytes(entry.file, MAX_COMPANION_BYTES).toString(Charsets.UTF_8)
         return try {
             decodeCompanionBackup(text)

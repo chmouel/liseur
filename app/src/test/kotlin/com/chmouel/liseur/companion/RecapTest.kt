@@ -5,6 +5,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -361,6 +362,193 @@ class RecapTest {
         assertEquals(listOf(0), h.book.saved.keys.map { it.index })
     }
 
+    @Test
+    fun `a chapter asked for is recapped with background recaps off, then the place is forgotten`() = runTest {
+        val h = harness(enabled = false)
+        h.scheduler.moved(5, movement = false)
+        assertFalse(h.scheduler.tracking.value)
+        h.scheduler.request(listOf(RecapRequest(h.unit(2), ceiling = 5)))
+        runCurrent()
+        assertTrue("the place was forgotten: nothing is sent until it is placed again", h.chat.requests.isEmpty())
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+
+        assertEquals(listOf(2), h.book.saved.keys.map { it.index })
+        assertTrue(h.scheduler.activity.value.waiting.isEmpty())
+        assertFalse(h.scheduler.tracking.value)
+        // A backward peek to chapter 4 while untracked forgets the place; asked for then, chapter 4 waits for it.
+        h.scheduler.moved(3, movement = false)
+        h.scheduler.request(listOf(RecapRequest(h.unit(3), ceiling = 5)))
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+        h.scheduler.moved(3, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+        h.scheduler.moved(4, movement = false)
+        runCurrent()
+        assertEquals(listOf(2, 3), h.book.saved.keys.map { it.index }.sorted())
+    }
+
+    @Test
+    fun `a chapter asked for stops when the reader goes back before it, and waits past a source's origin`() = runTest {
+        val h = harness(enabled = false, hold = true)
+        h.scheduler.request(listOf(RecapRequest(h.unit(3), ceiling = 5)))
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+
+        h.scheduler.moved(2, movement = false) // a jump back mid-request
+        runCurrent()
+        assertTrue(h.chat.cancelled)
+        assertEquals(listOf(3), h.scheduler.activity.value.waiting)
+        assertTrue(h.scheduler.activity.value.failed.isEmpty())
+
+        h.scheduler.peeking(originLo = 3) // a peek at a later page, asked from chapter 4
+        h.scheduler.moved(7, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+
+        h.chat.hold = false
+        h.scheduler.peeking(null)
+        runCurrent()
+        assertEquals("never past the ceiling it was asked under", 2, h.chat.requests.size)
+        assertEquals(listOf(3), h.book.saved.keys.map { it.index })
+    }
+
+    @Test
+    fun `background work gives way between batches to a chapter asked for, keeping its batches`() = runTest {
+        val long = (0 until 30).map { k -> "Chapter 1 text. Mira walks on, step $k. " + "x".repeat(1_050) }
+        val h = harness(hold = true, longChapter = long)
+        h.chat.holdAfter = 0
+        h.book.queue += h.unit(0)
+        h.book.queue += h.unit(2)
+        h.scheduler.moved(4, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+
+        // Chapter 3 is asked for while queued in the background: it is promoted.
+        h.scheduler.request(listOf(RecapRequest(h.unit(2), ceiling = 4)))
+        runCurrent()
+        assertFalse("the request in flight is not thrown away", h.chat.cancelled)
+        h.chat.hold = false
+        h.chat.release.complete(Unit)
+        runCurrent()
+
+        assertFalse(h.chat.cancelled)
+        assertTrue(h.chat.sent(0).contains("Chapter 1 text"))
+        assertTrue("asked for goes before the next batch", h.chat.sent(1).contains("Chapter 3 text"))
+        assertEquals(4, h.chat.requests.size)
+        assertEquals(setOf(0, 2), h.book.saved.keys.map { it.index }.toSet())
+        assertTrue(h.book.queue.isEmpty())
+    }
+
+    @Test
+    fun `asked again, only an unreadable recap is written over, and a failure keeps it`() = runTest {
+        val h = harness(enabled = false)
+        h.book.saved[h.unit(1)] = "not a recap"
+        h.book.savedBy[h.unit(1)] = h.setup.identity
+        h.book.saved[h.unit(2)] = ChapterRecap(listOf("Kept."), emptyList()).encode()
+        h.book.savedBy[h.unit(2)] = h.setup.identity
+        h.scheduler.request(listOf(RecapRequest(h.unit(2), 5, replace = true)))
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertTrue("a readable recap is kept", h.chat.requests.isEmpty())
+
+        val failing = harness(enabled = false, malformed = true, book = h.book)
+        failing.scheduler.request(listOf(RecapRequest(failing.unit(1), 5, replace = true)))
+        failing.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertEquals("not a recap", h.book.saved[h.unit(1)])
+        assertEquals(CompanionFailure.MALFORMED, failing.scheduler.activity.value.failed[1]?.failure)
+        assertEquals(2, failing.scheduler.activity.value.failed[1]?.details?.requests)
+
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5, replace = true)))
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertNotNull(ChapterRecap.decode(h.book.saved[h.unit(1)]!!))
+    }
+
+    @Test
+    fun `another service or model drops what was asked for`() = runTest {
+        val h = harness(enabled = false, hold = true)
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5), RecapRequest(h.unit(2), 5)))
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertEquals(listOf(1, 2), h.scheduler.activity.value.waiting)
+
+        h.settings.value = RecapSettings(false, h.setup.copy(identity = h.setup.identity.copy(model = "other")))
+        runCurrent()
+        assertTrue(h.chat.cancelled)
+        assertTrue(h.scheduler.activity.value.waiting.isEmpty())
+        assertEquals(1, h.chat.requests.size)
+    }
+
+    @Test
+    fun `a running summary goes after what was asked for, below the chapter on screen, and stops`() = runTest {
+        val h = harness(enabled = false)
+        val order = mutableListOf<String>()
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5)))
+        h.scheduler.summarize(SummaryWork(last = 4) { _, allowed -> if (allowed()) order += "summary" })
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+        assertEquals(listOf("summary"), order)
+        assertFalse(h.scheduler.activity.value.summarizing)
+
+        h.scheduler.summarize(SummaryWork(last = 6) { _, _ -> order += "too far" })
+        runCurrent()
+        assertTrue("tracked while waiting", h.scheduler.tracking.value)
+        assertEquals(listOf("summary"), order)
+        h.scheduler.stop()
+        h.scheduler.moved(7, movement = false)
+        runCurrent()
+        assertEquals(listOf("summary"), order)
+        assertFalse(h.scheduler.tracking.value)
+    }
+
+    @Test
+    fun `revoking Story's consent drops and stops what it queued on its own, not what the reader asked for`() = runTest {
+        val consent = MutableStateFlow(true)
+        val h = harness(enabled = false, hold = true, consent = consent)
+        val order = mutableListOf<String>()
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5, automatic = true), RecapRequest(h.unit(2), 5, automatic = true)))
+        h.scheduler.request(listOf(RecapRequest(h.unit(3), 5)))
+        h.scheduler.summarize(SummaryWork(last = 3, automatic = true) { _, _ -> order += "summary" })
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        assertEquals(1, h.chat.requests.size)
+
+        consent.value = false
+        runCurrent()
+        assertTrue("the automatic one in flight stops", h.chat.cancelled)
+        assertEquals(listOf(3), h.scheduler.activity.value.waiting)
+        assertFalse(h.scheduler.activity.value.summarizing)
+        // Offered later by a caller that saw consent before it was revoked: refused.
+        h.scheduler.request(listOf(RecapRequest(h.unit(4), 5, automatic = true)))
+        h.scheduler.summarize(SummaryWork(last = 3, automatic = true) { _, _ -> order += "late summary" })
+        assertEquals(listOf(3), h.scheduler.activity.value.waiting)
+        assertFalse(h.scheduler.activity.value.summarizing)
+
+        h.chat.hold = false
+        h.chat.release.complete(Unit)
+        runCurrent()
+        assertEquals(listOf(3), h.book.saved.keys.map { it.index })
+        assertTrue(order.isEmpty())
+    }
+
+    @Test
+    fun `a chapter Story queued on its own and then tapped is kept, and not restarted`() = runTest {
+        val h = harness(enabled = false, hold = true)
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5, automatic = true)))
+        h.scheduler.moved(5, movement = false)
+        runCurrent()
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), 5)))
+        h.scheduler.dropAutomatic()
+        runCurrent()
+        assertFalse(h.chat.cancelled)
+        assertEquals(listOf(1), h.scheduler.activity.value.waiting)
+    }
+
     // -- Fixtures --------------------------------------------------------------
 
     private class Harness(
@@ -387,6 +575,7 @@ class RecapTest {
         book: FakeBook = FakeBook(),
         longChapter: List<String>? = null,
         truncateFirst: Boolean = false,
+        consent: StateFlow<Boolean> = MutableStateFlow(true),
     ): Harness {
         val catalog = FakeCatalog(8, longChapter)
         val chat = RecapChat(hold, malformed, truncateFirst)
@@ -394,7 +583,7 @@ class RecapTest {
         val settings = MutableStateFlow(RecapSettings(enabled, setup))
         val foreground = MutableStateFlow(true)
         val scope = CoroutineScope(backgroundScope.coroutineContext + kotlinx.coroutines.Job(backgroundScope.coroutineContext[kotlinx.coroutines.Job]))
-        val scheduler = RecapScheduler(scope, book, catalog, settings, foreground)
+        val scheduler = RecapScheduler(scope, book, catalog, settings, foreground, consent)
         scheduler.start()
         return Harness(scheduler, book, chat, settings, foreground, setup, catalog, scope)
     }
@@ -405,14 +594,20 @@ class RecapTest {
         var cancelled = false
         var holdAfter = -1
 
+        /** Completed to let held requests through. */
+        val release = CompletableDeferred<Unit>()
+
+        fun sent(k: Int) = requests[k].last().content
+
         override suspend fun reply(messages: List<ChatMessage>, beforeRequest: () -> Unit): String {
             beforeRequest()
             requests += messages
             if (hold && (holdAfter < 0 || requests.size > holdAfter)) {
                 try {
-                    CompletableDeferred<Unit>().await()
-                } finally {
+                    release.await()
+                } catch (e: kotlinx.coroutines.CancellationException) {
                     cancelled = true
+                    throw e
                 }
             }
             if (malformed) return "Sorry, here is a poem instead."
@@ -442,7 +637,7 @@ class RecapTest {
         override suspend fun recaps(identity: RecapIdentity) =
             saved.filter { savedBy[it.key].reads(identity) }.map { SavedRecap(it.key, it.value) }
 
-        override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit) = unit in saved && savedBy[unit].reads(identity)
+        override suspend fun recapOf(identity: RecapIdentity, unit: RecapUnit) = saved[unit]?.takeIf { savedBy[unit].reads(identity) }
 
         override suspend fun parts(identity: RecapIdentity, unit: RecapUnit, batchCount: Int) =
             parts.filterKeys { it.first == unit }.mapKeys { it.key.second }

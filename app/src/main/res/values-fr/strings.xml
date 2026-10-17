@@ -1420,6 +1420,8 @@
     <string name="companion_settings_recaps_group">Résumés en arrière-plan</string>
     <string name="companion_settings_recaps">Résumer les chapitres pendant la lecture</string>
     <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer dans Aa, Avancé, dans le lecteur.</string>
+    <string name="companion_settings_story_auto">Compléter l’histoire automatiquement</string>
+    <string name="companion_settings_story_auto_summary">Quand le Codex s’ouvre sur Histoire, récapitule le chapitre précédant votre position s’il n’en a pas et tient à jour le résumé de l’histoire jusqu’ici. Activé par Autoriser dans l’onglet Histoire.</string>
     <string name="companion_settings_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
     <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
     <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>
@@ -1451,6 +1453,7 @@
     <string name="codex_scope">Seuls les chapitres avant le chapitre %1$d sont affichés.</string>
     <string name="codex_names">Noms</string>
     <string name="codex_relationships">Liens</string>
+    <string name="codex_story">Histoire</string>
     <string name="codex_search">Rechercher un nom</string>
     <string name="codex_empty">Aucun nom correspondant dans les chapitres précédents pour le moment.</string>
     <string name="codex_scripts">La détection automatique repose sur les majuscules. Les langues sans majuscules ne sont pas encore prises en charge.</string>
@@ -1466,13 +1469,52 @@
     <string name="codex_chapter">Chapitre %1$d</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
-    <string name="story_title">L’histoire jusqu’ici</string>
-    <string name="story_about">Écrit par un modèle d’IA à partir des chapitres précédents. Il peut se tromper et révéler ce qu’un modèle sait de ce livre par ailleurs.</string>
+    <string name="story_about">Écrit par un modèle d’IA à partir des récapitulatifs des chapitres précédents. Il peut se tromper, affirmer ce que le livre ne dit pas, ou révéler ce que le modèle sait de ce livre par ailleurs.</string>
     <string name="story_failed">Impossible de lire l’histoire jusqu’ici.</string>
     <string name="story_nothing_before">Aucun chapitre précédent à afficher.</string>
-    <string name="story_no_summary">Le récapitulatif de ce chapitre ne contient pas de résumé.</string>
-    <string name="story_unreadable">Impossible de lire le récapitulatif de ce chapitre.</string>
-    <string name="story_missing">Ce chapitre n’a pas de récapitulatif.</string>
-    <string name="story_go">Aller au chapitre</string>
+    <string name="story_no_summary">Pas de résumé dans ce récapitulatif</string>
+    <string name="story_unreadable">Le récapitulatif est illisible</string>
+    <string name="story_go">Aller au chapitre : %1$s</string>
     <string name="story_go_unavailable">Liseur ne sait pas exactement où commence ce chapitre.</string>
+    <string name="story_so_far">Jusqu’ici</string>
+    <string name="story_covers_first">Couvre le chapitre 1</string>
+    <string name="story_covers">Couvre les chapitres 1 à %1$d</string>
+    <string name="story_none_yet">Pas encore de résumé.</string>
+    <string name="story_none_possible">Récapitulez au moins deux chapitres précédents pour écrire l’histoire jusqu’ici.</string>
+    <string name="story_outdated">D’autres chapitres ont été récapitulés depuis.</string>
+    <string name="story_write">Écrire le résumé</string>
+    <string name="story_update">Mettre à jour le résumé</string>
+    <string name="story_updating">Écriture du résumé…</string>
+    <string name="story_more">Afficher plus</string>
+    <string name="story_less">Afficher moins</string>
+    <string name="story_consent_title">Récapituler le chapitre précédent ?</string>
+    <string name="story_allow">Autoriser</string>
+    <string name="story_not_now">Plus tard</string>
+    <string name="story_working">Récapitulatif du chapitre %1$d</string>
+    <string name="story_working_part">Récapitulatif du chapitre %1$d, partie %2$d sur %3$d</string>
+    <string name="story_writing">Écriture du résumé</string>
+    <string name="story_stop">Arrêter</string>
+    <string name="story_summarize">Récapituler</string>
+    <string name="story_summarize_again">Récapituler à nouveau</string>
+    <string name="story_status_missing">Pas encore récapitulé</string>
+    <string name="story_status_queued">En attente</string>
+    <string name="story_status_working">Récapitulatif en cours…</string>
+    <string name="story_status_failed">Récapitulatif impossible</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">Le chapitre %1$s n’a pas encore de récapitulatif</item>
+        <item quantity="other">Les chapitres %1$s n’ont pas encore de récapitulatif</item>
+    </plurals>
+    <string name="story_consent">Liseur peut envoyer le texte du chapitre précédant votre position à %1$s pour le récapituler, puis envoyer les récapitulatifs des chapitres pour écrire l’histoire jusqu’ici. Une fois autorisé, Histoire le fait d’elle-même.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">%d autre chapitre en attente</item>
+        <item quantity="other">%d autres chapitres en attente</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">Récapituler %d chapitre manquant</item>
+        <item quantity="other">Récapituler %d chapitres manquants</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">Envoyer le texte de %1$d chapitre à %2$s pour le récapituler ?</item>
+        <item quantity="other">Envoyer le texte de %1$d chapitres à %2$s pour les récapituler ?</item>
+    </plurals>
 </resources>

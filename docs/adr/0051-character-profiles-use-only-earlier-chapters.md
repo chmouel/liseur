@@ -1,7 +1,7 @@
 # 51. Character profiles use only earlier chapters
 
 Status: accepted, amended by
-[57. The story so far shows stored recaps](0057-the-story-so-far-shows-stored-recaps.md)
+[57. Codex tells the story so far](0057-codex-tells-the-story-so-far.md)
 
 ## Context
 

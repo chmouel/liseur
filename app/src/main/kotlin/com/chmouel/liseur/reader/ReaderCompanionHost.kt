@@ -16,7 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.companion.CompanionSheet
 import com.chmouel.liseur.companion.CodexSheet
 import com.chmouel.liseur.companion.Passage
-import com.chmouel.liseur.companion.StorySheet
+import com.chmouel.liseur.companion.CodexTab
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -26,7 +26,7 @@ import org.readium.r2.shared.publication.Locator
 internal typealias ReaderGo = suspend (EpubNavigatorFragment, Locator, NavigatorPositionEvent) -> Boolean
 
 /**
- * The character panel, the Codex and the story so far over the book, the
+ * The character panel and Codex, with its Story tab, over the book, the
  * companion's settings, and following a source or a chapter: the panel
  * steps aside while it is a peek, and comes back with Return or Show.
  */
@@ -44,6 +44,7 @@ internal fun CompanionPanelHost(
     val scan by companion.codex.progress.collectAsStateWithLifecycle()
     val codexEnabled by companion.codex.enabled.collectAsStateWithLifecycle()
     val story by companion.story.collectAsStateWithLifecycle()
+    val storyAvailable by companion.storyAvailable.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var peeked by rememberSaveable { mutableStateOf(false) }
 
@@ -56,7 +57,6 @@ internal fun CompanionPanelHost(
             peeked = false
             if (companion.panel.value?.visible == false) companion.close()
             if (companion.codex.panel.value?.visible == false) companion.codex.close()
-            if (companion.story.value?.visible == false) companion.closeStory()
         }
     }
 
@@ -69,11 +69,9 @@ internal fun CompanionPanelHost(
             val (_, fresh) = companion.startPeek() ?: return@launch
             companion.hide()
             companion.codex.hide()
-            companion.hideStory()
             if (!go(nav, place, NavigatorPositionEvent.LOCAL_JUMP)) {
                 companion.reveal()
                 companion.codex.reveal()
-                companion.revealStory()
                 if (fresh) companion.endPeek()
             }
         }
@@ -83,12 +81,37 @@ internal fun CompanionPanelHost(
     // the names reset with a new Codex, the passages with a new name.
     val codexNames = rememberSaveable(codex != null, saver = LazyListState.Saver) { LazyListState() }
     val codexDetail = rememberSaveable(codex?.detail?.name, codex?.detail?.other, saver = LazyListState.Saver) { LazyListState() }
-    codex?.takeIf { it.visible }?.let { CodexSheet(it, scan, companion.codex, onSource, codexNames, codexDetail) }
-    val storyList = rememberSaveable(story != null, saver = LazyListState.Saver) { LazyListState() }
-    story?.takeIf { it.visible }?.let { StorySheet(it, onChapter = follow, onDismiss = companion.closeStory, list = storyList) }
+    // The Story tab is shown for the place Codex was opened from, only while
+    // it is the tab in front and Codex is on screen: a peek pauses it, so
+    // nothing new starts on its own meanwhile, and Return shows it again.
+    val storyScope = codex?.scope?.takeIf { codex?.visible == true && codex?.tab == CodexTab.STORY && storyAvailable }
+    LaunchedEffect(storyScope) {
+        if (storyScope != null) companion.showStory(storyScope) else companion.hideStory()
+    }
+    // The service went away: Story's tab goes with it, and Names takes its place.
+    LaunchedEffect(storyAvailable) {
+        if (!storyAvailable && companion.codex.panel.value?.tab == CodexTab.STORY) companion.codex.showNames()
+    }
+    val storyList = rememberSaveable(codex != null, codex?.scope, saver = LazyListState.Saver) { LazyListState() }
+    codex?.takeIf { it.visible }?.let {
+        CodexSheet(
+            panel = it,
+            progress = scan,
+            controller = companion.codex,
+            onSource = onSource,
+            namesList = codexNames,
+            detailList = codexDetail,
+            storyList = storyList,
+            storyAvailable = storyAvailable,
+            story = story,
+            storyActions = companion.storyActions,
+            onChapter = follow,
+            onChooseModel = { settingsOpen = true },
+        )
+    }
 
     panel?.takeIf { it.visible }?.let { shown ->
-        val ceiling = shown.scope?.lo
+        val scope = shown.scope
         val target = (shown.view as? com.chmouel.liseur.companion.CompanionView.Profile)?.profile?.name
             ?: shown.name
             ?: shown.selection
@@ -100,10 +123,10 @@ internal fun CompanionPanelHost(
             onChoose = companion.choose,
             onSetUp = { settingsOpen = true },
             onChooseModel = { settingsOpen = true },
-            onCodex = if (codexEnabled && ceiling != null) {
+            onCodex = if (codexEnabled && scope != null) {
                 {
                     companion.close()
-                    companion.codex.openAt(ceiling, shown.titles, target)
+                    companion.codex.openAt(scope, shown.titles, target)
                 }
             } else null,
             onDismiss = companion.close,
@@ -145,7 +168,6 @@ internal suspend fun returnFromSource(
         if (arrived) {
             companion.reveal()
             companion.codex.reveal()
-            companion.revealStory()
             companion.returnArrived(generation)
             return
         }

@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -50,7 +51,67 @@ class CompanionStoreTest {
     @Test
     fun `the database migrates to its exported schema`() {
         helper.createDatabase("companion-schema-test", 1).close()
-        helper.runMigrationsAndValidate("companion-schema-test", 3, true, *CompanionDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate("companion-schema-test", 4, true, *CompanionDatabase.MIGRATIONS).close()
+    }
+
+    @Test
+    fun `adding running summaries keeps every recap, batch, queued chapter, choice and codex row`() {
+        helper.createDatabase("companion-data-test", 3).apply {
+            execSQL("INSERT INTO chapter_recap VALUES ('$BOOK', 'k0', 0, '$SHA', 'server', 'model', 1, '{}', 1, 2)")
+            execSQL("INSERT INTO recap_part VALUES ('$BOOK', 'k1', 0, 2, '$SHA', 'server', 'model', 1, '{}', 1)")
+            execSQL("INSERT INTO recap_queue VALUES ('$BOOK', 'k1', 1, '$SHA', 3)")
+            execSQL("INSERT INTO recap_choice VALUES ('$BOOK', 1)")
+            execSQL("INSERT INTO codex_book VALUES ('$BOOK', 'id', 4)")
+            close()
+        }
+        helper.runMigrationsAndValidate("companion-data-test", 4, true, *CompanionDatabase.MIGRATIONS).use { migrated ->
+            for (table in listOf("chapter_recap", "recap_part", "recap_queue", "recap_choice", "codex_book")) {
+                migrated.query("SELECT COUNT(*) FROM $table").use { c ->
+                    c.moveToFirst()
+                    assertEquals(table, 1, c.getInt(0))
+                }
+            }
+            migrated.query("SELECT COUNT(*) FROM story_summary").use { c ->
+                c.moveToFirst()
+                assertEquals(0, c.getInt(0))
+            }
+        }
+    }
+
+    @Test
+    fun `running summaries are kept per file and format, dropped with their book, and fenced after removal`() = runTest {
+        val store = store()
+        val book = store.forBook(BOOK, SHA)
+        val deps = listOf(SummaryDep(0, "k0", true), SummaryDep(1, "k1", false))
+        assertTrue(book.summaries.saveSummary(SavedSummary("top", StorySummaries.TOP, 0, 1, deps, "So far."), 0))
+        assertTrue(book.summaries.saveSummary(SavedSummary("win", 1, 0, 7, deps, "A window."), 0))
+        assertEquals("So far.", book.summaries.summaryOf("top"))
+        assertEquals(listOf(SavedSummary("top", StorySummaries.TOP, 0, 1, deps, "So far.", 1_002)).map { it.copy(savedAt = 0) },
+            book.summaries.tops().map { it.copy(savedAt = 0) })
+
+        val rewritten = store.forBook(BOOK, "new")
+        assertNull("another file's summary is not used", rewritten.summaries.summaryOf("top"))
+        assertTrue(rewritten.summaries.tops().isEmpty())
+        assertTrue("and is dropped once the new file's are read", db.recaps().summariesAt(BOOK, StorySummaries.TOP).isEmpty())
+
+        val other = store.forBook(OTHER, SHA)
+        other.summaries.saveSummary(SavedSummary("top", StorySummaries.TOP, 0, 1, deps, "Other."), 0)
+        library -= OTHER
+        store.sweep()
+        assertNull(db.recaps().summary(OTHER, "top"))
+        assertFalse(other.summaries.saveSummary(SavedSummary("late", StorySummaries.TOP, 0, 1, deps, "Late."), 0))
+        assertNull(db.recaps().summary(OTHER, "late"))
+    }
+
+    @Test
+    fun `the least recently used running summaries go first once over their limit`() = runTest {
+        val store = CompanionStore(db, { it }, { clock++ }, maxSummaries = 2)
+        val summaries = store.forBook(BOOK, SHA).summaries
+        val deps = listOf(SummaryDep(0, "k0", true))
+        for (key in listOf("a", "b")) summaries.saveSummary(SavedSummary(key, StorySummaries.TOP, 0, 0, deps, key), 0)
+        summaries.summaryOf("a")
+        summaries.saveSummary(SavedSummary("c", StorySummaries.TOP, 0, 0, deps, "c"), 0)
+        assertEquals(setOf("a", "c"), summaries.tops().map { it.key }.toSet())
     }
 
     @Test
@@ -63,12 +124,12 @@ class CompanionStoreTest {
         // Another service reads it, counts it as done, and does not drop it.
         for (other in listOf(IDENTITY.copy(serverId = "other"), IDENTITY.copy(model = "other"))) {
             assertEquals("$other", listOf(SavedRecap(UNIT_1, "one")), book.recaps(other))
-            assertTrue("$other", book.hasRecap(other, UNIT_1))
+            assertNotNull("$other", book.recapOf(other, UNIT_1))
         }
         assertEquals(listOf(SavedRecap(UNIT_1, "one")), book.recaps(IDENTITY))
 
         val format = IDENTITY.copy(format = IDENTITY.format + 1)
-        assertFalse(book.hasRecap(format, UNIT_1))
+        assertNull(book.recapOf(format, UNIT_1))
         assertTrue(book.recaps(format).isEmpty())
         // Dropped, not merely hidden: going back does not bring it back.
         assertTrue(book.recaps(IDENTITY).isEmpty())
@@ -246,12 +307,8 @@ class CompanionStoreTest {
         db.recaps().putRecap(row("hidden"))
         db.recaps().putRecap(row("old-file", sha = "old"))
         db.recaps().putRecap(row("old-format", format = Recaps.FORMAT + 1))
-        assertTrue(store.hasRecaps(BOOK, SHA).first())
-        assertFalse(store.hasRecaps(BOOK, "unknown").first())
-        assertFalse(store.hasRecaps(OTHER, SHA).first())
-
         val book = store.forBook(BOOK, SHA)
-        assertEquals(setOf("shown", "hidden"), book.stored().map { it.unit.key }.toSet())
+        assertEquals(setOf("shown", "hidden"), book.watch().first().map { it.unit.key }.toSet())
         book.touch(listOf("shown"))
 
         val rows = db.recaps().recaps(BOOK).associateBy { it.unitKey }

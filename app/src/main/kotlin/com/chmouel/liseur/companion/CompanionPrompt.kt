@@ -11,7 +11,7 @@ internal object CompanionPrompt {
     private const val BOOK_CLOSE = "</book>"
     private const val NAME_OPEN = "<name>"
     private const val NAME_CLOSE = "</name>"
-    private val MARKER = Regex("<(/?\\s*(?:book|name))", RegexOption.IGNORE_CASE)
+    private val MARKER = Regex("<(/?\\s*(?:book|name|summary|missing))", RegexOption.IGNORE_CASE)
 
     fun safe(text: String) = text.replace(MARKER, "<\u200B$1")
 

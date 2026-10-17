@@ -59,6 +59,22 @@ sealed class CompanionError(message: String) : Exception(message) {
         /** For logs: the class, and for [Malformed] the fixed rule broken; never book text or replies. */
         fun describe(e: Throwable): String =
             e.javaClass.simpleName + ((e as? Malformed)?.let { " (${it.code})" } ?: "")
+
+        /** What the reader is told about [e]. */
+        fun failureOf(e: Throwable): CompanionFailure = when (e) {
+            is Malformed -> CompanionFailure.MALFORMED
+            is TooManyRequests -> CompanionFailure.LIMIT
+            is TooLong -> CompanionFailure.TOO_LONG
+            is TranslationError.InvalidKey -> CompanionFailure.KEY
+            is TranslationError.RateLimited -> CompanionFailure.RATE_LIMITED
+            is TranslationError.LocalNetworkBlocked -> CompanionFailure.LOCAL_NETWORK
+            is TranslationError.Network -> CompanionFailure.NETWORK
+            is TranslationError.ModelNotFound -> CompanionFailure.MODEL_MISSING
+            is TranslationError.Refused -> CompanionFailure.REFUSED
+            is TranslationError.Malformed, is TranslationError.Empty, is TranslationError.Truncated -> CompanionFailure.MALFORMED
+            is TranslationError -> CompanionFailure.SERVER
+            else -> CompanionFailure.UNREADABLE
+        }
     }
 }
 

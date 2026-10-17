@@ -1518,6 +1518,8 @@
     <string name="companion_settings_recaps_group">Фоновые пересказы</string>
     <string name="companion_settings_recaps">Пересказывать главы во время чтения</string>
     <string name="companion_settings_recaps_summary">Когда вы дочитываете главу, она пересказывается в фоне, чтобы следующие поиски быстрее находили отрывки. По умолчанию выключено. Для каждой книги это можно изменить в читалке: Aa, Дополнительно.</string>
+    <string name="companion_settings_story_auto">Дополнять сюжет самостоятельно</string>
+    <string name="companion_settings_story_auto_summary">Когда Справочник открывается на вкладке «Сюжет», пересказывает главу перед вашим местом, если у неё нет пересказа, и поддерживает краткое содержание сюжета в актуальном состоянии. Включается кнопкой «Разрешить» на вкладке «Сюжет».</string>
     <string name="companion_settings_privacy">Текст книги до выделенного абзаца отправляется на выбранный сервер, а при включённых фоновых пересказах — целые главы. Его поставщик может брать плату за эти запросы.</string>
     <string name="settings_backup_include_connections">Включить аккаунты, сервисы и пароли</string>
     <string name="settings_backup_connections_replace">Сохранённые аккаунты библиотеки и KOReader, настройки сервисов и учётные данные будут автоматически заменены.</string>
@@ -1549,6 +1551,7 @@
     <string name="codex_scope">Показаны только главы до главы %1$d.</string>
     <string name="codex_names">Имена</string>
     <string name="codex_relationships">Связи</string>
+    <string name="codex_story">Сюжет</string>
     <string name="codex_search">Поиск имён</string>
     <string name="codex_empty">В предыдущих главах пока нет подходящих имён.</string>
     <string name="codex_scripts">Автоматический поиск имён основан на заглавных буквах. Языки без них пока не поддерживаются.</string>
@@ -1564,13 +1567,60 @@
     <string name="codex_chapter">Глава %1$d</string>
     <string name="codex_more">Загрузить ещё отрывки</string>
     <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
-    <string name="story_title">Сюжет на данный момент</string>
-    <string name="story_about">Написано ИИ-моделью по предыдущим главам. Может содержать ошибки и раскрыть то, что модель знает об этой книге из других источников.</string>
+    <string name="story_about">Написано ИИ-моделью по пересказам предыдущих глав. Может содержать ошибки, утверждать то, чего нет в книге, или раскрыть то, что модель знает об этой книге из других источников.</string>
     <string name="story_failed">Не удалось прочитать сюжет на данный момент.</string>
     <string name="story_nothing_before">Нет предыдущих глав.</string>
-    <string name="story_no_summary">В пересказе этой главы нет краткого содержания.</string>
-    <string name="story_unreadable">Не удалось прочитать пересказ этой главы.</string>
-    <string name="story_missing">Для этой главы нет пересказа.</string>
-    <string name="story_go">Перейти к главе</string>
+    <string name="story_no_summary">В пересказе нет краткого содержания</string>
+    <string name="story_unreadable">Не удалось прочитать пересказ</string>
+    <string name="story_go">Перейти к главе: %1$s</string>
     <string name="story_go_unavailable">Liseur не может точно определить, где начинается эта глава.</string>
+    <string name="story_so_far">На данный момент</string>
+    <string name="story_covers_first">Охватывает главу 1</string>
+    <string name="story_covers">Охватывает главы с 1 по %1$d</string>
+    <string name="story_none_yet">Краткого содержания пока нет.</string>
+    <string name="story_none_possible">Перескажите хотя бы две предыдущие главы, чтобы написать сюжет на данный момент.</string>
+    <string name="story_outdated">С тех пор были пересказаны другие главы.</string>
+    <string name="story_write">Написать краткое содержание</string>
+    <string name="story_update">Обновить краткое содержание</string>
+    <string name="story_updating">Пишется краткое содержание…</string>
+    <string name="story_more">Показать больше</string>
+    <string name="story_less">Показать меньше</string>
+    <string name="story_consent_title">Пересказать предыдущую главу?</string>
+    <string name="story_allow">Разрешить</string>
+    <string name="story_not_now">Не сейчас</string>
+    <string name="story_working">Пересказ главы %1$d</string>
+    <string name="story_working_part">Пересказ главы %1$d, часть %2$d из %3$d</string>
+    <string name="story_writing">Пишется краткое содержание</string>
+    <string name="story_stop">Остановить</string>
+    <string name="story_summarize">Пересказать</string>
+    <string name="story_summarize_again">Пересказать заново</string>
+    <string name="story_status_missing">Ещё не пересказана</string>
+    <string name="story_status_queued">В очереди</string>
+    <string name="story_status_working">Пересказывается…</string>
+    <string name="story_status_failed">Не удалось пересказать</string>
+    <plurals name="story_unsummarized">
+        <item quantity="one">У главы %1$s ещё нет пересказа</item>
+        <item quantity="few">У глав %1$s ещё нет пересказа</item>
+        <item quantity="many">У глав %1$s ещё нет пересказа</item>
+        <item quantity="other">У глав %1$s ещё нет пересказа</item>
+    </plurals>
+    <string name="story_consent">Liseur может отправить текст главы перед вашим местом в %1$s для пересказа, а затем отправить пересказы глав, чтобы написать сюжет на данный момент. После вашего разрешения «Сюжет» будет делать это сам.</string>
+    <plurals name="story_waiting">
+        <item quantity="one">Ещё %d глава в очереди</item>
+        <item quantity="few">Ещё %d главы в очереди</item>
+        <item quantity="many">Ещё %d глав в очереди</item>
+        <item quantity="other">Ещё %d главы в очереди</item>
+    </plurals>
+    <plurals name="story_summarize_missing">
+        <item quantity="one">Пересказать %d недостающую главу</item>
+        <item quantity="few">Пересказать %d недостающие главы</item>
+        <item quantity="many">Пересказать %d недостающих глав</item>
+        <item quantity="other">Пересказать %d недостающей главы</item>
+    </plurals>
+    <plurals name="story_confirm_missing">
+        <item quantity="one">Отправить текст %1$d главы в %2$s для пересказа?</item>
+        <item quantity="few">Отправить текст %1$d глав в %2$s для пересказа?</item>
+        <item quantity="many">Отправить текст %1$d глав в %2$s для пересказа?</item>
+        <item quantity="other">Отправить текст %1$d главы в %2$s для пересказа?</item>
+    </plurals>
 </resources>

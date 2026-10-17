@@ -73,6 +73,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.BusyBar
@@ -97,8 +98,16 @@ internal fun CodexSheet(
     // Return should land where the reader was in the list.
     namesList: LazyListState = rememberLazyListState(),
     detailList: LazyListState = rememberLazyListState(),
+    storyList: LazyListState = rememberLazyListState(),
+    /** Whether there is a Story tab, and what it shows and does. */
+    storyAvailable: Boolean = false,
+    story: StoryView? = null,
+    storyActions: StoryActions? = null,
+    onChapter: (Locator) -> Unit = {},
+    onChooseModel: () -> Unit = {},
 ) {
-    val tab = if (panel.relationships) 1 else 0
+    val tabs = if (storyAvailable && storyActions != null) CodexTab.entries else CodexTab.entries - CodexTab.STORY
+    val tab = panel.tab.takeIf { it in tabs } ?: CodexTab.NAMES
     val search = panel.search
     val detail = panel.detail
     LiseurModalBottomSheet(
@@ -160,14 +169,20 @@ internal fun CodexSheet(
                         TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_more)) }
                     }
                 }
-            } else if (tab == 0) {
+            } else if (tab == CodexTab.STORY && storyActions != null) {
+                LazyColumn(Modifier.weight(1f), state = storyList) {
+                    codexHeader(progress, controller, panel.ceiling)
+                    codexTabs(tab, tabs, controller)
+                    storyTab(story, storyActions, onChapter, onChooseModel)
+                }
+            } else if (tab == CodexTab.NAMES) {
                 val entries = remember(panel.entries, search) {
                     val needle = PassageText.fold(search)
                     panel.entries.filter { PassageText.fold(it.name).contains(needle) }
                 }
                 LazyColumn(Modifier.weight(1f), state = namesList) {
                     codexHeader(progress, controller, panel.ceiling)
-                    codexTabs(tab, controller)
+                    codexTabs(tab, tabs, controller)
                     item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
@@ -191,7 +206,7 @@ internal fun CodexSheet(
             } else {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     codexHeader(progress, controller, panel.ceiling)
-                    codexTabs(tab, controller)
+                    codexTabs(tab, tabs, controller)
                     val graph = panel.graph
                     if (panel.graphFailed) item {
                         Text(stringResource(R.string.codex_failed))
@@ -228,10 +243,31 @@ private fun LazyListScope.codexHeader(progress: CodexProgress, controller: Codex
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-private fun LazyListScope.codexTabs(tab: Int, controller: CodexViewModel) = item(key = "codex:tabs") {
-    PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.padding(bottom = 10.dp)) {
-        Tab(selected = tab == 0, onClick = controller::showNames, text = { Text(stringResource(R.string.codex_names)) })
-        Tab(selected = tab == 1, onClick = controller::showGraph, text = { Text(stringResource(R.string.codex_relationships)) })
+private fun LazyListScope.codexTabs(tab: CodexTab, tabs: List<CodexTab>, controller: CodexViewModel) = item(key = "codex:tabs") {
+    PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab), modifier = Modifier.padding(bottom = 10.dp)) {
+        tabs.forEach { each ->
+            Tab(
+                selected = tab == each,
+                onClick = when (each) {
+                    CodexTab.STORY -> controller::showStory
+                    CodexTab.NAMES -> controller::showNames
+                    CodexTab.RELATIONSHIPS -> controller::showGraph
+                },
+                text = {
+                    Text(
+                        stringResource(
+                            when (each) {
+                                CodexTab.STORY -> R.string.codex_story
+                                CodexTab.NAMES -> R.string.codex_names
+                                CodexTab.RELATIONSHIPS -> R.string.codex_relationships
+                            },
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+            )
+        }
     }
 }
 

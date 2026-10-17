@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
 import com.chmouel.liseur.companion.CodexViewModel
+import com.chmouel.liseur.companion.StoryActions
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.providers.ServicesScreen
@@ -708,15 +709,18 @@ class ReaderActivity : FragmentActivity() {
         hide = companionViewModel::hide,
         reveal = companionViewModel::reveal,
         close = companionViewModel::close,
+        storyAvailable = companionViewModel.storyAvailable,
         story = companionViewModel.story,
-        hasStory = companionViewModel.hasStory,
-        openStory = { place, translated ->
-            codexViewModel.close()
-            companionViewModel.openStory(place, translated)
-        },
+        showStory = companionViewModel::showStory,
         hideStory = companionViewModel::hideStory,
-        revealStory = companionViewModel::revealStory,
-        closeStory = companionViewModel::closeStory,
+        storyActions = StoryActions(
+            allow = { companionViewModel.allowStory() },
+            decline = { companionViewModel.declineStory() },
+            summarize = { companionViewModel.summarizeChapter(it) },
+            summarizeMissing = { companionViewModel.summarizeMissing() },
+            write = { companionViewModel.writeStory() },
+            stop = { companionViewModel.stopStory() },
+        ),
         startPeek = viewModel::startPeek,
         onUserTurn = viewModel::onUserTurn,
         endPeek = viewModel::endPeek,

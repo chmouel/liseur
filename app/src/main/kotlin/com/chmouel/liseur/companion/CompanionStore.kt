@@ -17,6 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -65,6 +66,28 @@ data class RecapQueueRow(
     @ColumnInfo(name = "enqueued_at") val enqueuedAt: Long,
 )
 
+/**
+ * A running summary of one book version: a window of chapters, or the
+ * story so far at level 0, keyed by what it was written from. [deps] lists
+ * those chapters, so it is shown only where all of them are known to lie
+ * before the reader.
+ */
+@Entity(tableName = "story_summary", primaryKeys = ["book_url", "key"], indices = [Index("used_at")])
+data class StorySummaryRow(
+    @ColumnInfo(name = "book_url") val bookUrl: String,
+    val key: String,
+    val level: Int,
+    val lo: Int,
+    val hi: Int,
+    @ColumnInfo(name = "content_sha") val contentSha: String,
+    @ColumnInfo(name = "recap_format") val recapFormat: Int,
+    @ColumnInfo(name = "summary_format") val summaryFormat: Int,
+    val deps: String,
+    val text: String,
+    @ColumnInfo(name = "saved_at") val savedAt: Long,
+    @ColumnInfo(name = "used_at") val usedAt: Long,
+)
+
 /** The reader's own choice for one book, over the switch in settings. */
 @Entity(tableName = "recap_choice")
 data class RecapChoiceRow(
@@ -78,13 +101,7 @@ interface CompanionRecapDao {
     suspend fun recaps(bookUrl: String): List<ChapterRecapRow>
 
     @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl AND content_sha = :sha AND format = :format")
-    suspend fun recapsFor(bookUrl: String, sha: String, format: Int): List<ChapterRecapRow>
-
-    @Query(
-        "SELECT EXISTS(SELECT 1 FROM chapter_recap WHERE book_url = :bookUrl " +
-            "AND content_sha = :sha AND format = :format)",
-    )
-    fun hasRecaps(bookUrl: String, sha: String, format: Int): Flow<Boolean>
+    fun watchRecaps(bookUrl: String, sha: String, format: Int): Flow<List<ChapterRecapRow>>
 
     @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl AND unit_key = :unitKey")
     suspend fun recap(bookUrl: String, unitKey: String): ChapterRecapRow?
@@ -153,9 +170,62 @@ interface CompanionRecapDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putChoice(row: RecapChoiceRow)
 
+    @Query("SELECT * FROM story_summary WHERE book_url = :bookUrl AND `key` = :key")
+    suspend fun summary(bookUrl: String, key: String): StorySummaryRow?
+
+    @Query("SELECT * FROM story_summary WHERE book_url = :bookUrl AND level = :level")
+    suspend fun summariesAt(bookUrl: String, level: Int): List<StorySummaryRow>
+
+    @Query("UPDATE story_summary SET used_at = :now WHERE book_url = :bookUrl AND `key` = :key")
+    suspend fun touchSummary(bookUrl: String, key: String, now: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putSummary(row: StorySummaryRow)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun restoreSummary(row: StorySummaryRow): Long
+
+    @Query(
+        "DELETE FROM story_summary WHERE book_url = :bookUrl AND " +
+            "(content_sha != :sha OR recap_format != :recapFormat OR summary_format != :summaryFormat)",
+    )
+    suspend fun forgetOtherSummaries(bookUrl: String, sha: String, recapFormat: Int, summaryFormat: Int)
+
+    @Query("DELETE FROM story_summary WHERE book_url IN (:bookUrls)")
+    suspend fun forgetSummaries(bookUrls: List<String>): Int
+
+    @Query("SELECT COUNT(*) FROM story_summary")
+    suspend fun summaryCount(): Int
+
+    @Query("SELECT COALESCE(SUM(LENGTH(text) + LENGTH(deps)), 0) FROM story_summary")
+    suspend fun summaryCharacters(): Long
+
+    @Query(
+        "SELECT book_url, `key` AS unit_key, LENGTH(text) + LENGTH(deps) AS length FROM story_summary " +
+            "ORDER BY used_at LIMIT :limit",
+    )
+    suspend fun oldestSummaries(limit: Int): List<RecapLength>
+
+    @Query("DELETE FROM story_summary WHERE book_url = :bookUrl AND `key` = :key")
+    suspend fun forgetSummary(bookUrl: String, key: String)
+
+    @Query(
+        "SELECT * FROM story_summary WHERE recap_format = :recapFormat AND summary_format = :summaryFormat " +
+            "ORDER BY used_at DESC, book_url, `key` LIMIT 50",
+    )
+    suspend fun firstSummaryPage(recapFormat: Int, summaryFormat: Int): List<StorySummaryRow>
+
+    @Query(
+        "SELECT * FROM story_summary WHERE recap_format = :recapFormat AND summary_format = :summaryFormat AND " +
+            "(used_at < :usedAt OR (used_at = :usedAt AND (book_url > :bookUrl OR (book_url = :bookUrl AND `key` > :key)))) " +
+            "ORDER BY used_at DESC, book_url, `key` LIMIT 50",
+    )
+    suspend fun nextSummaryPage(recapFormat: Int, summaryFormat: Int, usedAt: Long, bookUrl: String, key: String): List<StorySummaryRow>
+
     @Query(
         "SELECT book_url FROM chapter_recap UNION SELECT book_url FROM recap_part " +
-            "UNION SELECT book_url FROM recap_queue UNION SELECT book_url FROM recap_choice UNION SELECT book_url FROM codex_book",
+            "UNION SELECT book_url FROM recap_queue UNION SELECT book_url FROM recap_choice " +
+            "UNION SELECT book_url FROM story_summary UNION SELECT book_url FROM codex_book",
     )
     suspend fun books(): List<String>
 
@@ -206,8 +276,8 @@ data class RecapLength(
  */
 @Database(
     entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class,
-        CodexBookRow::class, CodexUnitRow::class, CodexPassageRow::class],
-    version = 3,
+        CodexBookRow::class, CodexUnitRow::class, CodexPassageRow::class, StorySummaryRow::class],
+    version = 4,
     exportSchema = true,
 )
 abstract class CompanionDatabase : RoomDatabase() {
@@ -237,7 +307,15 @@ abstract class CompanionDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** Adds the story so far's running summaries. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `story_summary` (`book_url` TEXT NOT NULL, `key` TEXT NOT NULL, `level` INTEGER NOT NULL, `lo` INTEGER NOT NULL, `hi` INTEGER NOT NULL, `content_sha` TEXT NOT NULL, `recap_format` INTEGER NOT NULL, `summary_format` INTEGER NOT NULL, `deps` TEXT NOT NULL, `text` TEXT NOT NULL, `saved_at` INTEGER NOT NULL, `used_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`, `key`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_story_summary_used_at` ON `story_summary` (`used_at`)")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }
 
@@ -268,7 +346,8 @@ interface RecapBook {
 
     suspend fun recaps(identity: RecapIdentity): List<SavedRecap>
 
-    suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit): Boolean
+    /** The saved recap of [unit] for [identity]'s book version and format, by any server or model. */
+    suspend fun recapOf(identity: RecapIdentity, unit: RecapUnit): String?
 
     suspend fun parts(identity: RecapIdentity, unit: RecapUnit, batchCount: Int): Map<Int, String>
 
@@ -301,6 +380,8 @@ class CompanionStore(
     private val maxRecaps: Int = MAX_RECAPS,
     private val maxCharacters: Long = MAX_CHARACTERS,
     private val maxParts: Int = MAX_PARTS,
+    private val maxSummaries: Int = MAX_SUMMARIES,
+    private val maxSummaryCharacters: Long = MAX_SUMMARY_CHARACTERS,
 ) {
     private val dao = database.recaps()
     val codex = CodexStore(database, present)
@@ -335,6 +416,31 @@ class CompanionStore(
         }
     }
 
+    /** Running summaries in the current formats, most recently used first; stops at the first row [write] declines. */
+    internal suspend fun exportSummaries(write: suspend (StorySummaryRow) -> Boolean) = writes.withLock {
+        database.withTransaction {
+            var page = dao.firstSummaryPage(Recaps.FORMAT, StorySummaries.FORMAT)
+            while (page.isNotEmpty()) {
+                for (row in page) if (!write(row)) return@withTransaction
+                val last = page.last()
+                page = dao.nextSummaryPage(Recaps.FORMAT, StorySummaries.FORMAT, last.usedAt, last.bookUrl, last.key)
+            }
+        }
+    }
+
+    /** Adds the missing summary [rows] for books still in the library; returns how many [trim] kept. */
+    internal suspend fun restoreSummaries(rows: List<StorySummaryRow>): Int = writes.withLock {
+        database.withTransaction {
+            val kept = rows.map { it.bookUrl }.distinct().chunked(BATCH).flatMap { present(it) }.toSet()
+            val inserted = rows.filter { row ->
+                row.bookUrl in kept && row.recapFormat == Recaps.FORMAT && row.summaryFormat == StorySummaries.FORMAT &&
+                    dao.restoreSummary(row) != -1L
+            }
+            trim()
+            inserted.count { dao.summary(it.bookUrl, it.key) != null }
+        }
+    }
+
     /** The book at [bookUrl], whose file hashes to [contentSha], for one opening of it. */
     fun forBook(bookUrl: String, contentSha: String): BookRecaps =
         BookRecaps(bookUrl, contentSha, epochs.computeIfAbsent(bookUrl) { 0L })
@@ -352,12 +458,6 @@ class CompanionStore(
             for (bookUrl in epochs.keys) if (bookUrl !in turnedOn) stops.merge(bookUrl, 1L, Long::plus)
             dao.clearQueueFollowingSettings()
         }
-    }
-
-    /** Whether [bookUrl] has a recap for the version hashing to [contentSha] in the current format; reads only. */
-    fun hasRecaps(bookUrl: String, contentSha: String): Flow<Boolean> {
-        require(contentSha.isNotBlank())
-        return dao.hasRecaps(bookUrl, contentSha, Recaps.FORMAT)
     }
 
     /** The reader's choice for [bookUrl], or null while it follows settings. */
@@ -394,6 +494,7 @@ class CompanionStore(
                     dao.forgetParts(it)
                     dao.forgetQueued(it)
                     dao.forgetChoices(it)
+                    dao.forgetSummaries(it)
                     codex.forget(it)
                 }
             }
@@ -416,6 +517,18 @@ class CompanionStore(
         }
         val parts = dao.partCount() - maxParts
         if (parts > 0) dao.dropOldestParts(parts)
+        val summaries = dao.summaryCount() - maxSummaries
+        if (summaries > 0) dao.oldestSummaries(summaries).forEach { dao.forgetSummary(it.bookUrl, it.unitKey) }
+        var summaryExcess = dao.summaryCharacters() - maxSummaryCharacters
+        while (summaryExcess > 0) {
+            val oldest = dao.oldestSummaries(BATCH)
+            if (oldest.isEmpty()) break
+            for (row in oldest) {
+                dao.forgetSummary(row.bookUrl, row.unitKey)
+                summaryExcess -= row.length
+                if (summaryExcess <= 0) break
+            }
+        }
     }
 
     private suspend fun quietly(what: String, work: suspend () -> Unit) {
@@ -443,9 +556,9 @@ class CompanionStore(
 
         override fun ticket(): Long = this@CompanionStore.ticket(bookUrl)
 
-        override suspend fun hasRecap(identity: RecapIdentity, unit: RecapUnit): Boolean {
-            val row = dao.recap(bookUrl, unit.key) ?: return false
-            return row.contentSha == identity.contentSha && row.format == identity.format
+        override suspend fun recapOf(identity: RecapIdentity, unit: RecapUnit): String? {
+            val row = dao.recap(bookUrl, unit.key) ?: return null
+            return row.json.takeIf { row.contentSha == identity.contentSha && row.format == identity.format }
         }
 
         /** The recaps for [identity]'s book version and format, by any server or model, touched as used. */
@@ -461,16 +574,15 @@ class CompanionStore(
             return rows.map { SavedRecap(RecapUnit(it.unit, it.unitKey), it.json) }
         }
 
-        /**
-         * The recaps for this book version in the current format, by any
-         * server or model, for the reader to read. Unlike [recaps] it
-         * drops and touches nothing.
-         */
-        suspend fun stored(): List<SavedRecap> {
+        /** The recaps for this book version in the current format as they change, for the reader; touches nothing. */
+        fun watch(): Flow<List<SavedRecap>> {
             require(contentSha.isNotBlank())
-            if (fenced()) return emptyList()
-            return dao.recapsFor(bookUrl, contentSha, Recaps.FORMAT).map { SavedRecap(RecapUnit(it.unit, it.unitKey), it.json) }
+            return dao.watchRecaps(bookUrl, contentSha, Recaps.FORMAT)
+                .map { rows -> if (fenced()) emptyList() else rows.map { SavedRecap(RecapUnit(it.unit, it.unitKey), it.json) } }
         }
+
+        /** This book version's running summaries; writes are dropped once the book is removed. */
+        val summaries: StorySummaryBook = StorySummaryBook()
 
         /** Marks the recaps of [keys] as used, so the trim keeps them longer. */
         suspend fun touch(keys: List<String>) {
@@ -555,12 +667,58 @@ class CompanionStore(
         override suspend fun dequeue(unit: RecapUnit) = writes.withLock {
             if (!fenced()) dao.dequeue(bookUrl, unit.key)
         }
+
+        inner class StorySummaryBook internal constructor() : SummaryBook {
+            override fun ticket(): Long = 0L
+
+            override suspend fun summaryOf(key: String): String? = writes.withLock {
+                if (fenced()) return null
+                val row = dao.summary(bookUrl, key) ?: return null
+                if (!row.current()) return null
+                dao.touchSummary(bookUrl, key, now())
+                row.text
+            }
+
+            override suspend fun saveSummary(summary: SavedSummary, ticket: Long): Boolean = writes.withLock {
+                if (fenced()) return false
+                val at = now()
+                dao.putSummary(
+                    StorySummaryRow(
+                        bookUrl, summary.key, summary.level, summary.lo, summary.hi, contentSha, Recaps.FORMAT,
+                        StorySummaries.FORMAT, StorySummaries.encodeDeps(summary.deps), summary.text, at, at,
+                    ),
+                )
+                trim()
+                true
+            }
+
+            /** The saved stories so far for this book version; those of another version or format are dropped. */
+            suspend fun tops(): List<SavedSummary> = writes.withLock {
+                if (fenced()) return emptyList()
+                dao.forgetOtherSummaries(bookUrl, contentSha, Recaps.FORMAT, StorySummaries.FORMAT)
+                dao.summariesAt(bookUrl, StorySummaries.TOP).mapNotNull { row ->
+                    StorySummaries.decodeDeps(row.deps)?.let { deps ->
+                        SavedSummary(row.key, row.level, row.lo, row.hi, deps, row.text, row.savedAt)
+                    }
+                }
+            }
+
+            /** Marks the story so far under [key] as used. */
+            suspend fun touch(key: String) = writes.withLock {
+                if (!fenced()) dao.touchSummary(bookUrl, key, now())
+            }
+
+            private fun StorySummaryRow.current() =
+                contentSha == this@BookRecaps.contentSha && recapFormat == Recaps.FORMAT && summaryFormat == StorySummaries.FORMAT
+        }
     }
 
     companion object {
         const val MAX_RECAPS = 5_000
         const val MAX_CHARACTERS = 20_000_000L
         const val MAX_PARTS = 2_000
+        const val MAX_SUMMARIES = 2_000
+        const val MAX_SUMMARY_CHARACTERS = 4_000_000L
         private const val BATCH = 500
         private const val TAG = "CompanionStore"
     }

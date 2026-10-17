@@ -14,90 +14,61 @@ pull request.
 
 | Feature | Issue | ADR | State |
 | --- | --- | --- | --- |
-| Story so far | #355 | 0057 (approved) | Implemented on this branch, not finished |
-| Summarize a finished chapter on demand | #356 | 0058 (to write) | Not started |
-| Ask the book | #357 | 0059 (to write) | Not started |
-| Book memory | #358 | 0060 (to write) | Not started, depends on #357 |
+| Story so far, with chapter recaps on demand | #355, #356 | 0057 | Implemented on this branch, being verified |
+| Ask the book | #357 | 0058 (to write) | Not started |
+| Book memory | #358 | 0059 (to write) | Not started, depends on #357 |
+
+#356 (recap a chapter on demand) became part of #355: the Story tab is
+where a reader asks for it. Close #356 with the pull request for #355.
 
 Before writing an ADR, check again which number is free, since other
 branches may already use it. Every new ADR amends ADR-0051, which ruled
 out a recap browser and follow-up chat. Add the amendment to ADR-0051's
 status line.
 
-## Story so far (#355, this branch)
+## Story so far (#355 and #356, this branch)
 
 The design is in
-[docs/adr/0057-the-story-so-far-shows-stored-recaps.md](docs/adr/0057-the-story-so-far-shows-stored-recaps.md).
-Codex approved it after one round of changes.
+[docs/adr/0057-codex-tells-the-story-so-far.md](docs/adr/0057-codex-tells-the-story-so-far.md).
+The plan behind it was reviewed with `codex-review` until it approved.
 
 What is done:
 
-- The reader's ⋮ menu has a "Story so far" entry. It shows once the
-  book has a saved recap for its current content sha and `Recap.FORMAT`.
-- It opens a sheet listing the chapters before the reader's place. Each
-  row shows the chapter title, the saved recap sentences, or a note when
-  there is no summary, the recap can't be read, or no recap exists.
-  "Go to chapter" jumps there as a peek, so Return comes back and the
-  reading position is not saved.
-- Nothing is sent over the network.
-- `ChapterMap.startsBefore` lists a chapter only when its start is
-  provably before the place, so a contents page listed out of order
-  cannot reveal a later chapter. A peek origin is treated as a
-  translated page.
-- `BookRecaps.stored()` reads without deleting rows from another sha or
-  format. Only rows shown with a summary are touched for trimming.
-- Strings exist in English, fr, es, ru, it, de and zh-Hans.
-- DEVELOPER.md, README.md and docs/PRIVACY.md have been updated.
-- Tests are in `ChapterMapTest`, `StoryTest`, `CompanionStoreTest` and
-  `PublicationCatalogTest`. The companion tests pass with
-  `./gradlew testFossDebugUnitTest --tests 'com.chmouel.liseur.companion.*'`.
+- Codex has a Story tab, first and opened by default from the ⋮ menu,
+  shown only while a companion service is chosen. Codex freezes the
+  full asking scope on open; a peek origin counts as translated, which
+  also closes the gap where the ⋮ Codex entry did not do so.
+- The tab shows a running summary of the story so far, a timeline of
+  the earlier chapters with their recap sentences and Go to chapter (a
+  peek), and Recap, Recap again, Retry and "Recap k missing chapters".
+- `RecapScheduler` has lanes: lookups, requested recaps, Story's
+  summary nodes, background recaps. Requested recaps work with
+  background recaps off and never send a chapter at or after the
+  asking place.
+- A consent card asks once (`story_auto_ok`, also a switch in companion
+  settings). Once allowed, each frozen scope recaps the chapter before
+  the place once if it is missing, and writes the summary from at least
+  two recaps. Stop and Not now hold for that
+  scope.
+- The summary is a bounded tree of windows of eight (`StorySummaries`),
+  cached in `companion.db`'s new `story_summary` table (schema 4) and
+  included in the exported ZIP.
+- Strings in all seven locales; DEVELOPER.md, README.md, PRIVACY.md and
+  the ADR updated. `StorySheet` and the old ⋮ Story entry are gone.
 
 Still to do:
 
-- Run the full checks. That run was stopped before it finished:
+- Full checks:
   `./gradlew testFossDebugUnitTest testPlayDebugUnitTest lintFossDebug lintPlayDebug assembleFossDebug assemblePlayDebug`
   (or `make check`).
-- Check it on the emulator: `make emulator` then `make run-bg`. On the
-  Mac, the AVD `liseur_phone_api36` lives in `~/.config/.android/avd`, so
-  set `ANDROID_AVD_HOME=~/.config/.android/avd`. Seed `chapter_recap`
-  rows in `companion.db` with `run-as`, or turn on background recaps and
-  read a few chapters.
-- Things to look at on the device: the menu entry shows and hides
-  correctly; the sheet's states (loading, empty, rows); Go to chapter
-  lands on a chapter that starts at an anchor inside a file (it relies on
-  the navigator honouring `locations.fragments` in a locator built with
-  `locatorFromLink`, which has not been verified); Return and Show in the
-  peek bar; the sheet closing when Codex opens and the other way round;
-  auto-scroll staying paused while the sheet is visible.
-- Save screenshots to `~/tmp/liseur/sshot`, and add one to the pull
-  request.
-- Open the pull request using the repository template. Link #355 and
-  ADR-0057, and run deslop on the text first.
+- Emulator pass: the tab with and without a service, consent and
+  autofill, Recap, Recap missing chapters, Stop, a cached summary on
+  reopen, Go to chapter with Return and Show, three tabs on a narrow
+  phone. Screenshots go to `~/tmp/liseur/sshot`.
+- Open the pull request using the repository template. Link #355, #356
+  and ADR-0057, and run deslop on the text first.
 
-Known gap left alone on purpose: Codex opened from the ⋮ menu during a
-peek still uses `pageTranslated` for the peek origin. Story so far treats
-a peek origin as translated. Fixing Codex belongs in its own change.
-
-## Summarize a finished chapter on demand (#356, ADR-0058)
-
-- From Story so far, a row with no recap offers "Summarize". It works
-  even when background recaps are off, because the reader asked for it.
-  It needs a companion service to be chosen.
-- Reuse the `Recap` batching, prompt, parsing and parts storage, and save
-  a normal `chapter_recap` row, as `RecapScheduler` does. Lookups and
-  Story so far then use it too.
-- Keep the same limit: only chapters strictly before the asking one,
-  never the chapter on screen or a peek origin.
-- Coordinate with `RecapScheduler`: one batch at a time, step aside for a
-  lookup, and skip a chapter already queued. Show progress and the
-  existing failure view.
-- Privacy: the request is the same as a background recap. Update
-  PRIVACY.md to say recaps can also be asked for one chapter at a time.
-- Tests: capture requests and check that no text from the asking chapter
-  or later leaves the device; scheduler dedupe; lookups reuse the saved
-  row.
-
-## Ask the book (#357, ADR-0059)
+## Ask the book (#357, ADR-0058)
 
 - Turn `Investigation` from "who is NAME" into an open question. Name
   lookups must behave exactly as before, and their existing tests must
@@ -119,6 +90,8 @@ a peek origin as translated. Fixing Codex belongs in its own change.
 - Follow-ups in the same panel, up to a number set in the ADR (about 5).
   Each turn passes the gate again. Earlier model answers are not sent
   again, only earlier questions and the refs they cited.
+- Recap prose is sent only by Story's running summary (ADR-0057); keep
+  it out of questions.
 - UI: add a question view to `CompanionSheet` (input, claims with source
   pills, follow-up field), cached per open book like lookups.
 - Update the "Only these go into a request body" rule in DEVELOPER.md
@@ -126,10 +99,10 @@ a peek origin as translated. Fixing Codex belongs in its own change.
 - Tests: a sentinel test that no later-chapter text leaves for questions
   or follow-ups; citation checks; limits; the follow-up cap.
 
-## Book memory (#358, ADR-0060)
+## Book memory (#358, ADR-0059)
 
 - Needs Ask the book first.
-- New `companion.db` table (migration 3 to 4) keyed by book URL and
+- New `companion.db` table (migration 4 to 5) keyed by book URL and
   content sha: past questions, asking scope, cited refs with a passage
   hash, and timestamps. Model prose is not stored.
 - When a new question is asked, the closest earlier entries (keyword
@@ -156,6 +129,7 @@ a peek origin as translated. Fixing Codex belongs in its own change.
   No Gemini-specific code.
 - Keep the existing limits: one corrective request and 10 HTTP requests
   per lookup, and recap work only while the app is in the foreground.
+  New companion work goes through `RecapScheduler`'s lanes.
 - Do not change `Recap.FORMAT`, because that drops every saved recap.
 - Ask the user before committing, pushing, opening a pull request, or
   creating or editing an issue. Run deslop on any public text first.

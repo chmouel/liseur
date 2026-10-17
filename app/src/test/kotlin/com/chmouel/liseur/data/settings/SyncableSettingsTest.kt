@@ -161,6 +161,7 @@ class SyncableSettingsTest {
             "app.companion_server",
             "app.companion_server_state",
             "app.companion_recaps",
+            "app.story_auto_ok",
             "app.companion_provider",
             "app.companion_gemini_model",
         )) {

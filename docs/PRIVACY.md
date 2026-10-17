@@ -60,9 +60,9 @@ All of this stays in the app's own private storage:
   they came from, the oldest going first past a fixed limit. Deleting
   the book deletes them, and turning recaps off stops the work and drops
   the waiting chapters. They are not automatically backed up or synced.
-  Completed recaps are included in ZIP backups you export from Settings.
-  Story so far in the reader's menu shows these saved recaps without
-  sending anything. Character profiles themselves are not saved.
+  Completed recaps, and the summaries of the story so far written from
+  them, are included in ZIP backups you export from Settings. Character
+  profiles themselves are not saved.
 - Which books you turned background recaps on or off for from the
   reader's menu, overriding the setting. Deleting the book removes it.
   It is not backed up and not synced.
@@ -223,8 +223,8 @@ characters of book text in all. Nothing from the paragraph you selected
 in or anything after it is sent. The model, and your API key if you entered one, go
 with every request. No book title, file, identifier or precise reading
 position goes with it, and the recaps
-described below are only used on the phone to find passages; their
-wording is never sent.
+described below are only used on the phone to find passages; a lookup
+never sends their wording.
 
 If you also turn on background chapter recaps, then while the book is
 open on screen and you read on from the end of one chapter into the
@@ -238,6 +238,17 @@ its training and let something from later in it slip into its answer;
 Liseur asks it not to, and shows next to every statement the passage
 from the book it relied on, but it cannot guarantee what a model
 writes.
+
+Codex's Story tab, shown once a companion server is chosen, lists the
+chapters before yours with their recaps. Recapping a chapter from there,
+with or without background recaps on, sends that whole chapter the same
+way. The first time it opens it asks before doing anything on its own;
+once you allow it, each time you open it at a new place it recaps the
+chapter right before your place if it has no recap, and, once at least
+two chapters have one, writes a summary of the
+story so far by sending the recaps' summary sentences with their chapter
+numbers, and no book text. Not now, Stop, and the switch in the
+companion settings stop this; the buttons on the tab still work.
 
 ### Google Gemini, for reading aloud (Google Play build only)
 
@@ -338,9 +349,10 @@ using the same key as reading aloud. It does nothing until you choose
 Gemini as the companion's service in Settings, Intelligence, Reading
 companion. Opening the model list on that screen asks
 `generativelanguage.googleapis.com` which text models the key can use,
-carrying only your key. From then on, lookups and background chapter
-recaps send exactly what is described above for a server, the same
-passages from the book up to your selection and the same whole chapters, to that
+carrying only your key. From then on, lookups, chapter recaps and
+the story so far send exactly what is described above for a server, the same
+passages from the book up to your selection, the same whole chapters and the
+same recap sentences, to that
 address over HTTPS, together with your key and the model you picked.
 Requests are billed to your key under Google's terms, and Google's
 retention policy for the Gemini API applies to them.

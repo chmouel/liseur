@@ -317,25 +317,10 @@ class CompanionLookups<P>(
                 return
             } catch (e: Exception) {
                 log(e)
-                show(CompanionView.Failed(failureOf(e), FailureDetails.of(e, chosen, recorded.requests, recorded.last)))
+                show(CompanionView.Failed(CompanionError.failureOf(e), FailureDetails.of(e, chosen, recorded.requests, recorded.last)))
                 return
             }
         }
-    }
-
-    private fun failureOf(e: Exception): CompanionFailure = when (e) {
-        is CompanionError.Malformed -> CompanionFailure.MALFORMED
-        is CompanionError.TooManyRequests -> CompanionFailure.LIMIT
-        is CompanionError.TooLong -> CompanionFailure.TOO_LONG
-        is TranslationError.InvalidKey -> CompanionFailure.KEY
-        is TranslationError.RateLimited -> CompanionFailure.RATE_LIMITED
-        is TranslationError.LocalNetworkBlocked -> CompanionFailure.LOCAL_NETWORK
-        is TranslationError.Network -> CompanionFailure.NETWORK
-        is TranslationError.ModelNotFound -> CompanionFailure.MODEL_MISSING
-        is TranslationError.Refused -> CompanionFailure.REFUSED
-        is TranslationError.Malformed, is TranslationError.Empty, is TranslationError.Truncated -> CompanionFailure.MALFORMED
-        is TranslationError -> CompanionFailure.SERVER
-        else -> CompanionFailure.UNREADABLE
     }
 
     /** A chat that counts the requests it lets go and keeps its last reply, for [FailureDetails]. */

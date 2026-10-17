@@ -67,10 +67,11 @@ translated sentence by sentence as you read.
 
 The reading companion answers questions about characters and events using
 the passages before the selected text. Character profiles show their source
-passages, and optional background recaps summarize finished chapters, which
-you can read back from the reader's menu as the story so far. Codex
+passages, and optional background recaps summarize finished chapters. Codex
 builds a searchable index of people, places and groups on your device, and
-shows which names appear together in earlier chapters. The companion uses a
+shows which names appear together in earlier chapters. With a companion
+server chosen, its Story tab shows the earlier chapters' recaps, recaps
+the ones missing, and writes a summary of the story so far. The companion uses a
 server you configure; Codex runs on your phone.
 
 The library is one shelf whatever the source: local folders, calibre-web,
