@@ -450,8 +450,37 @@ class CodexStoreTest {
             assertTrue(vm.panel.value?.entries?.isEmpty() == true)
             assertTrue(vm.panel.value?.detail?.passages?.isEmpty() == true)
 
+            // Turned back on with the page open, its mentions are read again.
+            settings.setCodexEnabled(true)
+            awaitCondition { vm.panel.value?.detail?.loading == false && vm.panel.value?.detail?.passages?.size == 3 }
+            assertEquals(CodexStage.COMPLETE, vm.progress.value.stage)
+            assertTrue(vm.panel.value?.entries?.isNotEmpty() == true)
+
+            settings.setCodexEnabled(false)
+            awaitCondition { !vm.enabled.value }
             profiles.value = false
             awaitCondition { vm.panel.value == null }
+        }
+    }
+
+    @Test fun `a scan turned on with a character page open starts and lists the mentions`() {
+        val profiles = MutableStateFlow(true)
+        val text = (0 until 3).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" }
+        withViewModel(listOf(text, "<p>At dusk, Fenna waited.</p>"), profiles = profiles) { vm, settings ->
+            settings.setCodexEnabled(false)
+            awaitCondition { !vm.enabled.value }
+            vm.openCharacter(chapter("two"), translated = false, selection = "Mira", pane = CharacterPane.PROFILE)
+            awaitCondition { vm.panel.value?.placing == false }
+            // Never scanned while off.
+            assertEquals(CodexStage.PAUSED, vm.progress.value.stage)
+            assertEquals(0, vm.progress.value.total)
+            assertTrue(vm.panel.value?.detail?.passages?.isEmpty() == true)
+
+            settings.setCodexEnabled(true)
+            awaitCondition { vm.progress.value.stage == CodexStage.COMPLETE && vm.panel.value?.detail?.loading == false }
+            assertEquals(3, vm.panel.value?.detail?.passages?.size)
+            assertEquals(CharacterPane.PROFILE, vm.panel.value?.detail?.pane)
+            assertTrue(vm.panel.value?.entries?.any { it.name == "Mira" } == true)
         }
     }
 

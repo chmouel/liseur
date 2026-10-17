@@ -2113,9 +2113,11 @@ Closing the panel lets the scan continue while the reader stays open;
 leaving the book or backgrounding the app pauses it. Opening Codex again
 resumes. The On-device companion switch under Advanced in Companion settings defaults on;
 turning it off cancels scanning and hides Names, Relationships and
-Mentions, retaining the cache. Codex still opens for Story and profiles
-while a companion service is chosen (`CodexViewModel.profiles`), and
-reads nothing from the index then; with neither, the entry is hidden.
+Mentions, retaining the cache; turning it back on while Codex is open
+resumes the scan and lists the open page's mentions. Codex still opens
+for Story and profiles while a companion service is chosen
+(`CodexViewModel.profiles`), and reads nothing from the index then;
+with neither, the entry is hidden.
 The switch travels in settings backups, but the derived index does not.
 
 Codex hosts the character page ([ADR-0058](docs/adr/0058-codex-hosts-the-character-profile.md)):

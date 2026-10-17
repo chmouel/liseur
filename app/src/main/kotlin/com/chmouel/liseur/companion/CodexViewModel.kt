@@ -123,7 +123,26 @@ class CodexViewModel(
     init {
         viewModelScope.launch {
             enabled.collect {
-                if (it) return@collect
+                if (it) {
+                    // Turned back on with Codex open: the scan picks up again, and a
+                    // page opened without it lists its mentions once they are read.
+                    val panel = _panel.value ?: return@collect
+                    // Still placing, the opening reads and scans once placed, so an earlier pause no longer holds it;
+                    // in the background, nothing scans.
+                    if (panel.placing) {
+                        paused = false
+                        return@collect
+                    }
+                    if (!foreground) return@collect
+                    _panel.update { current ->
+                        val detail = current?.detail
+                        if (detail != null && detail.passages.isEmpty() && !detail.loading) {
+                            current.copy(detail = detail.copy(loading = true, failed = false))
+                        } else current
+                    }
+                    resume()
+                    return@collect
+                }
                 pause()
                 // Story and the profiles stay while there is a service for them.
                 if (profiles.value) _panel.update { panel -> panel?.copy(tab = CodexTab.STORY) } else close()
