@@ -140,7 +140,9 @@ internal fun CodexSheet(
     onChapter: (Locator) -> Unit = {},
     onChooseModel: () -> Unit = {},
 ) {
-    val tabs = CodexTab.entries.filter { if (it == CodexTab.STORY) storyAvailable && storyActions != null else scanEnabled }
+    val views = codexViews(serviceChosen = profiles?.available == true, scanEnabled = scanEnabled)
+    // Story also needs the book's content identity and something to run it.
+    val tabs = views.tabs.filter { it != CodexTab.STORY || storyAvailable && storyActions != null }
     val tab = panel.tab.takeIf { it in tabs } ?: tabs.firstOrNull()
     val search = panel.search
     val detail = panel.detail
@@ -170,8 +172,7 @@ internal fun CodexSheet(
                 if (scanEnabled) CodexScanProgress(progress, controller)
                 if (panel.placing) BusyBar() else Text(stringResource(R.string.codex_unplaced))
             } else if (detail != null) {
-                val profiled = profiles != null && (profiles.available || !scanEnabled)
-                val panes = listOfNotNull(CharacterPane.PROFILE.takeIf { profiled }, CharacterPane.MENTIONS.takeIf { scanEnabled })
+                val panes = views.panes.filter { it != CharacterPane.PROFILE || profiles != null }
                 val pane = detail.pane.takeIf { it in panes } ?: panes.firstOrNull()
                 LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     codexHeader(progress, controller, panel.ceiling, scanEnabled)

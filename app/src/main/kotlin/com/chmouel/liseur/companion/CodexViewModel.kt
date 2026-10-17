@@ -342,7 +342,7 @@ class CodexViewModel(
     /** Opens the page of [name], or of the pair it makes with [other]: on the profile while there is a service to ask. */
     fun detail(name: String, other: String? = null) {
         detailJob?.cancel()
-        val pane = if (profiles.value) CharacterPane.PROFILE else CharacterPane.MENTIONS
+        val pane = codexViews(profiles.value, enabled.value).opening
         _panel.update { it?.copy(detail = CodexDetail(name, other, pane = pane, loading = enabled.value)) }
         if (enabled.value) loadMore()
     }

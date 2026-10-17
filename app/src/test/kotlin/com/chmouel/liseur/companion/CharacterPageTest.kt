@@ -25,6 +25,29 @@ class CharacterPageTest {
         assertNull(relationOf(profile("Tobin"), "  "))
     }
 
+    @Test fun `codex views follow the companion service and the on-device scan`() {
+        val both = codexViews(serviceChosen = true, scanEnabled = true)
+        assertEquals(listOf(CodexTab.STORY, CodexTab.NAMES, CodexTab.RELATIONSHIPS), both.tabs)
+        assertEquals(listOf(CharacterPane.PROFILE, CharacterPane.MENTIONS), both.panes)
+        assertEquals(CharacterPane.PROFILE, both.opening)
+
+        val serviceOnly = codexViews(serviceChosen = true, scanEnabled = false)
+        assertEquals(listOf(CodexTab.STORY), serviceOnly.tabs)
+        assertEquals(listOf(CharacterPane.PROFILE), serviceOnly.panes)
+        assertEquals(CharacterPane.PROFILE, serviceOnly.opening)
+
+        val scanOnly = codexViews(serviceChosen = false, scanEnabled = true)
+        assertEquals(listOf(CodexTab.NAMES, CodexTab.RELATIONSHIPS), scanOnly.tabs)
+        assertEquals(listOf(CharacterPane.MENTIONS), scanOnly.panes)
+        assertEquals(CharacterPane.MENTIONS, scanOnly.opening)
+
+        // A page with nothing behind it: its profile alone, closed by Back.
+        val neither = codexViews(serviceChosen = false, scanEnabled = false)
+        assertEquals(emptyList<CodexTab>(), neither.tabs)
+        assertEquals(listOf(CharacterPane.PROFILE), neither.panes)
+        assertEquals(CharacterPane.PROFILE, neither.opening)
+    }
+
     @Test fun `a lookup belongs to the page of the name it asked about or chose`() {
         val asked = CompanionPanel<Int>("“Tobin’s,”", PassageText.name("“Tobin’s,”"), null, CompanionView.Setup)
         assertTrue(asked.about("Tobin"))

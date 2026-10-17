@@ -1,6 +1,30 @@
 package com.chmouel.liseur.companion
 
 /**
+ * What Codex offers with and without a companion service and the
+ * on-device scan: Story only with a service, Names and Relationships only
+ * with the scan. A character page has its Profile while there is a
+ * service to ask or no mentions to list instead, and opens on it then.
+ */
+internal data class CodexViews(
+    /** The tabs over the lists, in order; none leaves a character page alone, closed by Back. */
+    val tabs: List<CodexTab>,
+    /** A character page's panes, in order. */
+    val panes: List<CharacterPane>,
+    /** The pane a character page opens on. */
+    val opening: CharacterPane,
+)
+
+internal fun codexViews(serviceChosen: Boolean, scanEnabled: Boolean): CodexViews {
+    val profiled = serviceChosen || !scanEnabled
+    return CodexViews(
+        tabs = CodexTab.entries.filter { if (it == CodexTab.STORY) serviceChosen else scanEnabled },
+        panes = listOfNotNull(CharacterPane.PROFILE.takeIf { profiled }, CharacterPane.MENTIONS.takeIf { scanEnabled }),
+        opening = if (profiled) CharacterPane.PROFILE else CharacterPane.MENTIONS,
+    )
+}
+
+/**
  * What [profile] says of its character's link to [other], a name from
  * Codex: the relationship naming them, matched as whole words either way,
  * so Tobin finds "Tobin the elder" and "Captain Tobin Hale" finds

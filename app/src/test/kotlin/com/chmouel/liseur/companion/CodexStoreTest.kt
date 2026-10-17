@@ -389,6 +389,7 @@ class CodexStoreTest {
             assertEquals(CodexStage.COMPLETE, vm.progress.value.stage)
 
             vm.detail("Mira")
+            assertEquals(CharacterPane.MENTIONS, vm.panel.value?.detail?.pane)
             awaitCondition { vm.panel.value?.detail?.loading == false }
             assertEquals(50, vm.panel.value?.detail?.passages?.size)
             assertTrue(vm.panel.value?.detail?.more == true)
@@ -442,6 +443,7 @@ class CodexStoreTest {
             vm.back()
             assertTrue(vm.panel.value!!.storyInFront)
             vm.detail("Mira")
+            assertEquals(CharacterPane.PROFILE, vm.panel.value?.detail?.pane)
             assertFalse(vm.panel.value!!.storyInFront)
             assertEquals(1, vm.panel.value?.ceiling)
             // Nothing is read from the index while the scan is off.

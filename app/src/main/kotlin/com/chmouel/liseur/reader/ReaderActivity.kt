@@ -23,6 +23,7 @@ import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
 import com.chmouel.liseur.companion.CodexViewModel
 import com.chmouel.liseur.companion.StoryActions
+import com.chmouel.liseur.companion.codexViews
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.ui.settings.AppLocales
 import com.chmouel.liseur.providers.ServicesScreen
@@ -698,10 +699,10 @@ class ReaderActivity : FragmentActivity() {
                 // With a service, or with no scan to list mentions, the page opens
                 // on the profile and asks at once; otherwise on the mentions, as
                 // Codex alone always has. Both place the selection the same way.
-                val profile = companionViewModel.hasChoice() || !codexViewModel.enabled.value
+                val pane = codexViews(companionViewModel.hasChoice(), codexViewModel.enabled.value).opening
                 companionViewModel.close()
-                codexViewModel.openCharacter(place, translated, selection, if (profile) CharacterPane.PROFILE else CharacterPane.MENTIONS)
-                if (profile && codexViewModel.panel.value != null) companionViewModel.open(selection, place, translated)
+                codexViewModel.openCharacter(place, translated, selection, pane)
+                if (pane == CharacterPane.PROFILE && codexViewModel.panel.value != null) companionViewModel.open(selection, place, translated)
             }
         },
         ask = companionViewModel::ask,
