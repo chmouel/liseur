@@ -274,30 +274,67 @@ class PublicationCatalogTest {
     @Test
     fun `codex's stored passages give lookups and recaps exactly what the walk gives`() = runBlocking {
         for (missing in listOf(false, true)) {
-            val publication = openPublication(File(folder.root, "seed-$missing.epub").also { writeEpub(it, missing) })
-            val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CompanionDatabase::class.java)
-                .allowMainThreadQueries().build()
-            try {
-                val live = PublicationCatalog(publication)
-                val store = CodexStore(database) { it }
-                val identity = CodexStore.identity("sha", live.map)
-                val book = CodexBookRow("book", identity, live.map.chapterCount)
-                store.prepare(book)
-                PublicationCodexSource(publication, live.map).scan(0) { unit, passages -> store.save(book, unit, emptyMap(), passages) }
-                val walks = Walks(PublicationCatalog(publication))
-                val seeded = seeded(walks, store, identity)
+            assertStoredMatchesWalk(File(folder.root, "seed-$missing.epub").also { writeEpub(it, missing) })
+        }
+    }
 
-                val all = live.passagesBefore(AskingScope(6, 6))
-                val scopes = all.mapNotNull { live.scopeOf(it.place, translated = false) } +
-                    all.mapNotNull { live.scopeOf(it.place, translated = true) } +
-                    (0..6).map { AskingScope(it, 6) }
-                for (scope in scopes) assertEquals("$scope", shape(live.passagesBefore(scope)), shape(seeded.passagesBefore(scope)))
-                for (unit in 0 until 6) assertEquals("chapter $unit", shape(live.passagesOf(unit)), shape(seeded.passagesOf(unit)))
-                assertEquals("the book is not walked again", 0, walks.count)
-            } finally {
-                database.close()
-                publication.close()
-            }
+    @Test
+    fun `codex's stored passages match the walk across a name cut in two and past ten refs`() = runBlocking {
+        // The name straddles the cut, so the stored first part carries a run-on the walk does not have.
+        val long = "lorem ".repeat(198) + "ipsum Mira Hale " + "dolor ".repeat(60)
+        assertTrue(long.length > PassageText.MAX_LENGTH)
+        val names = (1..11).map { "c$it" }
+        val epub = File(folder.root, "long.epub").also { target ->
+            writeBook(
+                target,
+                spine = names,
+                contents = names.joinToString("\n") { """<li><a href="$it.xhtml">${it.uppercase()}</a></li>""" },
+                pages = names.associateWith { name ->
+                    if (name == "c1") {
+                        page(*((0 until 11).map { "<p>Mira walks to mill $it.</p>" } + "<p>$long</p>").toTypedArray())
+                    } else {
+                        page("<p>Mira ${name.uppercase()} waits.</p>")
+                    }
+                },
+            )
+        }
+        assertStoredMatchesWalk(epub) { all ->
+            val first = all.filter { it.resource == 0 }
+            assertTrue("a part ends on the name's first word", first.any { it.text.endsWith("Mira") })
+            assertTrue("the next part starts on its second", first.any { it.text.startsWith("Hale") })
+            assertFalse("refs sorted as text are not in reading order", all.map { it.ref } == all.map { it.ref }.sorted())
+        }
+    }
+
+    /** Scans [epub] into Codex and checks every scope and chapter reads the same from it as from the walk, without walking. */
+    private suspend fun assertStoredMatchesWalk(epub: File, inspect: (List<Passage<Locator>>) -> Unit = {}) {
+        val publication = openPublication(epub)
+        val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CompanionDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val live = PublicationCatalog(publication)
+            val count = live.map.chapterCount
+            val store = CodexStore(database) { it }
+            val identity = CodexStore.identity("sha", live.map)
+            val book = CodexBookRow("book", identity, count)
+            store.prepare(book)
+            PublicationCodexSource(publication, live.map).scan(0) { unit, passages -> store.save(book, unit, emptyMap(), passages) }
+            // Rewritten last first, rows unchanged, so storage order runs against reading order and only the store's sort restores it.
+            database.codex().let { it.putPassages(it.passagesUpTo("book", count, count).asReversed()) }
+            val walks = Walks(PublicationCatalog(publication))
+            val seeded = seeded(walks, store, identity)
+
+            val all = live.passagesBefore(AskingScope(count, count))
+            inspect(all)
+            val scopes = all.mapNotNull { live.scopeOf(it.place, translated = false) } +
+                all.mapNotNull { live.scopeOf(it.place, translated = true) } +
+                (0..count).map { AskingScope(it, count) }
+            for (scope in scopes) assertEquals("$scope", shape(live.passagesBefore(scope)), shape(seeded.passagesBefore(scope)))
+            for (unit in 0 until count) assertEquals("chapter $unit", shape(live.passagesOf(unit)), shape(seeded.passagesOf(unit)))
+            assertEquals("the book is not walked again", 0, walks.count)
+        } finally {
+            database.close()
+            publication.close()
         }
     }
 
@@ -326,6 +363,9 @@ class PublicationCatalogTest {
 
             seeded(walks, store, CodexStore.identity("other", live.map)).passagesBefore(AskingScope(3, 6))
             assertEquals("another version's scan is not used", 2, walks.count)
+
+            assertEquals(shape(live.passagesOf(3)), shape(seeded(walks, store, identity).passagesOf(3)))
+            assertEquals("chapter 4 alone is walked for", 3, walks.count)
         } finally {
             database.close()
             publication.close()
