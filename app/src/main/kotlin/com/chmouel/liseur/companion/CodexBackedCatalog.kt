@@ -1,6 +1,8 @@
 package com.chmouel.liseur.companion
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * [live] with its passages read from Codex's scan when the scan already
@@ -22,12 +24,12 @@ class CodexBackedCatalog<P>(
 
     override suspend fun scopeOf(place: P, translated: Boolean): AskingScope? = live.scopeOf(place, translated)
 
-    override suspend fun passagesBefore(scope: AskingScope): List<Passage<P>> {
+    override suspend fun passagesBefore(scope: AskingScope): List<Passage<P>> = withContext(Dispatchers.Default) {
         val resource = scope.until?.resource ?: -1
         val ceiling = minOf(scope.lo, map.chapterCount)
         // Every chapter a passage below the ceiling or in those resources can end in.
         val through = maxOf(ceiling - 1, (0..resource).maxOfOrNull { map.resourceRange(it).hi } ?: -1)
-        return quietly { stored(through, ceiling, resource) }?.filter { Eligibility.allows(scope, it) }
+        quietly { stored(through, ceiling, resource) }?.filter { Eligibility.allows(scope, it) }
             ?: live.passagesBefore(scope)
     }
 
