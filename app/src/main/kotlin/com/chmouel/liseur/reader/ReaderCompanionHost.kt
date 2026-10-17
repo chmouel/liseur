@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.companion.CompanionSheet
 import com.chmouel.liseur.companion.CodexSheet
 import com.chmouel.liseur.companion.Passage
+import com.chmouel.liseur.companion.StorySheet
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -25,9 +26,9 @@ import org.readium.r2.shared.publication.Locator
 internal typealias ReaderGo = suspend (EpubNavigatorFragment, Locator, NavigatorPositionEvent) -> Boolean
 
 /**
- * The character panel over the book, its settings, and following a
- * source: the panel steps aside while the source is a peek, and comes
- * back with Return or Show profile.
+ * The character panel, the Codex and the story so far over the book, the
+ * companion's settings, and following a source or a chapter: the panel
+ * steps aside while it is a peek, and comes back with Return or Show.
  */
 @Composable
 internal fun CompanionPanelHost(
@@ -42,6 +43,7 @@ internal fun CompanionPanelHost(
     val codex by companion.codex.panel.collectAsStateWithLifecycle()
     val scan by companion.codex.progress.collectAsStateWithLifecycle()
     val codexEnabled by companion.codex.enabled.collectAsStateWithLifecycle()
+    val story by companion.story.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var peeked by rememberSaveable { mutableStateOf(false) }
 
@@ -54,11 +56,12 @@ internal fun CompanionPanelHost(
             peeked = false
             if (companion.panel.value?.visible == false) companion.close()
             if (companion.codex.panel.value?.visible == false) companion.codex.close()
+            if (companion.story.value?.visible == false) companion.closeStory()
         }
     }
 
-    val onSource: (Passage<Locator>) -> Unit = source@{ passage ->
-        val nav = navigator ?: return@source
+    val follow: (Locator) -> Unit = follow@{ place ->
+        val nav = navigator ?: return@follow
         scope.launch {
             // In scrolled reading the place on screen may be newer
             // than the one saved; it is the place to come back to.
@@ -66,18 +69,23 @@ internal fun CompanionPanelHost(
             val (_, fresh) = companion.startPeek() ?: return@launch
             companion.hide()
             companion.codex.hide()
-            if (!go(nav, passage.place, NavigatorPositionEvent.LOCAL_JUMP)) {
+            companion.hideStory()
+            if (!go(nav, place, NavigatorPositionEvent.LOCAL_JUMP)) {
                 companion.reveal()
                 companion.codex.reveal()
+                companion.revealStory()
                 if (fresh) companion.endPeek()
             }
         }
     }
+    val onSource: (Passage<Locator>) -> Unit = { follow(it.place) }
     // Out here, as the sheet leaves the screen while a source is a peek:
     // the names reset with a new Codex, the passages with a new name.
     val codexNames = rememberSaveable(codex != null, saver = LazyListState.Saver) { LazyListState() }
     val codexDetail = rememberSaveable(codex?.detail?.name, codex?.detail?.other, saver = LazyListState.Saver) { LazyListState() }
     codex?.takeIf { it.visible }?.let { CodexSheet(it, scan, companion.codex, onSource, codexNames, codexDetail) }
+    val storyList = rememberSaveable(story != null, saver = LazyListState.Saver) { LazyListState() }
+    story?.takeIf { it.visible }?.let { StorySheet(it, onChapter = follow, onDismiss = companion.closeStory, list = storyList) }
 
     panel?.takeIf { it.visible }?.let { shown ->
         val ceiling = shown.scope?.lo
@@ -137,6 +145,7 @@ internal suspend fun returnFromSource(
         if (arrived) {
             companion.reveal()
             companion.codex.reveal()
+            companion.revealStory()
             companion.returnArrived(generation)
             return
         }

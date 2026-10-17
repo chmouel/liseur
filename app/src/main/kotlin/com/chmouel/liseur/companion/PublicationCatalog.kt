@@ -57,6 +57,37 @@ class PublicationCatalog(private val publication: Publication) : BookCatalog<Loc
         }
     }
 
+    /**
+     * The chapters numbered below [scope]'s `lo` that surely start before
+     * the place it was asked from, in contents order, each with where it
+     * starts when the book can be opened there: a file listed once, and
+     * its anchor, if any, found in it.
+     */
+    suspend fun chaptersBefore(scope: AskingScope): List<EarlierChapter<Locator>> = withContext(Dispatchers.IO) {
+        lock.withLock {
+            val until = scope.until
+            val units = 0 until minOf(scope.lo, map.chapterCount)
+            val anchors = until?.let { asked ->
+                val fragments = units.mapNotNull(map::startOf)
+                    .filter { it.resource == asked.resource }
+                    .mapNotNullTo(mutableSetOf()) { it.fragment }
+                builder.anchorsAt(asked.resource, fragments)
+            } ?: emptyMap()
+            units.filter { map.startsBefore(it, until, anchors) }.map { EarlierChapter(it, startOf(it)) }
+        }
+    }
+
+    // Called holding [lock].
+    private suspend fun startOf(unit: Int): Locator? {
+        val start = map.startOf(unit) ?: return null
+        if (map.occurrencesOf(start.resource).size > 1) return null
+        val link = publication.readingOrder.getOrNull(start.resource) ?: return null
+        val top = publication.locatorFromLink(link) ?: return null
+        val fragment = start.fragment ?: return top
+        if (builder.anchorsAt(start.resource, setOf(fragment)).isEmpty()) return null
+        return top.copyWithLocations(fragments = listOf(fragment), progression = null)
+    }
+
     override suspend fun passagesOf(unit: Int): List<Passage<Locator>> =
         passagesBefore(AskingScope(unit + 1, map.chapterCount)).filter { it.range.hi == unit }
 
@@ -98,6 +129,9 @@ class PublicationCatalog(private val publication: Publication) : BookCatalog<Loc
         fun String.path(): String = substringBefore('#').substringBefore('?')
     }
 }
+
+/** A chapter before the place asked from, and where it starts when the book can be opened there. */
+data class EarlierChapter<P>(val unit: Int, val start: P?)
 
 /** A book's passages and chapters, as the lookup and the recaps see them. */
 interface BookCatalog<P> {

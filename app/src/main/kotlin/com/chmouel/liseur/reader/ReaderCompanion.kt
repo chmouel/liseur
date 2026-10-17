@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.chmouel.liseur.companion.Candidate
 import com.chmouel.liseur.companion.CompanionPanel
 import com.chmouel.liseur.companion.CodexViewModel
+import com.chmouel.liseur.companion.StoryPanel
 import kotlinx.coroutines.flow.StateFlow
 import org.readium.r2.shared.publication.Locator
 
@@ -23,6 +24,13 @@ class ReaderCompanion(
     val hide: () -> Unit,
     val reveal: () -> Unit,
     val close: () -> Unit,
+    /** The story so far, and whether the book has a stored recap to show in it. */
+    val story: StateFlow<StoryPanel?>,
+    val hasStory: StateFlow<Boolean>,
+    val openStory: (place: Locator, translated: Boolean) -> Unit,
+    val hideStory: () -> Unit,
+    val revealStory: () -> Unit,
+    val closeStory: () -> Unit,
     /** Starts a peek, or restarts one under way; the place asked from and whether it is new. */
     val startPeek: () -> Pair<Locator, Boolean>?,
     val onUserTurn: () -> Unit,

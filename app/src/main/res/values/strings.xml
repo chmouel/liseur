@@ -1522,4 +1522,13 @@
     <string name="codex_chapter">Chapter %1$d</string>
     <string name="codex_more">Load more passages</string>
     <string name="codex_no_passages">No earlier passages found.</string>
+    <string name="story_title">Story so far</string>
+    <string name="story_about">Written by an AI model from the chapters before this one. It may be wrong, and it may give away something a model knows about this book from elsewhere.</string>
+    <string name="story_failed">The story so far could not be read.</string>
+    <string name="story_nothing_before">No earlier chapter to show.</string>
+    <string name="story_no_summary">The recap of this chapter has no summary.</string>
+    <string name="story_unreadable">The recap of this chapter could not be read.</string>
+    <string name="story_missing">This chapter has not been recapped.</string>
+    <string name="story_go">Go to chapter</string>
+    <string name="story_go_unavailable">Liseur cannot tell exactly where this chapter starts.</string>
 </resources>

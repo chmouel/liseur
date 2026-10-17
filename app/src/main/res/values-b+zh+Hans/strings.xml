@@ -1416,4 +1416,13 @@
     <string name="codex_chapter">第 %1$d 章</string>
     <string name="codex_more">加载更多段落</string>
     <string name="codex_no_passages">未找到之前的段落。</string>
+    <string name="story_title">前情回顾</string>
+    <string name="story_about">由 AI 模型根据此前的章节写成。内容可能有误，也可能透露模型从别处得知的本书情节。</string>
+    <string name="story_failed">无法读取前情回顾。</string>
+    <string name="story_nothing_before">没有可显示的前面章节。</string>
+    <string name="story_no_summary">本章的回顾中没有摘要。</string>
+    <string name="story_unreadable">无法读取本章的回顾。</string>
+    <string name="story_missing">本章还没有回顾。</string>
+    <string name="story_go">前往本章</string>
+    <string name="story_go_unavailable">Liseur 无法确定本章的确切起点。</string>
 </resources>

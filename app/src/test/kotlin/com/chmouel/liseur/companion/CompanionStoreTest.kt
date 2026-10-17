@@ -237,6 +237,29 @@ class CompanionStoreTest {
         assertEquals(5_000L, db.recaps().recap(BOOK, "existing")!!.usedAt)
     }
 
+    @Test
+    fun `the story so far reads without dropping other versions and touches only what it shows`() = runTest {
+        val store = store()
+        fun row(key: String, sha: String = SHA, format: Int = Recaps.FORMAT) =
+            ChapterRecapRow(BOOK, key, 0, sha, "server", "model", format, "{}", 1, 7)
+        db.recaps().putRecap(row("shown"))
+        db.recaps().putRecap(row("hidden"))
+        db.recaps().putRecap(row("old-file", sha = "old"))
+        db.recaps().putRecap(row("old-format", format = Recaps.FORMAT + 1))
+        assertTrue(store.hasRecaps(BOOK, SHA).first())
+        assertFalse(store.hasRecaps(BOOK, "unknown").first())
+        assertFalse(store.hasRecaps(OTHER, SHA).first())
+
+        val book = store.forBook(BOOK, SHA)
+        assertEquals(setOf("shown", "hidden"), book.stored().map { it.unit.key }.toSet())
+        book.touch(listOf("shown"))
+
+        val rows = db.recaps().recaps(BOOK).associateBy { it.unitKey }
+        assertEquals(setOf("shown", "hidden", "old-file", "old-format"), rows.keys)
+        assertTrue(rows.getValue("shown").usedAt > 7)
+        for (key in listOf("hidden", "old-file", "old-format")) assertEquals(key, 7L, rows.getValue(key).usedAt)
+    }
+
     private companion object {
         const val BOOK = "file:///book.epub"
         const val OTHER = "file:///other.epub"

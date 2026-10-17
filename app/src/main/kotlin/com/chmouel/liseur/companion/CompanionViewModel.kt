@@ -14,17 +14,23 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -99,6 +105,27 @@ class CompanionViewModel(
     )
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
+
+    private val _story = MutableStateFlow<StoryPanel?>(null)
+    private var storyJob: Job? = null
+
+    /** The story so far over the book, while it is open. */
+    val story: StateFlow<StoryPanel?> = _story.asStateFlow()
+
+    /** Whether the book has a stored recap to read in the story so far; never true without a content identity. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val hasStory: StateFlow<Boolean> = contentSha
+        .flatMapLatest { sha ->
+            if (sha == null) {
+                flowOf(false)
+            } else {
+                store.hasRecaps(bookUrl, sha).catch {
+                    Log.w(TAG, "No recap count for this book: ${it.javaClass.simpleName}")
+                    emit(false)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Read from settings rather than [choice], which reports none until it first loads. */
     suspend fun hasChoice(): Boolean = server.current() != null
@@ -202,7 +229,47 @@ class CompanionViewModel(
         }
     }
 
-    fun open(selection: String, place: Locator, translated: Boolean) = lookups.open(selection, place, translated)
+    fun open(selection: String, place: Locator, translated: Boolean) {
+        closeStory()
+        lookups.open(selection, place, translated)
+    }
+
+    /**
+     * Opens the story so far, frozen at [place]: the chapters known to lie
+     * before it, with their stored summaries. Reads nothing from the
+     * network and drops no recap; only the recaps shown are touched.
+     */
+    fun openStory(place: Locator, translated: Boolean) {
+        val sha = contentSha.value ?: return
+        lookups.close()
+        storyJob?.cancel()
+        _story.value = StoryPanel()
+        storyJob = viewModelScope.launch {
+            try {
+                val opened = catalog.await()
+                val scope = opened.scopeOf(place, translated)
+                val earlier = scope?.let { opened.chaptersBefore(it) }.orEmpty()
+                val book = store.forBook(bookUrl, sha)
+                val chapters = Story.chapters(opened.map, earlier, if (earlier.isEmpty()) emptyList() else book.stored())
+                _story.update { it?.copy(chapters = chapters, loading = false) }
+                quietly { book.touch(Story.shown(opened.map, chapters)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Story so far failed: ${e.javaClass.simpleName}")
+                _story.update { it?.copy(loading = false, failed = true) }
+            }
+        }
+    }
+
+    fun hideStory() = _story.update { it?.copy(visible = false) }
+
+    fun revealStory() = _story.update { it?.copy(visible = true) }
+
+    fun closeStory() {
+        storyJob?.cancel()
+        _story.value = null
+    }
 
     fun retry() = lookups.retry()
 

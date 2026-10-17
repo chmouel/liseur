@@ -135,6 +135,54 @@ class PublicationCatalogTest {
     }
 
     @Test
+    fun `the story so far lists chapters before the reader and opens them at their anchor`() = runBlocking {
+        for (missing in listOf(false, true)) {
+            val catalog = open(missingAnchor = missing)
+            val all = catalog.passagesBefore(AskingScope(6, 6))
+            val six = catalog.chaptersBefore(catalog.scopeOf(all.first { "SIX" in it.text }.place, translated = false)!!)
+            assertEquals(listOf(0, 1, 2, 3, 4), six.map { it.unit })
+            val three = six.single { it.unit == 2 }.start
+            if (missing) {
+                // An anchor that is not in the file cannot be opened; the top of the file is not offered instead.
+                assertEquals(null, three)
+            } else {
+                assertEquals("two.xhtml", three!!.href.toString().substringAfterLast('/'))
+                assertEquals(listOf("c3"), three.locations.fragments)
+            }
+            assertEquals(emptyList<String>(), six.single { it.unit == 0 }.start!!.locations.fragments)
+        }
+
+        val catalog = open()
+        val place = catalog.passagesBefore(AskingScope(6, 6)).first { "THREE" in it.text }.place
+        assertEquals(listOf(0, 1), catalog.chaptersBefore(catalog.scopeOf(place, translated = false)!!).map { it.unit })
+        assertEquals(listOf(0), catalog.chaptersBefore(catalog.scopeOf(place, translated = true)!!).map { it.unit })
+    }
+
+    @Test
+    fun `the story so far leaves out a chapter the contents list before the reader but the book puts after`() = runBlocking {
+        val epub = File(folder.root, "out-of-order.epub")
+        writeBook(
+            epub,
+            spine = listOf("one", "two", "three", "four", "five"),
+            contents = """
+                  <li><a href="one.xhtml">One</a></li>
+                  <li><a href="five.xhtml">Five</a></li>
+                  <li><a href="three.xhtml">Three</a></li>""",
+            pages = listOf("one", "two", "three", "four", "five").associateWith { page("<p>Mira ${it.uppercase()} waits.</p>") },
+        )
+        val publication = openPublication(epub)
+        try {
+            val catalog = PublicationCatalog(publication)
+            val four = catalog.passagesBefore(AskingScope(3, 3)).first { "FOUR" in it.text }
+            val scope = catalog.scopeOf(four.place, translated = false)!!
+            assertEquals(2, scope.lo)
+            assertEquals(listOf(0), catalog.chaptersBefore(scope).map { it.unit })
+        } finally {
+            publication.close()
+        }
+    }
+
+    @Test
     fun `refs stay the same when the book is opened again`() = runBlocking {
         val first = open().passagesBefore(AskingScope(6, 6)).map { it.ref to it.hash }
         val again = open().passagesBefore(AskingScope(6, 6)).map { it.ref to it.hash }

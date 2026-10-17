@@ -1466,4 +1466,13 @@
     <string name="codex_chapter">Chapitre %1$d</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
+    <string name="story_title">L’histoire jusqu’ici</string>
+    <string name="story_about">Écrit par un modèle d’IA à partir des chapitres précédents. Il peut se tromper et révéler ce qu’un modèle sait de ce livre par ailleurs.</string>
+    <string name="story_failed">Impossible de lire l’histoire jusqu’ici.</string>
+    <string name="story_nothing_before">Aucun chapitre précédent à afficher.</string>
+    <string name="story_no_summary">Le récapitulatif de ce chapitre ne contient pas de résumé.</string>
+    <string name="story_unreadable">Impossible de lire le récapitulatif de ce chapitre.</string>
+    <string name="story_missing">Ce chapitre n’a pas de récapitulatif.</string>
+    <string name="story_go">Aller au chapitre</string>
+    <string name="story_go_unavailable">Liseur ne sait pas exactement où commence ce chapitre.</string>
 </resources>

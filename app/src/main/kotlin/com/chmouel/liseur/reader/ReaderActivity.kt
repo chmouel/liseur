@@ -708,6 +708,15 @@ class ReaderActivity : FragmentActivity() {
         hide = companionViewModel::hide,
         reveal = companionViewModel::reveal,
         close = companionViewModel::close,
+        story = companionViewModel.story,
+        hasStory = companionViewModel.hasStory,
+        openStory = { place, translated ->
+            codexViewModel.close()
+            companionViewModel.openStory(place, translated)
+        },
+        hideStory = companionViewModel::hideStory,
+        revealStory = companionViewModel::revealStory,
+        closeStory = companionViewModel::closeStory,
         startPeek = viewModel::startPeek,
         onUserTurn = viewModel::onUserTurn,
         endPeek = viewModel::endPeek,

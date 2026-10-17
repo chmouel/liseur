@@ -1564,4 +1564,13 @@
     <string name="codex_chapter">Глава %1$d</string>
     <string name="codex_more">Загрузить ещё отрывки</string>
     <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
+    <string name="story_title">Сюжет на данный момент</string>
+    <string name="story_about">Написано ИИ-моделью по предыдущим главам. Может содержать ошибки и раскрыть то, что модель знает об этой книге из других источников.</string>
+    <string name="story_failed">Не удалось прочитать сюжет на данный момент.</string>
+    <string name="story_nothing_before">Нет предыдущих глав.</string>
+    <string name="story_no_summary">В пересказе этой главы нет краткого содержания.</string>
+    <string name="story_unreadable">Не удалось прочитать пересказ этой главы.</string>
+    <string name="story_missing">Для этой главы нет пересказа.</string>
+    <string name="story_go">Перейти к главе</string>
+    <string name="story_go_unavailable">Liseur не может точно определить, где начинается эта глава.</string>
 </resources>

@@ -77,6 +77,15 @@ interface CompanionRecapDao {
     @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl")
     suspend fun recaps(bookUrl: String): List<ChapterRecapRow>
 
+    @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl AND content_sha = :sha AND format = :format")
+    suspend fun recapsFor(bookUrl: String, sha: String, format: Int): List<ChapterRecapRow>
+
+    @Query(
+        "SELECT EXISTS(SELECT 1 FROM chapter_recap WHERE book_url = :bookUrl " +
+            "AND content_sha = :sha AND format = :format)",
+    )
+    fun hasRecaps(bookUrl: String, sha: String, format: Int): Flow<Boolean>
+
     @Query("SELECT * FROM chapter_recap WHERE book_url = :bookUrl AND unit_key = :unitKey")
     suspend fun recap(bookUrl: String, unitKey: String): ChapterRecapRow?
 
@@ -345,6 +354,12 @@ class CompanionStore(
         }
     }
 
+    /** Whether [bookUrl] has a recap for the version hashing to [contentSha] in the current format; reads only. */
+    fun hasRecaps(bookUrl: String, contentSha: String): Flow<Boolean> {
+        require(contentSha.isNotBlank())
+        return dao.hasRecaps(bookUrl, contentSha, Recaps.FORMAT)
+    }
+
     /** The reader's choice for [bookUrl], or null while it follows settings. */
     fun recapChoice(bookUrl: String): Flow<Boolean?> = dao.choice(bookUrl)
 
@@ -444,6 +459,23 @@ class CompanionStore(
                 }
             }
             return rows.map { SavedRecap(RecapUnit(it.unit, it.unitKey), it.json) }
+        }
+
+        /**
+         * The recaps for this book version in the current format, by any
+         * server or model, for the reader to read. Unlike [recaps] it
+         * drops and touches nothing.
+         */
+        suspend fun stored(): List<SavedRecap> {
+            require(contentSha.isNotBlank())
+            if (fenced()) return emptyList()
+            return dao.recapsFor(bookUrl, contentSha, Recaps.FORMAT).map { SavedRecap(RecapUnit(it.unit, it.unitKey), it.json) }
+        }
+
+        /** Marks the recaps of [keys] as used, so the trim keeps them longer. */
+        suspend fun touch(keys: List<String>) {
+            if (keys.isEmpty()) return
+            writes.withLock { if (!fenced()) dao.touch(bookUrl, keys, now()) }
         }
 
         /** The batches of [unit] already done under [identity], by index, when it still has [batchCount]. */

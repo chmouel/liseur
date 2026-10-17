@@ -36,6 +36,40 @@ class ChapterMapTest {
     }
 
     @Test
+    fun `a chapter listed out of reading order is not taken to start before the reader`() {
+        val book = listOf("ch1.xhtml", "ch2.xhtml", "ch3.xhtml", "ch4.xhtml", "ch5.xhtml")
+        val map = ChapterMap.of(book, toc("ch1.xhtml", "ch5.xhtml", "ch3.xhtml"))
+        val lo = map.resourceRange(3).lo
+        assertEquals(2, lo)
+        val reader = ReadPoint(3, 10)
+        // Chapter 2 in the contents is ch5, after the reader, though its number is below lo.
+        assertEquals(listOf(0), (0 until lo).filter { map.startsBefore(it, reader, emptyMap()) })
+    }
+
+    @Test
+    fun `a chapter starting in the asking file is before only from a located anchor before the reader`() {
+        val map = ChapterMap.of(files, toc("ch1.xhtml", "ch2.xhtml", "ch2.xhtml#c3", "ch3.xhtml"))
+        val anchors = mapOf("c3" to 20)
+        assertTrue(map.startsBefore(1, ReadPoint(1, 5), anchors))
+        assertTrue(map.startsBefore(2, ReadPoint(1, 30), anchors))
+        assertFalse(map.startsBefore(2, ReadPoint(1, 20), anchors))
+        assertFalse(map.startsBefore(2, ReadPoint(1, 10), anchors))
+        // An anchor not found, or a reader whose place in the file is unknown.
+        assertFalse(map.startsBefore(2, ReadPoint(1, 30), emptyMap()))
+        assertFalse(map.startsBefore(2, ReadPoint(1, 0), anchors))
+        assertTrue(map.startsBefore(2, ReadPoint(2, 0), emptyMap()))
+        assertFalse(map.startsBefore(1, null, anchors))
+    }
+
+    @Test
+    fun `a chapter starting in a file listed twice is placed at its last listing`() {
+        val map = ChapterMap.of(listOf("a.xhtml", "notes.xhtml", "b.xhtml", "notes.xhtml"), toc("a.xhtml", "notes.xhtml", "b.xhtml"))
+        assertEquals(ChapterStart(1, null), map.startOf(1))
+        assertFalse(map.startsBefore(1, ReadPoint(2, 5), emptyMap()))
+        assertTrue(map.startsBefore(2, ReadPoint(3, 0), emptyMap()))
+    }
+
+    @Test
     fun `front matter before the first entry joins the first chapter`() {
         val map = ChapterMap.of(listOf("cover.xhtml") + files, toc(*files.toTypedArray()))
         assertEquals(ChapterRange(0, 0), map.resourceRange(0))

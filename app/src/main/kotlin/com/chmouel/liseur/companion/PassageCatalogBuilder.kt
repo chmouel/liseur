@@ -73,6 +73,10 @@ class PassageCatalogBuilder<P>(
     suspend fun startOf(at: Int, selector: String?): Int =
         selector?.let { outlineAt(at)?.span(it)?.first } ?: 0
 
+    /** Where [fragments] sit in [at], leaving out those that cannot be found. */
+    suspend fun anchorsAt(at: Int, fragments: Set<String>): Map<String, Int> =
+        if (fragments.isEmpty()) emptyMap() else outlineAt(at)?.anchors(fragments) ?: emptyMap()
+
     /** The outline of a resource asked about, parsed once and kept for the next ask about it. */
     private suspend fun outlineAt(at: Int): ResourceOutline? {
         if (at == askedResource) return askedOutline

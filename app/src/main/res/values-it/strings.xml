@@ -1466,4 +1466,13 @@
     <string name="codex_chapter">Capitolo %1$d</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>
+    <string name="story_title">La storia finora</string>
+    <string name="story_about">Scritto da un modello di IA a partire dai capitoli precedenti. Può sbagliare e rivelare ciò che un modello sa di questo libro da altre fonti.</string>
+    <string name="story_failed">Impossibile leggere la storia finora.</string>
+    <string name="story_nothing_before">Nessun capitolo precedente da mostrare.</string>
+    <string name="story_no_summary">Il riepilogo di questo capitolo non contiene un riassunto.</string>
+    <string name="story_unreadable">Impossibile leggere il riepilogo di questo capitolo.</string>
+    <string name="story_missing">Questo capitolo non ha un riepilogo.</string>
+    <string name="story_go">Vai al capitolo</string>
+    <string name="story_go_unavailable">Liseur non sa esattamente dove inizia questo capitolo.</string>
 </resources>

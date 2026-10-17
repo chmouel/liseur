@@ -1478,4 +1478,13 @@
     <string name="codex_chapter">Kapitel %1$d</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
+    <string name="story_title">Bisherige Handlung</string>
+    <string name="story_about">Von einem KI-Modell aus den vorherigen Kapiteln geschrieben. Es kann Fehler enthalten und verraten, was ein Modell anderweitig über dieses Buch weiß.</string>
+    <string name="story_failed">Die bisherige Handlung konnte nicht gelesen werden.</string>
+    <string name="story_nothing_before">Kein früheres Kapitel vorhanden.</string>
+    <string name="story_no_summary">Die Zusammenfassung dieses Kapitels enthält keinen Überblick.</string>
+    <string name="story_unreadable">Die Zusammenfassung dieses Kapitels konnte nicht gelesen werden.</string>
+    <string name="story_missing">Für dieses Kapitel gibt es keine Zusammenfassung.</string>
+    <string name="story_go">Zum Kapitel</string>
+    <string name="story_go_unavailable">Liseur kann nicht genau erkennen, wo dieses Kapitel beginnt.</string>
 </resources>

@@ -61,7 +61,8 @@ All of this stays in the app's own private storage:
   the book deletes them, and turning recaps off stops the work and drops
   the waiting chapters. They are not automatically backed up or synced.
   Completed recaps are included in ZIP backups you export from Settings.
-  Character profiles themselves are not saved.
+  Story so far in the reader's menu shows these saved recaps without
+  sending anything. Character profiles themselves are not saved.
 - Which books you turned background recaps on or off for from the
   reader's menu, overriding the setting. Deleting the book removes it.
   It is not backed up and not synced.

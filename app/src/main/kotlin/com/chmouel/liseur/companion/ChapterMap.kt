@@ -63,6 +63,9 @@ object Eligibility {
     }
 }
 
+/** A chapter's first place: a resource in the reading order, and an anchor in it when not its top. */
+data class ChapterStart(val resource: Int, val fragment: String?)
+
 /**
  * The book's chapters as its contents declare them, mapped onto the
  * reading order.
@@ -84,13 +87,31 @@ object Eligibility {
  */
 class ChapterMap private constructor(
     private val readingOrder: List<String>,
-    private val starts: List<Start>,
+    private val starts: List<ChapterStart>,
     private val titles: List<String?>,
 ) {
-    /** A chapter's first place: a resource in the reading order, and an anchor in it when not its top. */
-    private data class Start(val resource: Int, val fragment: String?)
-
     val chapterCount: Int get() = starts.size
+
+    /** Where chapter [unit] starts, as the contents give it. */
+    fun startOf(unit: Int): ChapterStart? = starts.getOrNull(unit)
+
+    /**
+     * Whether chapter [unit] surely starts before [until] in reading
+     * order, the contents' own order aside: in an earlier resource, at the
+     * top of the asking one, or at an anchor located there, in [anchors],
+     * before a located asking element. A start in a file listed more than
+     * once is taken at its last listing, so it is never placed too early.
+     */
+    fun startsBefore(unit: Int, until: ReadPoint?, anchors: Map<String, Int>): Boolean {
+        val start = starts.getOrNull(unit) ?: return false
+        if (until == null) return false
+        val resource = occurrencesOf(start.resource).last()
+        return when {
+            resource != until.resource -> resource < until.resource
+            start.fragment == null -> true
+            else -> until.element > 0 && (anchors[start.fragment] ?: return false) < until.element
+        }
+    }
 
     /** Chapter [unit]'s title in the contents, for the reader's eyes only: it is never sent away. */
     fun titleOf(unit: Int): String? = titles.getOrNull(unit)
@@ -164,7 +185,7 @@ class ChapterMap private constructor(
         return best
     }
 
-    private fun point(index: Int, start: Start, anchors: Map<String, Int>, unknown: Int): Point {
+    private fun point(index: Int, start: ChapterStart, anchors: Map<String, Int>, unknown: Int): Point {
         if (index == 0) return Point(0, BEFORE)
         val fragment = start.fragment ?: return Point(start.resource, BEFORE)
         return Point(start.resource, anchors[fragment] ?: unknown)
@@ -190,7 +211,7 @@ class ChapterMap private constructor(
                 val files = entry.children.mapTo(mutableSetOf()) { it.href.substringBefore('#') }.filter { it in readingOrder }
                 if (files.size >= 2) listOf(entry) + entry.children else listOf(entry)
             }
-            val starts = mutableListOf<Start>()
+            val starts = mutableListOf<ChapterStart>()
             val titles = mutableListOf<String?>()
             var after = 0
             entries.forEach { entry ->
@@ -200,14 +221,14 @@ class ChapterMap private constructor(
                 if (listed.isEmpty()) return@forEach
                 // A file listed twice is taken where reading has got to, so a later entry for it goes on.
                 val resource = listed.firstOrNull { it >= after } ?: listed.first()
-                val start = Start(resource, fragment)
+                val start = ChapterStart(resource, fragment)
                 if (start in starts) return@forEach
                 starts += start
                 titles += entry.title?.trim()?.takeIf { it.isNotEmpty() }
                 after = maxOf(after, resource)
             }
             if (starts.isEmpty()) {
-                starts += Start(0, null)
+                starts += ChapterStart(0, null)
                 titles += null
             }
             return ChapterMap(readingOrder, starts, titles)

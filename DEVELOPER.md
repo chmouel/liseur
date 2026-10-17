@@ -2270,6 +2270,18 @@ liseur-sync settings.
   recaps are included in the user-exported ZIP backup. Bump `PassageText.VERSION`
   when refs or passage splitting change, and the recap prompt version
   in `Recap` when the prompt or its JSON change.
+- Story so far (ADR-0057) shows the stored recaps; it sends nothing.
+  The ⋮ entry appears while `CompanionStore.hasRecaps` finds a row for
+  the content sha and `Recap.FORMAT`. On open the scope is frozen from
+  the place (a peek origin counts as translated) and
+  `PublicationCatalog.chaptersBefore` lists a chapter only if its number
+  is below the asking chapter and its start is provably before the
+  place (`ChapterMap.startsBefore`), so contents listed out of reading
+  order cannot show a later chapter. A start in a file listed twice is
+  placed at its last listing. `BookRecaps.stored()` reads without
+  deleting rows of another sha or format, and only rows shown with a
+  summary are touched for trimming. Go to chapter is a peek; it is
+  withheld for a repeated file or an anchor not found in its file.
 - Following a supporting passage is a peek (`SourcePeek` in
   `ReaderViewModel`): the asking place stays the saved one, and nothing
   at the source is saved, synced, timed (`ReadingSessionRecorder`'s peek
