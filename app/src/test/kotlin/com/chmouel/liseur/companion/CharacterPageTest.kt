@@ -59,6 +59,10 @@ class CharacterPageTest {
         )
         assertTrue(chosen.about("Tobin"))
         assertTrue(chosen.about("Tobin Hale"))
+
+        val unnamed = CompanionPanel<Int>("???", null, null, CompanionView.NotAName)
+        assertTrue(unnamed.about("???"))
+        assertFalse(unnamed.about("!!!"))
     }
 
     private fun character(name: String, vararg aliases: String, facts: List<String> = emptyList(), with: Map<String, String> = emptyMap()) =

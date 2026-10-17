@@ -47,12 +47,15 @@ fun codexEntryFor(entries: List<CodexEntry>, name: String): CodexEntry? {
 /**
  * Whether this lookup is about the character Codex calls [name]: asked
  * about it, or chosen among the characters it could mean. Both sides drop
- * a possessive or elision first, as Codex stores names.
+ * a possessive or elision first, as Codex stores names. A selection that
+ * folds to nothing, ??? say, is compared as it stands, so the lookup's
+ * verdict on it stays on its own page.
  */
 fun CompanionPanel<*>.about(name: String): Boolean {
-    val wanted = characterKey(name).takeIf { it.isNotEmpty() } ?: return false
-    val profile = (view as? CompanionView.Profile<*>)?.profile?.name
-    return listOfNotNull(this.name, also, selection, profile).any { characterKey(it) == wanted }
+    val trimmed = name.trim()
+    val asked = listOfNotNull(this.name, also, selection, (view as? CompanionView.Profile<*>)?.profile?.name)
+    val wanted = characterKey(trimmed)
+    return if (wanted.isEmpty()) asked.any { it.trim() == trimmed } else asked.any { characterKey(it) == wanted }
 }
 
 /** A name as Codex stores it, folded: "Tobin’s" and "tobin" are one character. */
