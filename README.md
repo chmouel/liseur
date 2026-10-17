@@ -34,7 +34,7 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
   <tr>
     <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
     <td><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
-    <td><img src="docs/screenshots/26-codex-relationships.png" alt="Codex map of character relationships across chapters"></td>
+    <td><img src="docs/screenshots/26-codex-relationships.png" alt="Companion map of character relationships across chapters"></td>
     <td></td>
   </tr>
   <tr>
@@ -67,12 +67,13 @@ translated sentence by sentence as you read.
 
 The reading companion answers questions about characters and events using
 the passages before the selected text. Character profiles show their source
-passages, and optional background recaps summarize finished chapters. Codex
-builds a searchable index of people, places and groups on your device, and
-shows which names appear together in earlier chapters. With a companion
-server chosen, its Story tab shows the earlier chapters' recaps, recaps
-the ones missing, and writes a summary of the story so far. The companion uses a
-server you configure; Codex runs on your phone.
+passages, and optional background recaps summarize finished chapters. Even
+without a server, the companion builds a searchable index of people, places
+and groups on your device, and shows which names appear together in earlier
+chapters. With a server chosen, its Story tab shows the earlier chapters'
+recaps, recaps the ones missing, and writes a summary of the story so far, and
+character pages show what those recaps already say. Answers come from a
+server you configure; the index runs on your phone.
 
 The library is one shelf whatever the source: local folders, calibre-web,
 Komga, BookOrbit, liseur-sync, or any OPDS catalog. Series are grouped into stacks tracking

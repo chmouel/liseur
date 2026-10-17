@@ -1343,7 +1343,6 @@
     <string name="translation_consent_title">Usare %1$s?</string>
     <string name="translation_consent_agree">Accetta e usa</string>
     <string name="companion_action">Chiedi al compagno</string>
-    <string name="companion_scope">In base al libro fin qui.</string>
     <string name="companion_also_from">Uno dei personaggi che «%1$s» può indicare</string>
     <string name="companion_setup">Scegli un server e un modello per il compagno di lettura.</string>
     <string name="companion_setup_action">Configura</string>
@@ -1366,7 +1365,6 @@
         <item quantity="other">%1$d passaggi</item>
     </plurals>
     <string name="companion_peek_return">Torna dove hai chiesto</string>
-    <string name="companion_peek_show">Mostra scheda</string>
     <string name="companion_retry">Riprova</string>
     <string name="companion_failed_cancelled">Ricerca annullata.</string>
     <string name="companion_failed_key">Il server ha rifiutato la chiave. Controllala in Servizi esterni e chiavi API.</string>
@@ -1421,7 +1419,7 @@
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
     <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo in Aa, Avanzate, nel lettore.</string>
     <string name="companion_settings_story_auto">Completa la storia da sola</string>
-    <string name="companion_settings_story_auto_summary">Quando il Codice si apre su Storia, riepiloga il capitolo prima della tua posizione se manca e tiene aggiornato il riassunto della storia finora. Si attiva con Consenti nella scheda Storia.</string>
+    <string name="companion_settings_story_auto_summary">Quando il Compagno si apre su Storia, riepiloga il capitolo prima della tua posizione se manca e tiene aggiornato il riassunto della storia finora. Si attiva con Consenti nella scheda Storia.</string>
     <string name="companion_settings_privacy">Il testo del libro prima del paragrafo selezionato viene inviato al server scelto, e capitoli interi se i riassunti in background sono attivi. Il suo fornitore può addebitare queste richieste.</string>
     <string name="settings_backup_include_connections">Includi account, servizi e password</string>
     <string name="settings_backup_connections_replace">Gli account della biblioteca e di KOReader, le impostazioni dei servizi e le credenziali salvate saranno sostituiti automaticamente.</string>
@@ -1436,23 +1434,21 @@
     <string name="settings_backup_error_export_password_lost">La password del backup è andata persa durante la scelta del file, quindi non è stato salvato nulla. Esporta di nuovo.</string>
 
     <!-- Offline codex -->
-    <string name="codex_title">Codice</string>
-    <string name="codex_settings_available">Codice offline disponibile</string>
-    <string name="codex_settings_enabled">Codice sul dispositivo</string>
-    <string name="codex_settings_summary">Indicizza nomi e collegamenti offline aprendo il codice. Senza IA né chiave API.</string>
+    <string name="codex_title">Compagno</string>
+    <string name="codex_settings_available">Compagno offline disponibile</string>
+    <string name="codex_settings_enabled">Compagno sul dispositivo</string>
+    <string name="codex_settings_summary">Indicizza nomi e collegamenti offline aprendo il Compagno. Senza IA né chiave API. Se disattivato, il Compagno mostra comunque la storia e i profili IA dei personaggi.</string>
     <string name="codex_preparing">Preparazione del libro…</string>
     <string name="codex_scanning">Analisi del libro…</string>
     <string name="codex_paused">Analisi in pausa</string>
     <string name="codex_complete">Libro indicizzato</string>
-    <string name="codex_failed">Impossibile leggere il codice. I capitoli completati sono salvati.</string>
+    <string name="codex_failed">Il Compagno non è riuscito a leggere il libro. I capitoli completati sono salvati.</string>
     <string name="codex_progress">Capitoli analizzati: %1$d/%2$d</string>
     <string name="codex_pause">Sospendi analisi</string>
     <string name="codex_resume">Riprendi analisi</string>
-    <string name="codex_retry">Riprova</string>
-    <string name="codex_unplaced">Impossibile individuare il capitolo. Riapri il codice da una posizione nota del libro.</string>
+    <string name="codex_unplaced">Impossibile individuare il capitolo. Riapri il Compagno da una posizione nota del libro.</string>
     <string name="codex_scope">Sono mostrati solo i capitoli precedenti al capitolo %1$d.</string>
     <string name="codex_names">Nomi</string>
-    <string name="codex_relationships">Collegamenti</string>
     <string name="codex_story">Storia</string>
     <string name="codex_search">Cerca nomi</string>
     <string name="codex_empty">Ancora nessun nome corrispondente nei capitoli precedenti.</string>
@@ -1463,10 +1459,17 @@
     <string name="codex_faction">Fazione</string>
     <string name="codex_other">Altro</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_pane_profile">Profilo</string>
+    <string name="codex_pane_mentions">Menzioni</string>
+    <string name="codex_profile_ask">Chiedi al compagno chi è %1$s, in base al libro fin qui.</string>
+    <string name="codex_pair_ask">Chiedi al compagno di %1$s per vedere il suo legame con %2$s.</string>
+    <string name="codex_profile_recaps">Dai riassunti dei capitoli</string>
+    <string name="codex_pair_not_described">Il profilo di %1$s non menziona %2$s.</string>
+    <string name="codex_mentions_of">Menzioni di %1$s</string>
+    <string name="codex_mentions_all">Mostra tutte le menzioni</string>
     <string name="codex_shared">Capitoli condivisi: %1$d</string>
     <string name="codex_graph_hint">Seleziona due nomi sulla mappa o un collegamento sotto.</string>
     <string name="codex_graph_empty">Continua a leggere per trovare nomi presenti in almeno due capitoli comuni.</string>
-    <string name="codex_chapter">Capitolo %1$d</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>
     <string name="story_about">Scritto da un modello di IA a partire dai riepiloghi dei capitoli precedenti. Può sbagliare, affermare cose che il libro non dice o rivelare ciò che il modello sa di questo libro da altre fonti.</string>

@@ -17,18 +17,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.PersonSearch
+import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -38,7 +34,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -50,7 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -65,104 +59,122 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.chrome.ChromePill
 import com.chmouel.liseur.ui.BusyIndicator
-import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
-import com.chmouel.liseur.ui.contentWidthCap
-import com.chmouel.liseur.ui.windowWidth
 import org.readium.r2.shared.publication.Locator
 
 /**
- * The character panel, in the reading page's colours. Claims are grouped
- * into distinct cards with compact chapter pills that expand the book's
- * own quotes on demand; tapping a quote shows it in the book and hides
- * the panel until the reader comes back.
+ * A character page's Profile pane, in the reading page's colours: what the
+ * companion's [lookup] says about [name], or a way to ask it. Claims are
+ * grouped into distinct cards with compact chapter pills that expand the
+ * book's own quotes on demand; tapping a quote shows it in the book and
+ * puts the sheet aside until the reader comes back. On a pair's page,
+ * [other] picks out what the profile says about them. [entry] is Codex's
+ * record of the name, and [onAlias] lists the mentions of an alias Codex
+ * [knows]; the others expand their quotes in place. [notes], what saved
+ * chapter recaps say, show until the profile answers.
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun CompanionSheet(
-    panel: CompanionPanel<Locator>,
+internal fun CharacterProfile(
+    name: String,
+    other: String?,
+    lookup: CompanionPanel<Locator>?,
+    notes: List<RecapNote<Locator>>,
+    titles: List<String?>,
+    entry: CodexEntry?,
+    knows: (String) -> Boolean,
+    onAlias: (String) -> Unit,
     onSource: (Passage<Locator>) -> Unit,
+    onAsk: () -> Unit,
     onRetry: () -> Unit,
     onCancel: () -> Unit,
     onChoose: (Candidate<Locator>) -> Unit,
     onSetUp: () -> Unit,
     onChooseModel: () -> Unit,
-    onCodex: (() -> Unit)? = null,
-    onDismiss: () -> Unit,
 ) {
-    LiseurModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    ) {
-        CompositionLocalProvider(LocalChapterTitles provides panel.titles) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .widthIn(max = contentWidthCap(windowWidth()))
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp)
-                    .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                val view = panel.view
-                val profile = (view as? CompanionView.Profile)?.profile
-                val title = profile?.name ?: panel.name ?: panel.selection
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    CompositionLocalProvider(LocalChapterTitles provides titles) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            val view = lookup?.view
+            val profile = (view as? CompanionView.Profile)?.profile
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (entry != null) {
                     Text(
-                        text = title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    panel.also?.let {
-                        Text(
-                            stringResource(R.string.companion_also_from, it),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Text(
-                        stringResource(R.string.companion_scope),
-                        style = MaterialTheme.typography.labelMedium,
+                        stringResource(R.string.codex_entry, kindLabel(entry.kind), entry.occurrences) +
+                            " · " + chapterLabel(ChapterRange(entry.firstUnit, entry.lastUnit)),
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (profile != null && profile.aliases.isNotEmpty()) {
-                        AliasPills(profile.aliases, onSource)
+                }
+                if (profile != null && PassageText.fold(profile.name) != PassageText.fold(name)) {
+                    Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                }
+                lookup?.also?.let {
+                    Text(
+                        stringResource(R.string.companion_also_from, it),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (other == null && profile != null && profile.aliases.isNotEmpty()) {
+                    AliasPills(profile.aliases, knows, onAlias, onSource)
+                }
+            }
+            // Until the profile answers, what the chapter recaps already say stands in
+            // for it; on a pair's page they stay, as the answer may not link the two.
+            if (notes.isNotEmpty() && (view !is CompanionView.Profile || other != null)) {
+                SectionCard(title = R.string.codex_profile_recaps) {
+                    notes.forEachIndexed { index, note ->
+                        if (index > 0) CardDivider()
+                        ClaimItem(
+                            key = "recap:$index:${note.unit}",
+                            heading = note.with,
+                            text = note.text,
+                            sources = note.sources,
+                            onSource = onSource,
+                        )
                     }
                 }
-                Column(
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    when (view) {
-                        CompanionView.Setup -> Message(R.string.companion_setup) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
-                                if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
+            }
+            Column(
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when (view) {
+                    null -> Message(
+                        if (other == null) stringResource(R.string.codex_profile_ask, name)
+                        else stringResource(R.string.codex_pair_ask, name, other),
+                    ) {
+                        Button(onClick = onAsk) { Text(stringResource(R.string.companion_action)) }
+                    }
+                    CompanionView.Setup -> Message(R.string.companion_setup) {
+                        Button(onClick = onSetUp) { Text(stringResource(R.string.companion_setup_action)) }
+                    }
+                    CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
+                    CompanionView.Unplaced -> Message(R.string.companion_unplaced)
+                    CompanionView.NotAName -> Message(R.string.companion_not_a_name)
+                    CompanionView.Insufficient -> Message(
+                        stringResource(R.string.companion_insufficient, lookup.name ?: lookup.selection),
+                    ) { Retry(onRetry) }
+                    is CompanionView.Loading -> Loading(view.stage, onCancel)
+                    is CompanionView.Failed -> FailureMessage(view, onRetry, onChooseModel)
+                    is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
+                    is CompanionView.Profile -> if (other == null) {
+                        Profile(view.profile, onSource)
+                    } else {
+                        val relation = relationOf(view.profile, other)
+                        if (relation != null) {
+                            SectionCard(title = R.string.companion_relationships) {
+                                ClaimItem(
+                                    key = "pair",
+                                    heading = relation.name,
+                                    text = relation.text,
+                                    sources = relation.sources,
+                                    onSource = onSource,
+                                )
                             }
-                        }
-                        CompanionView.FirstChapter -> Message(R.string.companion_first_chapter)
-                        CompanionView.Unplaced -> Message(R.string.companion_unplaced)
-                        CompanionView.NotAName -> Message(R.string.companion_not_a_name)
-                        CompanionView.Insufficient -> Message(
-                            stringResource(R.string.companion_insufficient, panel.name ?: panel.selection),
-                        ) {
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Retry(onRetry)
-                                if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
-                            }
-                        }
-                        is CompanionView.Loading -> Loading(view.stage, onCancel)
-                        is CompanionView.Failed -> {
-                            FailureMessage(view, onRetry, onChooseModel)
-                            if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
-                        }
-                        is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
-                        is CompanionView.Profile -> {
+                        } else {
+                            Message(stringResource(R.string.codex_pair_not_described, view.profile.name, other))
                             Profile(view.profile, onSource)
-                            if (onCodex != null) OutlinedButton(onClick = onCodex) { Text(stringResource(R.string.codex_title)) }
                         }
                     }
                 }
@@ -179,8 +191,6 @@ internal fun CompanionPeekBar(
     onReturn: () -> Unit,
     onShow: (() -> Unit)?,
     modifier: Modifier = Modifier,
-    showLabel: Int = R.string.companion_peek_show,
-    showIcon: ImageVector = Icons.Outlined.PersonSearch,
 ) {
     ChromePill(theme = theme, modifier = modifier) {
         Row(
@@ -200,9 +210,9 @@ internal fun CompanionPeekBar(
                 )
             }
             if (onShow != null) TextButton(onClick = onShow, enabled = !returning) {
-                Icon(showIcon, contentDescription = null, tint = theme.background)
+                Icon(Icons.Outlined.Hub, contentDescription = null, tint = theme.background)
                 Text(
-                    stringResource(showLabel),
+                    stringResource(R.string.codex_title),
                     color = theme.background,
                     maxLines = 1,
                     modifier = Modifier.padding(start = 8.dp),
@@ -262,7 +272,12 @@ private fun Ambiguous(candidates: List<Candidate<Locator>>, onChoose: (Candidate
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AliasPills(aliases: List<Alias<Locator>>, onSource: (Passage<Locator>) -> Unit) {
+private fun AliasPills(
+    aliases: List<Alias<Locator>>,
+    knows: (String) -> Boolean,
+    onAlias: (String) -> Unit,
+    onSource: (Passage<Locator>) -> Unit,
+) {
     val eInk = LocalEInk.current
     var selectedAlias by rememberSaveable { mutableStateOf<String?>(null) }
     Column(
@@ -299,7 +314,7 @@ private fun AliasPills(aliases: List<Alias<Locator>>, onSource: (Passage<Locator
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
                         .clickable(role = Role.Button) {
-                            selectedAlias = if (active) null else alias.name
+                            if (knows(alias.name)) onAlias(alias.name) else selectedAlias = if (active) null else alias.name
                         },
                 ) {
                     Text(
@@ -504,8 +519,7 @@ private fun chapterSummary(passages: List<Passage<Locator>>): String {
 
 /** The contents' own titles for [range], or chapter numbers where it has none. */
 @Composable
-private fun chapterLabel(range: ChapterRange): String {
-    val titles = LocalChapterTitles.current
+internal fun chapterLabel(range: ChapterRange, titles: List<String?> = LocalChapterTitles.current): String {
     val first = titles.getOrNull(range.lo)
     val last = titles.getOrNull(range.hi)
     return when {

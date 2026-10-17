@@ -44,6 +44,12 @@ data class CodexPassageRow(
         ref, PassageText.hash(text), resource, text, ChapterRange(lo, unit),
         checkNotNull(Locator.fromJSON(JSONObject(locator))), end, folded,
     )
+
+    /** The passage as the book's own walk builds it: [folded] here carries the next part's run-on, which only Codex's search wants. */
+    fun source(): Passage<Locator> = Passage(
+        ref, PassageText.hash(text), resource, text, ChapterRange(lo, unit),
+        checkNotNull(Locator.fromJSON(JSONObject(locator))), end,
+    )
 }
 
 @Dao
@@ -86,6 +92,12 @@ interface CodexDao {
             "ORDER BY codex_passage.unit, codex_passage.rowid LIMIT 50 OFFSET :offset",
     )
     suspend fun sharedMentions(bookUrl: String, ceiling: Int, needle: String, other: String, offset: Int): List<CodexPassageRow>
+
+    @Query("SELECT * FROM codex_passage WHERE book_url = :bookUrl AND (unit < :ceiling OR resource <= :resource)")
+    suspend fun passagesUpTo(bookUrl: String, ceiling: Int, resource: Int): List<CodexPassageRow>
+
+    @Query("SELECT * FROM codex_passage WHERE book_url = :bookUrl AND unit = :unit")
+    suspend fun passagesOfUnit(bookUrl: String, unit: Int): List<CodexPassageRow>
 
     @Query("DELETE FROM codex_book WHERE book_url IN (:books)")
     suspend fun forgetBooks(books: List<String>)
@@ -156,6 +168,31 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
         rows.map { it.passage() }
     }
 
+    /**
+     * The stored passages of chapters below [ceiling] and of resources up
+     * to [resource], in reading order, as the book's own walk builds them;
+     * null unless the scan was made for [identity] and has completed every
+     * chapter up to [through], so nothing it lacks is silently missing.
+     */
+    suspend fun stored(bookUrl: String, identity: String, through: Int, ceiling: Int, resource: Int): List<Passage<Locator>>? =
+        database.withTransaction {
+            if (dao.book(bookUrl)?.identity != identity) return@withTransaction null
+            val done = dao.completed(bookUrl).toSet()
+            if ((0..through).any { it !in done }) return@withTransaction null
+            dao.passagesUpTo(bookUrl, ceiling, resource)
+        }?.let { rows ->
+            withContext(Dispatchers.Default) { rows.map { it.source() }.sortedWith(READING_ORDER) }
+        }
+
+    /** The stored passages whose highest chapter is [unit], as [stored] gives them; null unless that chapter is scanned for [identity]. */
+    suspend fun storedUnit(bookUrl: String, identity: String, unit: Int): List<Passage<Locator>>? =
+        database.withTransaction {
+            if (dao.book(bookUrl)?.identity != identity || !dao.isCompleted(bookUrl, unit)) return@withTransaction null
+            dao.passagesOfUnit(bookUrl, unit)
+        }?.let { rows ->
+            withContext(Dispatchers.Default) { rows.map { it.source() }.sortedWith(READING_ORDER) }
+        }
+
     internal suspend fun forget(books: List<String>) {
         dao.forgetPassages(books)
         dao.forgetUnits(books)
@@ -164,6 +201,17 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
 
     companion object {
         const val FORMAT = 1
+
+        /** What a scan is valid for: the book's content, the extraction and passage formats, and its chapter bounds. */
+        fun identity(sha: String, map: ChapterMap): String =
+            "$sha:$FORMAT:${PassageText.VERSION}:" + PassageText.hash((0 until map.chapterCount).joinToString("|") { map.unitKey(it) })
+
+        // Refs are r<resource>.<ordinal>[.<part>], numbered in reading order.
+        private val READING_ORDER: Comparator<Passage<*>> = compareBy<Passage<*>>(
+            { it.resource },
+            { it.ref.split('.').getOrNull(1)?.toIntOrNull() ?: 0 },
+            { it.ref.split('.').getOrNull(2)?.toIntOrNull() ?: -1 },
+        )
         private fun needle(name: String) = PassageText.pattern(PassageText.fold(name))
         internal fun encode(stats: Map<String, CodexStats>): String = JSONObject().apply {
             stats.forEach { (name, value) -> put(name, JSONArray().put(value.occurrences).put(value.speechHits)) }

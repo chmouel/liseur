@@ -1343,7 +1343,6 @@
     <string name="translation_consent_title">Utiliser %1$s ?</string>
     <string name="translation_consent_agree">Accepter et utiliser</string>
     <string name="companion_action">Demander au compagnon</string>
-    <string name="companion_scope">D\'après le livre jusqu\'ici.</string>
     <string name="companion_also_from">Un des personnages que « %1$s » peut désigner</string>
     <string name="companion_setup">Choisissez un serveur et un modèle pour le compagnon de lecture.</string>
     <string name="companion_setup_action">Configurer</string>
@@ -1366,7 +1365,6 @@
         <item quantity="other">%1$d passages</item>
     </plurals>
     <string name="companion_peek_return">Revenir où vous étiez</string>
-    <string name="companion_peek_show">Afficher la fiche</string>
     <string name="companion_retry">Réessayer</string>
     <string name="companion_failed_cancelled">Recherche annulée.</string>
     <string name="companion_failed_key">Le serveur a refusé la clé. Vérifiez-la dans Services externes et clés d\'API.</string>
@@ -1421,7 +1419,7 @@
     <string name="companion_settings_recaps">Résumer les chapitres pendant la lecture</string>
     <string name="companion_settings_recaps_summary">Quand vous dépassez la fin d\'un chapitre, il est résumé en arrière-plan pour que les recherches suivantes trouvent plus vite les passages. Désactivé par défaut. Chaque livre peut le changer dans Aa, Avancé, dans le lecteur.</string>
     <string name="companion_settings_story_auto">Compléter l’histoire automatiquement</string>
-    <string name="companion_settings_story_auto_summary">Quand le Codex s’ouvre sur Histoire, récapitule le chapitre précédant votre position s’il n’en a pas et tient à jour le résumé de l’histoire jusqu’ici. Activé par Autoriser dans l’onglet Histoire.</string>
+    <string name="companion_settings_story_auto_summary">Quand le Compagnon s’ouvre sur Histoire, récapitule le chapitre précédant votre position s’il n’en a pas et tient à jour le résumé de l’histoire jusqu’ici. Activé par Autoriser dans l’onglet Histoire.</string>
     <string name="companion_settings_privacy">Le texte du livre avant le paragraphe sélectionné est envoyé au serveur choisi, et des chapitres entiers si les résumés en arrière-plan sont activés. Son fournisseur peut facturer ces requêtes.</string>
     <string name="settings_backup_include_connections">Inclure les comptes, services et mots de passe</string>
     <string name="settings_backup_connections_replace">Les comptes de bibliothèque et KOReader, les paramètres des services et les identifiants enregistrés seront remplacés automatiquement.</string>
@@ -1436,23 +1434,21 @@
     <string name="settings_backup_error_export_password_lost">Le mot de passe de la sauvegarde a été perdu pendant le choix du fichier ; rien n’a été enregistré. Exportez à nouveau.</string>
 
     <!-- Offline codex -->
-    <string name="codex_title">Codex</string>
-    <string name="codex_settings_available">Codex hors ligne disponible</string>
-    <string name="codex_settings_enabled">Codex sur cet appareil</string>
-    <string name="codex_settings_summary">Indexez les noms et les liens hors ligne en ouvrant le codex. Sans IA ni clé API.</string>
+    <string name="codex_title">Compagnon</string>
+    <string name="codex_settings_available">Compagnon hors ligne disponible</string>
+    <string name="codex_settings_enabled">Compagnon sur cet appareil</string>
+    <string name="codex_settings_summary">Indexez les noms et les liens hors ligne en ouvrant le Compagnon. Sans IA ni clé API. Désactivé, le Compagnon garde l\'histoire et les profils IA des personnages.</string>
     <string name="codex_preparing">Préparation du livre…</string>
     <string name="codex_scanning">Analyse du livre…</string>
     <string name="codex_paused">Analyse en pause</string>
     <string name="codex_complete">Livre indexé</string>
-    <string name="codex_failed">Impossible de lire le codex. Les chapitres terminés sont conservés.</string>
+    <string name="codex_failed">Le Compagnon n\'a pas pu lire le livre. Les chapitres terminés sont conservés.</string>
     <string name="codex_progress">Chapitres analysés : %1$d/%2$d</string>
     <string name="codex_pause">Suspendre</string>
     <string name="codex_resume">Reprendre</string>
-    <string name="codex_retry">Réessayer</string>
-    <string name="codex_unplaced">Votre chapitre est introuvable. Rouvrez le codex depuis un passage identifié du livre.</string>
+    <string name="codex_unplaced">Votre chapitre est introuvable. Rouvrez le Compagnon depuis un passage identifié du livre.</string>
     <string name="codex_scope">Seuls les chapitres avant le chapitre %1$d sont affichés.</string>
     <string name="codex_names">Noms</string>
-    <string name="codex_relationships">Liens</string>
     <string name="codex_story">Histoire</string>
     <string name="codex_search">Rechercher un nom</string>
     <string name="codex_empty">Aucun nom correspondant dans les chapitres précédents pour le moment.</string>
@@ -1463,10 +1459,17 @@
     <string name="codex_faction">Faction</string>
     <string name="codex_other">Autre</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_pane_profile">Profil</string>
+    <string name="codex_pane_mentions">Mentions</string>
+    <string name="codex_profile_ask">Demandez au compagnon qui est %1$s, d\'après le livre jusqu\'ici.</string>
+    <string name="codex_pair_ask">Demandez au compagnon qui est %1$s pour voir son lien avec %2$s.</string>
+    <string name="codex_profile_recaps">D’après les résumés de chapitre</string>
+    <string name="codex_pair_not_described">Le profil de %1$s ne mentionne pas %2$s.</string>
+    <string name="codex_mentions_of">Mentions de %1$s</string>
+    <string name="codex_mentions_all">Afficher toutes les mentions</string>
     <string name="codex_shared">Chapitres en commun : %1$d</string>
     <string name="codex_graph_hint">Sélectionnez deux noms sur la carte, ou un lien ci-dessous.</string>
     <string name="codex_graph_empty">Poursuivez la lecture pour trouver des noms partageant au moins deux chapitres.</string>
-    <string name="codex_chapter">Chapitre %1$d</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
     <string name="story_about">Écrit par un modèle d’IA à partir des récapitulatifs des chapitres précédents. Il peut se tromper, affirmer ce que le livre ne dit pas, ou révéler ce que le modèle sait de ce livre par ailleurs.</string>

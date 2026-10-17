@@ -2,6 +2,7 @@ package com.chmouel.liseur.companion
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -13,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -38,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,6 +71,7 @@ internal fun LazyListScope.storyTab(
     actions: StoryActions,
     onChapter: (Locator) -> Unit,
     onChooseModel: () -> Unit,
+    onCharacter: (String) -> Unit = {},
 ) {
     when {
         story == null || story.loading -> item(key = "story:loading") { BusyBar() }
@@ -90,6 +96,7 @@ internal fun LazyListScope.storyTab(
                     onSummarize = { actions.summarize(chapter.unit) },
                     onChapter = onChapter,
                     onChooseModel = onChooseModel,
+                    onCharacter = onCharacter,
                 )
             }
         }
@@ -184,15 +191,33 @@ private fun StoryWorkStrip(work: StoryWork, onStop: () -> Unit) {
 
 @Composable
 private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseModel: () -> Unit) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    val text = soFar.text
     StoryCard {
-        Text(
-            stringResource(R.string.story_so_far),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        val text = soFar.text
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .then(if (text != null) Modifier.clickable(role = Role.Button) { open = !open } else Modifier),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                stringResource(R.string.story_so_far),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+            if (text != null) {
+                Icon(
+                    if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(if (open) R.string.story_less else R.string.story_more),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        if (text != null && open) {
+            Text(text, style = MaterialTheme.typography.bodyLarge)
+        }
         if (text != null) {
-            ExpandableText(text, MaterialTheme.typography.bodyLarge, SO_FAR_LINES)
             soFar.through?.let { through ->
                 Text(
                     if (through == 0) stringResource(R.string.story_covers_first)
@@ -243,7 +268,7 @@ private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseMod
                 }
             }
         }
-        if (text != null || soFar.writing) {
+        if ((text != null && open) || soFar.writing) {
             Text(
                 stringResource(R.string.story_about),
                 style = MaterialTheme.typography.bodySmall,
@@ -280,6 +305,7 @@ private fun StoryRow(
     onSummarize: () -> Unit,
     onChapter: (Locator) -> Unit,
     onChooseModel: () -> Unit,
+    onCharacter: (String) -> Unit,
 ) {
     val recap = chapter.recap
     val progress = chapter.progress
@@ -312,7 +338,7 @@ private fun StoryRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // The number ties the row to "covers chapters 1–9" and the work strip.
                 val title = chapter.title?.let { "${chapter.unit + 1} · $it" }
-                    ?: stringResource(R.string.codex_chapter, chapter.unit + 1)
+                    ?: chapterLabel(ChapterRange(chapter.unit, chapter.unit), emptyList())
                 Column(Modifier.weight(1f)) {
                     Text(
                         title,
@@ -332,6 +358,13 @@ private fun StoryRow(
             }
             if (recap is StoryRecap.Summary) {
                 ExpandableText(recap.sentences.joinToString(" "), MaterialTheme.typography.bodyMedium, CHAPTER_LINES)
+            }
+            if (chapter.characters.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    chapter.characters.forEach { name ->
+                        SuggestionChip(onClick = { onCharacter(name) }, label = { Text(name) })
+                    }
+                }
             }
             if (chapter.start == null) {
                 Text(
@@ -369,7 +402,6 @@ private fun statusLabel(chapter: StoryChapter<*>): Pair<String, Color>? {
     }
 }
 
-private const val SO_FAR_LINES = 8
 private const val CHAPTER_LINES = 3
 private val RAIL_WIDTH = 28.dp
 private val RAIL_X = 8.dp

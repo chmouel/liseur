@@ -1294,7 +1294,6 @@
     <string name="translation_consent_title">使用%1$s？</string>
     <string name="translation_consent_agree">同意并使用</string>
     <string name="companion_action">询问阅读伴侣</string>
-    <string name="companion_scope">依据本书到此为止的内容。</string>
     <string name="companion_also_from">“%1$s”可能指的人物之一</string>
     <string name="companion_setup">请为阅读伴侣选择服务器和模型。</string>
     <string name="companion_setup_action">设置</string>
@@ -1316,7 +1315,6 @@
         <item quantity="other">%1$d 处段落</item>
     </plurals>
     <string name="companion_peek_return">返回提问处</string>
-    <string name="companion_peek_show">显示人物资料</string>
     <string name="companion_retry">重试</string>
     <string name="companion_failed_cancelled">已取消查找。</string>
     <string name="companion_failed_key">服务器拒绝了密钥。请在“外部服务和 API 密钥”中检查。</string>
@@ -1371,7 +1369,7 @@
     <string name="companion_settings_recaps">阅读时为章节生成摘要</string>
     <string name="companion_settings_recaps_summary">读过一章的结尾后，会在后台为其生成摘要，帮助之后的查找更快找到段落。默认关闭。每本书都可以在阅读器的 Aa › 高级中单独更改。</string>
     <string name="companion_settings_story_auto">自动补全前情</string>
-    <string name="companion_settings_story_auto_summary">在百科中打开“前情”时，如果当前位置之前那一章还没有回顾，就自动回顾它，并让前情摘要保持最新。在“前情”标签页中点按“允许”即可开启。</string>
+    <string name="companion_settings_story_auto_summary">在阅读伴侣中打开“前情”时，如果当前位置之前那一章还没有回顾，就自动回顾它，并让前情摘要保持最新。在“前情”标签页中点按“允许”即可开启。</string>
     <string name="companion_settings_privacy">所选段落之前的书籍文本会发送到所选服务器；开启后台摘要后会发送整章内容。服务提供方可能对这些请求收费。</string>
     <string name="settings_backup_include_connections">包含账号、服务和密码</string>
     <string name="settings_backup_connections_replace">已保存的书库和 KOReader 账号、服务设置及凭据将被自动替换。</string>
@@ -1386,23 +1384,21 @@
     <string name="settings_backup_error_export_password_lost">选择文件时备份密码已丢失，因此未保存任何内容。请重新导出。</string>
 
     <!-- Offline codex -->
-    <string name="codex_title">百科</string>
-    <string name="codex_settings_available">离线百科可用</string>
-    <string name="codex_settings_enabled">设备端百科</string>
-    <string name="codex_settings_summary">打开百科即可离线索引名称与联系，无需 AI 或 API 密钥。</string>
+    <string name="codex_title">阅读伴侣</string>
+    <string name="codex_settings_available">离线阅读伴侣可用</string>
+    <string name="codex_settings_enabled">设备端阅读伴侣</string>
+    <string name="codex_settings_summary">打开阅读伴侣即可离线索引名称与联系，无需 AI 或 API 密钥。关闭后，阅读伴侣仍会显示前情与 AI 人物简介。</string>
     <string name="codex_preparing">正在准备书籍…</string>
     <string name="codex_scanning">正在扫描书籍…</string>
     <string name="codex_paused">扫描已暂停</string>
     <string name="codex_complete">书籍已索引</string>
-    <string name="codex_failed">无法读取百科。已完成的章节已保存。</string>
+    <string name="codex_failed">阅读伴侣无法读取本书。已完成的章节已保存。</string>
     <string name="codex_progress">已扫描章节：%1$d/%2$d</string>
     <string name="codex_pause">暂停扫描</string>
     <string name="codex_resume">继续扫描</string>
-    <string name="codex_retry">重试</string>
-    <string name="codex_unplaced">无法确定当前章节。请从书中已知位置重新打开百科。</string>
+    <string name="codex_unplaced">无法确定当前章节。请从书中已知位置重新打开阅读伴侣。</string>
     <string name="codex_scope">仅显示第 %1$d 章之前的内容。</string>
     <string name="codex_names">名称</string>
-    <string name="codex_relationships">联系</string>
     <string name="codex_story">前情</string>
     <string name="codex_search">搜索名称</string>
     <string name="codex_empty">之前的章节中尚无匹配名称。</string>
@@ -1413,10 +1409,17 @@
     <string name="codex_faction">组织</string>
     <string name="codex_other">其他</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_pane_profile">简介</string>
+    <string name="codex_pane_mentions">提及</string>
+    <string name="codex_profile_ask">询问阅读伴侣%1$s是谁，依据本书到此为止的内容。</string>
+    <string name="codex_pair_ask">询问阅读伴侣关于%1$s的信息，了解其与%2$s的关系。</string>
+    <string name="codex_profile_recaps">来自章节回顾</string>
+    <string name="codex_pair_not_described">%1$s的简介中没有提到%2$s。</string>
+    <string name="codex_mentions_of">%1$s的提及</string>
+    <string name="codex_mentions_all">显示全部提及</string>
     <string name="codex_shared">共同章节：%1$d</string>
     <string name="codex_graph_hint">在图中选择两个名称，或选择下方的联系。</string>
     <string name="codex_graph_empty">继续阅读，以发现至少在两个章节中共同出现的名称。</string>
-    <string name="codex_chapter">第 %1$d 章</string>
     <string name="codex_more">加载更多段落</string>
     <string name="codex_no_passages">未找到之前的段落。</string>
     <string name="story_about">由 AI 模型根据此前各章的回顾写成。内容可能有误，可能写出书中没有的内容，也可能透露模型从别处得知的本书情节。</string>

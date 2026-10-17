@@ -1,0 +1,100 @@
+package com.chmouel.liseur.companion
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CharacterPageTest {
+    private fun profile(vararg names: String) = CompanionAnswer.Profile<Int>(
+        name = "Mira",
+        aliases = emptyList(),
+        identity = emptyList(),
+        backstory = emptyList(),
+        relationships = names.map { Relationship(it, "about $it", emptyList()) },
+    )
+
+    @Test fun `a pair finds the relationship naming the other as whole words, the exact name first`() {
+        assertEquals("Tobin", relationOf(profile("Tobin the elder", "Tobin"), "Tobin")?.name)
+        assertEquals("Tobin the elder", relationOf(profile("Tobin the elder"), "Tobin")?.name)
+        assertEquals("Tobin Hale", relationOf(profile("Tobin Hale"), "Captain Tobin Hale")?.name)
+        assertEquals("O’Brien", relationOf(profile("O’Brien"), "o'brien")?.name)
+        assertEquals("Élise", relationOf(profile("Élise"), "Elise")?.name)
+        assertNull(relationOf(profile("Anna"), "Ann"))
+        assertNull(relationOf(profile("Tobin"), "  "))
+    }
+
+    @Test fun `a lookup belongs to the page of the name it asked about or chose`() {
+        val asked = CompanionPanel<Int>("“Tobin’s,”", PassageText.name("“Tobin’s,”"), null, CompanionView.Setup)
+        assertTrue(asked.about("Tobin"))
+        assertFalse(asked.about("Mira"))
+
+        val chosen = CompanionPanel<Int>(
+            "Tobin", "Tobin Hale", null,
+            CompanionView.Profile(profile().copy(name = "Tobin Hale")), also = "Tobin",
+        )
+        assertTrue(chosen.about("Tobin"))
+        assertTrue(chosen.about("Tobin Hale"))
+    }
+
+    private fun character(name: String, vararg aliases: String, facts: List<String> = emptyList(), with: Map<String, String> = emptyMap()) =
+        RecapCharacter(
+            name = name,
+            aliases = aliases.toList(),
+            facts = facts.map { RecapFact(it, emptyList()) },
+            relationships = with.map { (other, text) -> RecapFact(text, emptyList(), other) },
+        )
+
+    @Test fun `recap claims come only from chapters before the scope, by whole name or alias`() {
+        val saved = listOf(
+            3 to ChapterRecap(emptyList(), listOf(character("Silver", "Long John", facts = listOf("Joins later.")))),
+            0 to ChapterRecap(emptyList(), listOf(character("Long John Silver", "Barbecue", facts = listOf("Has one leg.")))),
+            1 to ChapterRecap(emptyList(), listOf(character("Silverton", facts = listOf("Someone else.")), character("Barbecue", facts = listOf("Cooks.")))),
+        )
+        val scope = AskingScope(lo = 2, count = 4)
+
+        assertEquals(listOf(0 to "Has one leg.", 1 to "Cooks."), recapClaims(saved, scope, "Barbecue’s").map { it.first to it.second.text })
+        assertEquals(emptyList<Pair<Int, RecapFact>>(), recapClaims(saved, scope, "Silver"))
+        assertEquals(emptyList<Pair<Int, RecapFact>>(), recapClaims(saved, scope, " "))
+    }
+
+    @Test fun `a pair keeps the relationships between the two, told from either side`() {
+        val saved = listOf(
+            0 to ChapterRecap(
+                emptyList(),
+                listOf(
+                    character("Jim", facts = listOf("A boy."), with = mapOf("Long John" to "Fears him.", "Ben" to "Meets him.")),
+                    character("Silver", "Long John", with = mapOf("Jim Hawkins" to "Watches him.")),
+                    character("Jim Hawkins", "Jim"),
+                ),
+            ),
+        )
+
+        val claims = recapClaims(saved, AskingScope(lo = 1, count = 2), "Jim", "Silver").map { it.second.text }
+
+        assertEquals(listOf("Fears him.", "Watches him."), claims)
+    }
+
+    @Test fun `a recap's sources are the cited passages whose text is unchanged`() {
+        fun passage(ref: String, text: String) = Passage(ref, PassageText.hash(text), 0, text, ChapterRange(0, 0), 0)
+        val kept = passage("r0.1", "Jim ran.")
+        val changed = passage("r0.2", "Silver laughed.")
+        val fact = RecapFact("Runs.", listOf(Recaps.stored(kept), "r0.2#stale", "r0.9#gone"))
+
+        assertEquals(listOf(kept), recapSources(fact, listOf(kept, changed)))
+    }
+
+    @Test fun `an alias an earlier recap gives carries to chapters that use it alone, never from past the place or a second step`() {
+        val saved = listOf(
+            0 to ChapterRecap(emptyList(), listOf(character("Long John Silver", "Barbecue"))),
+            1 to ChapterRecap(emptyList(), listOf(character("Barbecue", "the cook", facts = listOf("Cooks.")))),
+            2 to ChapterRecap(emptyList(), listOf(character("the cook", facts = listOf("Someone else cooks.")))),
+            3 to ChapterRecap(emptyList(), listOf(character("Long John Silver", "Ship's cook"), character("Ship's cook", facts = listOf("Later.")))),
+        )
+
+        val claims = recapClaims(saved, AskingScope(lo = 3, count = 4), "Long John Silver").map { it.second.text }
+
+        assertEquals(listOf("Cooks."), claims)
+    }
+}

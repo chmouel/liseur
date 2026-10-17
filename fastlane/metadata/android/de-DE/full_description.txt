@@ -8,11 +8,11 @@ Höre jedes EPUB mit Satzmarkierung und automatischem Umblättern. Android-Stimm
 
 Übersetze eine Auswahl oder lies ein Buch Seite für Seite in einer anderen Sprache. Liseur speichert übersetzte Sätze auf deinem Handy, damit sie beim nächsten Besuch der Seite wieder bereitstehen. Nutze den Android-Übersetzer auf dem Gerät oder einen OpenAI-kompatiblen Übersetzungsdienst, selbst gehostet oder online. Lass übersetzte Seiten in der Zielsprache vorlesen und schlage Wörter nach, ohne die Seite zu verlassen.
 
-Lesehilfe und Codex
+Lesebegleiter
 
 Frage die Lesehilfe nach Figuren und Ereignissen. Figurenprofile nutzen Text vor der ausgewählten Stelle, darunter frühere Kapitel und frühere Passagen im aktuellen Kapitel. Quellenpassagen zeigen, woher die Informationen stammen. Aktiviere für jedes Buch Zusammenfassungen von Kapiteln im Hintergrund. Nutze einen OpenAI-kompatiblen Dienst.
 
-Codex erstellt auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Dafür ist kein KI-Dienst und kein API-Schlüssel nötig.
+Auch ohne KI-Dienst erstellt der Lesebegleiter auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Dafür ist kein API-Schlüssel nötig.
 
 Dein Lesegerät
 
@@ -26,6 +26,6 @@ Synchronisiere Lesepositionen mit calibre-web, Komga, BookOrbit oder liseur-sync
 
 Datenschutz
 
-Keine Werbung. Zum Lesen lokaler Bücher brauchst du kein Konto. Androids Systemübersetzer und Codex verarbeiten Buchtext auf deinem Gerät. Wenn du für Übersetzung, Lesehilfe oder Sprachwiedergabe einen Onlinedienst auswählst, sendet Liseur Text an diesen Anbieter. Das Wörterbuch kontaktiert Wiktionary; beim Durchsuchen des Katalogs wird Project Gutenberg kontaktiert.
+Keine Werbung. Zum Lesen lokaler Bücher brauchst du kein Konto. Androids Systemübersetzer und der Geräteindex des Lesebegleiters verarbeiten Buchtext auf deinem Gerät. Wenn du für Übersetzung, Lesehilfe oder Sprachwiedergabe einen Onlinedienst auswählst, sendet Liseur Text an diesen Anbieter. Das Wörterbuch kontaktiert Wiktionary; beim Durchsuchen des Katalogs wird Project Gutenberg kontaktiert.
 
 MIT-lizenziert. Quellcode und Issue-Tracker: https://github.com/chmouel/liseur

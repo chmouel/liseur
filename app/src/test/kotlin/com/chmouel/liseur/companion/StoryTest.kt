@@ -101,4 +101,13 @@ class StoryTest {
         assertEquals(listOf(1, 0), Story.missing(chapters))
         assertEquals(2, StoryView(chapters = chapters.map { StoryChapter<Locator>(it.unit, it.title, it.recap, null, it.progress) }).missing)
     }
+
+    @Test
+    fun `a chapter lists each of its recap's characters once`() {
+        fun named(name: String) = RecapCharacter(name, emptyList(), emptyList(), emptyList())
+        val recap = ChapterRecap(listOf("They sail."), listOf(named(" Jim "), named("Silver"), named("JIM’s"), named(" ")))
+
+        assertEquals(listOf("Jim", "Silver"), Story.characters(saved(0, recap.encode())))
+        assertEquals(emptyList<String>(), Story.characters(saved(0, "not json")))
+    }
 }

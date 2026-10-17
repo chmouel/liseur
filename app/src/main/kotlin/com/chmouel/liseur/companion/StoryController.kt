@@ -76,7 +76,7 @@ internal class StoryController(
                     Inputs(a, ok, saved, failure)
                 }
                 combine(book.watch().distinctUntilChanged(), state, choice, ::Triple).collect { (saved, inputs, chosen) ->
-                    val stored = Story.chapters(catalog.map, chapters, if (chapters.isEmpty()) emptyList() else saved, decoder::of)
+                    val stored = Story.chapters(catalog.map, chapters, if (chapters.isEmpty()) emptyList() else saved, decoder::of, decoder::names)
                     val failed = { f: RecapFailure -> failedView(f, chosen) }
                     var current = Story.progress(stored, inputs.activity, failed)
                     // Live, not inputs.allowed: consent may have been revoked while this collector was suspended.

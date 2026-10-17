@@ -224,7 +224,12 @@ in or anything after it is sent. The model, and your API key if you entered one,
 with every request. No book title, file, identifier or precise reading
 position goes with it, and the recaps
 described below are only used on the phone to find passages; a lookup
-never sends their wording.
+never sends their wording. Tapping a name or a pair inside Companion sends
+nothing until you tap Ask on its Profile, which looks up that name, or
+a pair's first name, the same way, from the place where you opened
+Companion. Before that, the Profile and the Story tab show what recaps
+already saved on the phone say about earlier chapters, which sends
+nothing.
 
 If you also turn on background chapter recaps, then while the book is
 open on screen and you read on from the end of one chapter into the
@@ -239,7 +244,7 @@ Liseur asks it not to, and shows next to every statement the passage
 from the book it relied on, but it cannot guarantee what a model
 writes.
 
-Codex's Story tab, shown once a companion server is chosen, lists the
+Companion's Story tab, shown once a companion server is chosen, lists the
 chapters before yours with their recaps. Recapping a chapter from there,
 with or without background recaps on, sends that whole chapter the same
 way. The first time it opens it asks before doing anything on its own;

@@ -25,6 +25,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -40,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.AbsoluteAlignment
@@ -87,6 +93,32 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
+/**
+ * The companion's side of a character page: the lookup in front, if any,
+ * whether a service is chosen to ask, and what the Profile pane can do.
+ */
+internal class CharacterProfiles(
+    val lookup: CompanionPanel<Locator>?,
+    val available: Boolean,
+    /** The saved recaps notes and pairs are read from; a change reads them again. */
+    val recaps: Any?,
+    val ask: (String) -> Unit,
+    /** What saved recaps already say of a name, or of a pair; read on the phone. */
+    val notes: suspend (name: String, other: String?) -> List<RecapNote<Locator>>,
+    /** For pairs of names, what saved recaps last say links each. */
+    val pairs: suspend (List<Pair<String, String>>) -> Map<Pair<String, String>, String>,
+    val retry: () -> Unit,
+    val cancel: () -> Unit,
+    val choose: (Candidate<Locator>) -> Unit,
+    val setUp: () -> Unit,
+)
+
+/**
+ * Codex, and with a companion service its Story tab and character
+ * profiles. Without [scanEnabled] there are no names, relationships or
+ * mentions, only what the companion gives; without a service it is the
+ * local index alone, as it always was.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CodexSheet(
@@ -94,6 +126,8 @@ internal fun CodexSheet(
     progress: CodexProgress,
     controller: CodexViewModel,
     onSource: (Passage<Locator>) -> Unit,
+    scanEnabled: Boolean = true,
+    profiles: CharacterProfiles? = null,
     // Held by the caller: the sheet leaves the screen during a peek, and
     // Return should land where the reader was in the list.
     namesList: LazyListState = rememberLazyListState(),
@@ -106,14 +140,17 @@ internal fun CodexSheet(
     onChapter: (Locator) -> Unit = {},
     onChooseModel: () -> Unit = {},
 ) {
-    val tabs = if (storyAvailable && storyActions != null) CodexTab.entries else CodexTab.entries - CodexTab.STORY
-    val tab = panel.tab.takeIf { it in tabs } ?: CodexTab.NAMES
+    val tabs = CodexTab.entries.filter { if (it == CodexTab.STORY) storyAvailable && storyActions != null else scanEnabled }
+    val tab = panel.tab.takeIf { it in tabs } ?: tabs.firstOrNull()
     val search = panel.search
     val detail = panel.detail
+    // A character page opened with nothing behind it closes with Back.
+    val back = if (tabs.isEmpty()) controller::close else controller::back
+    LaunchedEffect(detail == null, tab == null) { if (detail == null && tab == null) controller.close() }
     LiseurModalBottomSheet(
         onDismissRequest = controller::close,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        onBack = if (detail != null) controller::back else null,
+        onBack = if (detail != null) back else null,
     ) {
         Column(
             Modifier
@@ -130,50 +167,70 @@ internal fun CodexSheet(
                 TextButton(onClick = controller::close) { Text(stringResource(R.string.close)) }
             }
             if (panel.placing || panel.ceiling == null) {
-                CodexScanProgress(progress, controller)
+                if (scanEnabled) CodexScanProgress(progress, controller)
                 if (panel.placing) BusyBar() else Text(stringResource(R.string.codex_unplaced))
             } else if (detail != null) {
+                val profiled = profiles != null && (profiles.available || !scanEnabled)
+                val panes = listOfNotNull(CharacterPane.PROFILE.takeIf { profiled }, CharacterPane.MENTIONS.takeIf { scanEnabled })
+                val pane = detail.pane.takeIf { it in panes } ?: panes.firstOrNull()
                 LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, panel.ceiling)
-                    item(key = "codex:back") { TextButton(onClick = controller::back) { Text(stringResource(R.string.back)) } }
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
+                    item(key = "codex:back") { TextButton(onClick = back) { Text(stringResource(R.string.back)) } }
                     item(key = "codex:name") {
                         Text(detail.other?.let { stringResource(R.string.codex_pair, detail.name, it) } ?: detail.name,
                             style = MaterialTheme.typography.titleLarge)
                     }
-                    items(detail.passages, key = { it.ref }) { passage ->
-                        Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSource(passage) }.padding(vertical = 12.dp)) {
-                            val chapter = panel.titles.getOrNull(passage.range.hi)
-                                ?: stringResource(R.string.codex_chapter, passage.range.hi + 1)
-                            Text(chapter, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                            Text(
-                                highlightedExcerpt(
-                                    passage.text,
-                                    listOfNotNull(detail.name, detail.other),
-                                    SpanStyle(
-                                        background = MaterialTheme.colorScheme.secondaryContainer,
-                                        fontWeight = FontWeight.SemiBold,
-                                    ),
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                    if (panes.size > 1) item(key = "codex:panes") {
+                        PrimaryTabRow(selectedTabIndex = panes.indexOf(pane), modifier = Modifier.padding(bottom = 6.dp)) {
+                            panes.forEach { each ->
+                                Tab(
+                                    selected = pane == each,
+                                    onClick = { controller.showPane(each) },
+                                    text = {
+                                        Text(
+                                            stringResource(
+                                                when (each) {
+                                                    CharacterPane.PROFILE -> R.string.codex_pane_profile
+                                                    CharacterPane.MENTIONS -> R.string.codex_pane_mentions
+                                                },
+                                            ),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    },
+                                )
+                            }
                         }
-                        HorizontalDivider()
                     }
-                    if (detail.loading) item { BusyBar() }
-                    if (detail.failed) item {
-                        Text(stringResource(R.string.codex_failed))
-                        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_retry)) }
+                    if (pane == CharacterPane.PROFILE && profiles != null) item(key = "codex:profile") {
+                        val notes by produceState(emptyList<RecapNote<Locator>>(), detail.name, detail.other, panel.scope, profiles.available, profiles.recaps) {
+                            value = profiles.notes(detail.name, detail.other)
+                        }
+                        CharacterProfile(
+                            name = detail.name,
+                            other = detail.other,
+                            lookup = profiles.lookup?.takeIf { it.about(detail.name) },
+                            notes = notes,
+                            titles = panel.titles,
+                            entry = if (scanEnabled) codexEntryFor(panel.entries, detail.name) else null,
+                            knows = { scanEnabled && codexEntryFor(panel.entries, it) != null },
+                            onAlias = controller::focus,
+                            onSource = onSource,
+                            onAsk = { profiles.ask(detail.name) },
+                            onRetry = profiles.retry,
+                            onCancel = profiles.cancel,
+                            onChoose = profiles.choose,
+                            onSetUp = profiles.setUp,
+                            onChooseModel = onChooseModel,
+                        )
                     }
-                    if (!detail.loading && !detail.failed && detail.passages.isEmpty()) item { Text(stringResource(R.string.codex_no_passages)) }
-                    if (detail.more && !detail.loading) item {
-                        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_more)) }
-                    }
+                    if (pane == CharacterPane.MENTIONS) mentions(detail, panel.titles, controller, onSource)
                 }
             } else if (tab == CodexTab.STORY && storyActions != null) {
                 LazyColumn(Modifier.weight(1f), state = storyList) {
-                    codexHeader(progress, controller, panel.ceiling)
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
                     codexTabs(tab, tabs, controller)
-                    storyTab(story, storyActions, onChapter, onChooseModel)
+                    storyTab(story, storyActions, onChapter, onChooseModel, onCharacter = { controller.detail(it) })
                 }
             } else if (tab == CodexTab.NAMES) {
                 val entries = remember(panel.entries, search) {
@@ -181,7 +238,7 @@ internal fun CodexSheet(
                     panel.entries.filter { PassageText.fold(it.name).contains(needle) }
                 }
                 LazyColumn(Modifier.weight(1f), state = namesList) {
-                    codexHeader(progress, controller, panel.ceiling)
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
                     codexTabs(tab, tabs, controller)
                     item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
@@ -203,14 +260,18 @@ internal fun CodexSheet(
                         )
                     }
                 }
-            } else {
+            } else if (tab == CodexTab.RELATIONSHIPS) {
+                val linked = panel.graph?.let { graph -> graph.edges.map { graph.nodes[it.a].name to graph.nodes[it.b].name } }.orEmpty()
+                val relations by produceState(emptyMap<Pair<String, String>, String>(), linked, panel.scope, profiles?.available, profiles?.recaps) {
+                    value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.pairs?.invoke(linked).orEmpty()
+                }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, panel.ceiling)
-                    codexTabs(tab, tabs, controller)
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
+                    codexTabs(CodexTab.RELATIONSHIPS, tabs, controller)
                     val graph = panel.graph
                     if (panel.graphFailed) item {
                         Text(stringResource(R.string.codex_failed))
-                        TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.codex_retry)) }
+                        TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.companion_retry)) }
                     } else if (graph == null) item { BusyBar() }
                     else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
                     else {
@@ -221,7 +282,14 @@ internal fun CodexSheet(
                             val b = graph.nodes[edge.b].name
                             ListItem(
                                 headlineContent = { Text(stringResource(R.string.codex_pair, a, b)) },
-                                supportingContent = { Text(stringResource(R.string.codex_shared, edge.weight)) },
+                                supportingContent = {
+                                    Column {
+                                        Text(stringResource(R.string.codex_shared, edge.weight))
+                                        relations[a to b]?.let { relation ->
+                                            Text(relation, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.clickable(role = Role.Button) { controller.detail(a, b) },
                             )
                         }
@@ -232,11 +300,57 @@ internal fun CodexSheet(
     }
 }
 
+/** Where the book names a character, or a pair together, up to the ceiling; [CodexDetail.focus] narrows them to an alias. */
+private fun LazyListScope.mentions(
+    detail: CodexDetail,
+    titles: List<String?>,
+    controller: CodexViewModel,
+    onSource: (Passage<Locator>) -> Unit,
+) {
+    detail.focus?.let { focus ->
+        item(key = "codex:focus") {
+            InputChip(
+                selected = true,
+                onClick = { controller.focus(null) },
+                label = { Text(stringResource(R.string.codex_mentions_of, focus)) },
+                trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.codex_mentions_all)) },
+            )
+        }
+    }
+    items(detail.passages, key = { it.ref }) { passage ->
+        Column(Modifier.fillMaxWidth().clickable(role = Role.Button) { onSource(passage) }.padding(vertical = 12.dp)) {
+            val chapter = chapterLabel(ChapterRange(passage.range.hi, passage.range.hi), titles)
+            Text(chapter, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(
+                highlightedExcerpt(
+                    passage.text,
+                    listOfNotNull(detail.term, detail.other),
+                    SpanStyle(
+                        background = MaterialTheme.colorScheme.secondaryContainer,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        HorizontalDivider()
+    }
+    if (detail.loading) item { BusyBar() }
+    if (detail.failed) item {
+        Text(stringResource(R.string.codex_failed))
+        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.companion_retry)) }
+    }
+    if (!detail.loading && !detail.failed && detail.passages.isEmpty()) item { Text(stringResource(R.string.codex_no_passages)) }
+    if (detail.more && !detail.loading) item {
+        TextButton(onClick = controller::loadMore) { Text(stringResource(R.string.codex_more)) }
+    }
+}
+
 // The scan state, scope, tabs and search scroll with the results, so a
 // short window (a phone on its side, the keyboard up) still has room to
 // show them.
-private fun LazyListScope.codexHeader(progress: CodexProgress, controller: CodexViewModel, ceiling: Int) {
-    item(key = "codex:progress") { Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) } }
+private fun LazyListScope.codexHeader(progress: CodexProgress, controller: CodexViewModel, ceiling: Int, scanning: Boolean) {
+    if (scanning) item(key = "codex:progress") { Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) } }
     item(key = "codex:scope") {
         Text(stringResource(R.string.codex_scope, ceiling + 1), Modifier.padding(bottom = 10.dp), style = MaterialTheme.typography.bodySmall)
     }
@@ -259,7 +373,7 @@ private fun LazyListScope.codexTabs(tab: CodexTab, tabs: List<CodexTab>, control
                             when (each) {
                                 CodexTab.STORY -> R.string.codex_story
                                 CodexTab.NAMES -> R.string.codex_names
-                                CodexTab.RELATIONSHIPS -> R.string.codex_relationships
+                                CodexTab.RELATIONSHIPS -> R.string.companion_relationships
                             },
                         ),
                         maxLines = 1,
@@ -340,7 +454,7 @@ private fun highlightedExcerpt(text: String, terms: List<String>, style: SpanSty
 }
 
 @Composable
-private fun kindLabel(kind: CodexKind): String = stringResource(when (kind) {
+internal fun kindLabel(kind: CodexKind): String = stringResource(when (kind) {
     CodexKind.PERSON -> R.string.codex_person
     CodexKind.PLACE -> R.string.codex_place
     CodexKind.FACTION -> R.string.codex_faction
@@ -364,7 +478,7 @@ private fun CodexScanProgress(progress: CodexProgress, controller: CodexViewMode
         when (progress.stage) {
             CodexStage.PREPARING, CodexStage.SCANNING -> TextButton(onClick = controller::pause) { Text(stringResource(R.string.codex_pause)) }
             CodexStage.PAUSED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.codex_resume)) }
-            CodexStage.FAILED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.codex_retry)) }
+            CodexStage.FAILED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.companion_retry)) }
             CodexStage.COMPLETE -> Unit
         }
     }

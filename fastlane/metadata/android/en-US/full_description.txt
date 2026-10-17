@@ -8,11 +8,11 @@ Translation
 
 Translate a selection or read a book page by page in another language. Liseur saves translated sentences on your phone, so they are ready when you return to a page. Use Android's on-device translator or an OpenAI-compatible service on your network or hosted online. Read translated pages aloud in the target language and look up words without leaving the page.
 
-Reading companion and Codex
+Reading companion
 
 Ask the reading companion about characters and events. Character profiles use passages before the selected text, including earlier chapters and earlier passages in the current chapter; source excerpts show where details come from. Turn on background chapter recaps for each book. Use an OpenAI-compatible service.
 
-Codex builds a searchable, on-device index of people, places and groups, and shows which names appear together in earlier chapters. It needs no AI service or API key.
+Even without an AI service, the companion builds a searchable, on-device index of people, places and groups, and shows which names appear together in earlier chapters. It needs no API key.
 
 Your reader
 
@@ -26,6 +26,6 @@ Sync reading positions with calibre-web, Komga, BookOrbit or liseur-sync. Connec
 
 Privacy
 
-No ads. You do not need an account to read books on your device. Android's system translator and Codex process book text on your phone. When you choose an online service for translation, the reading companion or speech, Liseur sends text to that provider. Optional dictionary lookups contact Wiktionary; browsing the catalog also contacts Project Gutenberg.
+No ads. You do not need an account to read books on your device. Android's system translator and the companion's on-device index process book text on your phone. When you choose an online service for translation, the reading companion or speech, Liseur sends text to that provider. Optional dictionary lookups contact Wiktionary; browsing the catalog also contacts Project Gutenberg.
 
 MIT licensed. Source code and issue tracker: https://github.com/chmouel/liseur

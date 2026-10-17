@@ -52,6 +52,8 @@ class CompanionViewModel(
     private val fingerprints: BookFingerprintStore,
 ) : ViewModel() {
     private val catalog = CompletableDeferred<PublicationCatalog>()
+    // The same book, its passages read from Codex's scan when that holds them.
+    private val sources = CompletableDeferred<BookCatalog<Locator>>()
     private val contentSha = MutableStateFlow<String?>(null)
     private val placed = Mutex()
     private var scheduler: RecapScheduler<Locator>? = null
@@ -98,7 +100,7 @@ class CompanionViewModel(
 
     private val lookups = CompanionLookups(
         scope = viewModelScope,
-        catalog = { catalog.await() },
+        catalog = { sources.await() },
         choice = { server.current() },
         chatFor = server::chat,
         hints = ::hints,
@@ -118,6 +120,15 @@ class CompanionViewModel(
     /** Whether Codex has a Story tab: a service is chosen and the book has a content identity. */
     val storyAvailable: StateFlow<Boolean> = combine(choice, contentSha) { chosen, sha -> chosen != null && sha != null }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /** This book's saved recaps as they change, by any server or model, as Story reads them. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val recaps: StateFlow<List<SavedRecap>> = contentSha
+        .flatMapLatest { sha ->
+            if (sha.isNullOrBlank()) flowOf(emptyList()) else store.forBook(bookUrl, sha).watch().catch { emit(emptyList()) }
+        }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** The Story tab while it is on screen. */
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -149,6 +160,19 @@ class CompanionViewModel(
         if (catalog.isCompleted) return
         val opened = PublicationCatalog(publication)
         catalog.complete(opened)
+        val scanned = CodexBackedCatalog(
+            live = opened,
+            stored = { through, ceiling, resource ->
+                contentSha.value?.let { sha ->
+                    store.codex.stored(bookUrl, CodexStore.identity(sha, opened.map), through, ceiling, resource)
+                }
+            },
+            storedUnit = { unit ->
+                contentSha.value?.let { sha -> store.codex.storedUnit(bookUrl, CodexStore.identity(sha, opened.map), unit) }
+            },
+            log = { Log.w(TAG, "Codex passages unavailable: ${it.javaClass.simpleName}") },
+        )
+        sources.complete(scanned)
         viewModelScope.launch {
             val sha = try {
                 books.getByUrl(bookUrl)?.let { fingerprints.of(it) }?.sha256
@@ -168,7 +192,7 @@ class CompanionViewModel(
                 return@launch
             }
             contentSha.value = sha
-            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), opened, recapSettings, foreground, storyAllowed)
+            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), scanned, recapSettings, foreground, storyAllowed)
                 .also { it.start() }
             storyController.value = StoryController(
                 viewModelScope, store.forBook(bookUrl, sha), opened, started, choice, storyAllowed,
@@ -250,6 +274,9 @@ class CompanionViewModel(
 
     fun open(selection: String, place: Locator, translated: Boolean) = lookups.open(selection, place, translated)
 
+    /** Asks about [name] in the chapters Codex froze, from a character page's Ask. */
+    fun ask(name: String, scope: AskingScope?) = lookups.openAt(name, scope)
+
     /** Shows the Story tab for [scope], the place Codex was opened from. */
     fun showStory(scope: AskingScope) {
         storyScope = scope
@@ -280,22 +307,43 @@ class CompanionViewModel(
 
     fun cancel() = lookups.cancel()
 
-    fun hide() = lookups.hide()
-
-    fun reveal() = lookups.reveal()
-
     fun close() = lookups.close()
 
-    private suspend fun hints(chosen: CompanionChoice, asked: AskingScope, passages: List<Passage<Locator>>): List<RecapHint> {
+    private suspend fun hints(chosen: CompanionChoice, asked: AskingScope, passages: List<Passage<Locator>>): List<RecapHint> =
+        Recaps.hints(savedRecaps(chosen), asked, passages)
+
+    /** The recaps saved for this book, by chapter; any server or model, as Story shows them. */
+    private suspend fun savedRecaps(chosen: CompanionChoice): List<Pair<Int, ChapterRecap>> {
         val sha = contentSha.value ?: return emptyList()
         val opened = catalog.await()
         val identity = RecapIdentity(sha, chosen.serverId, chosen.model, Recaps.FORMAT)
         val saved = quietly { store.forBook(bookUrl, sha).recaps(identity) } ?: return emptyList()
-        val decoded = saved
+        return saved
             // A recap saved when the chapters were cut differently is not this chapter's.
             .filter { it.unit.index < opened.map.chapterCount && opened.map.unitKey(it.unit.index) == it.unit.key }
             .mapNotNull { row -> ChapterRecap.decode(row.json)?.let { row.unit.index to it } }
-        return Recaps.hints(decoded, asked, passages)
+    }
+
+    /**
+     * What saved recaps of the chapters before [asked] already say of
+     * [name], or of it with [other]: read on the phone, nothing is sent.
+     */
+    /** For each pair of names, what saved recaps before [asked] last say links them; sends nothing. */
+    suspend fun pairNotes(pairs: List<Pair<String, String>>, asked: AskingScope): Map<Pair<String, String>, String> {
+        val chosen = server.current() ?: return emptyMap()
+        val saved = savedRecaps(chosen).takeIf { it.isNotEmpty() } ?: return emptyMap()
+        // The latest chapter's word on them, as the one nearest the place.
+        return pairs.mapNotNull { pair -> recapClaims(saved, asked, pair.first, pair.second).lastOrNull()?.let { pair to it.second.text } }
+            .toMap()
+    }
+
+    suspend fun notes(name: String, other: String?, asked: AskingScope): List<RecapNote<Locator>> {
+        val chosen = server.current() ?: return emptyList()
+        val claims = recapClaims(savedRecaps(chosen), asked, name, other)
+        if (claims.isEmpty()) return emptyList()
+        val opened = sources.await()
+        val passages = claims.map { it.first }.distinct().associateWith { unit -> quietly { opened.passagesOf(unit) }.orEmpty() }
+        return claims.map { (unit, fact) -> RecapNote(unit, fact.text, recapSources(fact, passages[unit].orEmpty()), fact.with) }
     }
 
     private suspend fun <T> quietly(work: suspend () -> T): T? = try {

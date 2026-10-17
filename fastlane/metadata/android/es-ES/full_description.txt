@@ -8,11 +8,11 @@ Traducción
 
 Traduce una selección o lee el libro página a página en otro idioma. Liseur guarda las frases traducidas en el teléfono para que estén listas cuando vuelvas a una página. Usa el traductor del dispositivo de Android o un servicio compatible con OpenAI en tu red o alojado en internet. Lee en voz alta las páginas traducidas en el idioma de destino y consulta palabras sin salir de la página.
 
-Compañero de lectura y Codex
+Compañero de lectura
 
 Pregunta al compañero de lectura por personajes y acontecimientos. Los perfiles de personajes usan pasajes anteriores al texto seleccionado, incluidos capítulos anteriores y pasajes previos del capítulo actual. Los fragmentos de las fuentes muestran de dónde sale la información. Activa los resúmenes de capítulos en segundo plano para cada libro. Usa un servicio compatible con OpenAI.
 
-Codex crea en el dispositivo un índice consultable de personas, lugares y grupos, y muestra qué nombres aparecen juntos en capítulos anteriores. No necesita un servicio de IA ni una clave de API.
+Incluso sin un servicio de IA, el compañero crea en el dispositivo un índice consultable de personas, lugares y grupos, y muestra qué nombres aparecen juntos en capítulos anteriores. No necesita una clave de API.
 
 Tu lector
 
@@ -26,6 +26,6 @@ Sincroniza las posiciones de lectura con calibre-web, Komga, BookOrbit o liseur-
 
 Privacidad
 
-Sin anuncios. Lee libros guardados en tu dispositivo sin cuenta. El traductor del sistema Android y Codex procesan el texto en el teléfono. Si eliges un servicio en línea para traducir, usar el compañero de lectura o leer en voz alta, Liseur envía texto al proveedor elegido. El diccionario opcional contacta con Wiktionary; Project Gutenberg recibe conexiones cuando exploras su catálogo.
+Sin anuncios. Lee libros guardados en tu dispositivo sin cuenta. El traductor del sistema Android y el índice local del compañero procesan el texto en el teléfono. Si eliges un servicio en línea para traducir, usar el compañero de lectura o leer en voz alta, Liseur envía texto al proveedor elegido. El diccionario opcional contacta con Wiktionary; Project Gutenberg recibe conexiones cuando exploras su catálogo.
 
 Licencia MIT. Código fuente e incidencias: https://github.com/chmouel/liseur

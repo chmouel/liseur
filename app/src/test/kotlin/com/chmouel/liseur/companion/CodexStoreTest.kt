@@ -230,6 +230,7 @@ class CodexStoreTest {
     private fun withViewModel(
         chapters: List<String>,
         clock: () -> Long = { 1_000L },
+        profiles: MutableStateFlow<Boolean> = MutableStateFlow(false),
         block: suspend (CodexViewModel, AppSettingsRepository) -> Unit,
     ) = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Application>()
@@ -248,6 +249,7 @@ class CodexStoreTest {
                 settings = settings,
                 books = liseurDb.bookDao(),
                 fingerprints = BookFingerprintStore(context, liseurDb.workIdentityDao()),
+                profilesFlow = profiles,
                 foregroundFlow = MutableStateFlow(true),
                 clock = clock,
             )
@@ -403,6 +405,50 @@ class CodexStoreTest {
             assertTrue(vm.panel.value?.detail?.more == true)
 
             settings.setCodexEnabled(false)
+            awaitCondition { vm.panel.value == null }
+        }
+    }
+
+    @Test fun `with a companion service the scan can be off, and an alias lists its own mentions`() {
+        val profiles = MutableStateFlow(true)
+        val text = (0 until 3).joinToString("\n") { "<p>At dawn, Mira greeted Tobin ($it).</p>" } + "<p>The Captain waved.</p>"
+        withViewModel(listOf(text, "<p>At dusk, Fenna waited.</p>"), profiles = profiles) { vm, settings ->
+            vm.openCharacter(chapter("two"), translated = false, selection = "Mira’s", pane = CharacterPane.MENTIONS)
+            awaitCondition { vm.progress.value.stage == CodexStage.COMPLETE && vm.panel.value?.detail?.loading == false }
+            assertEquals(CodexTab.NAMES, vm.panel.value?.tab)
+            assertEquals("Mira", vm.panel.value?.detail?.name)
+            assertEquals(3, vm.panel.value?.detail?.passages?.size)
+
+            vm.focus("Captain")
+            awaitCondition { vm.panel.value?.detail?.loading == false }
+            assertEquals("Captain", vm.panel.value?.detail?.term)
+            assertEquals(1, vm.panel.value?.detail?.passages?.size)
+            vm.focus(null)
+            awaitCondition { vm.panel.value?.detail?.loading == false }
+            assertEquals(3, vm.panel.value?.detail?.passages?.size)
+
+            // Story and the profiles stay without the scan; the service going too closes Codex.
+            settings.setCodexEnabled(false)
+            awaitCondition { vm.panel.value?.tab == CodexTab.STORY }
+            assertEquals("Mira", vm.panel.value?.detail?.name)
+            vm.close()
+
+            vm.openCharacter(chapter("two"), translated = false, selection = "a long phrase that is no name at all, spoken by nobody in particular here", pane = CharacterPane.PROFILE)
+            awaitCondition { vm.panel.value?.placing == false }
+            assertEquals(CodexTab.STORY, vm.panel.value?.tab)
+            assertEquals(CharacterPane.PROFILE, vm.panel.value?.detail?.pane)
+            // Story stays paused under the page, so nothing it would send starts before Ask.
+            assertFalse(vm.panel.value!!.storyInFront)
+            vm.back()
+            assertTrue(vm.panel.value!!.storyInFront)
+            vm.detail("Mira")
+            assertFalse(vm.panel.value!!.storyInFront)
+            assertEquals(1, vm.panel.value?.ceiling)
+            // Nothing is read from the index while the scan is off.
+            assertTrue(vm.panel.value?.entries?.isEmpty() == true)
+            assertTrue(vm.panel.value?.detail?.passages?.isEmpty() == true)
+
+            profiles.value = false
             awaitCondition { vm.panel.value == null }
         }
     }

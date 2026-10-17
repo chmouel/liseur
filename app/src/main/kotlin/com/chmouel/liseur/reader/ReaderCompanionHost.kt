@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.chmouel.liseur.companion.CompanionSheet
+import com.chmouel.liseur.companion.CharacterProfiles
 import com.chmouel.liseur.companion.CodexSheet
 import com.chmouel.liseur.companion.Passage
 import com.chmouel.liseur.companion.CodexTab
@@ -26,9 +26,10 @@ import org.readium.r2.shared.publication.Locator
 internal typealias ReaderGo = suspend (EpubNavigatorFragment, Locator, NavigatorPositionEvent) -> Boolean
 
 /**
- * The character panel and Codex, with its Story tab, over the book, the
- * companion's settings, and following a source or a chapter: the panel
- * steps aside while it is a peek, and comes back with Return or Show.
+ * Codex over the book, with its Story tab and the companion's character
+ * profiles, the companion's settings, and following a source or a
+ * chapter: the sheet steps aside while it is a peek, and comes back with
+ * Return or Show.
  */
 @Composable
 internal fun CompanionPanelHost(
@@ -43,8 +44,10 @@ internal fun CompanionPanelHost(
     val codex by companion.codex.panel.collectAsStateWithLifecycle()
     val scan by companion.codex.progress.collectAsStateWithLifecycle()
     val codexEnabled by companion.codex.enabled.collectAsStateWithLifecycle()
+    val profiles by companion.codex.profiles.collectAsStateWithLifecycle()
     val story by companion.story.collectAsStateWithLifecycle()
     val storyAvailable by companion.storyAvailable.collectAsStateWithLifecycle()
+    val savedRecaps by companion.recaps.collectAsStateWithLifecycle()
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var peeked by rememberSaveable { mutableStateOf(false) }
 
@@ -55,9 +58,12 @@ internal fun CompanionPanelHost(
             peeked = true
         } else if (peeked) {
             peeked = false
-            if (companion.panel.value?.visible == false) companion.close()
             if (companion.codex.panel.value?.visible == false) companion.codex.close()
         }
+    }
+    // A profile lives on Codex's character page; closing Codex stops any lookup in flight.
+    LaunchedEffect(codex == null) {
+        if (codex == null) companion.close()
     }
 
     val follow: (Locator) -> Unit = follow@{ place ->
@@ -67,10 +73,8 @@ internal fun CompanionPanelHost(
             // than the one saved; it is the place to come back to.
             if (!progress.prepareCatchUp()) return@launch
             val (_, fresh) = companion.startPeek() ?: return@launch
-            companion.hide()
             companion.codex.hide()
             if (!go(nav, place, NavigatorPositionEvent.LOCAL_JUMP)) {
-                companion.reveal()
                 companion.codex.reveal()
                 if (fresh) companion.endPeek()
             }
@@ -82,9 +86,9 @@ internal fun CompanionPanelHost(
     val codexNames = rememberSaveable(codex != null, saver = LazyListState.Saver) { LazyListState() }
     val codexDetail = rememberSaveable(codex?.detail?.name, codex?.detail?.other, saver = LazyListState.Saver) { LazyListState() }
     // The Story tab is shown for the place Codex was opened from, only while
-    // it is the tab in front and Codex is on screen: a peek pauses it, so
-    // nothing new starts on its own meanwhile, and Return shows it again.
-    val storyScope = codex?.scope?.takeIf { codex?.visible == true && codex?.tab == CodexTab.STORY && storyAvailable }
+    // it is the tab in front and Codex is on screen: a peek or a character
+    // page over it pauses it, so nothing new starts on its own meanwhile.
+    val storyScope = codex?.scope?.takeIf { codex?.storyInFront == true && storyAvailable }
     LaunchedEffect(storyScope) {
         if (storyScope != null) companion.showStory(storyScope) else companion.hideStory()
     }
@@ -102,34 +106,24 @@ internal fun CompanionPanelHost(
             namesList = codexNames,
             detailList = codexDetail,
             storyList = storyList,
+            scanEnabled = codexEnabled,
+            profiles = CharacterProfiles(
+                lookup = panel,
+                available = profiles,
+                recaps = savedRecaps,
+                ask = { name -> companion.ask(name, it.scope) },
+                notes = { name, other -> it.scope?.let { scope -> companion.notes(name, other, scope) }.orEmpty() },
+                pairs = { pairs -> it.scope?.let { scope -> companion.pairNotes(pairs, scope) }.orEmpty() },
+                retry = companion.retry,
+                cancel = companion.cancel,
+                choose = companion.choose,
+                setUp = { settingsOpen = true },
+            ),
             storyAvailable = storyAvailable,
             story = story,
             storyActions = companion.storyActions,
             onChapter = follow,
             onChooseModel = { settingsOpen = true },
-        )
-    }
-
-    panel?.takeIf { it.visible }?.let { shown ->
-        val scope = shown.scope
-        val target = (shown.view as? com.chmouel.liseur.companion.CompanionView.Profile)?.profile?.name
-            ?: shown.name
-            ?: shown.selection
-        CompanionSheet(
-            panel = shown,
-            onSource = onSource,
-            onRetry = companion.retry,
-            onCancel = companion.cancel,
-            onChoose = companion.choose,
-            onSetUp = { settingsOpen = true },
-            onChooseModel = { settingsOpen = true },
-            onCodex = if (codexEnabled && scope != null) {
-                {
-                    companion.close()
-                    companion.codex.openAt(scope, shown.titles, target)
-                }
-            } else null,
-            onDismiss = companion.close,
         )
     }
 
@@ -166,7 +160,6 @@ internal suspend fun returnFromSource(
             companion.showsPlace(origin, navigator.currentLocator.value)
         }
         if (arrived) {
-            companion.reveal()
             companion.codex.reveal()
             companion.returnArrived(generation)
             return

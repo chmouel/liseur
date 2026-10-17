@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import com.chmouel.liseur.companion.CharacterPane
 import com.chmouel.liseur.companion.CompanionSettingsScreen
 import com.chmouel.liseur.companion.CompanionViewModel
 import com.chmouel.liseur.companion.CodexViewModel
@@ -694,22 +695,24 @@ class ReaderActivity : FragmentActivity() {
         peek = viewModel.peek,
         open = { selection, place, translated ->
             lifecycleScope.launch {
-                if (!companionViewModel.hasChoice() && codexViewModel.enabled.value) {
-                    companionViewModel.close()
-                    codexViewModel.open(place, translated, selection)
-                } else {
-                    codexViewModel.close()
-                    companionViewModel.open(selection, place, translated)
-                }
+                // With a service, or with no scan to list mentions, the page opens
+                // on the profile and asks at once; otherwise on the mentions, as
+                // Codex alone always has. Both place the selection the same way.
+                val profile = companionViewModel.hasChoice() || !codexViewModel.enabled.value
+                companionViewModel.close()
+                codexViewModel.openCharacter(place, translated, selection, if (profile) CharacterPane.PROFILE else CharacterPane.MENTIONS)
+                if (profile && codexViewModel.panel.value != null) companionViewModel.open(selection, place, translated)
             }
         },
+        ask = companionViewModel::ask,
+        notes = companionViewModel::notes,
+        pairNotes = companionViewModel::pairNotes,
         retry = companionViewModel::retry,
         cancel = companionViewModel::cancel,
         choose = companionViewModel::choose,
-        hide = companionViewModel::hide,
-        reveal = companionViewModel::reveal,
         close = companionViewModel::close,
         storyAvailable = companionViewModel.storyAvailable,
+        recaps = companionViewModel.recaps,
         story = companionViewModel.story,
         showStory = companionViewModel::showStory,
         hideStory = companionViewModel::hideStory,

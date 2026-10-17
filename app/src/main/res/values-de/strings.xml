@@ -1355,7 +1355,6 @@
     <string name="translation_consent_title">%1$s verwenden?</string>
     <string name="translation_consent_agree">Zustimmen und verwenden</string>
     <string name="companion_action">Lesebegleiter fragen</string>
-    <string name="companion_scope">Nach dem Buch bis hierher.</string>
     <string name="companion_also_from">Eine der Figuren, die „%1$s“ meinen kann</string>
     <string name="companion_setup">Wähle einen Server und ein Modell für den Lesebegleiter.</string>
     <string name="companion_setup_action">Einrichten</string>
@@ -1378,7 +1377,6 @@
         <item quantity="other">%1$d Textstellen</item>
     </plurals>
     <string name="companion_peek_return">Zurück zur Frage</string>
-    <string name="companion_peek_show">Profil zeigen</string>
     <string name="companion_retry">Erneut versuchen</string>
     <string name="companion_failed_cancelled">Suche abgebrochen.</string>
     <string name="companion_failed_key">Der Server hat den Schlüssel abgelehnt. Prüfe ihn unter Externe Dienste und API-Schlüssel.</string>
@@ -1433,7 +1431,7 @@
     <string name="companion_settings_recaps">Kapitel beim Lesen zusammenfassen</string>
     <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus. Jedes Buch kann das im Reader unter Aa, Erweitert ändern.</string>
     <string name="companion_settings_story_auto">Handlung selbstständig ergänzen</string>
-    <string name="companion_settings_story_auto_summary">Wenn der Kodex mit Handlung öffnet, wird das Kapitel vor deiner Position zusammengefasst, falls es noch keine Zusammenfassung hat, und der Überblick über die bisherige Handlung aktuell gehalten. Wird mit Erlauben im Tab Handlung eingeschaltet.</string>
+    <string name="companion_settings_story_auto_summary">Wenn der Lesebegleiter mit Handlung öffnet, wird das Kapitel vor deiner Position zusammengefasst, falls es noch keine Zusammenfassung hat, und der Überblick über die bisherige Handlung aktuell gehalten. Wird mit Erlauben im Tab Handlung eingeschaltet.</string>
     <string name="companion_settings_privacy">Text aus dem Buch vor dem ausgewählten Absatz wird an den gewählten Server gesendet, bei aktivierten Hintergrund-Zusammenfassungen ganze Kapitel. Der Anbieter kann diese Anfragen berechnen.</string>
     <string name="settings_backup_include_connections">Konten, Dienste und Passwörter einschließen</string>
     <string name="settings_backup_connections_replace">Gespeicherte Bibliotheks- und KOReader-Konten, Diensteinstellungen und Zugangsdaten werden automatisch ersetzt.</string>
@@ -1448,23 +1446,21 @@
     <string name="settings_backup_error_export_password_lost">Das Sicherungspasswort ging bei der Dateiauswahl verloren, daher wurde nichts gespeichert. Exportiere erneut.</string>
 
     <!-- Offline codex -->
-    <string name="codex_title">Kodex</string>
-    <string name="codex_settings_available">Offline-Kodex verfügbar</string>
-    <string name="codex_settings_enabled">Kodex auf diesem Gerät</string>
-    <string name="codex_settings_summary">Namen und Verbindungen beim Öffnen des Kodex offline erfassen. Ohne KI oder API-Schlüssel.</string>
+    <string name="codex_title">Lesebegleiter</string>
+    <string name="codex_settings_available">Offline-Lesebegleiter verfügbar</string>
+    <string name="codex_settings_enabled">Lesebegleiter auf diesem Gerät</string>
+    <string name="codex_settings_summary">Namen und Verbindungen beim Öffnen des Lesebegleiters offline erfassen. Ohne KI oder API-Schlüssel. Ausgeschaltet zeigt der Lesebegleiter weiterhin Handlung und KI-Figurenprofile.</string>
     <string name="codex_preparing">Buch wird vorbereitet…</string>
     <string name="codex_scanning">Buch wird erfasst…</string>
     <string name="codex_paused">Erfassung pausiert</string>
     <string name="codex_complete">Buch erfasst</string>
-    <string name="codex_failed">Kodex konnte nicht gelesen werden. Fertige Kapitel sind gespeichert.</string>
+    <string name="codex_failed">Der Lesebegleiter konnte das Buch nicht lesen. Fertige Kapitel sind gespeichert.</string>
     <string name="codex_progress">Erfasste Kapitel: %1$d/%2$d</string>
     <string name="codex_pause">Erfassung pausieren</string>
     <string name="codex_resume">Erfassung fortsetzen</string>
-    <string name="codex_retry">Erneut versuchen</string>
-    <string name="codex_unplaced">Kapitel nicht gefunden. Öffne den Kodex erneut an einer bekannten Stelle im Buch.</string>
+    <string name="codex_unplaced">Kapitel nicht gefunden. Öffne den Lesebegleiter erneut an einer bekannten Stelle im Buch.</string>
     <string name="codex_scope">Nur Kapitel vor Kapitel %1$d werden angezeigt.</string>
     <string name="codex_names">Namen</string>
-    <string name="codex_relationships">Verbindungen</string>
     <string name="codex_story">Handlung</string>
     <string name="codex_search">Namen suchen</string>
     <string name="codex_empty">Noch keine passenden Namen in früheren Kapiteln.</string>
@@ -1475,10 +1471,17 @@
     <string name="codex_faction">Gruppe</string>
     <string name="codex_other">Sonstiges</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_pane_profile">Profil</string>
+    <string name="codex_pane_mentions">Erwähnungen</string>
+    <string name="codex_profile_ask">Frag den Lesebegleiter, wer %1$s ist, nach dem Buch bis hierher.</string>
+    <string name="codex_pair_ask">Frag den Lesebegleiter nach %1$s, um die Beziehung zu %2$s zu sehen.</string>
+    <string name="codex_profile_recaps">Aus den Kapitelzusammenfassungen</string>
+    <string name="codex_pair_not_described">Das Profil von %1$s erwähnt %2$s nicht.</string>
+    <string name="codex_mentions_of">Erwähnungen von %1$s</string>
+    <string name="codex_mentions_all">Alle Erwähnungen zeigen</string>
     <string name="codex_shared">Gemeinsame Kapitel: %1$d</string>
     <string name="codex_graph_hint">Wähle zwei Namen in der Karte oder eine Verbindung darunter.</string>
     <string name="codex_graph_empty">Lies weiter, um Namen mit mindestens zwei gemeinsamen Kapiteln zu finden.</string>
-    <string name="codex_chapter">Kapitel %1$d</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
     <string name="story_about">Von einem KI-Modell aus den Zusammenfassungen der vorherigen Kapitel geschrieben. Es kann Fehler enthalten, Dinge behaupten, die nicht im Buch stehen, oder verraten, was das Modell anderweitig über dieses Buch weiß.</string>

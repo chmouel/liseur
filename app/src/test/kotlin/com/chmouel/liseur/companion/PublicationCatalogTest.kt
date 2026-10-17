@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.app.Application
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -10,6 +11,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
@@ -267,6 +269,86 @@ class PublicationCatalogTest {
         } finally {
             publication.close()
         }
+    }
+
+    @Test
+    fun `codex's stored passages give lookups and recaps exactly what the walk gives`() = runBlocking {
+        for (missing in listOf(false, true)) {
+            val publication = openPublication(File(folder.root, "seed-$missing.epub").also { writeEpub(it, missing) })
+            val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CompanionDatabase::class.java)
+                .allowMainThreadQueries().build()
+            try {
+                val live = PublicationCatalog(publication)
+                val store = CodexStore(database) { it }
+                val identity = CodexStore.identity("sha", live.map)
+                val book = CodexBookRow("book", identity, live.map.chapterCount)
+                store.prepare(book)
+                PublicationCodexSource(publication, live.map).scan(0) { unit, passages -> store.save(book, unit, emptyMap(), passages) }
+                val walks = Walks(PublicationCatalog(publication))
+                val seeded = seeded(walks, store, identity)
+
+                val all = live.passagesBefore(AskingScope(6, 6))
+                val scopes = all.mapNotNull { live.scopeOf(it.place, translated = false) } +
+                    all.mapNotNull { live.scopeOf(it.place, translated = true) } +
+                    (0..6).map { AskingScope(it, 6) }
+                for (scope in scopes) assertEquals("$scope", shape(live.passagesBefore(scope)), shape(seeded.passagesBefore(scope)))
+                for (unit in 0 until 6) assertEquals("chapter $unit", shape(live.passagesOf(unit)), shape(seeded.passagesOf(unit)))
+                assertEquals("the book is not walked again", 0, walks.count)
+            } finally {
+                database.close()
+                publication.close()
+            }
+        }
+    }
+
+    @Test
+    fun `lookups walk the book when codex lacks a chapter they need or scanned another version`() = runBlocking {
+        val publication = openPublication(File(folder.root, "partial.epub").also { writeEpub(it, false) })
+        val database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), CompanionDatabase::class.java)
+            .allowMainThreadQueries().build()
+        try {
+            val live = PublicationCatalog(publication)
+            val store = CodexStore(database) { it }
+            val identity = CodexStore.identity("sha", live.map)
+            val book = CodexBookRow("book", identity, live.map.chapterCount)
+            store.prepare(book)
+            PublicationCodexSource(publication, live.map).scan(0) { unit, passages ->
+                if (unit != 3) store.save(book, unit, emptyMap(), passages)
+            }
+            val fiveB = live.passagesBefore(AskingScope(6, 6)).first { "FIVEB" in it.text }
+            val scope = live.scopeOf(fiveB.place, translated = false)!!
+
+            val walks = Walks(PublicationCatalog(publication))
+            assertEquals(shape(live.passagesBefore(scope)), shape(seeded(walks, store, identity).passagesBefore(scope)))
+            assertEquals("chapter 4 is missing, so the book is walked", 1, walks.count)
+            seeded(walks, store, identity).passagesBefore(AskingScope(3, 6))
+            assertEquals("chapters 1 to 3 are all stored", 1, walks.count)
+
+            seeded(walks, store, CodexStore.identity("other", live.map)).passagesBefore(AskingScope(3, 6))
+            assertEquals("another version's scan is not used", 2, walks.count)
+        } finally {
+            database.close()
+            publication.close()
+        }
+    }
+
+    private class Walks(val live: PublicationCatalog) {
+        var count = 0
+        val catalog = object : BookCatalog<Locator> by live {
+            override suspend fun passagesBefore(scope: AskingScope) = live.passagesBefore(scope).also { count++ }
+            override suspend fun passagesOf(unit: Int) = live.passagesOf(unit).also { count++ }
+        }
+    }
+
+    private fun seeded(walks: Walks, store: CodexStore, identity: String) = CodexBackedCatalog(
+        live = walks.catalog,
+        stored = { through, ceiling, resource -> store.stored("book", identity, through, ceiling, resource) },
+        storedUnit = { store.storedUnit("book", identity, it) },
+        log = { throw it },
+    )
+
+    private fun shape(passages: List<Passage<Locator>>) = passages.map {
+        listOf(it.ref, it.hash, it.resource, it.text, it.range, it.end, it.folded, it.place.toJSON().toString())
     }
 
     private suspend fun openPublication(epub: File): Publication {

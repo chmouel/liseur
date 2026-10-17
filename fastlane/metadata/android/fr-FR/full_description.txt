@@ -8,11 +8,11 @@ Traduction
 
 Traduisez une sélection ou lisez un livre page par page dans une autre langue. Liseur enregistre les phrases traduites pour les retrouver à votre retour. Utilisez le traducteur Android sur l’appareil ou un service compatible avec OpenAI sur votre réseau ou en ligne. Écoutez les pages traduites dans la langue cible et cherchez des mots sans quitter la page.
 
-Compagnon de lecture et Codex
+Compagnon de lecture
 
 Interrogez le compagnon de lecture sur les personnages et événements. Les profils s’appuient sur les passages précédant la sélection, dans les chapitres précédents et le chapitre en cours. Les extraits indiquent les sources. Activez les résumés de chapitres en arrière-plan. Utilisez un service compatible avec OpenAI.
 
-Codex crée sur l’appareil un index consultable des personnes, des lieux et des groupes, et indique quels noms apparaissent ensemble dans les chapitres précédents. Il n’a besoin ni d’un service d’IA ni d’une clé API.
+Même sans service d’IA, le compagnon crée sur l’appareil un index consultable des personnes, des lieux et des groupes, et indique quels noms apparaissent ensemble dans les chapitres précédents. Il n’a besoin d’aucune clé API.
 
 Votre lecteur
 
@@ -26,6 +26,6 @@ Synchronisez les positions de lecture avec calibre-web, Komga, BookOrbit ou lise
 
 Confidentialité
 
-Sans publicité. Aucun compte n’est requis pour lire les livres sur votre appareil. Le traducteur Android et Codex traitent le texte sur le téléphone. Si vous choisissez un service en ligne pour traduire, le compagnon de lecture ou la lecture à voix haute, Liseur envoie du texte au fournisseur choisi. Le dictionnaire facultatif contacte Wiktionary ; Project Gutenberg est contacté lorsque vous parcourez son catalogue.
+Sans publicité. Aucun compte n’est requis pour lire les livres sur votre appareil. Le traducteur Android et l’index local du compagnon traitent le texte sur le téléphone. Si vous choisissez un service en ligne pour traduire, le compagnon de lecture ou la lecture à voix haute, Liseur envoie du texte au fournisseur choisi. Le dictionnaire facultatif contacte Wiktionary ; Project Gutenberg est contacté lorsque vous parcourez son catalogue.
 
 Licence MIT. Code source et suivi des problèmes : https://github.com/chmouel/liseur

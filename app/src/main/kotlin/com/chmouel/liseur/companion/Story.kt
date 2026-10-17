@@ -32,6 +32,8 @@ data class StoryChapter<P>(
     val recap: StoryRecap,
     val start: P?,
     val progress: StoryProgress = StoryProgress.Idle,
+    /** The characters the chapter's recap names, each once. */
+    val characters: List<String> = emptyList(),
 ) {
     /** Whether the reader can ask for this chapter's recap now. */
     val askable: Boolean
@@ -82,13 +84,15 @@ object Story {
         earlier: List<EarlierChapter<P>>,
         saved: List<SavedRecap>,
         decode: (SavedRecap) -> StoryRecap = ::decode,
+        names: (SavedRecap) -> List<String> = ::characters,
     ): List<StoryChapter<P>> {
         val byUnit = saved
             .filter { it.unit.index < map.chapterCount && map.unitKey(it.unit.index) == it.unit.key }
             .associateBy { it.unit.index }
         return earlier.sortedBy { it.unit }.map { chapter ->
-            val recap = byUnit[chapter.unit]?.let(decode) ?: StoryRecap.Missing
-            StoryChapter(chapter.unit, map.titleOf(chapter.unit), recap, chapter.start)
+            val row = byUnit[chapter.unit]
+            val recap = row?.let(decode) ?: StoryRecap.Missing
+            StoryChapter(chapter.unit, map.titleOf(chapter.unit), recap, chapter.start, characters = row?.let(names).orEmpty())
         }
     }
 
@@ -96,6 +100,9 @@ object Story {
         decoded.summary.map(String::trim).filter(String::isNotEmpty)
             .takeIf { it.isNotEmpty() }?.let(StoryRecap::Summary) ?: StoryRecap.NoSummary
     } ?: StoryRecap.Unreadable
+
+    fun characters(row: SavedRecap): List<String> = ChapterRecap.decode(row.json)?.characters.orEmpty()
+        .map { it.name.trim() }.filter { characterKey(it).isNotEmpty() }.distinctBy(::characterKey)
 
     /** [chapters] with where each stands in [activity]; [failed] shows a failure. */
     fun <P> progress(
@@ -133,10 +140,16 @@ object Story {
 /** Decodes each stored recap once while its text stays the same. */
 class StoryDecoder {
     private val memo = HashMap<String, Pair<String, StoryRecap>>()
+    private val named = HashMap<String, Pair<String, List<String>>>()
 
     fun of(row: SavedRecap): StoryRecap {
         memo[row.unit.key]?.let { (json, recap) -> if (json == row.json) return recap }
         return Story.decode(row).also { memo[row.unit.key] = row.json to it }
+    }
+
+    fun names(row: SavedRecap): List<String> {
+        named[row.unit.key]?.let { (json, names) -> if (json == row.json) return names }
+        return Story.characters(row).also { named[row.unit.key] = row.json to it }
     }
 }
 

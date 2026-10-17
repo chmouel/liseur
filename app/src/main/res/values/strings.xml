@@ -1399,7 +1399,6 @@
     <string name="translation_consent_title">Use %1$s?</string>
     <string name="translation_consent_agree">Agree and use</string>
     <string name="companion_action">Ask companion</string>
-    <string name="companion_scope">Based on the book up to here.</string>
     <string name="companion_also_from">One of the characters “%1$s” could mean</string>
     <string name="companion_setup">Choose a server and a model for the reading companion.</string>
     <string name="companion_setup_action">Set up</string>
@@ -1422,7 +1421,6 @@
         <item quantity="other">%1$d passages</item>
     </plurals>
     <string name="companion_peek_return">Back to where you asked</string>
-    <string name="companion_peek_show">Show profile</string>
     <string name="companion_retry">Try again</string>
     <string name="companion_failed_cancelled">Lookup cancelled.</string>
     <string name="companion_failed_key">The server refused the key. Check it in External services and API keys.</string>
@@ -1477,7 +1475,7 @@
     <string name="companion_settings_recaps">Recap chapters as you read</string>
     <string name="companion_settings_recaps_summary">When you read past the end of a chapter, it is summarised in the background so later lookups find passages faster. Off by default. Each book can change it under Aa, Advanced in the reader.</string>
     <string name="companion_settings_story_auto">Fill in the story on its own</string>
-    <string name="companion_settings_story_auto_summary">When Codex opens on Story, recap the chapter before your place if it has none, and keep the summary of the story so far up to date. Turned on by Allow in the Story tab.</string>
+    <string name="companion_settings_story_auto_summary">When Companion opens on Story, recap the chapter before your place if it has none, and keep the summary of the story so far up to date. Turned on by Allow in the Story tab.</string>
     <string name="companion_settings_privacy">Book text before your selected paragraph is sent to the chosen server, and whole chapters once background recaps are on. Its provider may charge for these requests.</string>
     <string name="settings_backup_include_connections">Include accounts, services and passwords</string>
     <string name="settings_backup_connections_replace">Saved library and KOReader accounts, service settings and credentials will be replaced automatically.</string>
@@ -1492,23 +1490,21 @@
     <string name="settings_backup_error_export_password_lost">The backup password was lost while choosing the file, so nothing was saved. Export again.</string>
 
     <!-- Offline codex -->
-    <string name="codex_title">Codex</string>
-    <string name="codex_settings_available">Offline codex available</string>
-    <string name="codex_settings_enabled">On-device codex</string>
-    <string name="codex_settings_summary">Index names and connections offline when you open Codex. No AI or API key needed.</string>
+    <string name="codex_title">Companion</string>
+    <string name="codex_settings_available">Offline companion available</string>
+    <string name="codex_settings_enabled">On-device companion</string>
+    <string name="codex_settings_summary">Index names and connections offline when you open Companion. No AI or API key needed. When off, Companion still shows Story and AI character profiles.</string>
     <string name="codex_preparing">Preparing book…</string>
     <string name="codex_scanning">Scanning book…</string>
     <string name="codex_paused">Scan paused</string>
     <string name="codex_complete">Book indexed</string>
-    <string name="codex_failed">Could not read the codex. Completed chapters are saved.</string>
+    <string name="codex_failed">Companion could not read the book. Completed chapters are saved.</string>
     <string name="codex_progress">Chapters scanned: %1$d/%2$d</string>
     <string name="codex_pause">Pause scan</string>
     <string name="codex_resume">Resume scan</string>
-    <string name="codex_retry">Retry</string>
-    <string name="codex_unplaced">Your chapter could not be located. Open Codex again from a known place in the book.</string>
+    <string name="codex_unplaced">Your chapter could not be located. Open Companion again from a known place in the book.</string>
     <string name="codex_scope">Only chapters before chapter %1$d are shown.</string>
     <string name="codex_names">Names</string>
-    <string name="codex_relationships">Relationships</string>
     <string name="codex_story">Story</string>
     <string name="codex_search">Search names</string>
     <string name="codex_empty">No matching names in earlier chapters yet.</string>
@@ -1519,10 +1515,17 @@
     <string name="codex_faction">Faction</string>
     <string name="codex_other">Other</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
+    <string name="codex_pane_profile">Profile</string>
+    <string name="codex_pane_mentions">Mentions</string>
+    <string name="codex_profile_ask">Ask the companion who %1$s is, based on the book up to here.</string>
+    <string name="codex_pair_ask">Ask the companion about %1$s to see how they relate to %2$s.</string>
+    <string name="codex_profile_recaps">From chapter recaps</string>
+    <string name="codex_pair_not_described">The profile of %1$s does not mention %2$s.</string>
+    <string name="codex_mentions_of">Mentions of %1$s</string>
+    <string name="codex_mentions_all">Show all mentions</string>
     <string name="codex_shared">Shared chapters: %1$d</string>
     <string name="codex_graph_hint">Select two names on the map, or choose a connection below.</string>
     <string name="codex_graph_empty">Read further to find names sharing at least two chapters.</string>
-    <string name="codex_chapter">Chapter %1$d</string>
     <string name="codex_more">Load more passages</string>
     <string name="codex_no_passages">No earlier passages found.</string>
     <string name="story_about">Written by an AI model from the recaps of earlier chapters. It may be wrong, say things the book does not, or give away something the model knows about this book from elsewhere.</string>

@@ -350,16 +350,10 @@ class CompanionLookupsTest {
     }
 
     @Test
-    fun `hiding for a source keeps the answer, closing drops it`() = runTest {
+    fun `closing drops the answer`() = runTest {
         val lookups = lookups()
         lookups.open("Mira", place = 400, translated = false)
         advanceUntilIdle()
-        val shown = lookups.panel.value
-
-        lookups.hide()
-        assertEquals(false, lookups.panel.value?.visible)
-        lookups.reveal()
-        assertEquals(shown, lookups.panel.value)
 
         lookups.close()
         assertNull(lookups.panel.value)
@@ -403,6 +397,32 @@ class CompanionLookupsTest {
         lookups.open("Mira", place = 500, translated = false)
         advanceUntilIdle()
         assertEquals(5, requests.size)
+    }
+
+    @Test
+    fun `a lookup in chapters codex already placed asks in exactly those and shares the cache`() = runTest {
+        val lookups = lookups()
+        val placed = AskingScope(4, 8, ReadPoint(4, 0))
+        lookups.openAt("Mira", placed)
+        assertEquals(placed, lookups.panel.value?.scope)
+        advanceUntilIdle()
+
+        assertTrue(view(lookups) is CompanionView.Profile)
+        assertEquals(listOf(placed), catalog.asked)
+        assertEquals("Chapter 1", lookups.panel.value?.titles?.first())
+        assertFalse(requests.flatten().joinToString("\n") { it.content }.contains("LATER"))
+
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertEquals(1, requests.size)
+
+        lookups.openAt("Mira", null)
+        advanceUntilIdle()
+        assertEquals(CompanionView.Unplaced, view(lookups))
+        lookups.openAt("Mira", AskingScope(0, 8))
+        advanceUntilIdle()
+        assertEquals(CompanionView.FirstChapter, view(lookups))
+        assertEquals(1, requests.size)
     }
 
     private companion object {

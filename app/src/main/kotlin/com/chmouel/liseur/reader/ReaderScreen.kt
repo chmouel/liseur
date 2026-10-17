@@ -47,7 +47,6 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Translate
@@ -232,6 +231,7 @@ import com.chmouel.liseur.reader.progress.BookScreenEstimate
 import com.chmouel.liseur.reader.progress.ReaderProgress
 import com.chmouel.liseur.reader.progress.SectionScreenProgress
 import com.chmouel.liseur.reader.progress.SectionScreens
+import com.chmouel.liseur.companion.CharacterPane
 import com.chmouel.liseur.companion.CompanionPeekBar
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.OpeningRestoration
@@ -2446,7 +2446,6 @@ fun ReaderScreen(
      * page still too: a decision taken about a page that has moved on is
      * a decision about nothing.
      */
-    val companionPanel = companion?.panel?.collectAsStateWithLifecycle()?.value
     val codexPanel = companion?.codex?.panel?.collectAsStateWithLifecycle()?.value
     val codexEnabled = companion?.codex?.enabled?.collectAsStateWithLifecycle()?.value == true
     val storyAvailable = companion?.storyAvailable?.collectAsStateWithLifecycle()?.value == true
@@ -2470,7 +2469,6 @@ fun ReaderScreen(
         defineWord == null &&
         jumpBack == null &&
         catchUp == null &&
-        companionPanel?.visible != true &&
         codexPanel?.visible != true &&
         companionPeek == null &&
         // A picture over the page is modal to a finger and to a screen
@@ -3643,13 +3641,7 @@ fun ReaderScreen(
                         theme = readingTheme,
                         returning = peek.phase == SourcePeek.Phase.RETURNING,
                         onReturn = returnToAsking,
-                        onShow = if (codexPanel != null || companionPanel != null) {
-                            {
-                                if (codexPanel != null) companion?.codex?.reveal() else companion?.reveal?.invoke()
-                            }
-                        } else null,
-                        showLabel = if (codexPanel != null) R.string.codex_title else R.string.companion_peek_show,
-                        showIcon = if (codexPanel != null) Icons.Outlined.Hub else Icons.Outlined.PersonSearch,
+                        onShow = codexPanel?.let { { companion?.codex?.reveal() } },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
@@ -4062,7 +4054,7 @@ fun ReaderScreen(
                         // sentence on screen; reading settings, this
                         // book's background recaps among them, stay in Aa.
                         // Hidden when none applies.
-                        if (codexEnabled || translateFromHere != null || readAloudFromHere != null) {
+                        if (codexEnabled || storyAvailable || translateFromHere != null || readAloudFromHere != null) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4072,7 +4064,7 @@ fun ReaderScreen(
                                     )
                                 }
                                 DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                                    if (codexEnabled) {
+                                    if (codexEnabled || storyAvailable) {
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.codex_title)) },
                                             leadingIcon = { Icon(Icons.Outlined.Hub, contentDescription = null) },
@@ -4652,7 +4644,7 @@ fun ReaderScreen(
                 searchHit = null
                 onSearchAction.clear()
             },
-            onCodex = if (codexEnabled && companion != null) {
+            onCodex = if ((codexEnabled || storyAvailable) && companion != null) {
                 { query ->
                     searchFor = null
                     searchHit = null
@@ -4665,7 +4657,13 @@ fun ReaderScreen(
                             ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
                         if (origin != null && navigatorNow === nav) {
                             lookups.close()
-                            lookups.codex.open(origin, peekOrigin != null || pageTranslated, query.takeIf { it.isNotBlank() })
+                            val translated = peekOrigin != null || pageTranslated
+                            // Without the scan there is nothing to search; the name gets its profile page instead.
+                            if (!codexEnabled && query.isNotBlank()) {
+                                lookups.codex.openCharacter(origin, translated, query, CharacterPane.PROFILE)
+                            } else {
+                                lookups.codex.open(origin, translated, query.takeIf { it.isNotBlank() })
+                            }
                         }
                     }
                 }

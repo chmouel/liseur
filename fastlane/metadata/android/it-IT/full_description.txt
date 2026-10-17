@@ -8,11 +8,11 @@ Traduzione
 
 Traduci una selezione oppure leggi il libro pagina per pagina in un’altra lingua. Liseur salva le frasi tradotte sul telefono, così sono pronte quando torni a una pagina. Usa il traduttore Android sul dispositivo o un servizio compatibile con OpenAI sulla tua rete o ospitato online. Fai leggere ad alta voce le pagine tradotte nella lingua di destinazione e cerca le parole senza uscire dalla pagina.
 
-Compagno di lettura e Codex
+Compagno di lettura
 
 Chiedi al compagno di lettura informazioni su personaggi ed eventi. I profili dei personaggi usano i passaggi che precedono il testo selezionato, compresi i capitoli precedenti e i passaggi precedenti del capitolo corrente. Gli estratti delle fonti mostrano da dove provengono le informazioni. Attiva i riepiloghi dei capitoli in background per ogni libro. Usa un servizio compatibile con OpenAI.
 
-Codex crea sul dispositivo un indice consultabile di persone, luoghi e gruppi e mostra quali nomi compaiono insieme nei capitoli precedenti. Non richiede un servizio di IA né una chiave API.
+Anche senza un servizio di IA, il compagno crea sul dispositivo un indice consultabile di persone, luoghi e gruppi e mostra quali nomi compaiono insieme nei capitoli precedenti. Non richiede una chiave API.
 
 Il tuo lettore
 
@@ -26,6 +26,6 @@ Sincronizza le posizioni di lettura con calibre-web, Komga, BookOrbit o liseur-s
 
 Privacy
 
-Senza pubblicità. Leggi libri sul dispositivo senza account. Il traduttore Android e Codex elaborano il testo sul telefono. Se scegli un servizio online per traduzione, compagno di lettura o lettura vocale, Liseur invia il testo al servizio scelto. Il dizionario facoltativo contatta Wiktionary; sfogliando il catalogo, contatti Project Gutenberg.
+Senza pubblicità. Leggi libri sul dispositivo senza account. Il traduttore Android e l’indice locale del compagno elaborano il testo sul telefono. Se scegli un servizio online per traduzione, compagno di lettura o lettura vocale, Liseur invia il testo al servizio scelto. Il dizionario facoltativo contatta Wiktionary; sfogliando il catalogo, contatti Project Gutenberg.
 
 Licenza MIT. Codice sorgente e issue tracker: https://github.com/chmouel/liseur

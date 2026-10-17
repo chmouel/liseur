@@ -110,14 +110,12 @@ data class FailureDetails(
  *
  * [scope] is fixed when the panel opens: following a source and coming
  * back, or choosing between candidates, asks about the same chapters.
- * [visible] is false while a source is shown in the book.
  */
 data class CompanionPanel<P>(
     val selection: String,
     val name: String?,
     val scope: AskingScope?,
     val view: CompanionView<P>,
-    val visible: Boolean = true,
     /** The name first selected, while a candidate it was ambiguous between is shown. */
     val also: String? = null,
     /** Each chapter's title in the contents, where it has one, to label sources; never sent away. */
@@ -172,16 +170,25 @@ class CompanionLookups<P>(
     private var job: Job? = null
 
     /** Asks about [selection], selected at [place]; [translated] when the page showed a translation. */
-    fun open(selection: String, place: P, translated: Boolean) {
+    fun open(selection: String, place: P, translated: Boolean) = start(selection, null) { it.scopeOf(place, translated) }
+
+    /**
+     * Asks about [selection] in chapters already placed, such as those
+     * Codex froze when it opened, so both read the same book; a null
+     * [asked] could not be placed.
+     */
+    fun openAt(selection: String, asked: AskingScope?) = start(selection, asked) { asked }
+
+    private fun start(selection: String, known: AskingScope?, place: suspend (BookCatalog<P>) -> AskingScope?) {
         job?.cancel()
         val name = PassageText.name(selection)
-        _panel.value = CompanionPanel(selection, name, null, CompanionView.Loading(CompanionView.Stage.READING))
+        _panel.value = CompanionPanel(selection, name, known, CompanionView.Loading(CompanionView.Stage.READING))
         job = scope.launch {
             var titles = emptyList<String?>()
             val asked = try {
                 val book = catalog()
                 titles = List(book.map.chapterCount) { book.map.titleOf(it) }
-                book.scopeOf(place, translated)
+                place(book)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -235,15 +242,6 @@ class CompanionLookups<P>(
         if (_panel.value?.view !is CompanionView.Loading) return
         job?.cancel()
         show(CompanionView.Failed(CompanionFailure.CANCELLED))
-    }
-
-    /** Hides the panel while a source is shown, keeping what it says. */
-    fun hide() {
-        _panel.update { it?.copy(visible = false) }
-    }
-
-    fun reveal() {
-        _panel.update { it?.copy(visible = true) }
     }
 
     fun close() {

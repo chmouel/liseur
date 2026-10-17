@@ -2102,20 +2102,47 @@ reader behavior.
 
 ### Reading companion
 
-The reader's ⋮ menu also opens **Codex**, a local name index and
+The reader's ⋮ menu also opens **Companion**, a local name index and
 co-occurrence graph available in both flavors without a provider or API
-key. Opening it starts a full-book scan, including books already partly
+key. Users only see the name Companion; code, string IDs and the
+`codex_*` tables keep the name Codex for the sheet and its offline index,
+and the rest of this section uses it. Opening it starts a full-book scan, including books already partly
 read. Progress and partial results appear while it runs; completed
 chapters are cached in `companion.db` and resumed after an interruption.
 Closing the panel lets the scan continue while the reader stays open;
 leaving the book or backgrounding the app pauses it. Opening Codex again
-resumes. The On-device codex switch under Advanced in Companion settings defaults on;
-turning it off cancels scanning and hides the entry, retaining the cache.
+resumes. The On-device companion switch under Advanced in Companion settings defaults on;
+turning it off cancels scanning and hides Names, Relationships and
+Mentions, retaining the cache. Codex still opens for Story and profiles
+while a companion service is chosen (`CodexViewModel.profiles`), and
+reads nothing from the index then; with neither, the entry is hidden.
 The switch travels in settings backups, but the derived index does not.
-When no AI service is chosen and On-device codex is enabled, tapping
-Ask companion on a selection opens Codex directly on that name's earlier
-mentions (and `CompanionSheet` also offers a Codex action to inspect the
-name locally).
+
+Codex hosts the character page ([ADR-0058](docs/adr/0058-codex-hosts-the-character-profile.md)):
+Profile (`CharacterProfile`, the companion's lookup) and Mentions panes,
+with a tab row only when both apply. Ask companion opens it on Profile
+and asks at once when a service is chosen (or when there is no scan),
+otherwise on Mentions as before. A name or pair tapped inside Codex (Names,
+the map, or a Story row's character chips) opens on Profile while a
+service is chosen, on Mentions otherwise; Profile's Ask runs
+`CompanionLookups.openAt` with Codex's frozen scope. Search's Companion
+pill opens Names, or with the scan off the query's Profile. A pair's
+Profile shows the first name's relationship to the second
+(`relationOf`). An alias pill Codex knows narrows Mentions to it
+(`CodexDetail.focus`). Closing Codex closes the lookup.
+
+Before Ask, a Profile shows what saved recaps of earlier chapters say
+(`recapClaims`): the characters whose name or alias folds, through
+`CodexExtractor.storedName`, to the asked name; for a pair, each side's
+relationships naming the other. A claim's sources are its cited
+passages whose hash is unchanged (`recapSources`). The map's pair rows
+show the latest such relationship. None of this sends a request.
+Aliases carry one step: a name an earlier recap gives the character is
+matched in other earlier chapters, but not that name's own aliases.
+Recaps are read like Story's (`CompanionViewModel.recaps`), from any
+server or model, and the notes are read again when they change. Story's
+controller runs only while its list is in front (`CodexPanel.storyInFront`),
+never under a character page, so opening a Profile sends nothing.
 
 Codex freezes the current chapter when opened and displays only earlier
 chapters, even after scanning the entire book. Counts, classification,
@@ -2128,8 +2155,15 @@ chapter boundaries and `CodexStore.FORMAT` plus `PassageText.VERSION`;
 bump `CodexStore.FORMAT` when extraction or codex evidence changes. Book
 removal sweeps the derived rows and stale scan handles cannot write them
 back. Capitalization-based extraction does not support scripts without
-case, and frequent German nouns can appear as candidates. This index is
-not used by the AI companion.
+case, and frequent German nouns can appear as candidates.
+
+Lookups and recaps read passages through `CodexBackedCatalog`, which
+serves `CodexStore.stored` when the scan's identity matches and every
+chapter the request needs is committed, and walks the publication
+otherwise. Stored rows are rebuilt with `CodexPassageRow.source()`, which
+drops Codex's run-on continuity from `folded`, then filtered by
+`Eligibility.allows`, so the result equals the walk (held by
+`PublicationCatalogTest`).
 
 Selecting a name and tapping Ask companion opens a character profile
 drawn only from the chapters before the one the reader asked from
