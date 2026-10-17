@@ -1,6 +1,7 @@
 # 57. Codex tells the story so far
 
-Status: proposed
+Status: proposed, amended by
+[58. Codex hosts the character profile](0058-codex-hosts-the-character-profile.md)
 
 Amends [51. Character profiles use only earlier chapters](0051-character-profiles-use-only-earlier-chapters.md),
 which said there is no recap browser and that recap prose is never sent.

@@ -39,12 +39,12 @@ are here.
   </tr>
 </table>
 
-## Reading companion and Codex
+## Reading companion
 
 <table>
   <tr>
     <td width="33%"><img src="screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
-    <td width="33%"><img src="screenshots/26-codex-relationships.png" alt="Codex map of character relationships across chapters"></td>
+    <td width="33%"><img src="screenshots/26-codex-relationships.png" alt="Companion map of character relationships across chapters"></td>
     <td></td>
   </tr>
   <tr>

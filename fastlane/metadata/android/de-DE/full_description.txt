@@ -10,7 +10,7 @@ Höre jedes EPUB mit Satzmarkierung und automatischem Umblättern. Android-Stimm
 
 Lesebegleiter
 
-Frage die Lesehilfe nach Figuren und Ereignissen. Figurenprofile nutzen Text vor der ausgewählten Stelle, darunter frühere Kapitel und frühere Passagen im aktuellen Kapitel. Quellenpassagen zeigen, woher die Informationen stammen. Aktiviere für jedes Buch Zusammenfassungen von Kapiteln im Hintergrund. Nutze einen OpenAI-kompatiblen Dienst.
+Frage den Lesebegleiter nach Figuren und Ereignissen. Figurenprofile nutzen Text vor der ausgewählten Stelle, darunter frühere Kapitel und frühere Passagen im aktuellen Kapitel. Quellenpassagen zeigen, woher die Informationen stammen. Aktiviere für jedes Buch Zusammenfassungen von Kapiteln im Hintergrund. Nutze einen OpenAI-kompatiblen Dienst.
 
 Auch ohne KI-Dienst erstellt der Lesebegleiter auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Dafür ist kein API-Schlüssel nötig.
 
@@ -26,6 +26,6 @@ Synchronisiere Lesepositionen mit calibre-web, Komga, BookOrbit oder liseur-sync
 
 Datenschutz
 
-Keine Werbung. Zum Lesen lokaler Bücher brauchst du kein Konto. Androids Systemübersetzer und der Geräteindex des Lesebegleiters verarbeiten Buchtext auf deinem Gerät. Wenn du für Übersetzung, Lesehilfe oder Sprachwiedergabe einen Onlinedienst auswählst, sendet Liseur Text an diesen Anbieter. Das Wörterbuch kontaktiert Wiktionary; beim Durchsuchen des Katalogs wird Project Gutenberg kontaktiert.
+Keine Werbung. Zum Lesen lokaler Bücher brauchst du kein Konto. Androids Systemübersetzer und der Geräteindex des Lesebegleiters verarbeiten Buchtext auf deinem Gerät. Wenn du für Übersetzung, Lesebegleiter oder Sprachwiedergabe einen Onlinedienst auswählst, sendet Liseur Text an diesen Anbieter. Das Wörterbuch kontaktiert Wiktionary; beim Durchsuchen des Katalogs wird Project Gutenberg kontaktiert.
 
 MIT-lizenziert. Quellcode und Issue-Tracker: https://github.com/chmouel/liseur

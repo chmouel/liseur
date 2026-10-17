@@ -227,9 +227,9 @@ described below are only used on the phone to find passages; a lookup
 never sends their wording. Tapping a name or a pair inside Companion sends
 nothing until you tap Ask on its Profile, which looks up that name, or
 a pair's first name, the same way, from the place where you opened
-Companion. Before that, the Profile and the Story tab show what recaps
-already saved on the phone say about earlier chapters, which sends
-nothing.
+Companion. Before that, the Profile and the Relationships map's pair
+rows show what recaps already saved on the phone say about earlier
+chapters, which sends nothing.
 
 If you also turn on background chapter recaps, then while the book is
 open on screen and you read on from the end of one chapter into the

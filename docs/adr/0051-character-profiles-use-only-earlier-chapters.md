@@ -2,6 +2,7 @@
 
 Status: accepted, amended by
 [57. Codex tells the story so far](0057-codex-tells-the-story-so-far.md)
+and [58. Codex hosts the character profile](0058-codex-hosts-the-character-profile.md)
 
 ## Context
 
