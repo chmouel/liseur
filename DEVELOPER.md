@@ -2131,7 +2131,8 @@ service is chosen, on Mentions otherwise; Profile's Ask runs
 pill opens Names, or with the scan off the query's Profile. A pair's
 Profile shows the first name's relationship to the second
 (`relationOf`). An alias pill Codex knows narrows Mentions to it
-(`CodexDetail.focus`). Closing Codex closes the lookup.
+(`CodexDetail.focus`). Closing Codex, or leaving the lookup's character
+page, closes the lookup.
 
 Before Ask, a Profile shows what saved recaps of earlier chapters say
 (`recapClaims`): the characters whose name or alias folds, through

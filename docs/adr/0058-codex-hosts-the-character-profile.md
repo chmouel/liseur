@@ -53,8 +53,9 @@ tab row shows.
   scan are hidden, and nothing is read from an earlier scan's index.
 - Search's pill opens the sheet too; with the scan off it opens the
   query's Profile.
-- Closing Codex cancels a lookup in flight. Peeks hide and show one
-  sheet, and the peek bar's Show button always reads Companion.
+- Closing Codex, or leaving the lookup's character page, cancels a
+  lookup in flight. Peeks hide and show one sheet, and the peek bar's
+  Show button always reads Companion.
 
 Lookups and recaps read their passages from Codex's store when the scan
 has committed every chapter they need under the same identity (content

@@ -17,6 +17,7 @@ import com.chmouel.liseur.companion.CharacterProfiles
 import com.chmouel.liseur.companion.CodexSheet
 import com.chmouel.liseur.companion.Passage
 import com.chmouel.liseur.companion.CodexTab
+import com.chmouel.liseur.companion.about
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -61,9 +62,13 @@ internal fun CompanionPanelHost(
             if (companion.codex.panel.value?.visible == false) companion.codex.close()
         }
     }
-    // A profile lives on Codex's character page; closing Codex stops any lookup in flight.
-    LaunchedEffect(codex == null) {
-        if (codex == null) companion.close()
+    // A profile lives on Codex's character page; closing Codex, or leaving the page
+    // it backs, stops the lookup, so choosing a service later does not send it again.
+    // Read from the view models, which set the page before its lookup, not from this frame's copies.
+    LaunchedEffect(codex?.detail?.name, panel) {
+        val lookup = companion.panel.value ?: return@LaunchedEffect
+        val shown = companion.codex.panel.value?.detail?.name
+        if (shown == null || !lookup.about(shown)) companion.close()
     }
 
     val follow: (Locator) -> Unit = follow@{ place ->
