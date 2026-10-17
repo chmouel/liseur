@@ -1462,7 +1462,7 @@
     <string name="codex_pane_profile">Profilo</string>
     <string name="codex_pane_mentions">Menzioni</string>
     <string name="codex_profile_ask">Chiedi al compagno chi è %1$s, in base al libro fin qui.</string>
-    <string name="codex_pair_ask">Chiedi al compagno di %1$s per vedere il suo legame con %2$s.</string>
+    <string name="codex_pair_ask">Chiedi al compagno chi è %1$s per vedere il suo legame con %2$s.</string>
     <string name="codex_profile_recaps">Dai riassunti dei capitoli</string>
     <string name="codex_pair_not_described">Il profilo di %1$s non menziona %2$s.</string>
     <string name="codex_mentions_of">Menzioni di %1$s</string>

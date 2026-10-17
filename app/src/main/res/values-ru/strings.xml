@@ -1559,7 +1559,7 @@
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Профиль</string>
     <string name="codex_pane_mentions">Упоминания</string>
-    <string name="codex_profile_ask">Спросите помощника, кто такой %1$s, по книге до этого места.</string>
+    <string name="codex_profile_ask">Спросите помощника, кто это — %1$s, по книге до этого места.</string>
     <string name="codex_pair_ask">Спросите помощника о %1$s, чтобы узнать связь с %2$s.</string>
     <string name="codex_profile_recaps">Из пересказов глав</string>
     <string name="codex_pair_not_described">В профиле %1$s не упоминается %2$s.</string>
