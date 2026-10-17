@@ -14,6 +14,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 
@@ -335,10 +337,13 @@ class CompanionViewModel(
     /** For each pair of names, what [saved], this book's [recaps], say last before [asked] links them; writes and sends nothing. */
     suspend fun pairNotes(pairs: List<Pair<String, String>>, asked: AskingScope, saved: List<SavedRecap>): Map<Pair<String, String>, String> {
         if (server.current() == null) return emptyMap()
-        val chapters = byChapter(saved).takeIf { it.isNotEmpty() } ?: return emptyMap()
-        // The latest chapter's word on them, as the one nearest the place.
-        return pairs.mapNotNull { pair -> recapClaims(chapters, asked, pair.first, pair.second).lastOrNull()?.let { pair to it.second.text } }
-            .toMap()
+        // Decoding the recaps and matching every pair run off the main thread: the sheet calls this while it draws.
+        return withContext(Dispatchers.Default) {
+            val chapters = byChapter(saved).takeIf { it.isNotEmpty() } ?: return@withContext emptyMap()
+            // The latest chapter's word on them, as the one nearest the place.
+            pairs.mapNotNull { pair -> recapClaims(chapters, asked, pair.first, pair.second).lastOrNull()?.let { pair to it.second.text } }
+                .toMap()
+        }
     }
 
     /**
@@ -348,7 +353,7 @@ class CompanionViewModel(
      */
     suspend fun notes(name: String, other: String?, asked: AskingScope, saved: List<SavedRecap>): List<RecapNote<Locator>> {
         if (server.current() == null) return emptyList()
-        val claims = recapClaims(byChapter(saved), asked, name, other)
+        val claims = withContext(Dispatchers.Default) { recapClaims(byChapter(saved), asked, name, other) }
         if (claims.isEmpty()) return emptyList()
         val opened = sources.await()
         val passages = claims.map { it.first }.distinct().associateWith { unit -> quietly { opened.passagesOf(unit) }.orEmpty() }
