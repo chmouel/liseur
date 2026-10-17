@@ -162,13 +162,16 @@ class CompanionViewModel(
         catalog.complete(opened)
         val scanned = CodexBackedCatalog(
             live = opened,
+            // Only while the on-device codex is on: nothing is read from an earlier scan's index.
             stored = { through, ceiling, resource ->
-                contentSha.value?.let { sha ->
+                contentSha.value?.takeIf { server.codexEnabled.first() }?.let { sha ->
                     store.codex.stored(bookUrl, CodexStore.identity(sha, opened.map), through, ceiling, resource)
                 }
             },
             storedUnit = { unit ->
-                contentSha.value?.let { sha -> store.codex.storedUnit(bookUrl, CodexStore.identity(sha, opened.map), unit) }
+                contentSha.value?.takeIf { server.codexEnabled.first() }?.let { sha ->
+                    store.codex.storedUnit(bookUrl, CodexStore.identity(sha, opened.map), unit)
+                }
             },
             log = { Log.w(TAG, "Codex passages unavailable: ${it.javaClass.simpleName}") },
         )

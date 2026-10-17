@@ -2161,8 +2161,9 @@ back. Capitalization-based extraction does not support scripts without
 case, and frequent German nouns can appear as candidates.
 
 Lookups and recaps read passages through `CodexBackedCatalog`, which
-serves `CodexStore.stored` when the scan's identity matches and every
-chapter the request needs is committed, and walks the publication
+serves `CodexStore.stored` while the On-device companion switch is on,
+the scan's identity matches and every chapter the request needs is
+committed, and walks the publication
 otherwise. Stored rows are rebuilt with `CodexPassageRow.source()`, which
 drops Codex's run-on continuity from `folded`, then filtered by
 `Eligibility.allows`, so the result equals the walk (held by
