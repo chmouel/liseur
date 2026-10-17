@@ -99,6 +99,19 @@ class CharacterPageTest {
         assertEquals(listOf("Fears him.", "Watches him."), claims)
     }
 
+    @Test fun `relationships of the same wording toward different partners are both kept`() {
+        val saved = listOf(
+            0 to ChapterRecap(
+                emptyList(),
+                listOf(character("Jim", with = mapOf("Silver" to "Trusts him.", "Ben" to "Trusts him."))),
+            ),
+        )
+
+        val claims = recapClaims(saved, AskingScope(lo = 1, count = 2), "Jim").map { it.second.with to it.second.text }
+
+        assertEquals(listOf("Silver" to "Trusts him.", "Ben" to "Trusts him."), claims)
+    }
+
     @Test fun `a recap's sources are the cited passages whose text is unchanged`() {
         fun passage(ref: String, text: String) = Passage(ref, PassageText.hash(text), 0, text, ChapterRange(0, 0), 0)
         val kept = passage("r0.1", "Jim ran.")

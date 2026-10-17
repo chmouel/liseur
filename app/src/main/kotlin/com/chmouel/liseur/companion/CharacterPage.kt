@@ -100,7 +100,8 @@ fun recapClaims(
             }
             toward(self, others, paired) + toward(others, self, asked)
         }
-        claims.distinctBy { it.text }.map { unit to it }
+        // The same wording can link different partners; the target tells them apart.
+        claims.distinctBy { it.text to it.with }.map { unit to it }
     }
 }
 
