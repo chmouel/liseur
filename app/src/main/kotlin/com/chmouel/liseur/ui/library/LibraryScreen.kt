@@ -60,6 +60,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -198,6 +199,7 @@ fun LibraryScreen(
     onResetSharedSeries: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
+    onSyncNow: () -> Unit,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
@@ -679,6 +681,17 @@ fun LibraryScreen(
                                     onClick = {
                                         moreOpen = false
                                         onOpenSettings()
+                                    },
+                                )
+                                // Keep this full sync action as the last item in the menu.
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.server_sync_now)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Sync, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        moreOpen = false
+                                        onSyncNow()
                                     },
                                 )
                             }

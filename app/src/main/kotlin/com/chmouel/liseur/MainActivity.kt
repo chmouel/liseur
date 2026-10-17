@@ -391,6 +391,9 @@ private fun LiseurApp(
                             onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
                             onOpenSettings = { backStack.push(Route.Settings) },
                             onOpenStats = { backStack.push(Route.Stats) },
+                            onSyncNow = {
+                                scope.launch { context.container.requestFullSync() }
+                            },
                             onOpenBookStats = { book ->
                                 backStack.push(Route.BookStats(book.url, book.displayTitle))
                             },
@@ -738,6 +741,7 @@ private fun ServerAccountRoute(
 private fun LibraryRoute(
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
+    onSyncNow: () -> Unit,
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
@@ -1095,6 +1099,7 @@ private fun LibraryRoute(
         onResetSharedSeries = viewModel::resetBookSharedSeries,
         deleteFailures = viewModel.deleteFailures,
         onRefresh = viewModel::refreshAll,
+        onSyncNow = onSyncNow,
         onSetSort = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
         onDownloadAndOpen = viewModel::downloadAndOpen,
