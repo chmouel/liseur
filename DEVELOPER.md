@@ -1798,8 +1798,13 @@ reader behavior.
   server on the External services and API keys page speaking OpenAI's chat completions
   (`ServerTranslationService`), and in Play only Gemini
   (`GeminiTranslationService`, sharing the read-aloud key) and Google
-  on this phone (`MlKitTranslationService`, ML Kit). The device is
-  the default; a network service is used only once chosen. The External
+  on this phone (`MlKitTranslationService`, ML Kit). Translation is opt-in:
+  until a service is stored, the reader offers no Translate actions, even
+  if the phone can translate. The Play library menu offers a setup sheet;
+  it waits for the system translator's availability before defaulting to it
+  or ML Kit, whose consent is shown before the reader turns it on. FOSS
+  users choose from Settings. Deleting a chosen server falls back to the
+  device provider, never another network service. The External
   services and API keys page holds every key and server; the Translation page in Settings
   holds the service, its model and the target language.
 - The device service is decided at runtime on each phone. Every
@@ -1835,7 +1840,10 @@ reader behavior.
   Firebase `ComponentRegistrar` classes; without it R8 removes them and
   the release build crashes the first time ML Kit is asked anything.
   Smoke-test ML Kit on a release build after upgrading it.
-- Languages keep the script and the Portuguese region
+- Language labels may show a flag emoji where the language tag has a clear
+  country association. Shared languages such as English, Spanish and Arabic
+  remain unflagged rather than imply one country; flags are decorative to
+  accessibility services. Languages keep the script and the Portuguese region
   (`TranslationLanguages`: zh-Hans and zh-Hant, pt-BR and pt-PT) and drop
   other regions. The source is the book's language when it declares
   exactly one; otherwise the sheet asks, unless the service detects it.

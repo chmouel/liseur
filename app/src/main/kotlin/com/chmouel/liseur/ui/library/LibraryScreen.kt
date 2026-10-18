@@ -61,6 +61,7 @@ import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -176,6 +177,8 @@ fun LibraryScreen(
     onBookSelected: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
+    /** Opens the sheet that turns translation on; shown in the menu only when set. */
+    onSetUpTranslation: (() -> Unit)? = null,
     onOpenBookStats: (Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
@@ -676,6 +679,20 @@ fun LibraryScreen(
                                         onOpenStats()
                                     },
                                 )
+                                // Until translation works; once on, the
+                                // reader is where it is used.
+                                onSetUpTranslation?.let { setUp ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.translation_setup_menu)) },
+                                        leadingIcon = {
+                                            Icon(Icons.Outlined.Translate, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            moreOpen = false
+                                            setUp()
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
                                   text = { Text(stringResource(R.string.server_sync_now)) },
                                   leadingIcon = {

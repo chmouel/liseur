@@ -47,6 +47,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -427,10 +429,17 @@ internal fun ConnectionRow(
     title: String,
     subtitle: String,
     onClick: () -> Unit,
+    /** What accessibility reads for [subtitle] when it shows more than words, such as a flag. */
+    subtitleDescription: String? = null,
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = {
+            Text(
+                subtitle,
+                modifier = subtitleDescription?.let { Modifier.semantics { contentDescription = it } } ?: Modifier,
+            )
+        },
         leadingContent = { Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) { icon() } },
         trailingContent = {
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)

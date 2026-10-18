@@ -54,6 +54,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -87,16 +88,22 @@ internal fun TranslationSettingsEntry(feature: ServiceTranslate, onClick: () -> 
     val server by feature.server.collectAsState(initial = null)
     val ready by feature.ready.collectAsState()
     val stored by feature.target.collectAsState(initial = null)
-    val target = TranslationLanguages.name(TranslationLanguages.target(stored, ui), ui)
+    val targetTag = TranslationLanguages.target(stored, ui)
+    val serviceName = server?.name ?: stringResource(service.label)
     ConnectionRow(
         icon = { Icon(Icons.Outlined.Translate, contentDescription = null) },
         title = stringResource(R.string.translation_settings_title),
         subtitle = if (ready) {
-            stringResource(R.string.translation_settings_entry_summary, server?.name ?: stringResource(service.label), target)
+            stringResource(R.string.translation_settings_entry_summary, serviceName, TranslationLanguages.flagged(targetTag, ui))
         } else {
             stringResource(R.string.read_aloud_settings_entry_missing)
         },
         onClick = onClick,
+        subtitleDescription = if (ready) {
+            stringResource(R.string.translation_settings_entry_summary, serviceName, TranslationLanguages.name(targetTag, ui))
+        } else {
+            null
+        },
     )
 }
 
@@ -125,6 +132,8 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val service by feature.service.collectAsState(initial = feature.services.first())
+    val provider by feature.provider.collectAsState(initial = null)
+    val chosen = provider != null
     val server by feature.server.collectAsState(initial = null)
     val servers by feature.servers.collectAsState(initial = ServerList.Empty)
     val configured by remember(service) { service.configured }.collectAsState(initial = true)
@@ -168,7 +177,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     overline = stringResource(R.string.translation_settings_provider),
                     headline = server?.name ?: stringResource(service.label),
                     supporting = when {
-                        !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
+                        !chosen || !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
                         server != null -> server!!.host
                         else -> stringResource(service.summary)
                     },
@@ -176,14 +185,18 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     onClick = { picking = true },
                 )
                 if (picking) {
+                    val device = remember { feature.services.firstOrNull { it.id == DeviceTranslationService.ID } }
+                    val deviceTranslates by remember(device) { device?.configured ?: flowOf(null) }.collectAsState(initial = null)
+                    val offered = offeredServiceIds(feature.services.map { it.id }, provider, deviceTranslates)
                     TranslationServiceSheet(
-                        services = feature.services,
+                        services = feature.services.filter { it.id in offered },
                         servers = servers.readable.orEmpty(),
-                        selected = service,
+                        // Nothing is ticked until the reader chooses, whatever translation falls back to.
+                        selected = service.takeIf { chosen },
                         selectedServer = server?.id,
                         onPick = {
                             picking = false
-                            if (it.consent != null && it.id != service.id) {
+                            if (it.consent != null && it.id != provider) {
                                 agreeing = it
                             } else {
                                 scope.launch { feature.choose(it) }
@@ -230,7 +243,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                 service.AdvancedSettings()
                 SettingsGroup(stringResource(R.string.translation_settings_target)) {
                     TargetRow(feature, service, configured)
-                    TestRow(feature, service, configured)
+                    TestRow(feature, service, chosen && configured)
                 }
                 ContextGroup(feature)
                 feature.saved?.let { SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync) }
@@ -309,12 +322,23 @@ private val TranslationContextSize.label: Int
         TranslationContextSize.LARGE -> R.string.translation_context_large
     }
 
+/**
+ * The services the picker lists, by id: all but the phone's translator
+ * once the phone is known to have none, unless it is the one [chosen].
+ */
+internal fun offeredServiceIds(ids: List<String>, chosen: String?, deviceTranslates: Boolean?): List<String> =
+    ids.filter { it != DeviceTranslationService.ID || deviceTranslates != false || it == chosen }
+
+/** Whether the Play library should offer setup or recovery for translation. */
+internal fun shouldOfferTranslationSetup(offersSetup: Boolean, chosen: Boolean, ready: Boolean): Boolean =
+    offersSetup && !(chosen && ready)
+
 /** Every service, each listed server by name in place of the server kind, then the way to the Services page. */
 @Composable
 private fun TranslationServiceSheet(
     services: List<TranslationService>,
     servers: List<ServerConnection>,
-    selected: TranslationService,
+    selected: TranslationService?,
     selectedServer: String?,
     onPick: (TranslationService) -> Unit,
     onPickServer: (ServerConnection) -> Unit,
@@ -325,7 +349,7 @@ private fun TranslationServiceSheet(
         if (service.id == ServerSettings.SERVER_PROVIDER) {
             servers.map { server ->
                 ServiceOption(
-                    selected = selected.id == service.id && server.id == selectedServer,
+                    selected = selected?.id == service.id && server.id == selectedServer,
                     icon = service.icon,
                     headline = server.name,
                     supporting = server.host,
@@ -335,7 +359,7 @@ private fun TranslationServiceSheet(
         } else {
             listOf(
                 ServiceOption(
-                    selected = service.id == selected.id,
+                    selected = service.id == selected?.id,
                     icon = service.icon,
                     headline = stringResource(service.label),
                     supporting = stringResource(service.summary),
@@ -379,9 +403,12 @@ private fun TargetRow(feature: ServiceTranslate, service: TranslationService, en
         },
         headlineContent = { Text(stringResource(R.string.translation_settings_target)) },
         supportingContent = {
+            val spoken = stored?.let { TranslationLanguages.name(it, ui) }
+                ?: stringResource(R.string.translation_settings_target_app, TranslationLanguages.name(app, ui))
             Text(
-                stored?.let { TranslationLanguages.name(it, ui) }
-                    ?: stringResource(R.string.translation_settings_target_app, TranslationLanguages.name(app, ui)),
+                stored?.let { TranslationLanguages.flagged(it, ui) }
+                    ?: stringResource(R.string.translation_settings_target_app, TranslationLanguages.flagged(app, ui)),
+                modifier = Modifier.semantics { contentDescription = spoken },
             )
         },
     )
@@ -405,24 +432,10 @@ private fun TargetRow(feature: ServiceTranslate, service: TranslationService, en
             },
             onBack = { picking = false },
             header = {
-                ListItem(
-                    modifier = Modifier.selectable(selected = stored == null, role = Role.RadioButton) {
-                        scope.launch { feature.setTarget(null) }
-                        picking = false
-                    },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = {
-                        Text(
-                            stringResource(R.string.translation_settings_target_follow),
-                            color = if (stored == null) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                        )
-                    },
-                    trailingContent = if (stored == null) {
-                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                    } else {
-                        null
-                    },
-                )
+                FollowAppRow(selected = stored == null) {
+                    scope.launch { feature.setTarget(null) }
+                    picking = false
+                }
             },
         )
     }

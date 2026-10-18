@@ -25,15 +25,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import java.util.Locale
 
 /**
  * Translation with the [services] the build offers, the device's first.
- * The chosen one is resolved at use time from the settings, so changing
- * it never rebuilds anything; a server that is not listed, or a service
- * this build lacks, falls back to the device.
+ * The chosen one is resolved at use time from the settings; without a
+ * stored choice, the fallback is never offered to the reader. A server
+ * that is not listed, or a service this build lacks, falls back to device.
  */
 internal class ServiceTranslate(
     private val settings: AppSettingsRepository,
@@ -46,14 +47,25 @@ internal class ServiceTranslate(
     val accountClears: AccountTranslationClears? = null,
     /** Has a full sync send a clear just recorded. */
     val requestFullSync: suspend () -> Unit = {},
+    /** Whether the library offers the setup sheet; the Play build's. */
+    override val offersSetup: Boolean = false,
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : TranslateFeature {
     override val isAvailable = true
 
     val service: Flow<TranslationService> = settings.settings.map(::resolve).distinctUntilChanged()
 
+    /** The service the reader chose, by id; null until one is chosen, whatever [service] falls back to. */
+    val provider: Flow<String?> = settings.settings.map { it.translationProvider }.distinctUntilChanged()
+
+    override val chosen: StateFlow<Boolean> = provider.map { it != null }
+        .stateIn(scope, SharingStarted.WhileSubscribed(STOP_AFTER_MS), false)
+
     @OptIn(ExperimentalCoroutinesApi::class)
-    override val ready: StateFlow<Boolean> = service.flatMapLatest { it.configured }
+    override val ready: StateFlow<Boolean> = settings.settings
+        .map { s -> s.translationProvider?.let { resolve(s) } }
+        .distinctUntilChanged()
+        .flatMapLatest { it?.configured ?: flowOf(false) }
         .stateIn(scope, SharingStarted.WhileSubscribed(STOP_AFTER_MS), false)
 
     override val action: StateFlow<Int> = service.map { it.action }
@@ -115,7 +127,10 @@ internal class ServiceTranslate(
      * service and model chosen when it is asked, so one picked from the
      * bar after a refusal takes over the run.
      */
-    override suspend fun openPage(source: String?, target: String): SentenceTranslator {
+    override suspend fun openPage(source: String?, target: String): SentenceTranslator? {
+        // A book left translated before translation was opt-in waits for the reader to choose.
+        if (settings.settings.first().translationProvider == null) return null
+
         class Bound(
             val identity: String,
             val service: TranslationService,
@@ -184,6 +199,7 @@ internal class ServiceTranslate(
 
     override suspend fun pageLanguages(declared: List<String>, app: Locale): PageTranslationModes.Mode? {
         val s = settings.settings.first()
+        if (s.translationProvider == null) return null
         val service = resolve(s)
         service.refresh()
         val source = TranslationLanguages.source(declared)
@@ -208,6 +224,9 @@ internal class ServiceTranslate(
 
     @Composable
     override fun SettingsScreen(onBack: () -> Unit, services: Boolean) = TranslationSettingsScreen(this, onBack, services)
+
+    @Composable
+    override fun SetupSheet(onDismiss: () -> Unit, onMore: () -> Unit) = TranslationSetupSheet(this, onDismiss, onMore)
 
     @Composable
     override fun Sheet(

@@ -79,6 +79,19 @@ class TranslationLanguagesTest {
     }
 
     @Test
+    fun `flags follow clear script or region tags and leave shared languages neutral`() {
+        assertEquals("🇨🇳", TranslationLanguages.flag("zh-Hans"))
+        assertNull(TranslationLanguages.flag(TranslationLanguages.of("zh_TW")!!))
+        assertNull(TranslationLanguages.flag(TranslationLanguages.of("zh_HK")!!))
+        assertEquals("🇧🇷", TranslationLanguages.flag("pt-BR"))
+        assertEquals("🇩🇪", TranslationLanguages.flag("de"))
+        assertNull(TranslationLanguages.flag("en"))
+        assertNull(TranslationLanguages.flag("es"))
+        assertNull(TranslationLanguages.flag("ar"))
+        assertNull(TranslationLanguages.flag("xx"))
+    }
+
+    @Test
     fun `pinned languages come first, the rest by name as the reader sorts them`() {
         val ordered = TranslationLanguages.ordered(listOf("fr", "de", "en", "es"), listOf("es", "it"), Locale.ENGLISH)
         assertEquals(listOf("es", "en", "fr", "de"), ordered)

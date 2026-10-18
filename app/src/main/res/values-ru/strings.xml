@@ -1326,6 +1326,10 @@
     <string name="services_delete_translation">Перевод использует %1$s. Он переключится на переводчик этого телефона.</string>
     <string name="services_delete_translation_off">Перевод использует %1$s. Он будет отключён, пока вы не выберете другую службу.</string>
     <string name="services_delete_translation_unsure">Перевод использует %1$s. Он переключится на переводчик этого телефона, если он есть.</string>
+    <string name="translation_setup_menu">Перевести</string>
+    <string name="translation_setup_title">Перевод книг</string>
+    <string name="translation_setup_turn_on">Включить перевод</string>
+    <string name="translation_setup_choose_service">Выбрать другую службу</string>
     <string name="translation_settings_title">Перевод</string>
     <string name="translation_settings_entry_summary">%1$s → %2$s</string>
     <string name="translation_settings_provider">Служба перевода</string>

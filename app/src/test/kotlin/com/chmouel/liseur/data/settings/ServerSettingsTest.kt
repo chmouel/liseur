@@ -468,7 +468,7 @@ class ServerSettingsTest {
         assertTrue(repo.deleteServer(id))
 
         val s = repo.settings.first()
-        assertNull(s.translationProvider)
+        assertEquals(ServerSettings.DEVICE_TRANSLATION_PROVIDER, s.translationProvider)
         assertNull(s.translationServer)
         assertEquals(mapOf(other to "gpt-4o-mini"), s.translationModels)
     }

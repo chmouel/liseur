@@ -139,6 +139,9 @@ internal object ServerSettings {
     const val TRANSLATION_STATE_NAME = "translation_server_state"
 
     val TRANSLATION_PROVIDER = stringPreferencesKey(TRANSLATION_PROVIDER_NAME)
+
+    /** The phone's own translator, what translation falls back to when its chosen server is deleted. */
+    const val DEVICE_TRANSLATION_PROVIDER = "device"
     val TRANSLATION_SERVER = stringPreferencesKey(TRANSLATION_SERVER_NAME)
 
     /** Translation's model and options on each server, by server id. */
@@ -539,7 +542,7 @@ internal object ServerSettings {
             }
             if (p[TRANSLATION_SERVER]?.let { it !in ids } == true) {
                 p.remove(TRANSLATION_SERVER)
-                if (p[TRANSLATION_PROVIDER] == SERVER_PROVIDER) p.remove(TRANSLATION_PROVIDER)
+                if (p[TRANSLATION_PROVIDER] == SERVER_PROVIDER) p[TRANSLATION_PROVIDER] = DEVICE_TRANSLATION_PROVIDER
             }
         }
         requireListed(ids, states.keys, p[READ_ALOUD_SERVER])
@@ -602,7 +605,9 @@ internal class ServerEdit private constructor(
         }
         if (p[ServerSettings.TRANSLATION_SERVER] == id) {
             p.remove(ServerSettings.TRANSLATION_SERVER)
-            if (p[ServerSettings.TRANSLATION_PROVIDER] == ServerSettings.SERVER_PROVIDER) p.remove(ServerSettings.TRANSLATION_PROVIDER)
+            if (p[ServerSettings.TRANSLATION_PROVIDER] == ServerSettings.SERVER_PROVIDER) {
+                p[ServerSettings.TRANSLATION_PROVIDER] = ServerSettings.DEVICE_TRANSLATION_PROVIDER
+            }
         }
         return true
     }

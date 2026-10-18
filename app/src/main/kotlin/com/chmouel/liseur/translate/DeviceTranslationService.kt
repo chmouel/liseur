@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.core.util.isNotEmpty
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ServerSettings
 import java.util.concurrent.Executors
 import java.util.function.Consumer
 import kotlin.coroutines.resume
@@ -321,7 +322,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
     }
 
     companion object {
-        const val ID = "device"
+        const val ID = ServerSettings.DEVICE_TRANSLATION_PROVIDER
 
         private const val QUERY_TIMEOUT_MS = 5_000L
         // One question at a time: a stuck system call cannot pile up threads, and answers arrive in order.

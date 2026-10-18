@@ -12,13 +12,24 @@ import java.util.Locale
 /**
  * Translating a selected passage, as the flavor-neutral reader sees it.
  * Both builds offer the device's translator and listed servers; the Play
- * build adds Gemini. [None] is never available and draws nothing.
+ * build adds Gemini. A service is not offered to readers until explicitly
+ * chosen. [None] is never available and draws nothing.
  */
 interface TranslateFeature {
     val isAvailable: Boolean
 
-    /** Whether the chosen service could translate, so the selection bar offers it. */
+    /** Whether the reader has explicitly chosen a service. */
+    val chosen: StateFlow<Boolean>
+
+    /**
+     * Whether a chosen service could translate, so the reader offers it.
+     * False until a service has been chosen: translation is opt-in, even
+     * where the phone's translator would work out of the box.
+     */
     val ready: StateFlow<Boolean>
+
+    /** Whether the library offers [SetupSheet] while translation is not [ready]. */
+    val offersSetup: Boolean get() = false
 
     /** The selection bar's label for translating, as the chosen service's terms word it. */
     val action: StateFlow<Int>
@@ -33,6 +44,14 @@ interface TranslateFeature {
     /** Translation's own settings screen; [services] opens it on the Services page. */
     @Composable
     fun SettingsScreen(onBack: () -> Unit, services: Boolean = false)
+
+    /**
+     * Turning translation on in one tap, with the service this phone can
+     * use and the app's language already filled in; [onMore] leaves for
+     * [SettingsScreen] to choose otherwise.
+     */
+    @Composable
+    fun SetupSheet(onDismiss: () -> Unit, onMore: () -> Unit) = Unit
 
     /**
      * The sheet that translates [passage], from the language the book
@@ -84,6 +103,7 @@ interface TranslateFeature {
 
     object None : TranslateFeature {
         override val isAvailable = false
+        override val chosen: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val ready: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val action: StateFlow<Int> = MutableStateFlow(R.string.translation_action).asStateFlow()
 

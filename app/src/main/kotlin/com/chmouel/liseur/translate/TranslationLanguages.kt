@@ -78,6 +78,21 @@ internal object TranslationLanguages {
     /** [tag]'s name in English, for a prompt: "Portuguese (Brazil)". */
     fun englishName(tag: String): String = Locale.forLanguageTag(tag).getDisplayName(Locale.ENGLISH).ifBlank { tag }
 
+    /**
+     * A flag for [tag], as an emoji, when one country is plainly its home or
+     * the tag names it (`pt-BR`, `zh-Hans`); null for a language many
+     * countries share, such as English, Spanish or Arabic, or a script
+     * written in several (`zh-Hant`), rather than pick one of them for
+     * every reader.
+     */
+    fun flag(tag: String): String? {
+        val region = FLAG_REGIONS[tag] ?: FLAG_REGIONS[tag.substringBefore('-')]?.takeIf { tag.substringBefore('-') !in BY_TAG_ONLY }
+        return region?.let { code -> code.map { String(Character.toChars(REGIONAL_A + (it - 'A'))) }.joinToString("") }
+    }
+
+    /** [tag]'s [name] behind its [flag], for text that names it among other words. */
+    fun flagged(tag: String, ui: Locale): String = flag(tag)?.let { "$it ${name(tag, ui)}" } ?: name(tag, ui)
+
     /** Every language the platform names, as translation keeps them. */
     fun all(): List<String> = (
         Locale.getAvailableLocales().mapNotNull { of(it.toLanguageTag()) } +
@@ -97,4 +112,23 @@ internal object TranslationLanguages {
 
     private val TRADITIONAL = setOf("TW", "HK", "MO")
     private val PORTUGUESE = setOf("BR", "PT")
+
+    private const val REGIONAL_A = 0x1F1E6
+
+    // Languages flagged only by a tag that names the country: bare `pt` or `zh` is left without.
+    private val BY_TAG_ONLY = setOf("pt", "zh")
+
+    private val FLAG_REGIONS = mapOf(
+        "zh-Hans" to "CN", "pt-BR" to "BR", "pt-PT" to "PT",
+        "am" to "ET", "az" to "AZ", "be" to "BY", "bg" to "BG", "bn" to "BD", "bs" to "BA",
+        "cs" to "CZ", "cy" to "GB", "da" to "DK", "de" to "DE", "el" to "GR", "et" to "EE",
+        "fa" to "IR", "fi" to "FI", "fil" to "PH", "fr" to "FR", "ga" to "IE", "he" to "IL",
+        "hi" to "IN", "hr" to "HR", "hu" to "HU", "hy" to "AM", "id" to "ID", "is" to "IS",
+        "it" to "IT", "ja" to "JP", "ka" to "GE", "kk" to "KZ", "km" to "KH", "ko" to "KR",
+        "lo" to "LA", "lt" to "LT", "lv" to "LV", "mk" to "MK", "mn" to "MN", "ms" to "MY",
+        "mt" to "MT", "my" to "MM", "nb" to "NO", "ne" to "NP", "nl" to "NL", "no" to "NO",
+        "pl" to "PL", "ro" to "RO", "ru" to "RU", "si" to "LK", "sk" to "SK", "sl" to "SI",
+        "sq" to "AL", "sr" to "RS", "sv" to "SE", "th" to "TH", "tl" to "PH", "tr" to "TR",
+        "uk" to "UA", "ur" to "PK", "uz" to "UZ", "vi" to "VN",
+    )
 }

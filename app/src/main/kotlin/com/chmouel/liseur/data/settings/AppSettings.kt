@@ -233,8 +233,8 @@ enum class DefinitionTarget(val id: String) {
  * @param deviceVoice The voice of the device's own speech engine reading
  *   aloud uses, by the engine's name for it, or null to pick one
  *   automatically; see `DeviceVoices.pick`.
- * @param translationProvider Which service translates passages, by id, or
- *   null for the device's own.
+ * @param translationProvider Which translation service the reader chose,
+ *   by id, or null before they opt in.
  * @param translationServer The id of the server translation uses when its
  *   provider is a server.
  * @param translationStates Translation's model and options on each server, by server id.

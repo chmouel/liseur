@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -92,8 +93,16 @@ internal fun PageTranslationBar(
         }
     }
 
-    val sourceName = translator.source?.let { TranslationLanguages.name(it, ui) }
+    val sourceTag = translator.source
+    val sourceName = sourceTag?.let { TranslationLanguages.name(it, ui) }
     val targetName = TranslationLanguages.name(translator.target, ui)
+    val sourceLabel = sourceTag?.let { TranslationLanguages.flagged(it, ui) }
+    val targetLabel = TranslationLanguages.flagged(translator.target, ui)
+    val pageLanguageDescription = stringResource(
+        R.string.translation_page_languages,
+        sourceName ?: stringResource(R.string.translation_detected),
+        targetName,
+    )
     val name = translator.destination ?: stringResource(service?.label ?: R.string.translation_provider_device)
     val status = when (state) {
         PageTranslationState.Translating -> stringResource(R.string.translation_loading)
@@ -121,9 +130,10 @@ internal fun PageTranslationBar(
                     Text(
                         text = stringResource(
                             R.string.translation_page_languages,
-                            sourceName ?: stringResource(R.string.translation_detected),
-                            targetName,
+                            sourceLabel ?: stringResource(R.string.translation_detected),
+                            targetLabel,
                         ),
+                        modifier = Modifier.semantics { contentDescription = pageLanguageDescription },
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

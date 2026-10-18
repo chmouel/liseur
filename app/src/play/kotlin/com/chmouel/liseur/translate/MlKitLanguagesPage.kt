@@ -44,6 +44,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -225,7 +226,17 @@ private fun LanguageRow(
     ListItem(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier.padding(horizontal = 4.dp),
-        headlineContent = { Text(entry.name) },
+        headlineContent = {
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TranslationLanguages.flag(MlKitLanguages.tag(entry.code))?.let { flag ->
+                    Text(flag, modifier = Modifier.clearAndSetSemantics { })
+                }
+                Text(entry.name)
+            }
+        },
         supportingContent = {
             Column {
                 Text(notes)

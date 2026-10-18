@@ -376,10 +376,10 @@ private fun LiseurApp(
                 route == Route.Settings -> ListDetailSceneStrategy.listPane(
                     detailPlaceholder = { SettingsPagePlaceholder() },
                 ) + paneMotion
-                // The server screen is also opened from the library, and
-                // there it is a screen of its own.
+                // The server and translation screens are also opened from
+                // the library, and there they are screens of their own.
                 route.isSettingsPage &&
-                    (route != Route.ServerAccount || below == Route.Settings) ->
+                    ((route != Route.ServerAccount && route != Route.Translation) || below == Route.Settings) ->
                     ListDetailSceneStrategy.detailPane() + paneMotion
                 else -> emptyMap()
             }
@@ -391,6 +391,7 @@ private fun LiseurApp(
                             onWidgetHandled = { launch?.request?.let(onLaunchHandled) },
                             onOpenSettings = { backStack.push(Route.Settings) },
                             onOpenStats = { backStack.push(Route.Stats) },
+                            onOpenTranslation = { backStack.push(Route.Translation) },
                             onSyncNow = {
                                 scope.launch { context.container.requestFullSync() }
                             },
@@ -743,6 +744,7 @@ private fun ServerAccountRoute(
 private fun LibraryRoute(
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
+    onOpenTranslation: () -> Unit,
     onSyncNow: () -> Unit,
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
@@ -1065,8 +1067,24 @@ private fun LibraryRoute(
         return
     }
 
+    // Until translation works, the Play build offers to turn it on from here.
+    val translate = context.container.translate
+    val translateReady by translate.ready.collectAsStateWithLifecycle()
+    val translationChosen by translate.chosen.collectAsStateWithLifecycle()
+    var settingUpTranslation by rememberSaveable { mutableStateOf(false) }
+    if (settingUpTranslation) {
+        translate.SetupSheet(onDismiss = { settingUpTranslation = false }, onMore = onOpenTranslation)
+    }
+
     LibraryScreen(
         state = state,
+        onSetUpTranslation = { settingUpTranslation = true }.takeIf {
+            com.chmouel.liseur.translate.shouldOfferTranslationSetup(
+                translate.offersSetup,
+                translationChosen,
+                translateReady,
+            )
+        },
         onAddBook = { openBook.launch(arrayOf("application/epub+zip")) },
         onAddFolder = { addFolder.launch(null) },
         onBookSelected = { book ->

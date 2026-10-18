@@ -330,6 +330,8 @@ private fun Translation(
         }
         Spacer(Modifier.height(12.dp))
         LanguageRow(
+            sourceTag = source,
+            targetTag = target,
             sourceName = sourceName ?: stringResource(
                 if (service?.detectsLanguage == true) R.string.translation_detected else R.string.translation_choose_language,
             ),
@@ -504,6 +506,8 @@ private fun readingStyle(style: TextStyle): TextStyle = style.copy(fontFamily = 
 
 @Composable
 private fun LanguageRow(
+    sourceTag: String?,
+    targetTag: String?,
     sourceName: String,
     targetName: String,
     copyable: String?,
@@ -524,7 +528,9 @@ private fun LanguageRow(
                     .weight(1f, fill = false)
                     .semantics { contentDescription = sourceLabel },
             ) {
-                Text(sourceName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (sourceTag != null) {
+                    LanguageLabel(sourceTag, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                } else Text(sourceName, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Icon(
                 Icons.AutoMirrored.Outlined.ArrowForward,
@@ -538,7 +544,9 @@ private fun LanguageRow(
                     .weight(1f, fill = false)
                     .semantics { contentDescription = targetLabel },
             ) {
-                Text(targetName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (targetTag != null) {
+                    LanguageLabel(targetTag, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                } else Text(targetName, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         if (copyable != null) {
@@ -684,8 +692,8 @@ internal fun LanguagePicker(
                     modifier = Modifier.selectable(selected = isSelected, role = Role.RadioButton) { onPick(tag) },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
-                        Text(
-                            TranslationLanguages.name(tag, ui),
+                        LanguageLabel(
+                            tag,
                             color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Unspecified,
                         )
                     },

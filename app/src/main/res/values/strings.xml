@@ -1291,6 +1291,10 @@
     <string name="services_delete_translation">Translation uses %1$s. It will switch to this phone\'s translator.</string>
     <string name="services_delete_translation_off">Translation uses %1$s. It will be off until you choose another service.</string>
     <string name="services_delete_translation_unsure">Translation uses %1$s. It will switch to this phone\'s translator, if the phone has one.</string>
+    <string name="translation_setup_menu">Translate</string>
+    <string name="translation_setup_title">Translate books</string>
+    <string name="translation_setup_turn_on">Turn on translation</string>
+    <string name="translation_setup_choose_service">Choose another service</string>
     <string name="translation_settings_title">Translation</string>
     <string name="translation_settings_entry_summary">%1$s, into %2$s</string>
     <string name="translation_settings_provider">Translation service</string>
