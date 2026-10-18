@@ -1467,11 +1467,13 @@ private fun BookGrid(
             }
             // Always the book itself, never its series pile: a search
             // is for reaching a book, and a pile is one tap short of it.
+            // The series line shows even for a lone volume, since it may
+            // be what the query matched.
             items(results, key = { it.id }) { book ->
                 BookCard(
                     book = book,
                     progress = state.downloads[book.url],
-                    inASeries = seriesKey(book.seriesName) in state.shownSeries,
+                    inASeries = !book.seriesName.isNullOrBlank(),
                     highlight = state.searchQuery,
                     onClick = { onBookSelected(book) },
                     onLongClick = { onBookLongPress(book) },

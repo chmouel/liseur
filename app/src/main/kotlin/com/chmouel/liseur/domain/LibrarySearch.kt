@@ -80,10 +80,12 @@ fun searchMatchRanges(text: String, query: String): List<IntRange> {
  */
 private fun Book.otherSeriesNames(): List<String> {
     if (seriesOverridden) return emptyList()
-    val shown = seriesKey(seriesName)
+    // Compared as searched, not by seriesKey: that drops a leading
+    // article, and "The Expanse" must still answer "the expanse".
+    val shown = seriesName?.foldForSearch()
     return listOfNotNull(fileSeriesName, catalogSeriesName)
-        .filter { it.isNotBlank() && seriesKey(it) != shown }
-        .distinctBy { seriesKey(it) }
+        .filter { it.isNotBlank() && it.foldForSearch() != shown }
+        .distinctBy { it.foldForSearch() }
 }
 
 private data class SearchHit(val book: Book, val tier: Int)

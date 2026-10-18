@@ -293,6 +293,17 @@ class LibrarySearchTest {
     }
 
     @Test
+    fun `an alternate series name keeps its leading article`() {
+        assertEquals(
+            listOf("Leviathan Wakes"),
+            search(
+                "the expanse",
+                book("Leviathan Wakes", series = "Expanse", fileSeries = "The Expanse"),
+            ),
+        )
+    }
+
+    @Test
     fun `a series the reader took the book out of does not find it`() {
         assertEquals(
             emptyList<String>(),
