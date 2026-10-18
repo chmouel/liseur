@@ -460,7 +460,15 @@ private fun SeriesOptionRow(ranked: RankedSeries, selected: Boolean, onClick: ()
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                text = highlighted(option.name, ranked.matches),
+                text = highlighted(
+                    option.name,
+                    ranked.matches,
+                    matchColor = if (selected && !eInk) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                ),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -795,11 +803,15 @@ private fun letterJumps(sections: List<PickerSection>): List<Pair<String, Int>> 
 
 /** The name, with what the search matched picked out of it. */
 @Composable
-private fun highlighted(name: String, matches: List<IntRange>): AnnotatedString {
+private fun highlighted(
+    name: String,
+    matches: List<IntRange>,
+    matchColor: Color,
+): AnnotatedString {
     if (matches.isEmpty()) return AnnotatedString(name)
     val emphasis = SpanStyle(
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        color = matchColor,
     )
     return buildAnnotatedString {
         var at = 0
