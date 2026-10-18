@@ -982,6 +982,7 @@
     </plurals>
     <string name="reading_stats_heatmap_day">%1$s le %2$s</string>
     <string name="reading_stats_heatmap_empty_day">Rien lu le %1$s</string>
+    <string name="reading_stats_unavailable">Impossible de charger vos statistiques de lecture depuis liseur-sync.</string>
     <string name="reading_stats_empty_range">Rien lu sur cette période. Essayez-en une plus longue.</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>

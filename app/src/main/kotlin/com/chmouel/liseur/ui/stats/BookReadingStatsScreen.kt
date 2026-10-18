@@ -63,6 +63,7 @@ fun BookReadingStatsScreen(
     onBack: () -> Unit,
     serverInsights: WorkInsights? = null,
     range: StatsRange = StatsRange.ALL_TIME,
+    onRetry: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -103,6 +104,10 @@ fun BookReadingStatsScreen(
         ) {
             if (state is BookReadingStatsUiState.Loading) {
                 BusyIndicator()
+                return@Box
+            }
+            if (state is BookReadingStatsUiState.Unavailable) {
+                StatsUnavailable(onRetry = onRetry)
                 return@Box
             }
             if (state is BookReadingStatsUiState.Empty) {

@@ -1052,6 +1052,7 @@
     </plurals>
     <string name="reading_stats_heatmap_day">%1$s %2$s</string>
     <string name="reading_stats_heatmap_empty_day">Ничего не прочитано %1$s</string>
+    <string name="reading_stats_unavailable">Не удалось загрузить статистику чтения из liseur-sync.</string>
     <string name="reading_stats_empty_range">В этом периоде ничего не прочитано. Попробуйте более длинный.</string>
     <string name="duration_minutes">%1$d мин</string>
     <string name="duration_hours">%1$d ч</string>

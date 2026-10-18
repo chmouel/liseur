@@ -994,6 +994,7 @@
     </plurals>
     <string name="reading_stats_heatmap_day">%1$s am %2$s</string>
     <string name="reading_stats_heatmap_empty_day">Nichts gelesen am %1$s</string>
+    <string name="reading_stats_unavailable">Deine Lesestatistik konnte nicht von liseur-sync geladen werden.</string>
     <string name="reading_stats_empty_range">In diesem Zeitraum nichts gelesen. Probiere einen längeren.</string>
     <string name="duration_minutes">%1$d Min.</string>
     <string name="duration_hours">%1$d Std.</string>

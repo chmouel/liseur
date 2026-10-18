@@ -11,14 +11,13 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.ReadingSession
-import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.LiveIdentity
+import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.liseursync.InsightDay
+import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
 import com.chmouel.liseur.data.liseursync.CompleteStatsSnapshot
 import com.chmouel.liseur.data.liseursync.RemoteStatsRefresh
-import com.chmouel.liseur.data.liseursync.statsSessions
-import com.chmouel.liseur.data.liseursync.statsAliases
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.liseursync.WorkTotals
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -68,6 +67,9 @@ import kotlinx.coroutines.launch
 
 sealed interface ReadingStatsUiState {
     data object Loading : ReadingStatsUiState
+
+    /** liseur-sync is set up and did not answer, so there is nothing to show (ADR-0060). */
+    data object Unavailable : ReadingStatsUiState
     data class Ready(
         val stats: ReadingStats,
         val headline: StatsHeadline,
@@ -118,6 +120,7 @@ data class StatsHeadline(
 sealed interface BookReadingStatsUiState {
     data object Loading : BookReadingStatsUiState
     data object Empty : BookReadingStatsUiState
+    data object Unavailable : BookReadingStatsUiState
     data class Ready(val stats: BookReadingStats) : BookReadingStatsUiState
 }
 
@@ -129,7 +132,13 @@ sealed interface BookReadingStatsUiState {
  * one coherent set of aggregates and actual overlap with captured local
  * sessions. All dashboard figures use that generation or fall back
  * together. A supported snapshot also supplies the comparison in the
- * account timezone; otherwise the comparison remains local.
+ * account timezone; without one, the server's figures carry no
+ * comparison rather than one this device made alone.
+ *
+ * Snapshots are only shown with [StatsAccount.serverOnly]
+ * set — a liseur-sync account whose token can read statistics — and then
+ * the local figures are never shown on their own: the screen waits for
+ * the server, and says so when it cannot get an answer (ADR-0060).
  *
  * Both sources are asked about the same [StatsRange], which is the whole
  * point of the range living in one place: while the server was pinned to
@@ -147,11 +156,14 @@ class ReadingStatsViewModel(
     private val now: (ZoneId) -> ZonedDateTime = ZonedDateTime::now,
     initialWeekStart: DayOfWeek = localeWeekStart(Locale.getDefault()),
     private val liveInvalidations: Flow<Long> = flowOf(0L),
-    private val liveAccounts: Flow<LiveIdentity?> = flowOf(null),
+    accounts: Flow<StatsAccount> = flowOf(StatsAccount.NONE),
     private val snapshotSource: LiseurSyncSnapshots? = null,
-    private val aliases: Flow<List<WorkAlias>> = flowOf(emptyList()),
     private val remoteStats: RemoteStatsRefresh? = null,
 ) : ViewModel() {
+
+    private val accounts = accounts.distinctUntilChanged()
+    private val liveAccounts = this.accounts.map { it.identity }.distinctUntilChanged()
+
 
     /** Collected only by the visible route, and refreshed again on entry. */
     suspend fun observeLiveInsights() {
@@ -161,7 +173,7 @@ class ReadingStatsViewModel(
                     var elapsed = 0L
                     while (isActive) {
                         delay(CLOCK_SAMPLE_MS)
-                        resampleClock()
+                        if (resampleClock()) refreshServerInsights()
                         elapsed += CLOCK_SAMPLE_MS
                         if (elapsed >= COMPARISON_REFRESH_MS) {
                             elapsed = 0L
@@ -169,7 +181,7 @@ class ReadingStatsViewModel(
                         }
                     }
                 }
-                combine(liveInvalidations, liveAccounts.distinctUntilChanged()) { tick, account ->
+                combine(liveInvalidations, liveAccounts) { tick, account ->
                     tick to account
                 }.collect { (_, account) ->
                     if (account != shownAccount) {
@@ -264,6 +276,9 @@ class ReadingStatsViewModel(
 
     private val _snapshot = MutableStateFlow<Answered<CompleteStatsSnapshot>?>(null)
 
+    /** The question the latest refresh gave up on, as [StatsWindow.asked]. */
+    private val _failed = MutableStateFlow<StatsWindow?>(null)
+
     init {
         settings?.let { store ->
             viewModelScope.launch {
@@ -282,8 +297,9 @@ class ReadingStatsViewModel(
      *
      * The server answers are dropped rather than kept while the new ones
      * are in flight: a thirty-day total sitting under a caption that now
-     * says seven is a wrong number, and briefly showing the local figures
-     * instead is not.
+     * says seven is a wrong number. Without a liseur-sync account able to
+     * answer, the local figures for the new span show meanwhile; with
+     * one, the screen waits.
      */
     fun selectRange(range: StatsRange) {
         rangeChosen = true
@@ -339,42 +355,68 @@ class ReadingStatsViewModel(
      * let the first request's answer land on top of the third's, and
      * both requests are for the same window, so nothing about the reply
      * would look wrong.
+     *
+     * The answer already on screen stays there until the new one lands,
+     * when it answers the same question. Dropping it first is what made
+     * the screen fall back to this device's figures for the length of
+     * every refresh and then jump back again.
+     *
+     * A reply that went stale while it was being read — an upload
+     * finished in the meantime — is asked for again a few times before
+     * giving up, since nothing else would ask.
      */
     fun refreshServerInsights() {
         resampleClock()
         val token = ++generation
         refresh?.cancel()
-        forgetServerAnswers()
-        val source = snapshotSource ?: return
+        _failed.value = null
         val window = _window.value
+        val source = snapshotSource ?: return fail(token, window)
         refresh = viewModelScope.launch {
-            val context = source.discover() ?: return@launch
-            val at = now(context.capabilities.timezone)
-            val sessions = sessionDao.allOnce()
-            val result = source.read(
-                context, sessions, window.range, at.toLocalDate(), window.weekStart,
-                at.toLocalTime(),
-            ) ?: return@launch
-            resampleClock()
-            if (source.isCurrent(result) && token == generation &&
-                _window.value.asked() == window.asked() && now(result.zone).toLocalDate() == result.today
-            ) {
-                val publish = if (result.totals.comparison != null &&
-                    !source.isComparisonCurrent(result)
-                ) {
-                    result.copy(totals = result.totals.copy(comparison = null))
-                } else {
-                    result
+            repeat(STALE_ATTEMPTS) {
+                val context = source.discover() ?: return@launch fail(token, window)
+                val at = now(context.capabilities.timezone)
+                val sessions = sessionDao.allOnce()
+                val result = source.read(
+                    context, sessions, window.range, at.toLocalDate(), window.weekStart,
+                    at.toLocalTime(), requireCurrent = false,
+                ) ?: return@launch fail(token, window)
+                if (resampleClock()) {
+                    refreshServerInsights()
+                    return@launch
                 }
-                _snapshot.value = Answered(window, publish)
-                remoteStats?.accept(publish, window.range, window.weekStart)
+                if (token != generation || _window.value.asked() != window.asked()) return@launch
+                if (source.isCurrent(result) && now(result.zone).toLocalDate() == result.today) {
+                    val publish = if (result.totals.comparison != null &&
+                        !source.isComparisonCurrent(result)
+                    ) {
+                        result.copy(totals = result.totals.copy(comparison = null))
+                    } else {
+                        result
+                    }
+                    _snapshot.value = Answered(window, publish)
+                    remoteStats?.accept(publish, window.range, window.weekStart)
+                    return@launch
+                }
             }
+            source.movedOn<Unit>()
+            fail(token, window)
         }
     }
 
-    fun clockChanged() = resampleClock()
+    /** Records that [window] went unanswered, unless a newer question has replaced it. */
+    private fun fail(token: Long, window: StatsWindow) {
+        if (token == generation && _window.value.asked() == window.asked()) {
+            _failed.value = window.asked()
+        }
+    }
 
-    private fun resampleClock() {
+    fun clockChanged() {
+        if (resampleClock()) refreshServerInsights()
+    }
+
+    /** Moves the window to the present; true when the server answers no longer apply. */
+    private fun resampleClock(): Boolean {
         val zone = zone()
         val at = now(zone)
         val old = _window.value
@@ -388,7 +430,9 @@ class ReadingStatsViewModel(
             generation++
             refresh?.cancel()
             forgetServerAnswers()
+            return true
         }
+        return false
     }
 
     /**
@@ -416,7 +460,6 @@ class ReadingStatsViewModel(
         )
 
     private data class LocalStats(
-        val sessions: List<ReadingSession>,
         val sessionSpans: List<SessionSpan>,
         val stats: ReadingStats,
         val books: Map<String, StatsBook>,
@@ -479,21 +522,10 @@ class ReadingStatsViewModel(
                 browseServerId = book.browseServerId,
             )
         }
-        val spans = sessions.map {
-            SessionSpan(
-                bookUrl = it.bookUrl,
-                startedAt = it.startedAt,
-                durationMs = it.durationMs,
-                lastReadAt = it.endedAt ?: it.lastCheckpointAt,
-                uploaded = it.uploadedAt != null,
-                startProgression = it.startProgression,
-                endProgression = it.endProgression,
-            )
-        }
+        val spans = sessionSpans(sessions)
         val comparison = window.range
             .comparison(window.today, window.weekStart, window.timeOfDay)
         LocalStats(
-            sessions = statsSessions(sessions),
             sessionSpans = spans,
             stats = readingStats(
                 sessions = spans,
@@ -519,30 +551,40 @@ class ReadingStatsViewModel(
         )
     }.flowOn(Dispatchers.Default)
 
-    private val aliasIdentities = aliases.map { rows ->
-        rows.groupBy { it.peerId }.mapValues { (_, values) -> statsAliases(values) }
-    }.distinctUntilChanged()
-
     val state: StateFlow<ReadingStatsUiState> = combine(
         local,
         _snapshot,
-        aliasIdentities,
-        liveAccounts.distinctUntilChanged(),
-    ) { local, answer, names, account ->
+        _failed,
+        accounts,
+    ) { local, answer, failed, account ->
 
         val window = local.window
+        val serverOnly = account.serverOnly
+        // Only an account that may still read statistics gets its answer
+        // shown: one that has just been refused falls back to this
+        // device rather than keeping the last figures it was allowed.
         val snapshot = answer.forWindow(window)?.takeIf {
-            account == LiveIdentity.from(it.context.account) &&
-                // Transmission evidence was checked after the response, before
-                // publication. A later upload cannot change that server snapshot.
-                it.captured.sessions == local.sessions &&
-                it.aliases == names[it.peer].orEmpty()
+            serverOnly && account.identity == LiveIdentity.from(it.context.account)
         }
+        // The server's figures are added to the sessions they were proved
+        // against, not to whatever this device holds now. Those were
+        // checked after the response and before publication, so the
+        // answer stays whole until the next refresh replaces it, rather
+        // than giving way to this device's figures whenever an upload or
+        // a new sitting lands in between.
+        val capturedSpans = snapshot?.let { sessionSpans(it.captured.sessions) }
         val united = snapshot?.let {
             val inAccountZone = readingStats(
-                local.sessionSpans, local.books, it.zone, it.today, window.range, window.weekStart,
+                capturedSpans.orEmpty(), local.books, it.zone, it.today, window.range, window.weekStart,
             )
             uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone)
+        }
+        if (serverOnly && united == null) {
+            return@combine if (snapshot != null || failed == window.asked()) {
+                ReadingStatsUiState.Unavailable
+            } else {
+                ReadingStatsUiState.Loading
+            }
         }
         val localComparison = local.spans?.let {
             compareReading(it.period, local.currentMs, local.previousMs)
@@ -550,10 +592,10 @@ class ReadingStatsViewModel(
         val comparison = if (united != null) {
             snapshot?.totals?.comparison?.let { remote ->
                 val localCurrent = readingTotals(
-                    local.sessionSpans, snapshot.zone, remote.current, remote.through,
+                    capturedSpans.orEmpty(), snapshot.zone, remote.current, remote.through,
                 ).totalMs
                 val localPrevious = readingTotals(
-                    local.sessionSpans, snapshot.zone, remote.previous, remote.through,
+                    capturedSpans.orEmpty(), snapshot.zone, remote.previous, remote.through,
                 ).totalMs
                 val current = unionMinutes(
                     remote.currentMinutes, localCurrent, remote.overlapCurrentMinutes,
@@ -567,7 +609,7 @@ class ReadingStatsViewModel(
                 } else {
                     null
                 }
-            } ?: localComparison
+            }
         } else {
             localComparison
         }
@@ -599,6 +641,7 @@ class ReadingStatsViewModel(
         state.map { current ->
             when (current) {
                 ReadingStatsUiState.Loading -> BookReadingStatsUiState.Loading
+                ReadingStatsUiState.Unavailable -> BookReadingStatsUiState.Unavailable
                 is ReadingStatsUiState.Ready -> current.stats.books
                     .firstOrNull { it.bookUrl == bookUrl }
                     ?.let(BookReadingStatsUiState::Ready)
@@ -615,6 +658,7 @@ class ReadingStatsViewModel(
         private const val STOP_TIMEOUT_MS = 5_000L
         private const val CLOCK_SAMPLE_MS = 60_000L
         private const val COMPARISON_REFRESH_MS = 5 * 60_000L
+        private const val STALE_ATTEMPTS = 3
 
         /**
          * Folds the server's aggregates into the local ones, never
@@ -842,9 +886,8 @@ class ReadingStatsViewModel(
                     bookDao = container.database.bookDao(),
                     progressDao = container.database.readingProgressDao(),
                     snapshotSource = container.syncSnapshots,
-                    aliases = container.database.workIdentityDao().observeAliases(),
                     liveInvalidations = container.insightInvalidations,
-                    liveAccounts = container.remoteAccount.server.map { it?.let(LiveIdentity::from) },
+                    accounts = container.remoteAccount.server.map(StatsAccount::from),
                     settings = container.appSettings,
                     remoteStats = container.remoteStatsRefresh,
                 )
@@ -860,6 +903,37 @@ class ReadingStatsViewModel(
  * a headline and the rows under it cannot differ by the seconds one of
  * them threw away.
  */
+/**
+ * The account behind the stats screens, and whether its figures are the
+ * only ones shown (ADR-0060).
+ *
+ * Both are read off the same server row, so a screen can never see a new
+ * account paired with the old one's answer to whether it can be asked.
+ */
+data class StatsAccount(val identity: LiveIdentity?, val serverOnly: Boolean) {
+    companion object {
+        val NONE = StatsAccount(null, serverOnly = false)
+
+        fun from(server: RemoteServer?): StatsAccount = StatsAccount(
+            identity = server?.let(LiveIdentity::from),
+            serverOnly = server != null && server.kind == ServerKind.LISEUR_SYNC &&
+                server.credentials != null && server.canReadInsights,
+        )
+    }
+}
+
+private fun sessionSpans(sessions: List<ReadingSession>): List<SessionSpan> = sessions.map {
+    SessionSpan(
+        bookUrl = it.bookUrl,
+        startedAt = it.startedAt,
+        durationMs = it.durationMs,
+        lastReadAt = it.endedAt ?: it.lastCheckpointAt,
+        uploaded = it.uploadedAt != null,
+        startProgression = it.startProgression,
+        endProgression = it.endProgression,
+    )
+}
+
 internal fun Double.minutesAsMillis(): Long =
     if (!isFinite() || this < 0) 0 else (this * 60_000).roundToLong()
 

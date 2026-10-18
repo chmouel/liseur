@@ -417,13 +417,16 @@ for another reason will not show the prompt.
 ### Why the reading stats say "this device only"
 
 The dashboard combines every device that has signed in to liseur-sync,
-but only when the merge can be *proved* exact. When it cannot, the
-screen silently shows what this device counted and says so. That is
-deliberate: ADR-0021 would rather report a smaller true number than a
-plausible wrong one, and a reader is never shown an error about it.
+but only when the merge can be *proved* exact. ADR-0021 would rather
+report a smaller true number than a plausible wrong one. Since ADR-0060,
+what happens when it cannot depends on the account. With a liseur-sync
+account whose token can read statistics, the screen shows an error with
+a Retry button and never this device's figures. Without one (no
+account, another server kind, or a token missing the read-insights
+scope), the screen shows what this device counted and says so.
 
-The reason is written to the log instead, so the answer is one command
-away:
+Either way the reason is written to the log, so the answer is one
+command away:
 
 ```bash
 adb logcat -s liseur-sync-insights

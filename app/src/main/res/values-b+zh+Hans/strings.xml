@@ -969,6 +969,7 @@
     <string name="reading_stats_pace_value">%1$d%%/h</string>
     <string name="reading_stats_heatmap_day">%1$s（%2$s）</string>
     <string name="reading_stats_heatmap_empty_day">%1$s 没有阅读记录</string>
+    <string name="reading_stats_unavailable">无法从 liseur-sync 加载您的阅读统计。</string>
     <string name="reading_stats_empty_range">此时间范围内没有阅读记录。试试更长的时间范围。</string>
     <string name="duration_minutes">%1$d 分钟</string>
     <string name="duration_hours">%1$d 小时</string>

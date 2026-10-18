@@ -99,6 +99,9 @@ class LiseurSyncSnapshots(
         through: LocalTime = LocalTime.MAX,
         compare: Boolean = true,
         from: LocalDate? = range.startDate(today, weekStart),
+        // The dashboard asks again when the reading moved under a reply,
+        // so it takes the reply and judges it itself; see [movedOn].
+        requireCurrent: Boolean = true,
     ): CompleteStatsSnapshot? = withContext(Dispatchers.Default) {
         optional {
             val account = context.account
@@ -316,9 +319,12 @@ class LiseurSyncSnapshots(
                     days = dense, overlapDays = overlapDays, comparison = acceptedComparison,
                 ),
             )
-            result.takeIf { isCurrent(it) } ?: refuse("the reading moved while the server was answering")
+            if (!requireCurrent) return@optional result
+            result.takeIf { isCurrent(it) } ?: movedOn()
         }
     }
+
+    internal fun <T> movedOn(): T? = refuse("the reading moved while the server was answering")
 
     internal suspend fun isCurrent(snapshot: CompleteStatsSnapshot): Boolean = withContext(Dispatchers.Default) {
         sameAccount(snapshot.context.account) &&
@@ -342,11 +348,12 @@ class LiseurSyncSnapshots(
     /**
      * Gives up on the proof, and says why.
      *
-     * The screen is unchanged by this — it shows what this device counted
-     * and says so — but a refusal that named nothing left the one reader
-     * who wanted to know why looking at a blank. Every one of these is a
-     * fact about evidence rather than an error, so it goes to the log and
-     * nowhere near the reader.
+     * The screen shows what this device counted and says so, or, with a
+     * liseur-sync account that can read statistics, that it could not
+     * load them (ADR-0060). Either way a refusal that named nothing left
+     * the one reader who wanted to know why looking at a blank. Every one
+     * of these is a fact about evidence rather than an error, so the
+     * reason goes to the log.
      */
     private fun <T> refuse(reason: String): T? {
         Log.i(TAG, "Statistics count this device alone: $reason")

@@ -436,6 +436,7 @@ private fun LiseurApp(
                             },
                             onBack = back,
                             onSelectRange = model::selectRange,
+                            onRetry = model::refreshServerInsights,
                         )
                     }
 
@@ -460,6 +461,7 @@ private fun LiseurApp(
                                 onBack = back,
                                 serverInsights = serverInsights,
                                 range = statsRange,
+                                onRetry = model::refreshServerInsights,
                             )
                         }
                     }

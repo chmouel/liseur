@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Remove
@@ -42,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -108,6 +110,7 @@ fun ReadingStatsScreen(
     onOpenBook: (BookReadingStats) -> Unit,
     onBack: () -> Unit,
     onSelectRange: (StatsRange) -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -133,6 +136,15 @@ fun ReadingStatsScreen(
             ) {
                 BusyIndicator()
             }
+            return@Scaffold
+        }
+        if (state is ReadingStatsUiState.Unavailable) {
+            StatsUnavailable(
+                onRetry = onRetry,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            )
             return@Scaffold
         }
         val ready = state as ReadingStatsUiState.Ready
@@ -837,6 +849,39 @@ private fun EmptyStats(modifier: Modifier = Modifier, narrowedByRange: Boolean =
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+        }
+    }
+}
+
+/**
+ * The liseur-sync account could not answer. Nothing is drawn in its
+ * place: this device's own figures are smaller, and shown here they
+ * would read as the whole story (ADR-0060).
+ */
+@Composable
+internal fun StatsUnavailable(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.CloudOff,
+                contentDescription = null,
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = stringResource(R.string.reading_stats_unavailable),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onRetry) {
+                Text(stringResource(R.string.catalog_retry))
+            }
         }
     }
 }

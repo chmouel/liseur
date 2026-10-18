@@ -11,7 +11,6 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.remote.ServerKind
-import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
@@ -21,6 +20,7 @@ import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.domain.unionMinutes
 import com.chmouel.liseur.ui.stats.ReadingStatsUiState
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
+import com.chmouel.liseur.ui.stats.StatsAccount
 import com.chmouel.liseur.ui.stats.StatsProvenance
 import java.net.InetAddress
 import java.time.DayOfWeek
@@ -33,7 +33,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -717,8 +720,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_MONTH,
                 zone = { ZoneId.of("UTC") }, now = { instant.atZone(it) },
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
             )
             models.put("snapshot", model)
             model.refreshServerInsights()
@@ -729,8 +731,9 @@ class LiseurSyncSnapshotsTest {
             assertEquals(120 * 60_000L, ready.headline.totalMs)
             assertEquals(120 * 60_000L, ready.stats.books.single().totalMs)
             assertEquals(120 * 60_000L, ready.stats.recent.last().totalMs)
-            assertEquals(ComparisonDirection.LESS, ready.headline.comparison!!.direction)
-            assertEquals(100, ready.headline.comparison!!.percent)
+            // The server offers no comparison, and one made from this
+            // device alone is not put beside all devices' figures.
+            assertNull(ready.headline.comparison)
             transmit(id)
             db.readingSessionDao().markUploaded(listOf(id), 99)
             db.bookDao().upsert(Book(
@@ -743,12 +746,14 @@ class LiseurSyncSnapshotsTest {
             assertEquals(ready.headline, afterUpload.headline)
             assertEquals(ready.snapshotId, afterUpload.snapshotId)
             assertEquals(StatsProvenance.ALL_DEVICES, afterUpload.provenance)
+            // A sitting recorded after the answer leaves it whole until the
+            // next refresh asks again with that sitting among the candidates.
             sitting()
-            val fallback = model.state.first {
-                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.THIS_DEVICE
+            model.refreshServerInsights()
+            val refreshed = model.state.first {
+                it is ReadingStatsUiState.Ready && it.snapshotId != ready.snapshotId
             } as ReadingStatsUiState.Ready
-            assertEquals(today.minusDays(1), fallback.today)
-            assertNull(fallback.snapshotId)
+            assertEquals(StatsProvenance.ALL_DEVICES, refreshed.provenance)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -796,8 +801,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_MONTH, zone = { zone },
                 now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
             )
             models.put("owned", model)
             model.refreshServerInsights()
@@ -808,6 +812,107 @@ class LiseurSyncSnapshotsTest {
             return Instant.ofEpochMilli(book.firstReadAt!!).atZone(zone).toLocalDate()
         } finally {
             models.clear()
+        }
+    }
+
+    /**
+     * With liseur-sync able to answer, this device's own figures are
+     * never shown: they are smaller, and on screen they would read as the
+     * whole story. Unreachable is an error with a retry, and a refresh
+     * that fails later keeps the answer already shown.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `server mode shows the server or an error and never this device`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        try {
+            sitting()
+            db.remoteServerDao().upsert(account.copy(canReadInsights = true))
+            capabilitiesCode = 500
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH, zone = { zone },
+                now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
+            )
+            models.put("server", model)
+            val seen = CopyOnWriteArrayList<ReadingStatsUiState>()
+            backgroundScope.launch { model.state.toList(seen) }
+
+            model.refreshServerInsights()
+            model.state.first { it == ReadingStatsUiState.Unavailable }
+
+            capabilitiesCode = 200
+            model.refreshServerInsights()
+            val ready = model.state.first { it is ReadingStatsUiState.Ready } as ReadingStatsUiState.Ready
+            assertEquals(StatsProvenance.ALL_DEVICES, ready.provenance)
+
+            capabilitiesCode = 500
+            val asked = server.requestCount
+            model.refreshServerInsights()
+            withContext(Dispatchers.Default) {
+                while (server.requestCount == asked) delay(10)
+                delay(200)
+            }
+            assertEquals(ready, model.state.value)
+
+            model.selectRange(StatsRange.THIS_WEEK)
+            model.state.first { it == ReadingStatsUiState.Unavailable }
+
+            assertTrue(seen.none { it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.THIS_DEVICE })
+
+            // Refused the scope: this device's figures, not the answer
+            // already on screen for this range.
+            capabilitiesCode = 200
+            model.refreshServerInsights()
+            val shown = model.state.first { it is ReadingStatsUiState.Ready } as ReadingStatsUiState.Ready
+            assertEquals(StatsProvenance.ALL_DEVICES, shown.provenance)
+            val estimate = model.serverEstimateFor("book")
+            backgroundScope.launch { estimate.collect {} }
+            estimate.first { it != null }
+            capabilitiesCode = 403
+            model.refreshServerInsights()
+            val local = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.THIS_DEVICE
+            } as ReadingStatsUiState.Ready
+            assertNull(local.snapshotId)
+            estimate.first { it == null }
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /** An upload landing while the server answers is asked about again, not shown as an error. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a reply the reading moved under is asked for again`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        try {
+            val id = sitting()
+            db.remoteServerDao().upsert(account.copy(canReadInsights = true))
+            var moved = false
+            duringRequest = { if (!moved) { moved = true; transmit(id) } }
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH, zone = { zone },
+                now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
+            )
+            models.put("moved", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready || it == ReadingStatsUiState.Unavailable
+            }
+            assertEquals(StatsProvenance.ALL_DEVICES, (ready as ReadingStatsUiState.Ready).provenance)
+            assertEquals(2, requests.size)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
         }
     }
 
@@ -836,8 +941,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_MONTH, zone = { zone },
                 now = { today.atTime(1, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
             )
             models.put("owned", model)
             model.refreshServerInsights()
@@ -867,8 +971,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_MONTH, zone = { zone },
                 now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
             )
             models.put("comparison", model)
             model.refreshServerInsights()
@@ -898,8 +1001,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_WEEK, zone = { zone },
                 now = { today.atTime(13, 0).atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
                 remoteStats = RemoteStatsRefresh(client(), db.readingSessionDao(), cache, now = { today.atTime(13, 0).atZone(it) }),
             )
             models.put("widgets", model)
@@ -943,8 +1045,7 @@ class LiseurSyncSnapshotsTest {
                 initialRange = StatsRange.THIS_MONTH, zone = { zone }, now = { today.atStartOfDay(it) },
                 initialWeekStart = DayOfWeek.MONDAY,
                 snapshotSource = client(),
-                aliases = db.workIdentityDao().observeAliases(),
-                liveAccounts = db.remoteServerDao().observe().map { it?.let(LiveIdentity::from) },
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
             )
             models.put("generation", model)
             model.refreshServerInsights()
