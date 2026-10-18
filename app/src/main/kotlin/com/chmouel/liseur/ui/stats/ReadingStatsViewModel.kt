@@ -68,8 +68,14 @@ import kotlinx.coroutines.launch
 sealed interface ReadingStatsUiState {
     data object Loading : ReadingStatsUiState
 
-    /** liseur-sync is set up and did not answer, so there is nothing to show (ADR-0060). */
-    data object Unavailable : ReadingStatsUiState
+    /**
+     * liseur-sync is set up and did not answer, so there is nothing to show (ADR-0060).
+     *
+     * Carries the span asked about so the reader can still pick another:
+     * one the server cannot answer, such as all time, would otherwise
+     * leave Retry asking the same question forever.
+     */
+    data class Unavailable(val range: StatsRange) : ReadingStatsUiState
     data class Ready(
         val stats: ReadingStats,
         val headline: StatsHeadline,
@@ -581,7 +587,7 @@ class ReadingStatsViewModel(
         }
         if (serverOnly && united == null) {
             return@combine if (snapshot != null || failed == window.asked()) {
-                ReadingStatsUiState.Unavailable
+                ReadingStatsUiState.Unavailable(window.range)
             } else {
                 ReadingStatsUiState.Loading
             }
@@ -641,7 +647,7 @@ class ReadingStatsViewModel(
         state.map { current ->
             when (current) {
                 ReadingStatsUiState.Loading -> BookReadingStatsUiState.Loading
-                ReadingStatsUiState.Unavailable -> BookReadingStatsUiState.Unavailable
+                is ReadingStatsUiState.Unavailable -> BookReadingStatsUiState.Unavailable
                 is ReadingStatsUiState.Ready -> current.stats.books
                     .firstOrNull { it.bookUrl == bookUrl }
                     ?.let(BookReadingStatsUiState::Ready)

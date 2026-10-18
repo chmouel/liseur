@@ -139,12 +139,29 @@ fun ReadingStatsScreen(
             return@Scaffold
         }
         if (state is ReadingStatsUiState.Unavailable) {
-            StatsUnavailable(
-                onRetry = onRetry,
-                modifier = Modifier
+            // The chips stay: the span itself may be what the server
+            // cannot answer, and Retry alone would ask it again.
+            Box(
+                Modifier
                     .fillMaxSize()
                     .padding(padding),
-            )
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Column(
+                    Modifier
+                        .widthIn(max = contentWidthCap(windowWidth()))
+                        .fillMaxSize()
+                        .padding(start = 20.dp, end = 20.dp, top = 4.dp),
+                ) {
+                    RangeChips(state.range, onSelectRange)
+                    StatsUnavailable(
+                        onRetry = onRetry,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                    )
+                }
+            }
             return@Scaffold
         }
         val ready = state as ReadingStatsUiState.Ready

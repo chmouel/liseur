@@ -842,7 +842,7 @@ class LiseurSyncSnapshotsTest {
             backgroundScope.launch { model.state.toList(seen) }
 
             model.refreshServerInsights()
-            model.state.first { it == ReadingStatsUiState.Unavailable }
+            model.state.first { it is ReadingStatsUiState.Unavailable }
 
             capabilitiesCode = 200
             model.refreshServerInsights()
@@ -859,7 +859,7 @@ class LiseurSyncSnapshotsTest {
             assertEquals(ready, model.state.value)
 
             model.selectRange(StatsRange.THIS_WEEK)
-            model.state.first { it == ReadingStatsUiState.Unavailable }
+            model.state.first { it == ReadingStatsUiState.Unavailable(StatsRange.THIS_WEEK) }
 
             assertTrue(seen.none { it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.THIS_DEVICE })
 
@@ -906,7 +906,7 @@ class LiseurSyncSnapshotsTest {
             models.put("moved", model)
             model.refreshServerInsights()
             val ready = model.state.first {
-                it is ReadingStatsUiState.Ready || it == ReadingStatsUiState.Unavailable
+                it is ReadingStatsUiState.Ready || it is ReadingStatsUiState.Unavailable
             }
             assertEquals(StatsProvenance.ALL_DEVICES, (ready as ReadingStatsUiState.Ready).provenance)
             assertEquals(2, requests.size)
