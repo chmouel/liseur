@@ -127,6 +127,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
@@ -163,6 +164,7 @@ import com.chmouel.liseur.ui.libraryBarHeight
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
 import kotlinx.coroutines.launch
+import com.chmouel.liseur.domain.searchMatchRanges
 import com.chmouel.liseur.domain.seriesKey
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -234,6 +236,10 @@ fun LibraryScreen(
     // bar should follow the size of the tile it is holding.
     val wide = tileHeight >= 64.dp
     val gridState = rememberLazyGridState()
+    // Results get a grid of their own, so they always start at the top
+    // and closing search finds the shelf scrolled where it was left.
+    val searchGridState = rememberLazyGridState()
+    LaunchedEffect(state.searchQuery) { searchGridState.scrollToItem(0) }
     val snackbarHost = remember { SnackbarHostState() }
     val context = LocalContext.current
     val downloading = stringResource(R.string.download_in_progress)
@@ -737,6 +743,37 @@ fun LibraryScreen(
                 when {
                     state.loading -> LibrarySkeleton(fillAboveBar)
 
+                    // Ahead of every shelf state: a search looks past the
+                    // filters and the archive, so the shelf can be empty
+                    // (everything finished, everything archived, a filter
+                    // that matches nothing) while the search is not.
+                    state.searchResults?.isEmpty() == true -> NothingMatched(
+                        searching = true,
+                        // Only the query: the filters played no part in
+                        // finding nothing, so clearing them would lose
+                        // the reader's shelf for no reason.
+                        onClear = {
+                            searchField = TextFieldValue()
+                            onSearchQueryChange("")
+                        },
+                        modifier = fillAboveBar,
+                    )
+
+                    state.searchResults != null -> BookGrid(
+                        state = state,
+                        gridState = searchGridState,
+                        onSetSort = onSetSort,
+                        onToggleSortDirection = onToggleSortDirection,
+                        onToggleFilter = onToggleFilter,
+                        onSetGroupBySeries = onSetGroupBySeries,
+                        onClearFilters = onClearFilters,
+                        onBookSelected = openShelfBook,
+                        onBookLongPress = { sheetBook = it },
+                        onSeriesSelected = onSeriesSelected,
+                        bottomInset = bottomInset,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                     // Everything on the shelf has been archived. Not an
                     // empty library, and saying so would be alarming — the
                     // books are all still here, behind one tap.
@@ -791,11 +828,8 @@ fun LibraryScreen(
                     // add a folder here would be answering a question nobody
                     // asked, and would suggest the shelf had been lost.
                     state.books.isEmpty() -> NothingMatched(
-                        searching = state.isSearchActive && state.searchQuery.isNotBlank(),
-                        onClear = {
-                            onSearchQueryChange("")
-                            onClearFilters()
-                        },
+                        searching = false,
+                        onClear = onClearFilters,
                         modifier = fillAboveBar,
                     )
 
@@ -1397,6 +1431,7 @@ private fun BookGrid(
         // and pushing the real answers off the screen. Nor is it an
         // archived book, so in the archive it is a book from somewhere
         // else entirely.
+        val results = state.searchResults
         state.continueReading
             ?.takeIf { !state.isSearchActive && !state.filters.archived }
             ?.let { recent ->
@@ -1406,6 +1441,43 @@ private fun BookGrid(
                     onClick = { onBookSelected(recent.book) },
                 )
             }
+        }
+        if (results != null) {
+            // In the slot the filter row sits in, at its height, so the
+            // covers do not jump on the first letter typed. The filters
+            // and the sort would be lying here: a search ignores both.
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Box(
+                    contentAlignment = Alignment.CenterStart,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 40.dp)
+                        .padding(horizontal = 4.dp),
+                ) {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.library_book_count,
+                            results.size,
+                            results.size,
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            // Always the book itself, never its series pile: a search
+            // is for reaching a book, and a pile is one tap short of it.
+            items(results, key = { it.id }) { book ->
+                BookCard(
+                    book = book,
+                    progress = state.downloads[book.url],
+                    inASeries = seriesKey(book.seriesName) in state.shownSeries,
+                    highlight = state.searchQuery,
+                    onClick = { onBookSelected(book) },
+                    onLongClick = { onBookLongPress(book) },
+                )
+            }
+            return@LazyVerticalGrid
         }
         item(span = { GridItemSpan(maxLineSpan) }) {
             // Filters and sort share one line: they answer the same
@@ -1560,6 +1632,8 @@ private fun BookCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** What was searched for, to embolden where it matched; null on the shelf. */
+    highlight: String? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     // The whole card is one thing to a screen reader: the cover, the badges
@@ -1601,6 +1675,11 @@ private fun BookCard(
             if (book.finished && progress == null) {
                 FinishedBadge(Modifier.align(Alignment.BottomEnd).padding(6.dp))
             }
+            // Only a search shows an archived book among others, and
+            // the corner left free by the rest says so.
+            if (book.archived && progress == null) {
+                ArchivedBadge(Modifier.align(Alignment.BottomStart).padding(6.dp))
+            }
             if (progress == null && inASeries) {
                 SeriesIndexRibbon(
                     index = book.seriesIndex,
@@ -1614,7 +1693,7 @@ private fun BookCard(
                 .heightIn(min = 56.dp),
         ) {
             Text(
-                text = book.displayTitle,
+                text = searchHighlighted(book.displayTitle, highlight),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 lineHeight = 18.sp,
@@ -1624,26 +1703,43 @@ private fun BookCard(
             book.displayAuthor?.let {
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = it,
+                    text = searchHighlighted(it, highlight),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (inASeries) SeriesLine(book, Modifier.padding(top = 2.dp))
+            if (inASeries) SeriesLine(book, Modifier.padding(top = 2.dp), highlight)
         }
     }
 }
 
+/**
+ * [text] with what [query] matched in bold, in the accent colour where
+ * the screen has one, or plain when nothing is being searched for.
+ */
+@Composable
+internal fun searchHighlighted(text: String, query: String?): AnnotatedString {
+    val eInk = LocalEInk.current
+    val color = if (eInk) Color.Unspecified else MaterialTheme.colorScheme.primary
+    val matches = remember(text, query) {
+        if (query.isNullOrBlank()) emptyList() else searchMatchRanges(text, query)
+    }
+    return highlighted(text, matches, color)
+}
+
 /** What a screen reader should say about a book beyond its title and author. */
 @Composable
-private fun bookStateDescription(book: Book, progress: DownloadProgress?): String = when {
-    progress?.queued == true -> stringResource(R.string.state_download_queued)
-    progress != null -> stringResource(R.string.state_downloading)
-    book.finished -> stringResource(R.string.state_finished)
-    book.downloadState != DownloadState.DOWNLOADED -> stringResource(R.string.state_on_server)
-    else -> stringResource(R.string.state_on_device)
+private fun bookStateDescription(book: Book, progress: DownloadProgress?): String {
+    val state = when {
+        progress?.queued == true -> stringResource(R.string.state_download_queued)
+        progress != null -> stringResource(R.string.state_downloading)
+        book.finished -> stringResource(R.string.state_finished)
+        book.downloadState != DownloadState.DOWNLOADED -> stringResource(R.string.state_on_server)
+        else -> stringResource(R.string.state_on_device)
+    }
+    return if (book.archived) "$state, ${stringResource(R.string.state_archived)}" else state
 }
 
 /**
@@ -1992,6 +2088,33 @@ internal fun OnServerBadge(modifier: Modifier = Modifier) {
             Icon(
                 imageVector = Icons.Outlined.CloudDownload,
                 contentDescription = stringResource(R.string.book_on_server),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Marks an archived book among books that are not, which only a search
+ * does. Neutral rather than in the finished tick's colour: an archived
+ * book is usually finished too, and two matching dots across the bottom
+ * of a cover would read as one state said twice. The card's state
+ * description already says it, so the icon says nothing of its own.
+ */
+@Composable
+private fun ArchivedBadge(modifier: Modifier = Modifier) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        tonalElevation = 4.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+        modifier = modifier.size(28.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.Archive,
+                contentDescription = null,
                 modifier = Modifier.size(16.dp),
             )
         }

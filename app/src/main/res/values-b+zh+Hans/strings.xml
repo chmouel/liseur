@@ -890,6 +890,7 @@
     <string name="catalog_partial_dismiss">忽略</string>
     <string name="state_finished">已读完</string>
     <string name="state_on_server">在服务器上</string>
+    <string name="state_archived">已归档</string>
     <string name="state_on_device">在本设备上</string>
     <string name="filter_archived">已归档</string>
     <string name="filter_archived_only">仅已归档图书</string>

@@ -63,7 +63,6 @@ import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.SeriesShelf
-import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 
@@ -75,15 +74,16 @@ import com.chmouel.liseur.ui.LocalEInk
  * where every card shouts two lines is a shelf nobody can scan.
  */
 @Composable
-internal fun SeriesLine(book: Book, modifier: Modifier = Modifier) {
+internal fun SeriesLine(book: Book, modifier: Modifier = Modifier, highlight: String? = null) {
     val series = book.seriesName?.takeIf { it.isNotBlank() } ?: return
     val index = seriesIndexLabel(book.seriesIndex)
+    val line = if (index == null) {
+        series
+    } else {
+        stringResource(R.string.series_position, series, index)
+    }
     Text(
-        text = if (index == null) {
-            series
-        } else {
-            stringResource(R.string.series_position, series, index)
-        },
+        text = searchHighlighted(line, highlight),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,

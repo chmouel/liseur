@@ -206,60 +206,7 @@ private fun tierOf(
     else -> null
 }
 
-/** Whether the query starts one of the words of the name. */
-private fun startsAWord(foldedName: String, foldedQuery: String): Boolean {
-    var at = foldedName.indexOf(foldedQuery)
-    while (at > 0) {
-        if (!foldedName[at - 1].isLetterOrDigit()) return true
-        at = foldedName.indexOf(foldedQuery, at + 1)
-    }
-    return false
-}
-
 private data class Scored(val ranked: RankedSeries, val tier: Int)
-
-/**
- * A folded name that still knows where each of its characters came from.
- *
- * Folding a whole string at once and then using the offsets it hands
- * back is a bug waiting for its first accent: dropping a combining mark
- * shortens the text, so *Éloge* folded says the match is at 0..4 and the
- * name says that is *Éloge* minus its last letter. Folding a character
- * at a time and keeping the source index of each one costs nothing at
- * this size and cannot drift.
- */
-private class FoldedText(val text: String, private val source: IntArray, private val length: Int) {
-    /** Where each query word landed, in the *original* name's indices. */
-    fun rangesOf(words: List<String>): List<IntRange> {
-        val ranges = mutableListOf<IntRange>()
-        words.forEach { word ->
-            var at = text.indexOf(word)
-            while (at >= 0) {
-                val start = source[at]
-                val endExclusive = if (at + word.length < source.size) {
-                    source[at + word.length]
-                } else {
-                    length
-                }
-                if (endExclusive > start) ranges += start until endExclusive
-                at = text.indexOf(word, at + word.length)
-            }
-        }
-        return ranges.sortedBy { it.first }
-    }
-}
-
-/** Folds a name the way the library search does, keeping the offsets. */
-private fun foldTracking(name: String): FoldedText {
-    val folded = StringBuilder(name.length)
-    val source = mutableListOf<Int>()
-    name.forEachIndexed { index, char ->
-        val piece = char.toString().foldForSearch()
-        folded.append(piece)
-        repeat(piece.length) { source += index }
-    }
-    return FoldedText(folded.toString(), source.toIntArray(), name.length)
-}
 
 private val byName: Comparator<SeriesPickOption> = compareBy { sortKey(it.name) }
 

@@ -928,6 +928,7 @@
     <string name="catalog_partial_dismiss">Dismiss</string>
     <string name="state_finished">Finished</string>
     <string name="state_on_server">On the server</string>
+    <string name="state_archived">Archived</string>
     <string name="state_on_device">On this device</string>
     <string name="filter_archived">Archived</string>
     <string name="filter_archived_only">Only archived books</string>

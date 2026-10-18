@@ -899,6 +899,7 @@
     <string name="catalog_partial_dismiss">Schließen</string>
     <string name="state_finished">Beendet</string>
     <string name="state_on_server">Auf dem Server</string>
+    <string name="state_archived">Archiviert</string>
     <string name="state_on_device">Auf diesem Gerät</string>
     <string name="filter_archived">Archiviert</string>
     <string name="filter_archived_only">Nur archivierte Bücher</string>

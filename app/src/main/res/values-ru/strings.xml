@@ -949,6 +949,7 @@
     <string name="catalog_partial_dismiss">Закрыть</string>
     <string name="state_finished">Прочитано</string>
     <string name="state_on_server">На сервере</string>
+    <string name="state_archived">В архиве</string>
     <string name="state_on_device">На этом устройстве</string>
     <string name="filter_archived">В архиве</string>
     <string name="filter_archived_only">Только архивные</string>

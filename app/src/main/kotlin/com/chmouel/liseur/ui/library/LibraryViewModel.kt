@@ -45,13 +45,12 @@ import com.chmouel.liseur.domain.SeriesPickOption
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.asPickOption
 import com.chmouel.liseur.domain.groupedIntoSeries
-import com.chmouel.liseur.domain.matchesLibrarySearch
 import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.mixedShelf
+import com.chmouel.liseur.domain.searchLibrary
 import com.chmouel.liseur.domain.movedItem
 import com.chmouel.liseur.domain.renumbered
 import com.chmouel.liseur.domain.seriesKey
-import com.chmouel.liseur.domain.survivesLibrarySearch
 import com.chmouel.liseur.domain.worthShowing
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.sync.PositionSyncCoordinator
@@ -86,8 +85,6 @@ import kotlinx.coroutines.flow.update
 import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
-import com.chmouel.liseur.domain.displayAuthor
-import com.chmouel.liseur.domain.displayTitle
 import java.io.IOException
 import kotlinx.coroutines.launch
 
@@ -248,6 +245,13 @@ data class LibraryUiState(
     val sort: LibrarySort = LibrarySort.Default,
     val sortReversed: Boolean = false,
     val searchQuery: String = "",
+    /**
+     * What the search found, best match first, or null when nothing is
+     * being searched for. Every book but the hidden ones is looked at,
+     * whatever the filters say, and a volume is always itself rather
+     * than its series pile.
+     */
+    val searchResults: List<Book>? = null,
     val filters: LibraryFilters = LibraryFilters.None,
     val isSearchActive: Boolean = false,
     /**
@@ -715,34 +719,19 @@ class LibraryViewModel(
 
             val filteredBooks = sortedBooks
                 .filter { filters.accepts(it, progressions[it.url]) }
-                .filter { book ->
-                    survivesLibrarySearch(
-                        query,
-                        searchActive,
-                        book.displayTitle,
-                        book.displayAuthor,
-                        book.seriesName,
-                        book.seriesIndex,
-                    )
-                }
 
-            // A series answers to its own name and to the names of the
-            // books in it, so searching for a title still finds the
-            // series that title is part of.
-            val filteredSeries = shelves.filter { shelf ->
-                !searchActive || matchesLibrarySearch(query, shelf.name, shelf.author) ||
-                    shelf.volumes.any {
-                        matchesLibrarySearch(
-                            query,
-                            it.book.displayTitle,
-                            it.book.displayAuthor,
-                            shelf.name,
-                            it.book.seriesIndex,
-                        )
-                    }
+            // A search is its own list rather than a narrowing of the
+            // shelf: it looks past the filters and the series piles, so
+            // the shelf underneath is left exactly as it was for when
+            // the bar closes. A query nobody can see, or one with
+            // nothing in it, is not a search.
+            val searchResults = if (searchActive && query.isNotBlank()) {
+                searchLibrary(query, books)
+            } else {
+                null
             }
 
-            val arrangedSeries = filteredSeries.arrangedBy(
+            val arrangedSeries = shelves.arrangedBy(
                 settings.librarySort,
                 settings.librarySortReversed,
                 readAt,
@@ -810,6 +799,7 @@ class LibraryViewModel(
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
                 searchQuery = query,
+                searchResults = searchResults,
                 filters = filters,
                 isSearchActive = searchActive,
                 libraryIsEmpty = books.none { !it.archived },

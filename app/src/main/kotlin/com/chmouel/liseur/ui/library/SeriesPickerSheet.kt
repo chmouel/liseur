@@ -803,7 +803,7 @@ private fun letterJumps(sections: List<PickerSection>): List<Pair<String, Int>> 
 
 /** The name, with what the search matched picked out of it. */
 @Composable
-private fun highlighted(
+internal fun highlighted(
     name: String,
     matches: List<IntRange>,
     matchColor: Color,
