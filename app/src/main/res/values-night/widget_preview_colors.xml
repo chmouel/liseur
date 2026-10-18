@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="widget_preview_card">#362F26</color>
-    <color name="widget_preview_rule">#4A4238</color>
-    <color name="widget_preview_ink">#EBE1D0</color>
-    <color name="widget_preview_fill">#E5A87C</color>
-    <color name="widget_preview_past">#7C5F48</color>
-    <color name="widget_preview_cover">#4A3324</color>
+    <color name="widget_preview_card">#2C3441</color>
+    <color name="widget_preview_rule">#3F4856</color>
+    <color name="widget_preview_ink">#E3E8F0</color>
+    <color name="widget_preview_fill">#EE9F82</color>
+    <color name="widget_preview_past">#7A5F5B</color>
+    <color name="widget_preview_cover">#8E4A33</color>
 </resources>

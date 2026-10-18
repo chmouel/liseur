@@ -1,10 +1,10 @@
 <resources>
     <style name="Theme.Liseur" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/ink</item>
+        <item name="android:windowBackground">@color/night</item>
     </style>
 
     <style name="Theme.Liseur.Starting" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/ink</item>
+        <item name="windowSplashScreenBackground">@color/night</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
         <!-- The mark was drawn for its cream field, so give it that disc on the
              splash too rather than letting it sit on a dark window. -->

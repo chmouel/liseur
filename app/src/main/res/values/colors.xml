@@ -1,6 +1,8 @@
 <resources>
     <color name="paper">#FFFFFF</color>
-    <color name="ink">#15110C</color>
+    <!-- NightSurface in ui/theme/Color.kt, so a dark launch opens on the
+         colour the app then draws. -->
+    <color name="night">#11161F</color>
 
     <!-- The field the mark is drawn on, behind the launcher and splash
          artwork.  Those two show the cream mark whatever the system theme

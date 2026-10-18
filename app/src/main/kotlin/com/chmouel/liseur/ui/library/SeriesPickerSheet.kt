@@ -468,7 +468,11 @@ private fun SeriesOptionRow(ranked: RankedSeries, selected: Boolean, onClick: ()
             Text(
                 text = listOfNotNull(option.author, count).joinToString(separator),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (selected && !eInk) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

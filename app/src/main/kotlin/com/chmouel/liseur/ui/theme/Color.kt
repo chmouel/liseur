@@ -47,22 +47,39 @@ val LeatherInk = Color(0xFF4A2711)
 val Teal = Color(0xFF3A5F5C)
 val TealLight = Color(0xFFBDECE6)
 
-// Night is the same room with the lights off: the same warm neutrals
-// walked down rather than a second, cooler palette.
-val NightSurface = Color(0xFF17130E)
-val NightSurfaceLowest = Color(0xFF100D09)
-val NightSurfaceLow = Color(0xFF1B1712)
-val NightSurfaceContainer = Color(0xFF201B15)
-val NightSurfaceHigh = Color(0xFF2B251D)
-val NightSurfaceHighest = Color(0xFF362F26)
-val NightSurfaceBright = Color(0xFF3D362C)
-val NightVariant = Color(0xFF443C31)
-val NightText = Color(0xFFEBE1D0)
-val NightTextSoft = Color(0xFFCFC3B1)
-val NightRule = Color(0xFF4A4238)
-val NightRuleStrong = Color(0xFF988D7C)
-val LeatherNight = Color(0xFFE5A87C)
-val LeatherNightDeep = Color(0xFF4A3324)
+// Night is the room in the library bar's night picture, so that picture
+// reads as a window into the app rather than a navy sticker on it. It
+// used to be the day palette's warm neutrals walked down, and brown is
+// exactly what the painted navy wall clashed with.
+//
+// The wall gives the surfaces, muted and kept to one hue so cards do not
+// drift purple or teal as they rise. The sofa gives the raised ones, the
+// moon in the frame the text, and the cushion the one warm accent: a cool
+// room with a single warm thing in it, as the picture has.
+val NightSurface = Color(0xFF11161F)
+val NightSurfaceLowest = Color(0xFF0B0F16)
+val NightSurfaceLow = Color(0xFF141A24)
+val NightSurfaceContainer = Color(0xFF19202B)
+val NightSurfaceHigh = Color(0xFF222A36)
+val NightSurfaceHighest = Color(0xFF2C3441)
+val NightSurfaceBright = Color(0xFF343D4B)
+val NightVariant = Color(0xFF39424F)
+val NightText = Color(0xFFE3E8F0)
+val NightTextSoft = Color(0xFFA9B3C2)
+val NightRule = Color(0xFF3F4856)
+val NightRuleStrong = Color(0xFF8A93A3)
+val LeatherNight = Color(0xFFEE9F82)
+val LeatherNightContainer = Color(0xFF8E4A33)
+
+// The cushion again, as the lamp catches it: the accent lifted just
+// enough to stay readable on the slate below.
+val LeatherLamplight = Color(0xFFF4B09A)
+
+// Icon discs and the selected chip or segment. Lighter than the sofa it
+// comes from on purpose: the default card is NightSurfaceHighest, and a
+// selected filter chip has no border, so anything closer to the card
+// would leave the chip with no shape.
+val SlateNight = Color(0xFF384963)
 val TealNight = Color(0xFFA2D3CD)
 val TealNightDeep = Color(0xFF2A4744)
 

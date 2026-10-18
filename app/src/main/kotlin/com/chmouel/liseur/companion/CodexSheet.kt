@@ -328,6 +328,7 @@ private fun LazyListScope.mentions(
                     listOfNotNull(detail.term, detail.other),
                     SpanStyle(
                         background = MaterialTheme.colorScheme.secondaryContainer,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
                         fontWeight = FontWeight.SemiBold,
                     ),
                 ),

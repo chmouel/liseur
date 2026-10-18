@@ -11,8 +11,9 @@ import com.chmouel.liseur.ui.theme.Leather
 import com.chmouel.liseur.ui.theme.LeatherDark
 import com.chmouel.liseur.ui.theme.LeatherInk
 import com.chmouel.liseur.ui.theme.LeatherLight
+import com.chmouel.liseur.ui.theme.LeatherLamplight
 import com.chmouel.liseur.ui.theme.LeatherNight
-import com.chmouel.liseur.ui.theme.LeatherNightDeep
+import com.chmouel.liseur.ui.theme.LeatherNightContainer
 import com.chmouel.liseur.ui.theme.LeatherSoft
 import com.chmouel.liseur.ui.theme.LeatherWash
 import com.chmouel.liseur.ui.theme.NightRule
@@ -37,6 +38,7 @@ import com.chmouel.liseur.ui.theme.PaperRaised
 import com.chmouel.liseur.ui.theme.PaperWarm
 import com.chmouel.liseur.ui.theme.Rule
 import com.chmouel.liseur.ui.theme.RuleStrong
+import com.chmouel.liseur.ui.theme.SlateNight
 import com.chmouel.liseur.ui.theme.Teal
 import com.chmouel.liseur.ui.theme.TealLight
 import com.chmouel.liseur.ui.theme.TealNight
@@ -83,13 +85,13 @@ object LiseurGlanceColorScheme {
         dark = darkColorScheme(
             primary = LeatherNight,
             onPrimary = LeatherDark,
-            primaryContainer = Leather,
-            onPrimaryContainer = LeatherLight,
+            primaryContainer = LeatherNightContainer,
+            onPrimaryContainer = NightText,
             inversePrimary = Leather,
             secondary = LeatherNight,
             onSecondary = LeatherDark,
-            secondaryContainer = LeatherNightDeep,
-            onSecondaryContainer = LeatherLight,
+            secondaryContainer = SlateNight,
+            onSecondaryContainer = LeatherLamplight,
             tertiary = TealNight,
             onTertiary = Ink,
             tertiaryContainer = TealNightDeep,
@@ -109,8 +111,8 @@ object LiseurGlanceColorScheme {
             surfaceContainerHighest = NightSurfaceHighest,
             outline = NightRuleStrong,
             outlineVariant = NightRule,
-            inverseSurface = PaperInverse,
-            inverseOnSurface = InkInverse,
+            inverseSurface = NightText,
+            inverseOnSurface = NightSurface,
         ),
     )
 }
