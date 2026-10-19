@@ -214,6 +214,11 @@ def handler(stub: Stub):
             return self.error(404, f"Unknown endpoint {self.path}")
 
         def chat(self, body: dict, found: dict[str, str]) -> None:
+            if args.refuse and args.refuse in found.get("passage", user_text(body)):
+                return self.send(200, {
+                    "choices": [{"index": 0, "finish_reason": "stop",
+                                 "message": {"role": "assistant", "refusal": "Stub refusal"}}],
+                })
             text = args.prefix + found.get("passage", user_text(body))
             if args.think:
                 text = "<think>\nThe stub is thinking.\n</think>\n" + text
@@ -264,6 +269,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--prefix", default="[T] ", help="put before every translation (default: %(default)r)")
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before answering chat and speech")
     parser.add_argument("--fail", type=int, metavar="CODE", help="answer chat and speech with this HTTP status")
+    parser.add_argument("--refuse", metavar="TEXT", help="refuse chat passages containing this text")
     parser.add_argument("--key", help="require this API key as a bearer token (x-api-key on the Gradium routes), refused otherwise")
     parser.add_argument("--think", action="store_true", help="put a <think> block before every translation")
     parser.add_argument("--quiet", action="store_true", help="do not print a line per request")

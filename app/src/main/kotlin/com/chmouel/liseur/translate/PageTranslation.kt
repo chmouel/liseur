@@ -137,13 +137,16 @@ sealed interface PageReader<out P> {
  * opening the book again costs nothing. One book's, for one opening of it.
  */
 interface PageTranslationCache {
+    /** Admits a live cache miss only when bulk does not own this configuration. */
+    suspend fun <T> request(identity: String, work: suspend () -> T): T = work()
+
     /** What [key] was translated into, if kept, and the [Lookup.stamp] to keep a new answer under. */
     suspend fun get(key: String): Lookup
 
     /** Keeps [value] for [key], unless what [stamp] was read under has been cleared since. */
     suspend fun put(key: String, value: String, stamp: Long)
 
-    data class Lookup(val translation: String?, val stamp: Long)
+    data class Lookup(val translation: String?, val stamp: Long, val refused: Boolean = false)
 }
 
 /** Kept only while the book is open: the reader's when nothing is saved. */

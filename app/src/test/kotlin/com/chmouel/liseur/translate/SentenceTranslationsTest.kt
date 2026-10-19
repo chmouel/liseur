@@ -75,6 +75,60 @@ class SentenceTranslationsTest {
     private fun at(text: String, before: String?, selector: String = "#p1") = PageSentence(text, "ch1.xhtml", selector, before)
 
     @Test
+    fun `a reader miss waits for bulk then rechecks its saved answer`(): Unit = runTest {
+        val admissions = TranslationAdmissions()
+        val memory = MemoryPageTranslationCache()
+        val translator = Translator()
+        val cache = object : PageTranslationCache by memory {
+            override suspend fun <T> request(identity: String, work: suspend () -> T): T =
+                admissions.reader("book", identity, work)
+        }
+        val sentence = at("un", null)
+        val request = SentenceRequests(translator, null, null).prepare(sentence, null, "svc")
+        val finishBulk = CompletableDeferred<Unit>()
+        val bulk = async(start = CoroutineStart.UNDISPATCHED) {
+            admissions.bulk("book", "svc") {
+                finishBulk.await()
+                memory.put(request.key, "bulk saved", 0)
+            }
+        }
+        val reading = async(start = CoroutineStart.UNDISPATCHED) {
+            SentenceTranslations(translator, cache).resolve(sentence, null)
+        }
+        runCurrent()
+        assertTrue(translator.asked.isEmpty())
+        assertFalse(reading.isCompleted)
+        finishBulk.complete(Unit)
+        bulk.await()
+        assertEquals("bulk saved", reading.await().text)
+        assertTrue(translator.asked.isEmpty())
+    }
+
+    @Test
+    fun `bulk waits until a previously admitted reader saves its answer`(): Unit = runTest {
+        val admissions = TranslationAdmissions()
+        val memory = MemoryPageTranslationCache()
+        val translator = Translator().apply { gate = CompletableDeferred() }
+        val cache = object : PageTranslationCache by memory {
+            override suspend fun <T> request(identity: String, work: suspend () -> T): T =
+                admissions.reader("book", identity, work)
+        }
+        val sentence = at("un", null)
+        val request = SentenceRequests(translator, null, null).prepare(sentence, null, "svc")
+        val reading = async(start = CoroutineStart.UNDISPATCHED) {
+            SentenceTranslations(translator, cache).resolve(sentence, null)
+        }
+        runCurrent()
+        val bulk = async(start = CoroutineStart.UNDISPATCHED) {
+            admissions.bulk("book", "svc") { memory.get(request.key).translation }
+        }
+        assertFalse(bulk.isCompleted)
+        translator.gate!!.complete(Unit)
+        assertEquals(reading.await().text, bulk.await())
+        assertEquals(1, translator.asked.size)
+    }
+
+    @Test
     fun `each sentence is translated with the facts of its own chapter`() = runTest {
         val translator = Translator()
         val facts = mapOf("ch1.xhtml" to BookFacts(chapter = "One"), "ch2.xhtml" to BookFacts(chapter = "Two"))

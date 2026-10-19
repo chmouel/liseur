@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.chmouel.liseur.R
+import com.chmouel.liseur.LiseurApplication
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
@@ -256,6 +257,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, chosen && configured)
                 }
+                WholeBookTranslationsGroup()
                 var advancedOpen by remember { mutableStateOf(false) }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
@@ -273,6 +275,37 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
             }
         }
     }
+}
+
+@Composable
+private fun WholeBookTranslationsGroup() {
+    val container = (LocalContext.current.applicationContext as LiseurApplication).container
+    val records by container.wholeBookTranslations.records.collectAsState(initial = emptyList())
+    val books by container.libraryRepository.books.collectAsState(initial = emptyList())
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    SettingsGroup(stringResource(R.string.whole_book_title)) {
+        if (records.isEmpty()) {
+            Text(
+                stringResource(R.string.whole_book_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            )
+        }
+        records.forEach { row ->
+            ListItem(
+                modifier = Modifier.clickable(role = Role.Button) { selected = row.bookUrl },
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = { Text(books.firstOrNull { it.url == row.bookUrl }?.title ?: row.bookUrl) },
+                supportingContent = {
+                    Text(
+                        stringResource(R.string.whole_book_list_summary, stringResource(wholeBookStateLabel(row.state)), row.done, row.total),
+                    )
+                },
+            )
+        }
+    }
+    selected?.let { WholeBookTranslationSheet(it, onDismiss = { selected = null }) }
 }
 
 /**
@@ -677,6 +710,12 @@ private fun SavedTranslationsGroup(
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (it.keptSentences > 0) {
+                    Text(
+                        stringResource(R.string.whole_book_storage, NumberFormat.getIntegerInstance().format(it.keptSentences), Formatter.formatShortFileSize(context, it.keptBytes)),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 // With an account connected there may be translations
@@ -784,6 +823,7 @@ internal fun errorSentence(error: TranslationError, name: String, source: String
     is TranslationError.DeviceFailed -> stringResource(R.string.translation_device_failed)
     is TranslationError.ModelNotFound -> stringResource(R.string.translation_model_not_found, error.model)
     is TranslationError.NoEndpoint -> stringResource(R.string.translation_no_endpoint, name)
+    is TranslationError.SettingsChanged -> stringResource(R.string.whole_book_settings_changed)
     is TranslationError.Service, is TranslationError.Malformed, is TranslationError.Changed, is TranslationError.Failed ->
         stringResource(R.string.translation_failed, name)
 }

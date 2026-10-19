@@ -37,6 +37,7 @@ class SentenceTranslations(
     private val preceding: PrecedingText? = null,
     private val book: (suspend (href: String) -> BookFacts?)? = null,
 ) {
+    private val requests = SentenceRequests(translator, preceding, book)
     private data class PageFailure(
         val scope: PageFailureScope,
         val identity: String,
@@ -131,7 +132,8 @@ class SentenceTranslations(
         pageFailureFor(sentence)?.let { throw it }
         acceptedFor(sentence, identity)?.let { return it }
         // What is sent, so the page and the voice asking for one place share the request.
-        val key = Triple(sentence.text, contextFor(sentence, context, identity), translator.book(identity, factsOf(sentence)))
+        val prepared = requests.prepare(sentence, context, identity)
+        val key = Triple(sentence.text, prepared.context, prepared.book)
         while (true) {
             val pending = inflight[key]
             if (pending != null) {
@@ -214,74 +216,54 @@ class SentenceTranslations(
         }
     }
 
-    /** The text [identity] is given before [sentence]: the book's own, or [fallback] where that is not known. */
-    private suspend fun contextFor(sentence: PageSentence, fallback: String?, identity: String): String? {
-        val size = translator.contextSize(identity) ?: return fallback
-        if (size.sentences <= 0) return null
-        val earlier = preceding?.before(sentence, size.sentences) ?: return fallback
-        return TranslationContext.window(earlier, size)
-    }
-
-    // Unknown facts only mean the model is told less, never a failed translation.
-    private suspend fun factsOf(sentence: PageSentence): BookFacts? = try {
-        book?.invoke(sentence.href)
-    } catch (e: CancellationException) {
-        throw e
-    } catch (_: Exception) {
-        null
-    }
-
     private suspend fun translated(sentence: PageSentence, fallback: String?): Translated {
+        while (true) {
+            val identity = translator.answering()
+            val prepared = requests.prepare(sentence, fallback, identity)
+            val cached = cache.get(prepared.key)
+            if (translator.answering() != identity) continue
+            cached.translation?.let { return Translated(it, identity) }
+            if (cached.refused) throw BoundFailure(identity, TranslationError.Refused())
+            val answer = cache.request(identity) { translatedAdmitted(sentence, fallback, identity) }
+            if (answer != null) return answer
+        }
+    }
+
+    private suspend fun translatedAdmitted(sentence: PageSentence, fallback: String?, identity: String): Translated? {
         val text = sentence.text
-        val facts = factsOf(sentence)
-        // What the book block says is part of the key: the same sentence in another chapter is asked again.
-        suspend fun keyOf(identity: String, context: String?) =
-            (listOf(identity, context.orEmpty(), text) +
-                listOfNotNull(translator.book(identity, facts)?.let { "book=${TranslationBookContext.identity(it)}" }))
-                .joinToString("\u0000")
-        var identity = translator.answering()
-        var context = contextFor(sentence, fallback, identity)
+        if (translator.answering() != identity) return null
+        val prepared = requests.prepare(sentence, fallback, identity)
         // Kept from the lookup: rebuilt later, it could name settings changed meanwhile.
-        var key = keyOf(identity, context)
-        var lookup = cache.get(key)
+        val lookup = cache.get(prepared.key)
         var answer: Translated? = null
         while (answer == null) {
             // Settings changed during the lookup: what was found answers for the service before.
             val current = translator.answering()
-            if (current != identity) {
-                identity = current
-                context = contextFor(sentence, fallback, identity)
-                key = keyOf(identity, context)
-                lookup = cache.get(key)
-                continue
-            }
+            if (current != identity) return null
             lookup.translation?.let { return Translated(it, identity) }
+            if (lookup.refused) throw BoundFailure(identity, TranslationError.Refused())
             // Null when they changed after all, before it was sent: the new service may have it saved.
             answer = try {
-                translator.translate(text, context, identity, facts)
+                translator.translate(text, prepared.context, identity, prepared.facts)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: TranslationError) {
                 throw BoundFailure(identity, e)
             }
+            if (answer == null) return null
         }
         // Far longer than the sentence is not its translation, and it would be held for the whole session.
-        if (answer.text.length > maxOf(LONGEST, text.length * GROWTH)) {
-            throw BoundFailure(
-                answer.by,
-                TranslationError.Malformed("the translation is far longer than the sentence"),
-            )
+        try {
+            checkTranslationLength(text, answer.text)
+        } catch (e: TranslationError) {
+            throw BoundFailure(answer.by, e)
         }
         // Filed under what answered, and only while that is still what the settings choose.
-        if (answer.by == identity && translator.answering() == identity) cache.put(key, answer.text, lookup.stamp)
+        if (answer.by == identity && translator.answering() == identity) cache.put(prepared.key, answer.text, lookup.stamp)
         return answer
     }
 
     companion object {
-        // A translation can run longer than its sentence, but not by this much.
-        private const val LONGEST = 2_000
-        private const val GROWTH = 8
-
         // Enough of the text before a sentence to tell where it is: one side may hold less of it than the other.
         private const val BEFORE_MATCHED = 24
 

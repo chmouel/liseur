@@ -60,6 +60,7 @@ import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
+import com.chmouel.liseur.translate.WholeBookTranslationSheet
 import com.chmouel.liseur.ui.library.BrowseLibrariesRoute
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
 import com.chmouel.liseur.ui.library.ConfirmRemoveDownloadDialog
@@ -911,6 +912,7 @@ private fun LibraryRoute(
     }
 
     var seriesSheetBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
+    var seriesTranslationBook by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesServerDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesLocalDelete by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
     var seriesRemoveDownload by remember { mutableStateOf<com.chmouel.liseur.data.db.Book?>(null) }
@@ -977,6 +979,7 @@ private fun LibraryRoute(
                 onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
                 onSetArchived = { viewModel.setArchived(book, it); seriesSheetBook = null },
                 onOpenStats = { onOpenBookStats(book); seriesSheetBook = null },
+                onOpenTranslation = { seriesTranslationBook = book; seriesSheetBook = null },
                 // Refiling from inside a series is chiefly how a volume
                 // that landed on the wrong shelf gets off it, so it is
                 // offered here as well as on the shelf.
@@ -997,6 +1000,14 @@ private fun LibraryRoute(
                     viewModel.uploadToServer(book)
                     seriesSheetBook = null
                 },
+            )
+        }
+        seriesTranslationBook?.let { book ->
+            WholeBookTranslationSheet(
+                bookUrl = book.url,
+                onDismiss = { seriesTranslationBook = null },
+                onBack = { seriesTranslationBook = null; seriesSheetBook = book },
+                onOpenSettings = { seriesTranslationBook = null; onOpenTranslation() },
             )
         }
         seriesSheetRefile?.let { book ->
@@ -1078,6 +1089,7 @@ private fun LibraryRoute(
 
     LibraryScreen(
         state = state,
+        onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(
                 translate.offersSetup,

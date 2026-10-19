@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.ServerTranslationState
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.tts.ListedField
 import com.chmouel.liseur.tts.Listing
@@ -50,6 +51,7 @@ internal class ServerTranslationService(
     override val summary = R.string.translation_provider_server_summary
     override val icon = Icons.Outlined.Dns
     override val detectsLanguage = true
+    override val supportsPinned = true
 
     /** The server translation uses, when it uses one that is listed. */
     val server: Flow<ServerConnection?> = settings.settings.map { it.translationServerConnection }.distinctUntilChanged()
@@ -87,7 +89,40 @@ internal class ServerTranslationService(
         override suspend fun translate(sentence: String, context: String?, book: String?) = ask(s, sentence, source, target, context, book)
     }
 
-    private suspend fun ask(s: AppSettings, passage: String, source: String?, target: String, context: String?, book: String?): String {
+    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit): TranslationRun {
+        val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
+        val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
+        if (model(s) == null) throw TranslationError.NotSetUp()
+        beforeRequest()
+        val key = connections.key(ServerKeys.origin(base))
+        beforeRequest()
+        return object : TranslationRun {
+            override suspend fun translate(sentence: String, context: String?, book: String?) =
+                ask(s, sentence, source, target, context, book, pinned = true, frozenKey = key, beforeRequest = beforeRequest)
+        }
+    }
+
+    override suspend fun wholeBookPrice(s: AppSettings): TextPrice? {
+        val server = s.translationServerConnection ?: return null
+        val model = model(s) ?: return null
+        return models(server.url).getOrNull()?.firstOrNull { it.id == model }?.price
+    }
+
+    override fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest): Int =
+        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context.takeIf { usesContext(s) }, request.book, tuning(s).instructions)
+
+    private suspend fun ask(
+        s: AppSettings,
+        passage: String,
+        source: String?,
+        target: String,
+        context: String?,
+        book: String?,
+        pinned: Boolean = false,
+        frozenKey: String? = null,
+        beforeRequest: suspend () -> Unit = {},
+    ): String {
+        beforeRequest()
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
@@ -95,7 +130,7 @@ internal class ServerTranslationService(
         val tuning = tuning(s)
         return client.translate(
             base,
-            connections.key(ServerKeys.origin(base)),
+            if (pinned) frozenKey else connections.key(ServerKeys.origin(base)),
             model,
             source,
             target,
@@ -106,6 +141,8 @@ internal class ServerTranslationService(
             maxTokens = tuning.maxTokens,
             keepAlive = tuning.keepAlive,
             book = book,
+            beforeRequest = beforeRequest,
+            allowTransportRetry = !pinned,
             onTemperatureRefused = {
                 // The translation came back; failing to remember this only means the next request retries.
                 try {

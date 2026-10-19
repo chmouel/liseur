@@ -48,7 +48,9 @@ All of this stays in the app's own private storage:
   so a page you read again does not have to be translated again. They are
   kept for the book they came from, at most 50,000 of them, the least
   recently read going first. Deleting the book deletes them, and Settings,
-  Translation, Advanced has a button to clear them all. They are not backed up.
+  Translation, Advanced has a button to clear the disposable cache. Whole-book
+  translations you choose to keep are excluded from that limit and clear;
+  delete them individually from the whole-book translations list.
   A passage translated in the sheet is not saved.
 - Which books you left translated, and between which two languages, so
   they open translated. Tapping Stop or deleting the book removes it.
@@ -191,6 +193,15 @@ download language packs for it, which you manage in the system's
 settings.
 
 ### A server, for translation
+
+“Translate whole book” sends the downloaded EPUB sentence by sentence to
+your chosen AI service after you confirm. This can include later chapters
+you have not read. Each request uses the same book details and preceding
+text as page translation. The local preview sends no book text; fetching
+model prices only requests model metadata. Gemini whole-book translation
+is available only in the Play build and uses the same Gemini service
+described below. Pause or cancel stops new requests, but a request already
+received by the provider may still be charged.
 
 Liseur can translate a selected passage with any server on the External
 services and API keys page that speaks OpenAI's chat API, such as
@@ -383,7 +394,11 @@ retention policy for the Gemini API applies to them.
 
 Liseur never contacts any other host. It requests the `INTERNET` and
 `ACCESS_NETWORK_STATE` permissions for the purposes above and for nothing
-else.
+else. It requests `POST_NOTIFICATIONS`, `WAKE_LOCK` and
+`FOREGROUND_SERVICE_DATA_SYNC` only to translate a whole book: to show a
+progress notification while it runs, and to hold a wake lock and a
+foreground service that keep that local job going. They send nothing over
+the network.
 
 ## Manual ZIP backups
 

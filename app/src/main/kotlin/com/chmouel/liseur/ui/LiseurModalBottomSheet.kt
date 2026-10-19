@@ -5,7 +5,8 @@ import android.view.KeyEvent
 import android.view.View
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
-import androidx.activity.compose.BackHandler
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -40,6 +42,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.view.doOnAttach
@@ -89,6 +92,7 @@ fun LiseurModalBottomSheet(
             containerColor = containerColor,
             contentColor = contentColor,
             scrimColor = scrimColor,
+            properties = ModalBottomSheetProperties(shouldDismissOnBackPress = onBack == null),
             dragHandle = {
                 BottomSheetDefaults.DragHandle(color = contentColor.copy(alpha = 0.4f))
             },
@@ -101,8 +105,9 @@ fun LiseurModalBottomSheet(
                 // a black clock on a black status bar (#225). Said here,
                 // inside the sheet's own window, it moves with the paper.
                 SystemBarIcons(dark = isDarkSurface(containerColor))
-                // Inside the sheet: it is a window of its own, so Back reaches it first.
-                BackHandler(enabled = onBack != null) { onBack?.invoke() }
+                if (onBack != null) {
+                    DialogBack(onBack)
+                }
                 content()
             },
         )
@@ -161,6 +166,21 @@ fun LiseurModalBottomSheet(
                 content()
             }
         }
+    }
+}
+
+@Composable
+private fun DialogBack(onBack: () -> Unit) {
+    val view = LocalView.current
+    val current by rememberUpdatedState(onBack)
+    val owner = (view.parent as DialogWindowProvider).window.callback as OnBackPressedDispatcherOwner
+    DisposableEffect(owner) {
+        // Register directly: the sheet inherits the activity's lifecycle, not the dialog's.
+        val callback = object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = current()
+        }
+        owner.onBackPressedDispatcher.addCallback(callback)
+        onDispose { callback.remove() }
     }
 }
 

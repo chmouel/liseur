@@ -82,6 +82,15 @@ def chat(passage: str, book: str | None = None, context: str | None = None) -> d
 
 
 def main() -> int:
+    refusal = Stub("--refuse", "Refuse this")
+    try:
+        code, reply = refusal.json("POST", "/v1/chat/completions", chat("Refuse this sentence."))
+        message = reply.get("choices", [{}])[0].get("message", {})
+        check("configured passage is refused", code == 200 and bool(message.get("refusal")) and "content" not in message, reply)
+        code, reply = refusal.json("POST", "/v1/chat/completions", chat("Translate this sentence."))
+        check("other passages still translate", code == 200 and reply["choices"][0]["message"]["content"] == "[T] Translate this sentence.", reply)
+    finally:
+        refusal.stop()
     stub = Stub()
     try:
         code, models = stub.json("GET", "/v1/models")

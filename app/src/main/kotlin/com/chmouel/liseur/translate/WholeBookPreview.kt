@@ -1,0 +1,28 @@
+package com.chmouel.liseur.translate
+
+internal data class WholeBookInfo(
+    val title: String,
+    val source: String?,
+    val target: String,
+    val eligible: Boolean,
+    val identityMatches: Boolean?,
+)
+
+internal data class WholeBookPreview(
+    val bookUrl: String,
+    val title: String,
+    val source: String?,
+    val target: String,
+    val identity: String,
+    val total: Int,
+    val cached: Int,
+    val failed: Int,
+    val characters: Long,
+    val destination: String?,
+    val cost: ClosedFloatingPointRange<Double>?,
+    val sourceFingerprint: String,
+    val retryFailures: Boolean = false,
+    val retentionStamp: RetentionStamp? = null,
+)
+
+internal data class RetentionStamp(val cleared: Long, val epoch: Long, val generation: Long?)

@@ -353,6 +353,9 @@ private fun Translation(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+        }
+        // A selected word can miss the cache while the book's sentences are saved offline.
+        if (step == TranslationStep.Translate) {
             onTranslatePage?.let {
                 OutlinedButton(onClick = it, modifier = Modifier.padding(top = 16.dp)) {
                     Icon(Icons.AutoMirrored.Outlined.MenuBook, contentDescription = null, modifier = Modifier.size(18.dp))

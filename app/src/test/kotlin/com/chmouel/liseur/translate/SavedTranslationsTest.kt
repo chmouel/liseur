@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -56,6 +57,220 @@ class SavedTranslationsTest {
     )
 
     private suspend fun PageTranslationCache.keep(key: String, value: String) = put(key, value, get(key).stamp)
+
+    private suspend fun preview(store: SavedTranslations, total: Int = 1, cached: Int = 1, failed: Int = 0) =
+        WholeBookPreview(
+            BOOK, "Book", null, "fr", "identity", total, cached, failed, 0, null, null, "fingerprint",
+            retentionStamp = store.retentionStamp(BOOK),
+        )
+
+    private suspend fun coverage(store: SavedTranslations, keys: List<String>): WholeBookCoverage {
+        val rows = store.scanLookups(BOOK, keys)
+        return WholeBookCoverage(keys.size, rows.count { it.translation != null }, rows.count { it.failed }, 0, 0, 0, 0)
+    }
+
+    @Test
+    fun `ordinary cached coverage can be retained and survives subsequent trim`(): Unit = runTest {
+        val store = saved(maxSentences = 1)
+        store.forBook(BOOK).keep("one", "un")
+        val approved = preview(store)
+        store.retain(approved) { coverage(store, listOf("one")) }
+        store.forBook(OTHER).keep("two", "deux")
+        store.tidy()
+        assertEquals("done", store.getKept(BOOK)?.state)
+        assertEquals("un", store.strictLookup(BOOK, "one").translation)
+    }
+
+    @Test
+    fun `last committed sentence can be finalized after an interrupted completion`(): Unit = runTest {
+        val store = saved()
+        val run = store.begin(BOOK, null, "fr", "identity", 2)
+        store.saveSuccess(BOOK, run.generation, "one", "un", 1, 0)
+        store.saveFailure(BOOK, run.generation, "two", 1, 1)
+        store.pause(BOOK, run.generation, "interrupted")
+        store.retain(preview(store, total = 2, cached = 1, failed = 1)) { coverage(store, listOf("one", "two")) }
+        val kept = store.getKept(BOOK)!!
+        assertEquals("done", kept.state)
+        assertEquals(1, kept.done)
+        assertEquals(1, kept.failed)
+        assertTrue(kept.generation > run.generation)
+    }
+
+    @Test
+    fun `trim between preview and adoption cannot retain missing translations`(): Unit = runTest {
+        val store = saved(maxCharacters = 0)
+        store.forBook(BOOK).keep("one", "un")
+        assertEquals("un", store.strictLookup(BOOK, "one").translation)
+        val approved = preview(store)
+        store.tidy()
+        try {
+            store.retain(approved) { coverage(store, listOf("one")) }
+            error("Missing coverage accepted")
+        } catch (_: IllegalStateException) {
+            assertNull(store.getKept(BOOK))
+        }
+    }
+
+    @Test
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun `trim cannot enter between final coverage checking and retention`(): Unit = runTest {
+        val store = saved(maxCharacters = 0)
+        store.forBook(BOOK).keep("one", "un")
+        val approved = preview(store)
+        val checking = CompletableDeferred<Unit>()
+        val proceed = CompletableDeferred<Unit>()
+        val retain = async {
+            store.retain(approved) {
+                checking.complete(Unit)
+                proceed.await()
+                coverage(store, listOf("one"))
+            }
+        }
+        checking.await()
+        val trim = async { store.tidy() }
+        runCurrent()
+        assertTrue(!trim.isCompleted)
+        proceed.complete(Unit)
+        retain.await()
+        trim.await()
+        assertEquals("done", store.getKept(BOOK)?.state)
+        assertEquals("un", store.strictLookup(BOOK, "one").translation)
+    }
+
+    @Test
+    fun `stale approvals preserve the current generation and refusal markers`(): Unit = runTest {
+        val store = saved()
+        val first = store.begin(BOOK, null, "fr", "identity", 1)
+        store.saveFailure(BOOK, first.generation, "one", 0, 1)
+        store.pause(BOOK, first.generation, "paused")
+        val stale = preview(store, cached = 0, failed = 1)
+        val second = store.begin(BOOK, null, "fr", "identity", 1)
+        store.pause(BOOK, second.generation, "paused")
+        val before = store.getKept(BOOK)
+        try {
+            store.begin(BOOK, null, "fr", "identity", 1, retryFailures = true, preview = stale)
+            error("Stale preview accepted")
+        } catch (_: IllegalStateException) {
+            assertEquals(before, store.getKept(BOOK))
+            assertTrue(store.strictLookup(BOOK, "one").failed)
+        }
+        store.remove(BOOK)
+        try {
+            store.retain(stale) { WholeBookCoverage(1, 1, 0, 0, 0, 0, 0) }
+            error("Deleted translation resurrected")
+        } catch (_: IllegalStateException) {
+            assertNull(store.getKept(BOOK))
+        }
+    }
+
+    @Test
+    fun `local adoption never verifies an imported record`(): Unit = runTest {
+        val store = saved()
+        val first = store.begin(BOOK, null, "fr", "identity", 1)
+        db.keptTranslations().put(first.copy(state = "restored"))
+        try {
+            store.retain(preview(store)) { WholeBookCoverage(1, 1, 0, 0, 0, 0, 0) }
+            error("Imported coverage verified")
+        } catch (_: IllegalStateException) {
+            assertEquals("restored", store.getKept(BOOK)?.state)
+        }
+    }
+
+    @Test
+    fun `kept running rows and failures survive trimming and global clear`() = runTest {
+        val store = saved(maxSentences = 0, maxCharacters = 0)
+        val record = store.begin(BOOK, null, "fr", "identity", 2)
+        store.saveSuccess(BOOK, record.generation, "one", "un", 1, 0)
+        store.saveFailure(BOOK, record.generation, "two", 1, 1)
+        store.ensureWork(PEER, BOOK, "work")
+        store.forBook(OTHER).keep("ordinary", "gone")
+        store.tidy()
+        store.clear()
+        assertEquals("un", store.strictLookup(BOOK, "one").translation)
+        assertTrue(store.forBook(BOOK).get("two").refused)
+        assertTrue(store.strictLookup(BOOK, "two").failed)
+        assertEquals("work", store.syncState(PEER, BOOK)?.workId)
+        assertEquals(1, store.keptRecords().size)
+        assertEquals(1, store.stats.first().keptSentences)
+        assertEquals(0, store.stats.first().sentences)
+        store.complete(BOOK, record.generation)
+        assertEquals("done", store.keptRecords().single().state)
+    }
+
+    @Test
+    fun `delete and resume fence old responses and absolute progress never accumulates`() = runTest {
+        val store = saved()
+        val first = store.begin(BOOK, null, "fr", "identity", 2)
+        store.saveSuccess(BOOK, first.generation, "one", "un", 1, 0)
+        store.pause(BOOK, first.generation, "network")
+        assertEquals(KeptWriteResult.INVALIDATED, store.saveFailure(BOOK, first.generation, "two", 1, 1))
+        val resumed = store.begin(BOOK, null, "fr", "identity", 2)
+        repeat(3) { store.progress(BOOK, resumed.generation, 1, 0) }
+        assertEquals(1, store.keptRecords().single().done)
+        store.remove(BOOK)
+        val replacement = store.begin(BOOK, null, "fr", "identity", 2)
+        assertTrue(replacement.generation > resumed.generation)
+        assertEquals(KeptWriteResult.INVALIDATED,
+            store.saveSuccess(BOOK, resumed.generation, "two", "late", 2, 0))
+        assertNull(store.strictLookup(BOOK, "two").translation)
+    }
+
+    @Test
+    fun `sweep removes a kept-only book and strict reads propagate storage failures`() = runTest {
+        val store = saved()
+        store.begin(BOOK, null, "fr", "identity", 0)
+        library -= BOOK
+        store.sweep()
+        assertTrue(store.keptRecords().isEmpty())
+        db.close()
+        var failed = false
+        try { store.strictLookup(BOOK, "one") } catch (_: Exception) { failed = true }
+        assertTrue(failed)
+    }
+
+    @Test
+    fun `begin preserves failed markers unless retry was explicitly requested`() = runTest {
+        val store = saved()
+        val first = store.begin(BOOK, null, "fr", "identity", 2)
+        store.saveSuccess(BOOK, first.generation, "one", "un", 1, 0)
+        store.saveFailure(BOOK, first.generation, "two", 1, 1)
+        val resumed = store.begin(BOOK, null, "fr", "identity", 2)
+        assertTrue(store.strictLookup(BOOK, "two", resumed.generation).failed)
+        val retry = store.begin(BOOK, null, "fr", "identity", 2, retryFailures = true)
+        assertEquals(false, store.strictLookup(BOOK, "two", retry.generation).failed)
+        assertEquals("un", store.strictLookup(BOOK, "one", retry.generation).translation)
+        assertTrue(store.strictLookup(BOOK, "two", resumed.generation).invalidated)
+        assertEquals(retry, store.getKept(BOOK))
+    }
+
+    @Test
+    fun `a failure never replaces a success delivered by sync`() = runTest {
+        val store = saved()
+        val record = store.begin(BOOK, null, "fr", "identity", 1)
+        store.landPulled(PEER, BOOK, store.pullTicket(BOOK),
+            listOf(PulledTranslation(hashed("one"), "peer answer")), "cursor")
+        assertEquals(KeptWriteResult.ALREADY_PRESENT,
+            store.saveFailure(BOOK, record.generation, "one", 1, 0))
+        val found = store.strictLookup(BOOK, "one", record.generation)
+        assertEquals("peer answer", found.translation)
+        assertEquals(false, found.failed)
+        assertTrue(store.exportFailures(BOOK).isEmpty())
+    }
+
+    @Test
+    fun `batched scan matches strict lookups including duplicates and success over refusal`() = runTest {
+        val store = saved()
+        val record = store.begin(BOOK, null, "fr", "identity", 3)
+        store.saveSuccess(BOOK, record.generation, "one", "un", 1, 0)
+        store.saveFailure(BOOK, record.generation, "bad", 1, 1)
+        store.saveFailure(BOOK, record.generation, "recovered", 1, 2)
+        store.landPulled(PEER, BOOK, store.pullTicket(BOOK),
+            listOf(PulledTranslation(hashed("recovered"), "recovered answer")), "cursor")
+        val keys = listOf("bad", "one", "missing", "recovered", "one")
+        assertEquals(keys.map { store.strictLookup(BOOK, it) }, store.scanLookups(BOOK, keys))
+        assertTrue(store.scanLookups(OTHER, keys).all { it == KeptLookup() })
+        assertTrue(store.scanLookups(BOOK, emptyList()).isEmpty())
+    }
 
     @Test
     fun `a book opened again finds what it translated`() = runTest {

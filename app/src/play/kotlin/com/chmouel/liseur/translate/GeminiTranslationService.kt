@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.tts.GeminiAccount
 import com.chmouel.liseur.tts.ListedField
 import com.chmouel.liseur.tts.Listing
@@ -46,6 +47,7 @@ internal class GeminiTranslationService(
     override val summary = R.string.translation_provider_gemini_summary
     override val icon = Icons.Outlined.AutoAwesome
     override val detectsLanguage = true
+    override val supportsPinned = true
     override val configured: Flow<Boolean> = account.configured
 
     private val model: Flow<String> =
@@ -71,6 +73,21 @@ internal class GeminiTranslationService(
     override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
         override suspend fun translate(sentence: String, context: String?, book: String?) =
             ask(model(s), sentence, source, target, context, book)
+    }
+
+    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit): TranslationRun {
+        beforeRequest()
+        val key = account.key() ?: throw TranslationError.NotSetUp()
+        beforeRequest()
+        val model = model(s)
+        return object : TranslationRun {
+            override suspend fun translate(sentence: String, context: String?, book: String?) =
+                client.translate(
+                    key, model, source, target, sentence, context, book, beforeRequest,
+                    allowTransportRetry = false,
+                )
+
+        }
     }
 
     private suspend fun ask(model: String, passage: String, source: String?, target: String, context: String?, book: String?): String {

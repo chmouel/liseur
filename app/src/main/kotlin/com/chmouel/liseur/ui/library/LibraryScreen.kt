@@ -9,6 +9,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -146,6 +148,8 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.R
+import com.chmouel.liseur.LiseurApplication
+import com.chmouel.liseur.translate.WholeBookTranslationSheet
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
@@ -179,6 +183,7 @@ fun LibraryScreen(
     onOpenStats: () -> Unit,
     /** Opens the sheet that turns translation on; shown in the menu only when set. */
     onSetUpTranslation: (() -> Unit)? = null,
+    onOpenTranslationSettings: () -> Unit,
     onOpenBookStats: (Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
@@ -248,6 +253,7 @@ fun LibraryScreen(
     val downloading = stringResource(R.string.download_in_progress)
     val downloadsNotAllowed = stringResource(R.string.downloads_not_allowed)
     var sheetBook by remember { mutableStateOf<Book?>(null) }
+    var translationBook by remember { mutableStateOf<Book?>(null) }
     var confirmServerDelete by remember { mutableStateOf<Book?>(null) }
     var confirmLocalDelete by remember { mutableStateOf<Book?>(null) }
     var confirmRemoveFromLibrary by remember { mutableStateOf<Book?>(null) }
@@ -957,11 +963,21 @@ fun LibraryScreen(
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
             onSetArchived = { onSetArchived(book, it); sheetBook = null },
             onOpenStats = { onOpenBookStats(book); sheetBook = null },
+            onOpenTranslation = { translationBook = book; sheetBook = null },
             onEditSeries = { editSeriesOf = book; sheetBook = null },
             onDeleteLocal = { confirmLocalDelete = book; sheetBook = null },
             onRemoveFromLibrary = { confirmRemoveFromLibrary = book; sheetBook = null },
             onDeleteFromServer = { confirmServerDelete = book; sheetBook = null },
             onUploadToServer = { onUploadToServer(book); sheetBook = null },
+        )
+    }
+
+    translationBook?.let { book ->
+        WholeBookTranslationSheet(
+            bookUrl = book.url,
+            onDismiss = { translationBook = null },
+            onBack = { translationBook = null; sheetBook = book },
+            onOpenSettings = { translationBook = null; onOpenTranslationSettings() },
         )
     }
 
@@ -1262,17 +1278,21 @@ internal fun BookActionsSheet(
     onSetFinished: (Boolean) -> Unit,
     onSetArchived: (Boolean) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenTranslation: () -> Unit,
     onEditSeries: () -> Unit,
     onDeleteLocal: () -> Unit,
     onRemoveFromLibrary: () -> Unit,
     onDeleteFromServer: () -> Unit,
     onUploadToServer: () -> Unit,
 ) {
+    val container = (LocalContext.current.applicationContext as LiseurApplication).container
+    val translations by container.wholeBookTranslations.records.collectAsStateWithLifecycle(initialValue = emptyList())
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
                 .align(Alignment.CenterHorizontally)
                 .widthIn(max = contentWidthCap(windowWidth()))
+                .verticalScroll(rememberScrollState())
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
         ) {
             Text(book.title, style = MaterialTheme.typography.titleMedium)
@@ -1352,6 +1372,11 @@ internal fun BookActionsSheet(
             }
             TextButton(onClick = onOpenStats, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.reading_stats))
+            }
+            if (book.openableUrl != null || translations.any { it.bookUrl == book.url }) {
+                TextButton(onClick = onOpenTranslation, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.translation_settings_title))
+                }
             }
             // Reads as one action rather than two, because a book with
             // no series and a book in the wrong one want the same

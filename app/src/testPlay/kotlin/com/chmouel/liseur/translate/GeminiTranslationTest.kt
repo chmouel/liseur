@@ -71,6 +71,23 @@ class GeminiTranslationTest {
     }
 
     @Test
+    fun `translation guard stops a thinking retry before it submits`(): Unit = runBlocking {
+        server.enqueue(
+            MockResponse.Builder().code(400)
+                .body("""{"error":{"code":400,"message":"Thinking level MINIMAL is not supported.","status":"INVALID_ARGUMENT"}}""").build(),
+        )
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        var attempts = 0
+        expect<TranslationError.SettingsChanged> {
+            client.translate("secret", "gemini-flash-latest", "en", "fr", "It rains.", beforeRequest = {
+                if (++attempts == 2) throw TranslationError.SettingsChanged()
+            })
+        }
+        assertEquals(2, attempts)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun `asks generateContent with the key in a header and the task as the system instruction`(): Unit = runBlocking {
         server.enqueue(MockResponse.Builder().code(200).body(reply("Hello")).build())
         val client = GeminiTranslationClient(base = server.url("/v1beta/models"))

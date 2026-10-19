@@ -93,6 +93,23 @@ internal interface TranslationService {
         override suspend fun translate(sentence: String, context: String?, book: String?) = translate(sentence, source, target, context, book)
     }
 
+    /** Only AI services with guarded, frozen requests can prepare whole books. */
+    val supportsPinned: Boolean get() = false
+
+    /** Opens without sending text; [beforeRequest] guards every submission, including option retries. */
+    suspend fun openPinned(
+        source: String?,
+        target: String,
+        s: AppSettings,
+        beforeRequest: suspend () -> Unit,
+    ): TranslationRun = throw TranslationError.NotSetUp()
+
+    /** Token pricing from server metadata, never an assumed price. */
+    suspend fun wholeBookPrice(s: AppSettings): TextPrice? = null
+
+    fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest): Int =
+        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context, request.book)
+
     /** Its own rows on the Translation page, under the service picker; [onOpenPage] shows its [Page]. */
     @Composable
     fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit)
@@ -146,4 +163,19 @@ internal interface TranslationRun {
     suspend fun translate(sentence: String, context: String?, book: String? = null): String
 
     fun close() = Unit
+}
+
+internal fun translationRequestCharacters(
+    model: String?,
+    source: String?,
+    target: String,
+    passage: String,
+    context: String?,
+    book: String?,
+    instructions: String? = null,
+): Int = if (TranslationPrompt.isTranslateGemma(model)) {
+    TranslationPrompt.translateGemma(source, target, passage, instructions).length
+} else {
+    TranslationPrompt.system(source, target, context != null, instructions, book != null).length +
+        TranslationPrompt.user(passage, context, book).length
 }

@@ -15,7 +15,6 @@ import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
@@ -74,6 +73,9 @@ data class PulledTranslation(val key: String, val translation: String)
 interface TranslatedSentenceDao {
     @Query("SELECT translation FROM translated_sentences WHERE book_url = :bookUrl AND `key` = :key")
     suspend fun find(bookUrl: String, key: String): String?
+
+    @Query("SELECT `key`, translation FROM translated_sentences WHERE book_url = :bookUrl AND `key` IN (:keys)")
+    suspend fun findAll(bookUrl: String, keys: List<String>): List<PulledTranslation>
 
     @Query("UPDATE translated_sentences SET used_at = :now WHERE book_url = :bookUrl AND `key` = :key")
     suspend fun touch(bookUrl: String, key: String, now: Long)
@@ -139,6 +141,21 @@ interface TranslatedSentenceDao {
     @Query("SELECT COUNT(*) FROM translated_sentences")
     suspend fun count(): Int
 
+    @Query("SELECT COUNT(*) FROM translated_sentences WHERE book_url NOT IN (SELECT book_url FROM kept_translations)")
+    suspend fun cacheCount(): Int
+
+    @Query("SELECT COALESCE(SUM(LENGTH(translation)), 0) FROM translated_sentences WHERE book_url NOT IN (SELECT book_url FROM kept_translations)")
+    suspend fun cacheCharacters(): Long
+
+    @Query("SELECT COALESCE(SUM(LENGTH(CAST(translation AS BLOB))), 0) FROM translated_sentences WHERE book_url IN (SELECT book_url FROM kept_translations)")
+    suspend fun keptBytes(): Long
+
+    @Query("SELECT * FROM translated_sentences WHERE book_url = :bookUrl ORDER BY `key`")
+    suspend fun forExport(bookUrl: String): List<TranslatedSentence>
+
+    @Query("SELECT * FROM translated_sentences WHERE book_url = :bookUrl AND `key` > :after ORDER BY `key` LIMIT :limit")
+    suspend fun exportPage(bookUrl: String, after: String, limit: Int): List<TranslatedSentence>
+
     @Query("SELECT COUNT(*) FROM translated_sentences")
     fun counted(): Flow<Int>
 
@@ -147,7 +164,7 @@ interface TranslatedSentenceDao {
 
     @Query(
         "SELECT rowid AS id, LENGTH(translation) AS length FROM translated_sentences " +
-            "ORDER BY used_at, rowid LIMIT :limit",
+            "WHERE book_url NOT IN (SELECT book_url FROM kept_translations) ORDER BY used_at, rowid LIMIT :limit",
     )
     suspend fun oldest(limit: Int): List<SavedLength>
 
@@ -156,7 +173,7 @@ interface TranslatedSentenceDao {
 
     @Query(
         "DELETE FROM translated_sentences WHERE rowid IN " +
-            "(SELECT rowid FROM translated_sentences ORDER BY used_at, rowid LIMIT :count)",
+            "(SELECT rowid FROM translated_sentences WHERE book_url NOT IN (SELECT book_url FROM kept_translations) ORDER BY used_at, rowid LIMIT :count)",
     )
     suspend fun dropOldest(count: Int)
 
@@ -166,7 +183,7 @@ interface TranslatedSentenceDao {
     @Query("DELETE FROM translated_sentences WHERE book_url IN (:bookUrls)")
     suspend fun forget(bookUrls: List<String>): Int
 
-    @Query("DELETE FROM translated_sentences")
+    @Query("DELETE FROM translated_sentences WHERE book_url NOT IN (SELECT book_url FROM kept_translations)")
     suspend fun clear()
 }
 
@@ -249,6 +266,9 @@ interface TranslationSyncStateDao {
 
     @Query("DELETE FROM translation_sync_state")
     suspend fun clear()
+
+    @Query("DELETE FROM translation_sync_state WHERE book_url NOT IN (SELECT book_url FROM kept_translations)")
+    suspend fun clearCache()
 
     /** The highest watermark any peer reached: a save's floor outlives the rows it cut at. */
     @Query("SELECT MAX(pushed_saved_at) FROM translation_sync_state")
@@ -349,8 +369,9 @@ interface TranslationAccountClearDao {
     entities = [
         TranslatedSentence::class, PageTranslationModeRow::class, TranslationSyncState::class,
         TranslationRekeyMove::class, TranslationAccountClear::class,
+        KeptTranslation::class, KeptFailure::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class TranslationCacheDatabase : RoomDatabase() {
@@ -363,6 +384,8 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
     abstract fun rekeyMoves(): TranslationRekeyMoveDao
 
     abstract fun accountClears(): TranslationAccountClearDao
+
+    abstract fun keptTranslations(): KeptTranslationDao
 
     companion object {
         const val NAME = "translations.db"
@@ -418,7 +441,24 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `kept_translations` (`book_url` TEXT NOT NULL, `source` TEXT, " +
+                        "`target` TEXT NOT NULL, `identity` TEXT NOT NULL, `generation` INTEGER NOT NULL, " +
+                        "`total` INTEGER NOT NULL, `done` INTEGER NOT NULL, `failed` INTEGER NOT NULL, " +
+                        "`state` TEXT NOT NULL, `reason` TEXT, `started_at` INTEGER NOT NULL, " +
+                        "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`book_url`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `kept_failures` (`book_url` TEXT NOT NULL, `key` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`book_url`, `key`), FOREIGN KEY(`book_url`) REFERENCES `kept_translations`(`book_url`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                )
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 }
 
@@ -444,13 +484,16 @@ class SavedTranslations(
     /** Where the books' modes are written, one after the other; it outlives any reader. */
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
-    data class Stats(val sentences: Int, val bytes: Long)
+    data class Stats(val sentences: Int, val bytes: Long, val keptSentences: Int = 0, val keptBytes: Long = 0)
 
     private val dao = database.sentences()
     private val modes = database.modes()
     private val sync = database.translationSync()
     private val moves = database.rekeyMoves()
     private val owedClears = database.accountClears()
+    private val keptDao = database.keptTranslations()
+    private val generations = AtomicLong()
+    val kept: Flow<List<KeptTranslation>> = keptDao.observe()
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
@@ -479,8 +522,11 @@ class SavedTranslations(
     }
 
     /** How many sentences are saved and the room they take, again after each clear. Silent if unreadable. */
-    val stats: Flow<Stats> = combine(dao.counted(), resized) { count, _ ->
-        Stats(count, files().filter { it.exists() }.sumOf { it.length() })
+    val stats: Flow<Stats> = combine(dao.counted(), keptDao.observe(), resized) { count, _, _ ->
+        val cacheCount = dao.cacheCount()
+        val keptBytes = dao.keptBytes()
+        Stats(cacheCount, (files().filter { it.exists() }.sumOf { it.length() } - keptBytes).coerceAtLeast(0),
+            count - cacheCount, keptBytes)
     }.flowOn(Dispatchers.IO).catch { e ->
         if (e is CancellationException) throw e
         Log.w(TAG, "Could not count saved translations: ${e.javaClass.simpleName}")
@@ -494,6 +540,214 @@ class SavedTranslations(
 
     /** Whether the book at [bookUrl] is left translated, for one opening of it; fenced like [forBook]. */
     fun modeFor(bookUrl: String): PageTranslationModes = BookMode(bookUrl, epochs.computeIfAbsent(bookUrl) { 0L })
+
+    internal suspend fun begin(
+        bookUrl: String, source: String?, target: String, identity: String, total: Int,
+        retryFailures: Boolean = false,
+        preview: WholeBookPreview? = null,
+    ): KeptTranslation =
+        writes.withLock {
+            require(total >= 0)
+            database.withTransaction {
+                val old = keptDao.find(bookUrl)
+                if (preview != null) checkPreview(preview, old)
+                val generation = maxOf(now(), generations.incrementAndGet(), (old?.generation ?: 0) + 1)
+                generations.set(generation)
+                if (retryFailures) keptDao.clearFailures(bookUrl)
+                KeptTranslation(bookUrl, source, target, identity, generation, total, 0, 0,
+                    "running", null, now(), now()).also { keptDao.put(it) }
+            }
+        }
+
+    /** Unlike the reader cache, database failures escape to the foreground job. Keys are raw request keys. */
+    suspend fun strictLookup(bookUrl: String, rawKey: String, generation: Long? = null): KeptLookup = database.withTransaction {
+        if (generation != null) {
+            val record = keptDao.find(bookUrl)
+            if (record == null || record.generation != generation || record.state != "running") {
+                return@withTransaction KeptLookup(invalidated = true)
+            }
+        }
+        val key = hash(rawKey)
+        val translation = dao.find(bookUrl, key)
+        KeptLookup(translation, translation == null && keptDao.failed(bookUrl, key))
+    }
+
+    internal suspend fun scanLookups(bookUrl: String, rawKeys: List<String>): List<KeptLookup> = database.withTransaction {
+        require(rawKeys.size <= BATCH)
+        val keys = rawKeys.map(::hash)
+        val translations = dao.findAll(bookUrl, keys).associate { it.key to it.translation }
+        val failures = keptDao.failedKeys(bookUrl, keys).toHashSet()
+        keys.map { key -> KeptLookup(translations[key], key !in translations && key in failures) }
+    }
+
+    suspend fun failureFor(bookUrl: String, rawKey: String): Boolean = keptDao.failed(bookUrl, hash(rawKey))
+
+    internal suspend fun retentionStamp(bookUrl: String): RetentionStamp = writes.withLock {
+        RetentionStamp(cleared.get(), epochs[bookUrl] ?: 0L, keptDao.find(bookUrl)?.generation)
+    }
+
+    private fun checkPreview(preview: WholeBookPreview, old: KeptTranslation?) {
+        check(preview.retentionStamp == RetentionStamp(cleared.get(), epochs[preview.bookUrl] ?: 0L, old?.generation)) {
+            "Saved translation changed; check the book again"
+        }
+    }
+
+    internal suspend fun retain(preview: WholeBookPreview, checkCoverage: suspend () -> WholeBookCoverage): Unit =
+        writes.withLock {
+            database.withTransaction {
+                val old = keptDao.find(preview.bookUrl)
+                checkPreview(preview, old)
+                check(present(listOf(preview.bookUrl)).isNotEmpty()) { "Book is not in the library" }
+                check(old?.state != "running" && old?.state != "restored") { "This translation cannot be finalized" }
+                // Holding the write lock and transaction prevents trim/clear between checking and retention.
+                val coverage = checkCoverage()
+                check(coverage.total == preview.total && coverage.cached + coverage.failed == coverage.total) {
+                    "Saved coverage changed; check the book again"
+                }
+                val generation = maxOf(now(), generations.incrementAndGet(), (old?.generation ?: 0) + 1)
+                generations.set(generation)
+                keptDao.put(KeptTranslation(
+                    preview.bookUrl, preview.source, preview.target, preview.identity, generation,
+                    coverage.total, coverage.cached, coverage.failed, "done", null, old?.startedAt ?: now(), now(),
+                ))
+            }
+        }
+
+    suspend fun saveSuccess(
+        bookUrl: String, generation: Long, rawKey: String, translation: String, done: Int, failed: Int,
+    ): KeptWriteResult = checkpoint(bookUrl, generation, done, failed) {
+        val key = hash(rawKey)
+        if (dao.find(bookUrl, key) != null) KeptWriteResult.ALREADY_PRESENT else {
+            val at = nextSaveAt()
+            dao.putPulled(TranslatedSentence(bookUrl, key, translation, at, at))
+            KeptWriteResult.SAVED
+        }
+    }
+
+    suspend fun saveFailure(
+        bookUrl: String, generation: Long, rawKey: String, done: Int, failed: Int,
+    ): KeptWriteResult = checkpoint(bookUrl, generation, done, failed) {
+        val key = hash(rawKey)
+        if (dao.find(bookUrl, key) != null || keptDao.fail(KeptFailure(bookUrl, key)) == -1L) {
+            KeptWriteResult.ALREADY_PRESENT
+        } else KeptWriteResult.SAVED
+    }
+
+    suspend fun progress(bookUrl: String, generation: Long, done: Int, failed: Int): KeptWriteResult =
+        checkpoint(bookUrl, generation, done, failed) { KeptWriteResult.ALREADY_PRESENT }
+
+    private suspend fun checkpoint(
+        bookUrl: String, generation: Long, done: Int, failed: Int, write: suspend () -> KeptWriteResult,
+    ): KeptWriteResult = writes.withLock {
+        database.withTransaction {
+            val record = keptDao.find(bookUrl)
+            if (record == null || record.generation != generation || record.state != "running") {
+                return@withTransaction KeptWriteResult.INVALIDATED
+            }
+            require(done >= 0 && failed >= 0 && done.toLong() + failed <= record.total)
+            val result = write()
+            keptDao.put(record.copy(done = done, failed = failed, updatedAt = now()))
+            result
+        }
+    }
+
+    suspend fun pause(bookUrl: String, generation: Long, reason: String): KeptWriteResult =
+        finish(bookUrl, generation, "paused", reason)
+
+    suspend fun complete(bookUrl: String, generation: Long): KeptWriteResult =
+        finish(bookUrl, generation, "done", null)
+
+    private suspend fun finish(bookUrl: String, generation: Long, state: String, reason: String?): KeptWriteResult =
+        writes.withLock {
+            database.withTransaction {
+                val record = keptDao.find(bookUrl)
+                if (record == null || record.generation != generation || record.state != "running") {
+                    return@withTransaction KeptWriteResult.INVALIDATED
+                }
+                if (state == "done") require(record.done.toLong() + record.failed == record.total.toLong())
+                keptDao.put(record.copy(state = state, reason = reason, updatedAt = now()))
+                KeptWriteResult.SAVED
+            }
+        }
+
+    suspend fun remove(bookUrl: String) = clearBook(bookUrl)
+
+    suspend fun clearFailures(bookUrl: String) = writes.withLock {
+        database.withTransaction {
+            val record = keptDao.find(bookUrl) ?: return@withTransaction
+            keptDao.put(record.copy(generation = record.generation + 1, state = "paused", reason = null,
+                failed = 0, updatedAt = now()))
+            keptDao.clearFailures(bookUrl)
+        }
+    }
+
+    suspend fun reconcileRunning(live: Set<String>) = writes.withLock {
+        database.withTransaction {
+            keptDao.all().filter { it.state == "running" && it.bookUrl !in live }.forEach {
+                keptDao.put(it.copy(state = "paused", reason = "interrupted", updatedAt = now()))
+            }
+        }
+    }
+
+    suspend fun keptRecords(): List<KeptTranslation> = keptDao.all()
+
+    suspend fun getKept(bookUrl: String): KeptTranslation? = keptDao.find(bookUrl)
+
+    suspend fun exportRows(bookUrl: String): List<TranslatedSentence> = dao.forExport(bookUrl)
+
+    suspend fun exportFailures(bookUrl: String): List<String> = keptDao.failures(bookUrl)
+
+    suspend fun <T> withKeptExport(bookUrl: String, write: suspend (KeptTranslation) -> T): T? = writes.withLock {
+        database.withTransaction {
+            val record = keptDao.find(bookUrl)?.takeIf { it.state == "done" || it.state == "restored" }
+                ?: return@withTransaction null
+            write(record)
+        }
+    }
+
+    suspend fun visitExportRows(bookUrl: String, visit: (TranslatedSentence) -> Unit) {
+        var after = ""
+        while (true) {
+            val page = dao.exportPage(bookUrl, after, 100)
+            if (page.isEmpty()) return
+            page.forEach(visit)
+            after = page.last().key
+        }
+    }
+
+    suspend fun visitExportFailures(bookUrl: String, visit: (String) -> Unit) {
+        var after = ""
+        while (true) {
+            val page = keptDao.failurePage(bookUrl, after, 100)
+            if (page.isEmpty()) return
+            page.forEach(visit)
+            after = page.last()
+        }
+    }
+
+    /** The keys here have already been hashed in the exporting database. */
+    suspend fun restoreKept(record: KeptTranslation, rows: List<TranslatedSentence>, failures: List<String>) =
+        writes.withLock {
+            database.withTransaction {
+                if (keptDao.find(record.bookUrl) == null) {
+                    keptDao.put(record.copy(generation = maxOf(now(), generations.incrementAndGet()),
+                        state = "restored", reason = null, startedAt = now(), updatedAt = now()))
+                }
+                for (row in rows) {
+                    if (dao.find(record.bookUrl, row.key) == null) {
+                        dao.putPulled(row.copy(bookUrl = record.bookUrl, savedAt = if (row.savedAt == 0L) 0L else nextSaveAt()))
+                    }
+                }
+                for (key in failures) {
+                    if (dao.find(record.bookUrl, key) == null) keptDao.fail(KeptFailure(record.bookUrl, key))
+                }
+            }
+        }
+
+    private suspend fun nextSaveAt(): Long {
+        if (lastSaveAt == null) lastSaveAt = maxOf(dao.maxSavedAt() ?: 0L, sync.maxPushedSavedAt() ?: 0L)
+        return maxOf(now(), (lastSaveAt ?: 0L) + 1).also { lastSaveAt = it }
+    }
 
     /** Keeps within the limits and drops the books gone from the library: once at start. */
     suspend fun tidy() {
@@ -516,17 +770,21 @@ class SavedTranslations(
      */
     suspend fun sweep() = quietly("sweep") {
         val emptied = writes.withLock {
-            val books = (dao.books() + modes.books() + sync.books() + epochs.keys).distinct()
+            val books = (dao.books() + modes.books() + sync.books() + keptDao.all().map { it.bookUrl } + epochs.keys).distinct()
             if (books.isEmpty()) return@withLock false
             val kept = books.chunked(BATCH).flatMap { present(it) }.toSet()
             val gone = books.filterNot { it in kept }
             gone.forEach { epochs.merge(it, 1L, Long::plus) }
-            gone.chunked(BATCH).forEach {
-                modes.forget(it)
-                sync.forget(it)
+            val removed = gone.chunked(BATCH).sumOf {
+                database.withTransaction {
+                    modes.forget(it)
+                    sync.forget(it)
+                    keptDao.invalidate(it)
+                    keptDao.forget(it)
+                    dao.forget(it)
+                }
             }
             // Removed books stay fenced, so they are gone again on every later sweep with nothing left to delete.
-            val removed = gone.chunked(BATCH).sumOf { dao.forget(it) }
             removed > 0 && dao.count() == 0
         }
         // Settings offer no Clear once nothing is saved, so the room the last book took is given back here.
@@ -561,7 +819,7 @@ class SavedTranslations(
             try {
                 database.withTransaction {
                     dao.clear()
-                    sync.clear()
+                    sync.clearCache()
                     owe(accountClears)
                 }
             } finally {
@@ -588,6 +846,8 @@ class SavedTranslations(
                 database.withTransaction {
                     dao.forget(listOf(bookUrl))
                     sync.forget(listOf(bookUrl))
+                    keptDao.invalidate(listOf(bookUrl))
+                    keptDao.forget(listOf(bookUrl))
                     owe(accountClears)
                 }
             } finally {
@@ -900,7 +1160,7 @@ class SavedTranslations(
         val hashed = hash(key)
         val found = dao.find(bookUrl, hashed)
         if (found != null) dao.touch(bookUrl, hashed, now())
-        return PageTranslationCache.Lookup(found, stamp)
+        return PageTranslationCache.Lookup(found, stamp, found == null && keptDao.failed(bookUrl, hashed))
     }
 
     internal suspend fun save(
@@ -935,9 +1195,9 @@ class SavedTranslations(
 
     // Called holding [writes].
     private suspend fun trim() {
-        val over = dao.count() - maxSentences
+        val over = dao.cacheCount() - maxSentences
         if (over > 0) dao.dropOldest(over)
-        var excess = dao.characters() - maxCharacters
+        var excess = dao.cacheCharacters() - maxCharacters
         while (excess > 0) {
             val oldest = dao.oldest(BATCH)
             if (oldest.isEmpty()) break
@@ -1058,7 +1318,6 @@ class SavedTranslations(
 
         private const val TAG = "SavedTranslations"
 
-        private fun hash(key: String): String =
-            MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
+        private fun hash(key: String): String = translationKey(key)
     }
 }

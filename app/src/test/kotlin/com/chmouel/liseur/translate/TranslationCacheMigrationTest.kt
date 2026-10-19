@@ -92,6 +92,34 @@ class TranslationCacheMigrationTest {
         }
     }
 
+    @Test
+    fun `version five preserves cache rows and cascades kept failure removal`() {
+        helper.createDatabase(TEST_DB, 4).use { old ->
+            old.execSQL(
+                "INSERT INTO translated_sentences (book_url, `key`, translation, used_at, saved_at) " +
+                    "VALUES ('file:///one.epub', 'k', 'un', 1000, 1000)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, *TranslationCacheDatabase.MIGRATIONS).use { db ->
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.query("SELECT translation, saved_at FROM translated_sentences").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("un", it.getString(0))
+                assertEquals(1000, it.getLong(1))
+            }
+            db.execSQL(
+                "INSERT INTO kept_translations VALUES ('file:///one.epub', NULL, 'fr', 'identity', 1, " +
+                    "1, 0, 1, 'done', NULL, 1000, 1000)",
+            )
+            db.execSQL("INSERT INTO kept_failures VALUES ('file:///one.epub', 'failed')")
+            db.execSQL("DELETE FROM kept_translations")
+            db.query("SELECT COUNT(*) FROM kept_failures").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "translations-migration-test"
     }

@@ -1306,11 +1306,13 @@ changing reader behavior.
 - Model lists are sorted by name and show per-million token prices when
   the list has them. Together's model type keeps non-text models out;
   Together AI is offered at `https://api.together.ai/v1`.
-- "Translate the page from here" (sheet) and "Translate into
-  <language>" (reader ⋮ menu) translate a reflowable book in place from
-  the first sentence on screen (`scrolledPlace` when scrolling, else the
-  page locator) in `TranslateFeature.pageLanguages`; hidden while setup
-  is needed or already translated.
+- "Translate the page from here" (selected-passage sheet) translates a
+  reflowable book in place from the first sentence on screen
+  (`scrolledPlace` when scrolling, else the page locator) in
+  `TranslateFeature.pageLanguages`; the translation bar keeps Stop. The
+  reader's ⋮ menu and Aa controls have no translation actions; whole-book
+  preparation is in the cover's long-press actions and Translation
+  settings.
 - `PageTranslation` walks with `PublicationUtteranceCursor`, keeps a
   bounded number ahead of the screen, restarts on a jump, skips walked
   sentences behind the screen, and asks one at a time through a
@@ -1352,6 +1354,22 @@ changing reader behavior.
   Lookup, re-lookup if the service changed, save only under the
   answerer. LRU: 50,000 sentences, 20 million characters. A lookup's
   stamp fences Clear: an earlier reply is shown, not saved.
+- Whole-book translation (`WholeBook*.kt`; see
+  `docs/adr/0062-whole-book-translations-stay-on-the-phone.md`): requests
+  are prepared by the reader's `SentenceRequests`, so keys match. Nothing
+  is scanned until a tap and nothing is sent until the reader confirms;
+  cost ranges use advertised prices and are estimates. Pinned translators
+  (`ServiceTranslate.openPinned`) check settings before every submission,
+  never rebind or fall back, and send one-shot bodies. Invalid envelopes
+  pause the job; only sentence-local refusals become failure markers.
+- Bulk and reader misses share admission (`TranslationAdmissions`): bulk
+  waits for submitted reader calls to save and blocks new matching misses
+  until its workers settle.
+- `kept_translations`/`kept_failures` are outside the LRU and Clear;
+  writes are generation-fenced and persist before progress advances. A
+  saved row wins over a marker; retrying failures needs confirmation;
+  checks precede replacing metadata or clearing markers. Markers never
+  sync. Sources must be inside the EPUB archive (network-denying opener).
 - Book removal is a sweep, not a delete by URL (`BookRemoval` may run in
   a caller's transaction): `AppContainer` sweeps on Room invalidation of
   `books` and at start; `sweep()` bumps the book's epoch so an open

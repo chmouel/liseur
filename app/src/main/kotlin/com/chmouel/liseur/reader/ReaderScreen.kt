@@ -50,7 +50,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -4149,37 +4148,6 @@ internal fun ReaderScreen(
                                 ),
                             )
                         }
-                        // The languages a page would go into with nothing
-                        // left to choose, read again each time the bar comes
-                        // up so a changed target shows. Null hides the item.
-                        val uiLocale = LocalConfiguration.current.locales[0]
-                        val pageLanguages by produceState<PageTranslationModes.Mode?>(
-                            null,
-                            chromeVisible,
-                            translateReady,
-                            pageTranslated,
-                            uiLocale,
-                        ) {
-                            value = if (translate.isAvailable && translateReady && !pageTranslated && reflowableText) {
-                                translate.pageLanguages(publication.metadata.languages, uiLocale)
-                            } else {
-                                null
-                            }
-                        }
-                        val translateLanguages = pageLanguages
-                        val translateFromHere: (() -> Unit)? = translateLanguages?.let { languages ->
-                            {
-                                effectScope.launch {
-                                    val nav = navigatorNow ?: return@launch
-                                    val locator = if (effectiveScrollingNow) {
-                                        scrolledPlace(nav) ?: return@launch
-                                    } else {
-                                        capture(nav, nav.currentLocator.value)
-                                    }
-                                    startTranslatingPage(nav, locator, languages.source, languages.target)
-                                }
-                            }
-                        }
                         val readAloudFromHere: (() -> Unit)? = readAloud
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
@@ -4209,7 +4177,7 @@ internal fun ReaderScreen(
                         // position; reading settings, this book's
                         // background recaps among them, stay in Aa.
                         // Hidden when none applies.
-                        if (codexEnabled || storyAvailable || translateFromHere != null || readAloudFromHere != null || syncable) {
+                        if (codexEnabled || storyAvailable || readAloudFromHere != null || syncable) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4238,26 +4206,6 @@ internal fun ReaderScreen(
                                                         lookups.codex.open(origin, peekOrigin != null || pageTranslated, story = storyAvailable)
                                                     }
                                                 }
-                                            },
-                                        )
-                                    }
-                                    if (translateFromHere != null && translateLanguages != null) {
-                                        val target = translateLanguages.target
-                                        DropdownMenuItem(
-                                            text = {
-                                                Text(
-                                                    stringResource(
-                                                        R.string.reader_translate_into,
-                                                        // Mid-sentence, as the language names itself: "français", not "Français".
-                                                        Locale.forLanguageTag(target).getDisplayName(uiLocale).ifBlank { target },
-                                                    ),
-                                                )
-                                            },
-                                            leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null) },
-                                            onClick = {
-                                                moreOpen = false
-                                                chromeVisible = false
-                                                translateFromHere()
                                             },
                                         )
                                     }

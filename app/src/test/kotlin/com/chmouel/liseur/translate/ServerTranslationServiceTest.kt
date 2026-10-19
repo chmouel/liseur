@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.security.SecretCipher
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerChange
 import com.chmouel.liseur.providers.ServerConnections
+import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.tts.OpenAiTtsClient
 import com.chmouel.liseur.tts.ServerKeys
 import java.io.File
@@ -15,6 +16,7 @@ import java.io.IOException
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -33,6 +35,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @Config(sdk = [35], application = Application::class)
@@ -45,6 +48,8 @@ class ServerTranslationServiceTest {
     private lateinit var scope: CoroutineScope
     private lateinit var settings: AppSettingsRepository
     private lateinit var service: ServerTranslationService
+    private lateinit var connections: ServerConnections
+    private lateinit var feature: ServiceTranslate
     private lateinit var url: String
     private var failWrites = false
 
@@ -66,8 +71,9 @@ class ServerTranslationServiceTest {
         val cipher = SecretCipher("test").apply {
             keyForTesting = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         }
-        val connections = ServerConnections(settings, ServerKeys(folder.newFolder("keys"), cipher), client = OpenAiTtsClient(), scope = scope)
+        connections = ServerConnections(settings, ServerKeys(folder.newFolder("keys"), cipher), client = OpenAiTtsClient(), scope = scope)
         service = ServerTranslationService(connections, settings, OpenAiChatClient(), scope)
+        feature = ServiceTranslate(settings, connections, ServiceAccounts(RuntimeEnvironment.getApplication(), connections), listOf(service), scope = scope)
         val id = (settings.addServer("Home", url) as ServerChange.Saved).id
         settings.selectTranslationServer(id)
     }
@@ -85,6 +91,93 @@ class ServerTranslationServiceTest {
         .build()
 
     private fun body() = JSONObject(web.takeRequest().body!!.utf8())
+
+    private suspend inline fun <reified E : TranslationError> expect(crossinline block: suspend () -> Unit) {
+        val error = try {
+            block()
+            null
+        } catch (e: TranslationError) {
+            e
+        }
+        assertTrue("Expected ${E::class.simpleName}, got $error", error is E)
+    }
+
+    @Test
+    fun `inspecting whole book settings needs no requests and tracks the selected recipe`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        val identity = feature.wholeBookIdentity("en", "fr")
+        settings.editTranslationServer(url) { it.copy(instructions = "Use tu.") }
+        assertFalse(identity == feature.wholeBookIdentity("en", "fr"))
+        settings.setTranslationProvider("device")
+        expect<TranslationError.NotSetUp> { feature.wholeBookIdentity("en", "fr") }
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
+    fun `a pinned preview sends no passage and rejects another identity or provider`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        val pinned = feature.openPinned("en", "fr")
+        val identity = pinned.answering()
+        assertEquals(0, web.requestCount)
+        expect<TranslationError.SettingsChanged> { feature.openPinned("en", "fr", identity + "other") }
+        settings.setTranslationProvider("device")
+        expect<TranslationError.NotSetUp> { feature.openPinned("en", "fr") }
+        expect<TranslationError.SettingsChanged> { pinned.answering() }
+        pinned.close()
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
+    fun `pinned runs stop at target preference recipe and key changes before cache lookup or submission`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        val target = feature.openPinned("en", "fr")
+        settings.setTranslationTarget("de")
+        expect<TranslationError.SettingsChanged> { target.answering() }
+        target.close()
+
+        val recipe = feature.openPinned("en", "fr")
+        val identity = recipe.answering()
+        settings.editTranslationServer(url) { it.copy(instructions = "Use tu.") }
+        expect<TranslationError.SettingsChanged> { recipe.translate("It rains.", null, identity) }
+        recipe.close()
+
+        val credential = feature.openPinned("en", "fr")
+        val changed = CompletableDeferred<Unit>()
+        connections.commitKey(ServerConnections.originOf(url)!!, "new-key", done = { changed.complete(Unit) })
+        changed.await()
+        expect<TranslationError.SettingsChanged> { credential.answering() }
+        credential.close()
+        assertEquals(0, web.requestCount)
+    }
+
+    @Test
+    fun `whole book pricing uses only model metadata and an absent price stays unknown`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        web.enqueue(MockResponse.Builder().code(200).body("""{"data":[{"id":"llama3"}]}""").build())
+        assertEquals(null, feature.wholeBookPrice())
+        assertEquals("/v1/models", web.takeRequest().url.encodedPath)
+        web.enqueue(
+            MockResponse.Builder().code(200)
+                .body("""{"data":[{"id":"llama3","pricing":{"input":0.1,"output":0.2}}]}""").build(),
+        )
+        assertEquals(TextPrice(0.1, 0.2), feature.wholeBookPrice())
+        assertEquals("/v1/models", web.takeRequest().url.encodedPath)
+    }
+
+    @Test
+    fun `preview prompt sizing freezes instructions and counts actual context and book markers`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        settings.editTranslationServer(url) { it.copy(instructions = "Use tu.") }
+        val size = feature.wholeBookPrompt("en", "fr")
+        val request = SentenceRequest(PageSentence("It rains.", "chapter", null, null), "id", "Clouds.", null, "Book.")
+        settings.editTranslationServer(url) { it.copy(instructions = "Different instructions.") }
+        assertEquals(
+            TranslationPrompt.system("en", "fr", true, "Use tu.", true).length +
+                TranslationPrompt.user("It rains.", "Clouds.", "Book.").length,
+            size(request),
+        )
+        assertEquals(0, web.requestCount)
+    }
 
     @Test
     fun `the server's options shape the request`(): Unit = runBlocking {

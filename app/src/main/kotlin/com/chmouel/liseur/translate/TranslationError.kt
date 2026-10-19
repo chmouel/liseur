@@ -50,6 +50,9 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
     /** The service's address or key kept changing while it was asked. */
     class Changed : TranslationError("The service changed while translating")
 
+    /** A whole-book job no longer matches the settings approved for it. */
+    class SettingsChanged : TranslationError("Translation settings changed")
+
     /** The device's translator has this pair but has not downloaded it. */
     class NotDownloaded : TranslationError("The language pair is not downloaded")
 

@@ -77,6 +77,33 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `translation guard stops a temperature retry before it submits`(): Unit = runBlocking {
+        server.enqueue(json("""{"error":{"message":"Unsupported temperature"}}""", 400))
+        var attempts = 0
+        expect<TranslationError.SettingsChanged> {
+            client.translate(base, "secret", "m", "en", "fr", "It rains.", beforeRequest = {
+                if (++attempts == 2) throw TranslationError.SettingsChanged()
+            })
+        }
+        assertEquals(2, attempts)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `translation guard stops a thinking retry before it submits`(): Unit = runBlocking {
+        val client = OpenAiChatClient(thinking = { listOf(JSONObject("""{"enable_thinking":false}""")) })
+        server.enqueue(json("""{"error":{"message":"Unsupported enable_thinking"}}""", 400))
+        var attempts = 0
+        expect<TranslationError.SettingsChanged> {
+            client.translate(base, "secret", "m", "en", "fr", "It rains.", beforeRequest = {
+                if (++attempts == 2) throw TranslationError.SettingsChanged()
+            })
+        }
+        assertEquals(2, attempts)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
     fun `asks the chat endpoint with the task apart from the passage`(): Unit = runBlocking {
         server.enqueue(json(completion("The sun was setting.")))
 

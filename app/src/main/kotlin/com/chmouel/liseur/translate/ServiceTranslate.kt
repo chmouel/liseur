@@ -151,6 +151,114 @@ internal class ServiceTranslate(
         service.translate(passage, source, target, book = about)
     }
 
+    /** A whole-book run never rebinds or falls back to an on-device translator. */
+    suspend fun wholeBookIdentity(source: String?, target: String): String {
+        val snapshot = settings.settings.first()
+        val service = wholeBookService(snapshot)
+        if (!service.configured.first()) throw TranslationError.NotSetUp()
+        return pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot))
+    }
+
+    suspend fun openPinned(source: String?, target: String, expectedIdentity: String? = null): SentenceTranslator {
+        val snapshot = settings.settings.first()
+        val service = wholeBookService(snapshot)
+        if (!service.configured.first()) throw TranslationError.NotSetUp()
+        val identity = pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot))
+        if (expectedIdentity != null && identity != expectedIdentity) throw TranslationError.SettingsChanged()
+        val owner = service.owner(snapshot) ?: throw TranslationError.NotSetUp()
+        val generation = connections.generation(owner).value
+        val recipe = pinnedRecipe(snapshot, service, source, target)
+        val context = contextOf(service, snapshot)
+        val template = bookOf(service, snapshot)
+
+        suspend fun guard() {
+            val current = settings.settings.first()
+            if (current.translationProvider != service.id ||
+                recipe != pinnedRecipe(current, service, source, target) ||
+                connections.generation(owner).value != generation
+            ) {
+                throw TranslationError.SettingsChanged()
+            }
+        }
+
+        guard()
+        val run = service.openPinned(source, target, snapshot, ::guard)
+        try {
+            guard()
+        } catch (e: Exception) {
+            run.close()
+            throw e
+        }
+        return object : SentenceTranslator {
+            override val source = source
+            override val target = target
+            override val destination = service.destination(snapshot)
+
+            private suspend fun check(wanted: String = identity) {
+                guard()
+                checkIdentity(wanted)
+            }
+
+            private fun checkIdentity(wanted: String) {
+                if (wanted != identity) throw TranslationError.SettingsChanged()
+            }
+
+            override suspend fun answering(): String {
+                check()
+                return identity
+            }
+
+            override suspend fun contextSize(identity: String): TranslationContextSize {
+                // These inputs are frozen; answering() and every submission check current settings.
+                checkIdentity(identity)
+                return context
+            }
+
+            override suspend fun book(identity: String, facts: BookFacts?): String? {
+                checkIdentity(identity)
+                return TranslationBookContext.render(template, facts)
+            }
+
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                check(identity)
+                val text = run.translate(sentence, context, TranslationBookContext.render(template, book))
+                check(identity)
+                return Translated(text, identity)
+            }
+
+            override fun close() = run.close()
+        }
+    }
+
+    /** Fetches model metadata only; an unadvertised price stays unknown. */
+    suspend fun wholeBookPrice(): TextPrice? {
+        val s = settings.settings.first()
+        return wholeBookService(s).wholeBookPrice(s)
+    }
+
+    /** The actual prompt size, frozen for a preview without submitting any book text. */
+    suspend fun wholeBookPrompt(source: String?, target: String): (SentenceRequest) -> Int {
+        val s = settings.settings.first()
+        val service = wholeBookService(s)
+        return { request -> service.requestCharacters(s, source, target, request) }
+    }
+
+    private fun wholeBookService(s: AppSettings): TranslationService =
+        services.firstOrNull { it.id == s.translationProvider && it.supportsPinned }
+            ?.takeIf { it.model(s) != null && it.owner(s) != null }
+            ?: throw TranslationError.NotSetUp()
+
+    private fun pinnedRecipe(s: AppSettings, service: TranslationService, source: String?, target: String): List<Any?> =
+        listOf(
+            pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s), bookOf(service, s)),
+            s.translationProvider,
+            s.translationTarget,
+            service.owner(s),
+            s.translationServerConnection?.takeIf { service.id == ServerSettings.SERVER_PROVIDER }?.let {
+                listOf(it.url, s.translationStates[it.id]?.keepAlive)
+            },
+        )
+
     /**
      * A translator that follows the settings: each sentence goes to the
      * service and model chosen when it is asked, so one picked from the

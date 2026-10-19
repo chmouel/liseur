@@ -138,6 +138,10 @@ class AppContainer(context: Context) {
         ),
     )
 
+    internal val translationPublicationOpener by lazy {
+        com.chmouel.liseur.translate.TranslationPublicationOpener(context)
+    }
+
     val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
         .addMigrations(*LiseurDatabase.MIGRATIONS)
         .build()
@@ -199,6 +203,7 @@ class AppContainer(context: Context) {
     suspend fun clearBookTranslations(bookUrl: String) {
         val clears = accountTranslationClears.forBook(bookUrl)
         if (clears.isEmpty() && !savedTranslationsOpening.isInitialized() && !savedTranslationsFile.exists()) return
+        wholeBookTranslations.pause(bookUrl)
         savedTranslations.clearBook(bookUrl, clears)
         if (clears.isNotEmpty()) requestBookSync(bookUrl)
     }
@@ -280,6 +285,8 @@ class AppContainer(context: Context) {
         }
     }
 
+    internal val translationAdmissions = com.chmouel.liseur.translate.TranslationAdmissions()
+
     /** [bookUrl]'s saved page translations, the store opened only once a page is translated. */
     fun pageTranslations(bookUrl: String): PageTranslationCache = object : PageTranslationCache {
         private val book by lazy { savedTranslations.forBook(bookUrl) }
@@ -287,6 +294,9 @@ class AppContainer(context: Context) {
         override suspend fun get(key: String) = book.get(key)
 
         override suspend fun put(key: String, value: String, stamp: Long) = book.put(key, value, stamp)
+
+        override suspend fun <T> request(identity: String, work: suspend () -> T): T =
+            translationAdmissions.reader(bookUrl, identity, work)
     }
 
     /**
@@ -859,6 +869,10 @@ class AppContainer(context: Context) {
     /** Translating a selected passage: the phone's translator, or a service from the Services page. */
     val translate: TranslateFeature by lazy {
         TranslateFeatureFactory.create(context.applicationContext, this)
+    }
+
+    internal val wholeBookTranslations by lazy {
+        com.chmouel.liseur.translate.WholeBookTranslations(context.applicationContext, this, applicationScope)
     }
 
     /** Reading added up across every device, when a server keeps it. */
