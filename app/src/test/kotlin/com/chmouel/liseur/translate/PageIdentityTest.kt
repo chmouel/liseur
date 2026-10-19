@@ -80,6 +80,15 @@ class PageIdentityTest {
     }
 
     @Test
+    fun `the book template joins the identity after the earlier text, only when one is sent`() {
+        val off = pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.STANDARD)
+        val told = pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.STANDARD, "Book: {title}")
+        assertEquals(off + "\u0000book=" + TranslationBookContext.identity("Book: {title}"), told)
+        assertNotEquals(told, pageIdentity(settings(), "gemini", "flash", "fr", "en", TranslationContextSize.STANDARD, "Title: {title}"))
+        assertEquals("gemini", pageIdentityService(told))
+    }
+
+    @Test
     fun `another service is not tied to the chosen server`() {
         assertFalse(pageIdentity(settings(), "gemini", "flash", "fr", "en").contains(id))
     }

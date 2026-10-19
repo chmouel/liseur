@@ -1271,6 +1271,13 @@
         <item quantity="other">Jusqu’à %1$d phrases, %2$s caractères</item>
     </plurals>
     <string name="translation_context_unused">Le service choisi traduit chaque phrase seule : ce réglage n’a aucun effet.</string>
+    <string name="translation_settings_book">Détails du livre</string>
+    <string name="translation_settings_book_detail">Un traducteur IA peut savoir de quel livre et de quel chapitre vient un passage, pour garder les noms, les termes et le ton cohérents. Le modèle ci-dessous est rempli et envoyé au service avec chaque traduction : par défaut le titre, l’auteur et le titre du chapitre. Ajoutez {percent} pour indiquer où commence le chapitre dans le livre.</string>
+    <string name="translation_book_switch">Envoyer les détails du livre</string>
+    <string name="translation_book_switch_detail">Pour les sélections et la traduction de page</string>
+    <string name="translation_book_template">Modèle : {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Rétablir le modèle par défaut</string>
+    <string name="translation_book_unused">Le service choisi ne reçoit rien sur le livre : ce réglage n’a aucun effet.</string>
     <string name="translation_options_instructions">Instructions supplémentaires</string>
     <string name="translation_options_instructions_detail">Ajoutées à la demande pour chaque passage.</string>
     <string name="translation_options_instructions_hint">Utiliser le tutoiement. Garder les noms des personnages tels quels.</string>

@@ -1,5 +1,6 @@
 package com.chmouel.liseur.tts
 
+import com.chmouel.liseur.translate.BookFacts
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.PageSentence
 import com.chmouel.liseur.translate.PageSentences
@@ -33,7 +34,7 @@ class TranslatedSpeechTest {
 
         override suspend fun answering() = identity
 
-        override suspend fun translate(sentence: String, context: String?, identity: String): Translated {
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
             asked += sentence to context
             if (sentence == failOn) throw TranslationError.Refused()
             return Translated(List(longer) { "<$sentence>" }.joinToString(" "), identity)

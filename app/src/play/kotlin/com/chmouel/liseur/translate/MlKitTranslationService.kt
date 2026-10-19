@@ -142,7 +142,7 @@ internal class MlKitTranslationService(
 
     override suspend fun hasDownloads() = true
 
-    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String {
         val (from, to) = ready(source, target)
         val translator = engine.open(from, to)
         try {
@@ -158,7 +158,7 @@ internal class MlKitTranslationService(
         private var held: MlKitTranslator? = null
         private var closed = false
 
-        override suspend fun translate(sentence: String, context: String?): String = lock.withLock {
+        override suspend fun translate(sentence: String, context: String?, book: String?): String = lock.withLock {
             if (closed) throw CancellationException("closed")
             try {
                 // Asked at each sentence, so a language deleted mid-run stops it.

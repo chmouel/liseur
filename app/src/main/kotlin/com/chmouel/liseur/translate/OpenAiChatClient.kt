@@ -24,8 +24,9 @@ class OpenAiChatClient(
 ) {
     /**
      * [passage] translated by [model], with [context] as the text before it
-     * when there is one. TranslateGemma is asked in its own format, which
-     * has no room for [context]. [instructions] are the reader's own words
+     * when there is one, and [book] as what is known about the book.
+     * TranslateGemma is asked in its own format, which has no room for
+     * [context] or [book]. [instructions] are the reader's own words
      * for the prompt; [maxTokens] and [keepAlive] (Ollama's, as seconds or
      * a duration) are sent only when set, and [temperature] unless it is
      * null. A server that refuses the temperature, as OpenAI's reasoning
@@ -46,6 +47,7 @@ class OpenAiChatClient(
         maxTokens: Int? = null,
         keepAlive: String? = null,
         onTemperatureRefused: suspend () -> Unit = {},
+        book: String? = null,
     ): String {
         val body = JSONObject()
             .put("model", model)
@@ -62,8 +64,8 @@ class OpenAiChatClient(
             body.put(
                 "messages",
                 JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null, instructions)))
-                    .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context))),
+                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null, instructions, book != null)))
+                    .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context, book))),
             )
         }
         return OpenAiChat.translation(send(base, apiKey, model, body, onTemperatureRefused))

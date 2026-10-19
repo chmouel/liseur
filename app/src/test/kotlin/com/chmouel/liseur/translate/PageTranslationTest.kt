@@ -30,7 +30,7 @@ class PageTranslationTest {
         var closed = false
         var answer: (String) -> String = String::uppercase
 
-        override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated? {
             val by = this.identity
             asked += sentence to context
             gate?.await()
@@ -94,7 +94,7 @@ class PageTranslationTest {
             var identity = "old"
             override val destination: String? = null
             override suspend fun answering() = identity
-            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated? {
                 val by = this.identity
                 this.identity = "new"
                 return Translated(sentence.uppercase(), by)
@@ -117,7 +117,7 @@ class PageTranslationTest {
             override val destination: String? = null
             // The settings went from old to new as the sentence was sent, and back to old before it answered.
             override suspend fun answering() = "old"
-            override suspend fun translate(sentence: String, context: String?, identity: String) = Translated(sentence.uppercase(), "new")
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?) = Translated(sentence.uppercase(), "new")
             override fun close() = Unit
         }
         val page = PageTranslation(backgroundScope, run, cache, ::sentencesFrom, 1)
@@ -141,7 +141,7 @@ class PageTranslationTest {
 
             // The settings move on after the lookup was checked, as the sentence is about to go.
             override suspend fun answering() = if (++looks <= 2) "old" else "new"
-            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated? {
                 if (identity != "new") return null
                 asked += sentence
                 return Translated(sentence.uppercase(), "new")

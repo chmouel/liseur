@@ -4,6 +4,7 @@ import android.webkit.WebView
 import com.chmouel.liseur.reader.chrome.attachedWebViews
 import com.chmouel.liseur.reader.chrome.layoutPasses
 import com.chmouel.liseur.reader.chrome.visibleWebView
+import com.chmouel.liseur.translate.BookFacts
 import com.chmouel.liseur.translate.PageReader
 import com.chmouel.liseur.translate.PrecedingSentences
 import com.chmouel.liseur.translate.PrecedingText
@@ -24,14 +25,18 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.positionsByReadingOrder
 import org.readium.r2.shared.util.Language
 
 /**
@@ -75,6 +80,55 @@ internal object TranslatedPages {
             ?.let { publication.locatorFromLink(it) }
             ?.let { sentences(publication, it, source) }
     })
+
+    /**
+     * What an AI translator may be told about each chapter file of
+     * [publication], by the path a [PageSentence] names it with: worked
+     * out once, the first time it is asked.
+     */
+    fun bookFacts(publication: Publication): suspend (href: String) -> BookFacts? {
+        val lock = Mutex()
+        var known: Map<String, BookFacts>? = null
+        return { href -> lock.withLock { known ?: factsOf(publication).also { known = it } }[href] }
+    }
+
+    private suspend fun factsOf(publication: Publication): Map<String, BookFacts> {
+        val hrefs = publication.readingOrder.map { pathOf(it) }
+        val indexes = HashMap<String, Int>()
+        hrefs.forEachIndexed { index, href -> indexes.putIfAbsent(href, index) }
+        val titles = HashMap<Int, String>()
+        // The first contents entry pointing into a file names it, even at a #fragment.
+        fun walk(links: List<Link>) {
+            for (link in links) {
+                val title = link.title?.trim()?.takeIf(String::isNotEmpty)
+                val index = indexes[pathOf(link)]
+                if (title != null && index != null) titles.putIfAbsent(index, title)
+                walk(link.children)
+            }
+        }
+        walk(publication.tableOfContents)
+        publication.readingOrder.forEachIndexed { index, link ->
+            link.title?.trim()?.takeIf(String::isNotEmpty)?.let { titles.putIfAbsent(index, it) }
+        }
+        // Without positions the model is only not told how far in the book it is.
+        val starts = try {
+            publication.positionsByReadingOrder().map { it.firstOrNull()?.locations?.totalProgression }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val metadata = publication.metadata
+        return BookFacts.byResource(
+            title = metadata.title,
+            author = metadata.authors.joinToString(", ") { it.name }.ifBlank { null },
+            hrefs = hrefs,
+            titles = titles,
+            starts = starts,
+        )
+    }
+
+    private fun pathOf(link: Link): String = link.url().toString().let { ResourceAddress.canonicalPath(it) ?: it }
 
     /** What names a place the walk starts from: its chapter and element. */
     fun key(place: Locator): String =

@@ -60,6 +60,13 @@ internal interface TranslationService {
     fun usesContext(s: AppSettings): Boolean = false
 
     /**
+     * Whether a passage it translates under [s] goes with what the reader
+     * chose to say about the book (`translation_book_context`). A service
+     * that would drop it, or translate it too, says no.
+     */
+    fun usesBook(s: AppSettings): Boolean = false
+
+    /**
      * The languages it translates [source] into, with their state; null
      * when it takes any language. [source] is null for a detected one.
      */
@@ -69,11 +76,12 @@ internal interface TranslationService {
     suspend fun sources(): Set<String>?
 
     /**
-     * [passage] in [target]; [context] is the text before it, sent along
-     * when the service can use it and never translated. Throws
-     * [TranslationError]; cancelling the caller cancels the request.
+     * [passage] in [target]; [context] is the text before it and [book]
+     * what is known about the book, sent along when the service can use
+     * them and never translated. Throws [TranslationError]; cancelling the
+     * caller cancels the request.
      */
-    suspend fun translate(passage: String, source: String?, target: String, context: String? = null): String
+    suspend fun translate(passage: String, source: String?, target: String, context: String? = null, book: String? = null): String
 
     /**
      * Sentences one after another from [source] into [target], for as long
@@ -82,7 +90,7 @@ internal interface TranslationService {
      * it answers is what the identity names.
      */
     fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
-        override suspend fun translate(sentence: String, context: String?) = translate(sentence, source, target, context)
+        override suspend fun translate(sentence: String, context: String?, book: String?) = translate(sentence, source, target, context, book)
     }
 
     /** Its own rows on the Translation page, under the service picker; [onOpenPage] shows its [Page]. */
@@ -131,8 +139,11 @@ internal interface TranslationService {
 
 /** A run of translations between two languages, closed when the page goes back to the original. */
 internal interface TranslationRun {
-    /** [sentence] translated, with [context] as the sentence before it. Throws [TranslationError]. */
-    suspend fun translate(sentence: String, context: String?): String
+    /**
+     * [sentence] translated, with [context] as the sentence before it and
+     * [book] what is known about the book. Throws [TranslationError].
+     */
+    suspend fun translate(sentence: String, context: String?, book: String? = null): String
 
     fun close() = Unit
 }

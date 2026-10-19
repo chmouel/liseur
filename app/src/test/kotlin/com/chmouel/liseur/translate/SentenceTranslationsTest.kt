@@ -20,21 +20,26 @@ class SentenceTranslationsTest {
         var identity = "svc"
         var identityAfterFailure: String? = null
         val asked = mutableListOf<Pair<String, String?>>()
+        val books = mutableListOf<BookFacts?>()
         var gate: CompletableDeferred<Unit>? = null
         var failWith: TranslationError? = null
         var closed = false
+        var template: String? = null
 
         override suspend fun answering() = identity
 
-        override suspend fun translate(sentence: String, context: String?, identity: String): Translated {
+        override suspend fun book(identity: String, facts: BookFacts?) = TranslationBookContext.render(template, facts)
+
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
             val by = this.identity
             asked += sentence to context
+            books += book
             gate?.await()
             failWith?.let {
                 identityAfterFailure?.let { changed -> this.identity = changed }
                 throw it
             }
-            return Translated("${sentence.uppercase()}<${context.orEmpty()}>", by)
+            return Translated("${sentence.uppercase()}<${context.orEmpty()}>${book?.chapter.orEmpty()}", by)
         }
 
         override fun close() {
@@ -51,7 +56,7 @@ class SentenceTranslationsTest {
         override val destination: String? = null
         override suspend fun answering() = "svc"
 
-        override suspend fun translate(sentence: String, context: String?, identity: String): Translated? =
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated? =
             when (context) {
                 "page" -> {
                     pageGate.await()
@@ -68,6 +73,40 @@ class SentenceTranslationsTest {
     }
 
     private fun at(text: String, before: String?, selector: String = "#p1") = PageSentence(text, "ch1.xhtml", selector, before)
+
+    @Test
+    fun `each sentence is translated with the facts of its own chapter`() = runTest {
+        val translator = Translator()
+        val facts = mapOf("ch1.xhtml" to BookFacts(chapter = "One"), "ch2.xhtml" to BookFacts(chapter = "Two"))
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache(), book = { facts[it] })
+        translations.resolve(at("un", null), null)
+        translations.resolve(PageSentence("deux", "ch2.xhtml", "#p1", null), null)
+        assertEquals(listOf(facts["ch1.xhtml"], facts["ch2.xhtml"]), translator.books)
+    }
+
+    @Test
+    fun `the same sentence in two chapters is saved under what each was told`() = runTest {
+        val translator = Translator().apply { template = "Chapter: {chapter}" }
+        val facts = mapOf("ch1.xhtml" to BookFacts(chapter = "One"), "ch2.xhtml" to BookFacts(chapter = "Two"))
+        val cache = MemoryPageTranslationCache()
+        val first = SentenceTranslations(translator, cache, book = { facts[it] })
+        assertEquals("OUI<>One", first.resolve(at("oui", null), null).text)
+        assertEquals("OUI<>Two", first.resolve(PageSentence("oui", "ch2.xhtml", "#p1", null), null).text)
+        assertEquals(2, translator.asked.size)
+
+        val reopened = SentenceTranslations(translator, cache, book = { facts[it] })
+        assertEquals("OUI<>Two", reopened.resolve(PageSentence("oui", "ch2.xhtml", "#p1", null), null).text)
+        assertEquals("OUI<>One", reopened.resolve(at("oui", null), null).text)
+        assertEquals(2, translator.asked.size)
+    }
+
+    @Test
+    fun `facts that cannot be read leave the sentence translated without them`() = runTest {
+        val translator = Translator()
+        val translations = SentenceTranslations(translator, MemoryPageTranslationCache(), book = { error("no positions") })
+        assertEquals("UN<>", translations.resolve(at("un", null), null).text)
+        assertEquals(listOf<BookFacts?>(null), translator.books)
+    }
 
     @Test
     fun `the same sentence asked at once by the page and the voice is asked once`() = runTest {

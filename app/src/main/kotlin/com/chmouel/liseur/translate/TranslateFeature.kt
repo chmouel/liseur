@@ -57,6 +57,7 @@ interface TranslateFeature {
      * The sheet that translates [passage], from the language the book
      * [declared] when it declares one. With [onTranslatePage], it offers
      * to go on translating the page from there, in the languages it shows.
+     * [book] says what is known of where the passage is in the book.
      */
     @Composable
     fun Sheet(
@@ -64,6 +65,7 @@ interface TranslateFeature {
         declared: List<String>,
         onDismiss: () -> Unit,
         onTranslatePage: ((source: String?, target: String) -> Unit)? = null,
+        book: suspend () -> BookFacts? = { null },
     )
 
     /** The chosen service, ready to translate a page sentence by sentence; null when there is none. */
@@ -121,6 +123,7 @@ interface TranslateFeature {
             declared: List<String>,
             onDismiss: () -> Unit,
             onTranslatePage: ((source: String?, target: String) -> Unit)?,
+            book: suspend () -> BookFacts?,
         ) = Unit
 
         override suspend fun openPage(source: String?, target: String): SentenceTranslator? = null

@@ -16,6 +16,7 @@ import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.providers.ServicesScreen
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -49,7 +51,7 @@ internal class ServiceTranslate(
     val requestFullSync: suspend () -> Unit = {},
     /** Whether the library offers the setup sheet; the Play build's. */
     override val offersSetup: Boolean = false,
-    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : TranslateFeature {
     override val isAvailable = true
 
@@ -90,7 +92,14 @@ internal class ServiceTranslate(
 
     private fun chosen(s: AppSettings): List<Any?> {
         val server = s.translationServerConnection
-        return listOf(resolve(s).id, server, server?.let { s.translationModels[it.id] }, identityOptions(s), s.translationGeminiModel)
+        return listOf(
+            resolve(s).id,
+            server,
+            server?.let { s.translationModels[it.id] },
+            identityOptions(s),
+            s.translationGeminiModel,
+            s.translationBookContext,
+        )
     }
 
     /** How much of the book's earlier text goes with each sentence of a page, for the services that take it. */
@@ -100,6 +109,17 @@ internal class ServiceTranslate(
 
     /** Whether the service chosen now sends the book's earlier text with a sentence. */
     val takesContext: Flow<Boolean> = settings.settings.map { resolve(it).usesContext(it) }.distinctUntilChanged()
+
+    /** What the reader wrote to tell an AI translator about the book; null for the default, empty for nothing. */
+    val bookContext: Flow<String?> = settings.settings.map { it.translationBookContext }.distinctUntilChanged()
+
+    /** Saves in the feature's scope, so a template typed as the screen closes is still saved. */
+    fun setBookContext(template: String?) {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { settings.setTranslationBookContext(template) }
+    }
+
+    /** Whether the service chosen now is told about the book. */
+    val takesBook: Flow<Boolean> = settings.settings.map { resolve(it).usesBook(it) }.distinctUntilChanged()
 
     /** The language the reader picked to translate into; null follows the app's. */
     val target: Flow<String?> = settings.settings.map { it.translationTarget }.distinctUntilChanged()
@@ -116,11 +136,20 @@ internal class ServiceTranslate(
     private val requests = TranslationRequests { owner -> connections.generation(owner).value }
 
     /**
-     * [passage] translated by [service], asked again when its address or
-     * key changed while it was asked. Throws [TranslationError].
+     * [passage] translated by [service], with what the reader chose to say
+     * about the [book] it comes from, asked again when its address or key
+     * changed while it was asked. Throws [TranslationError].
      */
-    suspend fun translate(service: TranslationService, passage: String, source: String?, target: String): String =
-        requests.run({ service.owner(settings.settings.first()) }) { service.translate(passage, source, target) }
+    suspend fun translate(
+        service: TranslationService,
+        passage: String,
+        source: String?,
+        target: String,
+        book: BookFacts? = null,
+    ): String = requests.run({ service.owner(settings.settings.first()) }) {
+        val about = TranslationBookContext.render(bookOf(service, settings.settings.first()), book)
+        service.translate(passage, source, target, book = about)
+    }
 
     /**
      * A translator that follows the settings: each sentence goes to the
@@ -139,6 +168,7 @@ internal class ServiceTranslate(
             val owner: String?,
             var choice: List<Any?>,
             val context: TranslationContextSize,
+            val book: String?,
         ) {
             var destination by mutableStateOf(destination)
         }
@@ -147,14 +177,24 @@ internal class ServiceTranslate(
             // One read, so the service and the identity it is known by come from the same settings.
             val s = settings.settings.first()
             val service = resolve(s)
-            return Triple(service, pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s)), s)
+            val identity = pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s), bookOf(service, s))
+            return Triple(service, identity, s)
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
         suspend fun bind(): Bound {
             val (service, identity, s) = wanted()
             val destination = service.destination(s)
-            return Bound(identity, service, service.open(source, target, s), destination, service.owner(s), chosen(s), contextOf(service, s))
+            return Bound(
+                identity,
+                service,
+                service.open(source, target, s),
+                destination,
+                service.owner(s),
+                chosen(s),
+                contextOf(service, s),
+                bookOf(service, s),
+            )
         }
 
         var bound by mutableStateOf(bind())
@@ -183,12 +223,15 @@ internal class ServiceTranslate(
             override suspend fun contextSize(identity: String) =
                 rebound().takeIf { it.identity == identity }?.context ?: TranslationContextSize.OFF
 
-            override suspend fun translate(sentence: String, context: String?, identity: String): Translated? {
+            override suspend fun book(identity: String, facts: BookFacts?) =
+                TranslationBookContext.render(rebound().takeIf { it.identity == identity }?.book, facts)
+
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated? {
                 var moved = false
                 // Judged by the settings the run asks with: a change while it is out binds again, and the new one is only asked under the identity looked up.
                 val (current, text) = requests.run(::rebound, Bound::owner) {
                     moved = it.identity != identity
-                    if (moved) "" else it.run.translate(sentence, context)
+                    if (moved) "" else it.run.translate(sentence, context, TranslationBookContext.render(it.book, book))
                 }
                 return if (moved) null else Translated(text, current.identity)
             }
@@ -234,7 +277,8 @@ internal class ServiceTranslate(
         declared: List<String>,
         onDismiss: () -> Unit,
         onTranslatePage: ((source: String?, target: String) -> Unit)?,
-    ) = TranslationSheet(this, passage, declared, onDismiss, onTranslatePage)
+        book: suspend () -> BookFacts?,
+    ) = TranslationSheet(this, passage, declared, onDismiss, onTranslatePage, book)
 
     @Composable
     override fun PageBar(
@@ -264,13 +308,18 @@ internal class ServiceTranslate(
 internal fun contextOf(service: TranslationService, s: AppSettings): TranslationContextSize =
     if (service.usesContext(s)) s.translationContext else TranslationContextSize.OFF
 
+/** The template of what [service] is told about the book under [s]; null when it is told nothing. */
+internal fun bookOf(service: TranslationService, s: AppSettings): String? =
+    if (service.usesBook(s)) TranslationBookContext.template(s.translationBookContext) else null
+
 /**
  * What a page translation by [service] with [model] depends on, written to
  * be kept across versions: the server by its address, never its name, its
  * key, or a model another service would use. The server's options that
  * change a translation join it only once set, so a page translated before
  * they existed keeps its identity. How much earlier text goes with a
- * sentence, [context], joins last, and only for a service that sends it.
+ * sentence, [context], joins after them, and only for a service that
+ * sends it; so does the template of what it is told about the [book].
  */
 internal fun pageIdentity(
     s: AppSettings,
@@ -279,12 +328,14 @@ internal fun pageIdentity(
     source: String?,
     target: String,
     context: TranslationContextSize = TranslationContextSize.OFF,
+    book: String? = null,
 ): String {
     val server = s.translationServerConnection?.takeIf { service == ServerSettings.SERVER_PROVIDER }
     val fields = listOf(IDENTITY_VERSION, TranslationPrompt.version(model), service, server?.id, model, source, target)
     val tuned = server?.let { identityOptions(s, model) }.orEmpty()
     val window = listOfNotNull(context.takeIf { it != TranslationContextSize.OFF }?.let { "context=${it.id}" })
-    return (fields + tuned + window).joinToString("\u0000") { it?.toString().orEmpty() }
+    val about = listOfNotNull(book?.let { "book=${TranslationBookContext.identity(it)}" })
+    return (fields + tuned + window + about).joinToString("\u0000") { it?.toString().orEmpty() }
 }
 
 /**

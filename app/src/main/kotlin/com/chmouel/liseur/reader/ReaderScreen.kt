@@ -565,6 +565,8 @@ internal fun ReaderScreen(
         publication.metadata.layout != Layout.FIXED
     }
     val reflowableTextNow by rememberUpdatedState(reflowableText)
+    // What an AI translator is told of where a passage is in the book.
+    val bookFacts = remember(publication) { TranslatedPages.bookFacts(publication) }
     // The chrome's answer, and the container's, which are not the same
     // one and must not be merged: see [chromeScrolls]/[containerScrolls].
     val effectiveScrolling = chromeScrolls(reflowableText, scrollMode, verticalText)
@@ -2295,7 +2297,7 @@ internal fun ReaderScreen(
             open = {
                 shared?.translations?.takeIf { it.acquire() }
                     ?: translate.openPage(source, target)?.let {
-                        SentenceTranslations(it, pageTranslations, TranslatedPages.preceding(publication, source))
+                        SentenceTranslations(it, pageTranslations, TranslatedPages.preceding(publication, source), bookFacts)
                     }
             },
             close = SentenceTranslations::release,
@@ -4614,6 +4616,10 @@ internal fun ReaderScreen(
                 { source, target -> translatePage(passage.locator, source, target) }
             } else {
                 null
+            },
+            book = {
+                val href = passage.locator.href.toString()
+                bookFacts(ResourceAddress.canonicalPath(href) ?: href)
             },
         )
     }

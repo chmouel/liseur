@@ -1271,6 +1271,13 @@
         <item quantity="other">Hasta %1$d frases, %2$s caracteres</item>
     </plurals>
     <string name="translation_context_unused">El servicio elegido traduce cada frase por separado, así que este ajuste no tiene efecto.</string>
+    <string name="translation_settings_book">Datos del libro</string>
+    <string name="translation_settings_book_detail">Un traductor de IA puede saber de qué libro y capítulo viene un pasaje, para mantener coherentes los nombres, los términos y el tono. La plantilla de abajo se completa y se envía al servicio con cada traducción: por defecto el título, el autor y el título del capítulo. Añade {percent} para indicar en qué punto del libro empieza el capítulo.</string>
+    <string name="translation_book_switch">Enviar datos del libro</string>
+    <string name="translation_book_switch_detail">Para selecciones y traducción de páginas</string>
+    <string name="translation_book_template">Plantilla: {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Restablecer la plantilla</string>
+    <string name="translation_book_unused">El servicio elegido no recibe nada sobre el libro, así que este ajuste no tiene efecto.</string>
     <string name="translation_options_instructions">Instrucciones adicionales</string>
     <string name="translation_options_instructions_detail">Se añaden a la petición de cada pasaje.</string>
     <string name="translation_options_instructions_hint">Usar el tuteo. Mantener los nombres de los personajes tal cual.</string>

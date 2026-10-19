@@ -55,6 +55,8 @@ internal class GeminiTranslationService(
 
     override fun usesContext(s: AppSettings) = true
 
+    override fun usesBook(s: AppSettings) = true
+
     override fun destination(s: AppSettings): String = "Gemini"
 
     override fun owner(s: AppSettings): String = GeminiAccount.OWNER
@@ -63,16 +65,17 @@ internal class GeminiTranslationService(
 
     override suspend fun sources(): Set<String>? = null
 
-    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String =
-        ask(model.first(), passage, source, target, context)
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String =
+        ask(model.first(), passage, source, target, context, book)
 
     override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
-        override suspend fun translate(sentence: String, context: String?) = ask(model(s), sentence, source, target, context)
+        override suspend fun translate(sentence: String, context: String?, book: String?) =
+            ask(model(s), sentence, source, target, context, book)
     }
 
-    private suspend fun ask(model: String, passage: String, source: String?, target: String, context: String?): String {
+    private suspend fun ask(model: String, passage: String, source: String?, target: String, context: String?, book: String?): String {
         val key = account.key() ?: throw TranslationError.NotSetUp()
-        return client.translate(key, model, source, target, passage, context)
+        return client.translate(key, model, source, target, passage, context, book)
     }
 
     /** Saves in the service's scope, so a model typed as the screen closes is still saved. */

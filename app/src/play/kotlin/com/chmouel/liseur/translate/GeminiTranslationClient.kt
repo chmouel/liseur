@@ -20,7 +20,7 @@ class GeminiTranslationClient(
 ) {
     /**
      * [passage] translated by [model], with [context] as the text before it
-     * when there is one. Throws [TranslationError]; cancelling the caller
+     * when there is one, and [book] as what is known about the book. Throws [TranslationError]; cancelling the caller
      * cancels the request.
      */
     suspend fun translate(
@@ -30,13 +30,14 @@ class GeminiTranslationClient(
         target: String,
         passage: String,
         context: String? = null,
+        book: String? = null,
     ): String {
         val body = JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null)))))
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null, book = book != null)))))
             .put(
                 "contents",
                 JSONArray().put(
-                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage, context)))),
+                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage, context, book)))),
                 ),
             )
             // Translation wants the likeliest wording, and the same sentence then gets the same translation.

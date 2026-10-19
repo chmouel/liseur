@@ -1283,6 +1283,13 @@
         <item quantity="other">Bis zu %1$d Sätze, %2$s Zeichen</item>
     </plurals>
     <string name="translation_context_unused">Der gewählte Dienst übersetzt jeden Satz einzeln, daher hat diese Einstellung keine Wirkung.</string>
+    <string name="translation_settings_book">Angaben zum Buch</string>
+    <string name="translation_settings_book_detail">Ein KI-Übersetzer kann erfahren, aus welchem Buch und Kapitel ein Abschnitt stammt, damit Namen, Begriffe und Ton einheitlich bleiben. Die Vorlage unten wird ausgefüllt und mit jeder Übersetzung an den Dienst gesendet: standardmäßig Titel, Autor und Kapiteltitel. Füge {percent} hinzu, um anzugeben, wo im Buch das Kapitel beginnt.</string>
+    <string name="translation_book_switch">Angaben zum Buch senden</string>
+    <string name="translation_book_switch_detail">Für Auswahlen und die Seitenübersetzung</string>
+    <string name="translation_book_template">Vorlage: {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Standardvorlage wiederherstellen</string>
+    <string name="translation_book_unused">Der gewählte Dienst erhält keine Angaben zum Buch, daher hat diese Einstellung keine Wirkung.</string>
     <string name="translation_options_instructions">Zusätzliche Anweisungen</string>
     <string name="translation_options_instructions_detail">Werden jeder Anfrage für einen Abschnitt hinzugefügt.</string>
     <string name="translation_options_instructions_hint">Duzen. Namen der Figuren unverändert lassen.</string>

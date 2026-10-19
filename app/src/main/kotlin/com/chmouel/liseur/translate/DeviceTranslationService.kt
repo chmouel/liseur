@@ -125,7 +125,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
 
     override suspend fun sources(): Set<String> = DevicePairs.sources(load())
 
-    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String {
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) throw TranslationError.Unsupported()
         val pair = ready(source, target)
         return withContext(Dispatchers.IO) {
@@ -144,7 +144,7 @@ internal class DeviceTranslationService(private val context: Context) : Translat
         private var held: Any? = null
         private var closed = false
 
-        override suspend fun translate(sentence: String, context: String?): String = lock.withLock {
+        override suspend fun translate(sentence: String, context: String?, book: String?): String = lock.withLock {
             if (closed) throw CancellationException("closed")
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) throw TranslationError.Unsupported()
             val pair = ready(source, target)

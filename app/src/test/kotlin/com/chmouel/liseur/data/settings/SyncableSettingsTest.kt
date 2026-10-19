@@ -157,6 +157,7 @@ class SyncableSettingsTest {
             "app.translation_target",
             // How much book text goes with each sentence is chosen with the service.
             "app.translation_context",
+            "app.translation_book_context",
             // The reading companion sends book text to this device's own service.
             "app.companion_server",
             "app.companion_server_state",

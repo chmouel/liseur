@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.translate.BookFacts
 import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.translate.SentenceTranslator
@@ -34,7 +35,7 @@ class ReaderReadAloudTest {
 
         override suspend fun answering() = "test"
 
-        override suspend fun translate(sentence: String, context: String?, identity: String) =
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?) =
             Translated(sentence, identity)
 
         override fun close() {

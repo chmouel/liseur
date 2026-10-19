@@ -1365,6 +1365,13 @@
         <item quantity="other">До %1$d предложения, %2$s символов</item>
     </plurals>
     <string name="translation_context_unused">Выбранный сервис переводит каждое предложение отдельно, поэтому эта настройка ни на что не влияет.</string>
+    <string name="translation_settings_book">Сведения о книге</string>
+    <string name="translation_settings_book_detail">ИИ-переводчику можно сообщить, из какой книги и главы взят отрывок, чтобы имена, термины и тон оставались согласованными. Шаблон ниже заполняется и отправляется в сервис с каждым переводом: по умолчанию название, автор и название главы. Добавьте {percent}, чтобы указать, в каком месте книги начинается глава.</string>
+    <string name="translation_book_switch">Отправлять сведения о книге</string>
+    <string name="translation_book_switch_detail">Для выделенного текста и перевода страницы</string>
+    <string name="translation_book_template">Шаблон: {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Восстановить шаблон по умолчанию</string>
+    <string name="translation_book_unused">Выбранный сервис не получает сведений о книге, поэтому эта настройка ни на что не влияет.</string>
     <string name="translation_options_instructions">Дополнительные инструкции</string>
     <string name="translation_options_instructions_detail">Добавляются к запросу для каждого отрывка.</string>
     <string name="translation_options_instructions_hint">Обращаться на «ты». Оставлять имена персонажей без изменений.</string>

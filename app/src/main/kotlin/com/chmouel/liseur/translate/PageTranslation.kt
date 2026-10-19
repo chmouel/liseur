@@ -83,13 +83,17 @@ interface SentenceTranslator {
      */
     suspend fun contextSize(identity: String): TranslationContextSize? = null
 
+    /** What [identity] is told about the book where [facts] place a sentence; null when it is told nothing. */
+    suspend fun book(identity: String, facts: BookFacts?): String? = null
+
     /**
-     * [sentence] translated, with [context] as the sentence before it, and
-     * the [answering] name of what translated it; null, without asking,
-     * when the settings no longer answer as [identity], whose saved
-     * translations were the ones looked in. Throws [TranslationError].
+     * [sentence] translated, with [context] as the sentence before it and
+     * [book] what is known of where it is in the book, and the [answering]
+     * name of what translated it; null, without asking, when the settings
+     * no longer answer as [identity], whose saved translations were the
+     * ones looked in. Throws [TranslationError].
      */
-    suspend fun translate(sentence: String, context: String?, identity: String): Translated?
+    suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts? = null): Translated?
 
     /** Lets go of what the service held for the run, such as the device's translator. */
     fun close()

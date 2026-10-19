@@ -48,7 +48,7 @@ All of this stays in the app's own private storage:
   so a page you read again does not have to be translated again. They are
   kept for the book they came from, at most 50,000 of them, the least
   recently read going first. Deleting the book deletes them, and Settings,
-  Translation has a button to clear them all. They are not backed up.
+  Translation, Advanced has a button to clear them all. They are not backed up.
   A passage translated in the sheet is not saved.
 - Which books you left translated, and between which two languages, so
   they open translated. Tapping Stop or deleting the book removes it.
@@ -94,7 +94,7 @@ but the translation says what it means, and a hash is for matching, not
 for secrecy: an operator who knows the book can test whether a given
 sentence was translated. You can clear them from the account for one
 book, from the reader's menu or when removing or finishing it, or for
-every book from Settings, Translation. You operate that server, or
+every book from Settings, Translation, Advanced. You operate that server, or
 someone you trust does. This policy does not
 cover what the server does with the data it receives.
 
@@ -124,8 +124,9 @@ fails then, and opening the screen makes no request.
 
 Reading aloud a book you are reading translated in the page reads the
 translation. Each sentence goes first to the translation service you
-chose, as page translation sends it, with the book's text before it, a few
-sentences ahead of the voice; then its translation goes to the speech
+chose, as page translation sends it, with the book's text before it and
+the book's details described for that service below, a few sentences
+ahead of the voice; then its translation goes to the speech
 service you chose for reading aloud, as described below for that
 service, in place of the book's words. This carries on with the screen
 off or the book closed, for as long as the voice plays, and stops when
@@ -193,14 +194,20 @@ you tap Translate on a passage, it sends that passage, up to 2,000
 characters, with its language and the language you want, the model you
 picked and, if you entered one, your API key. If you set any of the
 server's Advanced options in Settings, Translation, such as extra
-instructions, they go with every request to that server. No book title,
-file, identifier or reading position goes with it. Who else can see that
+instructions, they go with every request to that server. Unless you turn
+off "Send book details" in Settings, Translation, Advanced, each request also
+carries the book's title and author and the title of the chapter the
+text comes from, written as your template there says. If you add
+`{percent}` to the template, it also carries how far into the book that
+chapter starts, as a percentage. No file, identifier or
+exact reading position goes with it. TranslateGemma models never get
+the book's details. Who else can see that
 text depends on the server and the network you chose; with a hosted
 service, the passage goes to that service under its own terms and
 privacy policy. When you translate a page in the reader, each sentence
 goes the same way, with some of the book's text before it from the same
 chapter, as set by "Earlier text for page translation" in Settings,
-Translation: by default up to 8 sentences and 4,000 characters, and
+Translation, Advanced: by default up to 8 sentences and 4,000 characters, and
 some of it may come from before the place you started translating. Set
 it to Off, or turn off the server's Advanced option to send earlier
 text, and only the sentence goes. TranslateGemma models never get it.
@@ -308,8 +315,9 @@ use, carrying only your key. "Translate a test sentence" sends one fixed
 English sentence. When you tap Translate on a passage, Liseur sends that
 passage, up to 2,000 characters, with its language and the language you
 want, to the same address over HTTPS, together with your key and the
-model you picked. No book title, file, identifier or reading position
-goes with it. A page translated in the reader sends each sentence with
+model you picked. The book's details go with it as described for a
+server above, unless you turn them off; no file, identifier or exact
+reading position does. A page translated in the reader sends each sentence with
 some of the book's text before it, as described for a server above.
 Requests are billed to your key under Google's terms, and
 Google's retention policy for the Gemini API applies to them. A

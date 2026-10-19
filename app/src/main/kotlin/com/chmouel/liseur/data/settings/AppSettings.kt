@@ -242,6 +242,9 @@ enum class DefinitionTarget(val id: String) {
  *   for the default.
  * @param translationTarget The language passages are translated into, as a
  *   BCP 47 tag, or null to follow the app's language.
+ * @param translationBookContext What an AI translator is told about the
+ *   book, as a template with placeholders: null for the default one,
+ *   empty to tell it nothing.
  * @param companionServer The id of the server character profiles use.
  * @param companionStates The reading companion's model on each server, by server id.
  * @param companionRecaps Whether chapters are recapped in the background as
@@ -297,6 +300,7 @@ data class AppSettings(
     val translationGeminiModel: String? = null,
     val translationTarget: String? = null,
     val translationContext: TranslationContextSize = TranslationContextSize.Default,
+    val translationBookContext: String? = null,
     val companionServer: String? = null,
     val companionStates: Map<String, ServerCompanionState> = emptyMap(),
     val companionRecaps: Boolean = false,
@@ -457,6 +461,7 @@ class AppSettingsRepository(
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
         val TRANSLATION_TARGET = stringPreferencesKey(TRANSLATION_TARGET_NAME)
         val TRANSLATION_CONTEXT = stringPreferencesKey(TRANSLATION_CONTEXT_NAME)
+        val TRANSLATION_BOOK_CONTEXT = stringPreferencesKey(TRANSLATION_BOOK_CONTEXT_NAME)
         val CODEX_ENABLED = booleanPreferencesKey(CODEX_ENABLED_NAME)
         val COMPANION_RECAPS = booleanPreferencesKey(COMPANION_RECAPS_NAME)
         val STORY_AUTO_OK = booleanPreferencesKey(STORY_AUTO_OK_NAME)
@@ -558,6 +563,7 @@ class AppSettingsRepository(
             translationGeminiModel = p[Keys.TRANSLATION_GEMINI_MODEL],
             translationTarget = p[Keys.TRANSLATION_TARGET],
             translationContext = TranslationContextSize.fromId(p[Keys.TRANSLATION_CONTEXT]),
+            translationBookContext = p[Keys.TRANSLATION_BOOK_CONTEXT],
             companionServer = p[ServerSettings.COMPANION_SERVER],
             companionStates = ServerSettings.companionStates(p),
             companionRecaps = p[Keys.COMPANION_RECAPS] ?: false,
@@ -1040,6 +1046,13 @@ class AppSettingsRepository(
         store.edit { it[Keys.TRANSLATION_CONTEXT] = size.id }
     }
 
+    /** Stores what an AI translator is told about the book; null goes back to the default, empty tells it nothing. */
+    suspend fun setTranslationBookContext(template: String?) {
+        store.edit { p ->
+            if (template == null) p.remove(Keys.TRANSLATION_BOOK_CONTEXT) else p[Keys.TRANSLATION_BOOK_CONTEXT] = template.trim()
+        }
+    }
+
     /** Changes read aloud's state on the server at [url], if it is still listed there. */
     private suspend fun editSpeechServer(url: String, change: (ServerSpeechState) -> ServerSpeechState) {
         val id = ServerConnection.idOf(url) ?: return
@@ -1208,6 +1221,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     TRANSLATION_GEMINI_MODEL_NAME to BackupValueType.STRING,
     TRANSLATION_TARGET_NAME to BackupValueType.STRING,
     TRANSLATION_CONTEXT_NAME to BackupValueType.STRING,
+    TRANSLATION_BOOK_CONTEXT_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_SERVER_NAME to BackupValueType.STRING,
     ServerSettings.COMPANION_STATE_NAME to BackupValueType.STRING,
     CODEX_ENABLED_NAME to BackupValueType.BOOLEAN,
@@ -1221,6 +1235,7 @@ private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
 private const val TRANSLATION_CONTEXT_NAME = "translation_context"
+private const val TRANSLATION_BOOK_CONTEXT_NAME = "translation_book_context"
 private const val CODEX_ENABLED_NAME = "codex_enabled"
 private const val COMPANION_RECAPS_NAME = "companion_recaps"
 private const val STORY_AUTO_OK_NAME = "story_auto_ok"

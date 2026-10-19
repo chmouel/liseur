@@ -2024,6 +2024,31 @@ reader behavior.
   window stops at the resource: two chapters in one XHTML file share
   it. A resource that cannot be read, or a sentence not found in it,
   falls back to the caller's sentence before.
+- Book details: `translation_book_context` is a template the reader can
+  edit in Settings, Translation, Advanced (with the earlier text and the
+  saved translations, collapsed by default), with `{title}`, `{author}`, `{chapter}`
+  and `{percent}` (`TranslationBookContext`, `translate/BookFacts.kt`);
+  the default names the book, author and chapter, and leaves `{percent}`
+  to readers who add it.
+  Unset means the default template, so a later default reaches readers
+  who never edited it; an empty string means off. It is device-local and
+  backed up, never synced. `TranslationBookContext.render` drops a line
+  whose placeholder has no value and flattens each fact to one line of
+  at most 200 characters. The prompt puts it first, between `<book>` and
+  `</book>`, as reference only, and `clean()` drops an echoed block.
+  Only services with `TranslationService.usesBook` take it: Gemini, and
+  server chat models that are not TranslateGemma; the server's Advanced
+  context switch does not affect it. The selection sheet and page
+  translation (and so translated read aloud) both send it.
+  `TranslatedPages.bookFacts` builds the facts once per publication:
+  title and authors from the metadata, the chapter from the first
+  contents entry per reading-order resource (a resource without one
+  continues the chapter before), and the percentage from where that
+  resource starts in `positionsByReadingOrder()`, never the exact
+  sentence, so the facts are fixed per resource and saved pages stay
+  valid. The template joins `pageIdentity` after the context window as
+  `book=<hash>`, only for a service that takes it, so editing it asks
+  again and turning it off finds the earlier saves.
 - Page translation replies are saved in `translations.db`
   (`translate/SavedTranslations.kt`), a Room database of its own so the
   backup allowlists, which name `liseur.db`, leave it out. A row is keyed

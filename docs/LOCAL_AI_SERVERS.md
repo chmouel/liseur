@@ -73,7 +73,7 @@ every sentence, which makes page translation slow; Liseur drops a
 thinking block the reply starts with, but a model without reasoning, or
 with reasoning turned off on the server, gives faster results. Pages
 saved before Liseur learned to hide that thinking keep it until you
-clear them under Translation settings, Saved translations.
+clear them under Translation settings, Advanced, Saved translations.
 
 ### Advanced options
 

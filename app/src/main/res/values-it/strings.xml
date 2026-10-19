@@ -1271,6 +1271,13 @@
         <item quantity="other">Fino a %1$d frasi, %2$s caratteri</item>
     </plurals>
     <string name="translation_context_unused">Il servizio scelto traduce ogni frase da sola, quindi questa impostazione non ha effetto.</string>
+    <string name="translation_settings_book">Dettagli del libro</string>
+    <string name="translation_settings_book_detail">Un traduttore IA può sapere da quale libro e capitolo viene un brano, così nomi, termini e tono restano coerenti. Il modello qui sotto viene compilato e inviato al servizio con ogni traduzione: per impostazione predefinita titolo, autore e titolo del capitolo. Aggiungi {percent} per indicare a che punto del libro inizia il capitolo.</string>
+    <string name="translation_book_switch">Invia i dettagli del libro</string>
+    <string name="translation_book_switch_detail">Per le selezioni e la traduzione di pagina</string>
+    <string name="translation_book_template">Modello: {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Ripristina il modello predefinito</string>
+    <string name="translation_book_unused">Il servizio scelto non riceve nulla sul libro, quindi questa impostazione non ha effetto.</string>
     <string name="translation_options_instructions">Istruzioni aggiuntive</string>
     <string name="translation_options_instructions_detail">Aggiunte alla richiesta per ogni passaggio.</string>
     <string name="translation_options_instructions_hint">Dare del tu. Lasciare i nomi dei personaggi come sono.</string>

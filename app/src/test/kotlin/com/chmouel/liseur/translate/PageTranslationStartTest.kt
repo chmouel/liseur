@@ -17,7 +17,7 @@ class PageTranslationStartTest {
 
         override suspend fun answering() = "svc"
 
-        override suspend fun translate(sentence: String, context: String?, identity: String) = null
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?) = null
 
         override fun close() {
             closed = true

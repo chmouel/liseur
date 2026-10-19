@@ -1223,6 +1223,13 @@
         <item quantity="other">最多 %1$d 句，%2$s 个字符</item>
     </plurals>
     <string name="translation_context_unused">当前选择的服务逐句单独翻译，此设置不起作用。</string>
+    <string name="translation_settings_book">书籍信息</string>
+    <string name="translation_settings_book_detail">可以告诉 AI 翻译器一段文字出自哪本书、哪一章，让人名、术语和语气保持一致。下方模板填好后会随每次翻译发送给服务：默认包括书名、作者和章节标题。加入 {percent} 可注明该章在书中开始的位置。</string>
+    <string name="translation_book_switch">发送书籍信息</string>
+    <string name="translation_book_switch_detail">用于选中文字和整页翻译</string>
+    <string name="translation_book_template">模板：{title}、{author}、{chapter}、{percent}</string>
+    <string name="translation_book_reset">恢复默认模板</string>
+    <string name="translation_book_unused">当前选择的服务不会收到书籍信息，此设置不起作用。</string>
     <string name="translation_options_instructions">附加说明</string>
     <string name="translation_options_instructions_detail">会添加到每段文字的请求中。</string>
     <string name="translation_options_instructions_hint">使用“你”而不是“您”。人物名字保持原样。</string>

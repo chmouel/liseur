@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,20 +29,24 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,17 +72,23 @@ import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServiceOption
 import com.chmouel.liseur.providers.ServiceRow
 import com.chmouel.liseur.providers.ServiceSheet
+import com.chmouel.liseur.tts.TypedField
+import com.chmouel.liseur.tts.onLeaving
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
+import com.chmouel.liseur.ui.settings.RowDivider
+import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SettingsGroup
+import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
 import java.text.NumberFormat
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** Translation's row on the main settings screen: which service, and into what. */
@@ -245,8 +256,20 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     TargetRow(feature, service, configured)
                     TestRow(feature, service, chosen && configured)
                 }
-                ContextGroup(feature)
-                feature.saved?.let { SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync) }
+                var advancedOpen by remember { mutableStateOf(false) }
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    ContextGroup(feature)
+                    RowDivider()
+                    BookContextGroup(feature)
+                    feature.saved?.let {
+                        RowDivider()
+                        SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync)
+                    }
+                }
             }
         }
     }
@@ -262,7 +285,7 @@ private fun ContextGroup(feature: ServiceTranslate) {
     val takes by feature.takesContext.collectAsState(initial = true)
     val scope = rememberCoroutineScope()
     val numbers = NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0])
-    SettingsGroup(stringResource(R.string.translation_settings_context)) {
+    AdvancedSection(stringResource(R.string.translation_settings_context)) {
         Text(
             text = stringResource(R.string.translation_settings_context_detail),
             style = MaterialTheme.typography.bodyMedium,
@@ -312,6 +335,109 @@ private fun ContextGroup(feature: ServiceTranslate) {
             )
         }
     }
+}
+
+/** One of the settings inside the Advanced card, under a title of its own. */
+@Composable
+private fun AdvancedSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 8.dp),
+    )
+    Column(content = content)
+}
+
+private data class StoredBook(val template: String?)
+
+/**
+ * What an AI translator is told about the book a passage comes from: on
+ * with the default template until the reader writes their own or turns
+ * it off, with a note when the service chosen now is told nothing.
+ */
+@Composable
+private fun BookContextGroup(feature: ServiceTranslate) {
+    val loaded by remember { feature.bookContext.map(::StoredBook) }.collectAsState(initial = null)
+    val takes by feature.takesBook.collectAsState(initial = true)
+    // Bumped by the switch and reset, so an unsaved draft never overrides them as its field goes away.
+    var overrides by remember { mutableIntStateOf(0) }
+    val override = { template: String? ->
+        overrides++
+        feature.setBookContext(template)
+    }
+    val stored = loaded ?: return
+    val on = TranslationBookContext.template(stored.template) != null
+    AdvancedSection(stringResource(R.string.translation_settings_book)) {
+        Text(
+            text = stringResource(R.string.translation_settings_book_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        SwitchRow(
+            title = stringResource(R.string.translation_book_switch),
+            subtitle = stringResource(R.string.translation_book_switch_detail),
+            checked = on,
+            onCheckedChange = { checked -> override(if (checked) null else "") },
+        )
+        if (on) {
+            key(overrides) {
+                val mine = remember { overrides }
+                BookTemplateField(
+                    shown = stored.template ?: TranslationBookContext.DEFAULT_TEMPLATE,
+                    onSave = { if (overrides == mine) feature.setBookContext(it) },
+                )
+            }
+            if (stored.template != null) {
+                TextButton(
+                    onClick = { override(null) },
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) { Text(stringResource(R.string.translation_book_reset)) }
+            }
+        }
+        if (!takes) {
+            Text(
+                text = stringResource(R.string.translation_book_unused),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The template, saved when the reader leaves it: the default one as
+ * unset, so it follows a later default, and an empty one as off.
+ */
+@Composable
+private fun BookTemplateField(shown: String, onSave: (String?) -> Unit) {
+    var typed by remember { mutableStateOf(shown) }
+    var synced by remember { mutableStateOf(shown) }
+    LaunchedEffect(shown) {
+        if (TypedField.follows(typed, synced, shown)) {
+            typed = shown
+            synced = shown
+        }
+    }
+    val commit = {
+        val text = typed.trim()
+        if (text != shown.trim()) onSave(text.takeUnless { it == TranslationBookContext.DEFAULT_TEMPLATE })
+    }
+    val latestCommit by rememberUpdatedState(commit)
+    DisposableEffect(Unit) { onDispose { latestCommit() } }
+    OutlinedTextField(
+        value = typed,
+        onValueChange = { typed = it.take(TranslationBookContext.MAX_CHARACTERS) },
+        label = { Text(stringResource(R.string.translation_book_template)) },
+        minLines = 3,
+        maxLines = 8,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .onLeaving { commit() },
+    )
 }
 
 private val TranslationContextSize.label: Int
@@ -534,7 +660,7 @@ private fun SavedTranslationsGroup(
     var alsoAccount by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
-    SettingsGroup(stringResource(R.string.translation_settings_saved)) {
+    AdvancedSection(stringResource(R.string.translation_settings_saved)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val count = stats?.sentences ?: 0
             stats?.let {

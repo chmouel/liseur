@@ -1328,6 +1328,13 @@
         <item quantity="other">Up to %1$d sentences, %2$s characters</item>
     </plurals>
     <string name="translation_context_unused">The service chosen now translates each sentence on its own, so this setting has no effect.</string>
+    <string name="translation_settings_book">Book details</string>
+    <string name="translation_settings_book_detail">An AI translator can be told which book and chapter a passage comes from, so names, terms and tone stay consistent. The template below is filled in and sent to the service with each translation: by default the title, author and chapter title. Add {percent} for how far into the book the chapter starts.</string>
+    <string name="translation_book_switch">Send book details</string>
+    <string name="translation_book_switch_detail">Used for selections and page translation</string>
+    <string name="translation_book_template">Template: {title}, {author}, {chapter}, {percent}</string>
+    <string name="translation_book_reset">Reset to default</string>
+    <string name="translation_book_unused">The service chosen now is not told about the book, so this setting has no effect.</string>
     <string name="translation_options_instructions">Extra instructions</string>
     <string name="translation_options_instructions_detail">Added to the request for every passage.</string>
     <string name="translation_options_instructions_hint">Use the informal tu. Keep character names as written.</string>

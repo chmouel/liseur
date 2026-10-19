@@ -151,7 +151,7 @@ class TranslationContextTest {
 
         override suspend fun contextSize(identity: String) = size
 
-        override suspend fun translate(sentence: String, context: String?, identity: String): Translated {
+        override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
             asked += context
             gate?.await()
             return Translated(sentence.uppercase(), identity)

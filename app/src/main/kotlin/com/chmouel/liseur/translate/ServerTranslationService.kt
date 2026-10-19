@@ -64,6 +64,9 @@ internal class ServerTranslationService(
         return !TranslationPrompt.isTranslateGemma(model) && tuning(s).context != false
     }
 
+    // TranslateGemma's single message would translate what it is told about the book.
+    override fun usesBook(s: AppSettings): Boolean = model(s)?.let { !TranslationPrompt.isTranslateGemma(it) } == true
+
     /** How the reader asked for the chosen server to be asked; all defaults when untouched. */
     private fun tuning(s: AppSettings): ServerTranslationState =
         s.translationServerConnection?.let { s.translationStates[it.id] } ?: ServerTranslationState()
@@ -77,14 +80,14 @@ internal class ServerTranslationService(
 
     override suspend fun sources(): Set<String>? = null
 
-    override suspend fun translate(passage: String, source: String?, target: String, context: String?): String =
-        ask(settings.settings.first(), passage, source, target, context)
+    override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String =
+        ask(settings.settings.first(), passage, source, target, context, book)
 
     override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
-        override suspend fun translate(sentence: String, context: String?) = ask(s, sentence, source, target, context)
+        override suspend fun translate(sentence: String, context: String?, book: String?) = ask(s, sentence, source, target, context, book)
     }
 
-    private suspend fun ask(s: AppSettings, passage: String, source: String?, target: String, context: String?): String {
+    private suspend fun ask(s: AppSettings, passage: String, source: String?, target: String, context: String?, book: String?): String {
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
@@ -102,6 +105,7 @@ internal class ServerTranslationService(
             instructions = tuning.instructions,
             maxTokens = tuning.maxTokens,
             keepAlive = tuning.keepAlive,
+            book = book,
             onTemperatureRefused = {
                 // The translation came back; failing to remember this only means the next request retries.
                 try {

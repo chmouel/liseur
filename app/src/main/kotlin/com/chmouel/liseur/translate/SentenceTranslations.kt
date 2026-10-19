@@ -24,7 +24,8 @@ import kotlinx.coroutines.ensureActive
  * answering service takes ([SentenceTranslator.contextSize]), so the
  * page and the voice send the same whoever asks first. Without
  * [preceding], or where it cannot find the sentence, the caller's
- * sentence before goes instead.
+ * sentence before goes instead. What is known of the book where the
+ * sentence is comes from [book], by the sentence's resource.
  *
  * Held by [acquire] and [release]: it starts held once, by whoever
  * opened it, and closes the translator when the last holder lets go.
@@ -34,6 +35,7 @@ class SentenceTranslations(
     val translator: SentenceTranslator,
     private val cache: PageTranslationCache,
     private val preceding: PrecedingText? = null,
+    private val book: (suspend (href: String) -> BookFacts?)? = null,
 ) {
     private data class PageFailure(
         val scope: PageFailureScope,
@@ -44,7 +46,7 @@ class SentenceTranslations(
     private class BoundFailure(val identity: String, val error: TranslationError) : Exception(error)
 
     private var holders = 1
-    private val inflight = HashMap<Pair<String, String?>, CompletableDeferred<Translated>>()
+    private val inflight = HashMap<Triple<String, String?, String?>, CompletableDeferred<Translated>>()
     private var pageScope: PageFailureScope? = null
 
     // Accepted translations by resource, element and sentence; the text before tells repeated ones apart.
@@ -129,7 +131,7 @@ class SentenceTranslations(
         pageFailureFor(sentence)?.let { throw it }
         acceptedFor(sentence, identity)?.let { return it }
         // What is sent, so the page and the voice asking for one place share the request.
-        val key = sentence.text to contextFor(sentence, context, identity)
+        val key = Triple(sentence.text, contextFor(sentence, context, identity), translator.book(identity, factsOf(sentence)))
         while (true) {
             val pending = inflight[key]
             if (pending != null) {
@@ -220,9 +222,23 @@ class SentenceTranslations(
         return TranslationContext.window(earlier, size)
     }
 
+    // Unknown facts only mean the model is told less, never a failed translation.
+    private suspend fun factsOf(sentence: PageSentence): BookFacts? = try {
+        book?.invoke(sentence.href)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
     private suspend fun translated(sentence: PageSentence, fallback: String?): Translated {
         val text = sentence.text
-        fun keyOf(identity: String, context: String?) = listOf(identity, context.orEmpty(), text).joinToString("\u0000")
+        val facts = factsOf(sentence)
+        // What the book block says is part of the key: the same sentence in another chapter is asked again.
+        suspend fun keyOf(identity: String, context: String?) =
+            (listOf(identity, context.orEmpty(), text) +
+                listOfNotNull(translator.book(identity, facts)?.let { "book=${TranslationBookContext.identity(it)}" }))
+                .joinToString("\u0000")
         var identity = translator.answering()
         var context = contextFor(sentence, fallback, identity)
         var lookup = cache.get(keyOf(identity, context))
@@ -239,7 +255,7 @@ class SentenceTranslations(
             lookup.translation?.let { return Translated(it, identity) }
             // Null when they changed after all, before it was sent: the new service may have it saved.
             answer = try {
-                translator.translate(text, context, identity)
+                translator.translate(text, context, identity, facts)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: TranslationError) {
