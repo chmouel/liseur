@@ -235,6 +235,54 @@ There is no instrumented/emulator test suite. Reader interactions
 (gestures, immersive mode, process-death restore, rotation) are verified
 manually on a booted AVD.
 
+### AI services on the emulator
+
+`make ai-stub` (or `hack/ai-stub`, `PORT=` for another port) runs a fake
+OpenAI-compatible server on port 8765. Use it whenever a change touches
+what the app sends to an AI translation service or an OpenAI-compatible
+speech server, instead of a real provider or a stub written for the
+occasion. It answers:
+
+- `GET /v1/models`: `stub-chat` and `stub-tts`.
+- `POST /v1/chat/completions`: the `<passage>` block back, prefixed with
+  `[T] ` (`--prefix`), or the last user message when there is none.
+- `POST /v1/audio/speech`: a silent 24 kHz WAV that lasts about as long
+  as the text would. Any other `response_format` gets the 400 that sends
+  the app to its MP3 fallback.
+- `GET /v1/audio/voices`: `stub_a` and `stub_b`.
+- `GET /_stub/requests`: every request since it started, as JSON;
+  `DELETE` empties it. The same entries go to `tmp/ai-stub/requests.jsonl`.
+  Chat entries carry a `blocks` field with the prompt's `<book>`,
+  `<context>` and `<passage>` split out. The API key is never written,
+  only whether one was sent.
+
+`--fail CODE` answers chat and speech with that status (429, 401, 500),
+`--delay SECONDS` slows them down, `--key KEY` requires a bearer token,
+and `--think` puts a `<think>` block before each translation, as
+reasoning models do.
+
+From the emulator the host is `10.0.2.2`. In Settings, under External
+services and API keys, add a server at `http://10.0.2.2:8765/v1` and test
+the connection. For translation, pick that server as the translation
+service and `stub-chat` as the model; "Translate a test sentence" then
+sends one request. From a script, type `stub-chat` into the empty model
+field and press Enter: uiautomator does not see the model menu's popup.
+For read aloud, pick the server as the voice service; the app chooses
+`stub-tts` and lists the stub voices, and tapping one fetches a sample.
+The UI helpers in `hack/lib/demo-books.sh` (`tap_on`, `wait_for`,
+`on_screen`) can drive these screens once `serial`, `work` and an `adb`
+function scoped to the serial are set.
+
+Then read what the app sent:
+
+```bash
+curl -s localhost:8765/_stub/requests | jq '.[] | select(.blocks) | .blocks'
+```
+
+When a check needs something the stub does not do yet (another endpoint,
+a reply shape, an error), add it to `hack/ai-stub` and a case to
+`hack/test-ai-stub` in the same change.
+
 ### Furthest-position emulator check
 
 Verified on 2026-10-05 with `liseur_phone_api36` (Android API 36),

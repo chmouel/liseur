@@ -22,6 +22,7 @@ jobs:
           hack/test-fdroid-tags
           hack/test-prune-prereleases
           hack/test-store-images
+          hack/test-ai-stub
 
       # Tests, lint and builds run locally and in the pre-push hook, so
       # pull requests only get the quick checks above: skipping this step

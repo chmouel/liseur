@@ -29,7 +29,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -42,6 +42,7 @@ help:
 		'make verify-release-tools Check release tag and retention policies' \
 		'make verify-fdroid-tags Check the F-Droid release-tag policy' \
 		'make e2e               Run the device scenarios in tests/' \
+		'make ai-stub           Run a fake AI translation/speech server that logs requests (PORT=8765)' \
 		'make emulator          Start the configured Android emulator' \
 		'make stop              Stop the configured Android emulator' \
 		'make shutdown          Shut down the configured Android emulator' \
@@ -91,6 +92,7 @@ verify-release-tools: verify-fdroid-tags
 	hack/test-prune-prereleases
 	hack/test-release-apk-verification
 	hack/test-store-images
+	hack/test-ai-stub
 
 verify-fdroid-tags:
 	hack/test-fdroid-tags
@@ -100,6 +102,10 @@ verify-fdroid-tags:
 # checkout does not have.
 e2e:
 	tests/run-all $(if $(SERIAL),-s $(SERIAL))
+
+# Reached from an emulator at http://10.0.2.2:$(PORT)/v1. See DEVELOPER.md.
+ai-stub:
+	hack/ai-stub --port $(or $(PORT),8765)
 
 clean:
 	$(GRADLE) clean

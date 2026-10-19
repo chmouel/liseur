@@ -63,6 +63,14 @@ without asking first. `make dev-install` is safe from the production app's
 data because the dev package is `com.chmouel.liseur.dev`, but it is still an
 installation on a real device and must be announced.
 
+To check AI translation or OpenAI-compatible read aloud on the emulator,
+run `make ai-stub` and point the app at `http://10.0.2.2:8765/v1`; read
+what the app sent from `tmp/ai-stub/requests.jsonl` or
+`/_stub/requests`. Do not write a throwaway stub. When it lacks
+something a check needs, extend `hack/ai-stub` and `hack/test-ai-stub`
+in the same change. See
+[DEVELOPER.md](DEVELOPER.md#ai-services-on-the-emulator).
+
 ## Repository workflow
 
 - Preserve unrelated worktree changes. Inspect before editing and touch only

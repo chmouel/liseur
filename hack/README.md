@@ -131,6 +131,17 @@ target wrapping them. Run `make help` for the short list. See
 - `test-store-images`: Runs the deterministic tests for `store-images` on
   synthetic PNGs, and checks the committed store screenshots. It is part
   of `make check` and CI.
+- `ai-stub`: A fake OpenAI-compatible server for checking AI translation
+  and read-aloud speech on the emulator without a real provider. It
+  answers the model list, chat completions (the passage back, prefixed
+  with `[T] `), speech (silent WAV) and a voice list, and logs every
+  request it gets to `tmp/ai-stub/requests.jsonl`, with the prompt's
+  `<book>`, `<context>` and `<passage>` blocks split out. `--fail`,
+  `--delay`, `--key` and `--think` reproduce provider errors, slow
+  replies, API keys and reasoning models. Backs `make ai-stub`. See
+  `DEVELOPER.md` for using it from the app.
+- `test-ai-stub`: Starts `ai-stub` on a free port and checks every
+  endpoint and flag. It is part of `make check` and CI.
 
 See also `tests/`, which holds the headless, assertion-shaped end-to-end
 scenarios. They measure behaviour rather than walk the screen.
