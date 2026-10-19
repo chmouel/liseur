@@ -241,7 +241,9 @@ class SentenceTranslations(
                 .joinToString("\u0000")
         var identity = translator.answering()
         var context = contextFor(sentence, fallback, identity)
-        var lookup = cache.get(keyOf(identity, context))
+        // Kept from the lookup: rebuilt later, it could name settings changed meanwhile.
+        var key = keyOf(identity, context)
+        var lookup = cache.get(key)
         var answer: Translated? = null
         while (answer == null) {
             // Settings changed during the lookup: what was found answers for the service before.
@@ -249,7 +251,8 @@ class SentenceTranslations(
             if (current != identity) {
                 identity = current
                 context = contextFor(sentence, fallback, identity)
-                lookup = cache.get(keyOf(identity, context))
+                key = keyOf(identity, context)
+                lookup = cache.get(key)
                 continue
             }
             lookup.translation?.let { return Translated(it, identity) }
@@ -270,7 +273,7 @@ class SentenceTranslations(
             )
         }
         // Filed under what answered, and only while that is still what the settings choose.
-        if (translator.answering() == answer.by) cache.put(keyOf(answer.by, context), answer.text, lookup.stamp)
+        if (answer.by == identity && translator.answering() == identity) cache.put(key, answer.text, lookup.stamp)
         return answer
     }
 
