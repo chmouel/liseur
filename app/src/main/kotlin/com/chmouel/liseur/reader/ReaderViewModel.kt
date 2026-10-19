@@ -590,21 +590,28 @@ class ReaderViewModel(
     val goTo: SharedFlow<Locator> = _goTo.asSharedFlow()
 
     /**
-     * A note to show over the page, and where it was referenced from.
-     *
-     * [link] is kept so the card can offer the way it used to be the only
-     * way: opening the note where it actually lives, for the long ones and
-     * the ones carrying a picture the card cannot draw.
+     * A note to show over the page, its captured source, and the link to
+     * where it actually lives for long notes or ones carrying a picture.
      */
-    data class Footnote(val html: String, val link: Link)
+    data class Footnote(
+        val html: String,
+        val link: Link,
+        val origin: Locator?,
+        val mayFallbackToPublishedPlace: Boolean,
+    )
 
     private val _footnote = MutableStateFlow<Footnote?>(null)
 
     /** The note popped up over the page, if the reader tapped one. */
     val footnote: StateFlow<Footnote?> = _footnote.asStateFlow()
 
-    fun showFootnote(html: String, link: Link) {
-        _footnote.value = Footnote(html = html, link = link)
+    internal fun showFootnote(html: String, link: Link, origin: LinkTaps.LinkOrigin) {
+        _footnote.value = Footnote(
+            html = html,
+            link = link,
+            origin = origin.place,
+            mayFallbackToPublishedPlace = origin.mayFallbackToPublishedPlace,
+        )
     }
 
     fun dismissFootnote() {

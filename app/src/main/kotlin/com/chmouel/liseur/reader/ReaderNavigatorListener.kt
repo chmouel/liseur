@@ -37,7 +37,6 @@ import org.readium.r2.shared.util.AbsoluteUrl
 @OptIn(ExperimentalReadiumApi::class)
 internal class ReaderNavigatorListener(
     private val linkTaps: LinkTaps,
-    private val onFootnote: (html: String, link: Link) -> Unit,
     private val onExternal: (AbsoluteUrl) -> Unit,
 ) : EpubNavigatorFragment.Listener {
 
@@ -47,7 +46,7 @@ internal class ReaderNavigatorListener(
     ): Boolean {
         val known = (context as? HyperlinkNavigator.FootnoteContext)?.noteContent
         if (!known.isNullOrBlank()) {
-            onFootnote(known, link)
+            linkTaps.fromReadiumFootnote(link, known)
             return false
         }
         linkTaps.fromReadium(link)

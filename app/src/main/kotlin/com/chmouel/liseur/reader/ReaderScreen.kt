@@ -2459,11 +2459,11 @@ internal fun ReaderScreen(
     // The live place a tapped link started from, captured here because
     // the machinery is this screen's: scrolledPlace and captureExactly,
     // never the navigator's published position, which is debounced and
-    // names where the reader was a moment ago. Armed for as long as this
-    // screen is composed; a tap arriving without it is dropped rather
-    // than guessed at.
+    // names where the reader was a moment ago. Without an exact place a
+    // same-document link can still be followed, but cannot offer a way
+    // back to an unverified position. Stale requests are still dropped.
     DisposableEffect(linkTaps) {
-        linkTaps.captureOrigin = linkCapture@{ request, generation, resourceHref, placeRequired ->
+        linkTaps.captureOrigin = linkCapture@{ request, generation, resourceHref ->
             val nav = navigatorNow ?: return@linkCapture null
             val native = nav.currentLocator.value
             val guarding = resourceHref ?: native.href.toString()
@@ -2479,10 +2479,6 @@ internal fun ReaderScreen(
             } else {
                 captureExactly(nav, native)
             }
-            // A link Readium handed over navigates as it always has when
-            // the capture fails; a same-document tap is dropped instead,
-            // rather than offer back a place nobody verified.
-            if (place == null && placeRequired) return@linkCapture null
             currentCoroutineContext().ensureActive()
             if (navigatorNow !== nav || nav.currentLocator.value.href.toString() != guarding) {
                 return@linkCapture null
@@ -4242,10 +4238,11 @@ internal fun ReaderScreen(
                     onGoToNote = {
                         onDismissFootnote()
                         navigator?.let { nav ->
-                            // Where the reader is now, read before the reveal
-                            // below moves anything: that is the place a jump
-                            // back is meant to return them to.
-                            val here = nav.currentLocator.value
+                            // The captured place predates the card and any
+                            // reveal below. Use it for the return offer before
+                            // the note's layout can move the reader.
+                            val origin = note.origin
+                            val here = origin ?: nav.currentLocator.value
                             val from = here.restorePoint()
                             val fragment = note.link.href.toString().substringAfter('#', "")
                             effectScope.launch {
@@ -4282,7 +4279,9 @@ internal fun ReaderScreen(
                                 // jump itself to be recorded as reading: a
                                 // distance nobody read, taught to the pace
                                 // estimator and published as progress.
-                                onProgressAction.jumpFrom(here)
+                                if (origin != null || note.mayFallbackToPublishedPlace) {
+                                    onProgressAction.jumpFrom(origin ?: here)
+                                }
                                 val noteToken = moves.issue(
                                     from = from,
                                     to = publication.locatorFromLink(note.link)?.destination(),

@@ -38,8 +38,8 @@ internal class LinkTaps(
     private val scope: CoroutineScope,
     private val moves: IssuedMoves,
     private val noteAt: suspend (Link) -> String?,
-    private val onFootnote: (html: String, link: Link) -> Unit,
-    private val onFollow: (link: Link, from: Locator?) -> Unit,
+    private val onFootnote: (html: String, link: Link, origin: LinkOrigin) -> Unit,
+    private val onFollow: (link: Link, origin: LinkOrigin) -> Unit,
 ) {
     /**
      * What a tap started from, and how to ask whether it still may act.
@@ -56,13 +56,18 @@ internal class LinkTaps(
         val stillCurrent: () -> Boolean,
     )
 
+    internal data class LinkOrigin(
+        val place: Locator?,
+        val mayFallbackToPublishedPlace: Boolean,
+    )
+
     /**
      * The live capture, supplied by the reader screen once composed and
-     * withdrawn when it goes. Null while there is no screen, and a tap
-     * arriving then is dropped rather than guessed at.
+     * withdrawn when it goes. Null while there is no screen; unresolved
+     * taps are dropped rather than guessed at.
      */
     @Volatile
-    var captureOrigin: (suspend (request: Int, generation: Int, resourceHref: String?, placeRequired: Boolean) -> Origin?)? =
+    var captureOrigin: (suspend (request: Int, generation: Int, resourceHref: String?) -> Origin?)? =
         null
 
     private val requests = AtomicInteger()
@@ -71,13 +76,13 @@ internal class LinkTaps(
     fun latestRequest(): Int = requests.get()
 
     /**
-     * A same-document tap that passed the caller's gates: the emitting
-     * resource is known, and the place must be captured or the tap
-     * dropped — a pill offering back a place nobody verified is worse
-     * than a link that does nothing.
+     * A same-document tap that passed the caller's gates. Its emitting
+     * resource is known. If exact text capture is unavailable, it may
+     * still be followed, but it cannot offer a way back to an unverified
+     * place.
      */
     fun fromBridge(link: Link, resourceHref: String) {
-        accept(link, resourceHref, placeRequired = true)
+        accept(link, resourceHref, mayFallbackToPublishedPlace = false)
     }
 
     /**
@@ -88,17 +93,47 @@ internal class LinkTaps(
      * falling back to the last published place.
      */
     fun fromReadium(link: Link) {
-        accept(link, null, placeRequired = false)
+        accept(link, null, mayFallbackToPublishedPlace = true)
     }
 
-    private fun accept(link: Link, resourceHref: String?, placeRequired: Boolean) {
+    /** A note Readium already resolved, with the same live origin capture. */
+    fun fromReadiumFootnote(link: Link, html: String) {
+        accept(
+            link = link,
+            resourceHref = null,
+            mayFallbackToPublishedPlace = true,
+            knownFootnote = html,
+        )
+    }
+
+    private fun accept(
+        link: Link,
+        resourceHref: String?,
+        mayFallbackToPublishedPlace: Boolean,
+        knownFootnote: String? = null,
+    ) {
         val request = requests.incrementAndGet()
         val generation = moves.generation()
         scope.launch {
-            val capture = captureOrigin ?: return@launch
-            val origin = capture(request, generation, resourceHref, placeRequired)
+            val capture = captureOrigin
+            if (capture == null) {
+                if (knownFootnote != null) {
+                    onFootnote(
+                        knownFootnote,
+                        link,
+                        LinkOrigin(null, mayFallbackToPublishedPlace),
+                    )
+                }
+                return@launch
+            }
+            val origin = capture(request, generation, resourceHref)
                 ?: return@launch
-            followInternal(link, origin)
+            val linkOrigin = LinkOrigin(origin.place, mayFallbackToPublishedPlace)
+            if (knownFootnote != null) {
+                if (origin.stillCurrent()) onFootnote(knownFootnote, link, linkOrigin)
+            } else {
+                followInternal(link, origin, linkOrigin)
+            }
         }
     }
 
@@ -108,9 +143,9 @@ internal class LinkTaps(
      * might be a note, and only reading the target can say, so the answer
      * is deferred and revalidated before it acts.
      */
-    internal suspend fun followInternal(link: Link, origin: Origin) {
+    internal suspend fun followInternal(link: Link, origin: Origin, linkOrigin: LinkOrigin) {
         if (link.url().fragment.isNullOrBlank()) {
-            onFollow(link, origin.place)
+            onFollow(link, linkOrigin)
             return
         }
         val note = try {
@@ -123,7 +158,7 @@ internal class LinkTaps(
             null
         }
         if (!origin.stillCurrent()) return
-        if (note != null) onFootnote(note, link) else onFollow(link, origin.place)
+        if (note != null) onFootnote(note, link, linkOrigin) else onFollow(link, linkOrigin)
     }
 }
 
@@ -143,7 +178,9 @@ internal class LinkTaps(
  * [go] and [onJump] run in the same main-thread turn, and the navigator
  * reports a position only once the resource is laid out and on screen —
  * never synchronously inside `go` — so the pending jump marker is always
- * armed before the arrival it labels.
+ * armed before the arrival it labels. If no origin was verified and
+ * [mayFallbackToPublishedPlace] is false, navigation still proceeds
+ * without advertising a return place.
  */
 internal fun followLink(
     link: Link,
@@ -154,6 +191,7 @@ internal fun followLink(
     destinationOf: (Link) -> IssuedMoves.Destination?,
     go: (Link) -> Boolean,
     onJump: (Locator?) -> Unit,
+    mayFallbackToPublishedPlace: Boolean = true,
 ) {
     val token = moves.issue(
         from = (from ?: currentPlace()).restorePoint(),
@@ -161,7 +199,7 @@ internal fun followLink(
         nowMs = nowMs(),
     )
     if (go(link)) {
-        onJump(from)
+        if (from != null || mayFallbackToPublishedPlace) onJump(from)
     } else {
         moves.cancel(token)
     }

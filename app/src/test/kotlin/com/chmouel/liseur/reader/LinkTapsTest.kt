@@ -8,6 +8,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.readium.r2.shared.publication.Link
@@ -53,7 +55,7 @@ class LinkTapsTest {
         var customStillCurrent: (() -> Boolean)? = null
 
         init {
-            taps.captureOrigin = linkCapture@{ request, generation, _, _ ->
+            taps.captureOrigin = linkCapture@{ request, generation, _ ->
                 captured.add(request)
                 if (drop) return@linkCapture null
                 LinkTaps.Origin(place) {
@@ -74,8 +76,8 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { html, _ -> footnotes.add(html) },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
+            onFollow = { l, origin -> followed.add(l to origin.place) },
         )
         val screen = Screen(taps, moves)
         screen.place = place()
@@ -100,8 +102,8 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { html, _ -> footnotes.add(html) },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
+            onFollow = { l, origin -> followed.add(l to origin.place) },
         )
         Screen(taps, moves)
 
@@ -123,8 +125,8 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { html, _ -> footnotes.add(html) },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
+            onFollow = { l, origin -> followed.add(l to origin.place) },
         )
         val screen = Screen(taps, moves)
         screen.place = place()
@@ -149,8 +151,8 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { html, _ -> footnotes.add(html) },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
+            onFollow = { l, origin -> followed.add(l to origin.place) },
         )
         val screen = Screen(taps, moves)
         screen.customStillCurrent = { false }
@@ -173,8 +175,8 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { html, _ -> footnotes.add(html) },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
+            onFollow = { l, origin -> followed.add(l to origin.place) },
         )
         Screen(taps, moves)
 
@@ -208,7 +210,7 @@ class LinkTapsTest {
                     scope = this,
                     moves = moves,
                     noteAt = { asked++; lookups[asked - 1].noteAt(it) },
-                    onFootnote = { html, _ -> footnotes.add(html) },
+                    onFootnote = { html, _, _ -> footnotes.add(html) },
                     onFollow = { l, _ -> followed.add(l) },
                 )
                 Screen(taps, moves)
@@ -228,7 +230,78 @@ class LinkTapsTest {
     }
 
     @Test
-    fun `a same-document tap without a captured place is dropped`() = runTest {
+    fun `a same-document tap without an exact place still resolves a note`() = runTest {
+        val footnotes = mutableListOf<Pair<String, LinkTaps.LinkOrigin>>()
+        val lookup = Lookup()
+        val moves = IssuedMoves()
+        val taps = LinkTaps(
+            scope = this,
+            moves = moves,
+            noteAt = lookup.noteAt,
+            onFootnote = { html, _, origin -> footnotes.add(html to origin) },
+            onFollow = { _, _ -> },
+        )
+        Screen(taps, moves)
+
+        taps.fromBridge(link(), "EPUB/ch1.xhtml")
+        lookup.gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, lookup.asked)
+        assertEquals("the note", footnotes.single().first)
+        assertNull(footnotes.single().second.place)
+        assertFalse(footnotes.single().second.mayFallbackToPublishedPlace)
+    }
+
+    @Test
+    fun `a same-document tap without an exact place navigates without a return fallback`() = runTest {
+        val followed = mutableListOf<LinkTaps.LinkOrigin>()
+        val lookup = Lookup().apply { answer = null }
+        val moves = IssuedMoves()
+        val taps = LinkTaps(
+            scope = this,
+            moves = moves,
+            noteAt = lookup.noteAt,
+            onFootnote = { _, _, _ -> },
+            onFollow = { _, origin -> followed.add(origin) },
+        )
+        Screen(taps, moves)
+
+        taps.fromBridge(link(), "EPUB/ch1.xhtml")
+        lookup.gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, lookup.asked)
+        assertNull(followed.single().place)
+        assertFalse(followed.single().mayFallbackToPublishedPlace)
+    }
+
+    @Test
+    fun `a Readium-resolved note keeps its captured origin`() = runTest {
+        val footnotes = mutableListOf<Pair<String, LinkTaps.LinkOrigin>>()
+        val lookup = Lookup()
+        val moves = IssuedMoves()
+        val taps = LinkTaps(
+            scope = this,
+            moves = moves,
+            noteAt = lookup.noteAt,
+            onFootnote = { html, _, origin -> footnotes.add(html to origin) },
+            onFollow = { _, _ -> },
+        )
+        val screen = Screen(taps, moves)
+        screen.place = place()
+
+        taps.fromReadiumFootnote(link(), "known note")
+        advanceUntilIdle()
+
+        assertEquals("known note", footnotes.single().first)
+        assertEquals(place(), footnotes.single().second.place)
+        assertTrue(footnotes.single().second.mayFallbackToPublishedPlace)
+        assertEquals(0, lookup.asked)
+    }
+
+    @Test
+    fun `a same-document tap with a stale capture is dropped`() = runTest {
         val footnotes = mutableListOf<String>()
         val followed = mutableListOf<Link>()
         val lookup = Lookup()
@@ -237,7 +310,7 @@ class LinkTapsTest {
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { _, _ -> },
+            onFootnote = { html, _, _ -> footnotes.add(html) },
             onFollow = { l, _ -> followed.add(l) },
         )
         val screen = Screen(taps, moves)
@@ -246,31 +319,33 @@ class LinkTapsTest {
         taps.fromBridge(link(), "EPUB/ch1.xhtml")
         advanceUntilIdle()
 
+        assertTrue(footnotes.isEmpty())
         assertTrue(followed.isEmpty())
-        // Dropped before the target was ever read.
         assertEquals(0, lookup.asked)
     }
 
     @Test
     fun `a link readium handed over navigates without a captured place`() = runTest {
-        val followed = mutableListOf<Pair<Link, Locator?>>()
+        val followed = mutableListOf<Pair<Link, LinkTaps.LinkOrigin>>()
         val lookup = Lookup()
         val moves = IssuedMoves()
         val taps = LinkTaps(
             scope = this,
             moves = moves,
             noteAt = lookup.noteAt,
-            onFootnote = { _, _ -> },
-            onFollow = { l, from -> followed.add(l to from) },
+            onFootnote = { _, _, _ -> },
+            onFollow = { l, origin -> followed.add(l to origin) },
         )
         Screen(taps, moves)
-        // place stays null: the capture failed, and this door navigates as
-        // it always has rather than dropping the reader's link.
+        // This door retains its published-place fallback when capture fails.
 
         taps.fromReadium(link(fragment = null))
         advanceUntilIdle()
 
-        assertEquals(listOf(link(fragment = null) to null), followed)
+        assertEquals(
+            listOf(link(fragment = null) to LinkTaps.LinkOrigin(null, true)),
+            followed,
+        )
     }
 
     @Test
@@ -280,7 +355,7 @@ class LinkTapsTest {
             scope = this,
             moves = IssuedMoves(),
             noteAt = { null },
-            onFootnote = { _, _ -> },
+            onFootnote = { _, _, _ -> },
             onFollow = { l, _ -> followed.add(l) },
         )
         // No captureOrigin armed.
@@ -404,5 +479,31 @@ class FollowLinkTest {
         // The move is held against the current place when no capture
         // supplied one, so a restore taken now is refused.
         assertTrue(moves.mark(nowMs = 0L) == IssuedMoves.NONE)
+    }
+
+    @Test
+    fun `a jump without a captured place can navigate without offering a return`() {
+        val moves = IssuedMoves()
+        val from = place()
+        var followed = false
+        val jumps = mutableListOf<Locator?>()
+
+        followLink(
+            link = Link(href = Url("EPUB/notes.xhtml#n1")!!),
+            from = null,
+            moves = moves,
+            nowMs = { 0L },
+            currentPlace = { from },
+            destinationOf = { null },
+            go = {
+                followed = true
+                true
+            },
+            onJump = { jumps.add(it) },
+            mayFallbackToPublishedPlace = false,
+        )
+
+        assertTrue(followed)
+        assertTrue(jumps.isEmpty())
     }
 }

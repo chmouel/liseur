@@ -352,12 +352,14 @@ class ReaderActivity : FragmentActivity() {
                                         scope = lifecycleScope,
                                         moves = moves,
                                         noteAt = viewModel::noteAt,
-                                        onFootnote = viewModel::showFootnote,
-                                        onFollow = { link, from ->
+                                        onFootnote = { html, link, origin ->
+                                            viewModel.showFootnote(html, link, origin)
+                                        },
+                                        onFollow = { link, origin ->
                                             navigator?.let { nav ->
                                                 followLink(
                                                     link = link,
-                                                    from = from,
+                                                    from = origin.place,
                                                     moves = moves,
                                                     nowMs = { SystemClock.elapsedRealtime() },
                                                     currentPlace = { nav.currentLocator.value },
@@ -366,6 +368,8 @@ class ReaderActivity : FragmentActivity() {
                                                     },
                                                     go = { nav.go(it, animated = false) },
                                                     onJump = viewModel::onJump,
+                                                    mayFallbackToPublishedPlace =
+                                                        origin.mayFallbackToPublishedPlace,
                                                 )
                                             }
                                         },
@@ -435,7 +439,6 @@ class ReaderActivity : FragmentActivity() {
                                         // a footnote costs the reader their page.
                                         listener = ReaderNavigatorListener(
                                             linkTaps = linkTaps,
-                                            onFootnote = viewModel::showFootnote,
                                             onExternal = { pendingExternalLink = it },
                                         ),
                                         configuration = epubNavigatorConfiguration(
