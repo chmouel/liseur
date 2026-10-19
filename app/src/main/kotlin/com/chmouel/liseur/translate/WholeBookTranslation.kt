@@ -99,6 +99,7 @@ internal class WholeBookTranslation(
                     async {
                         val request = occurrences.first()
                         val saved = store.lookup(request.key)
+                        if (saved.translation != null) translator.cached(occurrences.size)
                         var translation = saved.translation
                         if (translation == null && !saved.refused) {
                             try {

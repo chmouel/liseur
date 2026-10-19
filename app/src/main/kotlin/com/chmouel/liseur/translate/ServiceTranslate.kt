@@ -226,6 +226,8 @@ internal class ServiceTranslate(
                 return Translated(text, identity)
             }
 
+            override fun cached(count: Int) = run.cached(count)
+
             override fun close() = run.close()
         }
     }

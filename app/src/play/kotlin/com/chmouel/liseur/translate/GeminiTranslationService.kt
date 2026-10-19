@@ -81,12 +81,21 @@ internal class GeminiTranslationService(
         beforeRequest()
         val model = model(s)
         return object : TranslationRun {
+            private val diagnostics = GeminiCacheDiagnostics()
             override suspend fun translate(sentence: String, context: String?, book: String?) =
                 client.translate(
                     key, model, source, target, sentence, context, book, beforeRequest,
-                    allowTransportRetry = false,
+                    allowTransportRetry = false, diagnostics = diagnostics,
                 )
 
+            override fun cached(count: Int) = diagnostics.cached(count)
+
+            override fun close() {
+                if (com.chmouel.liseur.BuildConfig.DEBUG && (diagnostics.snapshot().attempts > 0 || diagnostics.snapshot().localSentenceHits > 0)) {
+                    android.util.Log.d("GeminiCache", diagnostics.snapshot().toString())
+                }
+                diagnostics.close()
+            }
         }
     }
 

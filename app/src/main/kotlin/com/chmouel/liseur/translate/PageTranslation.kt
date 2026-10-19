@@ -95,6 +95,9 @@ interface SentenceTranslator {
      */
     suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts? = null): Translated?
 
+    /** Local saved answers, counted separately from any provider prompt-cache usage. */
+    fun cached(count: Int) = Unit
+
     /** Lets go of what the service held for the run, such as the device's translator. */
     fun close()
 }

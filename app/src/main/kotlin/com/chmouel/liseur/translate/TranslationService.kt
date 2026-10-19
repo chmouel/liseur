@@ -156,6 +156,8 @@ internal interface TranslationService {
 
 /** A run of translations between two languages, closed when the page goes back to the original. */
 internal interface TranslationRun {
+    fun cached(count: Int) = Unit
+
     /**
      * [sentence] translated, with [context] as the sentence before it and
      * [book] what is known about the book. Throws [TranslationError].

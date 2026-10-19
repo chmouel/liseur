@@ -23,7 +23,7 @@ class GeminiTranslationClient(
      * when there is one, and [book] as what is known about the book. Throws [TranslationError]; cancelling the caller
      * cancels the request.
      */
-    suspend fun translate(
+    internal suspend fun translate(
         apiKey: String,
         model: String,
         source: String?,
@@ -33,6 +33,7 @@ class GeminiTranslationClient(
         book: String? = null,
         beforeRequest: suspend () -> Unit = {},
         allowTransportRetry: Boolean = true,
+        diagnostics: GeminiCacheDiagnostics? = null,
     ): String {
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null, book = book != null)))))
@@ -47,7 +48,16 @@ class GeminiTranslationClient(
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
         return unthinking(model, body, beforeRequest) {
             val payload = it.toRequestBody(JSON).let { bytes -> if (allowTransportRetry) bytes else with(TranslationHttp) { bytes.oneShot() } }
-            TranslationHttp.execute(if (allowTransportRetry) client else noRecovery, request(url, apiKey).post(payload).build(), ::reply)
+            diagnostics?.started(body, book)
+            val started = System.nanoTime()
+            var completed = false
+            try {
+                TranslationHttp.execute(if (allowTransportRetry) client else noRecovery, request(url, apiKey).post(payload).build()) { response ->
+                    reply(response, diagnostics)
+                }.also { completed = true }
+            } finally {
+                diagnostics?.finished((System.nanoTime() - started) / 1_000_000, completed)
+            }
         }
     }
 
@@ -97,10 +107,18 @@ class GeminiTranslationClient(
     private fun request(url: HttpUrl, apiKey: String): Request.Builder =
         Request.Builder().url(url).secret("x-goog-api-key", apiKey).header("User-Agent", USER_AGENT)
 
-    private fun reply(response: Response): String {
+    private fun reply(response: Response, diagnostics: GeminiCacheDiagnostics?): String {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
         if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
         if (text == null) throw TranslationError.Protocol("reply too large")
+        if (diagnostics != null) {
+            val root = try {
+                JSONObject(text)
+            } catch (_: org.json.JSONException) {
+                throw TranslationError.Protocol("not JSON")
+            }
+            diagnostics.response(GeminiUsage.parse(root))
+        }
         return GeminiTranslation.translation(text)
     }
 

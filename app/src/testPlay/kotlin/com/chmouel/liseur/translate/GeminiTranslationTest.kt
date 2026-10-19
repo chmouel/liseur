@@ -71,6 +71,35 @@ class GeminiTranslationTest {
     }
 
     @Test
+    fun `cache diagnostics count every option attempt and distinguish unknown token usage`(): Unit = runBlocking {
+        server.enqueue(MockResponse.Builder().code(400).body("""{"error":{"message":"Thinking level MINIMAL is not supported"}}""").build())
+        server.enqueue(MockResponse.Builder().code(200).body(
+            JSONObject(reply("Bonjour")).put("usageMetadata", JSONObject(
+                """{"promptTokenCount":1500,"cachedContentTokenCount":1024,"candidatesTokenCount":3,"thoughtsTokenCount":0,"unknown":99}""",
+            )).toString(),
+        ).build())
+        server.enqueue(MockResponse.Builder().code(200).body(reply("Salut")).build())
+        val diagnostics = GeminiCacheDiagnostics()
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        client.translate("k", "gemini-flash-lite-latest", "en", "fr", "Hello.", "Earlier.", "Chapter one", diagnostics = diagnostics)
+        client.translate("k", "gemini-flash-lite-latest", "en", "fr", "Hello again.", "Earlier again.", "Chapter two", diagnostics = diagnostics)
+        diagnostics.cached(7)
+        val result = diagnostics.snapshot()
+        assertEquals(3L, result.attempts)
+        assertEquals(2L, result.completed)
+        assertEquals(2L, result.responses)
+        assertEquals(7L, result.localSentenceHits)
+        assertEquals(GeminiCacheDiagnostics.Tokens(1, 1500), result.input)
+        assertEquals(GeminiCacheDiagnostics.Tokens(1, 1024), result.cached)
+        assertEquals(GeminiCacheDiagnostics.Tokens(1, 0), result.thoughts)
+        assertEquals(1L, result.sameBookContext.comparisons)
+        assertEquals(1L, result.changedBookContext.comparisons)
+        assertTrue(result.changedBookContext.minimumBytes!! > 0)
+        val invalid = GeminiUsage.parse(JSONObject("""{"usageMetadata":{"promptTokenCount":-1,"cachedContentTokenCount":"42","candidatesTokenCount":1.5}}"""))
+        assertEquals(GeminiUsage(null, null, null, null), invalid)
+    }
+
+    @Test
     fun `translation guard stops a thinking retry before it submits`(): Unit = runBlocking {
         server.enqueue(
             MockResponse.Builder().code(400)

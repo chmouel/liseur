@@ -1377,7 +1377,13 @@ changing reader behavior.
   writes are generation-fenced and persist before progress advances. A
   saved row wins over a marker; retrying failures needs confirmation;
   checks precede replacing metadata or clearing markers. Markers never
-  sync (backup only). Sources must be inside the EPUB archive (network-denying opener).
+  sync (backup only). Sources must be inside the EPUB archive
+  (network-denying opener).
+- Play debug builds log a numeric-only `GeminiCache` summary per bulk
+  run: local hits, HTTP attempts, successes and `usageMetadata` token
+  totals (input, cached, output, thinking; absent is unknown, not zero),
+  plus bounded prompt-prefix byte comparisons (not tokens, not proof of
+  cache hits). No prompt, title, endpoint, key or reply is logged.
 - Book removal is a sweep, not a delete by URL (`BookRemoval` may run in
   a caller's transaction): `AppContainer` sweeps on Room invalidation of
   `books` and at start; `sweep()` bumps the book's epoch so an open
