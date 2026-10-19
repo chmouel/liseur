@@ -210,7 +210,8 @@ chapter, as set by "Earlier text for page translation" in Settings,
 Translation, Advanced: by default up to 8 sentences and 4,000 characters, and
 some of it may come from before the place you started translating. Set
 it to Off, or turn off the server's Advanced option to send earlier
-text, and only the sentence goes. TranslateGemma models never get it.
+text, and no earlier text goes. The book's details still go unless "Send
+book details" is off too. TranslateGemma models never get earlier text.
 [Local AI servers](LOCAL_AI_SERVERS.md) explains how to
 run a translation server on your own computer.
 
