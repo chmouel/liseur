@@ -138,7 +138,6 @@ import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.PageTranslationModes
 import com.chmouel.liseur.translate.TranslateFeature
-import com.chmouel.liseur.translate.TranslationLanguages
 import com.chmouel.liseur.translate.startPageTranslation
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.data.db.AnnotationKind
@@ -4180,9 +4179,6 @@ internal fun ReaderScreen(
                                                 )
                                             },
                                             leadingIcon = { Icon(Icons.Outlined.Translate, contentDescription = null) },
-                                            trailingIcon = TranslationLanguages.flag(target)?.let { flag ->
-                                                { Text(flag, modifier = Modifier.semantics { hideFromAccessibility() }) }
-                                            },
                                             onClick = {
                                                 moreOpen = false
                                                 chromeVisible = false
