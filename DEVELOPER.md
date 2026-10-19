@@ -261,7 +261,9 @@ occasion. It answers:
 and `--think` puts a `<think>` block before each translation, as
 reasoning models do.
 
-From the emulator the host is `10.0.2.2`. In Settings, under External
+The stub listens on `127.0.0.1` only, which the emulator reaches as
+`10.0.2.2`; `--host 0.0.0.0` opens it to other machines, since the log
+holds whatever text the app sent. In Settings, under External
 services and API keys, add a server at `http://10.0.2.2:8765/v1` and test
 the connection. For translation, pick that server as the translation
 service and `stub-chat` as the model; "Translate a test sentence" then

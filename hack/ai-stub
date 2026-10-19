@@ -84,7 +84,8 @@ class Stub:
         with self.lock, self.log.open("a", encoding="utf-8") as out:
             out.write(json.dumps(entry, ensure_ascii=False) + "\n")
         if not self.args.quiet:
-            shown = entry.get("blocks", {}).get("passage") or entry.get("body", {}).get("input") or ""
+            body = entry.get("body")
+            shown = entry.get("blocks", {}).get("passage") or (body.get("input") if isinstance(body, dict) else None) or ""
             print(f"{entry['method']} {entry['path']} {shown[:60]!r}" if shown else f"{entry['method']} {entry['path']}", flush=True)
 
     def entries(self) -> list[dict]:
@@ -166,9 +167,12 @@ def handler(stub: Stub):
             raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             try:
                 body = json.loads(raw or b"{}")
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 stub.record(self.entry(raw.decode("utf-8", "replace")))
                 return self.error(400, "Body is not JSON")
+            if not isinstance(body, dict):
+                stub.record(self.entry(body))
+                return self.error(400, "Body is not a JSON object")
             entry = self.entry(body)
             route = self.route()
             if route == "/chat/completions":
@@ -214,7 +218,11 @@ def parse(argv: list[str]) -> argparse.Namespace:
         description="Fake OpenAI-compatible translation and speech server that logs requests.",
         epilog="In the app, add http://10.0.2.2:PORT/v1 (emulator) under External services and API keys.",
     )
-    parser.add_argument("--host", default="0.0.0.0", help="address to listen on (default: %(default)s)")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="address to listen on; the emulator's 10.0.2.2 reaches the host's loopback (default: %(default)s)",
+    )
     parser.add_argument("--port", type=int, default=8765, help="port, 0 for any free one (default: %(default)s)")
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="JSON-lines request log (default: tmp/ai-stub/requests.jsonl)")
     parser.add_argument("--keep-log", action="store_true", help="append to the log instead of starting it empty")

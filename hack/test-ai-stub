@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import subprocess
@@ -24,12 +25,13 @@ def check(name: str, ok: bool, detail: object = "") -> None:
 
 
 class Stub:
-    def __init__(self, *flags: str):
+    def __init__(self, *flags: str, quiet: bool = True):
         self.dir = tempfile.TemporaryDirectory()
         self.log = Path(self.dir.name) / "requests.jsonl"
         self.proc = subprocess.Popen(
-            [sys.executable, str(SCRIPT), "--host", "127.0.0.1", "--port", "0", "--log", str(self.log), "--quiet", *flags],
+            [sys.executable, str(SCRIPT), "--host", "127.0.0.1", "--port", "0", "--log", str(self.log), *(["--quiet"] if quiet else []), *flags],
             stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
         )
         line = self.proc.stdout.readline()
@@ -39,8 +41,8 @@ class Stub:
             raise SystemExit(f"ai-stub did not start: {line!r}")
         self.base = f"http://127.0.0.1:{port.group(1)}"
 
-    def call(self, method: str, path: str, body: dict | None = None, key: str | None = None):
-        data = json.dumps(body).encode() if body is not None else None
+    def call(self, method: str, path: str, body: object = None, key: str | None = None):
+        data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(self.base + path, data=data, method=method)
         request.add_header("Content-Type", "application/json")
         if key:
@@ -50,6 +52,8 @@ class Stub:
                 return reply.status, reply.headers.get("Content-Type"), reply.read()
         except urllib.error.HTTPError as error:
             return error.code, error.headers.get("Content-Type"), error.read()
+        except (OSError, http.client.HTTPException) as error:
+            return 0, None, str(error).encode()
 
     def json(self, method: str, path: str, body: dict | None = None, key: str | None = None):
         code, _, data = self.call(method, path, body, key)
@@ -59,6 +63,8 @@ class Stub:
         self.proc.terminate()
         self.proc.wait(timeout=5)
         self.proc.stdout.close()
+        self.stderr = self.proc.stderr.read()
+        self.proc.stderr.close()
         self.dir.cleanup()
 
 
@@ -114,6 +120,18 @@ def main() -> int:
         check("clearing empties the log", entries == [], entries)
     finally:
         stub.stop()
+
+    stub = Stub(quiet=False)
+    try:
+        code, _, _ = stub.call("POST", "/v1/audio/speech", b"{not json")
+        check("a body that is not JSON gets a 400", code == 400, code)
+        code, _, _ = stub.call("POST", "/v1/audio/speech", [1, 2])
+        check("a JSON body that is not an object gets a 400", code == 400, code)
+        code, _, _ = stub.call("POST", "/v1/audio/speech", {"input": "Still up", "response_format": "wav"})
+        check("the stub keeps answering after a bad body", code == 200, code)
+    finally:
+        stub.stop()
+    check("a bad body raises nothing while printing requests", "Traceback" not in stub.stderr, stub.stderr[-300:])
 
     stub = Stub("--key", "secret", "--think")
     try:
