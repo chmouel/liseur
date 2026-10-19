@@ -1,0 +1,454 @@
+#!/usr/bin/env bash
+#
+# Checks that a tap on a same-document link is handed to the app instead of
+# silently jumping the page (issue #362).
+#
+# Like hack/verify-footnotes, none of what this fix has to get right can be
+# seen from the JVM: whether the listener runs after Readium's own handlers,
+# whether a noteref Readium itself handles is left alone, whether the
+# fragment arrives raw and undecoded. So the script is lifted out of
+# SameDocumentLinks.kt — the same text the app ships, never a copy — and run
+# in headless Chrome against real documents served over HTTP, so
+# location.href means what it means in the app's web views.
+#
+# The bridge the script talks to is faked here (window.LiseurLinks), which
+# is also what lets the harness see the verdicts: what was followed, what
+# was left alone, and whether the click's default action was prevented.
+#
+# One limit worth knowing, the same as the other harness: these documents
+# are parsed as HTML. A book served as XHTML puts epub:type in a namespace
+# instead, which is why the exact-noteref guard asks for the attribute by
+# its qualified name and works either way.
+#
+# There is no Chrome on the CI runners, so this is a check to run by hand
+# when the script changes, not part of `make check`.
+
+set -euo pipefail
+
+readonly SOURCE="app/src/main/kotlin/com/chmouel/liseur/reader/footnotes/SameDocumentLinks.kt"
+readonly PORT="${PORT:-8793}"
+
+die() {
+    printf 'error: %s\n' "$*" >&2
+    exit 1
+}
+
+cd "$(git rev-parse --show-toplevel)"
+
+browser=""
+for candidate in google-chrome-stable google-chrome chromium chromium-browser; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        browser=$candidate
+        break
+    fi
+done
+[[ -n $browser ]] || die "no chrome or chromium on PATH"
+
+command -v python3 >/dev/null 2>&1 || die "python3 is needed to serve the harness"
+
+work=$(mktemp -d)
+server=""
+cleanup() {
+    if [[ -n $server ]]; then
+        kill "$server" 2>/dev/null || true
+        wait "$server" 2>/dev/null || true
+    fi
+    rm -rf "$work"
+}
+trap cleanup EXIT
+
+mkdir -p "$work/cases"
+
+# The script comes out of the Kotlin, so the harness can never pass against
+# a copy that has drifted from what the app runs.
+python3 - "$SOURCE" "$work/links.js" <<'PY'
+import re, sys
+src = open(sys.argv[1]).read()
+match = re.search(r'const val SCRIPT: String = """(.*?)"""', src, re.S)
+if not match:
+    sys.exit("could not find SCRIPT in " + sys.argv[1])
+open(sys.argv[2], "w").write(match.group(1))
+PY
+
+emit() { cat >"$work/cases/$1"; }
+
+# The classic EPUB2 spelling: a plain anchor, the note a few paragraphs
+# down in the same file.
+emit plain.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence with a gloss<a id="l" href="#fn1">1</a> in the middle of it.</p>
+<p>Filler, so the note is not the next thing on the page.</p>
+<p id="fn1">The note itself.</p>
+</body></html>
+EOF
+
+# The note in an aside, which the layout pass may have hidden: the link is
+# still a link, and the card or the jump still has to happen.
+emit aside.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="#n1">1</a> with an aside note.</p>
+<aside id="n1"><p>The note.</p></aside>
+</body></html>
+EOF
+
+# The ARIA vocabulary, and the bare and multi-token type spellings, none of
+# which Readium's own footnote pass recognises.
+emit aria.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" role="doc-noteref" href="#n1">1</a> in ARIA.</p>
+<p id="n1">The note.</p>
+</body></html>
+EOF
+
+emit bare-type.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" type="noteref" href="#n1">1</a> with a bare type.</p>
+<p id="n1">The note.</p>
+</body></html>
+EOF
+
+emit multi-token.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" epub:type="other noteref" href="#n1">1</a> with a multi-token type.</p>
+<p id="n1">The note.</p>
+</body></html>
+EOF
+
+# Exactly what Readium itself handles; must be left entirely alone.
+emit exact-noteref.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" epub:type="noteref" href="#n1">1</a> Readium knows.</p>
+<p id="n1">The note.</p>
+</body></html>
+EOF
+
+# A book that cancels its own anchor clicks: the publisher's word is final.
+emit publisher-cancelled.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="#fn1">1</a> the publisher guards.</p>
+<p id="fn1">The note.</p>
+<script>document.addEventListener("click", function (e) { e.preventDefault(); }, false);</script>
+</body></html>
+EOF
+
+# A click that is dismissing a selection is not a click on a link.
+emit selection.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">Some marked words<a id="l" href="#fn1">1</a> and a link.</p>
+<p id="fn1">The note.</p>
+</body></html>
+EOF
+
+# A note in another file, and a link out of the book: the WebView's to
+# follow, and Readium intercepts cross-document loads as it always has.
+emit crossdoc.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="other.html#n1">1</a> pointing elsewhere.</p>
+</body></html>
+EOF
+
+emit external.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="https://example.org/#x">out</a> of the book.</p>
+</body></html>
+EOF
+
+# A base pointing elsewhere must not make this document's own anchors look
+# foreign, nor another path's look local.
+emit base.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title>
+<base href="http://127.0.0.1:1/elsewhere/"/></head><body>
+<p id="probe">A sentence<a id="l" href="#fn1">1</a> under a redirected base.</p>
+<p id="fn1">The note.</p>
+</body></html>
+EOF
+
+# A bare #, which names no fragment and keeps today's behaviour.
+emit bare-hash.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="#">1</a> going nowhere in particular.</p>
+</body></html>
+EOF
+
+# An id containing a literal %: the payload must arrive exactly as
+# written, because the Kotlin side decodes.
+emit percent.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="#a%25b">1</a> with a percent in it.</p>
+<p id="a%25b">The note.</p>
+</body></html>
+EOF
+
+# A book that writes its own chapter's name into the reference: just as
+# legal as a bare fragment, and the same document.
+emit path-spelled.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A sentence<a id="l" href="path-spelled.html#fn1">1</a> naming itself.</p>
+<p id="fn1">The note.</p>
+</body></html>
+EOF
+
+# Something that is not a link at all: the token still mints, nothing follows.
+emit nonanchor.html <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>t</title></head><body>
+<p id="probe">A div<div id="d">to click on</div> and nothing else.</p>
+</body></html>
+EOF
+
+cat >"$work/index.html" <<'EOF'
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>running</title>
+<style>body{margin:0;font:12px monospace}#f{border:0;width:412px;height:820px}</style>
+</head><body>
+<iframe id="f"></iframe><pre id="out"></pre>
+<script>
+var SCRIPT = null;
+var results = [];
+function log(ok, name, detail) {
+  results.push((ok ? "PASS " : "FAIL ") + name + (detail ? "  [" + detail + "]" : ""));
+}
+function frame(caseName) {
+  var f = document.getElementById("f");
+  return new Promise(function (res) {
+    f.onload = function () { setTimeout(function () { res(f.contentWindow); }, 30); };
+    f.src = "cases/" + caseName;
+  });
+}
+// The bridge the app would register, faked: it records the verdicts so
+// the harness can ask what the app would have been told.
+function bridge(win) {
+  var b = { began: 0, followed: [], prevented: null };
+  win.LiseurLinks = {
+    beginClick: function () { b.began++; },
+    follow: function (f) { b.followed.push(f); }
+  };
+  return b;
+}
+// Registered after the script's own listener, so it sees the click as
+// the WebView would: default already prevented, or not.
+function watch(win, b) {
+  win.document.addEventListener("click", function (e) {
+    b.prevented = e.defaultPrevented;
+  }, false);
+}
+function run(win) { return win.eval(SCRIPT); }
+function click(win, sel) {
+  var el = win.document.querySelector(sel);
+  el.click();
+}
+function selected(win, sel) {
+  var el = win.document.querySelector(sel);
+  var range = win.document.createRange();
+  range.selectNodeContents(el);
+  var selection = win.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+var TESTS = [];
+
+TESTS.push(function () {
+  return frame("plain.html").then(function (w) {
+    var b = bridge(w);
+    var answer = run(w);
+    watch(w, b);
+    click(w, "#l");
+    log(answer === "installed", "the pass installs", "got " + answer);
+    log(b.began === 1, "the click token mints once per click", "began " + b.began);
+    log(b.followed.length === 1 && b.followed[0] === "fn1",
+        "a plain same-document anchor is handed over", "followed " + JSON.stringify(b.followed));
+    log(b.prevented === true, "the WebView's own jump is prevented");
+    log(w.location.hash === "", "the page did not move", "hash " + w.location.hash);
+  });
+});
+
+["aside", "aria", "bare-type", "multi-token", "path-spelled"].forEach(function (name) {
+  var fragment = name === "path-spelled" ? "fn1" : "n1";
+  TESTS.push(function () {
+    return frame(name + ".html").then(function (w) {
+      var b = bridge(w);
+      run(w);
+      click(w, "#l");
+      log(b.followed.length === 1 && b.followed[0] === fragment,
+          name + " is handed over like any other", "followed " + JSON.stringify(b.followed));
+      log(w.location.hash === "", name + " does not move the page", "hash " + w.location.hash);
+    });
+  });
+});
+
+TESTS.push(function () {
+  return frame("exact-noteref.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    watch(w, b);
+    click(w, "#l");
+    log(b.followed.length === 0, "an exact noteref is left to Readium",
+        "followed " + JSON.stringify(b.followed));
+    log(b.prevented === false, "and its default action is not touched");
+  });
+});
+
+TESTS.push(function () {
+  return frame("publisher-cancelled.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 0, "a click the publisher cancelled is left alone");
+  });
+});
+
+TESTS.push(function () {
+  return frame("selection.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    selected(w, "#probe");
+    click(w, "#l");
+    log(b.followed.length === 0, "a click dismissing a selection is left alone");
+  });
+});
+
+TESTS.push(function () {
+  return frame("crossdoc.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 0, "a link into another file is the WebView's",
+        "followed " + JSON.stringify(b.followed));
+  });
+});
+
+TESTS.push(function () {
+  return frame("external.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 0, "a link out of the book is not ours to follow");
+  });
+});
+
+TESTS.push(function () {
+  return frame("base.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 0, "a base-redirected document is left to the WebView",
+        "followed " + JSON.stringify(b.followed));
+  });
+});
+
+TESTS.push(function () {
+  return frame("bare-hash.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 0, "a bare # names nothing and keeps today's behaviour");
+  });
+});
+
+TESTS.push(function () {
+  return frame("percent.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    log(b.followed.length === 1 && b.followed[0] === "a%25b",
+        "a percent-literal fragment arrives raw and undecoded",
+        "followed " + JSON.stringify(b.followed));
+  });
+});
+
+TESTS.push(function () {
+  return frame("plain.html").then(function (w) {
+    var b = bridge(w);
+    var first = run(w);
+    var second = run(w);
+    click(w, "#l");
+    log(first === "installed" && second === "present",
+        "a second pass finds the listeners already in", "got " + first + " then " + second);
+    log(b.began === 1 && b.followed.length === 1,
+        "and does not register them twice",
+        "began " + b.began + ", followed " + JSON.stringify(b.followed));
+  });
+});
+
+TESTS.push(function () {
+  return frame("nonanchor.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#d");
+    log(b.began === 1, "a click anywhere still mints its token", "began " + b.began);
+    log(b.followed.length === 0, "and nothing follows a click that is not on a link");
+  });
+});
+
+TESTS.push(function () {
+  return frame("plain.html").then(function (w) {
+    var b = bridge(w);
+    run(w);
+    click(w, "#l");
+    click(w, "#l");
+    log(b.began === 2, "two clicks mint two tokens", "began " + b.began);
+    log(b.followed.length === 2, "and each is handed over on its own",
+        "followed " + JSON.stringify(b.followed));
+  });
+});
+
+fetch("links.js").then(function (r) { return r.text(); }).then(function (src) {
+  SCRIPT = src;
+  return TESTS.reduce(function (p, t) { return p.then(t); }, Promise.resolve());
+}).then(function () {
+  var failed = results.filter(function (r) { return r.indexOf("FAIL") === 0; }).length;
+  document.getElementById("out").textContent = results.join("\n");
+  document.title = failed === 0 ? "ALL PASS" : failed + " FAILED";
+}).catch(function (e) {
+  document.getElementById("out").textContent = "harness error: " + (e && e.stack || e);
+  document.title = "HARNESS ERROR";
+});
+</script></body></html>
+EOF
+
+(cd "$work" && exec python3 -m http.server "$PORT" >/dev/null 2>&1) &
+server=$!
+
+ready=false
+for _ in $(seq 1 50); do
+    status=0
+    python3 - "$PORT" "$work/links.js" <<'PY' || status=$?
+import sys, urllib.request
+port, path = sys.argv[1], sys.argv[2]
+try:
+    served = urllib.request.urlopen("http://127.0.0.1:%s/links.js" % port, timeout=1).read()
+except Exception:
+    sys.exit(1)
+sys.exit(0 if served == open(path, "rb").read() else 2)
+PY
+    case $status in
+        0)
+            ready=true
+            break
+            ;;
+        2)
+            die "port $PORT is serving another tree; try PORT=… "
+            ;;
+    esac
+    kill -0 "$server" 2>/dev/null ||
+        die "could not serve the harness on port $PORT; something else is using it (try PORT=…)"
+    sleep 0.2
+done
+$ready || die "the harness server never came up on port $PORT"
+
+"$browser" --headless=new --disable-gpu --no-sandbox \
+    --virtual-time-budget=20000 \
+    --user-data-dir="$work/chrome" \
+    --dump-dom "http://127.0.0.1:$PORT/index.html" \
+    >"$work/dump.html" 2>/dev/null
+
+python3 - "$work/dump.html" <<'PY'
+import html, re, sys
+page = open(sys.argv[1]).read()
+title = re.search(r"<title>(.*?)</title>", page, re.S)
+out = re.search(r'<pre id="out">(.*?)</pre>', page, re.S)
+title = title.group(1) if title else "?"
+print(html.unescape(out.group(1)) if out else "(the harness produced no output)")
+print()
+print(title)
+sys.exit(0 if title == "ALL PASS" else 1)
+PY

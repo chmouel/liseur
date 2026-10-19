@@ -28,6 +28,20 @@ class IssuedMovesTest {
     }
 
     @Test
+    fun `a generation is answered even while a move is in the air`() {
+        val moves = IssuedMoves()
+        val before = moves.generation()
+        // A mark would refuse — something is about to be outstanding —
+        // but the generation is a plain count: taken before a suspension,
+        // comparable afterwards.
+        moves.issue(from = cover, to = section)
+        assertEquals(IssuedMoves.NONE, moves.mark())
+        assertEquals(before + 1, moves.generation())
+        assertFalse(moves.unchangedSince(before))
+        assertTrue(moves.unchangedSince(moves.generation()))
+    }
+
+    @Test
     fun `a move asked for after a mark retires it`() {
         val moves = IssuedMoves()
         val fit = moves.mark()

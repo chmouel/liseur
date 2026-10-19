@@ -159,10 +159,22 @@ object ExactLocatorAnchor {
             ?.takeIf { it.isNotBlank() && it != "null" }
 
     @OptIn(ExperimentalReadiumApi::class)
-    suspend fun capture(navigator: EpubNavigatorFragment, native: Locator): Locator {
-        val result = runCatching { navigator.evaluateJavascript(CAPTURE_SCRIPT) }.getOrNull()
-        return parseJavascriptResult(result)?.let { mark(native, it) } ?: native
-    }
+    suspend fun capture(navigator: EpubNavigatorFragment, native: Locator): Locator =
+        captureExactly(navigator, native) ?: native
+
+    /**
+     * [native] carrying the first visible words, or null when the
+     * capture script did not run or did not parse: the strict answer,
+     * for a caller that must not present a stale locator as a place
+     * nobody verified. [capture] is this plus today's fallback.
+     */
+    fun captureFromScript(result: String?, native: Locator): Locator? =
+        parseJavascriptResult(result)?.let { mark(native, it) }
+
+    @OptIn(ExperimentalReadiumApi::class)
+    suspend fun captureExactly(navigator: EpubNavigatorFragment, native: Locator): Locator? =
+        runCatching { navigator.evaluateJavascript(CAPTURE_SCRIPT) }.getOrNull()
+            ?.let { captureFromScript(it, native) }
 
     @OptIn(ExperimentalReadiumApi::class)
     suspend fun verify(navigator: EpubNavigatorFragment, locator: Locator): Boolean {

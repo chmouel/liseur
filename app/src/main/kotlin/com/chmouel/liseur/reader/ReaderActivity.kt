@@ -49,6 +49,8 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.readingCssFor
+import com.chmouel.liseur.reader.footnotes.SameDocumentClicks
+import com.chmouel.liseur.reader.footnotes.sameDocumentDestination
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.ReadingProgression as PublicationReadingProgression
@@ -336,6 +338,45 @@ class ReaderActivity : FragmentActivity() {
                                 // over it takes the reader back off the page
                                 // they asked for. See IssuedMoves.
                                 val moves = remember { IssuedMoves() }
+                                // Every tapped link, whichever door it
+                                // came in by, becomes its effect here: the
+                                // navigator listener hands over what
+                                // Readium recognised, the page script's
+                                // bridge hands over the same-document
+                                // anchors nothing else sees, and both meet
+                                // in LinkTaps. The way back is announced
+                                // only once the navigation accepts it — see
+                                // followLink.
+                                val linkTaps = remember(s.publication) {
+                                    LinkTaps(
+                                        scope = lifecycleScope,
+                                        moves = moves,
+                                        noteAt = viewModel::noteAt,
+                                        onFootnote = viewModel::showFootnote,
+                                        onFollow = { link, from ->
+                                            navigator?.let { nav ->
+                                                followLink(
+                                                    link = link,
+                                                    from = from,
+                                                    moves = moves,
+                                                    nowMs = { SystemClock.elapsedRealtime() },
+                                                    currentPlace = { nav.currentLocator.value },
+                                                    destinationOf = {
+                                                        s.publication.locatorFromLink(it)?.destination()
+                                                    },
+                                                    go = { nav.go(it, animated = false) },
+                                                    onJump = viewModel::onJump,
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                                // Click tokens shared between the page
+                                // script's bridge and the reader screen's
+                                // decoration listeners, so one tap cannot
+                                // both open an annotation sheet and
+                                // navigate.
+                                val linkClicks = remember { SameDocumentClicks() }
                                 // Kept as a value rather than computed
                                 // inline, because ReaderScreen has to know
                                 // exactly what this navigator was built
@@ -393,25 +434,8 @@ class ReaderActivity : FragmentActivity() {
                                         // every link the same way — go there — and
                                         // a footnote costs the reader their page.
                                         listener = ReaderNavigatorListener(
-                                            scope = lifecycleScope,
-                                            noteAt = viewModel::noteAt,
+                                            linkTaps = linkTaps,
                                             onFootnote = viewModel::showFootnote,
-                                            onFollow = { link ->
-                                                viewModel.onJump()
-                                                navigator?.let { nav ->
-                                                    val token = moves.issue(
-                                                        from = nav.currentLocator.value
-                                                            .restorePoint(),
-                                                        to = s.publication
-                                                            .locatorFromLink(link)
-                                                            ?.destination(),
-                                                        nowMs = SystemClock.elapsedRealtime(),
-                                                    )
-                                                    if (!nav.go(link, animated = false)) {
-                                                        moves.cancel(token)
-                                                    }
-                                                }
-                                            },
                                             onExternal = { pendingExternalLink = it },
                                         ),
                                         configuration = epubNavigatorConfiguration(
@@ -421,6 +445,30 @@ class ReaderActivity : FragmentActivity() {
                                             userFonts = importedFonts,
                                             onTextSelected = viewModel::onTextSelected,
                                             onSelectionCleared = viewModel::onSelectionCleared,
+                                            clicks = linkClicks,
+                                            onSameDocumentLink = { resource, fragment ->
+                                                val nav = navigator
+                                                val href = resource.url()
+                                                    .removeFragment().toString()
+                                                // Best-effort staleness gate: the
+                                                // navigator's published position
+                                                // is documented to lag the shown
+                                                // resource, and refusing is the
+                                                // safe side — the same window
+                                                // Readium's own async door has.
+                                                // Defense in depth on the way in:
+                                                // the payload is fragment-only and
+                                                // resource-bound by construction,
+                                                // and the publication says so
+                                                // again before anything moves.
+                                                val link = sameDocumentDestination(resource, fragment)
+                                                if (nav != null && link != null &&
+                                                    nav.currentLocator.value.href.toString() == href &&
+                                                    s.publication.locatorFromLink(link) != null
+                                                ) {
+                                                    linkTaps.fromBridge(link, href)
+                                                }
+                                            },
                                         ),
                                     ).also { supportFragmentManager.fragmentFactory = it }
                                 }
@@ -463,6 +511,8 @@ class ReaderActivity : FragmentActivity() {
                                     fontKey = fontKey,
                                     initialPreferences = initialPreferences,
                                     moves = moves,
+                                    linkTaps = linkTaps,
+                                    linkClicks = linkClicks,
                                     prefsFlow = viewModel.prefs,
                                     readingTheme = readingTheme,
                                     typographyIsOwnFlow = viewModel.typographyIsOwn,

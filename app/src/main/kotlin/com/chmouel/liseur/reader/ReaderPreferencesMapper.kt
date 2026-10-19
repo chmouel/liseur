@@ -13,6 +13,8 @@ import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.requiresAdvancedStyles
 import com.chmouel.liseur.data.settings.sanitized
+import com.chmouel.liseur.reader.footnotes.SameDocumentClicks
+import com.chmouel.liseur.reader.footnotes.SameDocumentLinkBridge
 import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -25,6 +27,7 @@ import org.readium.r2.navigator.preferences.ColumnCount
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.TextAlign
 import org.readium.r2.navigator.preferences.Theme
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 
@@ -267,16 +270,27 @@ internal fun EpubNavigatorFragment.Configuration.configureFontSizeRendering(refl
  * given a screenful of scrolling instead (see `PageTurner`).
  */
 @OptIn(ExperimentalReadiumApi::class)
-fun epubNavigatorConfiguration(
+internal fun epubNavigatorConfiguration(
     columnMode: ColumnMode = ColumnMode.Default,
     scroll: Boolean = false,
     reflowable: Boolean = true,
     userFonts: List<UserFont> = emptyList(),
     onTextSelected: () -> Unit = {},
     onSelectionCleared: () -> Unit = {},
+    onSameDocumentLink: (resource: Link, fragment: String) -> Unit = { _, _ -> },
+    // Shared with the reader screen's decoration listeners, which mark
+    // the current click's token when they consume one.
+    clicks: SameDocumentClicks = SameDocumentClicks(),
 ): EpubNavigatorFragment.Configuration =
     epubNavigatorConfigurationBase(reflowable).apply {
         servedAssets = listOf("fonts/.*")
+        // Bound to the resource it was injected into: the factory is
+        // called with the Link of that resource, so the callback carries
+        // the emitting document rather than the navigator's published
+        // position, which is documented to lag the shown resource.
+        registerJavascriptInterface("LiseurLinks") { resource ->
+            SameDocumentLinkBridge(resource, clicks, onSameDocumentLink)
+        }
         disablePageTurnsWhileScrolling = scroll
         readiumCssRsProperties = readingRsProperties(columnMode)
         selectionActionModeCallback = object : ActionMode.Callback {

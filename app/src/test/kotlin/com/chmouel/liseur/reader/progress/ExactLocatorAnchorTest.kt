@@ -4,6 +4,8 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -133,6 +135,43 @@ class ExactLocatorAnchorTest {
             assertTrue(tag, script.contains("\"$tag\""))
             assertFalse(tag, script.contains("\"${tag.uppercase()}\""))
         }
+    }
+
+    @Test
+    fun `a failed capture answers null however exact the stale native locator is`() {
+        // The native locator already carries an anchor from an earlier
+        // capture, so it *looks* verified; the script not answering must
+        // not let it through as the tapped passage.
+        val staleExact = ExactLocatorAnchor.mark(
+            locator(),
+            ViewportTextAnchor("#chapter", "before ", "visible", " after"),
+        )
+
+        for (failed in listOf(null, "null", "", "not json at all")) {
+            assertNull(failed, ExactLocatorAnchor.captureFromScript(failed, staleExact))
+            // The fallback variant keeps today's answer: the supplied
+            // locator, anchor and all.
+            assertSame(staleExact, ExactLocatorAnchor.captureFromScript(failed, staleExact) ?: staleExact)
+        }
+    }
+
+    @Test
+    fun `a parsed capture marks the native locator`() {
+        val json = JSONObject()
+            .put("cssSelector", "#chapter > p:nth-of-type(2)")
+            .put("before", "before ")
+            .put("highlight", "visible")
+            .put("after", " after")
+            .toString()
+
+        val marked = ExactLocatorAnchor.captureFromScript(
+            JSONObject.quote(json),
+            locator(),
+        )
+
+        assertNotNull(marked)
+        assertEquals("visible", marked?.text?.highlight)
+        assertTrue(ExactLocatorAnchor.isExact(marked))
     }
 
     private fun locator(): Locator = requireNotNull(

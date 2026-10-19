@@ -165,6 +165,8 @@ import com.chmouel.liseur.reader.dictionary.WiktionaryClient
 import com.chmouel.liseur.reader.dictionary.altLanguageFor
 import com.chmouel.liseur.reader.dictionary.definitionQuery
 import com.chmouel.liseur.reader.footnotes.FootnoteLayout
+import com.chmouel.liseur.reader.footnotes.SameDocumentClicks
+import com.chmouel.liseur.reader.footnotes.SameDocumentLinks
 import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.FooterSlot
@@ -398,7 +400,7 @@ private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED }
     ExperimentalLayoutApi::class,
 )
 @Composable
-fun ReaderScreen(
+internal fun ReaderScreen(
     publication: Publication,
     displayAuthors: List<String>,
     /**
@@ -432,6 +434,13 @@ fun ReaderScreen(
      * [IssuedMoves].
      */
     moves: IssuedMoves,
+    // Where a tapped link becomes its effect; armed below with this
+    // screen's capture machinery, because what the pill offers back has
+    // to be the passage on screen when the tap landed.
+    linkTaps: LinkTaps,
+    // Shared with the page script's bridge; the decoration listeners
+    // below mark the current click's token when they consume one.
+    linkClicks: SameDocumentClicks,
     prefsFlow: StateFlow<ReaderPrefs>,
     readingTheme: ReaderTheme,
     typographyIsOwnFlow: StateFlow<Boolean>,
@@ -841,7 +850,28 @@ fun ReaderScreen(
         val translated = pageTranslated
         val captured = onProgressAction.prepareLocator(ExactLocatorAnchor.capture(nav, locator))
         // Taken on a translated page, or across a switch: its words may be the translation's (ADR 45).
-        return if (translated || pageTranslated || turns != pageTranslatedTurns) ExactLocatorAnchor.coarse(captured) else captured
+        return settleCapture(captured, turns, translated, pageTranslatedTurns, pageTranslated)
+    }
+
+    /**
+     * [locator] carrying the first visible words, or null when the capture
+     * itself failed — the answer a tapped link needs, where a stale
+     * locator must never be passed off as the passage the reader tapped.
+     * A page that is translated, or that switched translation under the
+     * capture, is coarsened rather than failed: the place is real, only
+     * its words are not the book's (ADR 45).
+     */
+    suspend fun captureExactly(nav: EpubNavigatorFragment, locator: Locator): Locator? {
+        val turns = pageTranslatedTurns
+        val translated = pageTranslated
+        val captured = ExactLocatorAnchor.captureExactly(nav, locator) ?: return null
+        return settleCapture(
+            onProgressAction.prepareLocator(captured),
+            turns,
+            translated,
+            pageTranslatedTurns,
+            pageTranslated,
+        )
     }
 
     fun publishUnverified(locator: Locator, event: NavigatorPositionEvent) {
@@ -2378,6 +2408,7 @@ fun ReaderScreen(
         val listener = object : DecorableNavigator.Listener {
             override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
                 // Readium calls this from its JavaScript bridge thread.
+                linkClicks.markConsumed()
                 effectScope.launch {
                     if (nav == null || navigatorNow !== nav || isPinching()) return@launch
                     val annotation = annotationsNow.firstOrNull { it.id == event.decoration.id }
@@ -2407,6 +2438,10 @@ fun ReaderScreen(
         // the player, rather than turning the page under the voice.
         val spokenListener = object : DecorableNavigator.Listener {
             override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+                // Same thread, same click dispatch, as the annotations
+                // listener above; marking here is what keeps one tap from
+                // both raising the chrome and following a link.
+                linkClicks.markConsumed()
                 effectScope.launch {
                     if (nav == null || navigatorNow !== nav || isPinching()) return@launch
                     chromeVisible = !chromeVisible
@@ -2419,6 +2454,50 @@ fun ReaderScreen(
             nav?.removeDecorationListener(listener)
             nav?.removeDecorationListener(spokenListener)
         }
+    }
+
+    // The live place a tapped link started from, captured here because
+    // the machinery is this screen's: scrolledPlace and captureExactly,
+    // never the navigator's published position, which is debounced and
+    // names where the reader was a moment ago. Armed for as long as this
+    // screen is composed; a tap arriving without it is dropped rather
+    // than guessed at.
+    DisposableEffect(linkTaps) {
+        linkTaps.captureOrigin = linkCapture@{ request, generation, resourceHref, placeRequired ->
+            val nav = navigatorNow ?: return@linkCapture null
+            val native = nav.currentLocator.value
+            val guarding = resourceHref ?: native.href.toString()
+            // The emitting resource must still be the one the navigator
+            // is showing — the gate before the tap was best-effort, and
+            // this is the same question asked again after the capture's
+            // suspension.
+            if (resourceHref != null && native.href.toString() != resourceHref) {
+                return@linkCapture null
+            }
+            val place = if (effectiveScrollingNow) {
+                scrolledPlace(nav)
+            } else {
+                captureExactly(nav, native)
+            }
+            // A link Readium handed over navigates as it always has when
+            // the capture fails; a same-document tap is dropped instead,
+            // rather than offer back a place nobody verified.
+            if (place == null && placeRequired) return@linkCapture null
+            currentCoroutineContext().ensureActive()
+            if (navigatorNow !== nav || nav.currentLocator.value.href.toString() != guarding) {
+                return@linkCapture null
+            }
+            if (request != linkTaps.latestRequest() || !moves.unchangedSince(generation)) {
+                return@linkCapture null
+            }
+            LinkTaps.Origin(place) {
+                navigatorNow === nav &&
+                    nav.currentLocator.value.href.toString() == guarding &&
+                    request == linkTaps.latestRequest() &&
+                    moves.unchangedSince(generation)
+            }
+        }
+        onDispose { linkTaps.captureOrigin = null }
     }
 
     // Tracked rather than read: the setting arrives with the book, and
@@ -4918,6 +4997,10 @@ private suspend fun repairPage(nav: EpubNavigatorFragment): Boolean {
     val here = nav.currentLocator.value.locations.fragments
     val noted = FootnoteLayout.apply(nav, here) == FootnoteLayout.Result.CHANGED
     val led = SelectionHandleFix.apply(nav) == SelectionHandleFix.Result.CHANGED
+    // Handed the same-document anchors nothing else sees. An
+    // acknowledgment only — nothing here can move the page — so it never
+    // feeds the answer below.
+    SameDocumentLinks.apply(nav)
     return fitted || noted || led
 }
 
@@ -5223,6 +5306,25 @@ private fun consumeInsetsForReadium(view: View) {
  * Nothing here is Readium-shaped on purpose: the decision the gate makes
  * is worth testing on its own, without a navigator to ask.
  */
+/**
+ * A captured locator as it may be saved: coarsened when the page it was
+ * taken on was translated, or switched translation under the capture —
+ * those words are not the book's (ADR 45), so the anchor goes and the
+ * place stays.
+ */
+internal fun settleCapture(
+    captured: Locator,
+    turnsAtStart: Int,
+    translatedAtStart: Boolean,
+    turnsNow: Int,
+    translatedNow: Boolean,
+): Locator =
+    if (translatedAtStart || translatedNow || turnsAtStart != turnsNow) {
+        ExactLocatorAnchor.coarse(captured)
+    } else {
+        captured
+    }
+
 /**
  * Where a move is going, in the terms [IssuedMoves] can check against
  * what the navigator later reports. The fragment is carried because a

@@ -194,6 +194,16 @@ class IssuedMoves(
         return if (target == null && !restless) issued else NONE
     }
 
+    /**
+     * The issuance count right now, for a caller about to suspend and
+     * wanting to know afterwards whether the reader moved meanwhile.
+     *
+     * Unlike [mark], never refuses: it answers the count whether or not
+     * anything is in flight, so it can be taken before a suspension as
+     * well as after and compared with [unchangedSince].
+     */
+    fun generation(): Int = issued
+
     /** Whether nothing has been asked for since [mark] answered [since]. */
     fun unchangedSince(since: Int): Boolean = since != NONE && since == issued
 
