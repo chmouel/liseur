@@ -18,8 +18,8 @@ data class BookFacts(
          * The facts of each resource, by the canonical path a [PageSentence]
          * names it with. [titles] are the contents' titles by reading-order
          * index; a resource without one continues the chapter before it, as
-         * split chapters do. [starts] is where each resource starts in the
-         * book, from 0 to 1.
+         * split chapters do, and so shares its start. [starts] is where each
+         * resource starts in the book, from 0 to 1.
          */
         fun byResource(
             title: String?,
@@ -29,9 +29,14 @@ data class BookFacts(
             starts: List<Double?>,
         ): Map<String, BookFacts> {
             var chapter: String? = null
+            var chapterStart: Double? = null
             return hrefs.mapIndexed { index, href ->
-                titles[index]?.let { chapter = it }
-                val percent = starts.getOrNull(index)?.let { (it.coerceIn(0.0, 1.0) * 100).toInt() }
+                val start = starts.getOrNull(index)
+                titles[index]?.let {
+                    chapter = it
+                    chapterStart = start
+                }
+                val percent = (if (chapter != null) chapterStart else start)?.let { (it.coerceIn(0.0, 1.0) * 100).toInt() }
                 href to BookFacts(title, author, chapter, percent)
             }.toMap()
         }

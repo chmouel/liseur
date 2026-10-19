@@ -45,7 +45,7 @@ class TranslationBookContextTest {
             starts = listOf(0.0, 0.1, 0.255, null),
         )
         assertEquals(BookFacts("Dune", "Frank Herbert", null, 0), facts["cover.xhtml"])
-        assertEquals(BookFacts("Dune", "Frank Herbert", "One", 25), facts["ch1-2.xhtml"])
+        assertEquals(BookFacts("Dune", "Frank Herbert", "One", 10), facts["ch1-2.xhtml"])
         assertEquals(BookFacts("Dune", "Frank Herbert", "Two", null), facts["ch2.xhtml"])
     }
 }
