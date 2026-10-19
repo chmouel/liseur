@@ -50,7 +50,9 @@ All of this stays in the app's own private storage:
   recently read going first. Deleting the book deletes them, and Settings,
   Translation, Advanced has a button to clear the disposable cache. Whole-book
   translations you choose to keep are excluded from that limit and clear;
-  delete them individually from the whole-book translations list.
+  delete them individually from the whole-book translations list. Exported
+  settings backups can include kept translations. Their text is unencrypted,
+  even with a backup password, which protects only accounts and passwords.
   A passage translated in the sheet is not saved.
 - Which books you left translated, and between which two languages, so
   they open translated. Tapping Stop or deleting the book removes it.

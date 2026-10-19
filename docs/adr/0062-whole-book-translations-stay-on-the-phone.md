@@ -32,6 +32,10 @@ preparation and coverage checks require a tap. Progress, review and completion
 each have their own view. Translation adds no reader overflow or appearance
 control. Selected-text translation still offers translated reading.
 
+Settings ZIP backups carry kept answers and failures. Restored coverage is
+unverified until checked against the destination EPUB. Restored books can
+be exported again without regenerating their translations.
+
 Existing liseur-sync cache sharing continues unchanged. The server keeps
 its current cache limits; this change makes no server-retention promise.
 
@@ -41,3 +45,7 @@ The app needs no new translation prompts or server protocol. Changing a
 model or prompt can cause live requests again, and missing or failed
 sentences are not guaranteed translated offline. The background job can
 be interrupted by Android and resumes only when the reader asks.
+
+Backup archives can be much larger and contain readable translated book
+text. Their password encrypts connections only. Export reports books left
+out by its size cap rather than keeping an incomplete book entry.

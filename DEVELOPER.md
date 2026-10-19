@@ -110,8 +110,9 @@ keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
 
 A backup is a ZIP with a versioned `manifest.json`, `settings.json`,
 `annotations.json`, `positions.json`, `companion.json`, optional
-`fonts/<sha256>.(ttf|otf)` and (v5) optional `connections.enc.json`.
-Versions 1-4 stay readable and leave data they lack unchanged.
+`fonts/<sha256>.(ttf|otf)`, (v5) optional `connections.enc.json` and (v6)
+optional `translations.json`. Versions 1-5 stay readable and leave data
+they lack unchanged.
 
 - Manifest records each entry's size and SHA-256. Reject malformed known
   fields, unsafe or duplicate paths, checksum mismatches, unsupported
@@ -140,6 +141,13 @@ Versions 1-4 stay readable and leave data they lack unchanged.
   Keystore; sync cursors,
   acknowledgements and pending work are excluded. No encrypted payload:
   accounts and API keys untouched.
+- `translations.json` (optional) carries done or restored whole-book
+  records with rows and failure markers, whole books only under a
+  separate 64 MiB limit (omitted books are counted, never truncated).
+  The payload is validated before anything is applied; books must
+  already be in the library and match like recaps. Imported coverage is
+  `restored` (unverified) until checked, and stays exportable. It is
+  never encrypted.
 
 Backup and restore previews everything, including matching books, and also
 accepts old annotation-only JSON. Books match by URL or unambiguous title
@@ -1369,7 +1377,7 @@ changing reader behavior.
   writes are generation-fenced and persist before progress advances. A
   saved row wins over a marker; retrying failures needs confirmation;
   checks precede replacing metadata or clearing markers. Markers never
-  sync. Sources must be inside the EPUB archive (network-denying opener).
+  sync (backup only). Sources must be inside the EPUB archive (network-denying opener).
 - Book removal is a sweep, not a delete by URL (`BookRemoval` may run in
   a caller's transaction): `AppContainer` sweeps on Room invalidation of
   `books` and at start; `sweep()` bumps the book's epoch so an open

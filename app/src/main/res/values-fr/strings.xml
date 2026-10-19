@@ -1561,6 +1561,11 @@
     <string name="whole_book_delete">Supprimer les traductions enregistrées</string>
     <string name="whole_book_delete_body">Arrêter cette tâche et supprimer de cet appareil les traductions enregistrées et les marqueurs d’échec de ce livre ?</string>
     <string name="whole_book_storage">Traductions conservées : %2$s · Phrases : %1$s. Elles ne sont pas supprimées en vidant le cache.</string>
+    <string name="whole_book_backup_include">Inclure les traductions de livres entiers</string>
+    <string name="whole_book_backup_unencrypted">Le texte traduit des livres n’est pas chiffré, même avec un mot de passe de sauvegarde. Les livres inachevés et ceux dépassant la taille limite sont ignorés.</string>
+    <string name="whole_book_backup_preview">Livres traduits : %1$d. Les livres doivent déjà être dans votre bibliothèque. Les livres sans correspondance sont ignorés ; vérifiez la couverture après la restauration.</string>
+    <string name="whole_book_backup_exported">Livres traduits exportés : %1$d · Ignorés : %2$d.</string>
+    <string name="whole_book_backup_restored">Livres traduits restaurés : %1$d · Ignorés (y compris les livres absents de votre bibliothèque) : %2$d. Vérifiez la couverture dans les réglages de traduction.</string>
     <string name="whole_book_notification_channel">Traduction de livres entiers</string>
     <string name="whole_book_notification_progress">Traduites : %1$d / %2$d</string>
     <string name="whole_book_notification_paused">Traduction du livre en pause</string>

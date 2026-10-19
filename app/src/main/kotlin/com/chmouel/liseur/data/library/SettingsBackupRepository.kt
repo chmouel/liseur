@@ -23,6 +23,8 @@ import com.chmouel.liseur.data.settings.validateBackupJson
 import com.chmouel.liseur.domain.BackedUpReadingPosition
 import com.chmouel.liseur.domain.CompanionBackupContents
 import com.chmouel.liseur.domain.decodeCompanionBackup
+import com.chmouel.liseur.domain.decodeTranslationBackup
+import com.chmouel.liseur.domain.BackedUpTranslation
 import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import com.chmouel.liseur.domain.BackupContents
 import com.chmouel.liseur.domain.decodeAnnotationBackup
@@ -75,6 +77,7 @@ data class SettingsBackupPreview(
     val positionCount: Int = 0,
     val companionRecapCount: Int = 0,
     val includesConnections: Boolean = false,
+    val translationBookCount: Int = 0,
 )
 
 sealed interface SettingsBackupInspection {
@@ -87,6 +90,8 @@ sealed interface SettingsBackupExportResult {
         val fonts: Int,
         val annotations: Int = 0,
         val liseurSyncNeedsPairing: Boolean = false,
+        val translationBooks: Int = 0,
+        val translationBooksSkipped: Int = 0,
     ) : SettingsBackupExportResult
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupExportResult
 }
@@ -101,6 +106,8 @@ sealed interface SettingsBackupRestoreResult {
         val positionsRestored: Int = 0,
         val companionRecapsAdded: Int = 0,
         val liseurSyncNeedsPairing: Boolean = false,
+        val translationBooks: Int = 0,
+        val translationBooksSkipped: Int = 0,
     ) : SettingsBackupRestoreResult
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupRestoreResult
@@ -120,15 +127,17 @@ class SettingsBackupRepository(
     private val restoreAppSettings: suspend (JSONObject) -> Unit = { appSettings.restoreBackupValues(it) },
     private val exportConnections: suspend () -> JSONObject = { error("Connection backup unavailable") },
     private val prepareConnectionRestore: (JSONObject, JSONObject) -> (suspend () -> Unit) = { _, _ -> error("Connection restore unavailable") },
+    private val translations: TranslationBackupRepository? = null,
 ) {
     private val operationMutex = Mutex()
 
-    suspend fun exportTo(target: Uri, password: CharArray? = null): SettingsBackupExportResult = withContext(Dispatchers.IO) {
+    suspend fun exportTo(target: Uri, password: CharArray? = null, includeTranslations: Boolean = true): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
         var completed = false
         var annotationFile: File? = null
         var positionFile: File? = null
         var companionFile: File? = null
+        var translationFile: File? = null
         try {
             val settings = JSONObject()
                 .put("app", appSettings.backupValues())
@@ -177,6 +186,13 @@ class SettingsBackupRepository(
             companionFile = stagedCompanion
             companion.writeContents(stagedCompanion, MAX_COMPANION_BYTES)
             val companionMetadata = hashFile(COMPANION_PATH, stagedCompanion)
+            var translationResult = TranslationBackupResult()
+            val translationMetadata = if (includeTranslations && translations != null) {
+                val staged = File.createTempFile("translations-export-", ".json", context.cacheDir)
+                translationFile = staged
+                translationResult = translations.writeContents(staged, TranslationBackupRepository.MAX_BYTES)
+                hashFile(TRANSLATIONS_PATH, staged)
+            } else null
 
             val fonts = userFonts.backupFonts()
             if (fonts.size > MAX_FONT_FILES) {
@@ -188,8 +204,9 @@ class SettingsBackupRepository(
             listed += annotationMetadata
             listed += positionMetadata
             listed += companionMetadata
+            translationMetadata?.let { listed += it }
             connectionBytes?.let { listed += EntryMetadata(CONNECTIONS_PATH, it.size.toLong(), sha256(it)) }
-            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size + companionMetadata.size + (connectionBytes?.size ?: 0)
+            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size + companionMetadata.size + (connectionBytes?.size ?: 0) + (translationMetadata?.size ?: 0)
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
@@ -239,6 +256,7 @@ class SettingsBackupRepository(
                 writeFileEntry(zip, ANNOTATIONS_PATH, stagedAnnotations)
                 writeFileEntry(zip, POSITIONS_PATH, stagedPositions)
                 writeFileEntry(zip, COMPANION_PATH, stagedCompanion)
+                translationFile?.let { writeFileEntry(zip, TRANSLATIONS_PATH, it) }
                 connectionBytes?.let { writeEntry(zip, CONNECTIONS_PATH, it) }
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
@@ -249,7 +267,8 @@ class SettingsBackupRepository(
                 }
             }
             completed = true
-            SettingsBackupExportResult.Exported(fonts.size, annotationCount, liseurSyncNeedsPairing)
+            SettingsBackupExportResult.Exported(fonts.size, annotationCount, liseurSyncNeedsPairing,
+                translationResult.books, translationResult.skipped)
         } catch (e: CancellationException) {
             throw e
         } catch (e: BackupFailureException) {
@@ -262,6 +281,7 @@ class SettingsBackupRepository(
             annotationFile?.delete()
             positionFile?.delete()
             companionFile?.delete()
+            translationFile?.delete()
             if (!completed) discardExport(target)
         }
         }
@@ -290,6 +310,7 @@ class SettingsBackupRepository(
                     val annotationPreview = annotations.previewContents(decodeAnnotations(result.entries))
                     val positionContents = decodePositions(result.entries)
                     val companionContents = decodeCompanion(result.entries)
+                    val translationContents = decodeTranslations(result.entries)
                     result.entries[CONNECTIONS_PATH]?.let {
                         BackupEncryption.validate(readStagedBytes(it.file, BackupEncryption.MAX_BYTES))
                     }
@@ -319,6 +340,7 @@ class SettingsBackupRepository(
                             positionCount = positionContents.size,
                             companionRecapCount = companionContents.recaps.size,
                             includesConnections = CONNECTIONS_PATH in result.entries,
+                            translationBookCount = translationContents.size,
                         ),
                         result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
                     )
@@ -369,6 +391,12 @@ class SettingsBackupRepository(
 
             val companionContents = try {
                 decodeCompanion(archive.entries)
+            } catch (e: BackupFailureException) {
+                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+            }
+
+            val translationContents = try {
+                decodeTranslations(archive.entries)
             } catch (e: BackupFailureException) {
                 return@withContext SettingsBackupRestoreResult.Failed(e.failure)
             }
@@ -470,9 +498,18 @@ class SettingsBackupRepository(
                 Log.w(TAG, "Companion restore stopped after settings were restored", e)
                 return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
             }
+            val translationResult = try {
+                if (translationContents.isEmpty()) TranslationBackupResult()
+                else translations?.restore(translationContents) ?: TranslationBackupResult(0, translationContents.size)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Translation restore stopped after settings were restored", e)
+                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+            }
             SettingsBackupRestoreResult.Restored(
                 imported, present, failures, annotationResult.added, annotationResult.alreadyHere, restoredPositions,
-                companionRecapsAdded, liseurSyncNeedsPairing,
+                companionRecapsAdded, liseurSyncNeedsPairing, translationResult.books, translationResult.skipped,
             )
         } finally {
             if (!retainForRetry) removeStaging(archive.stagingDirectory)
@@ -525,7 +562,7 @@ class SettingsBackupRepository(
             if (!file.isFile) return null
             entries[path] = StagedEntry(file, file.length(), "", displayName)
         }
-        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH) && !it.startsWith("fonts/") }) {
+        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH, TRANSLATIONS_PATH) && !it.startsWith("fonts/") }) {
             return null
         }
         return ArchiveResult.Valid(directory, entries)
@@ -592,7 +629,7 @@ class SettingsBackupRepository(
                     if (
                         entry.isDirectory ||
                         !safePath(path) ||
-                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH) && !path.startsWith("fonts/") ||
+                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH, TRANSLATIONS_PATH) && !path.startsWith("fonts/") ||
                         path in entries ||
                         entries.size >= MAX_ARCHIVE_ENTRIES
                     ) {
@@ -604,6 +641,7 @@ class SettingsBackupRepository(
                         ANNOTATIONS_PATH -> MAX_ANNOTATIONS_BYTES
                         POSITIONS_PATH -> MAX_POSITIONS_BYTES
                         COMPANION_PATH -> MAX_COMPANION_BYTES
+                        TRANSLATIONS_PATH -> TranslationBackupRepository.MAX_BYTES
                         CONNECTIONS_PATH -> BackupEncryption.MAX_BYTES
                         else -> MAX_ENTRY_BYTES
                     }
@@ -647,7 +685,7 @@ class SettingsBackupRepository(
             if (manifest.opt("application") != "liseur") {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.opt("format") !in setOf(1, 2, 3, 4, FORMAT)) {
+            if (manifest.opt("format") !in setOf(1, 2, 3, 4, 5, FORMAT)) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
             if ((manifest.optInt("format") >= 2) != (ANNOTATIONS_PATH in entries)) {
@@ -662,6 +700,9 @@ class SettingsBackupRepository(
             if (manifest.optInt("format") < 5 && CONNECTIONS_PATH in entries) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
+            if (manifest.optInt("format") < 6 && TRANSLATIONS_PATH in entries) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
             val listed = manifest.optJSONArray("entries")
                 ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             val expected = mutableMapOf<String, ExpectedEntry>()
@@ -674,7 +715,7 @@ class SettingsBackupRepository(
                     if (
                         rawSize.isFinite() &&
                         rawSize % 1.0 == 0.0 &&
-                        rawSize in 0.0..MAX_ENTRY_BYTES.toDouble()
+                        rawSize in 0.0..entryLimit(path).toDouble()
                     ) {
                         rawSize.toLong()
                     } else {
@@ -695,7 +736,7 @@ class SettingsBackupRepository(
                 if (
                     !safePath(path) ||
                     path == MANIFEST_PATH ||
-                    size !in 0..MAX_ENTRY_BYTES ||
+                    size !in 0..entryLimit(path) ||
                     !SHA256.matches(digest) ||
                     expected.put(path, ExpectedEntry(size, digest, displayName)) != null
                 ) {
@@ -773,6 +814,18 @@ class SettingsBackupRepository(
             throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
         }
         return StagedEntry(file, size, digest.hexDigest())
+    }
+
+    private fun decodeTranslations(entries: Map<String, StagedEntry>): List<BackedUpTranslation> {
+        val entry = entries[TRANSLATIONS_PATH] ?: return emptyList()
+        if (!entry.file.isFile || entry.file.length() > TranslationBackupRepository.MAX_BYTES) {
+            throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+        }
+        return try {
+            entry.file.reader(Charsets.UTF_8).buffered().use(::decodeTranslationBackup)
+        } catch (e: Exception) {
+            throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+        }
     }
 
     private fun decodeCompanion(entries: Map<String, StagedEntry>): CompanionBackupContents {
@@ -959,7 +1012,7 @@ class SettingsBackupRepository(
                 val count = input.read(buffer)
                 if (count < 0) break
                 size += count
-                if (size > MAX_ENTRY_BYTES) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                if (size > entryLimit(path)) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
                 digest.update(buffer, 0, count)
             }
         }
@@ -981,7 +1034,7 @@ class SettingsBackupRepository(
                 val count = input.read(buffer)
                 if (count < 0) break
                 size += count
-                if (size > MAX_ENTRY_BYTES) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                if (size > entryLimit(path)) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
                 zip.write(buffer, 0, count)
                 digest.update(buffer, 0, count)
             }
@@ -1054,13 +1107,14 @@ class SettingsBackupRepository(
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")
-        private const val FORMAT = 5
+        private const val FORMAT = 6
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"
         private const val ANNOTATIONS_PATH = "annotations.json"
         private const val POSITIONS_PATH = "positions.json"
         private const val CONNECTIONS_PATH = "connections.enc.json"
         private const val COMPANION_PATH = "companion.json"
+        private const val TRANSLATIONS_PATH = "translations.json"
         // JSON trees expand well beyond their file size during inspection and restore.
         private const val MAX_READING_DATA_BYTES = 4L * 1024 * 1024
         private const val MAX_POSITIONS_BYTES = MAX_READING_DATA_BYTES
@@ -1070,12 +1124,15 @@ class SettingsBackupRepository(
         private const val MAX_MANIFEST_BYTES = 1024L * 1024
         private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS
         private const val MAX_ENTRY_BYTES = UserFontRepository.MAX_BYTES
-        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 6
+        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 7
         private const val MAX_TOTAL_BYTES =
-            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES + BackupEncryption.MAX_BYTES
+            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES + BackupEncryption.MAX_BYTES + TranslationBackupRepository.MAX_BYTES
         private const val BUFFER_SIZE = 32 * 1024
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")
+
+        private fun entryLimit(path: String) =
+            if (path == TRANSLATIONS_PATH) TranslationBackupRepository.MAX_BYTES else MAX_ENTRY_BYTES
 
         private fun safePath(path: String) = path.isNotBlank() && !path.startsWith('/') &&
             '\\' !in path && path.split('/').none { it.isEmpty() || it == "." || it == ".." }

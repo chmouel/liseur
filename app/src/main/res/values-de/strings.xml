@@ -1573,6 +1573,11 @@
     <string name="whole_book_delete">Gespeicherte Übersetzungen löschen</string>
     <string name="whole_book_delete_body">Diese Aufgabe stoppen und die gespeicherten Übersetzungen und Fehlermarkierungen dieses Buchs von diesem Gerät löschen?</string>
     <string name="whole_book_storage">Behaltene Übersetzungen: %2$s · Sätze: %1$s. Werden beim Leeren des Caches nicht gelöscht.</string>
+    <string name="whole_book_backup_include">Übersetzungen ganzer Bücher einschließen</string>
+    <string name="whole_book_backup_unencrypted">Übersetzter Buchtext ist auch mit einem Sicherungspasswort nicht verschlüsselt. Unfertige Bücher und Bücher über der Größenbegrenzung werden übersprungen.</string>
+    <string name="whole_book_backup_preview">Übersetzte Bücher: %1$d. Die Bücher müssen bereits in deiner Bibliothek sein. Nicht zugeordnete Bücher werden übersprungen; prüfe die Abdeckung nach der Wiederherstellung.</string>
+    <string name="whole_book_backup_exported">Übersetzte Bücher exportiert: %1$d · Übersprungen: %2$d.</string>
+    <string name="whole_book_backup_restored">Übersetzte Bücher wiederhergestellt: %1$d · Übersprungen (einschließlich fehlender Bücher in deiner Bibliothek): %2$d. Prüfe die Abdeckung in den Übersetzungseinstellungen.</string>
     <string name="whole_book_notification_channel">Übersetzung ganzer Bücher</string>
     <string name="whole_book_notification_progress">Übersetzt: %1$d / %2$d</string>
     <string name="whole_book_notification_paused">Buchübersetzung pausiert</string>

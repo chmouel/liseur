@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import com.chmouel.liseur.LiseurApplication
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.createSavedStateHandle
@@ -45,15 +47,22 @@ data class SettingsZipBackupUi(
     val bookProgress: BookExportProgress?,
     val exportBooks: () -> Unit,
     val cancelBookExport: () -> Unit,
-    val export: (CharArray?) -> Unit,
+    val export: (CharArray?, Boolean) -> Unit,
     val restore: () -> Unit,
     val confirmRestore: (CharArray?) -> Unit,
     val dismissPreview: () -> Unit,
     val close: () -> Unit,
+    val hasTranslations: Boolean = false,
 )
 
 sealed interface SettingsBackupUiStatus {
-    data class Exported(val fonts: Int, val annotations: Int, val liseurSyncNeedsPairing: Boolean) : SettingsBackupUiStatus
+    data class Exported(
+        val fonts: Int,
+        val annotations: Int,
+        val liseurSyncNeedsPairing: Boolean,
+        val translationBooks: Int = 0,
+        val translationBooksSkipped: Int = 0,
+    ) : SettingsBackupUiStatus
     data class Restored(
         val fontsImported: Int,
         val fontsAlreadyPresent: Int,
@@ -63,6 +72,8 @@ sealed interface SettingsBackupUiStatus {
         val positionsRestored: Int,
         val companionRecapsAdded: Int,
         val liseurSyncNeedsPairing: Boolean,
+        val translationBooks: Int = 0,
+        val translationBooksSkipped: Int = 0,
     ) : SettingsBackupUiStatus
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupUiStatus
@@ -104,11 +115,12 @@ private class SettingsBackupViewModel(
     private var closing = false
     private var exportPassword: CharArray? = null
 
-    fun prepareExport(password: CharArray?) {
+    fun prepareExport(password: CharArray?, includeTranslations: Boolean) {
         discardPassword()
         exportPassword = password
         savedState[EXPORT_PENDING] = true
         savedState[EXPORT_NEEDS_PASSWORD] = password != null
+        savedState[EXPORT_TRANSLATIONS] = includeTranslations
     }
 
     fun discardPassword() {
@@ -135,6 +147,7 @@ private class SettingsBackupViewModel(
             available = !closing && !_state.value.busy,
         )
         val password = exportPassword
+        val includeTranslations = savedState[EXPORT_TRANSLATIONS] ?: true
         exportPassword = null
         savedState[EXPORT_PENDING] = false
         savedState[EXPORT_NEEDS_PASSWORD] = false
@@ -148,11 +161,14 @@ private class SettingsBackupViewModel(
         }
         runBusy {
             try {
-                val result = repository.exportTo(uri, password)
+                val result = repository.exportTo(uri, password, includeTranslations = includeTranslations)
                 _state.update {
                     it.copy(status = when (result) {
                         is SettingsBackupExportResult.Exported ->
-                            SettingsBackupUiStatus.Exported(result.fonts, result.annotations, result.liseurSyncNeedsPairing)
+                            SettingsBackupUiStatus.Exported(
+                                result.fonts, result.annotations, result.liseurSyncNeedsPairing,
+                                result.translationBooks, result.translationBooksSkipped,
+                            )
                         is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
                     })
                 }
@@ -222,6 +238,8 @@ private class SettingsBackupViewModel(
                                 result.positionsRestored,
                                 result.companionRecapsAdded,
                                 result.liseurSyncNeedsPairing,
+                                result.translationBooks,
+                                result.translationBooksSkipped,
                             )
                             is SettingsBackupRestoreResult.Failed ->
                                 SettingsBackupUiStatus.Failed(result.failure)
@@ -274,6 +292,7 @@ private class SettingsBackupViewModel(
     companion object {
         private const val EXPORT_PENDING = "export_pending"
         private const val EXPORT_NEEDS_PASSWORD = "export_needs_password"
+        private const val EXPORT_TRANSLATIONS = "export_translations"
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -286,6 +305,8 @@ private class SettingsBackupViewModel(
 
 @Composable
 fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
+    val container = (LocalContext.current.applicationContext as LiseurApplication).container
+    val translations by container.wholeBookTranslations.records.collectAsState(initial = emptyList())
     val model: SettingsBackupViewModel = viewModel(factory = SettingsBackupViewModel.Factory)
     val state by model.state.collectAsState()
     LaunchedEffect(active) {
@@ -309,8 +330,8 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         bookProgress = state.bookProgress,
         exportBooks = { folder.launch(null) },
         cancelBookExport = model::cancelBookExport,
-        export = { password ->
-            model.prepareExport(password)
+        export = { password, includeTranslations ->
+            model.prepareExport(password, includeTranslations)
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
             save.launch("liseur-backup-$date.zip")
         },
@@ -318,5 +339,6 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         confirmRestore = model::confirmRestore,
         dismissPreview = model::dismissPreview,
         close = model::close,
+        hasTranslations = translations.isNotEmpty(),
     )
 }

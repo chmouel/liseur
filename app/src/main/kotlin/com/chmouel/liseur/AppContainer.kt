@@ -383,6 +383,7 @@ class AppContainer(context: Context) {
             inTransaction = { work -> database.withTransaction { work() } },
         ),
         companion = CompanionBackupRepository({ companionStore }, database.bookDao(), ::companionStoreExists),
+        translations = com.chmouel.liseur.data.library.TranslationBackupRepository({ savedTranslations }, database.bookDao()),
         restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
         exportConnections = { connectionBackup.export() },
         prepareConnectionRestore = { payload, values -> connectionBackup.prepareRestore(payload, values) },

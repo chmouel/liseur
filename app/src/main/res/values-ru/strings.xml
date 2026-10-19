@@ -1667,6 +1667,11 @@
     <string name="whole_book_delete">Удалить сохранённые переводы</string>
     <string name="whole_book_delete_body">Остановить эту задачу и удалить с устройства сохранённые переводы и отметки об ошибках для этой книги?</string>
     <string name="whole_book_storage">Сохранённые переводы: предложений — %1$s · %2$s. Не удаляются при очистке кэша.</string>
+    <string name="whole_book_backup_include">Включить переводы целых книг</string>
+    <string name="whole_book_backup_unencrypted">Переведённый текст книг не шифруется, даже если у резервной копии есть пароль. Незавершённые книги и книги, превышающие ограничение размера, пропускаются.</string>
+    <string name="whole_book_backup_preview">Переводы целых книг: %1$d. Книги должны уже быть в библиотеке. Книги без совпадений пропускаются; после восстановления проверьте полноту перевода.</string>
+    <string name="whole_book_backup_exported">Экспортировано переводов книг: %1$d · Пропущено: %2$d.</string>
+    <string name="whole_book_backup_restored">Восстановлено переводов книг: %1$d · Пропущено (включая отсутствующие в библиотеке): %2$d. Проверьте полноту перевода в настройках перевода.</string>
     <string name="whole_book_notification_channel">Перевод целых книг</string>
     <string name="whole_book_notification_progress">Переведено: %1$d / %2$d</string>
     <string name="whole_book_notification_paused">Перевод книги приостановлен</string>

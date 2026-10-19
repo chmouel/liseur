@@ -93,6 +93,36 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `translation payload is optional in format six and forbidden in older archives`() = runTest {
+        val repository = repository(
+            AppSettingsRepository(store("translations-app.preferences_pb")),
+            ReaderPreferencesRepository(store("translations-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val base = mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+            "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+        )
+        val empty = """{"format":1,"application":"liseur","books":[]}""".toByteArray()
+        for (version in listOf(4, 5, 6)) {
+            val file = archive("translations-$version.zip", settings,
+                base + ("translations.json" to empty), format = version)
+            val result = repository.inspect(Uri.fromFile(file))
+            if (version == 6) assertTrue(result is SettingsBackupInspection.Ready)
+            else assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), result)
+        }
+        val noTranslations = archive("optional-translations.zip", settings, base, format = 6)
+        assertTrue(repository.inspect(Uri.fromFile(noTranslations)) is SettingsBackupInspection.Ready)
+        val malformed = archive("bad-translations.zip", settings,
+            base + ("translations.json" to """{"format":1,"application":"liseur","books":[{}]}""".toByteArray()),
+            format = 6)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE),
+            repository.inspect(Uri.fromFile(malformed)))
+    }
+
+    @Test
     fun `ZIP round trip restores companion recaps across pages and changed URLs without replacing existing recaps`() = runTest {
         val app = AppSettingsRepository(store("companion-app.preferences_pb"))
         val reader = ReaderPreferencesRepository(store("companion-reader.preferences_pb"))
@@ -896,7 +926,7 @@ class SettingsBackupRepositoryTest {
         ZipFile(File(uri.path!!)).use { zip ->
             assertTrue(zip.getEntry("annotations.json") != null)
             val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
-            assertEquals(5, manifest.getInt("format"))
+            assertEquals(6, manifest.getInt("format"))
         }
 
         db.annotationDao().deleteForBook("source-book")
