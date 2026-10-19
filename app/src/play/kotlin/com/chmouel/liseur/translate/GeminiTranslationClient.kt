@@ -31,6 +31,8 @@ class GeminiTranslationClient(
         passage: String,
         context: String? = null,
         book: String? = null,
+        beforeRequest: suspend () -> Unit = {},
+        allowTransportRetry: Boolean = true,
     ): String {
         val body = JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null, book = book != null)))))
@@ -43,7 +45,10 @@ class GeminiTranslationClient(
             // Translation wants the likeliest wording, and the same sentence then gets the same translation.
             .put("generationConfig", JSONObject().put("temperature", 0))
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
-        return unthinking(model, body) { TranslationHttp.execute(client, request(url, apiKey).post(it.toRequestBody(JSON)).build(), ::reply) }
+        return unthinking(model, body, beforeRequest) {
+            val payload = it.toRequestBody(JSON).let { bytes -> if (allowTransportRetry) bytes else with(TranslationHttp) { bytes.oneShot() } }
+            TranslationHttp.execute(if (allowTransportRetry) client else noRecovery, request(url, apiKey).post(payload).build(), ::reply)
+        }
     }
 
     /**
@@ -51,7 +56,9 @@ class GeminiTranslationClient(
      * [model] does not refuse, or with none. [beforeRequest] guards
      * every attempt, including retries with another thinking option.
      */
-    private suspend fun unthinking(model: String, body: JSONObject, beforeRequest: () -> Unit = {}, send: suspend (String) -> String): String {
+    private val noRecovery by lazy { client.newBuilder().retryOnConnectionFailure(false).authenticator(okhttp3.Authenticator.NONE).build() }
+
+    private suspend fun unthinking(model: String, body: JSONObject, beforeRequest: suspend () -> Unit = {}, send: suspend (String) -> String): String {
         val config = body.getJSONObject("generationConfig")
         return Thinking.climb(
             "gemini|$model",
@@ -75,7 +82,7 @@ class GeminiTranslationClient(
      * model's. [beforeRequest] is called before the request goes. Throws
      * [TranslationError]; cancelling the caller cancels the request.
      */
-    suspend fun chat(apiKey: String, model: String, messages: List<Pair<String, String>>, beforeRequest: () -> Unit = {}): String {
+    suspend fun chat(apiKey: String, model: String, messages: List<Pair<String, String>>, beforeRequest: suspend () -> Unit = {}): String {
         val body = GeminiTranslation.chatBody(messages)
         val url = base.newBuilder().addPathSegment("$model:generateContent").build()
         return unthinking(model, body, beforeRequest) { TranslationHttp.execute(client, request(url, apiKey).post(it.toRequestBody(JSON)).build(), ::answer) }
@@ -93,7 +100,7 @@ class GeminiTranslationClient(
     private fun reply(response: Response): String {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
         if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
-        if (text == null) throw TranslationError.Malformed("reply too large")
+        if (text == null) throw TranslationError.Protocol("reply too large")
         return GeminiTranslation.translation(text)
     }
 
@@ -162,23 +169,27 @@ internal object GeminiTranslation {
         val root = try {
             JSONObject(text.trim())
         } catch (_: JSONException) {
-            throw TranslationError.Malformed("not JSON")
+            throw TranslationError.Protocol("not JSON")
         }
         if (root.optJSONObject("promptFeedback")?.optString("blockReason").orEmpty().isNotEmpty()) {
             throw TranslationError.Refused()
         }
         val candidate = root.optJSONArray("candidates")?.optJSONObject(0)
-            ?: throw TranslationError.Malformed("no candidates")
+            ?: throw TranslationError.Protocol("no candidates")
         val finish = candidate.optString("finishReason")
+        if (finish.isEmpty()) throw TranslationError.Protocol("no finish reason")
         if (finish in BLOCKED) throw TranslationError.Refused()
         if (finish == "MAX_TOKENS") throw TranslationError.Truncated()
         // Anything else that is not a normal stop, such as OTHER or LANGUAGE, may come with partial text;
         // no reason at all means the model had not finished.
         if (finish != "STOP") throw TranslationError.Malformed("finished with ${finish.ifEmpty { "no reason" }}")
         val parts = candidate.optJSONObject("content")?.optJSONArray("parts")
-        return (0 until (parts?.length() ?: 0)).mapNotNull { i ->
+            ?: throw TranslationError.Protocol("no content parts")
+        return (0 until parts.length()).mapNotNull { i ->
             // A thinking model's thoughts come as parts of their own.
-            parts?.optJSONObject(i)?.takeUnless { it.optBoolean("thought") }?.opt("text") as? String
+            val part = parts.optJSONObject(i) ?: throw TranslationError.Protocol("invalid content part")
+            if (part.optBoolean("thought")) null
+            else part.opt("text") as? String ?: throw TranslationError.Protocol("invalid text part")
         }.joinToString("")
     }
 

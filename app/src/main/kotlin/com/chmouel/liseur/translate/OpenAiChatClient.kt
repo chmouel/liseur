@@ -48,6 +48,8 @@ class OpenAiChatClient(
         keepAlive: String? = null,
         onTemperatureRefused: suspend () -> Unit = {},
         book: String? = null,
+        beforeRequest: suspend () -> Unit = {},
+        allowTransportRetry: Boolean = true,
     ): String {
         val body = JSONObject()
             .put("model", model)
@@ -68,7 +70,7 @@ class OpenAiChatClient(
                     .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context, book))),
             )
         }
-        return OpenAiChat.translation(send(base, apiKey, model, body, onTemperatureRefused))
+        return OpenAiChat.translation(send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry))
     }
 
     /**
@@ -85,7 +87,7 @@ class OpenAiChatClient(
         model: String,
         messages: List<Pair<String, String>>,
         temperature: Double? = 0.0,
-        beforeRequest: () -> Unit = {},
+        beforeRequest: suspend () -> Unit = {},
         onTemperatureRefused: suspend () -> Unit = {},
     ): String {
         val body = JSONObject()
@@ -105,7 +107,8 @@ class OpenAiChatClient(
         model: String,
         body: JSONObject,
         onTemperatureRefused: suspend () -> Unit,
-        beforeRequest: () -> Unit = {},
+        beforeRequest: suspend () -> Unit = {},
+        allowTransportRetry: Boolean = true,
     ): String {
         val hadTemperature = body.has("temperature")
         val reply = Thinking.climb(
@@ -116,7 +119,7 @@ class OpenAiChatClient(
         ) { way ->
             way?.keys()?.forEach { body.put(it, way.get(it)) }
             try {
-                ask(base, apiKey, body, beforeRequest)
+                ask(base, apiKey, body, beforeRequest, allowTransportRetry)
             } finally {
                 way?.keys()?.forEach { body.remove(it) }
             }
@@ -132,21 +135,25 @@ class OpenAiChatClient(
         base: HttpUrl,
         apiKey: String?,
         body: JSONObject,
-        beforeRequest: () -> Unit,
+        beforeRequest: suspend () -> Unit,
+        allowTransportRetry: Boolean,
     ): ChatReply {
         beforeRequest()
-        val first = complete(base, apiKey, body)
+        val first = complete(base, apiKey, body, allowTransportRetry)
         val refused = first is ChatReply.Failure && first.code == 400 && body.has("temperature") &&
             first.body.contains("temperature", ignoreCase = true)
         if (!refused) return first
         body.remove("temperature")
         beforeRequest()
-        return complete(base, apiKey, body)
+        return complete(base, apiKey, body, allowTransportRetry)
     }
 
-    private suspend fun complete(base: HttpUrl, apiKey: String?, body: JSONObject): ChatReply {
-        val request = request(base, "chat/completions", apiKey).post(body.toString().toRequestBody(JSON)).build()
-        return TranslationHttp.execute(client, request, ::reply)
+    private val noRecovery by lazy { client.newBuilder().retryOnConnectionFailure(false).authenticator(okhttp3.Authenticator.NONE).build() }
+
+    private suspend fun complete(base: HttpUrl, apiKey: String?, body: JSONObject, allowTransportRetry: Boolean): ChatReply {
+        val payload = body.toString().toRequestBody(JSON).let { if (allowTransportRetry) it else with(TranslationHttp) { it.oneShot() } }
+        val request = request(base, "chat/completions", apiKey).post(payload).build()
+        return TranslationHttp.execute(if (allowTransportRetry) client else noRecovery, request, ::reply)
     }
 
     /**
@@ -164,7 +171,7 @@ class OpenAiChatClient(
     private fun reply(response: Response): ChatReply {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
         if (!response.isSuccessful) return ChatReply.Failure(response.code, text.orEmpty().take(TranslationHttp.MAX_ERROR_BYTES.toInt()))
-        if (text == null) throw TranslationError.Malformed("reply too large")
+        if (text == null) throw TranslationError.Protocol("reply too large")
         return ChatReply.Text(text)
     }
 
@@ -217,12 +224,12 @@ internal object OpenAiChat {
         val root = try {
             JSONObject(text.trim())
         } catch (_: JSONException) {
-            throw TranslationError.Malformed("not JSON")
+            throw TranslationError.Protocol("not JSON")
         }
         // OpenRouter answers some failures with a 200 and an error object.
         root.optJSONObject("error")?.let { error -> throw errorFor(error.optInt("code", 500), root.toString()) }
-        val choice = root.optJSONArray("choices")?.optJSONObject(0) ?: throw TranslationError.Malformed("no choices")
-        val message = choice.optJSONObject("message") ?: throw TranslationError.Malformed("no message")
+        val choice = root.optJSONArray("choices")?.optJSONObject(0) ?: throw TranslationError.Protocol("no choices")
+        val message = choice.optJSONObject("message") ?: throw TranslationError.Protocol("no message")
         if ((message.opt("refusal") as? String)?.isNotBlank() == true) throw TranslationError.Refused()
         when (choice.optString("finish_reason")) {
             "content_filter" -> throw TranslationError.Refused()
@@ -230,11 +237,18 @@ internal object OpenAiChat {
         }
         return when (val raw = message.opt("content")) {
             is String -> raw
-            is JSONArray -> (0 until raw.length()).mapNotNull { i ->
-                raw.optJSONObject(i)?.takeIf { it.optString("type") == "text" }?.opt("text") as? String
-            }.joinToString("")
-            null, JSONObject.NULL -> ""
-            else -> throw TranslationError.Malformed("unexpected content")
+            is JSONArray -> {
+                val parts = (0 until raw.length()).mapNotNull { i ->
+                    val part = raw.optJSONObject(i) ?: throw TranslationError.Protocol("invalid content part")
+                    if (part.optString("type") != "text") null
+                    else part.opt("text") as? String ?: throw TranslationError.Protocol("invalid text part")
+                }
+                if (parts.isEmpty()) throw TranslationError.Protocol("no text parts")
+                parts.joinToString("")
+            }
+            JSONObject.NULL -> ""
+            null -> throw TranslationError.Protocol("no content")
+            else -> throw TranslationError.Protocol("unexpected content")
         }
     }
 

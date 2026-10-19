@@ -421,6 +421,7 @@ internal class PageTranslation<P>(
 
     private val TranslationError.halts: Boolean
         get() = when (this) {
+            is TranslationError.Protocol -> true
             is TranslationError.Refused, is TranslationError.Empty,
             is TranslationError.Truncated, is TranslationError.Malformed,
             -> false

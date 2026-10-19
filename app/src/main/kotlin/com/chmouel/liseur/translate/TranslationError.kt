@@ -39,7 +39,10 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
 
     /** The model stopped at its length limit, so the translation is missing its end. */
     class Truncated : TranslationError("The service stopped before the end of the translation")
-    class Malformed(reason: String) : TranslationError("The service sent no usable translation: $reason")
+    open class Malformed(reason: String) : TranslationError("The service sent no usable translation: $reason")
+
+    /** An incompatible response envelope is an endpoint failure, not a sentence refusal. */
+    class Protocol(reason: String) : Malformed(reason)
 
     /** The chosen service is missing its server, model or key. */
     class NotSetUp : TranslationError("The translation service is not set up")

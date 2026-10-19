@@ -49,6 +49,18 @@ class PageTranslationTest {
     private fun PageTranslation<Int>.texts() = swaps.value["ch1.xhtml"].orEmpty().map { it.translation }
 
     @Test
+    fun `an incompatible endpoint halts before translating more sentences`(): Unit = runTest {
+        val failure = TranslationError.Protocol("no choices")
+        val run = FakeRun().apply { failWith = { failure } }
+        val page = translation(run)
+        page.start(0, "start")
+        runCurrent()
+        assertEquals(1, run.asked.size)
+        assertEquals(PageTranslationState.Halted(failure), page.state.value)
+        assertTrue(page.texts().isEmpty())
+    }
+
+    @Test
     fun `translates ahead of the reader and no further`() = runTest {
         val run = FakeRun()
         val page = translation(run)

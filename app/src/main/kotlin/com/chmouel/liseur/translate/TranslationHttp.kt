@@ -9,10 +9,23 @@ import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.Response
+import okio.BufferedSink
 
 /** HTTP as the translation clients use it. There is no logging interceptor: requests carry a key and a passage. */
 internal object TranslationHttp {
+    /** OkHttp may follow a 503 even with connection recovery disabled. */
+    fun RequestBody.oneShot(): RequestBody {
+        val body = this
+        return object : RequestBody() {
+            override fun contentType() = body.contentType()
+            override fun contentLength() = body.contentLength()
+            override fun isOneShot() = true
+            override fun writeTo(sink: BufferedSink) = body.writeTo(sink)
+        }
+    }
+
     // A server of one's own may first load the model, as Ollama does after
     // a few idle minutes, and answers only once the whole reply is written.
     fun client(): OkHttpClient = OkHttpClient.Builder()

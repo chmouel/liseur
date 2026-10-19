@@ -50,6 +50,27 @@ class GeminiTranslationTest {
         ).toString()
 
     @Test
+    fun `pinned Gemini requests do not replay 503 responses`(): Unit = runBlocking {
+        server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").body("{}").build())
+        server.enqueue(MockResponse.Builder().code(200).body(reply("Should not be sent")).build())
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+        expect<TranslationError.Service> {
+            client.translate("secret", "gemini-flash-lite-latest", "en", "fr", "x", allowTransportRetry = false)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `Gemini malformed envelopes are protocol failures`() {
+        for (body in listOf(
+            "not JSON", "{}", """{"candidates":[{}]}""", """{"candidates":[{"finishReason":"STOP"}]}""",
+            """{"candidates":[{"finishReason":"STOP","content":{"parts":[{}]}}]}""",
+        )) {
+            expect<TranslationError.Protocol> { GeminiTranslation.translation(body) }
+        }
+    }
+
+    @Test
     fun `asks generateContent with the key in a header and the task as the system instruction`(): Unit = runBlocking {
         server.enqueue(MockResponse.Builder().code(200).body(reply("Hello")).build())
         val client = GeminiTranslationClient(base = server.url("/v1beta/models"))

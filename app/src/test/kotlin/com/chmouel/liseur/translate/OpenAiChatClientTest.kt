@@ -56,6 +56,27 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `pinned paid requests do not follow a retry after zero 503`(): Unit = runBlocking {
+        server.enqueue(MockResponse.Builder().code(503).addHeader("Retry-After", "0").body("{}").build())
+        server.enqueue(json(completion("Should not be sent")))
+        expect<TranslationError.Service> {
+            client.translate(base, "secret", "m", "en", "fr", "x", allowTransportRetry = false)
+        }
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `missing response envelopes are endpoint failures not sentence refusals`() {
+        for (body in listOf(
+            "not JSON", "{}", """{"choices":[{}]}""", """{"choices":[{"message":{}}]}""",
+            """{"choices":[{"message":{"content":[{"type":"text","text":42}]}}]}""",
+            """{"choices":[{"message":{"content":[{"type":"unknown"}]}}]}""",
+        )) {
+            expect<TranslationError.Protocol> { OpenAiChat.translation(body) }
+        }
+    }
+
+    @Test
     fun `asks the chat endpoint with the task apart from the passage`(): Unit = runBlocking {
         server.enqueue(json(completion("The sun was setting.")))
 
