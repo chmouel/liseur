@@ -163,24 +163,22 @@ internal class LinkTaps(
 }
 
 /**
- * Follows [link], announcing the way back only once the navigation has
- * accepted it.
+ * Follows [link], recording the jump and offering a way back only once
+ * the navigation has accepted it.
  *
- * The announcement ([onJump]) is not something a dismissal can roll back:
- * it replaces and re-arms any existing return offer, ends an active
- * source peek and resets pace tracking. Announcing first and dismissing
- * on refusal would therefore destroy a still-valid earlier offer — jump
- * A's pill lost when jump B's `go` refuses. Announcing after acceptance
- * leaves all of it untouched on refusal: the issued move is cancelled,
- * nothing is offered for a jump that never happened, and whatever offer,
- * peek or pace was there survives.
+ * The accounting callback ([onJump]) marks the arrival as a jump and
+ * resets pace tracking even when the tap had no verified origin. It
+ * offers a way back only when [from] is known or the caller allows
+ * fallback to the published place. Running it before [go] would replace
+ * an earlier offer, end a source peek and reset pace even when navigation
+ * is refused, so it runs only after [go] accepts the link.
  *
  * [go] and [onJump] run in the same main-thread turn, and the navigator
  * reports a position only once the resource is laid out and on screen —
  * never synchronously inside `go` — so the pending jump marker is always
  * armed before the arrival it labels. If no origin was verified and
- * [mayFallbackToPublishedPlace] is false, navigation still proceeds
- * without advertising a return place.
+ * [mayFallbackToPublishedPlace] is false, navigation is still recorded as
+ * a jump without advertising a return place.
  */
 internal fun followLink(
     link: Link,
@@ -190,7 +188,7 @@ internal fun followLink(
     currentPlace: () -> Locator,
     destinationOf: (Link) -> IssuedMoves.Destination?,
     go: (Link) -> Boolean,
-    onJump: (Locator?) -> Unit,
+    onJump: (from: Locator?, mayFallbackToPublishedPlace: Boolean) -> Unit,
     mayFallbackToPublishedPlace: Boolean = true,
 ) {
     val token = moves.issue(
@@ -199,7 +197,7 @@ internal fun followLink(
         nowMs = nowMs(),
     )
     if (go(link)) {
-        if (from != null || mayFallbackToPublishedPlace) onJump(from)
+        onJump(from, mayFallbackToPublishedPlace)
     } else {
         moves.cancel(token)
     }

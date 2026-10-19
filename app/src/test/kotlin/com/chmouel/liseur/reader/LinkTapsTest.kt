@@ -383,8 +383,7 @@ class FollowLinkTest {
     @Test
     fun `a refused go announces nothing and cancels the issued move`() {
         val moves = IssuedMoves()
-        val jumps = mutableListOf<Locator?>()
-        val order = mutableListOf<String>()
+        val jumps = mutableListOf<Pair<Locator?, Boolean>>()
         val from = place()
 
         followLink(
@@ -395,7 +394,7 @@ class FollowLinkTest {
             currentPlace = { from },
             destinationOf = { null },
             go = { false },
-            onJump = { jumps.add(it) },
+            onJump = { origin, mayFallback -> jumps.add(origin to mayFallback) },
         )
 
         assertTrue(jumps.isEmpty())
@@ -408,7 +407,7 @@ class FollowLinkTest {
     @Test
     fun `an accepted go announces the way back after the navigation`() {
         val moves = IssuedMoves()
-        val jumps = mutableListOf<Locator?>()
+        val jumps = mutableListOf<Pair<Locator?, Boolean>>()
         val order = mutableListOf<String>()
         val from = place()
 
@@ -423,20 +422,20 @@ class FollowLinkTest {
                 order.add("go")
                 true
             },
-            onJump = {
+            onJump = { origin, mayFallback ->
                 order.add("jump")
-                jumps.add(it)
+                jumps.add(origin to mayFallback)
             },
         )
 
         assertEquals(listOf("go", "jump"), order)
-        assertEquals(listOf<Locator?>(from), jumps)
+        assertEquals(listOf(from to true), jumps)
     }
 
     @Test
     fun `acceptance arms the marker before any arrival can be labelled`() {
         val moves = IssuedMoves()
-        val jumps = mutableListOf<Locator?>()
+        val jumps = mutableListOf<Pair<Locator?, Boolean>>()
         val from = place()
 
         followLink(
@@ -453,18 +452,19 @@ class FollowLinkTest {
                 moves.onPosition(RestorePoint("EPUB/notes.xhtml", 0.0, false), nowMs = 0L)
                 true
             },
-            onJump = { jumps.add(it) },
+            onJump = { origin, mayFallback -> jumps.add(origin to mayFallback) },
         )
 
         // The jump was announced regardless: the marker is armed in the
         // same turn, after go, and never after the arrival it labels.
-        assertEquals(listOf<Locator?>(from), jumps)
+        assertEquals(listOf(from to true), jumps)
     }
 
     @Test
     fun `a jump without a captured place falls back to the current one`() {
         val moves = IssuedMoves()
         val from = place()
+        val jumps = mutableListOf<Pair<Locator?, Boolean>>()
 
         followLink(
             link = Link(href = Url("EPUB/notes.xhtml#n1")!!),
@@ -474,19 +474,20 @@ class FollowLinkTest {
             currentPlace = { from },
             destinationOf = { null },
             go = { true },
-            onJump = { },
+            onJump = { origin, mayFallback -> jumps.add(origin to mayFallback) },
         )
         // The move is held against the current place when no capture
         // supplied one, so a restore taken now is refused.
         assertTrue(moves.mark(nowMs = 0L) == IssuedMoves.NONE)
+        assertEquals(listOf(null to true), jumps)
     }
 
     @Test
-    fun `a jump without a captured place can navigate without offering a return`() {
+    fun `a jump without a captured place is recorded without offering a return`() {
         val moves = IssuedMoves()
         val from = place()
         var followed = false
-        val jumps = mutableListOf<Locator?>()
+        val jumps = mutableListOf<Pair<Locator?, Boolean>>()
 
         followLink(
             link = Link(href = Url("EPUB/notes.xhtml#n1")!!),
@@ -499,11 +500,11 @@ class FollowLinkTest {
                 followed = true
                 true
             },
-            onJump = { jumps.add(it) },
+            onJump = { origin, mayFallback -> jumps.add(origin to mayFallback) },
             mayFallbackToPublishedPlace = false,
         )
 
         assertTrue(followed)
-        assertTrue(jumps.isEmpty())
+        assertEquals(listOf(null to false), jumps)
     }
 }

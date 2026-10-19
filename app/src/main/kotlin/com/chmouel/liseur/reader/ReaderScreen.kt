@@ -4279,9 +4279,15 @@ internal fun ReaderScreen(
                                 // jump itself to be recorded as reading: a
                                 // distance nobody read, taught to the pace
                                 // estimator and published as progress.
-                                if (origin != null || note.mayFallbackToPublishedPlace) {
-                                    onProgressAction.jumpFrom(origin ?: here)
-                                }
+                                // Record the jump even without a verified
+                                // origin. The fallback policy only controls
+                                // whether the reader gets a return offer.
+                                val returnFrom = origin
+                                    ?: here.takeIf { note.mayFallbackToPublishedPlace }
+                                onProgressAction.jumpFrom(
+                                    returnFrom,
+                                    note.mayFallbackToPublishedPlace,
+                                )
                                 val noteToken = moves.issue(
                                     from = from,
                                     to = publication.locatorFromLink(note.link)?.destination(),
@@ -5089,7 +5095,7 @@ class ReaderProgressActions(
     val setFooterMode: (FooterMode) -> Unit,
     val cycleFooterField: (FooterSlot, onChosen: (FooterField) -> Unit) -> Unit,
     val setFooterField: (FooterSlot, FooterField) -> Unit,
-    val jumpFrom: (Locator?) -> Unit,
+    val jumpFrom: (Locator?, Boolean) -> Unit,
     val dismissJumpBack: () -> Unit,
     val takeJumpBack: (ReaderViewModel.JumpBack) -> Boolean,
     val acceptCatchUp: (ReaderViewModel.CatchUp?) -> Unit,
@@ -5109,7 +5115,7 @@ class ReaderProgressActions(
     val onApproximateResume: () -> Unit,
 ) {
     /** The reader is jumping away from wherever they are now. */
-    fun onJump() = jumpFrom(null)
+    fun onJump() = jumpFrom(null, true)
 }
 
 /**

@@ -2175,26 +2175,37 @@ class ReaderViewModel(
     }
 
     /**
-     * Called before jumping, so the reader can come back in one tap.
+     * Records a local jump and offers a way back when a suitable place is
+     * available.
      *
      * [from] is the place to offer them back, for a caller that has to do
      * something to the page before it can navigate: by the time it does,
      * the layout has moved and the last position on hand is no longer the
-     * one the reader was looking at. Everyone else passes nothing and gets
-     * exactly that last position.
+     * one the reader was looking at. [mayFallbackToPublishedPlace] allows
+     * callers without a captured origin to use the last published place.
+     * Jump accounting still runs when no return place can be offered.
      */
-    fun onJump(from: Locator? = null) {
+    fun onJump(
+        from: Locator? = null,
+        mayFallbackToPublishedPlace: Boolean = true,
+    ) {
         // Jumping on from a source is reading again, and the way back is
         // to where the reader asked, not to the source glanced at.
         val origin = _peek.value?.origin
         if (origin != null) endPeek()
         val given = (origin ?: from)?.let(::prepareLocator)
-        val place = given ?: lastLocator ?: return
-        val progress = _progress.value
+        val place = given ?: if (mayFallbackToPublishedPlace) lastLocator else null
         // The jump itself is not reading, and neither is finding your
         // way back, so it must not affect the speed estimate.
         speed.forgetLastPosition()
         pendingPositionEvent = NavigatorPositionEvent.LOCAL_JUMP
+        jumpBackTimer?.cancel()
+        jumpBackTimer = null
+        if (place == null) {
+            _jumpBack.value = null
+            return
+        }
+        val progress = _progress.value
         _jumpBack.value = JumpBack(
             locator = place,
             // Resolved from the given place rather than read off the
@@ -2202,7 +2213,6 @@ class ReaderViewModel(
             position = given?.let { bookPositions?.resolve(it)?.position }
                 ?: progress?.position,
         )
-        jumpBackTimer?.cancel()
         jumpBackTimer = viewModelScope.launch {
             delay(JUMP_BACK_TIMEOUT_MS)
             _jumpBack.value = null
