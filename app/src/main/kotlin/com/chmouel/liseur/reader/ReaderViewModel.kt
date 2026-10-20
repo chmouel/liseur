@@ -937,6 +937,9 @@ class ReaderViewModel(
             if (!saved) {
                 Log.w("bookorbit-position", "The position choice was not applied")
                 if (takeRemote) returnToLocalPlace(preview)
+            } else if (takeRemote && offer != null) {
+                runCatching { Locator.fromJSON(JSONObject(offer.locatorJson)) }.getOrNull()
+                    ?.let { positionSaveBaseline = prepareLocator(it) }
             }
             finishBookOrbitChoice(
                 if (saved) R.string.reader_bookorbit_choice_saved else R.string.reader_bookorbit_choice_failed,
@@ -1273,6 +1276,16 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, HighlightPalette())
 
     private val _place = MutableStateFlow<Locator?>(null)
+
+    /**
+     * The place that need not be re-saved: the last one the publisher
+     * accepted, or one already on disk when the book opened or a
+     * remote place was adopted. The pause publish's same-position gate
+     * compares against it, so a writer that moves the displayed place
+     * without saving must leave the baseline behind — that is what
+     * makes an unsaved place retryable — while a writer that puts the
+     * place on disk itself must advance it.
+     */
     private var positionSaveBaseline: Locator? = null
 
     /** Most recent displayed position, also used to survive recreation. */
