@@ -1747,7 +1747,10 @@ class ReaderViewModel(
         }
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
-        val decliningApproximate = approximateOpening.takeIf { !keepsApproximateOpening(effectiveEvent) }
+        val sameAsSettlementInFlight = settlementInFlight?.sameReadingPositionAs(prepared) == true
+        // The place a settlement is already saving keeps that choice, so its retry does not flip it.
+        val settlesApproximate = !keepsApproximateOpening(effectiveEvent) && !sameAsSettlementInFlight
+        val decliningApproximate = approximateOpening.takeIf { settlesApproximate }
         val acceptingApproximate = approximateOpening.takeIf { acceptsApproximateOpening(effectiveEvent) }
         val samePosition = shouldSkipPositionSave(
             sameAsBaseline = positionSaveBaseline?.sameReadingPositionAs(prepared) == true,
@@ -1755,7 +1758,7 @@ class ReaderViewModel(
             settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null ||
                 decliningApproximate != null || approximateOpeningSettlementPending ||
                 acceptingApproximate != null,
-            sameAsSettlementInFlight = settlementInFlight?.sameReadingPositionAs(prepared) == true,
+            sameAsSettlementInFlight = sameAsSettlementInFlight,
         )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1766,7 +1769,7 @@ class ReaderViewModel(
         // display current, but do not turn that layout detail into reading.
         // Checked before the same-page return: a jump that lands on the page
         // already shown still turns the opening down.
-        if (!keepsApproximateOpening(effectiveEvent)) {
+        if (settlesApproximate) {
             decliningApproximate?.let { approximateDeclinedPending = it }
             approximateOpening = null
             approximateCatchUp?.let { bookOrbitDeclinedPending = it }
@@ -1785,8 +1788,9 @@ class ReaderViewModel(
         readingGeneration++
         // Reading on past a BookOrbit offer keeps this device's place.
         val declinedBookOrbit = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
-        bookOrbitDeclinedPending = null
         val declinedApproximate = approximateDeclinedPending
+        // Paired with an approximate decline, it waits for the same save, so a retry still sends both.
+        bookOrbitDeclinedPending = declinedBookOrbit.takeIf { declinedApproximate != null }
         _catchUp.value = null
         val totalProgression = stable?.progression ?: return
         if (effectiveEvent.teachesPace) {
@@ -1853,6 +1857,7 @@ class ReaderViewModel(
                     }
                     if (approximateDeclinedPending === declinedApproximate) {
                         approximateDeclinedPending = null
+                        if (bookOrbitDeclinedPending === declinedBookOrbit) bookOrbitDeclinedPending = null
                     }
                     positionSaveBaseline = prepared
                 }
