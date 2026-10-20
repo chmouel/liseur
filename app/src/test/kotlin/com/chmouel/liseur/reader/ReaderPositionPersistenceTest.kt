@@ -168,6 +168,21 @@ class ReaderPositionPersistenceTest {
                 ReaderViewModel.BookSync.Note(R.string.reader_open_position_not_saved),
                 reopening.bookSync.value,
             )
+
+            val failedPlace = place(0.9)
+            reopening.onLocatorChanged(failedPlace, NavigatorPositionEvent.LOCAL_JUMP)
+            assertFalse(publisher.flush(url))
+            assertEquals(
+                ReaderViewModel.BookSync.Note(R.string.reader_position_not_saved),
+                reopening.bookSync.value,
+            )
+
+            failWrites = false
+            reopening.onLocatorChanged(place(0.8), NavigatorPositionEvent.PREFERENCE_REFLOW)
+            reopening.onLocatorChanged(failedPlace, NavigatorPositionEvent.LOCAL_JUMP)
+            assertTrue(publisher.flush(url))
+            assertEquals(0.9, stored().locations.progression!!, 0.000001)
+            assertEquals(4, writes)
         } finally {
             models.clear()
             scope.cancel()

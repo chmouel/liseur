@@ -1326,6 +1326,7 @@ class ReaderViewModel(
         viewModelScope.launch {
             positionPublisher.failures.collect { failedBook ->
                 if (failedBook == bookId) {
+                    updatePositionSaveBaseline(null)
                     _bookSync.value = BookSync.Note(R.string.reader_position_not_saved)
                 }
             }

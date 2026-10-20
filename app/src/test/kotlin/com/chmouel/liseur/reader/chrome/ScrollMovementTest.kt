@@ -42,6 +42,18 @@ class ScrollMovementTest {
     }
 
     @Test
+    fun `samples during an automatic move stay suppressed until capture ends`() {
+        val movement = ScrollMovement()
+        movement.sample(0, automatic = false)
+        movement.beginAutomaticMove()
+        assertFalse(movement.sample(1_000, automatic = false))
+        assertFalse(movement.sample(2_000, automatic = false))
+        movement.endAutomaticMove()
+        assertFalse(movement.sample(2_050, automatic = false))
+        assertTrue(movement.sample(2_100, automatic = false))
+    }
+
+    @Test
     fun `a missing page keeps the pending move for the next sample`() {
         val movement = ScrollMovement()
         movement.sample(0, automatic = false)

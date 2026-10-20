@@ -1444,10 +1444,17 @@ internal fun ReaderScreen(
                 // while it is being answered would otherwise be left
                 // with neither.
                 val since = heldPlace.invalidate()
-                if (!emission.holdForPause || companion?.peek?.value != null) {
-                    scrollMovement.movedForReader()
+                val suppressScrollMovement = !emission.holdForPause || companion?.peek?.value != null
+                val retireHeldPlace = requested == NavigatorPositionEvent.REMOTE_ADOPTION ||
+                    (!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
+                    companion?.peek?.value != null
+                if (retireHeldPlace) heldPlace.retire()
+                if (suppressScrollMovement) scrollMovement.beginAutomaticMove()
+                val captured = try {
+                    capture(nav, native)
+                } finally {
+                    if (suppressScrollMovement) scrollMovement.endAutomaticMove()
                 }
-                val captured = capture(nav, native)
                 // The capture reaches into the document and swallows its
                 // own failures, cancellation included, so an answer can
                 // arrive after this collector has been stood down — a

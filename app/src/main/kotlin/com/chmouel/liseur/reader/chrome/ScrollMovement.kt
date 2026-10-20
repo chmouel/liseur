@@ -19,9 +19,21 @@ internal class ScrollMovement {
     private var last: Int? = null
     private var lastAutomatic = false
     private var movedForReader = false
+    private var automaticMoveInProgress = false
 
     /** The page was moved for the reader; the next difference is not theirs. */
     fun movedForReader() {
+        movedForReader = true
+    }
+
+    /** Keeps every scroll sample during an asynchronous automatic move from looking user-driven. */
+    fun beginAutomaticMove() {
+        automaticMoveInProgress = true
+    }
+
+    /** Ends the automatic move and gives the next sample a fresh baseline. */
+    fun endAutomaticMove() {
+        automaticMoveInProgress = false
         movedForReader = true
     }
 
@@ -30,11 +42,17 @@ internal class ScrollMovement {
         last = null
         lastAutomatic = false
         movedForReader = false
+        automaticMoveInProgress = false
     }
 
     /** Whether [offset] is the reader scrolling since the previous sample. */
     fun sample(offset: Int?, automatic: Boolean): Boolean {
         if (offset == null) return false
+        if (automaticMoveInProgress) {
+            last = offset
+            lastAutomatic = automatic
+            return false
+        }
         val previous = last
         val notTheReader = automatic || lastAutomatic || movedForReader
         last = offset
