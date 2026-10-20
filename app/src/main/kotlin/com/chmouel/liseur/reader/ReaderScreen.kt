@@ -3059,6 +3059,9 @@ internal fun ReaderScreen(
                 // only sent to, and accept a BookOrbit opening unread.
                 val web = visibleWebView(nav.publicationView)
                 val offset = web?.let { if (nav.settings.value.verticalText) it.scrollX else it.scrollY }
+                // Nor while the page is still being moved for them.
+                fun movingForReader() = gate.isGated || pendingPositionEvent?.persists == false
+                if (movingForReader()) return@let
                 if (heldPlace.current() == null && !scrollMovement.readerScrolledTo(offset)) return@let
                 // Held and published through the one path the scroll
                 // loop uses, or a measurement the loop is still carrying
@@ -3066,7 +3069,7 @@ internal fun ReaderScreen(
                 // backwards over the place this just published.
                 val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
-                    if (heldPlace.hold(it, since)) {
+                    if (!movingForReader() && heldPlace.hold(it, since)) {
                         publishCaptured(nav, it, NavigatorPositionEvent.READER_MOVEMENT)
                     }
                 }
