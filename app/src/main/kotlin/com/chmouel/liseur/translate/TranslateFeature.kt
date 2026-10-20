@@ -78,6 +78,9 @@ interface TranslateFeature {
      */
     suspend fun pageLanguages(declared: List<String>, app: Locale): PageTranslationModes.Mode?
 
+    /** Whether the chosen service can prepare a whole book for offline reading. */
+    suspend fun translatesWholeBooks(): Boolean = false
+
     /**
      * The bar under a translated page, where read aloud's player sits: the
      * languages and Stop with the reader's [controls] up, and what stopped

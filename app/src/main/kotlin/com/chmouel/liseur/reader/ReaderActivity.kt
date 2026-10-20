@@ -689,6 +689,15 @@ class ReaderActivity : FragmentActivity() {
                                     } else {
                                         null
                                     },
+                                    wholeBook = remember(target?.id) {
+                                        val bookUrl = checkNotNull(target).id
+                                        ReaderWholeBook(
+                                            bookUrl,
+                                            container.wholeBookTranslations.records
+                                                .map { records -> records.any { it.bookUrl == bookUrl } }
+                                                .distinctUntilChanged(),
+                                        )
+                                    },
                                     companion = companion,
                                 )
                             }

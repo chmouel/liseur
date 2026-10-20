@@ -1110,6 +1110,7 @@
     <string name="read_aloud_next_sentence">Nächster Satz</string>
     <string name="read_aloud_from_here">Ab hier vorlesen</string>
     <string name="reader_translate_into">Auf %1$s übersetzen</string>
+    <string name="reader_translate_book">Buch übersetzen</string>
     <string name="reader_narrate_from_here">Ab hier erzählen</string>
     <string name="read_aloud_pause">Vorlesen pausieren</string>
     <string name="read_aloud_resume">Vorlesen fortsetzen</string>

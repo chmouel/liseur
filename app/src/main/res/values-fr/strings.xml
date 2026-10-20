@@ -1098,6 +1098,7 @@
     <string name="read_aloud_next_sentence">Phrase suivante</string>
     <string name="read_aloud_from_here">Lire à voix haute à partir d\'ici</string>
     <string name="reader_translate_into">Traduire en %1$s</string>
+    <string name="reader_translate_book">Traduire le livre</string>
     <string name="reader_narrate_from_here">Narrer à partir d\'ici</string>
     <string name="read_aloud_pause">Mettre la lecture à voix haute en pause</string>
     <string name="read_aloud_resume">Reprendre la lecture à voix haute</string>

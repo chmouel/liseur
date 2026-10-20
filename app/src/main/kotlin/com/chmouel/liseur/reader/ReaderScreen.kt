@@ -136,6 +136,7 @@ import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.PageTranslationModes
+import com.chmouel.liseur.translate.WholeBookTranslationSheet
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.translate.startPageTranslation
 import com.chmouel.liseur.readaloud.ReadAloudFeature
@@ -507,6 +508,8 @@ internal fun ReaderScreen(
     pageTranslationModes: PageTranslationModes = remember { MemoryPageTranslationModes() },
     // Forgets this book's saved translations, here and on the account; null where nothing is saved.
     onClearTranslations: (() -> Unit)? = null,
+    // The book whole-book translation is prepared for from the ⋮ menu; null leaves the long press out.
+    wholeBook: ReaderWholeBook? = null,
     // Who a selected name is, from the chapters before; null leaves the action out.
     companion: ReaderCompanion? = null,
 ) {
@@ -523,6 +526,8 @@ internal fun ReaderScreen(
     var goToPage by remember { mutableStateOf(false) }
     var goToPercent by remember { mutableStateOf(false) }
     var clearingTranslations by remember { mutableStateOf(false) }
+    var translationSettingsOpen by remember { mutableStateOf(false) }
+    var wholeBookOpen by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
     // Which footer slot a long press opened a picker for. Its own state
@@ -4148,6 +4153,47 @@ internal fun ReaderScreen(
                                 ),
                             )
                         }
+                        // What the translation item offers, read again each
+                        // time the bar comes up or settings close so a changed
+                        // service or target shows. Null hides the item.
+                        val uiLocale = LocalConfiguration.current.locales[0]
+                        val wholeBookSavedFlow = remember(wholeBook) { wholeBook?.saved ?: flowOf(false) }
+                        val wholeBookSaved by wholeBookSavedFlow.collectAsStateWithLifecycle(false)
+                        val translateEntry by produceState<ReaderTranslateEntry?>(
+                            null,
+                            chromeVisible,
+                            translateReady,
+                            pageTranslated,
+                            uiLocale,
+                            translationSettingsOpen,
+                            wholeBookSaved,
+                        ) {
+                            if (translationSettingsOpen) return@produceState
+                            val languages = if (translate.isAvailable && translateReady && !pageTranslated && reflowableText) {
+                                translate.pageLanguages(publication.metadata.languages, uiLocale)
+                            } else {
+                                null
+                            }
+                            value = ReaderTranslateEntry.of(
+                                available = translate.isAvailable,
+                                reflowable = reflowableText,
+                                translated = pageTranslated,
+                                languages = languages,
+                                wholeBookEligible = wholeBook != null && translate.translatesWholeBooks(),
+                                wholeBookSaved = wholeBookSaved,
+                            )
+                        }
+                        val translateFromHere: (PageTranslationModes.Mode) -> Unit = { languages ->
+                            effectScope.launch {
+                                val nav = navigatorNow ?: return@launch
+                                val locator = if (effectiveScrollingNow) {
+                                    scrolledPlace(nav) ?: return@launch
+                                } else {
+                                    capture(nav, nav.currentLocator.value)
+                                }
+                                startTranslatingPage(nav, locator, languages.source, languages.target)
+                            }
+                        }
                         val readAloudFromHere: (() -> Unit)? = readAloud
                             ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
                             ?.let { reading ->
@@ -4177,7 +4223,7 @@ internal fun ReaderScreen(
                         // position; reading settings, this book's
                         // background recaps among them, stay in Aa.
                         // Hidden when none applies.
-                        if (codexEnabled || storyAvailable || readAloudFromHere != null || syncable) {
+                        if (codexEnabled || storyAvailable || translateEntry != null || readAloudFromHere != null || syncable) {
                             var moreOpen by remember { mutableStateOf(false) }
                             Box {
                                 IconButton(onClick = { moreOpen = true }) {
@@ -4206,6 +4252,26 @@ internal fun ReaderScreen(
                                                         lookups.codex.open(origin, peekOrigin != null || pageTranslated, story = storyAvailable)
                                                     }
                                                 }
+                                            },
+                                        )
+                                    }
+                                    translateEntry?.let { entry ->
+                                        ReaderTranslateMenuItem(
+                                            entry = entry,
+                                            uiLocale = uiLocale,
+                                            onClick = {
+                                                moreOpen = false
+                                                when (entry) {
+                                                    is ReaderTranslateEntry.Into -> {
+                                                        chromeVisible = false
+                                                        translateFromHere(entry.languages)
+                                                    }
+                                                    is ReaderTranslateEntry.SetUp -> translationSettingsOpen = true
+                                                }
+                                            },
+                                            onLongClick = {
+                                                moreOpen = false
+                                                wholeBookOpen = true
                                             },
                                         )
                                     }
@@ -4666,6 +4732,18 @@ internal fun ReaderScreen(
                 bookNoteEditor = null
             },
             onDismiss = { bookNoteEditor = null },
+        )
+    }
+
+    if (translationSettingsOpen) {
+        ReaderTranslationSettings(translate, onClose = { translationSettingsOpen = false })
+    }
+
+    wholeBook?.takeIf { wholeBookOpen }?.let { book ->
+        WholeBookTranslationSheet(
+            bookUrl = book.bookUrl,
+            onDismiss = { wholeBookOpen = false },
+            onOpenSettings = { wholeBookOpen = false; translationSettingsOpen = true },
         )
     }
 

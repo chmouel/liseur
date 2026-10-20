@@ -40,10 +40,12 @@ refusals; successful answers take precedence. The same service, model and
 options must be selected to reuse these keys offline.
 
 Whole-book preparation opens from Translation in a book cover's long-press
-actions, in the library or a series. The sheet shows saved state first;
+actions, in the library or a series, and from a long press on the reader's
+⋮ "Translate into <language>" item when the chosen service can prepare it
+or the book already has one. The sheet shows saved state first;
 preparation and coverage checks require a tap. Progress, review and completion
-each have their own view. Translation adds no reader overflow or appearance
-control. Selected-text translation still offers translated reading.
+each have their own view. Translation adds no reader appearance control.
+Selected-text translation still offers translated reading.
 
 Settings ZIP backups carry kept answers and failures. Restored coverage is
 unverified until checked against the destination EPUB. Restored books can

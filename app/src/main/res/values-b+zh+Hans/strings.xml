@@ -1055,6 +1055,7 @@
     <string name="read_aloud_next_sentence">下一句</string>
     <string name="read_aloud_from_here">从这里开始朗读</string>
     <string name="reader_translate_into">翻译成%1$s</string>
+    <string name="reader_translate_book">翻译本书</string>
     <string name="reader_narrate_from_here">从这里开始讲述</string>
     <string name="read_aloud_pause">暂停朗读</string>
     <string name="read_aloud_resume">继续朗读</string>

@@ -1319,13 +1319,17 @@ changing reader behavior.
 - Model lists are sorted by name and show per-million token prices when
   the list has them. Together's model type keeps non-text models out;
   Together AI is offered at `https://api.together.ai/v1`.
-- "Translate the page from here" (selected-passage sheet) translates a
-  reflowable book in place from the first sentence on screen
-  (`scrolledPlace` when scrolling, else the page locator) in
-  `TranslateFeature.pageLanguages`; the translation bar keeps Stop. The
-  reader's ⋮ menu and Aa controls have no translation actions; whole-book
-  preparation is in the cover's long-press actions and Translation
-  settings.
+- "Translate the page from here" (selected-passage sheet) and "Translate
+  into <language>" (reader ⋮ menu) translate a reflowable book in place
+  from the first sentence on screen (`scrolledPlace` when scrolling, else
+  the page locator) in `TranslateFeature.pageLanguages`; the translation
+  bar keeps Stop. While setup or a language choice is needed the ⋮ item
+  reads "Translate book" and opens Translation settings; it is hidden on
+  a translated page (`ReaderTranslateEntry`). Long-pressing it opens
+  whole-book translation when the chosen service can prepare one
+  (`TranslateFeature.translatesWholeBooks`) or the book already has one;
+  whole-book preparation is also in the cover's long-press actions and
+  Translation settings.
 - `PageTranslation` walks with `PublicationUtteranceCursor`, keeps a
   bounded number ahead of the screen, restarts on a jump, skips walked
   sentences behind the screen, and asks one at a time through a

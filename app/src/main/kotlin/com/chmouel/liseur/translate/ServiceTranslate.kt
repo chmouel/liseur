@@ -371,6 +371,15 @@ internal class ServiceTranslate(
         return PageTranslationModes.Mode(source, target).takeIf { step == TranslationStep.Translate }
     }
 
+    override suspend fun translatesWholeBooks(): Boolean {
+        val service = try {
+            wholeBookService(settings.settings.first())
+        } catch (_: TranslationError.NotSetUp) {
+            return false
+        }
+        return service.configured.first()
+    }
+
     private fun resolve(s: AppSettings): TranslationService {
         val wanted = when (val provider = s.translationProvider) {
             ServerSettings.SERVER_PROVIDER -> provider.takeIf { s.translationServerConnection != null }

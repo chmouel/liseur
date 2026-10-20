@@ -1143,6 +1143,7 @@
     <string name="read_aloud_next_sentence">Next sentence</string>
     <string name="read_aloud_from_here">Read aloud from here</string>
     <string name="reader_translate_into">Translate into %1$s</string>
+    <string name="reader_translate_book">Translate book</string>
     <string name="reader_narrate_from_here">Narrate from here</string>
     <string name="read_aloud_pause">Pause reading aloud</string>
     <string name="read_aloud_resume">Resume reading aloud</string>

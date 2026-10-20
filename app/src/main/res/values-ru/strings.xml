@@ -1182,6 +1182,7 @@
     <string name="read_aloud_next_sentence">Следующее предложение</string>
     <string name="read_aloud_from_here">Читать вслух отсюда</string>
     <string name="reader_translate_into">Перевести на %1$s</string>
+    <string name="reader_translate_book">Перевести книгу</string>
     <string name="reader_narrate_from_here">Озвучить отсюда</string>
     <string name="read_aloud_pause">Приостановить чтение вслух</string>
     <string name="read_aloud_resume">Продолжить чтение вслух</string>
