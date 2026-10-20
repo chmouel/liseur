@@ -1295,6 +1295,10 @@ class ReaderViewModel(
     private var positionSaveBaseline: Locator? = null
     private var positionSaveGeneration = 0L
 
+    // The place of a settling save still being written, so the same
+    // place is not queued twice before the first one lands.
+    private var settlementInFlight: Locator? = null
+
     /** Most recent displayed position, also used to survive recreation. */
     var lastLocator: Locator?
         get() = _place.value
@@ -1321,6 +1325,7 @@ class ReaderViewModel(
     private fun updatePositionSaveBaseline(locator: Locator?) {
         positionSaveGeneration++
         positionSaveBaseline = locator
+        settlementInFlight = null
     }
 
     init {
@@ -1750,6 +1755,7 @@ class ReaderViewModel(
             settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null ||
                 decliningApproximate != null || approximateOpeningSettlementPending ||
                 acceptingApproximate != null,
+            sameAsSettlementInFlight = settlementInFlight?.sameReadingPositionAs(prepared) == true,
         )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1829,15 +1835,17 @@ class ReaderViewModel(
                 bookOrbitDeclined = declinedBookOrbit,
             ),
         )
-        if (accepted) positionSaveGeneration++
+        val settling = settlingVerifiedOpening || settlingApproximateOpening || declinedApproximate != null
+        if (accepted) {
+            positionSaveGeneration++
+            settlementInFlight = prepared.takeIf { settling }
+        }
         val saveGeneration = positionSaveGeneration
-        if (accepted &&
-            (settlingVerifiedOpening || settlingApproximateOpening || declinedApproximate != null)
-        ) {
+        if (accepted && settling) {
             viewModelScope.launch {
-                if (positionPublisher.flush(bookId) &&
-                    shouldApplyPositionSaveResult(saveGeneration, positionSaveGeneration)
-                ) {
+                val saved = positionPublisher.flush(bookId)
+                if (settlementInFlight === prepared) settlementInFlight = null
+                if (saved && shouldApplyPositionSaveResult(saveGeneration, positionSaveGeneration)) {
                     if (settlingVerifiedOpening) verifiedOpeningSettlementPending = false
                     if (settlingApproximateOpening) {
                         approximateOpeningSettlementPending = false

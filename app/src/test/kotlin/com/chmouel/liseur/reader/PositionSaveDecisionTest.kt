@@ -55,4 +55,24 @@ class PositionSaveDecisionTest {
         assertFalse(shouldApplyPositionSaveResult(completedGeneration = 4, currentGeneration = 5))
         assertTrue(shouldApplyPositionSaveResult(completedGeneration = 5, currentGeneration = 5))
     }
+
+    @Test
+    fun `a settling place is not queued again while its write is pending`() {
+        assertTrue(
+            shouldSkipPositionSave(
+                sameAsBaseline = false,
+                awaitingPageCapture = false,
+                settlementPending = true,
+                sameAsSettlementInFlight = true,
+            ),
+        )
+        assertFalse(
+            shouldSkipPositionSave(
+                sameAsBaseline = false,
+                awaitingPageCapture = false,
+                settlementPending = true,
+                sameAsSettlementInFlight = false,
+            ),
+        )
+    }
 }
