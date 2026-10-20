@@ -1444,6 +1444,9 @@ internal fun ReaderScreen(
                 // while it is being answered would otherwise be left
                 // with neither.
                 val since = heldPlace.invalidate()
+                if (!emission.holdForPause || companion?.peek?.value != null) {
+                    scrollMovement.movedForReader()
+                }
                 val captured = capture(nav, native)
                 // The capture reaches into the document and swallows its
                 // own failures, cancellation included, so an answer can
@@ -1474,11 +1477,8 @@ internal fun ReaderScreen(
                     companion?.peek?.value != null
                 ) {
                     heldPlace.retire()
-                    scrollMovement.movedForReader()
                 } else if (emission.holdForPause) {
                     heldPlace.hold(captured, since)
-                } else {
-                    scrollMovement.movedForReader()
                 }
                 publishCaptured(nav, captured, event, expectedNative = native)
             }
