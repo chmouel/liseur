@@ -58,7 +58,9 @@ class WholeBookPublicationTest {
         val opener = TranslationPublicationOpener(ApplicationProvider.getApplicationContext<Context>())
         for ((href, entry) in listOf("chapter.xhtml" to "chapter.xhtml", "chapter%20one.xhtml" to "chapter one.xhtml")) {
             opener.withPublication(Uri.fromFile(epub(href, entry)).toAbsoluteUrl()!!) { publication ->
-                assertTrue(publication.translationSentences("en").next() != null)
+                val progress = mutableListOf<Pair<Int, Int>>()
+                assertTrue(publication.translationSentences("en") { done, total -> progress += done to total }.next() != null)
+                assertEquals(listOf(0 to 1, 1 to 1), progress)
             }
         }
     }

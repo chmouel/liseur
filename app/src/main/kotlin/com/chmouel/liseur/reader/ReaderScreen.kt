@@ -136,7 +136,7 @@ import com.chmouel.liseur.translate.MemoryPageTranslationCache
 import com.chmouel.liseur.translate.MemoryPageTranslationModes
 import com.chmouel.liseur.translate.PageTranslationCache
 import com.chmouel.liseur.translate.PageTranslationModes
-import com.chmouel.liseur.translate.WholeBookTranslationSheet
+import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.translate.startPageTranslation
 import com.chmouel.liseur.readaloud.ReadAloudFeature
@@ -4740,7 +4740,7 @@ internal fun ReaderScreen(
     }
 
     wholeBook?.takeIf { wholeBookOpen }?.let { book ->
-        WholeBookTranslationSheet(
+        WholeBookTranslationScreen(
             bookUrl = book.bookUrl,
             onDismiss = { wholeBookOpen = false },
             onOpenSettings = { wholeBookOpen = false; translationSettingsOpen = true },

@@ -1379,6 +1379,11 @@ changing reader behavior.
   (`ServiceTranslate.openPinned`) check settings before every submission,
   never rebind or fall back, and send one-shot bodies. Invalid envelopes
   pause the job; only sentence-local refusals become failure markers.
+- Whole-book preparation lives in the application scope, not its full-screen
+  page: Back leaves it running, Cancel stops it. Reopening reuses a checked
+  result only while the file, pinned configuration, retention stamp and cache
+  eviction revision match. Start/retain checks the revision under the write lock.
+  Progress is approximate by EPUB resource; checks do not survive process death.
 - Bulk runs batch up to 40 sentences of one href and book block per
   request (`TranslationPrompt.batchUser`/`batchReply`, strict numbering)
   when `TranslationRun.batches`; a bad batch splits in halves down to

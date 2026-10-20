@@ -25,6 +25,8 @@ internal data class WholeBookPreview(
     val retentionStamp: RetentionStamp? = null,
     /** Built from a paused record without a check; it only goes on while that very pause is still there. */
     val resumed: Boolean = false,
+    val configuration: String? = null,
+    val evictionRevision: Long? = null,
 )
 
 internal data class RetentionStamp(val cleared: Long, val epoch: Long, val generation: Long?)

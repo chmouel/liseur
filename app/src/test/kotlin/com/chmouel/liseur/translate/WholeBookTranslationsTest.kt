@@ -34,6 +34,70 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 class WholeBookTranslationsTest {
     @Test
+    fun `completed preview validity checks configuration file and retained translation changes`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        runCatching { WorkManager.getInstance(context) }.getOrElse {
+            WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
+        }
+        val container = AppContainer(context)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val coordinator = WholeBookTranslations(context, container, scope)
+        val file = File(context.filesDir, "preview-validity.epub").apply { writeText("Original book") }
+        val book = android.net.Uri.fromFile(file).toString()
+        try {
+            MockWebServer().use { server ->
+                server.start()
+                val url = server.url("/v1").toString()
+                container.appSettings.addServer("Test", url)
+                container.appSettings.selectTranslationServer(checkNotNull(ServerConnection.idOf(url)))
+                container.appSettings.setTranslationServerModel(url, "stub-chat")
+                container.appSettings.setTranslationTarget("fr")
+                container.database.bookDao().upsert(
+                    Book(url = book, title = "Book", author = null, coverPath = null,
+                        source = null, addedAt = 0, lastOpenedAt = null),
+                )
+                coordinator.records.first()
+                val feature = container.translate as ServiceTranslate
+                val saved = container.savedTranslations
+                val preview = WholeBookPreview(
+                    book, "Book", "en", "fr", feature.wholeBookIdentity("en", "fr"), 1, 0, 0, 0, null, null,
+                    checkNotNull(container.bookFingerprints.compute(book)).sha256,
+                    retentionStamp = saved.retentionStamp(book),
+                    configuration = feature.wholeBookConfiguration("en", "fr"),
+                    evictionRevision = saved.evictionRevision(),
+                )
+                assertTrue(coordinator.validPreview(preview))
+                container.appSettings.setTranslationTarget("de")
+                assertFalse(coordinator.validPreview(preview))
+                container.appSettings.setTranslationTarget("fr")
+                container.appSettings.setTranslationServerModel(url, "different-model")
+                assertFalse(coordinator.validPreview(preview))
+                container.appSettings.setTranslationServerModel(url, "stub-chat")
+                assertTrue(coordinator.validPreview(preview))
+                file.writeText("Changed book")
+                assertFalse(coordinator.validPreview(preview))
+                file.writeText("Original book")
+                assertTrue(coordinator.validPreview(preview))
+                val record = saved.begin(book, "en", "fr", preview.identity, 1)
+                saved.pause(book, record.generation, "paused")
+                assertFalse(coordinator.validPreview(preview))
+                val keptPreview = preview.copy(retentionStamp = saved.retentionStamp(book))
+                assertTrue(coordinator.validPreview(keptPreview))
+                saved.remove(book)
+                assertFalse(coordinator.validPreview(keptPreview))
+                val beforeClear = preview.copy(retentionStamp = saved.retentionStamp(book))
+                assertTrue(coordinator.validPreview(beforeClear))
+                saved.clear()
+                assertFalse(coordinator.validPreview(beforeClear))
+                assertEquals(0, server.requestCount)
+            }
+        } finally {
+            scope.cancel()
+            file.delete()
+        }
+    }
+
+    @Test
     fun `pause during publication opening keeps user intent without sending a request`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         runCatching { WorkManager.getInstance(context) }.getOrElse {

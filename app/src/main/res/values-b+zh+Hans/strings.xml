@@ -1488,6 +1488,13 @@
     <string name="whole_book_title">整本书翻译</string>
     <string name="whole_book_none">长按书籍封面并选择“翻译”，即可准备离线阅读。</string>
     <string name="whole_book_scanning">正在本地检查书籍。检查期间不会发送书籍文本。</string>
+    <string name="whole_book_opening">正在打开并验证书籍…</string>
+    <string name="whole_book_validating">正在检查书籍章节…</string>
+    <string name="whole_book_checking_sentences">正在检查已保存的译文…</string>
+    <string name="whole_book_finishing">正在完成检查…</string>
+    <string name="whole_book_sections">第 %1$s 节，共 %2$s 节</string>
+    <string name="whole_book_sentences_checked">已检查 %1$s 个句子</string>
+    <string name="whole_book_check_background">进度为估算值。你可以离开此页面；只要应用保持打开，检查就会继续。</string>
     <string name="whole_book_scan_failed">无法检查此书。请确认书籍已下载且可正常阅读，然后重试。</string>
     <string name="whole_book_already_running">另一本书正在翻译中。请等待其完成，或先将其暂停。</string>
     <string name="whole_book_counts">句子：%1$s · 已缓存：%2$s · 失败：%3$s · 待翻译：%4$s</string>

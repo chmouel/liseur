@@ -60,7 +60,7 @@ import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
-import com.chmouel.liseur.translate.WholeBookTranslationSheet
+import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.ui.library.BrowseLibrariesRoute
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
 import com.chmouel.liseur.ui.library.ConfirmRemoveDownloadDialog
@@ -1005,7 +1005,7 @@ private fun LibraryRoute(
             )
         }
         seriesTranslationBook?.let { book ->
-            WholeBookTranslationSheet(
+            WholeBookTranslationScreen(
                 bookUrl = book.url,
                 onDismiss = { seriesTranslationBook = null },
                 onBack = { seriesTranslationBook = null; seriesSheetBook = book },

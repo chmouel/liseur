@@ -7,6 +7,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -62,6 +63,7 @@ class SavedTranslationsTest {
         WholeBookPreview(
             BOOK, "Book", null, "fr", "identity", total, cached, failed, 0, null, null, "fingerprint",
             retentionStamp = store.retentionStamp(BOOK),
+            evictionRevision = store.evictionRevision(),
         )
 
     private suspend fun coverage(store: SavedTranslations, keys: List<String>): WholeBookCoverage {
@@ -156,9 +158,45 @@ class SavedTranslationsTest {
         assertEquals("un", store.strictLookup(BOOK, "one").translation)
         val approved = preview(store)
         store.tidy()
+        var checked = false
         try {
-            store.retain(approved) { coverage(store, listOf("one")) }
+            store.retain(approved) {
+                checked = true
+                coverage(store, listOf("one"))
+            }
             error("Missing coverage accepted")
+        } catch (_: IllegalStateException) {
+            assertNull(store.getKept(BOOK))
+            assertTrue(!checked)
+        }
+    }
+
+    @Test
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    fun `eviction discards prepared coverage without rescanning and blocks a stale start`(): Unit = runTest {
+        val store = saved(maxSentences = 1)
+        store.forBook(BOOK).keep("one", "un")
+        val approved = preview(store)
+        var scans = 0
+        val preparation = WholeBookPreparation(backgroundScope, { _, _ ->
+            scans++
+            approved
+        }, { candidate -> store.evictionRevision() == candidate.evictionRevision })
+        preparation.prepare()
+        runCurrent()
+        assertTrue(preparation.state.value is PreparationState.Ready)
+        store.forBook(OTHER).keep("two", "deux")
+        assertNull(store.strictLookup(BOOK, "one").translation)
+        assertEquals(approved.retentionStamp, store.retentionStamp(BOOK))
+        preparation.validate()
+        val discarded = backgroundScope.launch {
+            preparation.state.first { it == PreparationState.Idle }
+        }
+        discarded.join()
+        assertEquals(1, scans)
+        try {
+            store.begin(BOOK, null, "fr", "identity", 1, preview = approved)
+            error("Evicted coverage accepted")
         } catch (_: IllegalStateException) {
             assertNull(store.getKept(BOOK))
         }

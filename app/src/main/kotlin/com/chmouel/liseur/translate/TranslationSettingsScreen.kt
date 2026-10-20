@@ -305,7 +305,7 @@ private fun WholeBookTranslationsGroup() {
             )
         }
     }
-    selected?.let { WholeBookTranslationSheet(it, onDismiss = { selected = null }) }
+    selected?.let { WholeBookTranslationScreen(it, onDismiss = { selected = null }) }
 }
 
 /**

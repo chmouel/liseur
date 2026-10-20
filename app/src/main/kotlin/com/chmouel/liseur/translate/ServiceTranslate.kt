@@ -159,6 +159,14 @@ internal class ServiceTranslate(
         return pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot))
     }
 
+    suspend fun wholeBookConfiguration(source: String?, target: String): String {
+        val snapshot = settings.settings.first()
+        val service = wholeBookService(snapshot)
+        if (!service.configured.first()) throw TranslationError.NotSetUp()
+        val owner = service.owner(snapshot) ?: throw TranslationError.NotSetUp()
+        return translationKey("${pinnedRecipe(snapshot, service, source, target)}\u0000${connections.generation(owner).value}")
+    }
+
     suspend fun openPinned(source: String?, target: String, expectedIdentity: String? = null): SentenceTranslator {
         val snapshot = settings.settings.first()
         val service = wholeBookService(snapshot)

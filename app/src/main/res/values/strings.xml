@@ -1602,6 +1602,13 @@
     <string name="whole_book_title">Whole-book translations</string>
     <string name="whole_book_none">Long-press a book cover and choose Translation to prepare it for offline reading.</string>
     <string name="whole_book_scanning">Checking the book locally. No book text is sent during this check.</string>
+    <string name="whole_book_opening">Opening and verifying the book…</string>
+    <string name="whole_book_validating">Checking book sections…</string>
+    <string name="whole_book_checking_sentences">Checking saved translations…</string>
+    <string name="whole_book_finishing">Finishing the check…</string>
+    <string name="whole_book_sections">Section %1$s of %2$s</string>
+    <string name="whole_book_sentences_checked">%1$s sentences checked</string>
+    <string name="whole_book_check_background">Progress is approximate. You can leave this page; the check continues while the app stays open.</string>
     <string name="whole_book_scan_failed">The book could not be checked. Check that it is downloaded and readable, then try again.</string>
     <string name="whole_book_already_running">Another book is already being translated. Wait for it to finish or pause it first.</string>
     <string name="whole_book_counts">Sentences: %1$s · Cached: %2$s · Failed: %3$s · To translate: %4$s</string>

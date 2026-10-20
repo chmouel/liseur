@@ -503,6 +503,7 @@ class SavedTranslations(
     private val writes = Mutex()
     private val cleared = AtomicLong()
     private val epochs = ConcurrentHashMap<String, Long>()
+    private var evictions = 0L
 
     /** The highest save stamp handed out, under [writes]; read from the table on first use. */
     private var lastSaveAt: Long? = null
@@ -598,9 +599,14 @@ class SavedTranslations(
         RetentionStamp(cleared.get(), epochs[bookUrl] ?: 0L, keptDao.find(bookUrl)?.generation)
     }
 
+    internal suspend fun evictionRevision(): Long = writes.withLock { evictions }
+
     private fun checkPreview(preview: WholeBookPreview, old: KeptTranslation?) {
         check(preview.retentionStamp == RetentionStamp(cleared.get(), epochs[preview.bookUrl] ?: 0L, old?.generation)) {
             "Saved translation changed; check the book again"
+        }
+        check(preview.evictionRevision == null || preview.evictionRevision == evictions) {
+            "Cached translations changed; check the book again"
         }
     }
 
@@ -1224,7 +1230,10 @@ class SavedTranslations(
     // Called holding [writes].
     private suspend fun trim() {
         val over = dao.cacheCount() - maxSentences
-        if (over > 0) dao.dropOldest(over)
+        if (over > 0) {
+            evictions++
+            dao.dropOldest(over)
+        }
         var excess = dao.cacheCharacters() - maxCharacters
         while (excess > 0) {
             val oldest = dao.oldest(BATCH)
@@ -1237,6 +1246,7 @@ class SavedTranslations(
                 freed += row.length
                 if (freed >= excess) break
             }
+            evictions++
             dao.drop(dropped)
             excess -= freed
         }

@@ -73,12 +73,17 @@ internal suspend fun <T> AppContainer.withTranslationPublication(
     translationPublicationOpener.withPublication(url, block)
 }
 
-internal suspend fun Publication.translationSentences(source: String?): PageSentences {
+internal suspend fun Publication.translationSentences(
+    source: String?,
+    progress: (completed: Int, total: Int) -> Unit = { _, _ -> },
+): PageSentences {
     // Readium may skip a broken resource instead of failing its content iterator.
-    for (link in readingOrder) {
+    progress(0, readingOrder.size)
+    for ((index, link) in readingOrder.withIndex()) {
         currentCoroutineContext().ensureActive()
         val readable = get(link)?.use { it.read().getOrNull() != null } ?: false
         if (!readable) throw IOException("An EPUB resource cannot be read")
+        progress(index + 1, readingOrder.size)
     }
     val first = readingOrder.firstOrNull()?.let(::locatorFromLink) ?: throw IOException("The EPUB has no starting point")
     return TranslatedPages.sentences(this, first, source)

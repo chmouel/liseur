@@ -1542,6 +1542,13 @@
     <string name="whole_book_title">Traducciones de libros completos</string>
     <string name="whole_book_none">Mantén pulsada la portada de un libro y elige Traducción para prepararlo para leer sin conexión.</string>
     <string name="whole_book_scanning">Comprobando el libro localmente. No se envía texto del libro durante esta comprobación.</string>
+    <string name="whole_book_opening">Abriendo y verificando el libro…</string>
+    <string name="whole_book_validating">Comprobando las secciones del libro…</string>
+    <string name="whole_book_checking_sentences">Comprobando las traducciones guardadas…</string>
+    <string name="whole_book_finishing">Finalizando la comprobación…</string>
+    <string name="whole_book_sections">Sección %1$s de %2$s</string>
+    <string name="whole_book_sentences_checked">%1$s frases comprobadas</string>
+    <string name="whole_book_check_background">El progreso es aproximado. Puedes salir de esta página; la comprobación continúa mientras la aplicación siga abierta.</string>
     <string name="whole_book_scan_failed">No se pudo comprobar el libro. Comprueba que esté descargado y sea legible, y vuelve a intentarlo.</string>
     <string name="whole_book_already_running">Ya se está traduciendo otro libro. Espera a que termine o paúsalo primero.</string>
     <string name="whole_book_counts">Frases: %1$s · En caché: %2$s · Fallidas: %3$s · Por traducir: %4$s</string>

@@ -1648,6 +1648,13 @@
     <string name="whole_book_title">Переводы целых книг</string>
     <string name="whole_book_none">Нажмите и удерживайте обложку книги, затем выберите «Перевод», чтобы подготовить её для чтения без интернета.</string>
     <string name="whole_book_scanning">Локальная проверка книги. Во время проверки текст книги никуда не отправляется.</string>
+    <string name="whole_book_opening">Открытие и проверка книги…</string>
+    <string name="whole_book_validating">Проверка разделов книги…</string>
+    <string name="whole_book_checking_sentences">Проверка сохранённых переводов…</string>
+    <string name="whole_book_finishing">Завершение проверки…</string>
+    <string name="whole_book_sections">Раздел %1$s из %2$s</string>
+    <string name="whole_book_sentences_checked">Проверено предложений: %1$s</string>
+    <string name="whole_book_check_background">Прогресс приблизительный. Можно покинуть эту страницу; проверка продолжится, пока приложение открыто.</string>
     <string name="whole_book_scan_failed">Не удалось проверить книгу. Убедитесь, что она скачана и доступна для чтения, затем повторите попытку.</string>
     <string name="whole_book_already_running">Другая книга уже переводится. Дождитесь её окончания или сначала приостановите её.</string>
     <string name="whole_book_counts">Предложений: %1$s · В кэше: %2$s · Ошибок: %3$s · Для перевода: %4$s</string>

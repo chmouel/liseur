@@ -57,6 +57,29 @@ class WholeBookTranslationTest {
         WholeBookTranslation(translator, SentenceRequests(translator, null, null), store) { it.sentence.text.length }
 
     @Test
+    fun `scan progress counts checked occurrences including cache hits and duplicates without sending text`() = runTest {
+        val translator = object : Translator() {
+            override suspend fun contextSize(identity: String) = TranslationContextSize.OFF
+        }
+        val store = Store()
+        val requests = SentenceRequests(translator, null, null)
+        store.rows[requests.prepare(PageSentence("cached", "one.xhtml", "#p", null), null, "test").key] =
+            WholeBookLookup(translation = "saved")
+        val texts = Array(260) { if (it % 2 == 0) "cached" else "missing" }
+        val progress = mutableListOf<Pair<String, Int>>()
+        val coverage = job(translator, store).scan(sentences(*texts)) { href, checked -> progress += href to checked }
+        assertEquals(listOf("one.xhtml" to 128, "one.xhtml" to 256, "one.xhtml" to 260), progress)
+        assertEquals(260, coverage.total)
+        assertEquals(130, coverage.cached)
+        assertEquals(1, coverage.requests)
+        assertTrue(translator.asked.isEmpty())
+        progress.clear()
+        val empty = job(translator, store).scan(sentences()) { href, checked -> progress += href to checked }
+        assertEquals(0, empty.total)
+        assertTrue(progress.isEmpty())
+    }
+
+    @Test
     fun `a protocol failure stops the job without marking sentences refused`(): Unit = runTest {
         val translator = object : Translator() {
             override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated =

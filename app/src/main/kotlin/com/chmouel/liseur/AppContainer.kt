@@ -204,6 +204,7 @@ class AppContainer(context: Context) {
         val clears = accountTranslationClears.forBook(bookUrl)
         if (clears.isEmpty() && !savedTranslationsOpening.isInitialized() && !savedTranslationsFile.exists()) return
         wholeBookTranslations.pause(bookUrl)
+        wholeBookTranslations.invalidatePreparation(bookUrl)
         savedTranslations.clearBook(bookUrl, clears)
         if (clears.isNotEmpty()) requestBookSync(bookUrl)
     }

@@ -149,7 +149,7 @@ import coil3.request.crossfade
 import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.R
 import com.chmouel.liseur.LiseurApplication
-import com.chmouel.liseur.translate.WholeBookTranslationSheet
+import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.db.Book
@@ -973,7 +973,7 @@ fun LibraryScreen(
     }
 
     translationBook?.let { book ->
-        WholeBookTranslationSheet(
+        WholeBookTranslationScreen(
             bookUrl = book.url,
             onDismiss = { translationBook = null },
             onBack = { translationBook = null; sheetBook = book },

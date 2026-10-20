@@ -40,7 +40,11 @@ internal class WholeBookTranslation(
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
     private val requestCharacters: (SentenceRequest) -> Int,
 ) {
-    suspend fun scan(sentences: PageSentences, retryFailures: Boolean = false): WholeBookCoverage {
+    suspend fun scan(
+        sentences: PageSentences,
+        retryFailures: Boolean = false,
+        progress: (href: String, checked: Int) -> Unit = { _, _ -> },
+    ): WholeBookCoverage {
         var total = 0
         var cached = 0
         var failed = 0
@@ -96,6 +100,7 @@ internal class WholeBookTranslation(
                     }
                 }
             }
+            progress(batch.last().sentence.href, total)
         }
         if (translator.answering() != identity) throw TranslationError.Changed()
         return WholeBookCoverage(total, cached, failed, characters, input, output, missing)

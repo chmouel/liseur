@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.reader.TranslatedPages
+import com.chmouel.liseur.reader.ResourceAddress
 import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -37,6 +38,7 @@ internal class WholeBookTranslations(
 ) {
     private val saved: SavedTranslations get() = container.savedTranslations
     private val lock = Any()
+    private val preparations = HashMap<String, WholeBookPreparation>()
     private var active: String? = null
     private var pending: WholeBookPreview? = null
     private var approved: WholeBookPreview? = null
@@ -52,6 +54,36 @@ internal class WholeBookTranslations(
     val records: Flow<List<KeptTranslation>> = flow {
         initialized.await()
         emitAll(saved.kept)
+    }
+
+    fun preparation(bookUrl: String): WholeBookPreparation = synchronized(lock) {
+        preparations.getOrPut(bookUrl) {
+            WholeBookPreparation(
+                scope,
+                check = { retry, progress -> preview(bookUrl, retry, progress) },
+                valid = ::validPreview,
+            )
+        }
+    }
+
+    fun invalidatePreparation(bookUrl: String) {
+        synchronized(lock) { preparations[bookUrl] }?.cancel()
+    }
+
+    internal suspend fun validPreview(preview: WholeBookPreview): Boolean {
+        if (container.database.bookDao().getByUrl(preview.bookUrl) == null) return false
+        if (currentTarget() != preview.target || saved.retentionStamp(preview.bookUrl) != preview.retentionStamp) return false
+        if (saved.evictionRevision() != preview.evictionRevision) return false
+        val feature = container.translate as? ServiceTranslate ?: return false
+        return try {
+            val configuration = feature.wholeBookConfiguration(preview.source, preview.target)
+            if (configuration != preview.configuration || fingerprint(preview.bookUrl) != preview.sourceFingerprint) return false
+            saved.retentionStamp(preview.bookUrl) == preview.retentionStamp &&
+                saved.evictionRevision() == preview.evictionRevision &&
+                feature.wholeBookConfiguration(preview.source, preview.target) == configuration
+        } catch (_: TranslationError.NotSetUp) {
+            false
+        }
     }
 
     suspend fun inspect(bookUrl: String): WholeBookInfo {
@@ -71,46 +103,60 @@ internal class WholeBookTranslations(
         }
     }
 
-    suspend fun preview(bookUrl: String, retryFailures: Boolean = false): WholeBookPreview {
+    suspend fun preview(
+        bookUrl: String,
+        retryFailures: Boolean = false,
+        progress: (PreparationProgress) -> Unit = {},
+    ): WholeBookPreview = coroutineScope {
         initialized.await()
-        val record = saved.kept.first().firstOrNull { it.bookUrl == bookUrl }
-        return container.withTranslationPublication(bookUrl) { publication ->
-            val settings = container.appSettings.settings.first()
-            preview(
-                bookUrl,
-                record?.source ?: TranslationLanguages.source(publication.metadata.languages),
-                record?.target ?: TranslationLanguages.target(settings.translationTarget, Locale.getDefault()),
-                retryFailures,
-            )
-        }
-    }
-
-    suspend fun preview(bookUrl: String, source: String?, target: String, retryFailures: Boolean = false): WholeBookPreview = coroutineScope {
-        initialized.await()
+        progress(PreparationProgress())
         val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
         val book = container.database.bookDao().getByUrl(bookUrl) ?: throw IOException("Book is not in the library")
         val fingerprint = fingerprint(bookUrl)
         val retentionStamp = saved.retentionStamp(bookUrl)
-        val translator = feature.openPinned(source, target)
-        try {
-            val price = async { feature.wholeBookPrice() }
-            val identity = translator.answering()
-            val requestCharacters = feature.wholeBookPrompt(source, target)
-            val coverage = container.withTranslationPublication(bookUrl) { publication ->
+        val evictionRevision = saved.evictionRevision()
+        var result: WholeBookPreview? = null
+        openPublication(bookUrl) { publication ->
+            val source = saved.getKept(bookUrl)?.source ?: TranslationLanguages.source(publication.metadata.languages)
+            val target = currentTarget()
+            val configuration = feature.wholeBookConfiguration(source, target)
+            val translator = feature.openPinned(source, target)
+            try {
+                val price = async { feature.wholeBookPrice() }
+                val identity = translator.answering()
+                val requestCharacters = feature.wholeBookPrompt(source, target)
                 val requests = SentenceRequests(translator, TranslatedPages.preceding(publication, source), TranslatedPages.bookFacts(publication))
-                WholeBookTranslation(translator, requests, store(bookUrl), requestCharacters = requestCharacters)
-                    .scan(publication.translationSentences(source), retryFailures)
+                val sentences = publication.translationSentences(source) { completed, total ->
+                    progress(PreparationProgress(PreparationStage.VALIDATING, completed, total))
+                }
+                val sections = publication.readingOrder.mapIndexed { index, link ->
+                    ResourceAddress.canonicalPath(link.url().toString()) to index + 1
+                }.toMap()
+                var section = 0
+                progress(PreparationProgress(PreparationStage.SCANNING, 1, publication.readingOrder.size))
+                val coverage = WholeBookTranslation(translator, requests, store(bookUrl), requestCharacters = requestCharacters)
+                    .scan(sentences, retryFailures) { href, checked ->
+                        section = maxOf(section, sections[href] ?: section)
+                        progress(PreparationProgress(PreparationStage.SCANNING, section, publication.readingOrder.size, checked))
+                    }
+                progress(PreparationProgress(PreparationStage.FINISHING, sentences = coverage.total))
+                val cost = translationCost(coverage, price.await())
+                if (fingerprint(bookUrl) != fingerprint) throw IOException("The book changed while scanning")
+                if (translator.answering() != identity || feature.wholeBookConfiguration(source, target) != configuration) {
+                    throw TranslationError.Changed()
+                }
+                if (saved.retentionStamp(bookUrl) != retentionStamp) throw IOException("Saved translations changed while scanning")
+                if (saved.evictionRevision() != evictionRevision) throw IOException("Cached translations changed while scanning")
+                result = WholeBookPreview(
+                    bookUrl, book.title, source, target, identity, coverage.total, coverage.cached, coverage.failed,
+                    coverage.characters, translator.destination, cost,
+                    fingerprint, retryFailures, retentionStamp, configuration = configuration, evictionRevision = evictionRevision,
+                )
+            } finally {
+                translator.close()
             }
-            if (fingerprint(bookUrl) != fingerprint) throw IOException("The book changed while scanning")
-            if (translator.answering() != identity) throw TranslationError.Changed()
-            WholeBookPreview(
-                bookUrl, book.title, source, target, identity, coverage.total, coverage.cached, coverage.failed,
-                coverage.characters, translator.destination, translationCost(coverage, price.await()),
-                fingerprint, retryFailures, retentionStamp,
-            )
-        } finally {
-            translator.close()
         }
+        checkNotNull(result)
     }
 
     /**
@@ -178,6 +224,7 @@ internal class WholeBookTranslations(
         }
         try {
             ContextCompat.startForegroundService(context, Intent(context, WholeBookTranslationService::class.java))
+            invalidatePreparation(preview.bookUrl)
         } catch (e: RuntimeException) {
             synchronized(lock) {
                 pending = null
@@ -230,6 +277,7 @@ internal class WholeBookTranslations(
     }
 
     suspend fun delete(bookUrl: String) {
+        invalidatePreparation(bookUrl)
         pause(bookUrl)
         saved.remove(bookUrl)
     }
@@ -268,6 +316,9 @@ internal class WholeBookTranslations(
                 initialized.await()
                 if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
                 val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
+                if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target) != preview.configuration) {
+                    throw TranslationError.SettingsChanged()
+                }
                 val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
                 translator = pinned
                 openPublication(preview.bookUrl) { publication ->
@@ -323,6 +374,9 @@ internal class WholeBookTranslations(
             check(preview.total == preview.cached + preview.failed) { "Translation is not complete" }
             if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
             val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
+            if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target) != preview.configuration) {
+                throw TranslationError.SettingsChanged()
+            }
             val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
             try {
                 container.withTranslationPublication(preview.bookUrl) { publication ->
@@ -340,7 +394,7 @@ internal class WholeBookTranslations(
             } finally {
                 pinned.close()
             }
-        }
+        }.also { invalidatePreparation(preview.bookUrl) }
 
     private fun store(
         bookUrl: String,

@@ -42,7 +42,7 @@ options must be selected to reuse these keys offline.
 Whole-book preparation opens from Translation in a book cover's long-press
 actions, in the library or a series, and from a long press on the reader's
 ⋮ "Translate into <language>" item when the chosen service can prepare it
-or the book already has one. The sheet shows saved state first;
+or the book already has one. The full-screen page shows saved state first;
 preparation and coverage checks require a tap. Progress, review and completion
 each have their own view. Translation adds no reader appearance control.
 Selected-text translation still offers translated reading.
