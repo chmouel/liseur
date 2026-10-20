@@ -7,7 +7,7 @@ import org.junit.Test
 class PositionSaveDecisionTest {
 
     @Test
-    fun `a pending settlement is saved even at the stored place`() {
+    fun `a current event that declines a place is saved even at the stored place`() {
         assertFalse(
             shouldSkipPositionSave(
                 sameAsBaseline = true,
@@ -48,5 +48,11 @@ class PositionSaveDecisionTest {
                 settlementPending = false,
             ),
         )
+    }
+
+    @Test
+    fun `an older flush cannot clear a newer position save`() {
+        assertFalse(shouldApplyPositionSaveResult(completedGeneration = 4, currentGeneration = 5))
+        assertTrue(shouldApplyPositionSaveResult(completedGeneration = 5, currentGeneration = 5))
     }
 }

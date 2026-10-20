@@ -780,6 +780,24 @@ class BookOrbitCfiRepositoryTest {
     }
 
     @Test
+    fun `declining a fresh approximate opening records the first local place`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val remote = progress(percentageOnly(67.624))
+        val offer = agreement().approximateOffer(context, remote)!!
+        assertFalse(offer.replacesLocalPlace)
+        assertNull(offer.localRevision)
+
+        saveApproximate(context, 10, progression = 0.25, declined = offer)
+
+        val local = db.readingProgressDao().get(context.bookUrl)!!
+        val agreed = agreement().state(context)
+        assertEquals(local.positionRevision, agreed.agreedLocalRevision)
+        assertEquals(local.locatorJson, agreed.agreedLocatorJson)
+        assertEquals(67.624, agreed.agreedRemotePercentage!!, 0.0)
+        assertNull(agreement().approximateOffer(context, remote))
+    }
+
+    @Test
     fun `a sync that runs before the baseline does not strand the first move`(): Unit = runBlocking {
         val context = repository.capture(binding.bookUrl)
         val cfi = "epubcfi(/6/4!/4/2:3)"

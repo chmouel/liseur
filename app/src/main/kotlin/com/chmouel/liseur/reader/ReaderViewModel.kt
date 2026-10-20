@@ -1292,6 +1292,7 @@ class ReaderViewModel(
      * place on disk itself must advance it.
      */
     private var positionSaveBaseline: Locator? = null
+    private var positionSaveGeneration = 0L
 
     /** Most recent displayed position, also used to survive recreation. */
     var lastLocator: Locator?
@@ -1733,10 +1734,12 @@ class ReaderViewModel(
         }
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
+        val decliningApproximate = approximateOpening.takeIf { !keepsApproximateOpening(effectiveEvent) }
         val samePosition = shouldSkipPositionSave(
             sameAsBaseline = positionSaveBaseline?.sameReadingPositionAs(prepared) == true,
             awaitingPageCapture = bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } == true,
-            settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null,
+            settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null ||
+                decliningApproximate != null,
         )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1748,7 +1751,7 @@ class ReaderViewModel(
         // Checked before the same-page return: a jump that lands on the page
         // already shown still turns the opening down.
         if (!keepsApproximateOpening(effectiveEvent)) {
-            approximateOpening?.let { approximateDeclinedPending = it }
+            decliningApproximate?.let { approximateDeclinedPending = it }
             approximateOpening = null
             approximateCatchUp?.let { bookOrbitDeclinedPending = it }
             approximateCatchUp = null
@@ -1813,9 +1816,13 @@ class ReaderViewModel(
                 bookOrbitDeclined = declinedBookOrbit,
             ),
         )
+        if (accepted) positionSaveGeneration++
+        val saveGeneration = positionSaveGeneration
         if (accepted && (settlingVerifiedOpening || declinedApproximate != null)) {
             viewModelScope.launch {
-                if (positionPublisher.flush(bookId)) {
+                if (positionPublisher.flush(bookId) &&
+                    shouldApplyPositionSaveResult(saveGeneration, positionSaveGeneration)
+                ) {
                     if (settlingVerifiedOpening) verifiedOpeningSettlementPending = false
                     if (approximateDeclinedPending === declinedApproximate) {
                         approximateDeclinedPending = null

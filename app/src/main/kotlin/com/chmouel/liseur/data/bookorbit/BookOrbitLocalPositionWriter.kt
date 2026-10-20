@@ -29,7 +29,7 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
         update.bookOrbitApproximate?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { adoptApproximateBaselineIn(database, it) }
         update.bookOrbitApproximateDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
-            ?.let { declineApproximateOfferIn(database, it) }
+            ?.let { declineApproximateOfferIn(database, it, update.locatorJson) }
         update.bookOrbitPull?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { agreeOpeningPullIn(database, it) }
         update.bookOrbitDeclined?.takeIf { it.context.bookUrl == update.bookUrl }

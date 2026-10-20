@@ -870,17 +870,18 @@ internal suspend fun adoptApproximateBaselineIn(
 internal suspend fun declineApproximateOfferIn(
     database: LiseurDatabase,
     offer: BookOrbitApproximateOffer,
+    locatorJson: String,
 ): Boolean {
     val context = offer.context
-    val offeredRevision = offer.localRevision ?: return false
-    if (!offer.replacesLocalPlace || !offer.remote.isSaved || offer.remote.cfi != null ||
+    if (!offer.remote.isSaved || offer.remote.cfi != null ||
         !context.request.matches(database.remoteServerDao().get()) ||
         !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
     ) return false
     val dao = database.bookOrbitPositionAgreementDao()
     val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
     val local = database.readingProgressDao().get(context.bookUrl) ?: return false
-    if (local.positionRevision <= offeredRevision ||
+    if (local.locatorJson != locatorJson ||
+        offer.localRevision?.let { local.positionRevision <= it } == true ||
         local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
         !row.matchesChoiceBaseline(offer.baseline) ||
         row.candidateSaved != offer.remote.isSaved ||
