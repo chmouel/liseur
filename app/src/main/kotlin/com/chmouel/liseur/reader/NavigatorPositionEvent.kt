@@ -31,13 +31,9 @@ enum class NavigatorPositionEvent(
  *   later emission. A marker is single use, so this is what stops
  *   opening noise from spending one that belongs to the arrival.
  * @param holdForPause whether this place can be saved on pause. A
- *   settled local jump is owed that save. A settled adoption is held
- *   only to replace a stale hold — the adoption paths that store the
- *   place advance the save baseline to it, so its pause publish is
- *   deduped by the same-position gate rather than pushed back as local
- *   movement. Outside suppression holdForPause is equivalent to
- *   [NavigatorPositionEvent.persists]; the flag only adds information
- *   during the opening.
+ *   settled local jump is owed that save. Outside suppression
+ *   holdForPause is equivalent to [NavigatorPositionEvent.persists];
+ *   the flag only adds information during the opening.
  */
 data class NavigatorEmission(
     val event: NavigatorPositionEvent,
@@ -81,10 +77,7 @@ fun classifyNavigatorEmission(
     },
     markerSurvives = requested != null && suppressed && !landed,
     holdForPause = if (suppressed) {
-        landed && (
-            requested == NavigatorPositionEvent.LOCAL_JUMP ||
-                requested == NavigatorPositionEvent.REMOTE_ADOPTION
-            )
+        landed && requested == NavigatorPositionEvent.LOCAL_JUMP
     } else {
         requested?.persists ?: !reflowActive
     },

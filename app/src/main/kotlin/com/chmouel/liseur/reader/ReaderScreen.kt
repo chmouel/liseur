@@ -1469,7 +1469,8 @@ internal fun ReaderScreen(
                 // Following the voice is not the reader's place either:
                 // listening saves the place it reached itself. Nor is a
                 // source peek, whose place is never saved.
-                if ((!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
+                if (requested == NavigatorPositionEvent.REMOTE_ADOPTION ||
+                    (!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
                     companion?.peek?.value != null
                 ) {
                     heldPlace.retire()

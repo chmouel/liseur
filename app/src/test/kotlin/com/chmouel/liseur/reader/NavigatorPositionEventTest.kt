@@ -108,7 +108,7 @@ class NavigatorPositionEventTest {
     }
 
     @Test
-    fun `a settled jump or adoption during the opening is held for pause`() {
+    fun `only a settled local jump during the opening is held for pause`() {
         val requested = NavigatorPositionEvent.LOCAL_JUMP
         val noise = classify(requested, suppressed = true, landed = false)
         assertTrue(noise.markerSurvives)
@@ -119,17 +119,8 @@ class NavigatorPositionEventTest {
         assertEquals(NavigatorPositionEvent.OPENING_RESTORATION, arrival.event)
         assertTrue(arrival.holdForPause)
 
-        // An adopted remote landing is held too: it replaces a stale
-        // hold, and where the adoption is stored the pause publish is
-        // deduped against it.
-        val adoption = classify(
-            requested = NavigatorPositionEvent.REMOTE_ADOPTION,
-            suppressed = true,
-            landed = true,
-        )
-        assertFalse(adoption.markerSurvives)
-        assertEquals(NavigatorPositionEvent.OPENING_RESTORATION, adoption.event)
-        assertTrue(adoption.holdForPause)
+        val adoption = classify(NavigatorPositionEvent.REMOTE_ADOPTION, true, true)
+        assertFalse(adoption.holdForPause)
     }
 
     @Test

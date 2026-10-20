@@ -1727,8 +1727,11 @@ class ReaderViewModel(
         }
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
-        val samePosition = positionSaveBaseline?.sameReadingPositionAs(prepared) == true &&
-            bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } != true
+        val samePosition = shouldSkipPositionSave(
+            sameAsBaseline = positionSaveBaseline?.sameReadingPositionAs(prepared) == true,
+            awaitingPageCapture = bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } == true,
+            verifiedOpeningPending = bookOrbitOpening.verifiedPull != null,
+        )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
         val stable = bookPositions?.resolve(prepared)
