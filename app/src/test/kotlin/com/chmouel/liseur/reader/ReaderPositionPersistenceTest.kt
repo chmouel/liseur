@@ -55,7 +55,10 @@ class ReaderPositionPersistenceTest {
         try {
             val context = ApplicationProvider.getApplicationContext<Context>()
             runCatching { WorkManager.getInstance(context) }.getOrElse {
-                WorkManager.initialize(context, Configuration.Builder().build())
+                WorkManager.initialize(
+                    context,
+                    Configuration.Builder().setExecutor { it.run() }.build(),
+                )
             }
             val container = AppContainer(context)
             val file = book(context)

@@ -1452,6 +1452,15 @@ internal fun ReaderScreen(
                 // Neither a place held nor a position saved from that is
                 // anyone's.
                 currentCoroutineContext().ensureActive()
+                // An emission that persists nothing retires what was
+                // held, except a plain restoration: landing while the
+                // opening is still settling, it leaves the previous hold
+                // standing, and that hold names the place being restored
+                // to. A deliberate landing during the opening — a jump,
+                // or an adopted remote place — instead takes the hold,
+                // replacing whatever was held before it, so a stale
+                // pre-adoption place cannot be saved over the adoption
+                // when the reader leaves.
                 // A reflow locator is the layout moving, not the reader,
                 // and it is not a jump anyone should be sent back to on
                 // the way out. Its arrival still retires what was held,
