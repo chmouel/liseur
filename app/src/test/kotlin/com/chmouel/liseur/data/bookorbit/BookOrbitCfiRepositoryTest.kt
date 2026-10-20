@@ -666,7 +666,12 @@ class BookOrbitCfiRepositoryTest {
 
     private fun progress(body: String) = BookOrbitFileProgress.parse(JSONObject(body))
 
-    private suspend fun saveApproximate(context: BookOrbitCfiContext, at: Long, progression: Double) {
+    private suspend fun saveApproximate(
+        context: BookOrbitCfiContext,
+        at: Long,
+        progression: Double,
+        declined: BookOrbitApproximateOffer? = null,
+    ) {
         val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":$progression}}"""
         BookOrbitLocalPositionWriter(db).save(
             PositionUpdate(
@@ -674,6 +679,7 @@ class BookOrbitCfiRepositoryTest {
                 readingSecondsPerPosition = null, readingPaceSamples = null,
                 readingPaceElapsedMs = null, readingPaceEvidence = null,
                 updatedAt = at, bookOrbitCfi = null,
+                bookOrbitApproximateDeclined = declined,
             ), "Reading",
         )
     }
@@ -750,6 +756,27 @@ class BookOrbitCfiRepositoryTest {
         val offer = agreement().approximateOffer(context, progress(percentageOnly(67.624)))!!
         assertFalse(agreement().adoptApproximateBaseline(offer))
         assertNull(agreement().state(context).agreedRemoteSaved)
+    }
+
+    @Test
+    fun `declining an approximate opening keeps local place and prevents the offer returning`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveApproximate(context, 10, progression = 0.25)
+        val remote = progress(percentageOnly(67.624))
+        val offer = agreement().approximateOffer(context, remote)!!
+        val before = db.readingProgressDao().get(context.bookUrl)!!
+
+        saveApproximate(context, 11, progression = 0.25, declined = offer)
+
+        val local = db.readingProgressDao().get(context.bookUrl)!!
+        val agreed = agreement().state(context)
+        assertTrue(local.positionRevision > before.positionRevision)
+        assertEquals(local.positionRevision, agreed.agreedLocalRevision)
+        assertEquals(local.locatorJson, agreed.agreedLocatorJson)
+        assertEquals(true, agreed.agreedRemoteSaved)
+        assertNull(agreed.agreedRemoteCfi)
+        assertEquals(67.624, agreed.agreedRemotePercentage!!, 0.0)
+        assertNull(agreement().approximateOffer(context, remote))
     }
 
     @Test

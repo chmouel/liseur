@@ -28,6 +28,8 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
         // Agreed in the move's own transaction, so a restart cannot separate them.
         update.bookOrbitApproximate?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { adoptApproximateBaselineIn(database, it) }
+        update.bookOrbitApproximateDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
+            ?.let { declineApproximateOfferIn(database, it) }
         update.bookOrbitPull?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { agreeOpeningPullIn(database, it) }
         update.bookOrbitDeclined?.takeIf { it.context.bookUrl == update.bookUrl }

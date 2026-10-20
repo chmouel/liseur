@@ -200,9 +200,11 @@ class ReaderViewModel(
     @Volatile
     private var readingDeclared = false
     private val bookOrbitOpening = BookOrbitOpening()
+    private var verifiedOpeningSettlementPending = false
 
     /** Opened at a percentage-only BookOrbit place; agreed on the first saved move. */
     private var approximateOpening: BookOrbitApproximateOffer? = null
+    private var approximateDeclinedPending: BookOrbitApproximateOffer? = null
     private var approximateWayBack: JumpBack? = null
 
     /** When this device saved the place a BookOrbit choice offers to keep. */
@@ -216,12 +218,14 @@ class ReaderViewModel(
         )?.let { preview ->
             _bookSync.value = bookOrbitChoice(preview, bookOrbitOpening.choice?.second)
         }
+        if (bookOrbitOpening.verifiedPull != null) verifiedOpeningSettlementPending = true
     }
 
     fun onBookOrbitOpeningFailed() {
         if (bookOrbitOpening.chosen != null) return
         val retry = bookOrbitOpening.choice?.first?.takeIf { it.retryRequired }
         bookOrbitOpening.failed()
+        verifiedOpeningSettlementPending = false
         if (_bookSync.value == BookSync.Asking || _bookSync.value is BookSync.BookOrbitChoice) {
             _bookSync.value = BookSync.Idle
         }
@@ -956,6 +960,7 @@ class ReaderViewModel(
 
     private fun finishBookOrbitChoice(noteRes: Int?) {
         bookOrbitOpening.resolved()
+        verifiedOpeningSettlementPending = false
         clearBookOrbitChoicePending()
         _bookSync.value = noteRes?.let { BookSync.Note(it) } ?: BookSync.Idle
     }
@@ -1578,6 +1583,7 @@ class ReaderViewModel(
                 if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
             }
             bookOrbitOpening.propose(openingPull, openingChoice)
+            verifiedOpeningSettlementPending = false
             bookOrbitChoiceLocalAt = latestStored?.updatedAt
             val replaced = approximateOpening?.takeIf { it.replacesLocalPlace }
             if (replaced != null && localTarget != null && approximateTarget != null) {
@@ -1730,7 +1736,7 @@ class ReaderViewModel(
         val samePosition = shouldSkipPositionSave(
             sameAsBaseline = positionSaveBaseline?.sameReadingPositionAs(prepared) == true,
             awaitingPageCapture = bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } == true,
-            verifiedOpeningPending = bookOrbitOpening.verifiedPull != null,
+            settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null,
         )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1742,6 +1748,7 @@ class ReaderViewModel(
         // Checked before the same-page return: a jump that lands on the page
         // already shown still turns the opening down.
         if (!keepsApproximateOpening(effectiveEvent)) {
+            approximateOpening?.let { approximateDeclinedPending = it }
             approximateOpening = null
             approximateCatchUp?.let { bookOrbitDeclinedPending = it }
             approximateCatchUp = null
@@ -1760,6 +1767,7 @@ class ReaderViewModel(
         // Reading on past a BookOrbit offer keeps this device's place.
         val declinedBookOrbit = _catchUp.value?.bookOrbit ?: bookOrbitDeclinedPending
         bookOrbitDeclinedPending = null
+        val declinedApproximate = approximateDeclinedPending
         _catchUp.value = null
         val totalProgression = stable?.progression ?: return
         if (effectiveEvent.teachesPace) {
@@ -1777,6 +1785,7 @@ class ReaderViewModel(
         // so database latency cannot become reading time.
         if (effectiveEvent.recordsReadingTime) sessions.onPageTurned(totalProgression)
         val locatorJson = prepared.toJSON().toString()
+        val settlingVerifiedOpening = verifiedOpeningSettlementPending
         val accepted = positionPublisher.publish(
             PositionUpdate(
                 bookUrl = bookId,
@@ -1800,10 +1809,23 @@ class ReaderViewModel(
                 // the approximate opening, every move carries it until one
                 // agrees it, and the agreement refuses it afterwards.
                 bookOrbitPull = bookOrbitOpening.verifiedPull,
+                bookOrbitApproximateDeclined = declinedApproximate,
                 bookOrbitDeclined = declinedBookOrbit,
             ),
         )
-        if (accepted) positionSaveBaseline = prepared
+        if (accepted && (settlingVerifiedOpening || declinedApproximate != null)) {
+            viewModelScope.launch {
+                if (positionPublisher.flush(bookId)) {
+                    if (settlingVerifiedOpening) verifiedOpeningSettlementPending = false
+                    if (approximateDeclinedPending === declinedApproximate) {
+                        approximateDeclinedPending = null
+                    }
+                    positionSaveBaseline = prepared
+                }
+            }
+        } else if (accepted) {
+            positionSaveBaseline = prepared
+        }
         if (effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) approximateCatchUp = null
         // Reading on accepts the opening, so the way back to the old place
         // is withdrawn: taking it would push over the place just accepted.
@@ -2318,7 +2340,7 @@ class ReaderViewModel(
         // A tap on a frame drawn before the pill was withdrawn: a page turn
         // may already have accepted the opening, so the way back is gone.
         if (_jumpBack.value !== target) return false
-        approximateOpening = null
+        if (approximateWayBack !== target) approximateOpening = null
         approximateWayBack = null
         dismissJumpBack()
         return true

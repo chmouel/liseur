@@ -7,12 +7,12 @@ import org.junit.Test
 class PositionSaveDecisionTest {
 
     @Test
-    fun `a pending verified opening is settled by the first save even at the stored place`() {
+    fun `a pending settlement is saved even at the stored place`() {
         assertFalse(
             shouldSkipPositionSave(
                 sameAsBaseline = true,
                 awaitingPageCapture = false,
-                verifiedOpeningPending = true,
+                settlementPending = true,
             ),
         )
     }
@@ -23,7 +23,7 @@ class PositionSaveDecisionTest {
             shouldSkipPositionSave(
                 sameAsBaseline = true,
                 awaitingPageCapture = false,
-                verifiedOpeningPending = false,
+                settlementPending = false,
             ),
         )
     }
@@ -34,7 +34,18 @@ class PositionSaveDecisionTest {
             shouldSkipPositionSave(
                 sameAsBaseline = true,
                 awaitingPageCapture = true,
-                verifiedOpeningPending = false,
+                settlementPending = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a settled opening skips repeated same-place saves`() {
+        assertTrue(
+            shouldSkipPositionSave(
+                sameAsBaseline = true,
+                awaitingPageCapture = false,
+                settlementPending = false,
             ),
         )
     }

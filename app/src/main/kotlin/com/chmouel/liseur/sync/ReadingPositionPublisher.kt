@@ -28,6 +28,8 @@ data class PositionUpdate(
     val bookOrbitCfi: BookOrbitLocalCandidate? = null,
     /** An approximate BookOrbit opening this move accepts, agreed in the same write. */
     val bookOrbitApproximate: BookOrbitApproximateOffer? = null,
+    /** An approximate BookOrbit place this move declines, without adopting it. */
+    val bookOrbitApproximateDeclined: BookOrbitApproximateOffer? = null,
     /** A verified BookOrbit place the reader opened at and moves on from, agreed in the same write. */
     val bookOrbitPull: BookOrbitPullOffer? = null,
     /** A BookOrbit catch-up offer this move reads on past, which keeps this device's place. */

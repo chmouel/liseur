@@ -864,6 +864,43 @@ internal suspend fun adoptApproximateBaselineIn(
 }
 
 /**
+ * The reader kept its local place over a percentage-only offer. Record the
+ * place it kept and the remote place it declined in the same write.
+ */
+internal suspend fun declineApproximateOfferIn(
+    database: LiseurDatabase,
+    offer: BookOrbitApproximateOffer,
+): Boolean {
+    val context = offer.context
+    val offeredRevision = offer.localRevision ?: return false
+    if (!offer.replacesLocalPlace || !offer.remote.isSaved || offer.remote.cfi != null ||
+        !context.request.matches(database.remoteServerDao().get()) ||
+        !context.matches(database.bookOrbitBindingDao().get(context.request.accountKey, context.bookUrl))
+    ) return false
+    val dao = database.bookOrbitPositionAgreementDao()
+    val row = dao.get(context.request.accountKey, context.bookUrl) ?: return false
+    val local = database.readingProgressDao().get(context.bookUrl) ?: return false
+    if (local.positionRevision <= offeredRevision ||
+        local.ownerAccount != null && local.ownerAccount != context.request.accountKey ||
+        !row.matchesChoiceBaseline(offer.baseline) ||
+        row.candidateSaved != offer.remote.isSaved ||
+        row.candidateCfi != offer.remote.cfi ||
+        row.candidatePercentage != offer.remote.percentage ||
+        row.candidateUpdatedAt != offer.remote.displayTime
+    ) return false
+    dao.write(
+        row.copy(
+            agreedLocalRevision = local.positionRevision,
+            agreedLocatorJson = local.locatorJson,
+            agreedRemoteCfi = null,
+            agreedRemotePercentage = offer.remote.percentage,
+            agreedRemoteSaved = true,
+        ),
+    )
+    return true
+}
+
+/**
  * The reader moved on from a verified server place it opened at. That place
  * becomes the agreed remote one in the move's own transaction, so the move
  * is pushed instead of looking like movement on both sides. The pull was
