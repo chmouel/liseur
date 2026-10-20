@@ -1079,6 +1079,10 @@ changing reader behavior.
     match. A 400/422 naming `response_format` retries as `mp3`, then that
     (root, model) asks mp3 first. Error bodies are read only to classify.
     The DeepInfra schema is fetched without the key.
+  - api.openai.com voices are the static `OpenAiTts.openAiVoices`; its
+    `audio/voices` lists only custom voices and is never asked. The
+    monthly `openai-voices` workflow (`hack/openai-voices`) opens a PR
+    when OpenAI's API spec names a voice the list lacks; it only adds.
   - Picking a model saves it with a listed voice in one write
     (`setSpeechServerModelAndVoice`). Voice language flags
     (`VoiceLabel.flag`) are decorative and skipped by screen readers.

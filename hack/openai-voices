@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""hack/openai-voices -- check OpenAI's built-in read aloud voices against its API spec.
+
+Usage: hack/openai-voices [--spec FILE] [--kotlin FILE] [--write]
+
+Reads the voices OpenAI's `audio/speech` accepts from its OpenAPI spec
+(github.com/openai/openai-openapi, branch main, unless --spec is given) and
+lists the ones missing from OPENAI_VOICES in OpenAiTtsClient.kt. Liseur
+offers that list for api.openai.com, as OpenAI's own voice list holds only
+an account's custom voices.
+
+Voices are only ever added: the spec is a signal that OpenAI has a new
+voice, and a voice it stops naming may still work.
+
+--write adds the missing voices to the end of OPENAI_VOICES.
+
+Exit status: 0 when none is missing (or --write added them), 1 when some
+are missing, 2 when the spec or the Kotlin file cannot be read.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+SPEC_URL = "https://raw.githubusercontent.com/openai/openai-openapi/main/openapi.json"
+KOTLIN = Path(__file__).resolve().parent.parent / "app/src/main/kotlin/com/chmouel/liseur/tts/OpenAiTtsClient.kt"
+LIST = re.compile(r"(?P<head>private val OPENAI_VOICES = listOf\(\n)(?P<body>.*?)(?P<tail>\n\s*\))", re.S)
+INDENT = " " * 8
+WIDTH = 120
+
+
+def fail(message: str) -> None:
+    print(f"error: {message}", file=sys.stderr)
+    sys.exit(2)
+
+
+def speech_voices(spec: dict) -> list[str]:
+    """The voice names CreateSpeechRequest's `voice` takes, following $ref and anyOf/oneOf/allOf."""
+    try:
+        voice = spec["components"]["schemas"]["CreateSpeechRequest"]["properties"]["voice"]
+    except (KeyError, TypeError):
+        fail("the spec has no CreateSpeechRequest voice; its layout changed")
+    names: list[str] = []
+
+    def walk(node: object, depth: int) -> None:
+        if not isinstance(node, dict) or depth > 10:
+            return
+        ref = node.get("$ref")
+        if isinstance(ref, str) and ref.startswith("#/"):
+            target: object = spec
+            for part in ref[2:].split("/"):
+                target = target.get(part) if isinstance(target, dict) else None
+            walk(target, depth + 1)
+            return
+        for name in node.get("enum") or []:
+            if isinstance(name, str) and name not in names:
+                names.append(name)
+        for key in ("anyOf", "oneOf", "allOf"):
+            for child in node.get(key) or []:
+                walk(child, depth + 1)
+
+    walk(voice, 0)
+    if not names:
+        fail("the spec's speech voice names no voices; its layout changed")
+    return names
+
+
+def listed(body: str) -> list[str]:
+    return re.findall(r'"([^"]+)"', body)
+
+
+def wrapped(names: list[str]) -> str:
+    lines: list[str] = []
+    line = INDENT
+    for name in names:
+        item = f'"{name}",'
+        if line != INDENT and len(line) + 1 + len(item) > WIDTH:
+            lines.append(line)
+            line = INDENT
+        line += item if line == INDENT else " " + item
+    lines.append(line)
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(add_help=True, description=__doc__.split("\n")[0])
+    parser.add_argument("--spec", type=Path, help="read this spec instead of fetching it")
+    parser.add_argument("--kotlin", type=Path, default=KOTLIN, help="the file holding OPENAI_VOICES")
+    parser.add_argument("--write", action="store_true", help="add the missing voices to OPENAI_VOICES")
+    args = parser.parse_args()
+
+    try:
+        if args.spec:
+            spec = json.loads(args.spec.read_text())
+        else:
+            request = urllib.request.Request(SPEC_URL, headers={"User-Agent": "liseur-openai-voices"})
+            with urllib.request.urlopen(request, timeout=60) as reply:
+                spec = json.load(reply)
+    except (OSError, ValueError) as error:
+        fail(f"cannot read the spec: {error}")
+    try:
+        source = args.kotlin.read_text()
+    except OSError as error:
+        fail(f"cannot read {args.kotlin}: {error}")
+
+    match = LIST.search(source)
+    if not match:
+        fail(f"no OPENAI_VOICES list in {args.kotlin}")
+    ours = listed(match["body"])
+    missing = [name for name in speech_voices(spec) if name not in ours]
+    if not missing:
+        print("OpenAI lists no voice that Liseur lacks.")
+        return 0
+    print("Missing from OPENAI_VOICES: " + ", ".join(missing))
+    if not args.write:
+        return 1
+    body = wrapped(ours + missing)
+    args.kotlin.write_text(source[: match.start("body")] + body + source[match.end("body") :])
+    print(f"Added them to {args.kotlin}.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

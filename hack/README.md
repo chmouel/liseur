@@ -142,6 +142,12 @@ target wrapping them. Run `make help` for the short list. See
   `DEVELOPER.md` for using it from the app.
 - `test-ai-stub`: Starts `ai-stub` on a free port and checks every
   endpoint and flag. It is part of `make check` and CI.
+- `openai-voices`: Compares the voices OpenAI's API spec accepts for
+  speech with the built-in list Liseur offers for api.openai.com, and
+  with `--write` adds the missing ones. Run monthly by the
+  `openai-voices` workflow, which opens a pull request when it finds
+  any. `test-openai-voices` checks it on sample specs; it is part of
+  `make check` and CI.
 
 See also `tests/`, which holds the headless, assertion-shaped end-to-end
 scenarios. They measure behaviour rather than walk the screen.

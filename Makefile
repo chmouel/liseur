@@ -93,6 +93,7 @@ verify-release-tools: verify-fdroid-tags
 	hack/test-release-apk-verification
 	hack/test-store-images
 	hack/test-ai-stub
+	hack/test-openai-voices
 
 verify-fdroid-tags:
 	hack/test-fdroid-tags

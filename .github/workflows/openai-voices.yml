@@ -1,0 +1,67 @@
+name: OpenAI voices
+
+# Liseur offers a built-in list of OpenAI's read aloud voices, as OpenAI's
+# own voice list holds only an account's custom voices. Once a month this
+# checks OpenAI's API spec and opens a pull request adding any voice it
+# names that the list lacks (hack/openai-voices).
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Pushes and pull requests made with this token start no workflow, so
+  # the required build check is started by hand.
+  actions: write
+
+concurrency:
+  group: openai-voices
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      BRANCH: openai-voices
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Add missing voices
+        id: voices
+        run: |
+          hack/openai-voices --write | tee voices.txt
+          missing=$(sed -n 's/^Missing from OPENAI_VOICES: //p' voices.txt)
+          rm voices.txt
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update the pull request
+        if: steps.voices.outputs.missing != ''
+        env:
+          MISSING: ${{ steps.voices.outputs.missing }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git commit -a -F - <<EOF
+          feat: Offer OpenAI's new read aloud voices
+
+          OpenAI now lists these voices for read aloud: $MISSING.
+          They are added to the voices Liseur offers when OpenAI is the
+          voice service, so they can be picked from the list instead of
+          typed by name.
+          EOF
+          git push --force origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --head "$BRANCH" --base main \
+              --title "feat: Offer OpenAI's new read aloud voices" \
+              --body "OpenAI's API spec names voices for read aloud that Liseur does not offer yet: $MISSING.
+
+          This adds them to the list shown when OpenAI is the voice service. The spec is only a hint, so try one of them with Test connection before merging.
+
+          Opened by the monthly OpenAI voices workflow (hack/openai-voices)."
+          fi
+          gh workflow run build.yml --ref "$BRANCH"

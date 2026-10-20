@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Tests for hack/openai-voices: runs it on sample specs and a copy of the Kotlin list."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+SCRIPT = Path(__file__).resolve().parent / "openai-voices"
+failures = 0
+
+KOTLIN = """object OpenAiTts {
+    private val LEGACY_OPENAI_VOICES = listOf(
+        "alloy", "ash",
+    )
+    private val OPENAI_VOICES = listOf(
+        "marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
+    )
+}
+"""
+
+
+def spec(*extra: str) -> dict:
+    """OpenAI's layout: a shared enum behind a $ref, plus speech-only names, plus a custom voice object."""
+    return {
+        "components": {
+            "schemas": {
+                "VoiceIdsShared": {
+                    "anyOf": [
+                        {"type": "string"},
+                        {"type": "string", "enum": ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar", *extra]},
+                    ]
+                },
+                "CreateSpeechRequest": {
+                    "properties": {
+                        "voice": {
+                            "anyOf": [
+                                {"anyOf": [{"$ref": "#/components/schemas/VoiceIdsShared"}, {"type": "string", "enum": ["fable", "onyx", "nova"]}]},
+                                {"type": "object", "properties": {"id": {"type": "string"}}},
+                            ]
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+
+def check(name: str, ok: bool, detail: object = "") -> None:
+    global failures
+    print(f"{'PASS' if ok else 'FAIL'} {name}" + (f": {detail}" if not ok and detail != "" else ""))
+    failures += not ok
+
+
+def run(given: dict, *flags: str) -> tuple[int, str, str]:
+    with tempfile.TemporaryDirectory() as tmp:
+        spec_file = Path(tmp) / "openapi.json"
+        spec_file.write_text(json.dumps(given))
+        kotlin = Path(tmp) / "OpenAiTtsClient.kt"
+        kotlin.write_text(KOTLIN)
+        done = subprocess.run(
+            [sys.executable, str(SCRIPT), "--spec", str(spec_file), "--kotlin", str(kotlin), *flags],
+            capture_output=True,
+            text=True,
+        )
+        return done.returncode, done.stdout + done.stderr, kotlin.read_text()
+
+
+code, out, after = run(spec())
+check("nothing missing exits 0", code == 0, out)
+check("nothing missing leaves the file alone", after == KOTLIN)
+
+code, out, after = run(spec("juniper"))
+check("a new voice exits 1", code == 1, out)
+check("a new voice is named", "juniper" in out, out)
+check("without --write the file is left alone", after == KOTLIN)
+
+code, out, after = run(spec("juniper", "alloy"), "--write")
+check("--write exits 0", code == 0, out)
+check(
+    "--write appends the new voice and wraps the list",
+    after == KOTLIN.replace(
+        '"shimmer", "verse",\n',
+        '"shimmer",\n        "verse", "juniper",\n',
+    ),
+    after,
+)
+check("--write leaves the legacy list alone", '"alloy", "ash",\n    )\n    private val OPENAI_VOICES' in after, after)
+
+code, out, _ = run({"components": {"schemas": {}}})
+check("a changed spec layout fails", code == 2 and "layout" in out, out)
+
+code, out, _ = run({"components": {"schemas": {"CreateSpeechRequest": {"properties": {"voice": {"type": "string"}}}}}})
+check("a voice with no names fails", code == 2 and "no voices" in out, out)
+
+sys.exit(1 if failures else 0)
