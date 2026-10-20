@@ -28,12 +28,15 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
         // Agreed in the move's own transaction, so a restart cannot separate them.
         update.bookOrbitApproximate?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { adoptApproximateBaselineIn(database, it) }
-        update.bookOrbitApproximateDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
-            ?.let { declineApproximateOfferIn(database, it, update.locatorJson) }
+        val declinedCatchUp = update.bookOrbitDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
+        // Declining a catch-up leaves this move unagreed so it pushes; an opening decline would agree it.
+        if (declinedCatchUp == null) {
+            update.bookOrbitApproximateDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
+                ?.let { declineApproximateOfferIn(database, it, update.locatorJson) }
+        }
         update.bookOrbitPull?.takeIf { it.context.bookUrl == update.bookUrl }
             ?.let { agreeOpeningPullIn(database, it) }
-        update.bookOrbitDeclined?.takeIf { it.context.bookUrl == update.bookUrl }
-            ?.let { declineServerPlaceIn(database, it) }
+        declinedCatchUp?.let { declineServerPlaceIn(database, it) }
         val localCfis = database.bookOrbitLocalCfiDao()
         localCfis.clearBook(update.bookUrl)
         val candidate = update.bookOrbitCfi ?: return@withTransaction

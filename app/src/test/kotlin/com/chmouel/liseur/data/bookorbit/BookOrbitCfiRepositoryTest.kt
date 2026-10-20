@@ -637,6 +637,7 @@ class BookOrbitCfiRepositoryTest {
         context: BookOrbitCfiContext, cfi: String, at: Long, progression: Double = 0.25,
         approximate: BookOrbitApproximateOffer? = null, pull: BookOrbitPullOffer? = null,
         declined: BookOrbitPullOffer? = null,
+        approximateDeclined: BookOrbitApproximateOffer? = null,
     ) {
         val locator = """{"href":"OPS/chapter.xhtml","locations":{"progression":$progression}}"""
         BookOrbitLocalPositionWriter(db).save(
@@ -648,6 +649,7 @@ class BookOrbitCfiRepositoryTest {
                     context, "OPS/chapter.xhtml", locator, cfi,
                 ),
                 bookOrbitApproximate = approximate, bookOrbitPull = pull, bookOrbitDeclined = declined,
+                bookOrbitApproximateDeclined = approximateDeclined,
             ), "Reading",
         )
     }
@@ -1255,6 +1257,24 @@ class BookOrbitCfiRepositoryTest {
         assertFalse(agreement().state(context).serverMovedAway())
         assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
         assertEquals(listOf(mine), posts())
+    }
+
+    @Test
+    fun `jumping away from an approximate catch-up still pushes the jump`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        val first = "epubcfi(/6/4!/4/2:3)"
+        saveExact(context, first, 10)
+        agreement().observe(context, progress(saved(first)))
+        val posts = serveRemote(percentageOnly(70.0))
+        saveExact(context, "epubcfi(/6/4!/4/2:5)", 11, progression = 0.3)
+        assertEquals(BookOrbitPositionExchange.Result.Unresolved, exchange().run(context.bookUrl))
+        val remote = agreement().catchUpOffer(context)!!
+        val approximate = agreement().approximateCatchUp(context, remote)!!
+        val offer = catchUp(context, remote)
+        val jump = "epubcfi(/6/4!/4/2:7)"
+        saveExact(context, jump, 12, progression = 0.35, declined = offer, approximateDeclined = approximate)
+        assertEquals(BookOrbitPositionExchange.Result.Pushed, exchange().run(context.bookUrl))
+        assertEquals(listOf(jump), posts())
     }
 
     @Test
