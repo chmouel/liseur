@@ -45,10 +45,10 @@ class ScrollMovementTest {
     fun `samples during an automatic move stay suppressed until capture ends`() {
         val movement = ScrollMovement()
         movement.sample(0, automatic = false)
-        movement.beginAutomaticMove()
+        val move = movement.beginAutomaticMove()
         assertFalse(movement.sample(1_000, automatic = false))
         assertFalse(movement.sample(2_000, automatic = false))
-        movement.endAutomaticMove(null)
+        movement.endAutomaticMove(move, null)
         assertFalse(movement.sample(2_050, automatic = false))
         assertTrue(movement.sample(2_100, automatic = false))
     }
@@ -57,8 +57,7 @@ class ScrollMovementTest {
     fun `a drag right after an automatic move lands is the reader's`() {
         val movement = ScrollMovement()
         movement.sample(0, automatic = false)
-        movement.beginAutomaticMove()
-        movement.endAutomaticMove(9_000)
+        movement.endAutomaticMove(movement.beginAutomaticMove(), 9_000)
         assertTrue(movement.sample(9_200, automatic = false))
     }
 
@@ -75,10 +74,32 @@ class ScrollMovementTest {
     fun `showing the toolbar on a page only moved for the reader is not reading on`() {
         val movement = ScrollMovement()
         movement.sample(0, automatic = false)
-        movement.beginAutomaticMove()
-        movement.endAutomaticMove(9_000)
+        movement.endAutomaticMove(movement.beginAutomaticMove(), 9_000)
         assertFalse(movement.readerScrolledTo(9_000))
         assertTrue(movement.readerScrolledTo(9_050))
         assertTrue(movement.sample(9_050, automatic = false))
+    }
+
+    @Test
+    fun `a drag while the landing is captured is the reader's`() {
+        val movement = ScrollMovement()
+        movement.sample(0, automatic = false)
+        val move = movement.beginAutomaticMove()
+        assertFalse(movement.sample(9_200, automatic = false))
+        movement.endAutomaticMove(move, 9_000)
+        assertTrue(movement.readerScrolledTo(9_200))
+        assertTrue(movement.sample(9_200, automatic = false))
+    }
+
+    @Test
+    fun `a superseded move ends nothing`() {
+        val movement = ScrollMovement()
+        movement.sample(0, automatic = false)
+        val stale = movement.beginAutomaticMove()
+        val current = movement.beginAutomaticMove()
+        movement.endAutomaticMove(stale, 4_000)
+        assertFalse(movement.sample(9_000, automatic = false))
+        movement.endAutomaticMove(current, 9_000)
+        assertTrue(movement.sample(9_100, automatic = false))
     }
 }

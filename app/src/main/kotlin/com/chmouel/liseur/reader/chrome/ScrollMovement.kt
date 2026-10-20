@@ -22,23 +22,30 @@ internal class ScrollMovement {
     private var lastAutomatic = false
     private var movedForReader = false
     private var automaticMoveInProgress = false
+    private var automaticMove = 0
 
     /** The page was moved for the reader; the next difference is not theirs. */
     fun movedForReader() {
         movedForReader = true
     }
 
-    /** Suppresses scroll samples while an automatic move is being captured. */
-    fun beginAutomaticMove() {
+    /**
+     * Suppresses scroll samples while an automatic move is being captured,
+     * and returns the move to hand to [endAutomaticMove].
+     */
+    fun beginAutomaticMove(): Int {
         automaticMoveInProgress = true
+        return ++automaticMove
     }
 
     /**
-     * Ends the automatic move. The page it landed at, [offset], is the
-     * baseline a drag after it is measured from; when the landing cannot
-     * be read, the next sample becomes the baseline instead.
+     * Ends [move]. The page it landed at, [offset], is the baseline a drag
+     * after it is measured from; when the landing cannot be read, the next
+     * sample becomes the baseline instead. A move superseded by a later one,
+     * or by [reset], ends nothing.
      */
-    fun endAutomaticMove(offset: Int?) {
+    fun endAutomaticMove(move: Int, offset: Int?) {
+        if (move != automaticMove) return
         automaticMoveInProgress = false
         if (offset == null) {
             movedForReader = true
@@ -51,6 +58,7 @@ internal class ScrollMovement {
 
     /** Forgets the baseline, as when the reader comes back to the book. */
     fun reset() {
+        automaticMove++
         last = null
         lastAutomatic = false
         movedForReader = false

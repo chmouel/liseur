@@ -267,6 +267,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1477,12 +1478,15 @@ internal fun ReaderScreen(
                     (!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
                     companion?.peek?.value != null
                 if (retireHeldPlace) heldPlace.retire()
-                if (suppressScrollMovement) scrollMovement.beginAutomaticMove()
+                val automaticMove = scrollMovement.takeIf { suppressScrollMovement }?.beginAutomaticMove()
+                // Read before the capture suspends, so a drag made while it is answered still counts.
+                val landing = automaticMove?.let { scrollOffset(nav, visibleWebView(nav.publicationView)) }
                 val captured = try {
                     capture(nav, native)
                 } finally {
-                    if (suppressScrollMovement) {
-                        scrollMovement.endAutomaticMove(scrollOffset(nav, visibleWebView(nav.publicationView)))
+                    // A cancelled capture names no landing: the next sample starts afresh.
+                    automaticMove?.let {
+                        scrollMovement.endAutomaticMove(it, landing.takeIf { currentCoroutineContext().isActive })
                     }
                 }
                 // The capture reaches into the document and swallows its
