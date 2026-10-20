@@ -33,6 +33,7 @@ jobs:
       - name: Add missing voices
         id: voices
         run: |
+          set -o pipefail
           hack/openai-voices --write | tee voices.txt
           missing=$(sed -n 's/^Missing from OPENAI_VOICES: //p' voices.txt)
           rm voices.txt

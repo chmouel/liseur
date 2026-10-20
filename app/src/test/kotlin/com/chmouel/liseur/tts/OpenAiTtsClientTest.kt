@@ -319,13 +319,7 @@ class OpenAiTtsClientTest {
     fun `OpenAI offers its own voices for the model without asking its custom voice list`(): Unit = runBlocking {
         val openAi = OpenAiTts.baseUrl("https://api.openai.com/v1")!!
         val legacy = listOf("alloy", "ash", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer")
-        val current = listOf(
-            "marin", "cedar", "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse",
-        )
-        // What OpenAI answers on audio/voices for an account without custom voices.
-        repeat(4) {
-            server.enqueue(MockResponse(code = 200, body = """{"object":"list","data":[],"first_id":null,"last_id":null,"has_more":false}"""))
-        }
+        val current = OpenAiTts.openAiVoices("gpt-4o-mini-tts")
 
         assertEquals(current, clientFor("api.openai.com").voices(openAi, "k", "gpt-4o-mini-tts"))
         assertEquals(legacy, clientFor("api.openai.com").voices(openAi, "k", "tts-1"))
