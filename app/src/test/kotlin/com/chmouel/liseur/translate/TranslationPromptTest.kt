@@ -32,6 +32,32 @@ class TranslationPromptTest {
     }
 
     @Test
+    fun `a batch numbers each sentence and its reply gives each its own translation`() {
+        val user = TranslationPrompt.batchUser(listOf("One.", " Two. "), context = "Before.", book = "Title: Book")
+        assertEquals(
+            "<book>\nTitle: Book\n</book>\n<context>\nBefore.\n</context>\n<passage>\n[1] One.\n[2] Two.\n</passage>",
+            user,
+        )
+        assertEquals(listOf("Un.", "Deux."), TranslationPrompt.batchReply("<passage>\n[1] Un.\n\n[2]: Deux.\n</passage>", 2))
+        assertEquals(listOf("Un.", "Deux."), TranslationPrompt.batchReply("<think>plan</think>[1] Un.\n[2]. Deux.", 2))
+        assertFalse(TranslationPrompt.batchable("two\nlines"))
+        assertFalse(TranslationPrompt.batchable(" "))
+    }
+
+    @Test
+    fun `a batch reply that does not answer every sentence in order is rejected`() {
+        listOf(
+            "[1] Un. Deux.",
+            "[1] Un.\n[2] Deux.\n[3] Trois.",
+            "[2] Deux.\n[1] Un.",
+            "[1] Un.\nDeux.",
+            "[1] Un.\n[2]",
+        ).forEach { reply ->
+            assertThrows(reply, TranslationError.Malformed::class.java) { TranslationPrompt.batchReply(reply, 2) }
+        }
+    }
+
+    @Test
     fun `the system message names both languages and fixes the task`() {
         val system = TranslationPrompt.system("fr", "pt-BR")
         assertTrue(system, "from French (fr) into Portuguese (Brazil) (pt-BR)" in system)

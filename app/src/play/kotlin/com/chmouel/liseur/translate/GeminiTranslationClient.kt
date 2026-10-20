@@ -35,12 +35,56 @@ class GeminiTranslationClient(
         allowTransportRetry: Boolean = true,
         diagnostics: GeminiCacheDiagnostics? = null,
     ): String {
+        val text = generate(
+            apiKey, model, TranslationPrompt.system(source, target, context != null, book = book != null),
+            TranslationPrompt.user(passage, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
+        )
+        return GeminiTranslation.translation(text)
+    }
+
+    /**
+     * [sentences], each [TranslationPrompt.batchable], translated by
+     * [model] in one request, in order, as [translate] does one. Throws
+     * [TranslationError], and [TranslationError.Malformed] when the reply
+     * does not give one answer per sentence.
+     */
+    internal suspend fun translateBatch(
+        apiKey: String,
+        model: String,
+        source: String?,
+        target: String,
+        sentences: List<String>,
+        context: String? = null,
+        book: String? = null,
+        beforeRequest: suspend () -> Unit = {},
+        allowTransportRetry: Boolean = true,
+        diagnostics: GeminiCacheDiagnostics? = null,
+    ): List<String> {
+        require(sentences.isNotEmpty() && sentences.all(TranslationPrompt::batchable))
+        val text = generate(
+            apiKey, model, TranslationPrompt.batchSystem(source, target, context != null, book = book != null),
+            TranslationPrompt.batchUser(sentences, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
+        )
+        return TranslationPrompt.batchReply(GeminiTranslation.content(text), sentences.size)
+    }
+
+    /** The raw generateContent reply to [system] and [user]. */
+    private suspend fun generate(
+        apiKey: String,
+        model: String,
+        system: String,
+        user: String,
+        book: String?,
+        beforeRequest: suspend () -> Unit,
+        allowTransportRetry: Boolean,
+        diagnostics: GeminiCacheDiagnostics?,
+    ): String {
         val body = JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.system(source, target, context != null, book = book != null)))))
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             .put(
                 "contents",
                 JSONArray().put(
-                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", TranslationPrompt.user(passage, context, book)))),
+                    JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", user))),
                 ),
             )
             // Translation wants the likeliest wording, and the same sentence then gets the same translation.
@@ -109,7 +153,7 @@ class GeminiTranslationClient(
 
     private fun reply(response: Response, diagnostics: GeminiCacheDiagnostics?): String {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
-        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
+        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty()).retryingAfter(response.header("Retry-After"))
         if (text == null) throw TranslationError.Protocol("reply too large")
         if (diagnostics != null) {
             val root = try {
@@ -119,19 +163,19 @@ class GeminiTranslationClient(
             }
             diagnostics.response(GeminiUsage.parse(root))
         }
-        return GeminiTranslation.translation(text)
+        return text
     }
 
     private fun answer(response: Response): String {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
-        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
+        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty()).retryingAfter(response.header("Retry-After"))
         if (text == null) throw TranslationError.Malformed("reply too large")
         return GeminiTranslation.content(text).ifBlank { throw TranslationError.Empty() }
     }
 
     private fun models(response: Response): List<String> {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_LIST_BYTES)
-        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty())
+        if (!response.isSuccessful) throw GeminiTranslation.errorFor(response.code, text.orEmpty()).retryingAfter(response.header("Retry-After"))
         if (text == null) throw TranslationError.Malformed("list too large")
         return GeminiTranslation.textModels(text)
     }

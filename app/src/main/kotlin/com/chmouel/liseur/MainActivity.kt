@@ -226,6 +226,8 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         // Being here means the library is what you left the app on.
         lifecycleScope.launch { container.sessionState.setLeftFromReader(false) }
+        // Android allows starting the foreground job only while the app is in front.
+        lifecycleScope.launch { container.wholeBookTranslations.resumeInterrupted() }
     }
 
     private suspend fun resumeLastBook() {

@@ -117,6 +117,26 @@ class GeminiTranslationTest {
     }
 
     @Test
+    fun `a batch asks once with numbered sentences and rejects a reply that drops one`(): Unit = runBlocking {
+        server.enqueue(MockResponse.Builder().code(200).body(reply("[1] One.\n[2] Two.")).build())
+        server.enqueue(MockResponse.Builder().code(200).body(reply("[1] One.")).build())
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "30").body("{}").build())
+        val client = GeminiTranslationClient(base = server.url("/v1beta/models"))
+
+        assertEquals(listOf("One.", "Two."), client.translateBatch("secret", "gemini-flash-lite-latest", "fr", "en", listOf("Un.", "Deux.")))
+        val body = JSONObject(server.takeRequest().body!!.utf8())
+        assertTrue("[1] Un.\n[2] Deux." in body.getJSONArray("contents").toString().replace("\\n", "\n"))
+        expect<TranslationError.Malformed> {
+            client.translateBatch("secret", "gemini-flash-lite-latest", "fr", "en", listOf("Un.", "Deux."))
+        }
+        val limited = expect<TranslationError.RateLimited> {
+            client.translateBatch("secret", "gemini-flash-lite-latest", "fr", "en", listOf("Un.", "Deux."), allowTransportRetry = false)
+        }
+        assertEquals(30_000L, limited.retryAfterMillis)
+        assertEquals(3, server.requestCount)
+    }
+
+    @Test
     fun `asks generateContent with the key in a header and the task as the system instruction`(): Unit = runBlocking {
         server.enqueue(MockResponse.Builder().code(200).body(reply("Hello")).build())
         val client = GeminiTranslationClient(base = server.url("/v1beta/models"))

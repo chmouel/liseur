@@ -17,9 +17,22 @@ request preparation. It pins the approved destination and settings, writes
 through a strict store, and marks the book as kept before the first request.
 Kept books survive cache trimming and global cache clear. Deletion invalidates
 the job generation so outstanding requests cannot restore deleted rows.
-Up to four sentence requests run concurrently. Request preparation stays in
-reading order, duplicate pending keys share a request, and completed answers
-are saved without waiting for slower requests. Pause cancels outstanding calls;
+OpenAI-compatible servers (except TranslateGemma, or with a reply token
+cap set) and Gemini get up to 40 consecutive sentences of one chapter per
+request, numbered one per line, with up to four requests running at once;
+other translators get one sentence per request. A reply must answer every
+number in order; otherwise the batch is asked again in halves, down to
+single sentences, whose refusals become failure markers. Each answer is
+saved under its own sentence key, so the reader still finds it; a batched
+answer may read slightly differently from a live single-sentence one.
+Request preparation stays in reading order, duplicate pending keys share a
+request, and completed answers are saved without waiting for slower
+requests. A 429, a 408 or 5xx, or a lost connection is asked again with
+growing waits, or the wait the server asks for, within 30 minutes of the
+first failure; with no network the job waits for one, a LAN included,
+without using up a try. A server asking to wait longer pauses the job
+instead of being asked early. A retried request may be billed twice. The
+cost estimate groups sentences the way the job does. Pause cancels outstanding calls;
 it cannot undo processing or billing already performed by the provider.
 
 The reader uses its existing sentence cache. Saved failures are skippable
@@ -41,10 +54,19 @@ its current cache limits; this change makes no server-retention promise.
 
 ## Consequences
 
-The app needs no new translation prompts or server protocol. Changing a
+The app needs a batch prompt but no new server protocol. Changing a
 model or prompt can cause live requests again, and missing or failed
 sentences are not guaranteed translated offline. The background job can
-be interrupted by Android and resumes only when the reader asks.
+be interrupted by Android. A job paused by Android, its time limit, a
+lost connection, a 429 or a 408/5xx resumes when the app next comes to
+the foreground; a pause the reader chose, a 402 or other refusal, changed
+settings or a storage failure waits for the reader. The consent says so.
+Resume skips the full check when the book file's sha256
+(`kept_translations.fingerprint`), service and languages still match the
+approved job; a changed target language pauses it as changed settings.
+A resume only starts while the record it was asked from is still paused
+in the same generation, so deleting the translation meanwhile ends it
+without recreating anything.
 
 Backup archives can be much larger and contain readable translated book
 text. Their password encrypts connections only. Export reports books left

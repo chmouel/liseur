@@ -164,6 +164,17 @@ internal interface TranslationRun {
      */
     suspend fun translate(sentence: String, context: String?, book: String? = null): String
 
+    /** Whether [translateBatch] sends several sentences in one request. */
+    val batches: Boolean get() = false
+
+    /**
+     * [sentences], each [TranslationPrompt.batchable], translated in one
+     * request, in order, with [context] as the text before the first.
+     * Only when [batches]. Throws [TranslationError].
+     */
+    suspend fun translateBatch(sentences: List<String>, context: String?, book: String? = null): List<String> =
+        throw UnsupportedOperationException()
+
     fun close() = Unit
 }
 

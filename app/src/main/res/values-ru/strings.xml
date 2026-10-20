@@ -1660,7 +1660,7 @@
     <string name="whole_book_paused">Приостановлено</string>
     <string name="whole_book_settings_changed">Настройки перевода изменились. Проверьте книгу перед продолжением.</string>
     <string name="whole_book_pause">Приостановить</string>
-    <string name="whole_book_resume">Проверить и продолжить</string>
+    <string name="whole_book_resume">Продолжить</string>
     <string name="whole_book_check">Проверить полноту перевода</string>
     <string name="whole_book_retry">Повторить перевод предложений с ошибками</string>
     <string name="whole_book_retry_notice">При подтверждении отметки об ошибках будут удалены, а предложения отправлены повторно. Это может повлечь новые расходы.</string>
@@ -1682,7 +1682,7 @@
     <string name="whole_book_prepare_detail">Сохраните перевод книги для чтения без интернета. Сначала проверьте, что ещё нужно перевести.</string>
     <string name="whole_book_cancel_check">Отменить проверку</string>
     <string name="whole_book_try_again">Повторить попытку</string>
-    <string name="whole_book_consent">Непереведённые предложения и их контекст будут отправлены выбранному сервису ИИ. Может взиматься плата. Предложения, которые не удастся перевести, останутся на языке оригинала.</string>
+    <string name="whole_book_consent">Непереведённые предложения и их контекст будут отправлены выбранному сервису ИИ. Может взиматься плата. После прерывания или временной ошибки сервиса перевод сам продолжится при открытии Liseur, пока вы не приостановите или не удалите его. Повторно отправленный запрос может быть оплачен дважды. Предложения, которые не удастся перевести, останутся на языке оригинала.</string>
     <string name="whole_book_details">Подробности</string>
     <string name="whole_book_manage">Управление переводом</string>
     <string name="whole_book_saved_progress">Сохранено предложений: %1$s / %2$s</string>
@@ -1699,10 +1699,11 @@
     <string name="whole_book_read_hint">Чтобы читать перевод, выделите текст в книге, выберите «Перевести», затем «Перевести страницу». Для чтения без интернета нужны те же сервис, модель, языки и параметры, что при сохранении.</string>
     <string name="whole_book_ineligible">Выберите настроенный сервис ИИ в настройках перевода. Перевод всей книги недоступен с переводчиком на устройстве.</string>
     <string name="whole_book_file_unsupported">Перевод всей книги доступен только для скачанных EPUB с адаптивной вёрсткой.</string>
-    <string name="whole_book_reason_network">Сетевое соединение потеряно. Проверьте соединение перед продолжением.</string>
+    <string name="whole_book_reason_network">Сетевое соединение потеряно. Перевод продолжится при открытии Liseur, или нажмите «Продолжить».</string>
     <string name="whole_book_reason_rate">Сервис ограничил запросы. Подождите перед продолжением.</string>
-    <string name="whole_book_reason_timeout">Достигнут лимит фоновой работы Android. Продолжите, когда будете готовы.</string>
-    <string name="whole_book_reason_interrupted">Приложение или фоновая задача остановились. Сохранённые предложения не потеряны; проверьте перед продолжением.</string>
+    <string name="whole_book_reason_timeout">Достигнут лимит фоновой работы Android. Перевод продолжится при открытии Liseur, или нажмите «Продолжить».</string>
+    <string name="whole_book_reason_interrupted">Приложение или фоновая задача остановились. Сохранённые предложения не потеряны. Перевод продолжится при открытии Liseur, или нажмите «Продолжить».</string>
     <string name="whole_book_reason_service">Сервис не смог продолжить работу. Проверьте учётные данные, модель и квоту перед продолжением.</string>
+    <string name="whole_book_reason_code">Сервис ответил ошибкой %d.</string>
     <string name="whole_book_reason_storage">Не удалось прочитать или записать книгу или её сохранённые переводы. Проверьте файл и свободное место перед продолжением.</string>
 </resources>

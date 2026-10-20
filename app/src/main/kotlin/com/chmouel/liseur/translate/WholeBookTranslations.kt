@@ -88,7 +88,7 @@ internal class WholeBookTranslations(
             val requestCharacters = feature.wholeBookPrompt(source, target)
             val coverage = container.withTranslationPublication(bookUrl) { publication ->
                 val requests = SentenceRequests(translator, TranslatedPages.preceding(publication, source), TranslatedPages.bookFacts(publication))
-                WholeBookTranslation(translator, requests, store(bookUrl), requestCharacters)
+                WholeBookTranslation(translator, requests, store(bookUrl), requestCharacters = requestCharacters)
                     .scan(publication.translationSentences(source), retryFailures)
             }
             if (fingerprint(bookUrl) != fingerprint) throw IOException("The book changed while scanning")
@@ -100,6 +100,58 @@ internal class WholeBookTranslations(
             )
         } finally {
             translator.close()
+        }
+    }
+
+    /**
+     * Starts [bookUrl]'s paused job again without the full check, when the
+     * book file, the service and the languages are still the ones the
+     * reader approved. False when it needs the check first, or, when
+     * [automatic], when the pause was not a passing trouble.
+     */
+    suspend fun resume(bookUrl: String, automatic: Boolean = false): Boolean {
+        initialized.await()
+        // Taken before any wait, so a delete meanwhile makes the job's start find another generation.
+        val record = saved.getKept(bookUrl) ?: return false
+        val stamp = saved.retentionStamp(bookUrl)
+        if (stamp.generation != record.generation) return false
+        if (record.state != "paused" || !resumable(record.reason, automatic)) return false
+        val approved = record.fingerprint ?: return false
+        val feature = container.translate as? ServiceTranslate ?: return false
+        try {
+            if (currentTarget() != record.target) return false
+            if (feature.wholeBookIdentity(record.source, record.target) != record.identity) return false
+            val book = container.database.bookDao().getByUrl(bookUrl) ?: return false
+            if (fingerprint(bookUrl) != approved) return false
+            if (synchronized(lock) { active != null }) return false
+            start(
+                WholeBookPreview(
+                    bookUrl, book.title, record.source, record.target, record.identity, record.total, record.done,
+                    record.failed, 0, null, null, approved, retentionStamp = stamp, resumed = true,
+                ),
+            )
+            return true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot resume without checking: ${e.javaClass.simpleName}")
+            return false
+        }
+    }
+
+    private suspend fun currentTarget(): String =
+        TranslationLanguages.target(container.appSettings.settings.first().translationTarget, Locale.getDefault())
+
+    /** Resumes the most recent job that a passing trouble paused; called when the app comes to the foreground. */
+    suspend fun resumeInterrupted() {
+        try {
+            initialized.await()
+            saved.keptRecords().filter { it.state == "paused" && resumable(it.reason, automatic = true) }
+                .firstOrNull { resume(it.bookUrl, automatic = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Cannot resume an interrupted translation: ${e.javaClass.simpleName}")
         }
     }
 
@@ -181,6 +233,7 @@ internal class WholeBookTranslations(
             translator = pinned
             container.withTranslationPublication(preview.bookUrl) { publication ->
                 if (pinned.answering() != preview.identity) throw TranslationError.SettingsChanged()
+                if (preview.resumed && currentTarget() != preview.target) throw TranslationError.SettingsChanged()
                 val current = saved.begin(
                     preview.bookUrl, preview.source, preview.target, preview.identity, preview.total,
                     retryFailures = preview.retryFailures, preview = preview,
@@ -192,7 +245,8 @@ internal class WholeBookTranslations(
                 WholeBookTranslation(
                     pinned, requests,
                     store(preview.bookUrl, current.generation, preview.sourceFingerprint, preview.total, progress),
-                    feature.wholeBookPrompt(preview.source, preview.target),
+                    online = container.networkAvailability::isAvailable,
+                    requestCharacters = feature.wholeBookPrompt(preview.source, preview.target),
                 ).run(publication.translationSentences(preview.source), preview.identity, preview.total)
             }
             saved.modeFor(preview.bookUrl).remember(PageTranslationModes.Mode(preview.source, preview.target))
@@ -206,7 +260,8 @@ internal class WholeBookTranslations(
             val reason = when (e) {
                 is TranslationError.Changed, is TranslationError.SettingsChanged -> "settings_changed"
                 is TranslationError.Network -> "network"
-                is TranslationError.RateLimited -> "rate_limited"
+                is TranslationError.RateLimited -> "rate_limited:${e.code}"
+                is TranslationError.Service -> "service:${e.code}"
                 is TranslationError -> "service"
                 else -> "storage"
             }
@@ -294,4 +349,20 @@ internal class WholeBookTranslations(
     private companion object {
         const val TAG = "WholeBookTranslation"
     }
+}
+
+/**
+ * Whether a job paused for [reason] may go on without a new check: never
+ * after changed settings or a storage or book failure, and only after a
+ * passing trouble (a killed app, Android's time limit, a lost connection,
+ * a busy or failing server) when nobody asked. A 402 waits for the reader.
+ */
+internal fun resumable(reason: String?, automatic: Boolean): Boolean {
+    if (reason == "settings_changed" || reason == "storage") return false
+    if (!automatic) return true
+    if (reason in listOf("interrupted", "timeout", "network", "rate_limited:429")) return true
+    // A 402 is a spent quota or an unpaid bill, which only the reader can settle.
+    if (reason?.startsWith("service:") != true) return false
+    val code = wholeBookPauseCode(reason) ?: return false
+    return code == 408 || code in 500..599
 }

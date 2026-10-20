@@ -1370,6 +1370,16 @@ changing reader behavior.
   (`ServiceTranslate.openPinned`) check settings before every submission,
   never rebind or fall back, and send one-shot bodies. Invalid envelopes
   pause the job; only sentence-local refusals become failure markers.
+- Bulk runs batch up to 40 sentences of one href and book block per
+  request (`TranslationPrompt.batchUser`/`batchReply`, strict numbering)
+  when `TranslationRun.batches`; a bad batch splits in halves down to
+  single requests. Each answer saves under its own sentence key. Temporary
+  errors (429, 408, 5xx, network) retry with backoff, honouring
+  `Retry-After`, within 30 minutes of a chunk's first failure; offline
+  waits poll `NetworkAvailability` without using an attempt. A wait past
+  the window pauses rather than asking early. The scan estimate follows
+  the same chunk rule (`startsChunk`). See ADR 0062 for auto-resume and
+  fast resume.
 - Bulk and reader misses share admission (`TranslationAdmissions`): bulk
   waits for submitted reader calls to save and blocks new matching misses
   until its workers settle.
@@ -1384,6 +1394,9 @@ changing reader behavior.
   totals (input, cached, output, thinking; absent is unknown, not zero),
   plus bounded prompt-prefix byte comparisons (not tokens, not proof of
   cache hits). No prompt, title, endpoint, key or reply is logged.
+  Debug builds log the same per run for OpenAI-compatible servers as
+  `ChatCache` (`usage.prompt_tokens_details.cached_tokens`). OpenAI only
+  caches a prefix of 1,024 tokens or more; ours is usually shorter.
 - Book removal is a sweep, not a delete by URL (`BookRemoval` may run in
   a caller's transaction): `AppContainer` sweeps on Room invalidation of
   `books` and at start; `sweep()` bumps the book's epoch so an open

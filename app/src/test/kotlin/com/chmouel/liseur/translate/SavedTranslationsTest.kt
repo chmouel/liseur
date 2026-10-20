@@ -164,6 +164,26 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a resume only goes on while the very pause it was asked from is there`(): Unit = runTest {
+        val store = saved()
+        val first = store.begin(BOOK, null, "fr", "identity", 1)
+        store.pause(BOOK, first.generation, "network")
+        val resumed = preview(store, cached = 0).copy(resumed = true)
+        store.remove(BOOK)
+        try {
+            store.begin(BOOK, null, "fr", "identity", 1, preview = resumed)
+            error("Deleted translation resumed")
+        } catch (_: kotlin.coroutines.cancellation.CancellationException) {
+            assertNull(store.getKept(BOOK))
+        }
+
+        val again = store.begin(BOOK, null, "fr", "identity", 1)
+        store.pause(BOOK, again.generation, "network")
+        val approved = preview(store, cached = 0).copy(resumed = true)
+        assertEquals("running", store.begin(BOOK, null, "fr", "identity", 1, preview = approved).state)
+    }
+
+    @Test
     fun `local adoption never verifies an imported record`(): Unit = runTest {
         val store = saved()
         val first = store.begin(BOOK, null, "fr", "identity", 1)

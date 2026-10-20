@@ -50,15 +50,9 @@ class OpenAiChatClient(
         book: String? = null,
         beforeRequest: suspend () -> Unit = {},
         allowTransportRetry: Boolean = true,
+        usage: ((ChatUsage) -> Unit)? = null,
     ): String {
-        val body = JSONObject()
-            .put("model", model)
-            .put("stream", false)
-        // Translation wants the likeliest wording, and the same sentence then gets the same translation.
-        temperature?.let { body.put("temperature", if (it == 0.0) 0 else it) }
-        maxTokens?.let { body.put("max_tokens", it) }
-        // Ollama reads a bare number as seconds but a string only as a duration with its unit.
-        keepAlive?.let { body.put("keep_alive", it.toLongOrNull() ?: it) }
+        val body = translationBody(model, temperature, maxTokens, keepAlive)
         if (TranslationPrompt.isTranslateGemma(model)) {
             val prompt = TranslationPrompt.translateGemma(source, target, passage, instructions)
             body.put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt)))
@@ -70,7 +64,61 @@ class OpenAiChatClient(
                     .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context, book))),
             )
         }
-        return OpenAiChat.translation(send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry))
+        val reply = send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry)
+        usage?.invoke(OpenAiChat.usage(reply))
+        return OpenAiChat.translation(reply)
+    }
+
+    /**
+     * [sentences] translated by [model] in one request, in order, with
+     * [context] as the text before the first and [book] as in [translate].
+     * Each sentence must be [TranslationPrompt.batchable], and the model
+     * must not be TranslateGemma. Throws [TranslationError], and
+     * [TranslationError.Malformed] when the reply does not give one answer
+     * per sentence.
+     */
+    suspend fun translateBatch(
+        base: HttpUrl,
+        apiKey: String?,
+        model: String,
+        source: String?,
+        target: String,
+        sentences: List<String>,
+        context: String? = null,
+        temperature: Double? = 0.0,
+        instructions: String? = null,
+        maxTokens: Int? = null,
+        keepAlive: String? = null,
+        onTemperatureRefused: suspend () -> Unit = {},
+        book: String? = null,
+        beforeRequest: suspend () -> Unit = {},
+        allowTransportRetry: Boolean = true,
+        usage: ((ChatUsage) -> Unit)? = null,
+    ): List<String> {
+        require(!TranslationPrompt.isTranslateGemma(model))
+        require(sentences.isNotEmpty() && sentences.all(TranslationPrompt::batchable))
+        val body = translationBody(model, temperature, maxTokens, keepAlive)
+        body.put(
+            "messages",
+            JSONArray()
+                .put(JSONObject().put("role", "system").put("content", TranslationPrompt.batchSystem(source, target, context != null, instructions, book != null)))
+                .put(JSONObject().put("role", "user").put("content", TranslationPrompt.batchUser(sentences, context, book))),
+        )
+        val reply = send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry)
+        usage?.invoke(OpenAiChat.usage(reply))
+        return OpenAiChat.batch(reply, sentences.size)
+    }
+
+    private fun translationBody(model: String, temperature: Double?, maxTokens: Int?, keepAlive: String?): JSONObject {
+        val body = JSONObject()
+            .put("model", model)
+            .put("stream", false)
+        // Translation wants the likeliest wording, and the same sentence then gets the same translation.
+        temperature?.let { body.put("temperature", if (it == 0.0) 0 else it) }
+        maxTokens?.let { body.put("max_tokens", it) }
+        // Ollama reads a bare number as seconds but a string only as a duration with its unit.
+        keepAlive?.let { body.put("keep_alive", it.toLongOrNull() ?: it) }
+        return body
     }
 
     /**
@@ -127,7 +175,7 @@ class OpenAiChatClient(
         if (reply is ChatReply.Text && hadTemperature && !body.has("temperature")) onTemperatureRefused()
         return when (reply) {
             is ChatReply.Text -> reply.text
-            is ChatReply.Failure -> throw OpenAiChat.errorFor(reply.code, reply.body, model)
+            is ChatReply.Failure -> throw OpenAiChat.errorFor(reply.code, reply.body, model).retryingAfter(reply.retryAfter)
         }
     }
 
@@ -170,7 +218,7 @@ class OpenAiChatClient(
 
     private fun reply(response: Response): ChatReply {
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_REPLY_BYTES)
-        if (!response.isSuccessful) return ChatReply.Failure(response.code, text.orEmpty().take(TranslationHttp.MAX_ERROR_BYTES.toInt()))
+        if (!response.isSuccessful) return ChatReply.Failure(response.code, text.orEmpty().take(TranslationHttp.MAX_ERROR_BYTES.toInt()), response.header("Retry-After"))
         if (text == null) throw TranslationError.Protocol("reply too large")
         return ChatReply.Text(text)
     }
@@ -178,7 +226,7 @@ class OpenAiChatClient(
     /** A chat completion's reply, read but not yet judged, so a refused option can be asked again without. */
     private sealed interface ChatReply {
         class Text(val text: String) : ChatReply
-        class Failure(val code: Int, val body: String) : ChatReply
+        class Failure(val code: Int, val body: String, val retryAfter: String? = null) : ChatReply
     }
 
     private fun models(response: Response): List<TextModel> {
@@ -211,6 +259,32 @@ internal object OpenAiChat {
      * refusal, a filtered or empty answer, or anything not a completion.
      */
     fun translation(text: String): String = TranslationPrompt.clean(content(text)).ifEmpty { throw TranslationError.Empty() }
+
+    /** The [count] translations in a reply to a batch, as [TranslationPrompt.batchReply] reads them. */
+    fun batch(text: String, count: Int): List<String> = TranslationPrompt.batchReply(content(text), count)
+
+    /**
+     * The token counts a completion reports, each null when it does not:
+     * a server that says nothing of its cache is unknown, not uncached.
+     * Never throws; [translation] judges the reply itself.
+     */
+    fun usage(text: String): ChatUsage {
+        val usage = try {
+            JSONObject(text.trim()).optJSONObject("usage")
+        } catch (_: JSONException) {
+            null
+        }
+        fun tokens(from: JSONObject?, name: String): Long? = when (val value = from?.opt(name)) {
+            is Int -> value.toLong().takeIf { it >= 0 }
+            is Long -> value.takeIf { it in 0..Int.MAX_VALUE.toLong() }
+            else -> null
+        }
+        return ChatUsage(
+            tokens(usage, "prompt_tokens"),
+            tokens(usage?.optJSONObject("prompt_tokens_details"), "cached_tokens"),
+            tokens(usage, "completion_tokens"),
+        )
+    }
 
     /**
      * The answer in a chat completion, without the reasoning a thinking

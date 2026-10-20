@@ -95,6 +95,17 @@ interface SentenceTranslator {
      */
     suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts? = null): Translated?
 
+    /** Whether [translateBatch] sends several sentences in one request. */
+    val batches: Boolean get() = false
+
+    /**
+     * [sentences] translated in one request, in order, as [translate] does
+     * one; null, without asking, when the settings no longer answer as
+     * [identity]. Only when [batches]. Throws [TranslationError].
+     */
+    suspend fun translateBatch(sentences: List<String>, context: String?, identity: String, book: BookFacts? = null): List<Translated>? =
+        throw UnsupportedOperationException()
+
     /** Local saved answers, counted separately from any provider prompt-cache usage. */
     fun cached(count: Int) = Unit
 

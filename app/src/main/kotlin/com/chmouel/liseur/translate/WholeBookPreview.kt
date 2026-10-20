@@ -23,6 +23,8 @@ internal data class WholeBookPreview(
     val sourceFingerprint: String,
     val retryFailures: Boolean = false,
     val retentionStamp: RetentionStamp? = null,
+    /** Built from a paused record without a check; it only goes on while that very pause is still there. */
+    val resumed: Boolean = false,
 )
 
 internal data class RetentionStamp(val cleared: Long, val epoch: Long, val generation: Long?)

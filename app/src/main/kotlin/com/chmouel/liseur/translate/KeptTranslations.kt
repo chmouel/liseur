@@ -25,6 +25,8 @@ data class KeptTranslation(
     val reason: String?,
     @ColumnInfo(name = "started_at") val startedAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /** The book file's sha256 when the reader approved the job, so a resume can skip the check. */
+    val fingerprint: String? = null,
 )
 
 @Entity(

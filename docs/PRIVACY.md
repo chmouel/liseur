@@ -196,14 +196,19 @@ settings.
 
 ### A server, for translation
 
-“Translate whole book” sends the downloaded EPUB sentence by sentence to
-your chosen AI service after you confirm. This can include later chapters
-you have not read. Each request uses the same book details and preceding
-text as page translation. The local preview sends no book text; fetching
+“Translate whole book” sends the downloaded EPUB to your chosen AI service
+after you confirm, a few dozen consecutive sentences per request. This can
+include later chapters you have not read. Each request uses the same book
+details and preceding text as page translation. The local preview sends no book text; fetching
 model prices only requests model metadata. Gemini whole-book translation
 is available only in the Play build and uses the same Gemini service
 described below. Pause or cancel stops new requests, but a request already
-received by the provider may still be charged.
+received by the provider may still be charged. A request that fails on the
+way, or that a busy server turns down, is sent again a few times, so it can
+be charged twice. A job that Android or a passing server or connection
+problem stopped carries on by itself the next time you open Liseur, until
+you pause it or delete it. A job stopped by a spent quota or credit limit
+waits for you.
 
 Liseur can translate a selected passage with any server on the External
 services and API keys page that speaks OpenAI's chat API, such as

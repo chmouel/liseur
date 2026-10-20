@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -96,9 +97,28 @@ internal class ServerTranslationService(
         beforeRequest()
         val key = connections.key(ServerKeys.origin(base))
         beforeRequest()
+        val gemma = TranslationPrompt.isTranslateGemma(model(s))
         return object : TranslationRun {
+            private val diagnostics = ChatCacheDiagnostics()
+
             override suspend fun translate(sentence: String, context: String?, book: String?) =
-                ask(s, sentence, source, target, context, book, pinned = true, frozenKey = key, beforeRequest = beforeRequest)
+                ask(s, sentence, source, target, context, book, pinned = true, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
+
+            // TranslateGemma's trained format has room for one passage only, and a reply
+            // cap the reader set for one sentence would cut every batch short.
+            override val batches = !gemma && tuning(s).maxTokens == null
+
+            override suspend fun translateBatch(sentences: List<String>, context: String?, book: String?): List<String> {
+                check(batches)
+                return ask(s, sentences, source, target, context, book, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
+            }
+
+            override fun cached(count: Int) = diagnostics.cached(count)
+
+            override fun close() {
+                val snapshot = diagnostics.snapshot()
+                if (BuildConfig.DEBUG && (snapshot.responses > 0 || snapshot.localSentenceHits > 0)) Log.d("ChatCache", snapshot.toString())
+            }
         }
     }
 
@@ -121,39 +141,85 @@ internal class ServerTranslationService(
         pinned: Boolean = false,
         frozenKey: String? = null,
         beforeRequest: suspend () -> Unit = {},
+        usage: ((ChatUsage) -> Unit)? = null,
     ): String {
         beforeRequest()
+        val call = call(s)
+        return client.translate(
+            call.base,
+            if (pinned) frozenKey else connections.key(ServerKeys.origin(call.base)),
+            call.model,
+            source,
+            target,
+            passage,
+            context.takeIf { call.tuning.context != false },
+            temperature = call.temperature(),
+            instructions = call.tuning.instructions,
+            maxTokens = call.tuning.maxTokens,
+            keepAlive = call.tuning.keepAlive,
+            book = book,
+            beforeRequest = beforeRequest,
+            allowTransportRetry = !pinned,
+            onTemperatureRefused = call::temperatureRefused,
+            usage = usage,
+        )
+    }
+
+    /** A pinned batch: always the [frozenKey], never a transport retry. */
+    private suspend fun ask(
+        s: AppSettings,
+        sentences: List<String>,
+        source: String?,
+        target: String,
+        context: String?,
+        book: String?,
+        frozenKey: String?,
+        beforeRequest: suspend () -> Unit,
+        usage: (ChatUsage) -> Unit,
+    ): List<String> {
+        beforeRequest()
+        val call = call(s)
+        return client.translateBatch(
+            call.base,
+            frozenKey,
+            call.model,
+            source,
+            target,
+            sentences,
+            context.takeIf { call.tuning.context != false },
+            temperature = call.temperature(),
+            instructions = call.tuning.instructions,
+            maxTokens = call.tuning.maxTokens,
+            keepAlive = call.tuning.keepAlive,
+            book = book,
+            beforeRequest = beforeRequest,
+            allowTransportRetry = false,
+            onTemperatureRefused = call::temperatureRefused,
+            usage = usage,
+        )
+    }
+
+    private suspend fun call(s: AppSettings): Call {
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val model = model(s) ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
         if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()
-        val tuning = tuning(s)
-        return client.translate(
-            base,
-            if (pinned) frozenKey else connections.key(ServerKeys.origin(base)),
-            model,
-            source,
-            target,
-            passage,
-            context.takeIf { tuning.context != false },
-            temperature = (tuning.temperature ?: 0.0).takeUnless { refusesTemperature(server.id, model) },
-            instructions = tuning.instructions,
-            maxTokens = tuning.maxTokens,
-            keepAlive = tuning.keepAlive,
-            book = book,
-            beforeRequest = beforeRequest,
-            allowTransportRetry = !pinned,
-            onTemperatureRefused = {
-                // The translation came back; failing to remember this only means the next request retries.
-                try {
-                    settings.editTranslationServer(server.url) { if (it.model == model) it.copy(noTemperature = true) else it }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "Could not save a refused temperature: ${e.javaClass.simpleName}")
-                }
-            },
-        )
+        return Call(server, model, base, tuning(s))
+    }
+
+    private inner class Call(val server: ServerConnection, val model: String, val base: okhttp3.HttpUrl, val tuning: ServerTranslationState) {
+        suspend fun temperature(): Double? = (tuning.temperature ?: 0.0).takeUnless { refusesTemperature(server.id, model) }
+
+        suspend fun temperatureRefused() {
+            // The translation came back; failing to remember this only means the next request retries.
+            try {
+                settings.editTranslationServer(server.url) { if (it.model == model) it.copy(noTemperature = true) else it }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not save a refused temperature: ${e.javaClass.simpleName}")
+            }
+        }
     }
 
     // Read afresh, as a page's run keeps the settings it was opened with and would otherwise be refused each sentence.

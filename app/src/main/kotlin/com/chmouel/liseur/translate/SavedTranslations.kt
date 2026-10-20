@@ -371,7 +371,7 @@ interface TranslationAccountClearDao {
         TranslationRekeyMove::class, TranslationAccountClear::class,
         KeptTranslation::class, KeptFailure::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class TranslationCacheDatabase : RoomDatabase() {
@@ -458,7 +458,13 @@ abstract class TranslationCacheDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE kept_translations ADD COLUMN fingerprint TEXT")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }
 
@@ -550,12 +556,18 @@ class SavedTranslations(
             require(total >= 0)
             database.withTransaction {
                 val old = keptDao.find(bookUrl)
+                if (preview?.resumed == true &&
+                    (old?.state != "paused" || preview.retentionStamp != RetentionStamp(cleared.get(), epochs[bookUrl] ?: 0L, old.generation))
+                ) {
+                    // Deleted or replaced since the resume was asked: end quietly, never bring it back.
+                    throw CancellationException("Translation deleted")
+                }
                 if (preview != null) checkPreview(preview, old)
                 val generation = maxOf(now(), generations.incrementAndGet(), (old?.generation ?: 0) + 1)
                 generations.set(generation)
                 if (retryFailures) keptDao.clearFailures(bookUrl)
                 KeptTranslation(bookUrl, source, target, identity, generation, total, 0, 0,
-                    "running", null, now(), now()).also { keptDao.put(it) }
+                    "running", null, now(), now(), preview?.sourceFingerprint ?: old?.fingerprint).also { keptDao.put(it) }
             }
         }
 
@@ -609,6 +621,7 @@ class SavedTranslations(
                 keptDao.put(KeptTranslation(
                     preview.bookUrl, preview.source, preview.target, preview.identity, generation,
                     coverage.total, coverage.cached, coverage.failed, "done", null, old?.startedAt ?: now(), now(),
+                    preview.sourceFingerprint,
                 ))
             }
         }

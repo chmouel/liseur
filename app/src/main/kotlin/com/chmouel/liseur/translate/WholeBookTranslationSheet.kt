@@ -134,6 +134,19 @@ internal fun WholeBookTranslationSheet(
             }
         }
     }
+    val resume: () -> Unit = {
+        checkJob?.cancel()
+        failure = null
+        checking = true
+        checkJob = scope.launch {
+            val resumed = try {
+                jobs.resume(bookUrl)
+            } finally {
+                checking = false
+            }
+            if (resumed) starting = true else check(false)
+        }
+    }
     LaunchedEffect(bookUrl, refresh) {
         inspecting = true
         inspectionFailed = false
@@ -354,7 +367,10 @@ internal fun WholeBookTranslationSheet(
                 record?.state == "paused" -> {
                     Text(stringResource(R.string.whole_book_saved_progress, numbers.format(record.done), numbers.format(record.total)))
                     Text(stringResource(wholeBookPauseReason(record.reason)), style = MaterialTheme.typography.bodyMedium)
-                    Button(onClick = { check(false) }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.whole_book_resume)) }
+                    wholeBookPauseCode(record.reason)?.let { code ->
+                        Text(stringResource(R.string.whole_book_reason_code, code), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(onClick = { resume() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.whole_book_resume)) }
                 }
                 inspecting -> BusyIndicator(modifier = Modifier.size(24.dp))
                 inspectionFailed -> {
@@ -428,10 +444,16 @@ internal fun wholeBookStateLabel(state: String): Int = when (state) {
 internal fun wholeBookPauseReason(reason: String?): Int = when (reason) {
     "settings_changed" -> R.string.whole_book_settings_changed
     "network" -> R.string.whole_book_reason_network
-    "rate_limited" -> R.string.whole_book_reason_rate
     "timeout" -> R.string.whole_book_reason_timeout
     "interrupted" -> R.string.whole_book_reason_interrupted
-    "service" -> R.string.whole_book_reason_service
     "storage" -> R.string.whole_book_reason_storage
-    else -> R.string.whole_book_paused
+    else -> when (reason?.substringBefore(':')) {
+        "rate_limited" -> R.string.whole_book_reason_rate
+        "service" -> R.string.whole_book_reason_service
+        else -> R.string.whole_book_paused
+    }
 }
+
+/** The HTTP status a service or rate-limit pause kept, as in `service:503` or `rate_limited:402`. */
+internal fun wholeBookPauseCode(reason: String?): Int? =
+    reason?.takeIf { it.startsWith("service:") || it.startsWith("rate_limited:") }?.substringAfter(':')?.toIntOrNull()

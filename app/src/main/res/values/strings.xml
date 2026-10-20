@@ -1614,7 +1614,7 @@
     <string name="whole_book_paused">Paused</string>
     <string name="whole_book_settings_changed">Translation settings changed. Check the book again before resuming.</string>
     <string name="whole_book_pause">Pause</string>
-    <string name="whole_book_resume">Check and resume</string>
+    <string name="whole_book_resume">Resume</string>
     <string name="whole_book_check">Check coverage</string>
     <string name="whole_book_retry">Retry failed sentences</string>
     <string name="whole_book_retry_notice">Confirming clears the failure markers and sends those sentences again. This may incur new charges.</string>
@@ -1636,7 +1636,7 @@
     <string name="whole_book_prepare_detail">Save this book’s translation for offline reading. First, check what still needs translating.</string>
     <string name="whole_book_cancel_check">Cancel check</string>
     <string name="whole_book_try_again">Try again</string>
-    <string name="whole_book_consent">Missing sentences and their context will be sent to the selected AI service. Charges may apply. Sentences that cannot be translated stay in the original language.</string>
+    <string name="whole_book_consent">Missing sentences and their context will be sent to the selected AI service. Charges may apply. After an interruption or a passing service error, translation continues on its own when you open Liseur, until you pause or delete it. A request that is sent again may be charged twice. Sentences that cannot be translated stay in the original language.</string>
     <string name="whole_book_details">Details</string>
     <string name="whole_book_manage">Manage translation</string>
     <string name="whole_book_saved_progress">Saved: %1$s / %2$s sentences</string>
@@ -1653,10 +1653,11 @@
     <string name="whole_book_read_hint">To read translated, select text in the book, choose Translate, then Translate page. Offline reading requires the same service, model, languages and options used to save it.</string>
     <string name="whole_book_ineligible">Choose a configured AI service in Translation settings. Whole-book translation is not available with the on-device translator.</string>
     <string name="whole_book_file_unsupported">Whole-book translation is available only for downloaded, reflowable EPUBs.</string>
-    <string name="whole_book_reason_network">The network connection was lost. Check your connection before resuming.</string>
+    <string name="whole_book_reason_network">The network connection was lost. Translation continues when you open Liseur, or tap Resume.</string>
     <string name="whole_book_reason_rate">The service limited requests. Wait before resuming.</string>
-    <string name="whole_book_reason_timeout">Android’s background time limit was reached. Resume when you are ready.</string>
-    <string name="whole_book_reason_interrupted">The app or background job stopped. Saved sentences are kept; review before resuming.</string>
+    <string name="whole_book_reason_timeout">Android’s background time limit was reached. Translation continues when you open Liseur, or tap Resume.</string>
+    <string name="whole_book_reason_interrupted">The app or background job stopped. Saved sentences are kept. Translation continues when you open Liseur, or tap Resume.</string>
     <string name="whole_book_reason_service">The service could not continue. Check its credentials, model and quota before resuming.</string>
+    <string name="whole_book_reason_code">The service answered with error %d.</string>
     <string name="whole_book_reason_storage">The book or its saved translations could not be read or written. Check the file and available storage before resuming.</string>
 </resources>

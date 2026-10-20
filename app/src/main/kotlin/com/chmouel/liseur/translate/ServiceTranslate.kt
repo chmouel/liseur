@@ -226,6 +226,16 @@ internal class ServiceTranslate(
                 return Translated(text, identity)
             }
 
+            override val batches = run.batches
+
+            override suspend fun translateBatch(sentences: List<String>, context: String?, identity: String, book: BookFacts?): List<Translated> {
+                check(identity)
+                val texts = run.translateBatch(sentences, context, TranslationBookContext.render(template, book))
+                check(identity)
+                if (texts.size != sentences.size) throw TranslationError.Malformed("wrong number of translations")
+                return texts.map { Translated(it, identity) }
+            }
+
             override fun cached(count: Int) = run.cached(count)
 
             override fun close() = run.close()

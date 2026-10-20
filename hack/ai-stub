@@ -5,7 +5,8 @@ Covers what translation and read aloud call on a server from the
 External services and API keys page:
 
   GET  /v1/models            stub-chat and stub-tts
-  POST /v1/chat/completions  replies with the <passage> it was sent, prefixed
+  POST /v1/chat/completions  replies with the <passage> it was sent, prefixed;
+                             a numbered batch ([1] ..., [2] ...) line by line
   POST /v1/audio/speech      silent 24 kHz mono 16-bit WAV, sized to the text
   GET  /v1/audio/voices      stub_a, stub_b and English/French/Spanish voices
 
@@ -53,6 +54,7 @@ GRADIUM_SAMPLE_RATE = 48_000
 SECONDS_PER_CHARACTER = 0.03
 MAX_SECONDS = 20.0
 BLOCKS = ("book", "context", "passage")
+NUMBERED = re.compile(r"\[(\d+)\] (.*)")
 
 DEFAULT_LOG = Path(__file__).resolve().parent.parent / "tmp/ai-stub/requests.jsonl"
 
@@ -219,7 +221,13 @@ def handler(stub: Stub):
                     "choices": [{"index": 0, "finish_reason": "stop",
                                  "message": {"role": "assistant", "refusal": "Stub refusal"}}],
                 })
-            text = args.prefix + found.get("passage", user_text(body))
+            passage = found.get("passage", user_text(body))
+            lines = passage.split("\n")
+            numbered = [NUMBERED.match(line) for line in lines]
+            if len(lines) > 1 and all(numbered):
+                text = "\n".join(f"[{m.group(1)}] {args.prefix}{m.group(2)}" for m in numbered)
+            else:
+                text = args.prefix + passage
             if args.think:
                 text = "<think>\nThe stub is thinking.\n</think>\n" + text
             self.send(200, {

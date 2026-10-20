@@ -1554,7 +1554,7 @@
     <string name="whole_book_paused">En pausa</string>
     <string name="whole_book_settings_changed">Los ajustes de traducción han cambiado. Vuelve a comprobar el libro antes de continuar.</string>
     <string name="whole_book_pause">Pausar</string>
-    <string name="whole_book_resume">Comprobar y continuar</string>
+    <string name="whole_book_resume">Continuar</string>
     <string name="whole_book_check">Comprobar cobertura</string>
     <string name="whole_book_retry">Reintentar las frases fallidas</string>
     <string name="whole_book_retry_notice">Al confirmar se borran las marcas de fallo y se vuelven a enviar esas frases. Esto puede generar nuevos cargos.</string>
@@ -1576,7 +1576,7 @@
     <string name="whole_book_prepare_detail">Guarda la traducción de este libro para leer sin conexión. Primero, comprueba qué queda por traducir.</string>
     <string name="whole_book_cancel_check">Cancelar comprobación</string>
     <string name="whole_book_try_again">Volver a intentar</string>
-    <string name="whole_book_consent">Las frases pendientes y su contexto se enviarán al servicio de IA seleccionado. Puede haber cargos. Las frases que no se puedan traducir permanecerán en el idioma original.</string>
+    <string name="whole_book_consent">Las frases pendientes y su contexto se enviarán al servicio de IA seleccionado. Puede haber cargos. Tras una interrupción o un error pasajero del servicio, la traducción continúa sola al abrir Liseur, hasta que la pauses o la elimines. Una solicitud enviada de nuevo puede cobrarse dos veces. Las frases que no se puedan traducir permanecerán en el idioma original.</string>
     <string name="whole_book_details">Detalles</string>
     <string name="whole_book_manage">Gestionar traducción</string>
     <string name="whole_book_saved_progress">Guardadas: %1$s / %2$s frases</string>
@@ -1593,10 +1593,11 @@
     <string name="whole_book_read_hint">Para leer la traducción, selecciona texto en el libro, elige Traducir y luego Traducir página. La lectura sin conexión requiere los mismos servicio, modelo, idiomas y opciones usados al guardarla.</string>
     <string name="whole_book_ineligible">Elige un servicio de IA configurado en los ajustes de traducción. La traducción de libros completos no está disponible con el traductor del dispositivo.</string>
     <string name="whole_book_file_unsupported">La traducción de libros completos solo está disponible para EPUB descargados con diseño adaptable.</string>
-    <string name="whole_book_reason_network">Se perdió la conexión de red. Comprueba la conexión antes de continuar.</string>
+    <string name="whole_book_reason_network">Se perdió la conexión de red. La traducción continúa al abrir Liseur, o toca Continuar.</string>
     <string name="whole_book_reason_rate">El servicio limitó las solicitudes. Espera antes de continuar.</string>
-    <string name="whole_book_reason_timeout">Se alcanzó el límite de tiempo en segundo plano de Android. Continúa cuando quieras.</string>
-    <string name="whole_book_reason_interrupted">La aplicación o la tarea en segundo plano se detuvo. Las frases guardadas se conservan; comprueba antes de continuar.</string>
+    <string name="whole_book_reason_timeout">Se alcanzó el límite de tiempo en segundo plano de Android. La traducción continúa al abrir Liseur, o toca Continuar.</string>
+    <string name="whole_book_reason_interrupted">La aplicación o la tarea en segundo plano se detuvo. Las frases guardadas se conservan. La traducción continúa al abrir Liseur, o toca Continuar.</string>
     <string name="whole_book_reason_service">El servicio no pudo continuar. Comprueba sus credenciales, modelo y cuota antes de continuar.</string>
+    <string name="whole_book_reason_code">El servicio respondió con el error %d.</string>
     <string name="whole_book_reason_storage">No se pudo leer o escribir el libro o sus traducciones guardadas. Comprueba el archivo y el espacio disponible antes de continuar.</string>
 </resources>

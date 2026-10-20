@@ -1,6 +1,9 @@
 package com.chmouel.liseur.translate
 
 import java.io.IOException
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -12,6 +15,15 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
      * reader on demand; kept out of [message] so logs never carry it.
      */
     open val serverMessage: String? get() = null
+
+    /** How long the server asked to wait before trying again (its Retry-After), when it said. */
+    var retryAfterMillis: Long? = null
+        private set
+
+    /** This error with the wait a Retry-After [header] asks for: delta-seconds or an HTTP date. */
+    fun retryingAfter(header: String?, now: Long = System.currentTimeMillis()): TranslationError = apply {
+        retryAfterMillis = retryAfter(header, now)
+    }
 
     /** [code] is null when the key could not even be sent. */
     class InvalidKey(val code: Int? = null, override val serverMessage: String? = null) : TranslationError(
@@ -67,6 +79,16 @@ sealed class TranslationError(message: String, cause: Throwable? = null) : Excep
 
     companion object {
         const val MAX_SERVER_MESSAGE = 4_000
+
+        internal fun retryAfter(header: String?, now: Long): Long? {
+            val value = header?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            value.toLongOrNull()?.let { return it.coerceIn(0, Long.MAX_VALUE / 1_000) * 1_000 }
+            return try {
+                ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli().minus(now).coerceAtLeast(0)
+            } catch (_: DateTimeParseException) {
+                null
+            }
+        }
 
         /**
          * The readable part of an error reply: `error.message` (or a bare

@@ -66,6 +66,21 @@ class OpenAiChatClientTest {
     }
 
     @Test
+    fun `a server's wait is read as seconds or as a date, never negative`(): Unit = runBlocking {
+        assertEquals(120_000L, TranslationError.retryAfter("120", 0))
+        assertEquals(30_000L, TranslationError.retryAfter("Thu, 01 Jan 1970 00:00:30 GMT", 0))
+        assertEquals(0L, TranslationError.retryAfter("Thu, 01 Jan 1970 00:00:30 GMT", 60_000))
+        assertEquals(null, TranslationError.retryAfter("soon", 0))
+        server.enqueue(MockResponse.Builder().code(429).addHeader("Retry-After", "45").body("{}").build())
+        try {
+            client.translate(base, "secret", "gpt-4o-mini", "fr", "en", "Bonjour", allowTransportRetry = false)
+            fail("expected a rate limit")
+        } catch (e: TranslationError.RateLimited) {
+            assertEquals(45_000L, e.retryAfterMillis)
+        }
+    }
+
+    @Test
     fun `missing response envelopes are endpoint failures not sentence refusals`() {
         for (body in listOf(
             "not JSON", "{}", """{"choices":[{}]}""", """{"choices":[{"message":{}}]}""",
@@ -120,6 +135,31 @@ class OpenAiChatClientTest {
         val messages = body.getJSONArray("messages")
         assertEquals("system", messages.getJSONObject(0).getString("role"))
         assertEquals("<passage>\nLe soleil se couchait.\n</passage>", messages.getJSONObject(1).getString("content"))
+    }
+
+    @Test
+    fun `a batch asks once with numbered sentences and reports the cached tokens`(): Unit = runBlocking {
+        server.enqueue(
+            json(
+                """{"choices":[{"message":{"role":"assistant","content":"[1] One.\n[2] Two."},"finish_reason":"stop"}],""" +
+                    """"usage":{"prompt_tokens":1200,"completion_tokens":9,"prompt_tokens_details":{"cached_tokens":1024}}}""",
+            ),
+        )
+        val usage = mutableListOf<ChatUsage>()
+
+        val texts = client.translateBatch(base, "secret", "gpt-4o-mini", "fr", "en", listOf("Un.", "Deux."), usage = usage::add)
+
+        assertEquals(listOf("One.", "Two."), texts)
+        assertEquals(listOf(ChatUsage(1200, 1024, 9)), usage)
+        val messages = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("messages")
+        assertEquals("<passage>\n[1] Un.\n[2] Deux.\n</passage>", messages.getJSONObject(1).getString("content"))
+        assertTrue("[1]" in messages.getJSONObject(0).getString("content"))
+    }
+
+    @Test
+    fun `usage a server does not report stays unknown rather than zero`() {
+        assertEquals(ChatUsage(null, null, null), OpenAiChat.usage(completion("Hi")))
+        assertEquals(ChatUsage(10, null, 2), OpenAiChat.usage("""{"usage":{"prompt_tokens":10,"completion_tokens":2}}"""))
     }
 
     @Test

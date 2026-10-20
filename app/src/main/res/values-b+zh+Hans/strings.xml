@@ -1500,7 +1500,7 @@
     <string name="whole_book_paused">已暂停</string>
     <string name="whole_book_settings_changed">翻译设置已更改。请重新检查书籍后再继续。</string>
     <string name="whole_book_pause">暂停</string>
-    <string name="whole_book_resume">检查并继续</string>
+    <string name="whole_book_resume">继续</string>
     <string name="whole_book_check">检查覆盖情况</string>
     <string name="whole_book_retry">重试失败的句子</string>
     <string name="whole_book_retry_notice">确认后将清除失败标记并重新发送这些句子，可能会产生新的费用。</string>
@@ -1522,7 +1522,7 @@
     <string name="whole_book_prepare_detail">保存这本书的译文以供离线阅读。请先检查还需翻译哪些内容。</string>
     <string name="whole_book_cancel_check">取消检查</string>
     <string name="whole_book_try_again">重试</string>
-    <string name="whole_book_consent">尚未翻译的句子及其上下文将发送至所选 AI 服务，可能产生费用。无法翻译的句子将保留原文。</string>
+    <string name="whole_book_consent">尚未翻译的句子及其上下文将发送至所选 AI 服务，可能产生费用。如果翻译被中断或服务暂时出错，打开 Liseur 时会自动继续，直到你暂停或删除它。重新发送的请求可能被重复计费。无法翻译的句子将保留原文。</string>
     <string name="whole_book_details">详情</string>
     <string name="whole_book_manage">管理翻译</string>
     <string name="whole_book_saved_progress">已保存：%1$s / %2$s 句</string>
@@ -1539,10 +1539,11 @@
     <string name="whole_book_read_hint">如需阅读译文，请在书中选中文字，选择“翻译”，再选择“翻译页面”。离线阅读需要使用保存时相同的服务、模型、语言和选项。</string>
     <string name="whole_book_ineligible">请在翻译设置中选择已配置的 AI 服务。设备端翻译器不支持整本书翻译。</string>
     <string name="whole_book_file_unsupported">整本书翻译仅支持已下载且可重排的 EPUB。</string>
-    <string name="whole_book_reason_network">网络连接已断开。请检查连接后再继续。</string>
+    <string name="whole_book_reason_network">网络连接已断开。打开 Liseur 时翻译会继续，也可以点按“继续”。</string>
     <string name="whole_book_reason_rate">服务限制了请求。请稍等后再继续。</string>
-    <string name="whole_book_reason_timeout">已达到 Android 的后台运行时限。准备好后可继续。</string>
-    <string name="whole_book_reason_interrupted">应用或后台任务已停止。已保存的句子会保留；请检查后再继续。</string>
+    <string name="whole_book_reason_timeout">已达到 Android 的后台运行时限。打开 Liseur 时翻译会继续，也可以点按“继续”。</string>
+    <string name="whole_book_reason_interrupted">应用或后台任务已停止。已保存的句子会保留。打开 Liseur 时翻译会继续，也可以点按“继续”。</string>
     <string name="whole_book_reason_service">服务无法继续。请检查凭据、模型和配额后再继续。</string>
+    <string name="whole_book_reason_code">服务返回了错误 %d。</string>
     <string name="whole_book_reason_storage">无法读取或写入书籍及其已保存译文。请检查文件和可用存储空间后再继续。</string>
 </resources>

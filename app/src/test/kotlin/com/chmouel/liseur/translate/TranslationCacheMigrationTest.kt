@@ -120,6 +120,24 @@ class TranslationCacheMigrationTest {
         }
     }
 
+    @Test
+    fun `version six keeps whole-book jobs and leaves their approved file unknown`() {
+        helper.createDatabase(TEST_DB, 5).use { old ->
+            old.execSQL(
+                "INSERT INTO kept_translations VALUES ('file:///one.epub', NULL, 'fr', 'identity', 1, " +
+                    "10, 4, 1, 'paused', 'interrupted', 1000, 1000)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 6, true, *TranslationCacheDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT done, reason, fingerprint FROM kept_translations").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(4, it.getInt(0))
+                assertEquals("interrupted", it.getString(1))
+                assertTrue(it.isNull(2))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "translations-migration-test"
     }

@@ -101,6 +101,10 @@ def main() -> int:
         text = reply.get("choices", [{}])[0].get("message", {}).get("content")
         check("chat answers with the passage, prefixed", code == 200 and text == "[T] Il pleut.", reply)
 
+        code, reply = stub.json("POST", "/v1/chat/completions", chat("[1] Il pleut.\n[2] Il fait gris."))
+        text = reply.get("choices", [{}])[0].get("message", {}).get("content")
+        check("a numbered batch is answered line by line", code == 200 and text == "[1] [T] Il pleut.\n[2] [T] Il fait gris.", reply)
+
         code, reply = stub.json("POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "Hello"}]})
         check("chat without markers echoes the user message", reply["choices"][0]["message"]["content"] == "[T] Hello", reply)
 
@@ -126,13 +130,13 @@ def main() -> int:
 
         code, entries = stub.json("GET", "/_stub/requests")
         first_chat = next((e for e in entries if e["path"] == "/v1/chat/completions"), {})
-        check("the log keeps every request", code == 200 and len(entries) == 9, len(entries))
+        check("the log keeps every request", code == 200 and len(entries) == 10, len(entries))
         check(
             "the log splits the prompt's blocks",
             first_chat.get("blocks") == {"book": "Book: Dune", "context": "Il fait gris.", "passage": "Il pleut."},
             first_chat.get("blocks"),
         )
-        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 9)
+        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 10)
 
         stub.json("DELETE", "/_stub/requests")
         code, entries = stub.json("GET", "/_stub/requests")

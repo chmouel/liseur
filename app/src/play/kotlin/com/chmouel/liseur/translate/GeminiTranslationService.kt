@@ -88,6 +88,14 @@ internal class GeminiTranslationService(
                     allowTransportRetry = false, diagnostics = diagnostics,
                 )
 
+            override val batches = true
+
+            override suspend fun translateBatch(sentences: List<String>, context: String?, book: String?) =
+                client.translateBatch(
+                    key, model, source, target, sentences, context, book, beforeRequest,
+                    allowTransportRetry = false, diagnostics = diagnostics,
+                )
+
             override fun cached(count: Int) = diagnostics.cached(count)
 
             override fun close() {

@@ -110,6 +110,239 @@ class WholeBookTranslationTest {
         assertTrue(walked[2].book == "Chapter one")
     }
 
+    private open class Batcher : Translator() {
+        override val batches = true
+        val batched = mutableListOf<List<String>>()
+        override suspend fun translateBatch(sentences: List<String>, context: String?, identity: String, book: BookFacts?): List<Translated> {
+            batched += sentences
+            if (refuse in sentences) throw TranslationError.Malformed("missing line")
+            return sentences.map { Translated(it.uppercase(), identity) }
+        }
+    }
+
+    @Test
+    fun `a batching translator sends one request per chunk and saves every sentence under its own key`(): Unit = runTest {
+        val translator = Batcher()
+        val store = Store()
+        val texts = Array(100) { "sentence $it" }
+        job(translator, store).run(sentences(*texts), "test", 100)
+        assertEquals(listOf(40, 40, 20), translator.batched.map { it.size })
+        assertTrue(translator.asked.isEmpty())
+        val keys = SentenceRequests(translator, null, null).let { requests ->
+            var previous: String? = null
+            texts.map { text -> requests.prepare(PageSentence(text, "one.xhtml", "#p", null), previous, "test").key.also { previous = text } }
+        }
+        assertEquals(texts.map { it.uppercase() }, keys.map { store.rows.getValue(it).translation })
+        assertEquals(100 to 0, store.counts.last())
+        assertTrue(store.finished)
+    }
+
+    @Test
+    fun `a bad batch splits down to the refused sentence and keeps its siblings`(): Unit = runTest {
+        val translator = Batcher().apply { refuse = "bad" }
+        val store = Store()
+        job(translator, store).run(sentences("one", "two", "bad", "four", "five"), "test", 5)
+        assertEquals(listOf("bad"), translator.asked)
+        assertEquals(4 to 1, store.counts.last())
+        assertEquals(1, store.rows.values.count { it.refused })
+        assertTrue(store.finished)
+    }
+
+    @Test
+    fun `a sentence with its own line break is asked alone`(): Unit = runTest {
+        val translator = Batcher()
+        val store = Store()
+        job(translator, store).run(sentences("one", "two\nlines", "three", "four"), "test", 4)
+        // A chunk of one sentence uses the single-sentence request.
+        assertEquals(listOf("one", "two\nlines"), translator.asked)
+        assertEquals(listOf(listOf("three", "four")), translator.batched)
+        assertEquals(4 to 0, store.counts.last())
+    }
+
+    @Test
+    fun `temporary failures are asked again before the job pauses`(): Unit = runTest {
+        val failures = ArrayDeque<TranslationError>(
+            listOf(TranslationError.Service(503), TranslationError.Network(IOException("reset")), TranslationError.RateLimited(429)),
+        )
+        val translator = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                failures.removeFirstOrNull()?.let { throw it }
+                return super.translate(sentence, context, identity, book)
+            }
+        }
+        val store = Store()
+        job(translator, store).run(sentences("one"), "test", 1)
+        assertEquals(1 to 0, store.counts.last())
+
+        val broken = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                asked += sentence
+                throw TranslationError.Service(500)
+            }
+        }
+        try {
+            job(broken, Store()).run(sentences("one"), "test", 1)
+            error("Expected a pause")
+        } catch (_: TranslationError.Service) {
+            assertEquals(6, broken.asked.size)
+        }
+        val denied = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                asked += sentence
+                throw TranslationError.Service(401)
+            }
+        }
+        try {
+            job(denied, Store()).run(sentences("one"), "test", 1)
+            error("Expected a pause")
+        } catch (_: TranslationError.Service) {
+            assertEquals(1, denied.asked.size)
+        }
+    }
+
+    @Test
+    fun `scan of a batching translator counts the shared request parts once per chunk`() = runTest {
+        val texts = Array(80) { "sentence $it" }
+        // The shared instructions, context and book block cost 500 characters.
+        suspend fun scan(translator: Translator) = WholeBookTranslation(translator, SentenceRequests(translator, null, null), Store()) {
+            it.sentence.text.length + 500
+        }.scan(sentences(*texts))
+        val single = scan(Translator())
+        val batched = scan(Batcher())
+        assertEquals(single.outputCharacters, batched.outputCharacters)
+        // Two chunks of 40: each pays the shared parts and the batch instructions once, and a numbered line per sentence.
+        assertEquals(single.inputCharacters - 78 * 500 + 2 * BATCH_PROMPT + 80 * 8, batched.inputCharacters)
+    }
+
+    private val BATCH_PROMPT = TranslationPrompt.batchSystem(null, "fr").length - TranslationPrompt.system(null, "fr").length
+
+    private fun spread(texts: List<Pair<String, String>>): PageSentences {
+        var i = 0
+        return PageSentences { texts.getOrNull(i++)?.let { (href, text) -> PageSentence(text, href, "#p", null) } }
+    }
+
+    private suspend fun scanInput(translator: Translator, texts: List<Pair<String, String>>) =
+        WholeBookTranslation(translator, SentenceRequests(translator, null, null), Store()) { it.sentence.text.length + 500 }
+            .scan(spread(texts)).inputCharacters
+
+    @Test
+    fun `scan of a batching translator splits chunks where the job does`() = runTest {
+        // One sentence per resource: every request is a plain one.
+        val alone = List(40) { "chapter$it.xhtml" to "sentence $it" }
+        assertEquals(scanInput(Translator(), alone), scanInput(Batcher(), alone))
+        // 4,000 characters each: no two fit in 6,000, so no batch at all.
+        val long = List(3) { "one.xhtml" to "$it" + "x".repeat(3_999) }
+        assertEquals(scanInput(Translator(), long), scanInput(Batcher(), long))
+        // A line break is asked alone and splits the chunk around it.
+        val broken = listOf("one.xhtml" to "a", "one.xhtml" to "b", "one.xhtml" to "c\nd", "one.xhtml" to "e", "one.xhtml" to "f")
+        val expected = (1 + 500) + (BATCH_PROMPT + 8 + 1 + 8) + (3 + 500) + (1 + 500) + (BATCH_PROMPT + 8 + 1 + 8)
+        assertEquals(expected.toLong(), scanInput(Batcher(), broken))
+    }
+
+    @Test
+    fun `a sparse cache costs a little more than the scan says, never less`() = runTest {
+        // Every other sentence is saved: the job's windows of 160 then hold 80 missing ones, two chunks each,
+        // while the scan sees one run. The estimate differs by the shared parts of the extra chunks only.
+        val texts = Array(400) { "sentence $it" }
+        val store = Store()
+        val translator = Batcher()
+        val requests = SentenceRequests(translator, null, null)
+        var previous: String? = null
+        texts.forEachIndexed { i, text ->
+            val key = requests.prepare(PageSentence(text, "one.xhtml", "#p", null), previous, "test").key
+            previous = text
+            if (i % 2 == 0) store.rows[key] = WholeBookLookup("saved")
+        }
+        val estimate = WholeBookTranslation(translator, requests, store) { it.sentence.text.length + 500 }.scan(sentences(*texts))
+        WholeBookTranslation(translator, requests, store) { it.sentence.text.length + 500 }.run(sentences(*texts), "test", 400)
+        val chunks = translator.batched.size
+        assertEquals(200, translator.batched.sumOf { it.size })
+        assertEquals(5, (200 + 39) / 40)
+        assertTrue("$chunks chunks", chunks >= 5)
+        val sent = translator.batched.sumOf { batch -> 500 + BATCH_PROMPT + batch.sumOf { it.length + 8 } }.toLong()
+        assertTrue("estimate ${estimate.inputCharacters} vs sent $sent", estimate.inputCharacters <= sent)
+        assertTrue(sent - estimate.inputCharacters <= (chunks - 5L) * (500 + BATCH_PROMPT))
+    }
+
+    @Test
+    fun `a server asking to wait past the retry budget pauses the book without being asked early`(): Unit = runTest {
+        val translator = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                asked += sentence
+                throw TranslationError.RateLimited(429).retryingAfter("7200")
+            }
+        }
+        val job = WholeBookTranslation(translator, SentenceRequests(translator, null, null), Store(), clock = { testScheduler.currentTime }) { 1 }
+        try {
+            job.run(sentences("one"), "test", 1)
+            error("Expected a pause")
+        } catch (_: TranslationError.RateLimited) {
+            assertEquals(1, translator.asked.size)
+            assertEquals(0L, testScheduler.currentTime)
+        }
+        val polite = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                if (asked.isEmpty()) throw TranslationError.Service(503).retryingAfter("90").also { asked += sentence }
+                return super.translate(sentence, context, identity, book)
+            }
+        }
+        val start = testScheduler.currentTime
+        WholeBookTranslation(polite, SentenceRequests(polite, null, null), Store(), clock = { testScheduler.currentTime }) { 1 }
+            .run(sentences("one"), "test", 1)
+        assertEquals(90_000L, testScheduler.currentTime - start)
+    }
+
+    @Test
+    fun `offline waits cost no attempt but end at the retry deadline`(): Unit = runTest {
+        var online = false
+        val translator = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                if (!online) throw TranslationError.Network(IOException("offline")).also { asked += sentence }
+                return super.translate(sentence, context, identity, book)
+            }
+        }
+        val store = Store()
+        val job = WholeBookTranslation(translator, SentenceRequests(translator, null, null), store, { online }, { testScheduler.currentTime }) { 1 }
+        val running = launch { job.run(sentences("one"), "test", 1) }
+        testScheduler.advanceTimeBy(20 * 60_000L)
+        assertEquals("nothing is sent while offline", 1, translator.asked.size)
+        online = true
+        advanceUntilIdle()
+        running.join()
+        assertEquals(2, translator.asked.size)
+        assertEquals(1 to 0, store.counts.last())
+
+        val stranded = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                asked += sentence
+                throw TranslationError.Network(IOException("offline"))
+            }
+        }
+        val start = testScheduler.currentTime
+        try {
+            WholeBookTranslation(stranded, SentenceRequests(stranded, null, null), Store(), { false }, { testScheduler.currentTime }) { 1 }
+                .run(sentences("one"), "test", 1)
+            error("Expected a pause")
+        } catch (_: TranslationError.Network) {
+            assertEquals(1, stranded.asked.size)
+            assertEquals(30 * 60_000L, testScheduler.currentTime - start)
+        }
+    }
+
+    @Test
+    fun `only a passing trouble resumes on its own, and a check is needed after changes`() {
+        listOf("interrupted", "timeout", "network", "rate_limited:429", "service:503", "service:408")
+            .forEach { assertTrue(it, resumable(it, automatic = true)) }
+        listOf("paused", "service:401", "service:400", "service", null, "settings_changed", "storage", "rate_limited:402", "rate_limited")
+            .forEach { assertFalse("$it", resumable(it, automatic = true)) }
+        assertTrue(resumable("paused", automatic = false))
+        assertTrue(resumable("service:401", automatic = false))
+        assertTrue(resumable("rate_limited:402", automatic = false))
+        assertTrue(resumable("rate_limited", automatic = false))
+        assertFalse(resumable("settings_changed", automatic = false))
+        assertFalse(resumable("storage", automatic = false))
+    }
+
     @Test
     fun `scan deduplicates missing requests and sends no text`() = runTest {
         val translator = Translator()

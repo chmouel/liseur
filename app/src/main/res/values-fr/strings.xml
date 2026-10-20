@@ -1554,7 +1554,7 @@
     <string name="whole_book_paused">En pause</string>
     <string name="whole_book_settings_changed">Les réglages de traduction ont changé. Vérifiez à nouveau le livre avant de reprendre.</string>
     <string name="whole_book_pause">Mettre en pause</string>
-    <string name="whole_book_resume">Vérifier et reprendre</string>
+    <string name="whole_book_resume">Reprendre</string>
     <string name="whole_book_check">Vérifier la couverture</string>
     <string name="whole_book_retry">Réessayer les phrases en échec</string>
     <string name="whole_book_retry_notice">La confirmation efface les marqueurs d’échec et renvoie ces phrases. De nouveaux frais peuvent s’appliquer.</string>
@@ -1576,7 +1576,7 @@
     <string name="whole_book_prepare_detail">Conservez la traduction de ce livre pour lire hors connexion. Vérifiez d’abord ce qui reste à traduire.</string>
     <string name="whole_book_cancel_check">Annuler la vérification</string>
     <string name="whole_book_try_again">Réessayer</string>
-    <string name="whole_book_consent">Les phrases manquantes et leur contexte seront envoyés au service d’IA sélectionné. Des frais peuvent s’appliquer. Les phrases impossibles à traduire restent dans leur langue d’origine.</string>
+    <string name="whole_book_consent">Les phrases manquantes et leur contexte seront envoyés au service d’IA sélectionné. Des frais peuvent s’appliquer. Après une interruption ou une erreur passagère du service, la traduction reprend d’elle-même à l’ouverture de Liseur, jusqu’à ce que vous la mettiez en pause ou la supprimiez. Une requête envoyée à nouveau peut être facturée deux fois. Les phrases impossibles à traduire restent dans leur langue d’origine.</string>
     <string name="whole_book_details">Détails</string>
     <string name="whole_book_manage">Gérer la traduction</string>
     <string name="whole_book_saved_progress">Conservées : %1$s / %2$s phrases</string>
@@ -1593,10 +1593,11 @@
     <string name="whole_book_read_hint">Pour lire la traduction, sélectionnez du texte dans le livre, choisissez Traduire, puis Traduire la page. La lecture hors connexion nécessite les mêmes service, modèle, langues et options que lors de l’enregistrement.</string>
     <string name="whole_book_ineligible">Choisissez un service d’IA configuré dans les réglages de traduction. La traduction de livres entiers n’est pas disponible avec le traducteur de l’appareil.</string>
     <string name="whole_book_file_unsupported">La traduction de livres entiers nécessite un EPUB téléchargé à mise en page adaptable.</string>
-    <string name="whole_book_reason_network">La connexion réseau a été perdue. Vérifiez votre connexion avant de reprendre.</string>
+    <string name="whole_book_reason_network">La connexion réseau a été perdue. La traduction reprend à l’ouverture de Liseur, ou touchez Reprendre.</string>
     <string name="whole_book_reason_rate">Le service a limité les requêtes. Patientez avant de reprendre.</string>
-    <string name="whole_book_reason_timeout">La limite de durée en arrière-plan d’Android a été atteinte. Reprenez quand vous le souhaitez.</string>
-    <string name="whole_book_reason_interrupted">L’application ou la tâche en arrière-plan s’est arrêtée. Les phrases enregistrées sont conservées ; vérifiez avant de reprendre.</string>
+    <string name="whole_book_reason_timeout">La limite de durée en arrière-plan d’Android a été atteinte. La traduction reprend à l’ouverture de Liseur, ou touchez Reprendre.</string>
+    <string name="whole_book_reason_interrupted">L’application ou la tâche en arrière-plan s’est arrêtée. Les phrases enregistrées sont conservées. La traduction reprend à l’ouverture de Liseur, ou touchez Reprendre.</string>
     <string name="whole_book_reason_service">Le service n’a pas pu continuer. Vérifiez ses identifiants, son modèle et son quota avant de reprendre.</string>
+    <string name="whole_book_reason_code">Le service a répondu avec l’erreur %d.</string>
     <string name="whole_book_reason_storage">Impossible de lire ou d’écrire le livre ou ses traductions enregistrées. Vérifiez le fichier et l’espace disponible avant de reprendre.</string>
 </resources>

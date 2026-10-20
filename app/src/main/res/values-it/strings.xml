@@ -1554,7 +1554,7 @@
     <string name="whole_book_paused">In pausa</string>
     <string name="whole_book_settings_changed">Le impostazioni di traduzione sono cambiate. Verifica nuovamente il libro prima di riprendere.</string>
     <string name="whole_book_pause">Metti in pausa</string>
-    <string name="whole_book_resume">Verifica e riprendi</string>
+    <string name="whole_book_resume">Riprendi</string>
     <string name="whole_book_check">Verifica la copertura</string>
     <string name="whole_book_retry">Riprova le frasi non riuscite</string>
     <string name="whole_book_retry_notice">La conferma cancella i marcatori di errore e invia di nuovo queste frasi. Potrebbero essere addebitati nuovi costi.</string>
@@ -1576,7 +1576,7 @@
     <string name="whole_book_prepare_detail">Salva la traduzione di questo libro per leggere offline. Prima verifica cosa resta da tradurre.</string>
     <string name="whole_book_cancel_check">Annulla la verifica</string>
     <string name="whole_book_try_again">Riprova</string>
-    <string name="whole_book_consent">Le frasi mancanti e il loro contesto saranno inviati al servizio IA selezionato. Potrebbero esserci costi. Le frasi che non possono essere tradotte rimarranno nella lingua originale.</string>
+    <string name="whole_book_consent">Le frasi mancanti e il loro contesto saranno inviati al servizio IA selezionato. Potrebbero esserci costi. Dopo un’interruzione o un errore passeggero del servizio, la traduzione riprende da sola all’apertura di Liseur, finché non la metti in pausa o la elimini. Una richiesta inviata di nuovo può essere addebitata due volte. Le frasi che non possono essere tradotte rimarranno nella lingua originale.</string>
     <string name="whole_book_details">Dettagli</string>
     <string name="whole_book_manage">Gestisci la traduzione</string>
     <string name="whole_book_saved_progress">Salvate: %1$s / %2$s frasi</string>
@@ -1593,10 +1593,11 @@
     <string name="whole_book_read_hint">Per leggere la traduzione, seleziona del testo nel libro, scegli Traduci, poi Traduci pagina. Per leggere offline occorrono gli stessi servizio, modello, lingue e opzioni usati per salvarla.</string>
     <string name="whole_book_ineligible">Scegli un servizio IA configurato nelle impostazioni di traduzione. La traduzione di libri interi non è disponibile con il traduttore del dispositivo.</string>
     <string name="whole_book_file_unsupported">La traduzione di libri interi è disponibile solo per EPUB scaricati con impaginazione adattabile.</string>
-    <string name="whole_book_reason_network">La connessione di rete è stata persa. Controlla la connessione prima di riprendere.</string>
+    <string name="whole_book_reason_network">La connessione di rete è stata persa. La traduzione riprende all’apertura di Liseur, oppure tocca Riprendi.</string>
     <string name="whole_book_reason_rate">Il servizio ha limitato le richieste. Attendi prima di riprendere.</string>
-    <string name="whole_book_reason_timeout">È stato raggiunto il limite di tempo in background di Android. Riprendi quando vuoi.</string>
-    <string name="whole_book_reason_interrupted">L’app o l’attività in background si è fermata. Le frasi salvate sono conservate; verifica prima di riprendere.</string>
+    <string name="whole_book_reason_timeout">È stato raggiunto il limite di tempo in background di Android. La traduzione riprende all’apertura di Liseur, oppure tocca Riprendi.</string>
+    <string name="whole_book_reason_interrupted">L’app o l’attività in background si è fermata. Le frasi salvate sono conservate. La traduzione riprende all’apertura di Liseur, oppure tocca Riprendi.</string>
     <string name="whole_book_reason_service">Il servizio non ha potuto continuare. Controlla credenziali, modello e quota prima di riprendere.</string>
+    <string name="whole_book_reason_code">Il servizio ha risposto con l\'errore %d.</string>
     <string name="whole_book_reason_storage">Impossibile leggere o scrivere il libro o le sue traduzioni salvate. Controlla il file e lo spazio disponibile prima di riprendere.</string>
 </resources>
