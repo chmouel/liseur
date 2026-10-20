@@ -109,7 +109,7 @@ class WholeBookTranslationService : Service() {
     }
 
     override fun onDestroy() {
-        coordinator.stopActive()
+        coordinator.stopActive("interrupted")
         scope.cancel()
         releaseWakeLock()
         super.onDestroy()

@@ -1391,7 +1391,9 @@ changing reader behavior.
   fast resume.
 - Bulk and reader misses share admission (`TranslationAdmissions`): bulk
   waits for submitted reader calls to save and blocks new matching misses
-  until its workers settle.
+  until its workers settle. Explicit Pause persists even before service
+  execution or bulk admission, against the approved retained generation;
+  it must not leave an automatically resumable reason or recreate a deleted job.
 - `kept_translations`/`kept_failures` are outside the LRU and Clear;
   writes are generation-fenced and persist before progress advances. A
   saved row wins over a marker; retrying failures needs confirmation;

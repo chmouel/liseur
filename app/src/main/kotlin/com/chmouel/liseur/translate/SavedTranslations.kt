@@ -667,6 +667,21 @@ class SavedTranslations(
     suspend fun pause(bookUrl: String, generation: Long, reason: String): KeptWriteResult =
         finish(bookUrl, generation, "paused", reason)
 
+    internal suspend fun pauseBeforeBegin(preview: WholeBookPreview, reason: String): KeptWriteResult = writes.withLock {
+        database.withTransaction {
+            val record = keptDao.find(preview.bookUrl)
+            if (record == null || record.state != "paused" ||
+                preview.retentionStamp != RetentionStamp(cleared.get(), epochs[preview.bookUrl] ?: 0L, record.generation)
+            ) {
+                return@withTransaction KeptWriteResult.INVALIDATED
+            }
+            // Explicit intent also fences the cancelled starter and its late automatic pause.
+            val generation = if (reason == "paused") record.generation + 1 else record.generation
+            keptDao.put(record.copy(generation = generation, reason = reason, updatedAt = now()))
+            KeptWriteResult.SAVED
+        }
+    }
+
     suspend fun complete(bookUrl: String, generation: Long): KeptWriteResult =
         finish(bookUrl, generation, "done", null)
 

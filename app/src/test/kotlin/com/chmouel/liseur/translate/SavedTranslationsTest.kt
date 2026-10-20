@@ -70,6 +70,59 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `startup pause preserves progress and disables automatic resume`() = runTest {
+        val store = saved()
+        val run = store.begin(BOOK, null, "fr", "identity", 2)
+        store.saveSuccess(BOOK, run.generation, "one", "un", 1, 0)
+        store.pause(BOOK, run.generation, "network")
+        val approved = preview(store, total = 2).copy(resumed = true)
+
+        assertEquals(KeptWriteResult.SAVED, store.pauseBeforeBegin(approved, "paused"))
+        val paused = store.getKept(BOOK)!!
+        assertEquals("paused", paused.reason)
+        assertTrue(paused.generation > run.generation)
+        assertEquals(1, paused.done)
+        assertEquals(false, resumable(paused.reason, automatic = true))
+        assertEquals("un", store.strictLookup(BOOK, "one").translation)
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "interrupted"))
+        assertEquals("paused", store.getKept(BOOK)?.reason)
+        try {
+            store.begin(BOOK, null, "fr", "identity", 2, preview = approved)
+            error("Explicitly paused startup resumed")
+        } catch (_: kotlinx.coroutines.CancellationException) {
+            assertEquals("paused", store.getKept(BOOK)?.reason)
+        }
+    }
+
+    @Test
+    fun `startup pause cannot recreate deleted records or pause a replacement generation`() = runTest {
+        val store = saved()
+        val run = store.begin(BOOK, null, "fr", "identity", 1)
+        store.pause(BOOK, run.generation, "interrupted")
+        val approved = preview(store).copy(resumed = true)
+        store.remove(BOOK)
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "paused"))
+        assertNull(store.getKept(BOOK))
+
+        val replacement = store.begin(BOOK, null, "fr", "identity", 1)
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "paused"))
+        store.pause(BOOK, replacement.generation, "network")
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "paused"))
+        assertEquals("network", store.getKept(BOOK)?.reason)
+    }
+
+    @Test
+    fun `startup pause refuses running and completed records even with matching stamp`() = runTest {
+        val store = saved()
+        val run = store.begin(BOOK, null, "fr", "identity", 0)
+        val approved = preview(store, total = 0, cached = 0)
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "paused"))
+        store.complete(BOOK, run.generation)
+        assertEquals(KeptWriteResult.INVALIDATED, store.pauseBeforeBegin(approved, "paused"))
+        assertEquals("done", store.getKept(BOOK)?.state)
+    }
+
+    @Test
     fun `ordinary cached coverage can be retained and survives subsequent trim`(): Unit = runTest {
         val store = saved(maxSentences = 1)
         store.forBook(BOOK).keep("one", "un")

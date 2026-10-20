@@ -11,29 +11,39 @@ import java.io.IOException
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.readium.r2.shared.publication.Publication
 
 internal class WholeBookTranslations(
     private val context: Context,
     private val container: AppContainer,
-    scope: CoroutineScope,
+    private val scope: CoroutineScope,
+    private val openPublication: suspend (String, suspend (Publication) -> Unit) -> Unit =
+        { bookUrl, work -> container.withTranslationPublication(bookUrl, work) },
 ) {
     private val saved: SavedTranslations get() = container.savedTranslations
     private val lock = Any()
     private var active: String? = null
     private var pending: WholeBookPreview? = null
+    private var approved: WholeBookPreview? = null
+    private var pausePersistence: Job? = null
     private var cancel: (() -> Unit)? = null
     private var stopped = false
-    private var stopReason = "paused"
+    private var stopReason = "interrupted"
     private val initialized = scope.async { saved.reconcileRunning(emptySet()) }
     internal data class StartFailure(val bookUrl: String, val error: Exception)
     private val _startFailures = MutableSharedFlow<StartFailure>(extraBufferCapacity = 1)
@@ -111,6 +121,7 @@ internal class WholeBookTranslations(
      */
     suspend fun resume(bookUrl: String, automatic: Boolean = false): Boolean {
         initialized.await()
+        synchronized(lock) { pausePersistence }?.join()
         // Taken before any wait, so a delete meanwhile makes the job's start find another generation.
         val record = saved.getKept(bookUrl) ?: return false
         val stamp = saved.retentionStamp(bookUrl)
@@ -161,7 +172,8 @@ internal class WholeBookTranslations(
             if (active != null) throw WholeBookBusyException()
             active = preview.bookUrl
             pending = preview
-            stopReason = "paused"
+            approved = preview
+            stopReason = "interrupted"
             stopped = false
         }
         try {
@@ -170,6 +182,7 @@ internal class WholeBookTranslations(
             synchronized(lock) {
                 pending = null
                 active = null
+                approved = null
             }
             throw e
         }
@@ -178,8 +191,10 @@ internal class WholeBookTranslations(
     fun pause(bookUrl: String) {
         synchronized(lock) {
             if (active == bookUrl) {
+                stopReason = "paused"
                 stopped = true
                 pending = null
+                persistStartupPause()
                 cancel?.invoke()
             }
         }
@@ -187,10 +202,30 @@ internal class WholeBookTranslations(
 
     fun stopActive(reason: String = "paused") {
         synchronized(lock) {
-            if (!stopped) stopReason = reason
+            if (!stopped || reason == "paused") stopReason = reason
             stopped = true
             pending = null
+            persistStartupPause()
             cancel?.invoke()
+        }
+    }
+
+    // The service's lazy worker may never enter execute, so persist on the application scope too.
+    private fun persistStartupPause() {
+        val preview = approved ?: return
+        val reason = stopReason
+        val previous = pausePersistence
+        pausePersistence = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                previous?.join()
+                initialized.await()
+                saved.pauseBeforeBegin(preview, reason)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _startFailures.tryEmit(StartFailure(preview.bookUrl, e))
+                Log.w(TAG, "Could not persist translation pause: ${e.javaClass.simpleName}")
+            }
         }
     }
 
@@ -202,7 +237,10 @@ internal class WholeBookTranslations(
     internal fun takePending(): WholeBookPreview? = synchronized(lock) {
         pending.also {
             pending = null
-            if (it == null && cancel == null) active = null
+            if (it == null && cancel == null) {
+                active = null
+                approved = null
+            }
         }
     }
 
@@ -217,42 +255,52 @@ internal class WholeBookTranslations(
             if (active == bookUrl) {
                 active = null
                 cancel = null
+                approved = null
             }
         }
     }
 
-    internal suspend fun execute(preview: WholeBookPreview, progress: (Int, Int) -> Unit): Unit =
-        container.translationAdmissions.bulk(preview.bookUrl, preview.identity) {
+    internal suspend fun execute(preview: WholeBookPreview, progress: (Int, Int) -> Unit) {
         var record: KeptTranslation? = null
         var translator: SentenceTranslator? = null
         try {
-            initialized.await()
-            if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
-            val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
-            val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
-            translator = pinned
-            container.withTranslationPublication(preview.bookUrl) { publication ->
-                if (pinned.answering() != preview.identity) throw TranslationError.SettingsChanged()
-                if (preview.resumed && currentTarget() != preview.target) throw TranslationError.SettingsChanged()
-                val current = saved.begin(
-                    preview.bookUrl, preview.source, preview.target, preview.identity, preview.total,
-                    retryFailures = preview.retryFailures, preview = preview,
-                )
-                record = current
-                val requests = SentenceRequests(
-                    pinned, TranslatedPages.preceding(publication, preview.source), TranslatedPages.bookFacts(publication),
-                )
-                WholeBookTranslation(
-                    pinned, requests,
-                    store(preview.bookUrl, current.generation, preview.sourceFingerprint, preview.total, progress),
-                    online = container.networkAvailability::isAvailable,
-                    requestCharacters = feature.wholeBookPrompt(preview.source, preview.target),
-                ).run(publication.translationSentences(preview.source), preview.identity, preview.total)
+            container.translationAdmissions.bulk(preview.bookUrl, preview.identity) {
+                initialized.await()
+                if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
+                val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
+                val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
+                translator = pinned
+                openPublication(preview.bookUrl) { publication ->
+                    if (pinned.answering() != preview.identity) throw TranslationError.SettingsChanged()
+                    if (preview.resumed && currentTarget() != preview.target) throw TranslationError.SettingsChanged()
+                    // Keep the committed generation even if cancellation arrives as Room returns it.
+                    currentCoroutineContext().ensureActive()
+                    withContext(NonCancellable) {
+                        record = saved.begin(
+                            preview.bookUrl, preview.source, preview.target, preview.identity, preview.total,
+                            retryFailures = preview.retryFailures, preview = preview,
+                        )
+                    }
+                    currentCoroutineContext().ensureActive()
+                    val current = checkNotNull(record)
+                    val requests = SentenceRequests(
+                        pinned, TranslatedPages.preceding(publication, preview.source), TranslatedPages.bookFacts(publication),
+                    )
+                    WholeBookTranslation(
+                        pinned, requests,
+                        store(preview.bookUrl, current.generation, preview.sourceFingerprint, preview.total, progress),
+                        online = container.networkAvailability::isAvailable,
+                        requestCharacters = feature.wholeBookPrompt(preview.source, preview.target),
+                    ).run(publication.translationSentences(preview.source), preview.identity, preview.total)
+                }
+                saved.modeFor(preview.bookUrl).remember(PageTranslationModes.Mode(preview.source, preview.target))
             }
-            saved.modeFor(preview.bookUrl).remember(PageTranslationModes.Mode(preview.source, preview.target))
         } catch (e: CancellationException) {
             withContext(NonCancellable) {
-                record?.let { saved.pause(it.bookUrl, it.generation, synchronized(lock) { stopReason }) }
+                val reason = synchronized(lock) { stopReason }
+                val current = record
+                if (current != null) saved.pause(current.bookUrl, current.generation, reason)
+                else saved.pauseBeforeBegin(preview, reason)
             }
             throw e
         } catch (e: Exception) {
