@@ -39,8 +39,9 @@ data class SpeechModel(
 
 object OpenAiTts {
     /**
-     * OpenAI's own voices for [model], offered for OpenAI, which has no
-     * voice list: `tts-1` and `tts-1-hd` take fewer than its newer models,
+     * OpenAI's own voices for [model], offered for OpenAI, whose voice
+     * list holds only an account's custom voices, which are sent by id and
+     * not offered: `tts-1` and `tts-1-hd` take fewer than its newer models,
      * whose list starts with the two OpenAI recommends. Any other name can
      * still be typed.
      */
@@ -216,17 +217,19 @@ class OpenAiTtsClient(
     }
 
     /**
-     * The voices [model] has, in the server's order: the server's voice
+     * The voices [model] has, in the server's order: OpenAI's own for
+     * OpenAI, never asked (see [OpenAiTts.openAiVoices]); the server's voice
      * list; when it has none, the ones DeepInfra describes for [model] (see
-     * [OpenAiTts.modelDescription]), OpenAI's own for OpenAI, Groq's (see
+     * [OpenAiTts.modelDescription]), Groq's (see
      * [OpenAiTts.groqVoices]), or the ones the server's model list names
      * for it (OpenRouter's). Empty when the
      * server names none, so the voice is typed: nothing is guessed.
      * Throws [SpeechError].
      */
     suspend fun voices(base: HttpUrl, apiKey: String?, model: String?): List<String> {
-        voiceList(base, apiKey)?.let { return it }
         val named = model?.takeIf { it.isNotBlank() }
+        if (OpenAiTts.isOpenAi(base)) return OpenAiTts.openAiVoices(named)
+        voiceList(base, apiKey)?.let { return it }
         val description = named?.let { OpenAiTts.modelDescription(base, it) }
         return when {
             // Public, so asked without the key.
@@ -234,7 +237,6 @@ class OpenAiTtsClient(
                 Request.Builder().url(description).header("User-Agent", USER_AGENT).get().build(),
                 ::describedVoices,
             )
-            OpenAiTts.isOpenAi(base) -> OpenAiTts.openAiVoices(named)
             OpenAiTts.isGroq(base) -> named?.let { OpenAiTts.groqVoices(base, it) }.orEmpty()
             named != null -> models(base, apiKey).firstOrNull { it.id == named }?.voices.orEmpty()
             else -> emptyList()
