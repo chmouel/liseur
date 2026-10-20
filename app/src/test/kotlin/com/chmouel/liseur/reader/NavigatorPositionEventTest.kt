@@ -106,4 +106,30 @@ class NavigatorPositionEventTest {
         assertFalse(classify(suppressed = true).markerSurvives)
         assertFalse(classify().markerSurvives)
     }
+
+    @Test
+    fun `only a settled local jump can be saved on pause during opening`() {
+        val requested = NavigatorPositionEvent.LOCAL_JUMP
+        val noise = classify(requested, suppressed = true, landed = false)
+        assertTrue(noise.markerSurvives)
+        assertFalse(noise.holdForPause)
+
+        val arrival = classify(requested, suppressed = true, landed = true)
+        assertFalse(arrival.markerSurvives)
+        assertEquals(NavigatorPositionEvent.OPENING_RESTORATION, arrival.event)
+        assertTrue(arrival.holdForPause)
+    }
+
+    @Test
+    fun `automatic restoration and remote arrival cannot become pause-time local writes`() {
+        assertFalse(classify(suppressed = true).holdForPause)
+        assertFalse(classify(suppressed = true, landed = true).holdForPause)
+        assertFalse(classify(NavigatorPositionEvent.REMOTE_ADOPTION, true, true).holdForPause)
+        NavigatorPositionEvent.entries.filterNot { it.persists }.forEach {
+            assertFalse(it.name, classify(requested = it).holdForPause)
+        }
+        assertFalse(classify(reflowActive = true).holdForPause)
+        assertTrue(classify().holdForPause)
+        assertTrue(classify(NavigatorPositionEvent.LOCAL_JUMP).holdForPause)
+    }
 }

@@ -965,6 +965,7 @@ class ReaderViewModel(
         val local = runCatching { Locator.fromJSON(JSONObject(preview.localLocator)) }.getOrNull() ?: return
         val target = prepareLocator(local)
         lastLocator = target
+        positionSaveBaseline = target
         _progress.value = progressAt(target)
         _goTo.tryEmit(target)
     }
@@ -1139,6 +1140,7 @@ class ReaderViewModel(
         )
         pendingPositionEvent = NavigatorPositionEvent.REMOTE_ADOPTION
         lastLocator = prepareLocator(target)
+        positionSaveBaseline = lastLocator
         _progress.value = progressAt(target)
         _goTo.emit(lastLocator ?: target)
     }
@@ -1271,8 +1273,9 @@ class ReaderViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, HighlightPalette())
 
     private val _place = MutableStateFlow<Locator?>(null)
+    private var positionSaveBaseline: Locator? = null
 
-    /** Most recent position, used to persist progress and to survive recreation. */
+    /** Most recent displayed position, also used to survive recreation. */
     var lastLocator: Locator?
         get() = _place.value
         private set(value) {
@@ -1335,6 +1338,9 @@ class ReaderViewModel(
 
     private fun open() {
         viewModelScope.launch {
+            if (!positionPublisher.flush(bookId)) {
+                _bookSync.value = BookSync.Note(R.string.reader_open_position_not_saved)
+            }
             // Make sure saved preferences are loaded before the navigator is
             // created, so the book opens directly with the user's settings.
             prefsRepo.prefs.first()
@@ -1546,9 +1552,10 @@ class ReaderViewModel(
                 ?.let { positions.locatorAtOrBeforeProgression(it.progression) }
                 ?.let(::prepareLocator)
             approximateOpening = approximate?.takeIf { approximateTarget != null }
+            val storedTarget = if (stillCurrent) localTarget else localTargetFor(latestStored)
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
-                ?: if (stillCurrent) localTarget else localTargetFor(latestStored)
+                ?: storedTarget
             val openingPull = pullOffer?.takeIf {
                 choicePreview == null && stillCurrent && incoming != null && initialLocator != null
             }?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
@@ -1564,6 +1571,9 @@ class ReaderViewModel(
                 offerBookOrbitWayBack(localTarget, approximateTarget, replaced.remote.displayTime)
             }
             lastLocator = initialLocator
+            // A BookOrbit place opened on is only proposed, not written,
+            // so going to it on purpose must still save it.
+            positionSaveBaseline = storedTarget
             val primaryAuthors = primaryEpubAuthors(publication)
             if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors, publication)
             library.markOpened(bookId)
@@ -1704,7 +1714,7 @@ class ReaderViewModel(
         }
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
-        val samePosition = lastLocator?.sameReadingPositionAs(prepared) == true &&
+        val samePosition = positionSaveBaseline?.sameReadingPositionAs(prepared) == true &&
             bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } != true
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1777,6 +1787,7 @@ class ReaderViewModel(
                 bookOrbitDeclined = declinedBookOrbit,
             ),
         )
+        if (accepted) positionSaveBaseline = prepared
         if (effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT) approximateCatchUp = null
         // Reading on accepts the opening, so the way back to the old place
         // is withdrawn: taking it would push over the place just accepted.
@@ -2131,6 +2142,7 @@ class ReaderViewModel(
                             bookOrbitAgreement?.adoptCaughtUpInReader(offer) == true
                     } == true
                 }
+                if (adopted) positionSaveBaseline = prepareLocator(target)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: IOException) {

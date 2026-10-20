@@ -30,10 +30,13 @@ enum class NavigatorPositionEvent(
  * @param markerSurvives whether the pending marker is still owed to a
  *   later emission. A marker is single use, so this is what stops
  *   opening noise from spending one that belongs to the arrival.
+ * @param holdForPause whether this place can be saved on pause, including
+ *   a deliberate jump that settled while opening was still suppressed.
  */
 data class NavigatorEmission(
     val event: NavigatorPositionEvent,
     val markerSurvives: Boolean,
+    val holdForPause: Boolean,
 )
 
 /**
@@ -71,6 +74,11 @@ fun classifyNavigatorEmission(
         else -> NavigatorPositionEvent.READER_MOVEMENT
     },
     markerSurvives = requested != null && suppressed && !landed,
+    holdForPause = if (suppressed) {
+        landed && requested == NavigatorPositionEvent.LOCAL_JUMP
+    } else {
+        requested?.persists ?: !reflowActive
+    },
 )
 
 /**

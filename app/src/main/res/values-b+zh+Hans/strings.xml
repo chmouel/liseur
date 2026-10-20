@@ -433,6 +433,7 @@
     <string name="reader_sync_forget_keep">保留</string>
     <string name="reader_sync_furthest_forgotten">已忘记最远位置。</string>
     <string name="reader_position_not_saved">此阅读位置无法保存。请保持书本打开并再翻一页以重试。</string>
+    <string name="reader_open_position_not_saved">无法保存你最新的阅读位置。此书可能会在之前的位置打开。</string>
     <string name="server_sync_timeout">服务器响应超时，阅读进度将在稍后同步。</string>
     <string name="server_sync_unauthorised">服务器不再接受此登录凭据。请重新连接账户以恢复进度同步。</string>
     <string name="server_sync_forbidden">此账户无权同步阅读进度。请联系服务器管理员授予 Kobo 同步权限。</string>

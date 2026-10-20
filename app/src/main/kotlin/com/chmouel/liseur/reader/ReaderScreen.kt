@@ -208,6 +208,7 @@ import com.chmouel.liseur.reader.chrome.FooterSlotNote
 import com.chmouel.liseur.reader.chrome.FooterSlotSheet
 import com.chmouel.liseur.reader.chrome.HeldPlace
 import com.chmouel.liseur.reader.chrome.ScrollEdgeTurner
+import com.chmouel.liseur.reader.chrome.ScrollMovement
 import com.chmouel.liseur.reader.chrome.shownResource
 import com.chmouel.liseur.reader.chrome.visibleWebView
 import com.chmouel.liseur.reader.chrome.visibleWebViewCache
@@ -842,6 +843,7 @@ internal fun ReaderScreen(
     // moment the reader leaves. Everything that measures one and
     // everything that supersedes one goes through here; see [HeldPlace].
     val heldPlace = remember { HeldPlace() }
+    val scrollMovement = remember { ScrollMovement() }
     var cachedBookOrbitCfi by remember(openedBookOrbit) {
         mutableStateOf<BookOrbitLocalCandidate?>(null)
     }
@@ -1458,13 +1460,15 @@ internal fun ReaderScreen(
                 // Following the voice is not the reader's place either:
                 // listening saves the place it reached itself. Nor is a
                 // source peek, whose place is never saved.
-                if (event == NavigatorPositionEvent.PREFERENCE_REFLOW ||
-                    event == NavigatorPositionEvent.TTS_FOLLOW ||
+                if ((!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
                     companion?.peek?.value != null
                 ) {
                     heldPlace.retire()
-                } else {
+                    scrollMovement.movedForReader()
+                } else if (emission.holdForPause) {
                     heldPlace.hold(captured, since)
+                } else {
+                    scrollMovement.movedForReader()
                 }
                 publishCaptured(nav, captured, event, expectedNative = native)
             }
@@ -2804,18 +2808,23 @@ internal fun ReaderScreen(
                     webViews.invalidate()
                 }
             }
-            var lastOffset: Int? = null
+            scrollMovement.reset()
             while (true) {
                 val web = webViews.current()
                 val offset = web?.let {
                     if (nav.settings.value.verticalText) it.scrollX else it.scrollY
                 }
-                val moved = offset != null && lastOffset != null && offset != lastOffset
                 // The baseline is taken before the first wait, not after
                 // it, or the first window of a chapter is one nobody was
                 // watching — and the window a reader opens a book in is
-                // exactly the one they scroll in.
-                if (offset != null) lastOffset = offset
+                // exactly the one they scroll in. The page the opening
+                // restored, or a place it was sent to for the reader, is
+                // a new baseline rather than a scroll, including while
+                // that move has not been reported yet.
+                val moved = scrollMovement.sample(
+                    offset,
+                    automatic = gate.isGated || pendingPositionEvent?.persists == false,
+                )
                 // Auto-scroll keeps the same place on its own clock, and
                 // it is the one moving the page: asking twice would be
                 // two round trips for one answer. The offset is still
@@ -2843,7 +2852,9 @@ internal fun ReaderScreen(
                     } catch (_: Exception) {
                         null
                     }
-                    if (captured != null && heldPlace.hold(captured, since)) {
+                    if (captured != null && !gate.isGated && pendingPositionEvent?.persists != false &&
+                        heldPlace.hold(captured, since)
+                    ) {
                         val candidate = candidateFor(nav, captured)
                         cachedBookOrbitCfi = candidate?.takeIf {
                             heldPlace.current()?.toJSON()?.toString() == it.locatorJson

@@ -402,6 +402,7 @@
     <string name="reader_sync_forget_keep">Оставить</string>
     <string name="reader_sync_furthest_forgotten">Самая дальняя позиция забыта.</string>
     <string name="reader_position_not_saved">Эту позицию чтения не удалось сохранить. Оставьте книгу открытой и перелистните страницу, чтобы попробовать снова.</string>
+    <string name="reader_open_position_not_saved">Не удалось сохранить последнее место чтения. Книга может открыться на более раннем месте.</string>
     <string name="server_sync_timeout">Сервер слишком долго не отвечал; позиции синхронизируются позже.</string>
     <string name="server_sync_unauthorised">Сервер больше не принимает этот вход. Подключите учётную запись заново, чтобы снова синхронизировать позиции.</string>
     <string name="server_sync_forbidden">Этой учётной записи нельзя синхронизировать позиции чтения. Попросите у администратора сервера права синхронизации Kobo.</string>

@@ -370,6 +370,7 @@
     <string name="reader_sync_forget_keep">Conservar</string>
     <string name="reader_sync_furthest_forgotten">Posición más avanzada olvidada.</string>
     <string name="reader_position_not_saved">No se pudo guardar esta posición de lectura. Mantén el libro abierto y pasa otra página para intentarlo de nuevo.</string>
+    <string name="reader_open_position_not_saved">No se pudo guardar tu última posición de lectura. Puede que este libro se abra en una posición anterior.</string>
     <string name="server_sync_timeout">El servidor tardó demasiado en responder; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_unauthorised">El servidor ya no acepta este inicio de sesión. Vuelve a conectar la cuenta para sincronizar posiciones.</string>
     <string name="server_sync_forbidden">Esta cuenta no puede sincronizar posiciones de lectura. Pide a quien administre el servidor derechos de sincronización Kobo.</string>
