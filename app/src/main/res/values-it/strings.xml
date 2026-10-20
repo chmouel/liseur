@@ -1543,6 +1543,7 @@
     <string name="whole_book_none">Tieni premuta la copertina di un libro e scegli Traduzione per prepararlo alla lettura offline.</string>
     <string name="whole_book_scanning">Verifica locale del libro. Durante la verifica non viene inviato alcun testo del libro.</string>
     <string name="whole_book_scan_failed">Impossibile verificare il libro. Controlla che sia scaricato e leggibile, poi riprova.</string>
+    <string name="whole_book_already_running">Un altro libro è già in corso di traduzione. Attendi che finisca oppure mettilo prima in pausa.</string>
     <string name="whole_book_counts">Frasi: %1$s · Nella cache: %2$s · Non riuscite: %3$s · Da tradurre: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Lingua del libro</string>

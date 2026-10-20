@@ -103,6 +103,11 @@ class WholeBookTranslationService : Service() {
         stopSelf()
     }
 
+    // Android 15 calls this one; only Android 16 knows the two-argument form.
+    override fun onTimeout(startId: Int) {
+        onTimeout(startId, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+    }
+
     override fun onDestroy() {
         coordinator.stopActive()
         scope.cancel()

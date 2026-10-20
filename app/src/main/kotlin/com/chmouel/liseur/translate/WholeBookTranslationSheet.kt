@@ -83,6 +83,7 @@ internal fun WholeBookTranslationSheet(
     var inspectionFailed by remember(bookUrl) { mutableStateOf(false) }
     var unsupported by remember(bookUrl) { mutableStateOf(false) }
     var refresh by remember(bookUrl) { mutableIntStateOf(0) }
+    var seenState by remember(bookUrl) { mutableStateOf<String?>(null) }
     var preview by remember(bookUrl) { mutableStateOf<WholeBookPreview?>(null) }
     var failure by remember(bookUrl) { mutableStateOf<Throwable?>(null) }
     var checking by remember(bookUrl) { mutableStateOf(false) }
@@ -174,9 +175,13 @@ internal fun WholeBookTranslationSheet(
             preview = null
             failure = null
             starting = false
+            seenState = "running"
         } else if (record != null) {
             starting = false
-            refresh++
+            // The first delivery only fills the sheet in; a later change (a
+            // running record finishing) is what asks for a fresh check.
+            if (seenState != null && seenState != record.state) refresh++
+            seenState = record.state
         }
     }
     LaunchedEffect(bookUrl) {
@@ -266,6 +271,7 @@ internal fun WholeBookTranslationSheet(
                             is TranslationError.Unsupported -> stringResource(R.string.whole_book_file_unsupported)
                             is TranslationError.NotSetUp -> stringResource(R.string.whole_book_ineligible)
                             is TranslationError -> errorSentence(error, serviceName ?: stringResource(R.string.translation_settings_provider), "", "")
+                            is WholeBookBusyException -> stringResource(R.string.whole_book_already_running)
                             else -> stringResource(R.string.whole_book_scan_failed)
                         },
                         color = MaterialTheme.colorScheme.error,

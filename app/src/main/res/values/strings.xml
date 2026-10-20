@@ -1603,6 +1603,7 @@
     <string name="whole_book_none">Long-press a book cover and choose Translation to prepare it for offline reading.</string>
     <string name="whole_book_scanning">Checking the book locally. No book text is sent during this check.</string>
     <string name="whole_book_scan_failed">The book could not be checked. Check that it is downloaded and readable, then try again.</string>
+    <string name="whole_book_already_running">Another book is already being translated. Wait for it to finish or pause it first.</string>
     <string name="whole_book_counts">Sentences: %1$s · Cached: %2$s · Failed: %3$s · To translate: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Book language</string>

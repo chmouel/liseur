@@ -158,7 +158,7 @@ internal class WholeBookTranslations(
     fun start(preview: WholeBookPreview, retryFailures: Boolean = false) {
         require(retryFailures == preview.retryFailures)
         synchronized(lock) {
-            check(active == null) { "Another book is already being translated" }
+            if (active != null) throw WholeBookBusyException()
             active = preview.bookUrl
             pending = preview
             stopReason = "paused"
@@ -257,14 +257,7 @@ internal class WholeBookTranslations(
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Whole-book translation paused: ${e.javaClass.simpleName}")
-            val reason = when (e) {
-                is TranslationError.Changed, is TranslationError.SettingsChanged -> "settings_changed"
-                is TranslationError.Network -> "network"
-                is TranslationError.RateLimited -> "rate_limited:${e.code}"
-                is TranslationError.Service -> "service:${e.code}"
-                is TranslationError -> "service"
-                else -> "storage"
-            }
+            val reason = wholeBookPauseReasonFor(e)
             val current = record
             if (current != null) saved.pause(current.bookUrl, current.generation, reason)
             else {
@@ -349,6 +342,23 @@ internal class WholeBookTranslations(
     private companion object {
         const val TAG = "WholeBookTranslation"
     }
+}
+
+/** Another book's job holds the single whole-book slot; the reader must wait for it or pause it. */
+internal class WholeBookBusyException : IllegalStateException("Another book is already being translated")
+
+/**
+ * The pause reason [WholeBookTranslations.execute] keeps for [e], read
+ * back by [resumable] and by the sheet's pause banner; a typo on either
+ * side breaks the resume path.
+ */
+internal fun wholeBookPauseReasonFor(e: Exception): String = when (e) {
+    is TranslationError.Changed, is TranslationError.SettingsChanged -> "settings_changed"
+    is TranslationError.Network -> "network"
+    is TranslationError.RateLimited -> "rate_limited:${e.code}"
+    is TranslationError.Service -> "service:${e.code}"
+    is TranslationError -> "service"
+    else -> "storage"
 }
 
 /**

@@ -222,6 +222,15 @@ class AppContainer(context: Context) {
     }
 
     /**
+     * Resumes a whole-book job a passing trouble paused, when the app
+     * comes to the front; a phone that never translated opens no store.
+     */
+    suspend fun resumeWholeBookTranslations() {
+        if (!savedTranslationsOpening.isInitialized() && !savedTranslationsFile.exists()) return
+        wholeBookTranslations.resumeInterrupted()
+    }
+
+    /**
      * Records the account's clear of [bookUrl]'s translations, leaving
      * this device's where they are but never to be pushed again, for a
      * book about to leave the shelf. Taken before it goes: the work

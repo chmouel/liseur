@@ -203,15 +203,6 @@ fun SettingsBackupScreen(
                         Checkbox(checked = includeTranslations, onCheckedChange = null, enabled = !backup.busy)
                         Text(stringResource(R.string.whole_book_backup_include), Modifier.padding(start = 12.dp))
                     }
-                    BackupActionRow(
-                        icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
-                        title = stringResource(R.string.settings_backup_export),
-                        subtitle = stringResource(R.string.settings_backup_export_detail),
-                        enabled = !backup.busy,
-                        onClick = {
-                            if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
-                        },
-                    )
                     Text(
                         stringResource(R.string.whole_book_backup_unencrypted),
                         style = MaterialTheme.typography.bodySmall,
@@ -219,6 +210,15 @@ fun SettingsBackupScreen(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
+                BackupActionRow(
+                    icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+                    title = stringResource(R.string.settings_backup_export),
+                    subtitle = stringResource(R.string.settings_backup_export_detail),
+                    enabled = !backup.busy,
+                    onClick = {
+                        if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
+                    },
+                )
                 BackupActionRow(
                     icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
                     title = stringResource(R.string.settings_backup_restore),
