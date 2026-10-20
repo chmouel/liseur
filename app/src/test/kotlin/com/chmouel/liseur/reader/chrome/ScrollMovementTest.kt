@@ -48,9 +48,18 @@ class ScrollMovementTest {
         movement.beginAutomaticMove()
         assertFalse(movement.sample(1_000, automatic = false))
         assertFalse(movement.sample(2_000, automatic = false))
-        movement.endAutomaticMove()
+        movement.endAutomaticMove(null)
         assertFalse(movement.sample(2_050, automatic = false))
         assertTrue(movement.sample(2_100, automatic = false))
+    }
+
+    @Test
+    fun `a drag right after an automatic move lands is the reader's`() {
+        val movement = ScrollMovement()
+        movement.sample(0, automatic = false)
+        movement.beginAutomaticMove()
+        movement.endAutomaticMove(9_000)
+        assertTrue(movement.sample(9_200, automatic = false))
     }
 
     @Test
@@ -67,9 +76,7 @@ class ScrollMovementTest {
         val movement = ScrollMovement()
         movement.sample(0, automatic = false)
         movement.beginAutomaticMove()
-        movement.endAutomaticMove()
-        assertFalse(movement.readerScrolledTo(9_000))
-        movement.sample(9_000, automatic = false)
+        movement.endAutomaticMove(9_000)
         assertFalse(movement.readerScrolledTo(9_000))
         assertTrue(movement.readerScrolledTo(9_050))
         assertTrue(movement.sample(9_050, automatic = false))

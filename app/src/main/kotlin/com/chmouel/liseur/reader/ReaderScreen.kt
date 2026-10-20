@@ -747,6 +747,25 @@ internal fun ReaderScreen(
     }
     val effectScope = rememberCoroutineScope()
     var pendingPositionEvent by remember { mutableStateOf<NavigatorPositionEvent?>(null) }
+    var pendingPositionEventAt by remember { mutableLongStateOf(0L) }
+    // A scroll the poll has held but nobody has reported to the view
+    // model yet. Only this, not any held place, makes the toolbar's
+    // refresh the reader's movement: a held jump is not reading on.
+    var scrollHeldUnreported by remember { mutableStateOf(false) }
+
+    fun markPendingPositionEvent(event: NavigatorPositionEvent) {
+        pendingPositionEvent = event
+        pendingPositionEventAt = SystemClock.elapsedRealtime()
+    }
+
+    fun scrollOffset(nav: EpubNavigatorFragment, web: WebView?): Int? =
+        web?.let { if (nav.settings.value.verticalText) it.scrollX else it.scrollY }
+
+    // A move to the place already on screen is never reported, so its
+    // marker can outlive it: past the time a move gets to land, the
+    // page scrolling is the reader again.
+    fun pageMovingForReader(): Boolean = pendingPositionEvent?.persists == false &&
+        SystemClock.elapsedRealtime() - pendingPositionEventAt < IssuedMoves.SETTLE_TIMEOUT_MS
 
     // Closed while the book is still being reopened. One per navigator,
     // because a column or scroll mode change builds a new one and it
@@ -1077,14 +1096,17 @@ internal fun ReaderScreen(
     // the reader's; false when the navigator would not go.
     suspend fun go(nav: EpubNavigatorFragment, locator: Locator, event: NavigatorPositionEvent): Boolean {
         retargetGate(locator)
-        pendingPositionEvent = event
+        markPendingPositionEvent(event)
         val token = moves.issue(
             from = nav.currentLocator.value.restorePoint(),
             to = locator.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
         val went = nav.go(locator, animated = false)
-        if (!went) moves.cancel(token)
+        if (!went) {
+            moves.cancel(token)
+            pendingPositionEvent = null
+        }
         return went
     }
 
@@ -1120,13 +1142,16 @@ internal fun ReaderScreen(
                 ?.let(onProgressAction.locatorAtOrBeforeProgression)
             ?: return
         retargetGate(fallback)
-        pendingPositionEvent = event
+        markPendingPositionEvent(event)
         val fallbackToken = moves.issue(
             from = nav.currentLocator.value.restorePoint(),
             to = fallback.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
-        if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
+        if (!nav.go(fallback, animated = false)) {
+            moves.cancel(fallbackToken)
+            pendingPositionEvent = null
+        }
         onProgressAction.onApproximateResume()
     }
 
@@ -1453,7 +1478,9 @@ internal fun ReaderScreen(
                 val captured = try {
                     capture(nav, native)
                 } finally {
-                    if (suppressScrollMovement) scrollMovement.endAutomaticMove()
+                    if (suppressScrollMovement) {
+                        scrollMovement.endAutomaticMove(scrollOffset(nav, visibleWebView(nav.publicationView)))
+                    }
                 }
                 // The capture reaches into the document and swallows its
                 // own failures, cancellation included, so an answer can
@@ -1487,6 +1514,7 @@ internal fun ReaderScreen(
                 } else if (emission.holdForPause) {
                     heldPlace.hold(captured, since)
                 }
+                scrollHeldUnreported = false
                 publishCaptured(nav, captured, event, expectedNative = native)
             }
         }
@@ -1736,7 +1764,7 @@ internal fun ReaderScreen(
                 ?.takeIf(ResourceAnchor::isFraction)
                 ?.let(onProgressAction.locatorAtOrBeforeProgression)
             ?: return@LaunchedEffect
-        pendingPositionEvent = NavigatorPositionEvent.FRAGMENT_RECREATION
+        markPendingPositionEvent(NavigatorPositionEvent.FRAGMENT_RECREATION)
         // Retarget rather than release. This navigation is asynchronous
         // and pendingPositionEvent is single-use, so an emission landing
         // in between takes the marker and the real arrival is left
@@ -1748,7 +1776,10 @@ internal fun ReaderScreen(
             to = fallback.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
-        if (!nav.go(fallback, animated = false)) moves.cancel(fallbackToken)
+        if (!nav.go(fallback, animated = false)) {
+            moves.cancel(fallbackToken)
+            pendingPositionEvent = null
+        }
         onProgressAction.onApproximateResume()
     }
 
@@ -2828,9 +2859,7 @@ internal fun ReaderScreen(
             scrollMovement.reset()
             while (true) {
                 val web = webViews.current()
-                val offset = web?.let {
-                    if (nav.settings.value.verticalText) it.scrollX else it.scrollY
-                }
+                val offset = scrollOffset(nav, web)
                 // The baseline is taken before the first wait, not after
                 // it, or the first window of a chapter is one nobody was
                 // watching — and the window a reader opens a book in is
@@ -2840,7 +2869,7 @@ internal fun ReaderScreen(
                 // that move has not been reported yet.
                 val moved = scrollMovement.sample(
                     offset,
-                    automatic = gate.isGated || pendingPositionEvent?.persists == false,
+                    automatic = gate.isGated || pageMovingForReader(),
                 )
                 // Auto-scroll keeps the same place on its own clock, and
                 // it is the one moving the page: asking twice would be
@@ -2869,9 +2898,10 @@ internal fun ReaderScreen(
                     } catch (_: Exception) {
                         null
                     }
-                    if (captured != null && !gate.isGated && pendingPositionEvent?.persists != false &&
+                    if (captured != null && !gate.isGated && !pageMovingForReader() &&
                         heldPlace.hold(captured, since)
                     ) {
+                        scrollHeldUnreported = true
                         val candidate = candidateFor(nav, captured)
                         cachedBookOrbitCfi = candidate?.takeIf {
                             heldPlace.current()?.toJSON()?.toString() == it.locatorJson
@@ -3057,12 +3087,11 @@ internal fun ReaderScreen(
                 // already where the view model thinks: answering it as
                 // movement would read on past a place the reader was
                 // only sent to, and accept a BookOrbit opening unread.
-                val web = visibleWebView(nav.publicationView)
-                val offset = web?.let { if (nav.settings.value.verticalText) it.scrollX else it.scrollY }
+                val offset = scrollOffset(nav, visibleWebView(nav.publicationView))
                 // Nor while the page is still being moved for them.
-                fun movingForReader() = gate.isGated || pendingPositionEvent?.persists == false
+                fun movingForReader() = gate.isGated || pageMovingForReader()
                 if (movingForReader()) return@let
-                if (heldPlace.current() == null && !scrollMovement.readerScrolledTo(offset)) return@let
+                if (!scrollHeldUnreported && !scrollMovement.readerScrolledTo(offset)) return@let
                 // Held and published through the one path the scroll
                 // loop uses, or a measurement the loop is still carrying
                 // would come back at pause and walk the reader
@@ -3070,6 +3099,7 @@ internal fun ReaderScreen(
                 val since = heldPlace.mark()
                 scrolledPlace(nav)?.let {
                     if (!movingForReader() && heldPlace.hold(it, since)) {
+                        scrollHeldUnreported = false
                         publishCaptured(nav, it, NavigatorPositionEvent.READER_MOVEMENT)
                     }
                 }

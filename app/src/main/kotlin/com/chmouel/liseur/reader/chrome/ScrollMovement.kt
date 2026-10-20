@@ -9,8 +9,10 @@ package com.chmouel.liseur.reader.chrome
  * as a jump the reader made. A sample taken while the page is moving on
  * its own (the opening still being restored, or a move that saves
  * nothing still waiting to be reported), the first one after that, or
- * the first one after the navigator reported such a move, starts a fresh
- * baseline instead.
+ * the first one after the navigator reported such a move without a
+ * readable landing, starts a fresh baseline instead. A landing that
+ * could be read is the baseline itself, so a drag straight after it
+ * still counts.
  *
  * Main thread only, like [HeldPlace].
  */
@@ -31,10 +33,20 @@ internal class ScrollMovement {
         automaticMoveInProgress = true
     }
 
-    /** Ends the automatic move and gives the next sample a fresh baseline. */
-    fun endAutomaticMove() {
+    /**
+     * Ends the automatic move. The page it landed at, [offset], is the
+     * baseline a drag after it is measured from; when the landing cannot
+     * be read, the next sample becomes the baseline instead.
+     */
+    fun endAutomaticMove(offset: Int?) {
         automaticMoveInProgress = false
-        movedForReader = true
+        if (offset == null) {
+            movedForReader = true
+            return
+        }
+        last = offset
+        lastAutomatic = false
+        movedForReader = false
     }
 
     /** Forgets the baseline, as when the reader comes back to the book. */
