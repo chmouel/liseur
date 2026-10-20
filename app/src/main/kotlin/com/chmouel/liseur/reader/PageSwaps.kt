@@ -24,7 +24,8 @@ import org.json.JSONObject
  *
  * Sentences are found the way [SpokenPassage] finds the one being read:
  * in their element, by the text before them and their own, over the
- * page's text with its whitespace collapsed as Readium collapses it.
+ * page's text built as Readium builds it: whitespace collapsed, text
+ * nodes of only whitespace and invisible characters left out.
  *
  * The document keeps a count of the changes it was sent, so a reloaded
  * one, which counts from zero, is sent them all again, and the run they
@@ -128,6 +129,9 @@ internal object PageSwaps {
           const orig = new Map();
           const edits = new Map();
           const collapse = s => s.replace(/\s+/g, " ");
+          // Readium drops zero-width spaces and soft hyphens from a sentence's text.
+          const invisible = /[\u200b\u00ad]/;
+          const visible = s => s.replace(/[\u200b\u00ad]/g, "");
           const original = node => orig.has(node) ? orig.get(node) : node.data;
           const here = url => location.href.split("#")[0] === url.split("#")[0];
           // Where an offset in a node's original text is in the text shown now.
@@ -160,7 +164,10 @@ internal object PageSwaps {
             let node;
             while ((node = walker.nextNode())) {
               const data = original(node);
+              // Readium skips a text node of only whitespace, such as a space in a span of its own between sentences.
+              if (!/\S/.test(data)) continue;
               for (let i = 0; i < data.length; i++) {
+                if (invisible.test(data[i])) continue;
                 const blank = /\s/.test(data[i]);
                 if (blank && space) continue;
                 flat += blank ? " " : data[i];
@@ -169,8 +176,8 @@ internal object PageSwaps {
                 space = blank;
               }
             }
-            const quote = collapse(text).trim();
-            const prefix = collapse(before);
+            const quote = collapse(visible(text)).trim();
+            const prefix = collapse(visible(before));
             if (quote.length === 0) return null;
             let start = -1;
             if (prefix.length > 0) {

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader
 
 import com.chmouel.liseur.translate.PageSentence
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -216,6 +217,50 @@ class PageSwapsTest {
         assertTrue(selectionIntersects(TRANSLATION_NODE, 12, 15))
         assertFalse(selectionIntersects(FOLLOWING_TEXT_NODE, 0, 4))
         assertFalse(selectionIntersects(NOTE_REFERENCE_NODE, 0, 3))
+    }
+
+    @Test
+    fun `a sentence is found when Readium left out the space spans between words`() {
+        // Some books put the space between two sentences in a span of its own;
+        // Readium skips such text nodes and drops soft hyphens, so the sentence
+        // it hands over reads "23rdStreet.The door" where the page shows "23rd Street. The door".
+        val script = PageSwaps.shownWords("https://book/EPUB/text/ch1.xhtml", sentence)
+        val helpers = script.substringAfter("const collapse = ").substringBefore("const here = ")
+            .replace(Regex("\\bconst\\b"), "var")
+        val locate = ("const locate = " + script.substringAfter("const locate = ").substringBefore("const linkOf = "))
+            .replace(Regex("\\bconst\\b"), "var")
+        val context = Context.enter()
+        context.languageVersion = Context.VERSION_ES6
+        try {
+            val scope = context.initStandardObjects()
+            val result = context.evaluateString(
+                scope,
+                """
+                    var NodeFilter = { SHOW_TEXT: 4 };
+                    var texts = ["on 23", "rd", " ", "Street", ".", " ", "The door op\u00adened."];
+                    var all = texts.map(function(data, i) { return { data: data, i: i }; });
+                    var document = {
+                      body: {},
+                      querySelector: function() { return null; },
+                      createTreeWalker: function() {
+                        var at = 0;
+                        return { nextNode: function() { return at < all.length ? all[at++] : null; } };
+                      },
+                    };
+                    var orig = new Map();
+                    var collapse = $helpers
+                    $locate
+                    var at = locate(null, "", "23rdStreet.The door opened.");
+                    at ? [at.nodes[at.start].i, at.offsets[at.start], at.nodes[at.end].i, at.offsets[at.end]].join(",") : "none";
+                """.trimIndent(),
+                "PageSwapsLocate.js",
+                1,
+                null,
+            )
+            assertEquals("0,3,6,16", Context.toString(result))
+        } finally {
+            Context.exit()
+        }
     }
 
     @Test

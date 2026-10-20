@@ -66,8 +66,9 @@ internal object SpokenPassage {
         return shown && stillShown()
     }
 
-    // Readium extracts the sentence with its whitespace collapsed, so the
-    // page's text is collapsed the same way, keeping where each character
+    // Readium extracts the sentence with its whitespace collapsed, leaving
+    // out text nodes of only whitespace and invisible characters, so the
+    // page's text is built the same way, keeping where each character
     // came from to build the range back out of it. A sentence that is not
     // found falls back to whether its block is on screen at all.
     private fun script(selector: String?, before: String, highlight: String): String = """
@@ -83,6 +84,8 @@ internal object SpokenPassage {
             rect.left < window.innerWidth && rect.top < window.innerHeight
           );
           const collapse = s => s.replace(/\s+/g, " ");
+          const invisible = /[\u200b\u00ad]/;
+          const visible = s => s.replace(/[\u200b\u00ad]/g, "");
           const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
           let flat = "";
           const nodes = [];
@@ -91,7 +94,9 @@ internal object SpokenPassage {
           let node;
           while ((node = walker.nextNode())) {
             const data = node.data;
+            if (!/\S/.test(data)) continue;
             for (let i = 0; i < data.length; i++) {
+              if (invisible.test(data[i])) continue;
               const blank = /\s/.test(data[i]);
               if (blank && space) continue;
               flat += blank ? " " : data[i];
@@ -100,8 +105,8 @@ internal object SpokenPassage {
               space = blank;
             }
           }
-          const quote = collapse(${JSONObject.quote(highlight)}).trim();
-          const before = collapse(${JSONObject.quote(before)});
+          const quote = collapse(visible(${JSONObject.quote(highlight)})).trim();
+          const before = collapse(visible(${JSONObject.quote(before)}));
           let start = -1;
           if (before.length > 0) {
             const found = flat.indexOf(before + quote);
