@@ -204,6 +204,7 @@ class ReaderViewModel(
 
     /** Opened at a percentage-only BookOrbit place; agreed on the first saved move. */
     private var approximateOpening: BookOrbitApproximateOffer? = null
+    private var approximateOpeningSettlementPending = false
     private var approximateDeclinedPending: BookOrbitApproximateOffer? = null
     private var approximateWayBack: JumpBack? = null
 
@@ -1577,6 +1578,7 @@ class ReaderViewModel(
                 ?.let { positions.locatorAtOrBeforeProgression(it.progression) }
                 ?.let(::prepareLocator)
             approximateOpening = approximate?.takeIf { approximateTarget != null }
+            approximateOpeningSettlementPending = false
             val storedTarget = if (stillCurrent) localTarget else localTargetFor(latestStored)
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
@@ -1741,11 +1743,13 @@ class ReaderViewModel(
         // After listening, the saved place is the sentence heard rather
         // than the page last reported, so the page is not yet saved.
         val decliningApproximate = approximateOpening.takeIf { !keepsApproximateOpening(effectiveEvent) }
+        val acceptingApproximate = approximateOpening.takeIf { acceptsApproximateOpening(effectiveEvent) }
         val samePosition = shouldSkipPositionSave(
             sameAsBaseline = positionSaveBaseline?.sameReadingPositionAs(prepared) == true,
             awaitingPageCapture = bookHandle?.let { it.awaitingPageCapture && !it.listeningOwnsPlace } == true,
             settlementPending = verifiedOpeningSettlementPending || approximateDeclinedPending != null ||
-                decliningApproximate != null,
+                decliningApproximate != null || approximateOpeningSettlementPending ||
+                acceptingApproximate != null,
         )
         lastLocator = prepared
         placeShown(prepared, effectiveEvent == NavigatorPositionEvent.READER_MOVEMENT)
@@ -1795,6 +1799,9 @@ class ReaderViewModel(
         if (effectiveEvent.recordsReadingTime) sessions.onPageTurned(totalProgression)
         val locatorJson = prepared.toJSON().toString()
         val settlingVerifiedOpening = verifiedOpeningSettlementPending
+        if (acceptingApproximate != null) approximateOpeningSettlementPending = true
+        val settlingApproximateOpening = approximateOpeningSettlementPending
+        val settlingApproximateOffer = approximateOpening
         val accepted = positionPublisher.publish(
             PositionUpdate(
                 bookUrl = bookId,
@@ -1824,12 +1831,18 @@ class ReaderViewModel(
         )
         if (accepted) positionSaveGeneration++
         val saveGeneration = positionSaveGeneration
-        if (accepted && (settlingVerifiedOpening || declinedApproximate != null)) {
+        if (accepted &&
+            (settlingVerifiedOpening || settlingApproximateOpening || declinedApproximate != null)
+        ) {
             viewModelScope.launch {
                 if (positionPublisher.flush(bookId) &&
                     shouldApplyPositionSaveResult(saveGeneration, positionSaveGeneration)
                 ) {
                     if (settlingVerifiedOpening) verifiedOpeningSettlementPending = false
+                    if (settlingApproximateOpening) {
+                        approximateOpeningSettlementPending = false
+                        if (approximateOpening === settlingApproximateOffer) approximateOpening = null
+                    }
                     if (approximateDeclinedPending === declinedApproximate) {
                         approximateDeclinedPending = null
                     }
@@ -2147,6 +2160,7 @@ class ReaderViewModel(
         // written nor allowed to turn the offer down.
         pendingPositionEvent = NavigatorPositionEvent.REMOTE_ADOPTION
         approximateOpening = offer
+        approximateOpeningSettlementPending = false
         approximateCatchUp = pull
         lastLocator = target
         _progress.value = progressAt(target)

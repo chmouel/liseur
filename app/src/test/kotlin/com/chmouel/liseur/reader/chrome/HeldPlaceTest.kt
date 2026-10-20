@@ -55,6 +55,18 @@ class HeldPlaceTest {
     }
 
     @Test
+    fun `retiring a remote arrival before capture removes the old pause place`() {
+        val held = HeldPlace()
+        held.hold(place(0.4), held.mark())
+        val since = held.invalidate()
+
+        held.retire()
+
+        assertNull(held.current())
+        assertFalse(held.hold(place(0.7), since))
+    }
+
+    @Test
     fun `a measurement started after a retire is kept`() {
         val held = HeldPlace()
         held.hold(place(0.4), held.mark())

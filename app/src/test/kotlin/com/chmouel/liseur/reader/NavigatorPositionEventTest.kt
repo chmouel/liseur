@@ -19,6 +19,13 @@ class NavigatorPositionEventTest {
     }
 
     @Test
+    fun `only a page turn accepts an approximate opening`() {
+        assertTrue(acceptsApproximateOpening(NavigatorPositionEvent.READER_MOVEMENT))
+        assertFalse(acceptsApproximateOpening(NavigatorPositionEvent.LOCAL_JUMP))
+        assertFalse(acceptsApproximateOpening(NavigatorPositionEvent.OPENING_RESTORATION))
+    }
+
+    @Test
     fun `only genuine reading teaches pace and records reading time`() {
         assertTrue(NavigatorPositionEvent.READER_MOVEMENT.persists)
         assertTrue(NavigatorPositionEvent.READER_MOVEMENT.teachesPace)

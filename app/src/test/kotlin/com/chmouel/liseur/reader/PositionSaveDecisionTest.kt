@@ -7,7 +7,7 @@ import org.junit.Test
 class PositionSaveDecisionTest {
 
     @Test
-    fun `a current event that declines a place is saved even at the stored place`() {
+    fun `a pending BookOrbit choice is saved even at the stored place`() {
         assertFalse(
             shouldSkipPositionSave(
                 sameAsBaseline = true,

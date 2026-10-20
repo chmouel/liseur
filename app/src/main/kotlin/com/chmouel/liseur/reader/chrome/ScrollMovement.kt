@@ -26,7 +26,7 @@ internal class ScrollMovement {
         movedForReader = true
     }
 
-    /** Keeps every scroll sample during an asynchronous automatic move from looking user-driven. */
+    /** Suppresses scroll samples while an automatic move is being captured. */
     fun beginAutomaticMove() {
         automaticMoveInProgress = true
     }

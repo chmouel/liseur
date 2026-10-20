@@ -91,3 +91,7 @@ fun classifyNavigatorEmission(
  */
 fun keepsApproximateOpening(event: NavigatorPositionEvent): Boolean =
     !event.persists || event == NavigatorPositionEvent.READER_MOVEMENT
+
+/** Whether reading past a percentage-only opening accepts it. */
+fun acceptsApproximateOpening(event: NavigatorPositionEvent): Boolean =
+    event == NavigatorPositionEvent.READER_MOVEMENT
