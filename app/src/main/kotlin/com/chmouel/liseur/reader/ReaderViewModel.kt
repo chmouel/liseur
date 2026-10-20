@@ -943,7 +943,7 @@ class ReaderViewModel(
                 if (takeRemote) returnToLocalPlace(preview)
             } else if (takeRemote && offer != null) {
                 runCatching { Locator.fromJSON(JSONObject(offer.locatorJson)) }.getOrNull()
-                    ?.let { positionSaveBaseline = prepareLocator(it) }
+                    ?.let { updatePositionSaveBaseline(prepareLocator(it)) }
             }
             finishBookOrbitChoice(
                 if (saved) R.string.reader_bookorbit_choice_saved else R.string.reader_bookorbit_choice_failed,
@@ -973,7 +973,7 @@ class ReaderViewModel(
         val local = runCatching { Locator.fromJSON(JSONObject(preview.localLocator)) }.getOrNull() ?: return
         val target = prepareLocator(local)
         lastLocator = target
-        positionSaveBaseline = target
+        updatePositionSaveBaseline(target)
         _progress.value = progressAt(target)
         _goTo.tryEmit(target)
     }
@@ -1148,7 +1148,7 @@ class ReaderViewModel(
         )
         pendingPositionEvent = NavigatorPositionEvent.REMOTE_ADOPTION
         lastLocator = prepareLocator(target)
-        positionSaveBaseline = lastLocator
+        updatePositionSaveBaseline(lastLocator)
         _progress.value = progressAt(target)
         _goTo.emit(lastLocator ?: target)
     }
@@ -1316,6 +1316,11 @@ class ReaderViewModel(
     private var ownedEpub: BookOrbitOpenedEpub? = null
     private var epubsReleased = false
     private var bookHandle: OpenBookHandle? = null
+
+    private fun updatePositionSaveBaseline(locator: Locator?) {
+        positionSaveGeneration++
+        positionSaveBaseline = locator
+    }
 
     init {
         viewModelScope.launch {
@@ -1593,7 +1598,7 @@ class ReaderViewModel(
             lastLocator = initialLocator
             // A BookOrbit place opened on is only proposed, not written,
             // so going to it on purpose must still save it.
-            positionSaveBaseline = storedTarget
+            updatePositionSaveBaseline(storedTarget)
             val primaryAuthors = primaryEpubAuthors(publication)
             if (primaryAuthors != null) library.refreshAuthor(bookId, primaryAuthors, publication)
             library.markOpened(bookId)
@@ -2187,7 +2192,7 @@ class ReaderViewModel(
                             bookOrbitAgreement?.adoptCaughtUpInReader(offer) == true
                     } == true
                 }
-                if (adopted) positionSaveBaseline = prepareLocator(target)
+                if (adopted) updatePositionSaveBaseline(prepareLocator(target))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: IOException) {
