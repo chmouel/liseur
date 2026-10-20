@@ -45,6 +45,17 @@ internal class ScrollMovement {
         automaticMoveInProgress = false
     }
 
+    /**
+     * Whether the page sits at [offset] because the reader scrolled it
+     * since the last sample, without taking a sample. A page only moved
+     * for the reader, or not yet sampled at all, has not been read on.
+     */
+    fun readerScrolledTo(offset: Int?): Boolean {
+        if (offset == null || automaticMoveInProgress || movedForReader || lastAutomatic) return false
+        val previous = last ?: return false
+        return previous != offset
+    }
+
     /** Whether [offset] is the reader scrolling since the previous sample. */
     fun sample(offset: Int?, automatic: Boolean): Boolean {
         if (offset == null) return false

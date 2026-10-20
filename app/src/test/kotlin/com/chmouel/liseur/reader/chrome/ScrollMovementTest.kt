@@ -61,4 +61,17 @@ class ScrollMovementTest {
         assertFalse(movement.sample(null, automatic = false))
         assertFalse(movement.sample(500, automatic = false))
     }
+
+    @Test
+    fun `showing the toolbar on a page only moved for the reader is not reading on`() {
+        val movement = ScrollMovement()
+        movement.sample(0, automatic = false)
+        movement.beginAutomaticMove()
+        movement.endAutomaticMove()
+        assertFalse(movement.readerScrolledTo(9_000))
+        movement.sample(9_000, automatic = false)
+        assertFalse(movement.readerScrolledTo(9_000))
+        assertTrue(movement.readerScrolledTo(9_050))
+        assertTrue(movement.sample(9_050, automatic = false))
+    }
 }

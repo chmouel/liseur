@@ -3053,6 +3053,13 @@ internal fun ReaderScreen(
     LaunchedEffect(chromeVisible) {
         if (chromeVisible && effectiveScrollingNow) {
             navigatorNow?.let { nav ->
+                // A page nobody has scrolled since it was last placed is
+                // already where the view model thinks: answering it as
+                // movement would read on past a place the reader was
+                // only sent to, and accept a BookOrbit opening unread.
+                val web = visibleWebView(nav.publicationView)
+                val offset = web?.let { if (nav.settings.value.verticalText) it.scrollX else it.scrollY }
+                if (heldPlace.current() == null && !scrollMovement.readerScrolledTo(offset)) return@let
                 // Held and published through the one path the scroll
                 // loop uses, or a measurement the loop is still carrying
                 // would come back at pause and walk the reader
