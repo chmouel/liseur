@@ -1469,7 +1469,10 @@ internal fun ReaderScreen(
                 // while it is being answered would otherwise be left
                 // with neither.
                 val since = heldPlace.invalidate()
-                val suppressScrollMovement = !emission.holdForPause || companion?.peek?.value != null
+                // Any move the app made, a jump included, is where the
+                // next scroll is measured from, not a scroll itself.
+                val suppressScrollMovement = !emission.holdForPause || requested != null ||
+                    companion?.peek?.value != null
                 val retireHeldPlace = requested == NavigatorPositionEvent.REMOTE_ADOPTION ||
                     (!event.persists && event != NavigatorPositionEvent.OPENING_RESTORATION) ||
                     companion?.peek?.value != null
