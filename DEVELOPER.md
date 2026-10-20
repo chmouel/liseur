@@ -383,6 +383,11 @@ hack/release --no-play 0.2.1 "..."   # leave Google Play out of this one
   so a release goes to Play unless you pass `--no-play`, which is recorded
   in the annotated tag so a configured credential cannot override it. Do
   not delete the secret by hand; a later release restores it from `pass`.
+- The app ships a `dataSync` foreground service
+  (`WholeBookTranslationService`). Google Play requires a per-app Foreground
+  Service types declaration with a justification in Play Console before
+  publishing; without it the Play release can be blocked at upload or
+  approval.
 - `hack/release` creates the environment and uploads missing secrets from
   `pass`, so an unlocked password store is the only setup a fresh clone
   needs. Refresh them all (e.g. after key rotation) with:
