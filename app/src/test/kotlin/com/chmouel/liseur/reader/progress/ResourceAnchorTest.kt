@@ -293,6 +293,11 @@ class ResourceAnchorTest {
             ResourceAnchor.resumeTarget(replaced, 0.05, chapters) { fromPercentage },
         )
         assertNull(ResourceAnchor.resumeTarget(replaced, null, chapters) { null })
+
+        // A spine that lists the resource twice still has it.
+        val repeated = listOf("/part_c01_r1.xhtml", "/chapter-7.xhtml", "/part_c01_r1.xhtml")
+        assertEquals(replaced, ResourceAnchor.exactIn(replaced, repeated))
+        assertEquals(replaced, ResourceAnchor.resumeTarget(replaced, 0.05, repeated) { fromPercentage })
     }
 
     @Test

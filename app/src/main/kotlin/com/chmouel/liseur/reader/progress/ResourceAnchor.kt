@@ -92,7 +92,8 @@ object ResourceAnchor {
      */
     fun targetIn(locator: Locator?, readingOrder: Collection<String>): Locator? {
         val resource = sanitize(locator) ?: return null
-        val localHref = spineMatch(resource, readingOrder)?.let { Url(it) ?: Url("/$it") } ?: return null
+        val localHref = spineMatches(resource, readingOrder).singleOrNull()
+            ?.let { Url(it) ?: Url("/$it") } ?: return null
         return resource.copy(href = localHref)
     }
 
@@ -107,12 +108,16 @@ object ResourceAnchor {
      * is saved (#372).
      */
     fun exactIn(locator: Locator?, readingOrder: Collection<String>): Locator? =
-        locator?.takeIf { ExactLocatorAnchor.isExact(it) && spineMatch(it, readingOrder) != null }
+        locator?.takeIf { ExactLocatorAnchor.isExact(it) && inSpine(it, readingOrder) }
 
-    private fun spineMatch(locator: Locator, readingOrder: Collection<String>): String? {
-        val target = ResourceAddress.canonicalPath(locator.href.toString()) ?: return null
-        return readingOrder.filter { ResourceAddress.canonicalPath(it) == target }.singleOrNull()
+    private fun spineMatches(locator: Locator, readingOrder: Collection<String>): List<String> {
+        val target = ResourceAddress.canonicalPath(locator.href.toString()) ?: return emptyList()
+        return readingOrder.filter { ResourceAddress.canonicalPath(it) == target }
     }
+
+    /** Presence only: a resource the spine repeats is still in the book. */
+    private fun inSpine(locator: Locator, readingOrder: Collection<String>): Boolean =
+        spineMatches(locator, readingOrder).isNotEmpty()
 
     /**
      * Where to reopen: the exact passage, else the chapter, else the
@@ -130,7 +135,7 @@ object ResourceAnchor {
         byProgression: (Double) -> Locator?,
     ): Locator? = exactIn(saved, readingOrder)
         ?: approximateTarget(saved, totalProgression, readingOrder, byProgression)
-        ?: saved?.takeIf { spineMatch(it, readingOrder) != null }
+        ?: saved?.takeIf { inSpine(it, readingOrder) }
 
     /**
      * The rungs below the exact one, for a caller whose exact attempt
