@@ -54,7 +54,7 @@ class SpeechServerPresetsTest {
         )
         assertEquals(3, regions.map { it.origin }.distinct().size)
         assertEquals("https://eu.api.gradium.ai/api", OpenAiTts.baseUrl("https://eu.api.gradium.ai/api").toString())
-        assertEquals("https://eu.api.gradium.ai/api", OpenAiTts.identityUrl("https://eu.api.gradium.ai/api/").toString())
+        assertEquals("https://eu.api.gradium.ai/api/v1", OpenAiTts.identityUrl("https://eu.api.gradium.ai/api/").toString())
         assertEquals(regions[1], SpeechServerPresets.matching("https://EU.api.gradium.ai/api"))
         assertNull(SpeechServerPresets.matching("http://api.gradium.ai/api"))
     }

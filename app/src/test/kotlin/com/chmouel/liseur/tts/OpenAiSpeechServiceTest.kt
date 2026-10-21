@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -48,9 +49,13 @@ class OpenAiSpeechServiceTest {
     private class Server {
         val web = MockWebServer()
         val keys = CopyOnWriteArrayList<String>()
+        val voiceRequests = CountDownLatch(1)
 
         @Volatile
         var gate: CountDownLatch? = null
+
+        @Volatile
+        var voiceResponse: String? = null
 
         @Volatile
         var status = 200
@@ -62,9 +67,10 @@ class OpenAiSpeechServiceTest {
                     val path = request.url.encodedPath
                     return when {
                         status != 200 -> MockResponse(code = status)
-                        path.endsWith("/audio/voices") -> {
+                        path.endsWith("/audio/voices") || path.endsWith("/voices/") -> {
+                            voiceRequests.countDown()
                             gate?.await(30, TimeUnit.SECONDS)
-                            MockResponse(code = 404)
+                            voiceResponse?.let { MockResponse(code = 200, body = it) } ?: MockResponse(code = 404)
                         }
                         path.endsWith("/models") -> MockResponse(code = 200, body = MODELS)
                         else -> MockResponse(code = 404)
@@ -117,6 +123,26 @@ class OpenAiSpeechServiceTest {
     private fun server() = Server().also { servers += it }
 
     private fun service() = OpenAiSpeechService(connections, settings, control, OpenAiTtsClient(), scope)
+
+    private fun gradiumService(server: Server): OpenAiSpeechService {
+        val client = OpenAiTtsClient(
+            okhttp3.OkHttpClient.Builder()
+                .followRedirects(false)
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    val url = request.url
+                    val moved = if (GradiumTts.isGradiumHost(url.host)) {
+                        url.newBuilder().scheme("http").host(server.web.hostName).port(server.web.port).build()
+                    } else {
+                        url
+                    }
+                    chain.proceed(request.newBuilder().url(moved).build())
+                }
+                .build(),
+        )
+        connections = ServerConnections(settings, keys, client = client, scope = scope)
+        return OpenAiSpeechService(connections, settings, control, client, scope)
+    }
 
     @Test
     fun blockedLocalServerReceivesNoListsTestsOrSpeechUntilAccessIsGranted(): Unit = runBlocking {
@@ -330,6 +356,63 @@ class OpenAiSpeechServiceTest {
     }
 
     @Test
+    fun aGradiumVoiceListAnsweredAfterItsKeyChangedDoesNotPublishLabels(): Unit = runBlocking {
+        val a = server()
+        a.voiceResponse = NAMED_GRADIUM_VOICE
+        val service = gradiumService(a)
+        val url = "https://api.gradium.ai/api"
+        saveUrl(service, url)
+
+        val gate = CountDownLatch(1).also { a.gate = it }
+        val listed = async { service.voices(url, GradiumTts.MODEL) }
+        withTimeout(WAIT) { while (a.voiceRequests.count > 0) delay(10) }
+        saveKey(url, "key-a")
+        gate.countDown()
+
+        assertEquals(listOf("shared"), withTimeout(WAIT) { listed.await() }.getOrThrow())
+        assertEquals(VoiceLabel.of("shared"), service.labelOf("shared", url, GradiumTts.MODEL))
+    }
+
+    @Test
+    fun aGradiumConnectionTestAnsweredAfterItsKeyChangedDoesNotPublishLabels(): Unit = runBlocking {
+        val a = server()
+        a.voiceResponse = NAMED_GRADIUM_VOICE
+        val service = gradiumService(a)
+        val url = "https://api.gradium.ai/api"
+        saveUrl(service, url)
+        settings.setSpeechServerModelAndVoice(url, GradiumTts.MODEL, "")
+
+        val gate = CountDownLatch(1).also { a.gate = it }
+        val checked = async { service.test(url) }
+        withTimeout(WAIT) { while (a.voiceRequests.count > 0) delay(10) }
+        saveKey(url, "key-a")
+        gate.countDown()
+
+        assertTrue(withTimeout(WAIT) { checked.await() }.isSuccess)
+        assertEquals(VoiceLabel.of("shared"), service.labelOf("shared", url, GradiumTts.MODEL))
+    }
+
+    @Test
+    fun gradiumVoiceLabelsStayWithTheirServerAndAnIdOnlyListReplacesThem(): Unit = runBlocking {
+        val a = server()
+        a.voiceResponse = NAMED_GRADIUM_VOICE
+        val service = gradiumService(a)
+        val url = "https://api.gradium.ai/api"
+        val euUrl = "https://eu.api.gradium.ai/api"
+        saveUrl(service, url)
+
+        assertEquals(listOf("shared"), service.voices(url, GradiumTts.MODEL).getOrThrow())
+        assertEquals("Server name", service.labelOf("shared", url, GradiumTts.MODEL).name)
+        assertEquals("fr-FR", service.labelOf("shared", url, GradiumTts.MODEL).language)
+
+        saveUrl(service, euUrl)
+        assertEquals(VoiceLabel.of("shared"), service.labelOf("shared", euUrl, GradiumTts.MODEL))
+        a.voiceResponse = ID_ONLY_GRADIUM_VOICE
+        assertEquals(listOf("shared"), service.voices(euUrl, GradiumTts.MODEL).getOrThrow())
+        assertEquals(VoiceLabel.of("shared"), service.labelOf("shared", euUrl, GradiumTts.MODEL))
+    }
+
+    @Test
     fun aServerWithoutAVoiceListStillOffersItsTypedVoice(): Unit = runBlocking {
         val a = server()
         val service = service()
@@ -398,6 +481,8 @@ class OpenAiSpeechServiceTest {
 
 private const val MODELS = """{"data":[{"id":"tts","supported_voices":["tts-1","tts-2"]},
     {"id":"older","supported_voices":["older-1"]},{"id":"newer","supported_voices":["newer-1"]}]}"""
+private const val NAMED_GRADIUM_VOICE = """[{"uid":"shared","name":"Server name","language":"fr-FR"}]"""
+private const val ID_ONLY_GRADIUM_VOICE = """[{"uid":"shared"}]"""
 
 /** Generous: the whole suite shares the machine, and the first settings write can be slow. */
 private const val WAIT = 20_000L

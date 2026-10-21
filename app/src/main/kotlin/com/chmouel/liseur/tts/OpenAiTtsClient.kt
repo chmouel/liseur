@@ -144,24 +144,31 @@ object OpenAiTts {
      * see [GradiumTts], so its address is kept as typed. Null when it is
      * no http(s) address.
      */
-    fun baseUrl(input: String): HttpUrl? = normalized(input) { segments -> segments.none { VERSION.matches(it) } }
+    fun baseUrl(input: String): HttpUrl? = normalized(input, preserveGradiumRoot = true) { segments ->
+        segments.none { VERSION.matches(it) }
+    }
 
     /**
      * The address a listed server is saved under: [baseUrl] as it was
      * before a version other than `v1` was recognised, kept so saved
-     * servers, backups and synced settings still match their ids.
+     * servers, backups and synced settings still match their ids. Gradium's
+     * request root is `/api`, but its saved id still has `/v1`.
      */
-    fun identityUrl(input: String): HttpUrl? = normalized(input) { segments -> "v1" !in segments }
+    fun identityUrl(input: String): HttpUrl? = normalized(input, preserveGradiumRoot = false) { segments -> "v1" !in segments }
 
     private val VERSION = Regex("v\\d+[a-z0-9]*")
 
-    private fun normalized(input: String, addV1: (List<String>) -> Boolean): HttpUrl? {
+    private fun normalized(
+        input: String,
+        preserveGradiumRoot: Boolean,
+        addV1: (List<String>) -> Boolean,
+    ): HttpUrl? {
         var text = input.trim()
         if (text.isEmpty()) return null
         if (!text.contains("://")) text = "http://$text"
         val url = text.toHttpUrlOrNull() ?: return null
         val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
-        if (!GradiumTts.isGradiumHost(url.host) && addV1(segments)) segments.add("v1")
+        if ((!preserveGradiumRoot || !GradiumTts.isGradiumHost(url.host)) && addV1(segments)) segments.add("v1")
         return url.newBuilder()
             .encodedPath("/")
             .apply { segments.forEach { addPathSegment(it) } }

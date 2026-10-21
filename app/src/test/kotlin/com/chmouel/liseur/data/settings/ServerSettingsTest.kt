@@ -150,6 +150,24 @@ class ServerSettingsTest {
     }
 
     @Test
+    fun `a Gradium server saved before its API root was recognised keeps its id`() {
+        val url = "https://api.gradium.ai/api"
+        val id = "$url/v1"
+        val p = mutablePreferencesOf(
+            ServerSettings.SERVERS to """[{"id":"$id","name":"Gradium","url":"$url"}]""",
+            ServerSettings.READ_ALOUD_SERVER to id,
+            ServerSettings.READ_ALOUD_STATE to """{"$id":{"model":"default","voice":"Emma"}}""",
+            ServerSettings.TRANSLATION_SERVER to id,
+            ServerSettings.TRANSLATION_STATE to """{"$id":{"model":"glm-4.7"}}""",
+        )
+
+        assertEquals(id, ServerConnection.idOf(url))
+        assertEquals(id, ServerSettings.servers(p).readable?.single()?.id)
+        assertEquals("Emma", ServerSettings.states(p)[id]?.voice)
+        assertEquals("glm-4.7", ServerSettings.translationStates(p)[id]?.model)
+    }
+
+    @Test
     fun `state or a read-aloud choice for a server not listed cannot be read and is kept`() = runTest {
         val dangling = listOf(
             Pair(ServerSettings.READ_ALOUD_STATE, """{"$OPENROUTER_ID":{"model":"tts"}}"""),

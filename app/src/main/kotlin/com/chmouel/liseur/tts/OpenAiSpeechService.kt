@@ -37,7 +37,6 @@ import com.chmouel.liseur.ui.settings.RowDivider
 import okhttp3.HttpUrl
 import java.text.NumberFormat
 import java.util.Locale
-import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +49,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -82,7 +82,7 @@ internal class OpenAiSpeechService(
     private val settingsLock = Mutex()
 
     /** Bumped by every server and model choice; a model choice is saved only if none came after it. */
-    private val generation = AtomicInteger()
+    private val generation = MutableStateFlow(0)
 
     /** The model choice still asking for its voices, if any; a reopened screen shows it and leaves it be. */
     class PendingModel(val url: String, val model: String, val settle: Boolean)
@@ -94,17 +94,17 @@ internal class OpenAiSpeechService(
     data class Choice(val made: Int, val connection: Int)
 
     /** The current choice on the server at [url]; an automatic voice change taken at an older one is dropped. */
-    fun choice(url: String): Choice = Choice(generation.get(), generation(url).value)
+    fun choice(url: String): Choice = Choice(generation.value, generation(url).value)
 
     /**
      * Runs [save] if [choice] is still the current one on the server at
      * [url]; a change to its address or key waits for it to finish.
      */
     private suspend fun <T> ifCurrent(url: String, choice: Choice, save: suspend () -> T): T? {
-        if (generation.get() != choice.made) return null
+        if (generation.value != choice.made) return null
         // Checked again once admitted: a newer choice may have come while it waited.
         return connections.unlessChanged(ServerConnections.originOf(url).orEmpty(), choice.connection) {
-            if (generation.get() == choice.made) save() else null
+            if (generation.value == choice.made) save() else null
         }
     }
 
@@ -152,7 +152,7 @@ internal class OpenAiSpeechService(
      */
     fun commitServer(serverId: String) {
         blockedUrl.value = null
-        generation.incrementAndGet()
+        generation.update { it + 1 }
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             settingsLock.withLock {
                 val s = settings.settings.first()
@@ -184,7 +184,7 @@ internal class OpenAiSpeechService(
         settle: Boolean,
         done: (Result<List<String>>) -> Unit,
     ) {
-        generation.incrementAndGet()
+        generation.update { it + 1 }
         val choice = choice(url)
         val mine = PendingModel(url, model, settle)
         pending.value = mine
@@ -252,7 +252,10 @@ internal class OpenAiSpeechService(
     suspend fun setVoice(voice: String) {
         val before = settings.settings.first()
         val scope = scopeOf(before)
-        val language = VoiceResolver.settingsLanguage(languagesOf(voice), control.sessionLanguage(this))
+        val language = VoiceResolver.settingsLanguage(
+            languagesOf(voice, before.speechServerUrl.orEmpty(), before.speechServerModel.orEmpty()),
+            control.sessionLanguage(this),
+        )
         if (scope == null || !remember(scope, language, voice)) {
             before.speechServerUrl?.let { settings.setSpeechServerVoice(it, voice) }
         }
@@ -276,12 +279,14 @@ internal class OpenAiSpeechService(
     override suspend fun catalogue(s: AppSettings): VoiceCatalogue? {
         val scope = scopeOf(s) ?: return null
         val url = s.speechServerUrl.orEmpty()
+        val model = s.speechServerModel.orEmpty()
         val stored = s.speechServerVoice.orEmpty()
         // The server is slow to answer while it reads, so the last list it gave is kept.
-        val listing = listedVoices?.takeIf { it.first == VoicesAsked(url, s.speechServerModel.orEmpty(), generation(url).value) }
-            ?.second?.let { Result.success(it) }
-            ?: voices(url, s.speechServerModel.orEmpty())
-        val listed = listing.getOrNull().orEmpty()
+        val asked = VoicesAsked(url, model, choice(url))
+        val listing = listedVoices?.takeIf { it.asked == asked }?.let { Result.success(it) }
+            ?: requestVoices(url, model)
+        val current = listing.getOrNull()?.takeIf { it.asked == asked && choice(url) == asked.choice }
+        val listed = current?.ids.orEmpty()
         val ids = if (listed.isNotEmpty()) {
             VoiceLabel.offered(listed, s.speechServerVoices, stored) + stored
         } else {
@@ -289,7 +294,7 @@ internal class OpenAiSpeechService(
         }
         return VoiceCatalogue(
             scope = scope,
-            voices = ids.filter { it.isNotBlank() }.distinct().map { CatalogueVoice(it, languagesOf(it)) },
+            voices = ids.filter { it.isNotBlank() }.distinct().map { CatalogueVoice(it, languagesOf(it, url, model)) },
             global = stored.takeIf { it.isNotBlank() },
             failed = listing.isFailure,
         )
@@ -305,13 +310,27 @@ internal class OpenAiSpeechService(
     }
 
     @Composable
-    override fun voiceLabel(voice: String): String = voiceChipLabel(labelOf(voice))
+    override fun voiceLabel(voice: String): String {
+        val currentUrl by url.collectAsState(initial = "")
+        val currentModel by model.collectAsState(initial = "")
+        val made by generation.collectAsState(initial = 0)
+        val connection by remember(currentUrl) { generation(currentUrl) }.collectAsState(initial = 0)
+        val asked = VoicesAsked(currentUrl, currentModel, Choice(made, connection))
+        val label = listedVoices?.takeIf { it.asked == asked }?.labels?.get(voice) ?: VoiceLabel.of(voice)
+        return voiceChipLabel(label)
+    }
 
-    /** How [voice] is shown: as its server last listed it, else as its id says. */
-    fun labelOf(voice: String): VoiceLabel = voiceLabels[voice] ?: VoiceLabel.of(voice)
+    /** How [voice] is shown for [url] and [model]: as listed, else as its id says. */
+    fun labelOf(voice: String, url: String, model: String): VoiceLabel =
+        currentVoiceListing(url, model)?.labels?.get(voice) ?: VoiceLabel.of(voice)
 
-    private fun languagesOf(voice: String): Set<String>? =
-        labelOf(voice).language?.let(SpeechLanguage::normalize)?.let(::setOf)
+    private fun languagesOf(voice: String, url: String, model: String): Set<String>? =
+        labelOf(voice, url, model).language?.let(SpeechLanguage::normalize)?.let(::setOf)
+
+    private fun currentVoiceListing(url: String, model: String): VoiceListing? {
+        val asked = VoicesAsked(url, model, choice(url))
+        return listedVoices?.takeIf { it.asked == asked }
+    }
 
     suspend fun setChosenVoices(voices: Set<String>) {
         settings.settings.first().speechServerUrl?.let { settings.setSpeechServerVoices(it, voices) }
@@ -322,31 +341,37 @@ internal class OpenAiSpeechService(
         ask(url) { base, key -> OpenAiTts.speechModels(client.models(base, key)) }
 
     /** The voices [model] has on the server at [url], asked with the saved key. */
-    suspend fun voices(url: String, model: String): Result<List<String>> {
-        val asked = VoicesAsked(url, model, generation(url).value)
-        return ask(url) { base, key -> client.listVoices(base, key, model).map(::label) }.onSuccess {
-            // A list asked with an address or key since changed is not kept.
-            if (generation(url).value == asked.connection) listedVoices = asked to it
+    suspend fun voices(url: String, model: String): Result<List<String>> =
+        requestVoices(url, model).map { it.ids }
+
+    private suspend fun requestVoices(url: String, model: String): Result<VoiceListing> {
+        val asked = VoicesAsked(url, model, choice(url))
+        return ask(url) { base, key ->
+            voiceListing(asked, client.listVoices(base, key, model))
+        }.onSuccess { listing ->
+            // A list asked before a server, model or key change is not kept.
+            if (choice(url) == asked.choice) listedVoices = listing
         }
     }
 
-    /** Keeps how the server shows a listed voice, and gives its id. */
-    private fun label(voice: SpeechVoice): String {
-        if (voice.name != null || voice.language != null) voiceLabels = voiceLabels + (voice.id to VoiceLabel.of(voice))
-        return voice.id
-    }
+    private fun voiceListing(asked: VoicesAsked, voices: List<SpeechVoice>) = VoiceListing(
+        asked = asked,
+        ids = voices.map { it.id },
+        labels = voices.asSequence()
+            .filter { it.name != null || it.language != null }
+            .associate { it.id to VoiceLabel.of(it) },
+    )
 
-    /** The names and languages servers gave their voices, for the labels shown; ids say the rest. */
-    @Volatile
-    private var voiceLabels: Map<String, VoiceLabel> = emptyMap()
+    private data class VoicesAsked(val url: String, val model: String, val choice: Choice)
 
-    private data class VoicesAsked(val url: String, val model: String, val connection: Int)
+    private data class VoiceListing(val asked: VoicesAsked, val ids: List<String>, val labels: Map<String, VoiceLabel>)
 
     /**
      * The last voices a server listed, by its address, model and key, so
      * the player's menu need not wait on a busy server.
      */
-    private var listedVoices: Pair<VoicesAsked, List<String>>? = null
+    @Volatile
+    private var listedVoices: VoiceListing? = null
 
     /** What the server answered when tested: its speech models, and the voices of the [model] tested. */
     class ServerCheck(val models: List<SpeechModel>, val model: String, val voices: List<String>)
@@ -358,12 +383,21 @@ internal class OpenAiSpeechService(
      */
     suspend fun test(url: String): Result<ServerCheck> {
         val s = settings.settings.first()
+        val model = s.speechServerModel.orEmpty()
+        val asked = VoicesAsked(url, model, choice(url))
         return ask(url) { base, key ->
-            val model = s.speechServerModel.orEmpty()
-            val voices = client.listVoices(base, key, model).map(::label)
-            val check = ServerCheck(OpenAiTts.speechModels(client.models(base, key)), model, voices)
+            val voices = client.listVoices(base, key, model)
+            val check = ServerCheck(OpenAiTts.speechModels(client.models(base, key)), model, voices.map { it.id })
             val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
             if (model.isNotBlank() && voice != null) client.synthesize(base, key, TEST_WORD, voice, model)
+            val current = settings.settings.first()
+            if (s.speechServerUrl.orEmpty() == url &&
+                current.speechServerUrl.orEmpty() == url &&
+                current.speechServerModel.orEmpty() == model &&
+                choice(url) == asked.choice
+            ) {
+                listedVoices = voiceListing(asked, voices)
+            }
             check
         }
     }
@@ -587,7 +621,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService, o
         enabled = reachable && pendingModel == null,
         listing = voices?.takeIf { it.url == voiceKey(storedUrl, shownModel) },
         preview = preview,
-        labelOf = service::labelOf,
+        labelOf = { service.labelOf(it, storedUrl, shownModel) },
         onSave = { scope.launch { service.setVoice(it) } },
         onChoose = { scope.launch { service.setChosenVoices(it) } },
         onRetry = {
