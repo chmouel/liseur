@@ -746,7 +746,8 @@ beside it. `play`-only strings live in `app/src/play/res`, same locales.
   platform's `LOCALE_CHANGED` redraws widgets. Below 13 it is a
   `SharedPreferences` entry applied in each UI activity's
   `attachBaseContext` via `applyOverrideConfiguration` carrying only the
-  locale; a new UI activity needs the same override. Widget text then
+  locale; a new UI activity needs the same override, and the whole-book
+  translation service wraps its base context with it. Widget text then
   keeps the system language; `LiseurApplication` sets the process default
   locale at startup and after every configuration change so dates and
   week starts follow the choice.

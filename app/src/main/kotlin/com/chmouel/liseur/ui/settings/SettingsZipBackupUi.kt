@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.chmouel.liseur.LiseurApplication
 import androidx.lifecycle.SavedStateHandle
@@ -30,6 +31,7 @@ import com.chmouel.liseur.data.library.SettingsBackupRepository
 import com.chmouel.liseur.data.library.SettingsBackupRestoreResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -306,7 +308,10 @@ private class SettingsBackupViewModel(
 @Composable
 fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
-    val translations by container.wholeBookTranslations.records.collectAsState(initial = emptyList())
+    // Opening the coordinator reconciles translation storage, so only an open backup screen asks.
+    val translations by remember(active) {
+        if (active) container.wholeBookTranslations.records else flowOf(emptyList())
+    }.collectAsState(initial = emptyList())
     val model: SettingsBackupViewModel = viewModel(factory = SettingsBackupViewModel.Factory)
     val state by model.state.collectAsState()
     LaunchedEffect(active) {

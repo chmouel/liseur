@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.pm.PackageManager
@@ -20,6 +21,7 @@ import androidx.core.content.ContextCompat
 import com.chmouel.liseur.LiseurApplication
 import com.chmouel.liseur.MainActivity
 import com.chmouel.liseur.R
+import com.chmouel.liseur.ui.settings.AppLocales
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -35,6 +37,11 @@ class WholeBookTranslationService : Service() {
     private var worker: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val coordinator get() = (application as LiseurApplication).container.wholeBookTranslations
+
+    // Below Android 13 a service's resources follow the system language, not the app's.
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocales.overrideConfiguration(newBase)?.let(newBase::createConfigurationContext) ?: newBase)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
