@@ -265,6 +265,37 @@ class ResourceAnchorTest {
     }
 
     @Test
+    fun `an exact anchor in a resource the book no longer has gives way to the percentage`() {
+        // Issue #372: a file replaced under the same name kept its saved
+        // place. Readium sent to a missing resource never reports another
+        // position, so the reader's place stopped being saved.
+        val replaced = requireNotNull(
+            Locator.fromJSON(
+                JSONObject()
+                    .put("href", "/part_c01_r1.xhtml")
+                    .put("type", "application/xhtml+xml")
+                    .put(
+                        "locations",
+                        JSONObject()
+                            .put("progression", 0.15)
+                            .put("cssSelector", "#p42")
+                            .put("liseurAnchor", 1),
+                    )
+                    .put("text", JSONObject().put("highlight", "the word")),
+            ),
+        )
+        assertTrue(ExactLocatorAnchor.isExact(replaced))
+        val fromPercentage = locator(progression = 0.1, totalProgression = 0.05)
+        val chapters = setOf("/chapter-7.xhtml")
+        assertNull(ResourceAnchor.exactIn(replaced, chapters))
+        assertEquals(
+            fromPercentage,
+            ResourceAnchor.resumeTarget(replaced, 0.05, chapters) { fromPercentage },
+        )
+        assertNull(ResourceAnchor.resumeTarget(replaced, null, chapters) { null })
+    }
+
+    @Test
     fun `nothing usable leaves the caller what it had`() {
         // Preserving the old behaviour: a locator nobody can improve on
         // is still passed through rather than dropped.

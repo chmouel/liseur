@@ -1126,7 +1126,7 @@ class ReaderViewModel(
         val positions = positionsFor(publication ?: return)
         val remoteLocator = preview.remoteLocatorJson
             ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
-        val exact = remoteLocator?.takeIf(ExactLocatorAnchor::isExact)
+        val exact = ResourceAnchor.exactIn(remoteLocator, readingOrderPaths())
         val target = exact
             ?: ResourceAnchor.approximateTarget(
                 saved = remoteLocator,

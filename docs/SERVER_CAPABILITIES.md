@@ -248,6 +248,11 @@ Within a matching edition the restoration descends three rungs, in
    from different things, and on a book with a few large chapters they
    disagree by pages.
 
+The first two rungs apply only when the saved resource is in the book's
+reading order. A file replaced under the same name can leave a position
+in a chapter the new file lacks, and Readium never reports a place after
+being sent there, so such a position goes straight to the percentage.
+
 The kosync partner is not a kind of server: it is paired *alongside* a
 connected one, covers that server's downloaded books (matched by
 KOReader's partial MD5 of the file), and has its own lifecycle.

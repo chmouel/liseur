@@ -92,13 +92,26 @@ object ResourceAnchor {
      */
     fun targetIn(locator: Locator?, readingOrder: Collection<String>): Locator? {
         val resource = sanitize(locator) ?: return null
-        val target = ResourceAddress.canonicalPath(resource.href.toString()) ?: return null
-        val matches = readingOrder.filter {
-            ResourceAddress.canonicalPath(it) == target
-        }
-        if (matches.size != 1) return null
-        val localHref = matches.single().let { Url(it) ?: Url("/$it") } ?: return null
+        val localHref = spineMatch(resource, readingOrder)?.let { Url(it) ?: Url("/$it") } ?: return null
         return resource.copy(href = localHref)
+    }
+
+    /**
+     * [locator] whole, if it is an exact anchor in a resource this
+     * publication has.
+     *
+     * A saved place can outlive the file it was taken in: a book replaced
+     * under the same name keeps its row and its position. Readium sent
+     * to a resource the book does not have waits for it for ever and
+     * reports no further position, so nothing the reader does after that
+     * is saved (#372).
+     */
+    fun exactIn(locator: Locator?, readingOrder: Collection<String>): Locator? =
+        locator?.takeIf { ExactLocatorAnchor.isExact(it) && spineMatch(it, readingOrder) != null }
+
+    private fun spineMatch(locator: Locator, readingOrder: Collection<String>): String? {
+        val target = ResourceAddress.canonicalPath(locator.href.toString()) ?: return null
+        return readingOrder.filter { ResourceAddress.canonicalPath(it) == target }.singleOrNull()
     }
 
     /**
@@ -115,9 +128,9 @@ object ResourceAnchor {
         totalProgression: Double?,
         readingOrder: Collection<String>,
         byProgression: (Double) -> Locator?,
-    ): Locator? = saved?.takeIf(ExactLocatorAnchor::isExact)
+    ): Locator? = exactIn(saved, readingOrder)
         ?: approximateTarget(saved, totalProgression, readingOrder, byProgression)
-        ?: saved
+        ?: saved?.takeIf { spineMatch(it, readingOrder) != null }
 
     /**
      * The rungs below the exact one, for a caller whose exact attempt
