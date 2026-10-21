@@ -35,8 +35,9 @@ server"; its id stays `openai`.
   in `OpenAiTtsClient`. `OpenAiSpeechService`, `ServerConnections` and
   the screens do not branch on the host.
 - `models` and `allModels` answer one model, `default`; `allModels`, the
-  key check, lists the voices instead. `baseUrl` and `identityUrl` add
-  no `v1` to a Gradium host.
+  key check, lists the voices instead. `baseUrl` keeps requests under the
+  `/api` root; `identityUrl` retains the earlier `/api/v1` form for saved
+  server IDs and voice scopes.
 - The voice list now carries a name and a language per voice
   (`SpeechVoice`); OpenAI-style servers fill the id only, and
   `VoiceLabel.of(SpeechVoice)` shows a listed voice by what its server
