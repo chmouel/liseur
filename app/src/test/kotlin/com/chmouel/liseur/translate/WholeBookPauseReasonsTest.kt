@@ -74,6 +74,19 @@ class WholeBookPauseReasonsTest {
     }
 
     @Test
+    fun `a failing server that asked to wait longer resumes alone only once the wait is over`() {
+        val reason = wholeBookPauseReasonFor(TranslationError.Service(503).retryingAfter("3600", now = 1_000), now = 1_000)
+        assertEquals("service:503:3601000", reason)
+        assertFalse(resumable(reason, automatic = true, now = 3_600_999))
+        assertTrue(resumable(reason, automatic = true, now = 3_601_000))
+        assertTrue(resumable(reason, automatic = false, now = 1_000))
+        assertEquals(503, wholeBookPauseCode(reason))
+        assertEquals(R.string.whole_book_reason_service, wholeBookPauseReason(reason))
+        // A deadline never makes a reader-only pause resume alone.
+        assertFalse(resumable("service:401:0", automatic = true, now = 1_000))
+    }
+
+    @Test
     fun `the sheet names every kept reason and reads back its HTTP code`() {
         val labels = listOf(
             "settings_changed" to R.string.whole_book_settings_changed,

@@ -455,14 +455,15 @@ internal class WholeBookSameLanguageException(val target: String) : IllegalState
 /**
  * The pause reason [WholeBookTranslations.execute] keeps for [e], read
  * back by [resumable] and by the sheet's pause banner; a typo on either
- * side breaks the resume path. A rate limit with a Retry-After keeps the
- * time the server allows the next request, as in `rate_limited:429:<millis>`.
+ * side breaks the resume path. A rate limit or service error with a
+ * Retry-After keeps the time the server allows the next request, as in
+ * `rate_limited:429:<millis>` or `service:503:<millis>`.
  */
 internal fun wholeBookPauseReasonFor(e: Exception, now: Long = System.currentTimeMillis()): String = when (e) {
     is TranslationError.Changed, is TranslationError.SettingsChanged -> "settings_changed"
     is TranslationError.Network -> "network"
     is TranslationError.RateLimited -> "rate_limited:${e.code}" + (e.retryAfterMillis?.let { ":${now + it}" } ?: "")
-    is TranslationError.Service -> "service:${e.code}"
+    is TranslationError.Service -> "service:${e.code}" + (e.retryAfterMillis?.let { ":${now + it}" } ?: "")
     is TranslationError -> "service"
     else -> "storage"
 }
@@ -477,13 +478,10 @@ internal fun resumable(reason: String?, automatic: Boolean, now: Long = System.c
     if (reason == "settings_changed" || reason == "storage") return false
     if (!automatic) return true
     if (reason in listOf("interrupted", "timeout", "network")) return true
-    // Asking before the server's Retry-After would only be refused again.
-    if (wholeBookPauseCode(reason) == 429 && reason?.startsWith("rate_limited:") == true) {
-        val notBefore = reason.split(':').getOrNull(2)?.toLongOrNull() ?: return true
-        return now >= notBefore
-    }
-    // A 402 is a spent quota or an unpaid bill, which only the reader can settle.
-    if (reason?.startsWith("service:") != true) return false
     val code = wholeBookPauseCode(reason) ?: return false
-    return code == 408 || code in 500..599
+    // A 402 is a spent quota or an unpaid bill, which only the reader can settle.
+    val passing = if (reason?.startsWith("rate_limited:") == true) code == 429 else code == 408 || code in 500..599
+    // Asking before the server's Retry-After would only be refused again.
+    val notBefore = reason?.split(':')?.getOrNull(2)?.toLongOrNull() ?: 0
+    return passing && now >= notBefore
 }
