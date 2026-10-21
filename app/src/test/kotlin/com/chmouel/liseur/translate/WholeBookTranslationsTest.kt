@@ -262,4 +262,30 @@ class WholeBookTranslationsTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun `a new key holds a paused job for a new check`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        runCatching { WorkManager.getInstance(context) }.getOrElse {
+            WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
+        }
+        val container = AppContainer(context)
+        val book = "file:///new-key.epub"
+        container.database.bookDao().upsert(
+            Book(url = book, title = "Book", author = null, coverPath = null,
+                source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val saved = container.savedTranslations
+        val run = saved.begin(book, "en", "fr", "identity", 1)
+        saved.pause(book, run.generation, "network")
+        container.serverConnections.commitKey(owner = "https://example.com:443", op = {})
+        withTimeout(10_000) {
+            // The commit runs on the main looper, which this test thread holds.
+            while (saved.getKept(book)?.reason != "settings_changed") {
+                shadowOf(android.os.Looper.getMainLooper()).idle()
+                kotlinx.coroutines.delay(20)
+            }
+        }
+        assertFalse(resumable(saved.getKept(book)?.reason, automatic = true))
+    }
 }

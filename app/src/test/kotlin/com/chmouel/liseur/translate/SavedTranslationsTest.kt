@@ -97,6 +97,28 @@ class SavedTranslationsTest {
     }
 
     @Test
+    fun `a changed key or server holds only jobs that would resume by themselves`() = runTest {
+        val store = saved()
+        val reasons = mapOf(
+            "network" to "settings_changed",
+            "rate_limited:429:${Long.MAX_VALUE - 1}" to "settings_changed",
+            "service:503" to "settings_changed",
+            "paused" to "paused",
+            "rate_limited:402" to "rate_limited:402",
+        )
+        for ((reason, expected) in reasons) {
+            val run = store.begin(BOOK, null, "fr", "identity", 1)
+            store.pause(BOOK, run.generation, reason)
+            store.requireCheck()
+            assertEquals(reason, expected, store.getKept(BOOK)?.reason)
+        }
+        val running = store.begin(BOOK, null, "fr", "identity", 1)
+        store.requireCheck()
+        assertEquals("running", store.getKept(BOOK)?.state)
+        assertEquals(running.generation, store.getKept(BOOK)?.generation)
+    }
+
+    @Test
     fun `startup pause cannot recreate deleted records or pause a replacement generation`() = runTest {
         val store = saved()
         val run = store.begin(BOOK, null, "fr", "identity", 1)

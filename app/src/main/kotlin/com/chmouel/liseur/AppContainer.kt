@@ -231,6 +231,20 @@ class AppContainer(context: Context) {
         wholeBookTranslations.resumeInterrupted()
     }
 
+    // Told before a key or server address changes, which an automatic resume would not ask about.
+    private fun requireWholeBookChecks() {
+        applicationScope.launch {
+            if (!savedTranslationsOpening.isInitialized() && !savedTranslationsFile.exists()) return@launch
+            try {
+                savedTranslations.requireCheck()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("translations", "Could not hold paused translations: ${e.javaClass.simpleName}")
+            }
+        }
+    }
+
     /**
      * Records the account's clear of [bookUrl]'s translations, leaving
      * this device's where they are but never to be pushed again, for a
@@ -860,6 +874,7 @@ class AppContainer(context: Context) {
     /** The servers and keys on the Services page, shared by every feature that reaches one. */
     internal val serverConnections: ServerConnections by lazy {
         ServerConnections(appSettings, ServerKeys(context.applicationContext), localNetwork)
+            .also { it.addListener { requireWholeBookChecks() } }
     }
 
     /** The service and model the reading companion uses: a listed server, and in the Play build Gemini too. */

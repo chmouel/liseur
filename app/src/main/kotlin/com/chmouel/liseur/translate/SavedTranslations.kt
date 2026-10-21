@@ -723,6 +723,19 @@ class SavedTranslations(
         }
     }
 
+    /**
+     * Paused jobs that would go on by themselves wait for a new check
+     * instead: a key or server address changed since the reader approved
+     * them, and a resume skips the confirmation.
+     */
+    suspend fun requireCheck() = writes.withLock {
+        database.withTransaction {
+            keptDao.all().filter { it.state == "paused" && resumable(it.reason, automatic = true, now = Long.MAX_VALUE) }.forEach {
+                keptDao.put(it.copy(reason = "settings_changed"))
+            }
+        }
+    }
+
     suspend fun keptRecords(): List<KeptTranslation> = keptDao.all()
 
     suspend fun getKept(bookUrl: String): KeptTranslation? = keptDao.find(bookUrl)
