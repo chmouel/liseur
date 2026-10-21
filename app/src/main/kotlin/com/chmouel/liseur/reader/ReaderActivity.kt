@@ -693,7 +693,7 @@ class ReaderActivity : FragmentActivity() {
                                         val bookUrl = checkNotNull(target).id
                                         ReaderWholeBook(
                                             bookUrl,
-                                            container.wholeBookTranslations.records
+                                            container.wholeBookRecords
                                                 .map { records -> records.any { it.bookUrl == bookUrl } }
                                                 .distinctUntilChanged(),
                                         )

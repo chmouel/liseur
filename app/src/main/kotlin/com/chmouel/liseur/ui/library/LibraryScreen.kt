@@ -1286,7 +1286,7 @@ internal fun BookActionsSheet(
     onUploadToServer: () -> Unit,
 ) {
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
-    val translations by container.wholeBookTranslations.records.collectAsStateWithLifecycle(initialValue = emptyList())
+    val translations by container.wholeBookRecords.collectAsStateWithLifecycle(initialValue = emptyList())
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier

@@ -107,6 +107,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import java.io.File
 
 /**
@@ -171,6 +177,7 @@ class AppContainer(context: Context) {
     )
 
     private val savedTranslationsFile = context.getDatabasePath(TranslationCacheDatabase.NAME)
+    private val savedTranslationsOpened = MutableStateFlow(false)
 
     private val savedTranslationsOpening = lazy {
         val name = TranslationCacheDatabase.NAME
@@ -182,7 +189,10 @@ class AppContainer(context: Context) {
             present = { urls -> database.bookDao().presentUrls(urls) },
             files = { listOf(path, File("$path-wal"), File("$path-shm")) },
             scope = applicationScope,
-        ).also { saved -> applicationScope.launch { saved.tidy() } }
+        ).also { saved ->
+            savedTranslationsOpened.value = true
+            applicationScope.launch { saved.tidy() }
+        }
     }
 
     /** Sentences page translation translated, kept apart from the library and its backups. */
@@ -900,6 +910,14 @@ class AppContainer(context: Context) {
     internal val wholeBookTranslations by lazy {
         com.chmouel.liseur.translate.WholeBookTranslations(context.applicationContext, this, applicationScope)
     }
+
+    /** Whole-book jobs, empty without opening translation storage until there is some. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    internal val wholeBookRecords: Flow<List<com.chmouel.liseur.translate.KeptTranslation>> = savedTranslationsOpened
+        .map { opened -> opened || savedTranslationsFile.exists() }
+        .distinctUntilChanged()
+        .flatMapLatest { stored -> if (stored) wholeBookTranslations.records else flowOf(emptyList()) }
+        .flowOn(Dispatchers.IO)
 
     /** Reading added up across every device, when a server keeps it. */
     val syncInsights = LiseurSyncInsights(

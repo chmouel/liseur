@@ -280,7 +280,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
 @Composable
 private fun WholeBookTranslationsGroup() {
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
-    val records by container.wholeBookTranslations.records.collectAsState(initial = emptyList())
+    val records by container.wholeBookRecords.collectAsState(initial = emptyList())
     val books by container.libraryRepository.books.collectAsState(initial = emptyList())
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     SettingsGroup(stringResource(R.string.whole_book_title)) {

@@ -1403,7 +1403,8 @@ changing reader behavior.
   it must not leave an automatically resumable reason or recreate a deleted job.
   A key or server change (`ServerConnections` listener) turns every
   automatically resumable pause into `settings_changed`, so a new check
-  and consent come before any further paid request.
+  and consent come before any further paid request. Screens outside the
+  job read `AppContainer.wholeBookRecords`, which opens no store.
 - `kept_translations`/`kept_failures` are outside the LRU and Clear;
   writes are generation-fenced and persist before progress advances. A
   saved row wins over a marker; retrying failures needs confirmation;
