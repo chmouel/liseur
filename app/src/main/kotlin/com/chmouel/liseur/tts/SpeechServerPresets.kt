@@ -14,6 +14,7 @@ internal class SpeechServerPreset(
     val url: String,
     val keyUrl: String? = null,
     val example: Boolean = false,
+    @StringRes val group: Int? = null,
 ) {
     /** The server the address is on, as its key is kept, see [ServerKeys.origin]. */
     val origin: String = ServerKeys.origin(requireNotNull(OpenAiTts.baseUrl(url)) { url })
@@ -38,9 +39,9 @@ internal object SpeechServerPresets {
         SpeechServerPreset(R.string.speech_preset_mistral, "https://api.mistral.ai/v1", keyUrl = "https://console.mistral.ai/api-keys"),
         SpeechServerPreset(R.string.speech_preset_groq, "https://api.groq.com/openai/v1", keyUrl = "https://console.groq.com/keys"),
         SpeechServerPreset(R.string.speech_preset_together, "https://api.together.ai/v1", keyUrl = "https://api.together.xyz/settings/api-keys"),
-        SpeechServerPreset(R.string.speech_preset_gradium, "https://api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
-        SpeechServerPreset(R.string.speech_preset_gradium_eu, "https://eu.api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
-        SpeechServerPreset(R.string.speech_preset_gradium_us, "https://us.api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
+        SpeechServerPreset(R.string.speech_preset_gradium, "https://api.gradium.ai/api", keyUrl = GRADIUM_KEYS, group = R.string.speech_preset_gradium),
+        SpeechServerPreset(R.string.speech_preset_gradium_eu, "https://eu.api.gradium.ai/api", keyUrl = GRADIUM_KEYS, group = R.string.speech_preset_gradium),
+        SpeechServerPreset(R.string.speech_preset_gradium_us, "https://us.api.gradium.ai/api", keyUrl = GRADIUM_KEYS, group = R.string.speech_preset_gradium),
         SpeechServerPreset(R.string.speech_preset_kokoro, "http://192.168.1.10:8880", example = true),
         SpeechServerPreset(R.string.speech_preset_lm_studio, "http://192.168.1.10:1234", example = true),
         SpeechServerPreset(R.string.speech_preset_ollama, "http://192.168.1.10:11434", example = true),

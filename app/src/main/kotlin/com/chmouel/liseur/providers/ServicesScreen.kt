@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
@@ -70,6 +72,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -334,6 +337,7 @@ private fun ServerScreen(
         }
     }
     val inUse = SpeechServerPresets.matching(address.text)
+    var expandedPresetGroup by remember(presetsOpen) { mutableStateOf(inUse?.group) }
     val presetsLabel = stringResource(R.string.services_server_presets)
     val title = server?.name ?: stringResource(R.string.services_add)
 
@@ -416,37 +420,59 @@ private fun ServerScreen(
                         keyboardActions = KeyboardActions(onNext = { if (!invalid) commit() }),
                     )
                     ExposedDropdownMenu(expanded = presetsOpen, onDismissRequest = { presetsOpen = false }) {
-                        SpeechServerPresets.all.forEach { preset ->
-                            val selected = preset === inUse
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(stringResource(preset.name))
-                                        Text(
-                                            text = if (preset.example) {
-                                                stringResource(R.string.read_aloud_settings_server_preset_own)
-                                            } else {
-                                                preset.url
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                },
-                                trailingIcon = if (selected) {
-                                    {
+                        SpeechServerPresets.all.groupBy { it.group ?: it.name }.forEach { (name, presets) ->
+                            val grouped = presets.first().group != null
+                            val expanded = expandedPresetGroup == name
+                            if (grouped) {
+                                val state = stringResource(
+                                    if (expanded) R.string.settings_section_expanded else R.string.settings_section_collapsed,
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(name)) },
+                                    trailingIcon = {
                                         Icon(
-                                            Icons.Outlined.Check,
+                                            if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.primary,
                                         )
-                                    }
-                                } else {
-                                    null
-                                },
-                                onClick = { pick(preset) },
-                                modifier = Modifier.semantics { this.selected = selected },
-                            )
+                                    },
+                                    onClick = { expandedPresetGroup = if (expanded) null else name },
+                                    modifier = Modifier.semantics { stateDescription = state },
+                                )
+                            }
+                            if (!grouped || expanded) presets.forEach { preset ->
+                                val selected = preset === inUse
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(stringResource(preset.name))
+                                            Text(
+                                                text = if (preset.example) {
+                                                    stringResource(R.string.read_aloud_settings_server_preset_own)
+                                                } else {
+                                                    preset.url
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                    trailingIcon = if (selected) {
+                                        {
+                                            Icon(
+                                                Icons.Outlined.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    onClick = { pick(preset) },
+                                    modifier = Modifier
+                                        .padding(start = if (grouped) 16.dp else 0.dp)
+                                        .semantics { this.selected = selected },
+                                )
+                            }
                         }
                     }
                 }

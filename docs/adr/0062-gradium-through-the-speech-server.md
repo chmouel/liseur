@@ -24,8 +24,8 @@ more key.
 
 ## Decision
 
-Gradium is three presets on the speech server's address field, one per
-region (`api.gradium.ai`, `eu.api.gradium.ai`, `us.api.gradium.ai`,
+Gradium is one expandable entry on the speech server's address field,
+with three region presets (`api.gradium.ai`, `eu.api.gradium.ai`, `us.api.gradium.ai`,
 each with the `/api` root), and the client speaks Gradium's protocol
 when the server's host is one of those. The provider is renamed "Speech
 server"; its id stays `openai`.
