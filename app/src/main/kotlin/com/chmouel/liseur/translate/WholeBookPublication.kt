@@ -70,7 +70,13 @@ internal suspend fun <T> AppContainer.withTranslationPublication(
 ): T = withContext(Dispatchers.IO) {
     val book = database.bookDao().getByUrl(bookUrl) ?: throw IOException("Book is not in the library")
     val url = book.openableUri()?.toUri()?.toAbsoluteUrl() ?: throw IOException("Book is not downloaded")
-    translationPublicationOpener.withPublication(url, block)
+    try {
+        translationPublicationOpener.withPublication(url, block)
+    } catch (e: Exception) {
+        // Readium reports a cancelled read as a read error; the cancellation must win.
+        ensureActive()
+        throw e
+    }
 }
 
 internal suspend fun Publication.translationSentences(

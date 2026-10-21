@@ -67,6 +67,7 @@ import com.chmouel.liseur.ui.theme.isDarkSurface
 import java.text.NumberFormat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -197,7 +198,8 @@ private fun WholeBookTranslationContent(
             unsupported = e is TranslationError.Unsupported
             inspectionFailed = true
         } finally {
-            inspecting = false
+            // A run cancelled by a key change must not end the run that replaced it.
+            if (isActive) inspecting = false
         }
     }
     LaunchedEffect(record?.state) {
