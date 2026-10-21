@@ -96,7 +96,7 @@ def main() -> int:
         check("chat without markers echoes the user message", reply["choices"][0]["message"]["content"] == "[T] Hello", reply)
 
         code, voices = stub.json("GET", "/v1/audio/voices")
-        check("voices lists the stub voices", code == 200 and voices == {"voices": ["stub_a", "stub_b"]}, voices)
+        check("voices lists ungrouped and multilingual stub voices", code == 200 and voices == {"voices": ["stub_a", "stub_b", "af_bella", "ff_siwis", "ef_dora"]}, voices)
 
         code, kind, audio = stub.call("POST", "/v1/audio/speech", {"model": "stub-tts", "input": "Hello there.", "voice": "stub_a", "response_format": "wav"})
         rate = int.from_bytes(audio[24:28], "little") if len(audio) > 28 else None

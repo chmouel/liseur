@@ -183,7 +183,8 @@ one-off stub. It serves `GET /v1/models` (`stub-chat`, `stub-tts`),
 `POST /v1/chat/completions` (the `<passage>` prefixed `[T]`,
 `--prefix`), `POST /v1/audio/speech` (silent 24 kHz WAV; other
 `response_format` gets the 400 that triggers the MP3 fallback),
-`GET /v1/audio/voices` (`stub_a`, `stub_b`), and `GET /_stub/requests`
+`GET /v1/audio/voices` (`stub_a`, `stub_b`, and English/French/Spanish
+voices), and `GET /_stub/requests`
 (all requests, `DELETE` empties; also `tmp/ai-stub/requests.jsonl`; chat
 entries split `<book>`, `<context>`, `<passage>` into `blocks`; the API
 key is never logged). Flags: `--fail CODE`, `--delay SECONDS`,

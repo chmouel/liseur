@@ -73,6 +73,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -110,6 +111,7 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
+import com.chmouel.liseur.ui.settings.SettingsExpandableSection
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.CoroutineScope
@@ -592,33 +594,53 @@ internal fun VoicePicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            else -> VoiceLabel.grouped(VoiceLabel.offered(listed, chosen, stored), labelOf).forEach { (language, voices) ->
-                if (language != null) LanguageHeader(language, locale)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = if (language == null) Modifier.padding(top = 8.dp) else Modifier,
-                ) {
-                    voices.forEach { voice ->
-                        val speaking = preview.playing == voice.id
-                        FilterChip(
-                            selected = voice.id == stored,
-                            onClick = {
-                                if (speaking) {
-                                    preview.stop()
-                                } else {
-                                    onSave(voice.id)
-                                    preview.play(sample(language), voice.id)
+            else -> {
+                val groups = VoiceLabel.grouped(VoiceLabel.offered(listed, chosen, stored), labelOf)
+                groups.forEach { (language, voices) ->
+                    key(language) {
+                        var expanded by remember(listing.url) {
+                            mutableStateOf(groups.size == 1 || voices.any { it.id == stored })
+                        }
+                        val chips: @Composable () -> Unit = {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = if (language == null) Modifier.padding(top = 8.dp) else Modifier,
+                            ) {
+                                voices.forEach { voice ->
+                                    val speaking = preview.playing == voice.id
+                                    FilterChip(
+                                        selected = voice.id == stored,
+                                        onClick = {
+                                            if (speaking) {
+                                                preview.stop()
+                                            } else {
+                                                onSave(voice.id)
+                                                preview.play(sample(language), voice.id)
+                                            }
+                                        },
+                                        label = { Text(voiceChipLabel(voice)) },
+                                        leadingIcon = {
+                                            Icon(
+                                                if (speaking) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                            )
+                                        },
+                                    )
                                 }
-                            },
-                            label = { Text(voiceChipLabel(voice)) },
-                            leadingIcon = {
-                                Icon(
-                                    if (speaking) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                )
-                            },
-                        )
+                            }
+                        }
+                        if (language == null) {
+                            chips()
+                        } else {
+                            SettingsExpandableSection(
+                                title = Locale.forLanguageTag(language).getDisplayName(locale),
+                                expanded = expanded,
+                                onExpandedChange = { expanded = it },
+                            ) {
+                                chips()
+                            }
+                        }
                     }
                 }
             }

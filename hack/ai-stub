@@ -7,7 +7,7 @@ External services and API keys page:
   GET  /v1/models            stub-chat and stub-tts
   POST /v1/chat/completions  replies with the <passage> it was sent, prefixed
   POST /v1/audio/speech      silent 24 kHz mono 16-bit WAV, sized to the text
-  GET  /v1/audio/voices      stub_a and stub_b
+  GET  /v1/audio/voices      stub_a, stub_b and English/French/Spanish voices
 
 And what read aloud calls on a Gradium server, under its /api root; the
 app speaks Gradium's protocol to its real hosts only, so these answer
@@ -42,7 +42,7 @@ from pathlib import Path
 
 CHAT_MODEL = "stub-chat"
 SPEECH_MODEL = "stub-tts"
-VOICES = ["stub_a", "stub_b"]
+VOICES = ["stub_a", "stub_b", "af_bella", "ff_siwis", "ef_dora"]
 GRADIUM_VOICES = [
     {"uid": "stubEmma0001", "name": "Emma", "description": "Stub", "is_catalog": True, "is_pro_clone": False, "language": "en", "tags": []},
     {"uid": "stubLouis0002", "name": "Louis", "description": None, "is_catalog": False, "is_pro_clone": False, "language": "fr", "tags": []},
