@@ -62,6 +62,18 @@ class WholeBookPauseReasonsTest {
     }
 
     @Test
+    fun `a rate limit that asked to wait longer resumes alone only once the wait is over`() {
+        val error = TranslationError.RateLimited(429).retryingAfter("3600", now = 1_000)
+        val reason = wholeBookPauseReasonFor(error, now = 1_000)
+        assertEquals("rate_limited:429:3601000", reason)
+        assertFalse(resumable(reason, automatic = true, now = 3_600_999))
+        assertTrue(resumable(reason, automatic = true, now = 3_601_000))
+        assertTrue(resumable(reason, automatic = false, now = 1_000))
+        assertEquals(429, wholeBookPauseCode(reason))
+        assertEquals(R.string.whole_book_reason_rate, wholeBookPauseReason(reason))
+    }
+
+    @Test
     fun `the sheet names every kept reason and reads back its HTTP code`() {
         val labels = listOf(
             "settings_changed" to R.string.whole_book_settings_changed,

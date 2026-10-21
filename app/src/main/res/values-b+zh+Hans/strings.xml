@@ -1497,6 +1497,7 @@
     <string name="whole_book_check_background">进度为估算值。你可以离开此页面；只要应用保持打开，检查就会继续。</string>
     <string name="whole_book_scan_failed">无法检查此书。请确认书籍已下载且可正常阅读，然后重试。</string>
     <string name="whole_book_already_running">另一本书正在翻译中。请等待其完成，或先将其暂停。</string>
+    <string name="whole_book_same_language">这本书已经是%1$s。请在翻译设置中选择其他目标语言。</string>
     <string name="whole_book_counts">句子：%1$s · 已缓存：%2$s · 失败：%3$s · 待翻译：%4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">书籍语言</string>

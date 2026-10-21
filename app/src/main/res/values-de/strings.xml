@@ -1563,6 +1563,7 @@
     <string name="whole_book_check_background">Der Fortschritt ist ungefähr. Du kannst diese Seite verlassen; die Prüfung läuft weiter, solange die App geöffnet bleibt.</string>
     <string name="whole_book_scan_failed">Das Buch konnte nicht geprüft werden. Prüfe, ob es heruntergeladen und lesbar ist, und versuche es erneut.</string>
     <string name="whole_book_already_running">Ein anderes Buch wird bereits übersetzt. Warte, bis es fertig ist, oder pausiere es zuerst.</string>
+    <string name="whole_book_same_language">Dieses Buch ist bereits auf %1$s. Wähle in den Übersetzungseinstellungen eine andere Zielsprache.</string>
     <string name="whole_book_counts">Sätze: %1$s · Im Cache: %2$s · Fehlgeschlagen: %3$s · Zu übersetzen: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Buchsprache</string>

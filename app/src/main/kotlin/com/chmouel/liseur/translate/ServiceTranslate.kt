@@ -168,6 +168,7 @@ internal class ServiceTranslate(
     }
 
     suspend fun openPinned(source: String?, target: String, expectedIdentity: String? = null): SentenceTranslator {
+        if (source != null && TranslationLanguages.same(source, target)) throw WholeBookSameLanguageException(target)
         val snapshot = settings.settings.first()
         val service = wholeBookService(snapshot)
         if (!service.configured.first()) throw TranslationError.NotSetUp()

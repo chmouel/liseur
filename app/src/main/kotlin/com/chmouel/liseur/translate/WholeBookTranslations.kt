@@ -449,15 +449,19 @@ internal class WholeBookTranslations(
 /** Another book's job holds the single whole-book slot; the reader must wait for it or pause it. */
 internal class WholeBookBusyException : IllegalStateException("Another book is already being translated")
 
+/** The book is already in the [target] language, so a run would pay to copy it. */
+internal class WholeBookSameLanguageException(val target: String) : IllegalStateException("The book is already in the target language")
+
 /**
  * The pause reason [WholeBookTranslations.execute] keeps for [e], read
  * back by [resumable] and by the sheet's pause banner; a typo on either
- * side breaks the resume path.
+ * side breaks the resume path. A rate limit with a Retry-After keeps the
+ * time the server allows the next request, as in `rate_limited:429:<millis>`.
  */
-internal fun wholeBookPauseReasonFor(e: Exception): String = when (e) {
+internal fun wholeBookPauseReasonFor(e: Exception, now: Long = System.currentTimeMillis()): String = when (e) {
     is TranslationError.Changed, is TranslationError.SettingsChanged -> "settings_changed"
     is TranslationError.Network -> "network"
-    is TranslationError.RateLimited -> "rate_limited:${e.code}"
+    is TranslationError.RateLimited -> "rate_limited:${e.code}" + (e.retryAfterMillis?.let { ":${now + it}" } ?: "")
     is TranslationError.Service -> "service:${e.code}"
     is TranslationError -> "service"
     else -> "storage"
@@ -469,10 +473,15 @@ internal fun wholeBookPauseReasonFor(e: Exception): String = when (e) {
  * passing trouble (a killed app, Android's time limit, a lost connection,
  * a busy or failing server) when nobody asked. A 402 waits for the reader.
  */
-internal fun resumable(reason: String?, automatic: Boolean): Boolean {
+internal fun resumable(reason: String?, automatic: Boolean, now: Long = System.currentTimeMillis()): Boolean {
     if (reason == "settings_changed" || reason == "storage") return false
     if (!automatic) return true
-    if (reason in listOf("interrupted", "timeout", "network", "rate_limited:429")) return true
+    if (reason in listOf("interrupted", "timeout", "network")) return true
+    // Asking before the server's Retry-After would only be refused again.
+    if (wholeBookPauseCode(reason) == 429 && reason?.startsWith("rate_limited:") == true) {
+        val notBefore = reason.split(':').getOrNull(2)?.toLongOrNull() ?: return true
+        return now >= notBefore
+    }
     // A 402 is a spent quota or an unpaid bill, which only the reader can settle.
     if (reason?.startsWith("service:") != true) return false
     val code = wholeBookPauseCode(reason) ?: return false

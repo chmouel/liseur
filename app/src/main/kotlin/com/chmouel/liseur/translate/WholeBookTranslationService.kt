@@ -60,9 +60,13 @@ class WholeBookTranslationService : Service() {
             return START_NOT_STICKY
         }
         promote(notification(preview.title, 0, preview.total))
-        wakeLock = getSystemService(PowerManager::class.java).newWakeLock(
+        val held = getSystemService(PowerManager::class.java).newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "$packageName:whole-book-translation",
-        ).apply { acquire(6 * 60 * 60 * 1_000L) }
+        ).apply {
+            setReferenceCounted(false)
+            acquire(6 * 60 * 60 * 1_000L)
+        }
+        synchronized(this) { wakeLock = held }
         val job = scope.launch(start = CoroutineStart.LAZY) {
             var lastNotification = 0L
             try {
@@ -86,7 +90,7 @@ class WholeBookTranslationService : Service() {
             }
         }
         job.invokeOnCompletion {
-            releaseWakeLock()
+            releaseWakeLock(held)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
             coordinator.release(preview.bookUrl)
@@ -115,9 +119,13 @@ class WholeBookTranslationService : Service() {
         super.onDestroy()
     }
 
-    private fun releaseWakeLock() {
-        wakeLock?.let { if (it.isHeld) it.release() }
-        wakeLock = null
+    // The worker's completion runs off the main thread, racing onTimeout and onDestroy.
+    private fun releaseWakeLock(lock: PowerManager.WakeLock? = null) {
+        synchronized(this) {
+            val held = lock ?: wakeLock ?: return
+            if (held.isHeld) held.release()
+            if (wakeLock === held) wakeLock = null
+        }
     }
 
     private fun promote(notification: Notification) {

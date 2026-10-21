@@ -92,11 +92,11 @@ class ServerTranslationServiceTest {
 
     private fun body() = JSONObject(web.takeRequest().body!!.utf8())
 
-    private suspend inline fun <reified E : TranslationError> expect(crossinline block: suspend () -> Unit) {
+    private suspend inline fun <reified E : Exception> expect(crossinline block: suspend () -> Unit) {
         val error = try {
             block()
             null
-        } catch (e: TranslationError) {
+        } catch (e: Exception) {
             e
         }
         assertTrue("Expected ${E::class.simpleName}, got $error", error is E)
@@ -120,6 +120,7 @@ class ServerTranslationServiceTest {
         val identity = pinned.answering()
         assertEquals(0, web.requestCount)
         expect<TranslationError.SettingsChanged> { feature.openPinned("en", "fr", identity + "other") }
+        expect<WholeBookSameLanguageException> { feature.openPinned("en-GB", "en") }
         settings.setTranslationProvider("device")
         expect<TranslationError.NotSetUp> { feature.openPinned("en", "fr") }
         expect<TranslationError.SettingsChanged> { pinned.answering() }

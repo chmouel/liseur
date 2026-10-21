@@ -1657,6 +1657,7 @@
     <string name="whole_book_check_background">Прогресс приблизительный. Можно покинуть эту страницу; проверка продолжится, пока приложение открыто.</string>
     <string name="whole_book_scan_failed">Не удалось проверить книгу. Убедитесь, что она скачана и доступна для чтения, затем повторите попытку.</string>
     <string name="whole_book_already_running">Другая книга уже переводится. Дождитесь её окончания или сначала приостановите её.</string>
+    <string name="whole_book_same_language">Эта книга уже на языке: %1$s. Выберите другой язык перевода в настройках перевода.</string>
     <string name="whole_book_counts">Предложений: %1$s · В кэше: %2$s · Ошибок: %3$s · Для перевода: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Язык книги</string>

@@ -316,11 +316,13 @@ private fun WholeBookTranslationContent(
                                 is TranslationError.NotSetUp -> stringResource(R.string.whole_book_ineligible)
                                 is TranslationError -> errorSentence(error, serviceName ?: stringResource(R.string.translation_settings_provider), "", "")
                                 is WholeBookBusyException -> stringResource(R.string.whole_book_already_running)
+                                is WholeBookSameLanguageException ->
+                                    stringResource(R.string.whole_book_same_language, TranslationLanguages.name(error.target, locale))
                                 else -> stringResource(R.string.whole_book_scan_failed)
                             },
                             color = MaterialTheme.colorScheme.error,
                         )
-                        if (failure is TranslationError.NotSetUp) {
+                        if (failure is TranslationError.NotSetUp || failure is WholeBookSameLanguageException) {
                             Button(onClick = { onOpenSettings?.invoke() ?: run { settings = true } }, modifier = Modifier.fillMaxWidth()) {
                                 Text(stringResource(R.string.translation_open_settings))
                             }
@@ -510,4 +512,4 @@ internal fun wholeBookPauseReason(reason: String?): Int = when (reason) {
 
 /** The HTTP status a service or rate-limit pause kept, as in `service:503` or `rate_limited:402`. */
 internal fun wholeBookPauseCode(reason: String?): Int? =
-    reason?.takeIf { it.startsWith("service:") || it.startsWith("rate_limited:") }?.substringAfter(':')?.toIntOrNull()
+    reason?.takeIf { it.startsWith("service:") || it.startsWith("rate_limited:") }?.split(':')?.getOrNull(1)?.toIntOrNull()

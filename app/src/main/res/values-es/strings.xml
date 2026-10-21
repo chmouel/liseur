@@ -1551,6 +1551,7 @@
     <string name="whole_book_check_background">El progreso es aproximado. Puedes salir de esta página; la comprobación continúa mientras la aplicación siga abierta.</string>
     <string name="whole_book_scan_failed">No se pudo comprobar el libro. Comprueba que esté descargado y sea legible, y vuelve a intentarlo.</string>
     <string name="whole_book_already_running">Ya se está traduciendo otro libro. Espera a que termine o paúsalo primero.</string>
+    <string name="whole_book_same_language">Este libro ya está en %1$s. Elige otro idioma de destino en los ajustes de traducción.</string>
     <string name="whole_book_counts">Frases: %1$s · En caché: %2$s · Fallidas: %3$s · Por traducir: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Idioma del libro</string>

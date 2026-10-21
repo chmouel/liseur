@@ -1391,7 +1391,8 @@ changing reader behavior.
   errors (429, 408, 5xx, network) retry with backoff, honouring
   `Retry-After`, within 30 minutes of a chunk's first failure; offline
   waits poll `NetworkAvailability` without using an attempt. A wait past
-  the window pauses rather than asking early. The scan estimate follows
+  the window pauses rather than asking early, as `rate_limited:429:<millis>`,
+  and auto-resume waits for that time. The scan estimate follows
   the same chunk rule (`startsChunk`). See ADR 0062 for auto-resume and
   fast resume.
 - Bulk and reader misses share admission (`TranslationAdmissions`): bulk

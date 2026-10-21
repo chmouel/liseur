@@ -850,6 +850,8 @@ class ReaderActivity : FragmentActivity() {
         // font size or margin under it. Unconditional, so it always
         // pairs with onStop even when the activity is finishing.
         ReaderPresence.opened()
+        // Coming back to a reader skips the library, which resumes paused jobs too.
+        lifecycleScope.launch { container.resumeWholeBookTranslations() }
     }
 
     override fun onStop() {

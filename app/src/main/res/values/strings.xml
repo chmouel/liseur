@@ -1611,6 +1611,7 @@
     <string name="whole_book_check_background">Progress is approximate. You can leave this page; the check continues while the app stays open.</string>
     <string name="whole_book_scan_failed">The book could not be checked. Check that it is downloaded and readable, then try again.</string>
     <string name="whole_book_already_running">Another book is already being translated. Wait for it to finish or pause it first.</string>
+    <string name="whole_book_same_language">This book is already in %1$s. Choose another target language in Translation settings.</string>
     <string name="whole_book_counts">Sentences: %1$s · Cached: %2$s · Failed: %3$s · To translate: %4$s</string>
     <string name="whole_book_languages">%1$s → %2$s</string>
     <string name="whole_book_source_auto">Book language</string>

@@ -31,7 +31,8 @@ requests. A 429, a 408 or 5xx, or a lost connection is asked again with
 growing waits, or the wait the server asks for, within 30 minutes of the
 first failure; with no network the job waits for one, a LAN included,
 without using up a try. A server asking to wait longer pauses the job
-instead of being asked early. A retried request may be billed twice. The
+instead of being asked early, and the job keeps that time so an automatic
+resume waits for it too. A retried request may be billed twice. The
 cost estimate groups sentences the way the job does. Pause cancels outstanding calls;
 it cannot undo processing or billing already performed by the provider.
 
