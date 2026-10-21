@@ -41,12 +41,12 @@ class Stub:
             raise SystemExit(f"ai-stub did not start: {line!r}")
         self.base = f"http://127.0.0.1:{port.group(1)}"
 
-    def call(self, method: str, path: str, body: object = None, key: str | None = None):
+    def call(self, method: str, path: str, body: object = None, key: str | None = None, header: str = "Authorization"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(self.base + path, data=data, method=method)
         request.add_header("Content-Type", "application/json")
         if key:
-            request.add_header("Authorization", f"Bearer {key}")
+            request.add_header(header, key if header != "Authorization" else f"Bearer {key}")
         try:
             with urllib.request.urlopen(request, timeout=10) as reply:
                 return reply.status, reply.headers.get("Content-Type"), reply.read()
@@ -105,15 +105,25 @@ def main() -> int:
         code, error = stub.json("POST", "/v1/audio/speech", {"input": "Hi", "response_format": "mp3"})
         check("speech refuses another format, naming response_format", code == 400 and "response_format" in error["error"]["message"], error)
 
+        code, voices = stub.json("GET", "/api/voices/?include_catalog=true&skip=0&limit=100")
+        check("gradium voices list uids, names and languages", code == 200 and [v["uid"] for v in voices] == ["stubEmma0001", "stubLouis0002"] and voices[0]["language"] == "en", voices)
+
+        code, kind, audio = stub.call("POST", "/api/post/speech/tts", {"text": "Hello there.", "voice_id": "stubEmma0001", "output_format": "wav", "only_audio": True})
+        rate = int.from_bytes(audio[24:28], "little") if len(audio) > 28 else None
+        check("gradium speech answers a 48 kHz WAV", code == 200 and kind == "audio/wav" and audio[:4] == b"RIFF" and rate == 48_000, (code, kind, rate))
+
+        code, kind, text = stub.call("POST", "/api/post/speech/tts", {"text": "Hi", "voice_id": "nope", "output_format": "wav", "only_audio": True})
+        check("gradium refuses an unknown voice in plain text", code == 500 and kind == "text/plain" and b"voice" in text, (code, kind, text))
+
         code, entries = stub.json("GET", "/_stub/requests")
         first_chat = next((e for e in entries if e["path"] == "/v1/chat/completions"), {})
-        check("the log keeps every request", code == 200 and len(entries) == 6, len(entries))
+        check("the log keeps every request", code == 200 and len(entries) == 9, len(entries))
         check(
             "the log splits the prompt's blocks",
             first_chat.get("blocks") == {"book": "Book: Dune", "context": "Il fait gris.", "passage": "Il pleut."},
             first_chat.get("blocks"),
         )
-        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 6)
+        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 9)
 
         stub.json("DELETE", "/_stub/requests")
         code, entries = stub.json("GET", "/_stub/requests")
@@ -142,6 +152,12 @@ def main() -> int:
         check("--think puts reasoning before the translation", code == 200 and text.startswith("<think>") and text.endswith("[T] Oui."), text)
         entries = stub.json("GET", "/_stub/requests")[1]
         check("the key is never logged", "secret" not in json.dumps(entries) and entries[-1]["key_sent"] is True)
+        code, kind, text = stub.call("GET", "/api/voices/")
+        check("gradium refuses a missing key with its 1008 text", code == 500 and kind == "text/plain" and text.startswith(b"error from server 1008"), (code, text))
+        code, _, _ = stub.call("GET", "/api/voices/", key="secret", header="x-api-key")
+        check("gradium takes the key from x-api-key", code == 200, code)
+        entries = stub.json("GET", "/_stub/requests")[1]
+        check("the gradium key is never logged either", "secret" not in json.dumps(entries) and entries[-1]["key_sent"] is True)
     finally:
         stub.stop()
 

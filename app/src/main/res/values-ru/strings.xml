@@ -1220,8 +1220,8 @@
     <string name="read_aloud_settings_server_privacy">Читаемый вслух текст отправляется на указанный вами сервер для создания голоса.</string>
     <string name="read_aloud_settings_server_model">Модель</string>
     <string name="read_aloud_settings_server_pick_detail">Выберите из списка или введите название.</string>
-    <string name="read_aloud_provider_openai">Речевой сервер (совместимый с OpenAI)</string>
-    <string name="read_aloud_provider_openai_summary">Ваш собственный сервер, например Kokoro, или облачный сервис вроде OpenAI.</string>
+    <string name="read_aloud_provider_openai">Речевой сервер</string>
+    <string name="read_aloud_provider_openai_summary">Ваш собственный сервер, например Kokoro, или облачный сервис вроде OpenAI или Gradium.</string>
     <string name="read_aloud_provider_device">Голоса устройства</string>
     <string name="read_aloud_provider_device_summary">Встроенные голоса Android. Работают без сети, текст не покидает устройство.</string>
     <string name="read_aloud_settings_device_voice_number">Голос %1$d</string>
@@ -1308,7 +1308,7 @@
     <string name="services_server_address">Адрес</string>
     <string name="services_server_name">Название</string>
     <string name="services_add">Добавить сервер</string>
-    <string name="services_add_detail">Сервер, совместимый с OpenAI, в интернете или в вашей сети.</string>
+    <string name="services_add_detail">Сервер, совместимый с OpenAI, или Gradium, в интернете или в вашей сети.</string>
     <string name="services_server_used_read_aloud">%1$s, используется для чтения вслух</string>
     <string name="services_server_duplicate">Этот адрес уже есть в списке под именем «%1$s».</string>
     <string name="services_unreadable">Не удалось прочитать сохранённые серверы.</string>

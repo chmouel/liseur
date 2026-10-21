@@ -1148,8 +1148,8 @@
     <string name="read_aloud_settings_server_privacy">Der vorgelesene Text wird an den angegebenen Server gesendet, um die Stimme zu erzeugen.</string>
     <string name="read_aloud_settings_server_model">Modell</string>
     <string name="read_aloud_settings_server_pick_detail">Wähle einen Eintrag aus der Liste oder gib einen Namen ein.</string>
-    <string name="read_aloud_provider_openai">Sprachserver (OpenAI-kompatibel)</string>
-    <string name="read_aloud_provider_openai_summary">Ein eigener Server wie Kokoro oder ein gehosteter Dienst wie OpenAI.</string>
+    <string name="read_aloud_provider_openai">Sprachserver</string>
+    <string name="read_aloud_provider_openai_summary">Ein eigener Server wie Kokoro oder ein gehosteter Dienst wie OpenAI oder Gradium.</string>
     <string name="read_aloud_provider_device">Gerätestimmen</string>
     <string name="read_aloud_provider_device_summary">Die Stimmen von Android. Sie funktionieren offline, und kein Text verlässt das Gerät.</string>
     <string name="read_aloud_settings_device_voice_number">Stimme %1$d</string>
@@ -1230,7 +1230,7 @@
     <string name="services_server_address">Adresse</string>
     <string name="services_server_name">Name</string>
     <string name="services_add">Server hinzufügen</string>
-    <string name="services_add_detail">Ein OpenAI-kompatibler Server, gehostet oder im eigenen Netzwerk.</string>
+    <string name="services_add_detail">Ein OpenAI-kompatibler Server oder Gradium, gehostet oder im eigenen Netzwerk.</string>
     <string name="services_server_used_read_aloud">%1$s, für Vorlesen verwendet</string>
     <string name="services_server_duplicate">Diese Adresse ist bereits als „%1$s“ aufgeführt.</string>
     <string name="services_unreadable">Gespeicherte Server konnten nicht gelesen werden.</string>

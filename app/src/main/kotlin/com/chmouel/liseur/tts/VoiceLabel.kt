@@ -47,6 +47,20 @@ internal data class VoiceLabel(
         }
 
         /**
+         * How a listed [voice] is shown: by the name and language its
+         * server gave, else by what its id says.
+         */
+        fun of(voice: SpeechVoice): VoiceLabel {
+            val parsed = of(voice.id)
+            return VoiceLabel(
+                id = voice.id,
+                name = voice.name ?: parsed.name,
+                language = voice.language?.let(SpeechLanguage::normalize) ?: parsed.language,
+                gender = parsed.gender,
+            )
+        }
+
+        /**
          * The [listed] voices to offer: those [chosen], keeping the
          * [stored] one so the voice in use is always seen; all of them
          * when nothing listed was chosen.
@@ -69,9 +83,9 @@ internal data class VoiceLabel(
 
         private const val REGIONAL_INDICATOR_A = 0x1F1E6
 
-        /** [ids] grouped by language in the order first seen, voices with none last. */
-        fun grouped(ids: List<String>): List<Pair<String?, List<VoiceLabel>>> {
-            val groups = ids.map(::of).groupBy { it.language }
+        /** [ids] grouped by language in the order first seen, voices with none last; [labelOf] says how each is shown. */
+        fun grouped(ids: List<String>, labelOf: (String) -> VoiceLabel = ::of): List<Pair<String?, List<VoiceLabel>>> {
+            val groups = ids.map(labelOf).groupBy { it.language }
             return groups.filterKeys { it != null }.toList() + groups.filterKeys { it == null }.toList()
         }
     }

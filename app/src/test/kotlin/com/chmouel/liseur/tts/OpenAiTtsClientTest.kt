@@ -815,4 +815,82 @@ class OpenAiTtsClientTest {
         assertTrue(System.nanoTime() - started < TimeUnit.SECONDS.toNanos(2))
         assertTrue("the HTTP call itself was cancelled", cancelled)
     }
+
+    private val gradium: HttpUrl get() = OpenAiTts.baseUrl("https://api.gradium.ai/api")!!
+
+    private fun gradiumVoice(uid: String, name: String, language: String?) =
+        """{"uid":"$uid","name":"$name","description":null,"is_catalog":true,"is_pro_clone":false,"language":${language?.let { "\"$it\"" } ?: "null"},"tags":[]}"""
+
+    @Test
+    fun `gradium's voices are listed with their names and languages, page after page, with the key in its own header`(): Unit = runBlocking {
+        val first = (1..100).joinToString(",", "[", "]") { gradiumVoice("v$it", "Voice $it", "en") }
+        server.enqueue(MockResponse(body = first, headers = okhttp3.Headers.headersOf("Content-Type", "application/json")))
+        server.enqueue(MockResponse(body = "[${gradiumVoice("YTpq7expH9539ERJ", "Emma", "en")},${gradiumVoice("mine", "Me", null)}]"))
+
+        val voices = clientFor("api.gradium.ai").listVoices(gradium, "secret", GradiumTts.MODEL)
+
+        assertEquals(102, voices.size)
+        assertEquals(SpeechVoice("YTpq7expH9539ERJ", "Emma", "en"), voices[100])
+        assertEquals(SpeechVoice("mine", "Me", null), voices[101])
+        val page = server.takeRequest()
+        assertEquals("/api/voices/?include_catalog=true&skip=0&limit=100", page.url.encodedPath + "?" + page.url.encodedQuery)
+        assertEquals("secret", page.headers["x-api-key"])
+        assertNull(page.headers["Authorization"])
+        assertEquals("100", server.takeRequest().url.queryParameter("skip"))
+    }
+
+    @Test
+    fun `gradium has one model, and its key is checked by listing voices`(): Unit = runBlocking {
+        server.enqueue(MockResponse(body = "[${gradiumVoice("a", "A", "fr")}]"))
+        val client = clientFor("api.gradium.ai")
+
+        assertEquals(listOf(SpeechModel("default", speech = true)), client.models(gradium, "k"))
+        assertEquals(listOf(SpeechModel("default", speech = true)), client.allModels(gradium, "k"))
+        assertEquals("/api/voices/", server.takeRequest().url.encodedPath)
+        assertEquals(1, server.requestCount)
+
+        server.enqueue(MockResponse(code = 500, body = "error from server 1008: API key is revoked or expired"))
+        expect<SpeechError.InvalidKey> { client.allModels(gradium, "k") }
+        server.enqueue(MockResponse(code = 401))
+        expect<SpeechError.InvalidKey> { client.listVoices(gradium, "k", null) }
+        server.enqueue(MockResponse(code = 500, body = "upstream unavailable"))
+        expect<SpeechError.Service> { client.listVoices(gradium, "k", null) }
+    }
+
+    @Test
+    fun `gradium is asked for one WAV, read by its 48 kHz header`(): Unit = runBlocking {
+        server.enqueue(pcm(WavPcmTest.wav(rate = 48_000, channels = 1, data = ByteArray(400)), "audio/wav"))
+
+        val audio = clientFor("api.gradium.ai").synthesize(gradium, "secret", "Bonjour.", "YTpq7expH9539ERJ", "default")
+
+        assertEquals(100, audio.frames)
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/api/post/speech/tts", request.url.encodedPath)
+        assertEquals("secret", request.headers["x-api-key"])
+        assertNull(request.headers["Authorization"])
+        val body = JSONObject(request.body!!.utf8())
+        assertEquals("Bonjour.", body.getString("text"))
+        assertEquals("YTpq7expH9539ERJ", body.getString("voice_id"))
+        assertEquals("wav", body.getString("output_format"))
+        assertTrue(body.getBoolean("only_audio"))
+        assertFalse(body.has("model"))
+    }
+
+    @Test
+    fun `gradium's refusals are told apart, and a non-WAV answer is an error`(): Unit = runBlocking {
+        val client = clientFor("api.gradium.ai")
+        server.enqueue(MockResponse(code = 500, body = "error from server 1008: API key is revoked or expired"))
+        expect<SpeechError.InvalidKey> { client.synthesize(gradium, "k", "t", "v", "default") }
+        server.enqueue(MockResponse(code = 403))
+        expect<SpeechError.InvalidKey> { client.synthesize(gradium, "k", "t", "v", "default") }
+        server.enqueue(MockResponse(code = 500, body = "error from server 1003: voice not found"))
+        expect<SpeechError.InvalidVoice> { client.synthesize(gradium, "k", "t", "v", "default") }
+        server.enqueue(MockResponse(code = 429))
+        expect<SpeechError.RateLimited> { client.synthesize(gradium, "k", "t", "v", "default") }
+        server.enqueue(pcm(byteArrayOf(1, 0, 2, 0), "audio/pcm"))
+        expect<SpeechError.InvalidResponse> { client.synthesize(gradium, "k", "t", "v", "default") }
+        // No MP3 fallback: one request per sentence.
+        assertEquals(5, server.requestCount)
+    }
 }

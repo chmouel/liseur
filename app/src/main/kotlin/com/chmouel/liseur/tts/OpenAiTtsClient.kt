@@ -37,6 +37,19 @@ data class SpeechModel(
     val voices: List<String>? = null,
 )
 
+/**
+ * A voice a server lists: its [id], the one sent to it, and when the list
+ * says, the [name] to show for it and the [language] it speaks, as a
+ * BCP 47 tag or whatever the server wrote. OpenAI-style servers give
+ * ids only, which say what they say (see [VoiceLabel]); Gradium names its
+ * voices and their language.
+ */
+data class SpeechVoice(
+    val id: String,
+    val name: String? = null,
+    val language: String? = null,
+)
+
 object OpenAiTts {
     /**
      * OpenAI's own voices for [model], offered for OpenAI, whose voice
@@ -127,7 +140,9 @@ object OpenAiTts {
      * taken as http, and an address with no API version in its path gets
      * `v1`, so a self-hosted server's own address works as well as a hosted
      * service's API root, such as `/v1/openai`, Z.ai's `/api/paas/v4` or
-     * Gemini's `/v1beta/openai`. Null when it is no http(s) address.
+     * Gemini's `/v1beta/openai`. Gradium's root is `/api` with no version,
+     * see [GradiumTts], so its address is kept as typed. Null when it is
+     * no http(s) address.
      */
     fun baseUrl(input: String): HttpUrl? = normalized(input) { segments -> segments.none { VERSION.matches(it) } }
 
@@ -146,7 +161,7 @@ object OpenAiTts {
         if (!text.contains("://")) text = "http://$text"
         val url = text.toHttpUrlOrNull() ?: return null
         val segments = url.pathSegments.filter { it.isNotEmpty() }.toMutableList()
-        if (addV1(segments)) segments.add("v1")
+        if (!GradiumTts.isGradiumHost(url.host) && addV1(segments)) segments.add("v1")
         return url.newBuilder()
             .encodedPath("/")
             .apply { segments.forEach { addPathSegment(it) } }
@@ -161,7 +176,8 @@ object OpenAiTts {
  * self-hosted server such as Kokoro), asked for WAV, whose header says the
  * rate, and turned into the 24 kHz mono 16-bit PCM every speech service
  * hands the shared output. A reply without a WAV header is taken as that
- * PCM already, as some servers answer whatever was asked.
+ * PCM already, as some servers answer whatever was asked. A Gradium
+ * server, told by its host, is spoken to its own way, see [GradiumTts].
  *
  * There is no logging interceptor on purpose: the request may carry a key
  * in a header and carries the book's text in the body.
@@ -185,6 +201,7 @@ class OpenAiTtsClient(
         voice: String,
         model: String,
     ): SpeechAudio {
+        if (GradiumTts.isGradium(base)) return gradiumSpeak(base, apiKey, text, voice)
         val key = base to model
         if (key in mp3Models) return decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3)
         return when (val reply = speak(base, apiKey, text, voice, model, WAV)) {
@@ -226,10 +243,15 @@ class OpenAiTtsClient(
      * server names none, so the voice is typed: nothing is guessed.
      * Throws [SpeechError].
      */
-    suspend fun voices(base: HttpUrl, apiKey: String?, model: String?): List<String> {
+    suspend fun voices(base: HttpUrl, apiKey: String?, model: String?): List<String> =
+        listVoices(base, apiKey, model).map { it.id }
+
+    /** [voices], with the name and language the server gives each, when it does. */
+    suspend fun listVoices(base: HttpUrl, apiKey: String?, model: String?): List<SpeechVoice> {
         val named = model?.takeIf { it.isNotBlank() }
-        if (OpenAiTts.isOpenAi(base)) return OpenAiTts.openAiVoices(named)
-        voiceList(base, apiKey)?.let { return it }
+        if (GradiumTts.isGradium(base)) return gradiumVoices(base, apiKey)
+        if (OpenAiTts.isOpenAi(base)) return OpenAiTts.openAiVoices(named).map(::SpeechVoice)
+        voiceList(base, apiKey)?.let { return it.map(::SpeechVoice) }
         val description = named?.let { OpenAiTts.modelDescription(base, it) }
         return when {
             // Public, so asked without the key.
@@ -240,7 +262,7 @@ class OpenAiTtsClient(
             OpenAiTts.isGroq(base) -> named?.let { OpenAiTts.groqVoices(base, it) }.orEmpty()
             named != null -> models(base, apiKey).firstOrNull { it.id == named }?.voices.orEmpty()
             else -> emptyList()
-        }
+        }.map(::SpeechVoice)
     }
 
     /**
@@ -250,6 +272,7 @@ class OpenAiTtsClient(
      * it is asked again without. Throws [SpeechError].
      */
     suspend fun models(base: HttpUrl, apiKey: String?): List<SpeechModel> {
+        if (GradiumTts.isGradium(base)) return GRADIUM_MODELS
         val speech = base.newBuilder().addPathSegment("models").addQueryParameter("output_modalities", "speech").build()
         return try {
             execute(request(speech, apiKey).get().build()) { modelList(it, base) }
@@ -261,13 +284,102 @@ class OpenAiTtsClient(
 
     /**
      * Every model the server lists, whatever it outputs, in its order: a
-     * check that the server answers and takes the key. Throws [SpeechError].
+     * check that the server answers and takes the key. Gradium has no
+     * model list, so its voice list is the check. Throws [SpeechError].
      */
-    suspend fun allModels(base: HttpUrl, apiKey: String?): List<SpeechModel> =
-        execute(request(base, "models", apiKey).get().build()) {
+    suspend fun allModels(base: HttpUrl, apiKey: String?): List<SpeechModel> {
+        if (GradiumTts.isGradium(base)) {
+            gradiumVoices(base, apiKey)
+            return GRADIUM_MODELS
+        }
+        return execute(request(base, "models", apiKey).get().build()) {
             if (!it.isSuccessful) throw errorFor(it)
             modelList(it, base)
         }
+    }
+
+    /**
+     * Gradium's voices, the catalogue's and the account's own, every page
+     * of them: a page shorter than asked is the last. Throws [SpeechError].
+     */
+    private suspend fun gradiumVoices(base: HttpUrl, apiKey: String?): List<SpeechVoice> {
+        val voices = LinkedHashMap<String, SpeechVoice>()
+        var skip = 0
+        var pages = 0
+        while (true) {
+            if (pages >= MAX_VOICE_PAGES) throw SpeechError.InvalidResponse("voice list too long")
+            val url = GradiumTts.voicesUrl(base, skip, GradiumTts.VOICE_PAGE)
+            val page = execute(request(url, apiKey, gradium = true).get().build(), ::gradiumVoicePage)
+            page.forEach { voices.putIfAbsent(it.id, it) }
+            pages++
+            if (page.size < GradiumTts.VOICE_PAGE) return voices.values.toList()
+            skip += page.size
+        }
+    }
+
+    private fun gradiumVoicePage(response: Response): List<SpeechVoice> {
+        if (!response.isSuccessful) throw gradiumErrorFor(response)
+        val text = boundedText(response, MAX_LIST_BYTES) ?: throw SpeechError.InvalidResponse("response too large")
+        val items = try {
+            JSONArray(text.trimStart())
+        } catch (_: JSONException) {
+            throw SpeechError.InvalidResponse("no list")
+        }
+        return (0 until items.length()).mapNotNull { i ->
+            val item = items.optJSONObject(i) ?: return@mapNotNull null
+            val id = (item.opt("uid") as? String)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            SpeechVoice(
+                id = id,
+                name = (item.opt("name") as? String)?.takeIf { it.isNotBlank() },
+                language = (item.opt("language") as? String)?.takeIf { it.isNotBlank() },
+            )
+        }
+    }
+
+    /** Gradium's speech: the whole WAV at once, its 48 kHz read from its header. */
+    private suspend fun gradiumSpeak(base: HttpUrl, apiKey: String?, text: String, voice: String): SpeechAudio {
+        val body = JSONObject()
+            .put("text", text)
+            .put("voice_id", voice)
+            .put("output_format", WAV)
+            .put("only_audio", true)
+            .toString()
+        val request = request(base, "post/speech/tts", apiKey, gradium = true).post(body.toRequestBody(JSON)).build()
+        val bytes = execute(request) { response ->
+            if (!response.isSuccessful) throw gradiumErrorFor(response)
+            val source = response.body.source()
+            if (source.request(MAX_AUDIO_BYTES + 1L)) throw SpeechError.InvalidResponse("audio too long")
+            source.buffer.readByteArray()
+        }
+        return withContext(Dispatchers.Default) {
+            if (!WavPcm.isWav(bytes)) throw SpeechError.InvalidResponse("unexpected format")
+            try {
+                SpeechAudio(WavPcm.toSpeechPcm(bytes))
+            } catch (e: SpeechError) {
+                throw e
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                throw SpeechError.InvalidResponse("undecodable audio")
+            }
+        }
+    }
+
+    /**
+     * A failed Gradium request: a refused key, whether as a 401/403 or as
+     * the plain text its proxy answers before streaming (see
+     * [GradiumTts.refusedKey]); a voice it does not have; else its failure.
+     */
+    private fun gradiumErrorFor(response: Response): SpeechError {
+        val code = response.code
+        val text = errorBody(response).text
+        return when {
+            code == 401 || code == 403 || GradiumTts.refusedKey(text) -> SpeechError.InvalidKey(code)
+            code == 429 -> SpeechError.RateLimited(code)
+            text.contains("voice", ignoreCase = true) -> SpeechError.InvalidVoice(code)
+            else -> SpeechError.Service(code)
+        }
+    }
 
     /**
      * The server's own voice list, every page of it, or null when it has
@@ -342,16 +454,16 @@ class OpenAiTtsClient(
         return body
     }
 
-    private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder =
-        request(base.newBuilder().addPathSegments(path).build(), apiKey)
+    private fun request(base: HttpUrl, path: String, apiKey: String?, gradium: Boolean = false): Request.Builder =
+        request(base.newBuilder().addPathSegments(path).build(), apiKey, gradium)
 
-    private fun request(url: HttpUrl, apiKey: String?): Request.Builder {
+    private fun request(url: HttpUrl, apiKey: String?, gradium: Boolean = false): Request.Builder {
         val builder = Request.Builder()
             .url(url)
             .header("User-Agent", USER_AGENT)
         if (apiKey.isNullOrBlank()) return builder
         try {
-            builder.header("Authorization", "Bearer $apiKey")
+            if (gradium) builder.header("x-api-key", apiKey) else builder.header("Authorization", "Bearer $apiKey")
         } catch (_: IllegalArgumentException) {
             // A pasted line break or non-ASCII character; OkHttp's message
             // would repeat the key, so it is not kept as the cause.
@@ -571,6 +683,7 @@ class OpenAiTtsClient(
         private const val MP3 = "mp3"
         private val NAME_FIELDS = listOf("slug", "id", "name")
         private const val MAX_VOICE_PAGES = 20
+        private val GRADIUM_MODELS = listOf(SpeechModel(GradiumTts.MODEL, speech = true))
 
         /** A reply's bytes: the longest PCM, with room for a WAV header. */
         private const val MAX_AUDIO_BYTES = SpeechAudio.MAX_PCM_BYTES + 64 * 1024L

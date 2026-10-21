@@ -553,6 +553,7 @@ internal fun VoicePicker(
     onSave: (String) -> Unit,
     onChoose: (Set<String>) -> Unit,
     onRetry: () -> Unit,
+    labelOf: (String) -> VoiceLabel = VoiceLabel::of,
 ) {
     val focus = LocalFocusManager.current
     val listed = (listing as? Listing.Loaded)?.items.orEmpty()
@@ -591,7 +592,7 @@ internal fun VoicePicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
-            else -> VoiceLabel.grouped(VoiceLabel.offered(listed, chosen, stored)).forEach { (language, voices) ->
+            else -> VoiceLabel.grouped(VoiceLabel.offered(listed, chosen, stored), labelOf).forEach { (language, voices) ->
                 if (language != null) LanguageHeader(language, locale)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -632,6 +633,7 @@ internal fun VoicePicker(
                 listed = listed,
                 chosen = chosen,
                 preview = preview,
+                labelOf = labelOf,
                 onDismiss = { choosing = false },
                 onSave = {
                     choosing = false
@@ -658,7 +660,7 @@ internal fun VoicePicker(
                     val voice = typed.trim()
                     if (voice.isNotEmpty()) {
                         onSave(voice)
-                        preview.play(sample(VoiceLabel.of(voice).language), voice)
+                        preview.play(sample(labelOf(voice).language), voice)
                     }
                 },
             ),
@@ -692,6 +694,7 @@ internal fun ChooseVoicesDialog(
     preview: VoicePreview,
     onDismiss: () -> Unit,
     onSave: (Set<String>) -> Unit,
+    labelOf: (String) -> VoiceLabel = VoiceLabel::of,
 ) {
     val locale = LocalConfiguration.current.locales[0]
     val sample = sampleSentence()
@@ -715,7 +718,7 @@ internal fun ChooseVoicesDialog(
                 }
                 PreviewError(preview)
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    VoiceLabel.grouped(listed).forEach { (language, voices) ->
+                    VoiceLabel.grouped(listed, labelOf).forEach { (language, voices) ->
                         if (language != null) LanguageHeader(language, locale)
                         voices.forEach { voice ->
                             val speaking = preview.playing == voice.id

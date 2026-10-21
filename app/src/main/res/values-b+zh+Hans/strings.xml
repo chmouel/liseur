@@ -1093,8 +1093,8 @@
     <string name="read_aloud_settings_server_privacy">朗读的文字会发送到你填写的服务器以生成语音。</string>
     <string name="read_aloud_settings_server_model">模型</string>
     <string name="read_aloud_settings_server_pick_detail">从列表中选择，或输入名称。</string>
-    <string name="read_aloud_provider_openai">语音服务器（OpenAI 兼容）</string>
-    <string name="read_aloud_provider_openai_summary">你自己的服务器（如 Kokoro），或 OpenAI 等托管服务。</string>
+    <string name="read_aloud_provider_openai">语音服务器</string>
+    <string name="read_aloud_provider_openai_summary">你自己的服务器（如 Kokoro），或 OpenAI、Gradium 等托管服务。</string>
     <string name="read_aloud_provider_device">设备语音</string>
     <string name="read_aloud_provider_device_summary">Android 自带的语音。可离线使用，文本不会离开设备。</string>
     <string name="read_aloud_settings_device_voice_number">语音 %1$d</string>
@@ -1172,7 +1172,7 @@
     <string name="services_server_address">地址</string>
     <string name="services_server_name">名称</string>
     <string name="services_add">添加服务器</string>
-    <string name="services_add_detail">兼容 OpenAI 的服务器，可以是托管服务，也可以在你自己的网络中。</string>
+    <string name="services_add_detail">兼容 OpenAI 的服务器或 Gradium，可以是托管服务，也可以在你自己的网络中。</string>
     <string name="services_server_used_read_aloud">%1$s，用于朗读</string>
     <string name="services_server_duplicate">此地址已在列表中，名称为“%1$s”。</string>
     <string name="services_unreadable">无法读取已保存的服务器。</string>

@@ -145,7 +145,8 @@ terms, chosen in Android's settings.
 
 Liseur can read aloud with any speech server that speaks OpenAI's API:
 a server of your own running a model such as Kokoro, OpenAI itself, or
-another hosted service. Nothing is sent until you add that server in Settings, External services and API keys,
+another hosted service; and with Gradium, a hosted speech service with
+its own API. Nothing is sent until you add that server in Settings, External services and API keys,
 typing its address or picking it from the services listed on that field
 (picking one only fills in its address), and choose it in Settings, Read
 aloud. Liseur then
@@ -171,6 +172,15 @@ sends nothing there), and the paste button inside the field reads your
 clipboard once when tapped.
 Saving a key checks it against that server's models endpoint, sending
 the key without any book text.
+
+With Gradium (`https://api.gradium.ai/api`, or its `eu.` and `us.`
+hosts if you picked a region), the same things are sent to the same
+ends: the key check and the lists ask for its voices, with your key,
+and once you press play the text being read goes to Gradium with the
+voice you picked and your key. There is one model, so none is listed or
+sent. What Gradium keeps and for how long is under its own terms and
+privacy policy; its data retention and region settings are made in its
+Studio, not in Liseur.
 
 ### This phone's translator, for translation
 

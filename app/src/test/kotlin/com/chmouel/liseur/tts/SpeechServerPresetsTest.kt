@@ -44,4 +44,18 @@ class SpeechServerPresetsTest {
             assertEquals("192.168.1.10", example.url.substring(example.host))
         }
     }
+
+    @Test
+    fun gradiumsRegionsAreEachTheirOwnServerAndKeepTheirApiRoot() {
+        val regions = SpeechServerPresets.all.filter { it.url.contains("gradium") }
+        assertEquals(
+            listOf("https://api.gradium.ai/api", "https://eu.api.gradium.ai/api", "https://us.api.gradium.ai/api"),
+            regions.map { it.url },
+        )
+        assertEquals(3, regions.map { it.origin }.distinct().size)
+        assertEquals("https://eu.api.gradium.ai/api", OpenAiTts.baseUrl("https://eu.api.gradium.ai/api").toString())
+        assertEquals("https://eu.api.gradium.ai/api", OpenAiTts.identityUrl("https://eu.api.gradium.ai/api/").toString())
+        assertEquals(regions[1], SpeechServerPresets.matching("https://EU.api.gradium.ai/api"))
+        assertNull(SpeechServerPresets.matching("http://api.gradium.ai/api"))
+    }
 }

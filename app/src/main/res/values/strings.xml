@@ -1164,6 +1164,9 @@
     <string name="speech_preset_mistral" translatable="false">Mistral</string>
     <string name="speech_preset_groq" translatable="false">Groq</string>
     <string name="speech_preset_together" translatable="false">Together AI</string>
+    <string name="speech_preset_gradium" translatable="false">Gradium</string>
+    <string name="speech_preset_gradium_eu" translatable="false">Gradium (EU)</string>
+    <string name="speech_preset_gradium_us" translatable="false">Gradium (US)</string>
     <string name="speech_preset_kokoro" translatable="false">Kokoro</string>
     <string name="speech_preset_lm_studio" translatable="false">LM Studio</string>
     <string name="speech_preset_ollama" translatable="false">Ollama</string>
@@ -1192,8 +1195,8 @@
     <string name="read_aloud_settings_server_privacy">The text being read aloud is sent to the server you entered to make the voice.</string>
     <string name="read_aloud_settings_server_model">Model</string>
     <string name="read_aloud_settings_server_pick_detail">Pick one from the list, or type a name.</string>
-    <string name="read_aloud_provider_openai">Speech server (OpenAI-compatible)</string>
-    <string name="read_aloud_provider_openai_summary">Your own server, such as Kokoro, or a hosted service like OpenAI.</string>
+    <string name="read_aloud_provider_openai">Speech server</string>
+    <string name="read_aloud_provider_openai_summary">Your own server, such as Kokoro, or a hosted service like OpenAI or Gradium.</string>
     <string name="read_aloud_provider_device">Device voices</string>
     <string name="read_aloud_provider_device_summary">Android\'s own voices. They work offline, and no text leaves the device.</string>
     <string name="read_aloud_settings_device_voice_number">Voice %1$d</string>
@@ -1275,7 +1278,7 @@
     <string name="services_server_address">Address</string>
     <string name="services_server_name">Name</string>
     <string name="services_add">Add server</string>
-    <string name="services_add_detail">An OpenAI-compatible server, hosted or on your own network.</string>
+    <string name="services_add_detail">An OpenAI-compatible server or Gradium, hosted or on your own network.</string>
     <string name="services_server_used_read_aloud">%1$s, used for read aloud</string>
     <string name="services_server_duplicate">This address is already listed as “%1$s”.</string>
     <string name="services_unreadable">Saved servers couldn\'t be read.</string>

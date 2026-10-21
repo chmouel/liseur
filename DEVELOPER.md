@@ -1059,8 +1059,9 @@ changing reader behavior.
   ViewModel must not drop it as unchanged. On opening, the wide-content
   fit restores to the gate's non-exact target instead of capturing.
 - Providers (Read aloud screen under Reading & navigation): Gemini (Play
-  only), device voices, and any OpenAI-API server on the External services
-  and API keys page. Each is a `SpeechService` (`GeminiSpeechService`,
+  only), device voices, and "Speech server": any OpenAI-API server, or
+  Gradium, on the External services and API keys page. Each is a
+  `SpeechService` (`GeminiSpeechService`,
   `DeviceSpeechService`, `OpenAiSpeechService`) owning its rows, voice
   catalogue and `SessionVoice`; the flavor's `ReadAloudFeatureFactory`
   passes them to `SpeechReadAloud`. All return 24 kHz mono 16-bit PCM, so
@@ -1079,6 +1080,15 @@ changing reader behavior.
     match. A 400/422 naming `response_format` retries as `mp3`, then that
     (root, model) asks mp3 first. Error bodies are read only to classify.
     The DeepInfra schema is fetched without the key.
+  - Gradium is three presets (default, EU, US hosts, `/api` root, no
+    `v1` added) and host branches in `OpenAiTtsClient` (`GradiumTts`):
+    `x-api-key` header, one model `default`, voices from `voices/` with a
+    name and language each (`SpeechVoice`, shown by
+    `VoiceLabel.of(SpeechVoice)`), speech from `post/speech/tts` as WAV
+    with `only_audio`, no MP3 fallback; the key check lists voices; a
+    500 body matching `error from server 1008` is a refused key. Nothing
+    outside the client branches on the host; see
+    `docs/adr/0062-gradium-through-the-speech-server.md`.
   - api.openai.com voices are the static `OpenAiTts.openAiVoices`; its
     `audio/voices` lists only custom voices and is never asked. The
     monthly `openai-voices` workflow (`hack/openai-voices`) opens a PR
@@ -1094,7 +1104,7 @@ changing reader behavior.
     the voice in use stays).
     "Test connection" (`OpenAiSpeechService.test`) fetches both lists and
     synthesizes one word.
-  - The OpenAI-compatible provider runs one request at a time with long
+  - The speech server provider runs one request at a time with long
     timeouts; notices name the host. Groq `model_terms_required`
     (`SpeechError.TermsRequired`) and a text-only server with no speech
     route (`SpeechError.NoSpeech`: Ollama's or llama.cpp's 404, LM
@@ -1145,7 +1155,7 @@ changing reader behavior.
   (`UtterancePrefetcher.pause` only stops reading further). Resume
   rewinds `REWIND_FRAMES` (a second) without refetching; a skip, jump,
   voice change or retry restarts the sentence.
-- Keys (Gemini, OpenAI-compatible) live in `noBackupFilesDir`, encrypted
+- Keys (Gemini, speech servers) live in `noBackupFilesDir`, encrypted
   by `SecretCipher`, one file each, per origin for servers (`ServerKeys`,
   `openai-key-<hash>`; old `openai-key` is deleted). Each speech request
   reads only the key stored for the origin it calls. Keys, request bodies

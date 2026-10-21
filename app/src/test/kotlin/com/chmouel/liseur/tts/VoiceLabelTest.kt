@@ -15,6 +15,14 @@ class VoiceLabelTest {
     }
 
     @Test
+    fun `a listed voice is shown by the name and language its server gave, or by its id`() {
+        assertEquals(VoiceLabel("YTpq7expH9539ERJ", "Emma", "en", null), VoiceLabel.of(SpeechVoice("YTpq7expH9539ERJ", "Emma", "en")))
+        assertEquals(VoiceLabel("x1", "X1", "fr-FR", null), VoiceLabel.of(SpeechVoice("x1", null, "fre_fr")))
+        assertEquals(VoiceLabel.of("af_bella"), VoiceLabel.of(SpeechVoice("af_bella")))
+        assertEquals(listOf("en", null), VoiceLabel.grouped(listOf("a", "b")) { VoiceLabel(it, it, if (it == "a") "en" else null, null) }.map { it.first })
+    }
+
+    @Test
     fun `a language with a country shows its flag`() {
         assertEquals("\uD83C\uDDFA\uD83C\uDDF8", VoiceLabel.flag("en-US"))
         assertEquals("\uD83C\uDDEB\uD83C\uDDF7", VoiceLabel.flag("fr-FR"))

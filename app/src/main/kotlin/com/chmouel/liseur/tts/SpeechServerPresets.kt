@@ -28,6 +28,9 @@ internal class SpeechServerPreset(
 }
 
 internal object SpeechServerPresets {
+    // Keys are made in Studio's Organization page, which has no address of its own.
+    private const val GRADIUM_KEYS = "https://studio.gradium.ai/"
+
     val all = listOf(
         SpeechServerPreset(R.string.speech_preset_openai, "https://api.openai.com/v1", keyUrl = "https://platform.openai.com/api-keys"),
         SpeechServerPreset(R.string.speech_preset_deepinfra, "https://api.deepinfra.com/v1/openai", keyUrl = "https://deepinfra.com/dash/api_keys"),
@@ -35,6 +38,9 @@ internal object SpeechServerPresets {
         SpeechServerPreset(R.string.speech_preset_mistral, "https://api.mistral.ai/v1", keyUrl = "https://console.mistral.ai/api-keys"),
         SpeechServerPreset(R.string.speech_preset_groq, "https://api.groq.com/openai/v1", keyUrl = "https://console.groq.com/keys"),
         SpeechServerPreset(R.string.speech_preset_together, "https://api.together.ai/v1", keyUrl = "https://api.together.xyz/settings/api-keys"),
+        SpeechServerPreset(R.string.speech_preset_gradium, "https://api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
+        SpeechServerPreset(R.string.speech_preset_gradium_eu, "https://eu.api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
+        SpeechServerPreset(R.string.speech_preset_gradium_us, "https://us.api.gradium.ai/api", keyUrl = GRADIUM_KEYS),
         SpeechServerPreset(R.string.speech_preset_kokoro, "http://192.168.1.10:8880", example = true),
         SpeechServerPreset(R.string.speech_preset_lm_studio, "http://192.168.1.10:1234", example = true),
         SpeechServerPreset(R.string.speech_preset_ollama, "http://192.168.1.10:11434", example = true),

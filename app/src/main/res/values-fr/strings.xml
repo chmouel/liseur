@@ -1136,8 +1136,8 @@
     <string name="read_aloud_settings_server_privacy">Le texte lu à voix haute est envoyé au serveur que vous avez indiqué pour produire la voix.</string>
     <string name="read_aloud_settings_server_model">Modèle</string>
     <string name="read_aloud_settings_server_pick_detail">Choisissez dans la liste, ou saisissez un nom.</string>
-    <string name="read_aloud_provider_openai">Serveur vocal (compatible OpenAI)</string>
-    <string name="read_aloud_provider_openai_summary">Votre propre serveur, comme Kokoro, ou un service hébergé comme OpenAI.</string>
+    <string name="read_aloud_provider_openai">Serveur vocal</string>
+    <string name="read_aloud_provider_openai_summary">Votre propre serveur, comme Kokoro, ou un service hébergé comme OpenAI ou Gradium.</string>
     <string name="read_aloud_provider_device">Voix de l\'appareil</string>
     <string name="read_aloud_provider_device_summary">Les voix d\'Android. Elles fonctionnent hors ligne et aucun texte ne quitte l\'appareil.</string>
     <string name="read_aloud_settings_device_voice_number">Voix %1$d</string>
@@ -1218,7 +1218,7 @@
     <string name="services_server_address">Adresse</string>
     <string name="services_server_name">Nom</string>
     <string name="services_add">Ajouter un serveur</string>
-    <string name="services_add_detail">Un serveur compatible OpenAI, hébergé ou sur votre propre réseau.</string>
+    <string name="services_add_detail">Un serveur compatible OpenAI ou Gradium, hébergé ou sur votre propre réseau.</string>
     <string name="services_server_used_read_aloud">%1$s, utilisé pour la lecture à voix haute</string>
     <string name="services_server_duplicate">Cette adresse est déjà dans la liste, sous le nom « %1$s ».</string>
     <string name="services_unreadable">Impossible de lire les serveurs enregistrés.</string>

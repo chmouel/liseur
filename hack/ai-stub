@@ -9,6 +9,13 @@ External services and API keys page:
   POST /v1/audio/speech      silent 24 kHz mono 16-bit WAV, sized to the text
   GET  /v1/audio/voices      stub_a and stub_b
 
+And what read aloud calls on a Gradium server, under its /api root; the
+app speaks Gradium's protocol to its real hosts only, so these answer
+a client pointed here on purpose (see hack/test-ai-stub):
+
+  GET  /api/voices/          two voices with a name and a language each
+  POST /api/post/speech/tts  silent 48 kHz mono 16-bit WAV, sized to the text
+
 Every request is appended to the log as one JSON line. A chat request
 also has its user message split into the prompt's blocks (book,
 context, passage) so a check can read them without parsing the prompt.
@@ -36,7 +43,12 @@ from pathlib import Path
 CHAT_MODEL = "stub-chat"
 SPEECH_MODEL = "stub-tts"
 VOICES = ["stub_a", "stub_b"]
+GRADIUM_VOICES = [
+    {"uid": "stubEmma0001", "name": "Emma", "description": "Stub", "is_catalog": True, "is_pro_clone": False, "language": "en", "tags": []},
+    {"uid": "stubLouis0002", "name": "Louis", "description": None, "is_catalog": False, "is_pro_clone": False, "language": "fr", "tags": []},
+]
 SAMPLE_RATE = 24_000
+GRADIUM_SAMPLE_RATE = 48_000
 # Silence per character of input, so a longer sentence plays longer.
 SECONDS_PER_CHARACTER = 0.03
 MAX_SECONDS = 20.0
@@ -45,11 +57,11 @@ BLOCKS = ("book", "context", "passage")
 DEFAULT_LOG = Path(__file__).resolve().parent.parent / "tmp/ai-stub/requests.jsonl"
 
 
-def wav(seconds: float) -> bytes:
-    frames = int(SAMPLE_RATE * max(0.1, min(seconds, MAX_SECONDS)))
+def wav(seconds: float, rate: int = SAMPLE_RATE) -> bytes:
+    frames = int(rate * max(0.1, min(seconds, MAX_SECONDS)))
     data = bytes(frames * 2)
     header = b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVE"
-    fmt = b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, SAMPLE_RATE, SAMPLE_RATE * 2, 2, 16)
+    fmt = b"fmt " + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16)
     return header + fmt + b"data" + struct.pack("<I", len(data)) + data
 
 
@@ -130,12 +142,19 @@ def handler(stub: Stub):
             self.error(401, "Invalid API key")
             return False
 
+        def gradium_authorized(self) -> bool:
+            """Gradium reads an x-api-key header, and refuses in plain text with its code 1008."""
+            if args.key is None or self.headers.get("x-api-key") == args.key:
+                return True
+            self.send(500, b"error from server 1008: API key is revoked or expired", "text/plain")
+            return False
+
         def entry(self, body=None) -> dict:
             entry = {
                 "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "method": self.command,
                 "path": self.path,
-                "key_sent": "Authorization" in self.headers,
+                "key_sent": "Authorization" in self.headers or "x-api-key" in self.headers,
             }
             if body is not None:
                 entry["body"] = body
@@ -146,6 +165,8 @@ def handler(stub: Stub):
             if route == "/_stub/requests":
                 return self.send(200, stub.entries())
             stub.record(self.entry())
+            if route == "/api/voices":
+                return self.send(200, GRADIUM_VOICES) if self.gradium_authorized() else None
             if not self.authorized():
                 return None
             if route == "/models":
@@ -178,6 +199,8 @@ def handler(stub: Stub):
             if route == "/chat/completions":
                 entry["blocks"] = blocks(user_text(body))
             stub.record(entry)
+            if route == "/api/post/speech/tts":
+                return self.gradium_speech(body) if self.gradium_authorized() else None
             if not self.authorized():
                 return None
             if args.delay:
@@ -210,6 +233,18 @@ def handler(stub: Stub):
             text = body.get("input") or ""
             self.send(200, wav(len(text) * SECONDS_PER_CHARACTER), "audio/wav")
 
+        def gradium_speech(self, body: dict) -> None:
+            if args.delay:
+                time.sleep(args.delay)
+            if args.fail:
+                return self.send(args.fail, f"error from server {args.fail}: stub failing".encode(), "text/plain")
+            if body.get("output_format") != "wav" or body.get("only_audio") is not True:
+                return self.send(500, b"unsupported output", "text/plain")
+            if body.get("voice_id") not in {v["uid"] for v in GRADIUM_VOICES}:
+                return self.send(500, b"error from server 1003: voice not found", "text/plain")
+            text = body.get("text") or ""
+            self.send(200, wav(len(text) * SECONDS_PER_CHARACTER, GRADIUM_SAMPLE_RATE), "audio/wav")
+
     return Handler
 
 
@@ -229,7 +264,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--prefix", default="[T] ", help="put before every translation (default: %(default)r)")
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before answering chat and speech")
     parser.add_argument("--fail", type=int, metavar="CODE", help="answer chat and speech with this HTTP status")
-    parser.add_argument("--key", help="require this API key as a bearer token, 401 otherwise")
+    parser.add_argument("--key", help="require this API key as a bearer token (x-api-key on the Gradium routes), refused otherwise")
     parser.add_argument("--think", action="store_true", help="put a <think> block before every translation")
     parser.add_argument("--quiet", action="store_true", help="do not print a line per request")
     return parser.parse_args(argv)

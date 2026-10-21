@@ -305,7 +305,13 @@ internal class OpenAiSpeechService(
     }
 
     @Composable
-    override fun voiceLabel(voice: String): String = voiceChipLabel(VoiceLabel.of(voice))
+    override fun voiceLabel(voice: String): String = voiceChipLabel(labelOf(voice))
+
+    /** How [voice] is shown: as its server last listed it, else as its id says. */
+    fun labelOf(voice: String): VoiceLabel = voiceLabels[voice] ?: VoiceLabel.of(voice)
+
+    private fun languagesOf(voice: String): Set<String>? =
+        labelOf(voice).language?.let(SpeechLanguage::normalize)?.let(::setOf)
 
     suspend fun setChosenVoices(voices: Set<String>) {
         settings.settings.first().speechServerUrl?.let { settings.setSpeechServerVoices(it, voices) }
@@ -318,11 +324,21 @@ internal class OpenAiSpeechService(
     /** The voices [model] has on the server at [url], asked with the saved key. */
     suspend fun voices(url: String, model: String): Result<List<String>> {
         val asked = VoicesAsked(url, model, generation(url).value)
-        return ask(url) { base, key -> client.voices(base, key, model) }.onSuccess {
+        return ask(url) { base, key -> client.listVoices(base, key, model).map(::label) }.onSuccess {
             // A list asked with an address or key since changed is not kept.
             if (generation(url).value == asked.connection) listedVoices = asked to it
         }
     }
+
+    /** Keeps how the server shows a listed voice, and gives its id. */
+    private fun label(voice: SpeechVoice): String {
+        if (voice.name != null || voice.language != null) voiceLabels = voiceLabels + (voice.id to VoiceLabel.of(voice))
+        return voice.id
+    }
+
+    /** The names and languages servers gave their voices, for the labels shown; ids say the rest. */
+    @Volatile
+    private var voiceLabels: Map<String, VoiceLabel> = emptyMap()
 
     private data class VoicesAsked(val url: String, val model: String, val connection: Int)
 
@@ -344,7 +360,8 @@ internal class OpenAiSpeechService(
         val s = settings.settings.first()
         return ask(url) { base, key ->
             val model = s.speechServerModel.orEmpty()
-            val check = ServerCheck(OpenAiTts.speechModels(client.models(base, key)), model, client.voices(base, key, model))
+            val voices = client.listVoices(base, key, model).map(::label)
+            val check = ServerCheck(OpenAiTts.speechModels(client.models(base, key)), model, voices)
             val voice = s.speechServerVoice?.takeIf { it.isNotBlank() }
             if (model.isNotBlank() && voice != null) client.synthesize(base, key, TEST_WORD, voice, model)
             check
@@ -570,6 +587,7 @@ private fun OpenAiRows(feature: SpeechReadAloud, service: OpenAiSpeechService, o
         enabled = reachable && pendingModel == null,
         listing = voices?.takeIf { it.url == voiceKey(storedUrl, shownModel) },
         preview = preview,
+        labelOf = service::labelOf,
         onSave = { scope.launch { service.setVoice(it) } },
         onChoose = { scope.launch { service.setChosenVoices(it) } },
         onRetry = {
@@ -699,7 +717,3 @@ private fun TestConnectionRow(
         }
     }
 }
-
-/** The language a voice's name says it speaks, as Kokoro's do; null when it says none. */
-private fun languagesOf(voice: String): Set<String>? =
-    VoiceLabel.of(voice).language?.let(SpeechLanguage::normalize)?.let(::setOf)
