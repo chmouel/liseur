@@ -35,6 +35,8 @@ import kotlinx.coroutines.withContext
 class WholeBookTranslationService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var worker: Job? = null
+    // A finished run frees its slot before onDestroy; a newer run must not be stopped by this instance.
+    private var owned: WholeBookRun? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val coordinator get() = (application as LiseurApplication).container.wholeBookTranslations
 
@@ -59,13 +61,15 @@ class WholeBookTranslationService : Service() {
             return START_NOT_STICKY
         }
         if (worker?.isActive == true) return START_NOT_STICKY
-        val preview = coordinator.takePending()
-        if (preview == null) {
+        val run = coordinator.takePending()
+        if (run == null) {
             // Even a cancelled start must meet startForegroundService's promotion deadline.
             promote(notification("", 0, 0))
             stopSelf()
             return START_NOT_STICKY
         }
+        val preview = run.preview
+        owned = run
         promote(notification(preview.title, 0, preview.total))
         val held = getSystemService(PowerManager::class.java).newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK, "$packageName:whole-book-translation",
@@ -100,16 +104,16 @@ class WholeBookTranslationService : Service() {
             releaseWakeLock(held)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelfResult(startId)
-            coordinator.release(preview.bookUrl)
+            coordinator.release(run)
         }
         worker = job
-        coordinator.attachCancellation(preview.bookUrl) { job.cancel() }
+        coordinator.attachCancellation(run) { job.cancel() }
         job.start()
         return START_NOT_STICKY
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        coordinator.stopActive("timeout")
+        owned?.let { coordinator.stopActive("timeout", it) }
         releaseWakeLock()
         stopSelf()
     }
@@ -120,7 +124,7 @@ class WholeBookTranslationService : Service() {
     }
 
     override fun onDestroy() {
-        coordinator.stopActive("interrupted")
+        owned?.let { coordinator.stopActive("interrupted", it) }
         scope.cancel()
         releaseWakeLock()
         super.onDestroy()

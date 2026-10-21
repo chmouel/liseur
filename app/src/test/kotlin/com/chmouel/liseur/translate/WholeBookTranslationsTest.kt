@@ -137,13 +137,14 @@ class WholeBookTranslationsTest {
                 )
                 coordinator.start(preview)
                 shadowOf(context).nextStartedService
-                assertEquals(preview, coordinator.takePending())
+                val run = checkNotNull(coordinator.takePending())
+                assertEquals(preview, run.preview)
                 val worker = launch { coordinator.execute(preview) { _, _ -> error("No work expected") } }
-                coordinator.attachCancellation(book) { worker.cancel() }
+                coordinator.attachCancellation(run) { worker.cancel() }
                 withTimeout(10_000) { opening.await() }
                 coordinator.pause(book)
                 worker.join()
-                coordinator.release(book)
+                coordinator.release(run)
                 coordinator.resumeInterrupted()
                 assertEquals("paused", saved.getKept(book)?.reason)
                 assertNull(shadowOf(context).nextStartedService)
@@ -192,7 +193,8 @@ class WholeBookTranslationsTest {
                     coordinator.stopActive("interrupted")
                     assertNull(coordinator.takePending())
                 } else {
-                    assertEquals(preview, coordinator.takePending())
+                    val run = checkNotNull(coordinator.takePending())
+                    assertEquals(preview, run.preview)
                     val held = CompletableDeferred<Unit>()
                     val reader = launch(start = CoroutineStart.UNDISPATCHED) {
                         container.translationAdmissions.reader(book, "identity") { held.await() }
@@ -200,7 +202,7 @@ class WholeBookTranslationsTest {
                     val worker = launch(start = CoroutineStart.LAZY) {
                         coordinator.execute(preview) { _, _ -> error("No provider work expected") }
                     }
-                    coordinator.attachCancellation(book) { worker.cancel() }
+                    coordinator.attachCancellation(run) { worker.cancel() }
                     if (stage != "lazy") {
                         worker.start()
                         // Both coroutines use this event loop: yield until execute is waiting on admission.
@@ -210,7 +212,7 @@ class WholeBookTranslationsTest {
                     worker.join()
                     held.complete(Unit)
                     reader.cancelAndJoin()
-                    coordinator.release(book)
+                    coordinator.release(run)
                 }
                 if (stage == "cancelled") {
                     assertEquals("interrupted", saved.getKept(book)?.reason)
@@ -223,6 +225,39 @@ class WholeBookTranslationsTest {
                 }
                 assertNull(shadowOf(context).nextStartedService)
             }
+        } finally {
+            scope.cancel()
+        }
+    }
+    @Test
+    fun `a finished service run cannot stop the run that replaced it`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        runCatching { WorkManager.getInstance(context) }.getOrElse {
+            WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
+        }
+        val container = AppContainer(context)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val coordinator = WholeBookTranslations(context, container, scope)
+        val book = "file:///replaced-run.epub"
+        try {
+            coordinator.records.first()
+            val preview = WholeBookPreview(
+                book, "Replaced", "en", "fr", "identity", 1, 0, 0, 0, null, null, "fingerprint", retentionStamp = null,
+            )
+            coordinator.start(preview)
+            val first = checkNotNull(coordinator.takePending())
+            coordinator.attachCancellation(first) { }
+            // The worker finished and freed the slot; the old service's onDestroy has not run yet.
+            coordinator.release(first)
+            coordinator.start(preview)
+            coordinator.stopActive("timeout", first)
+            coordinator.stopActive("interrupted", first)
+            val second = checkNotNull(coordinator.takePending())
+            var cancelled = false
+            coordinator.attachCancellation(second) { cancelled = true }
+            assertFalse(cancelled)
+            coordinator.stopActive("interrupted", second)
+            assertTrue(cancelled)
         } finally {
             scope.cancel()
         }

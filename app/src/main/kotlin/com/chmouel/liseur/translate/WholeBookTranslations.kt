@@ -29,6 +29,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.readium.r2.shared.publication.Publication
 
+/** One accepted start. Identity, not the book, tells successive runs of the same book apart. */
+internal class WholeBookRun(val preview: WholeBookPreview)
+
 internal class WholeBookTranslations(
     private val context: Context,
     private val container: AppContainer,
@@ -39,9 +42,8 @@ internal class WholeBookTranslations(
     private val saved: SavedTranslations get() = container.savedTranslations
     private val lock = Any()
     private val preparations = HashMap<String, WholeBookPreparation>()
-    private var active: String? = null
-    private var pending: WholeBookPreview? = null
-    private var approved: WholeBookPreview? = null
+    private var run: WholeBookRun? = null
+    private var pending: WholeBookRun? = null
     private var pausePersistence: Job? = null
     private var cancel: (() -> Unit)? = null
     private var stopped = false
@@ -180,7 +182,7 @@ internal class WholeBookTranslations(
             if (feature.wholeBookIdentity(record.source, record.target) != record.identity) return false
             val book = container.database.bookDao().getByUrl(bookUrl) ?: return false
             if (fingerprint(bookUrl) != approved) return false
-            if (synchronized(lock) { active != null }) return false
+            if (synchronized(lock) { run != null }) return false
             start(
                 WholeBookPreview(
                     bookUrl, book.title, record.source, record.target, record.identity, record.total, record.done,
@@ -215,10 +217,8 @@ internal class WholeBookTranslations(
     fun start(preview: WholeBookPreview, retryFailures: Boolean = false) {
         require(retryFailures == preview.retryFailures)
         synchronized(lock) {
-            if (active != null) throw WholeBookBusyException()
-            active = preview.bookUrl
-            pending = preview
-            approved = preview
+            if (run != null) throw WholeBookBusyException()
+            run = WholeBookRun(preview).also { pending = it }
             stopReason = "interrupted"
             stopped = false
         }
@@ -228,8 +228,7 @@ internal class WholeBookTranslations(
         } catch (e: RuntimeException) {
             synchronized(lock) {
                 pending = null
-                active = null
-                approved = null
+                run = null
             }
             throw e
         }
@@ -237,7 +236,7 @@ internal class WholeBookTranslations(
 
     fun pause(bookUrl: String) {
         synchronized(lock) {
-            if (active == bookUrl) {
+            if (run?.preview?.bookUrl == bookUrl) {
                 stopReason = "paused"
                 stopped = true
                 pending = null
@@ -247,8 +246,10 @@ internal class WholeBookTranslations(
         }
     }
 
-    fun stopActive(reason: String = "paused") {
+    /** Stops the job holding the slot; with [owner], only when that run still holds it. */
+    fun stopActive(reason: String = "paused", owner: WholeBookRun? = null) {
         synchronized(lock) {
+            if (owner != null && owner !== run) return
             if (!stopped || reason == "paused") stopReason = reason
             stopped = true
             pending = null
@@ -259,7 +260,7 @@ internal class WholeBookTranslations(
 
     // The service's lazy worker may never enter execute, so persist on the application scope too.
     private fun persistStartupPause() {
-        val preview = approved ?: return
+        val preview = run?.preview ?: return
         val reason = stopReason
         val previous = pausePersistence
         pausePersistence = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -282,28 +283,24 @@ internal class WholeBookTranslations(
         saved.remove(bookUrl)
     }
 
-    internal fun takePending(): WholeBookPreview? = synchronized(lock) {
+    internal fun takePending(): WholeBookRun? = synchronized(lock) {
         pending.also {
             pending = null
-            if (it == null && cancel == null) {
-                active = null
-                approved = null
-            }
+            if (it == null && cancel == null) run = null
         }
     }
 
-    internal fun attachCancellation(bookUrl: String, stop: () -> Unit) {
+    internal fun attachCancellation(owner: WholeBookRun, stop: () -> Unit) {
         synchronized(lock) {
-            if (active != bookUrl || stopped) stop() else cancel = stop
+            if (owner !== run || stopped) stop() else cancel = stop
         }
     }
 
-    internal fun release(bookUrl: String) {
+    internal fun release(owner: WholeBookRun) {
         synchronized(lock) {
-            if (active == bookUrl) {
-                active = null
+            if (owner === run) {
+                run = null
                 cancel = null
-                approved = null
             }
         }
     }
