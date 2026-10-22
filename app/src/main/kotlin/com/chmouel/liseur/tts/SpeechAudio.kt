@@ -43,4 +43,10 @@ sealed class SpeechError(message: String, cause: Throwable? = null) : Exception(
 fun interface SpeechSynthesizer {
     /** Throws [SpeechError]; cancelling the caller cancels the request. */
     suspend fun synthesize(text: String): SpeechAudio
+
+    /**
+     * Synthesizes [text] with optional non-spoken reference [context].
+     * Implementations that do not support reference context ignore [context].
+     */
+    suspend fun synthesize(text: String, context: String?): SpeechAudio = synthesize(text)
 }

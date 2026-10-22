@@ -103,20 +103,29 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServiceOption
 import com.chmouel.liseur.providers.ServiceRow
 import com.chmouel.liseur.providers.ServiceSheet
+import com.chmouel.liseur.translate.BookDetailsTemplateSettings
+import com.chmouel.liseur.translate.BookEarlierTextRow
+import com.chmouel.liseur.translate.SharedContextHeader
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.InfoButton
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
+import com.chmouel.liseur.ui.settings.RowDivider
+import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SettingsExpandableSection
 import com.chmouel.liseur.ui.settings.SettingsGroup
+import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -163,6 +172,7 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
     val selectedServer by feature.selectedServer.collectAsState(initial = null)
     val server = servers.readable?.firstOrNull { it.id == selectedServer }
     val scope = rememberCoroutineScope()
+    var picking by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -187,7 +197,6 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
             ) {
-                var picking by remember { mutableStateOf(false) }
                 ServiceRow(service, server, onClick = { picking = true })
                 if (picking) {
                     ServiceSheet(
@@ -216,8 +225,71 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                 SettingsGroup(stringResource(R.string.read_aloud_settings_playback)) {
                     SentencesPerRequestRow(feature)
                 }
+                var advancedOpen by remember { mutableStateOf(false) }
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    ReadAloudContextGroup(feature, onChangeService = { picking = true })
+                }
             }
         }
+    }
+}
+
+private data class StoredSpeechBook(val template: String?)
+
+/**
+ * "Send book context" and, once it is on, the earlier-text and
+ * book-details settings it shares with translation. A voice model that
+ * cannot take context shows the switch off and disabled, but the saved
+ * choice stays as it was.
+ */
+@Composable
+private fun ReadAloudContextGroup(feature: SpeechReadAloud, onChangeService: () -> Unit) {
+    val enabled by feature.contextEnabled.collectAsState(initial = false)
+    val supported by feature.contextSupported.collectAsState(initial = false)
+    val chosenSize by feature.contextSize.collectAsState(initial = TranslationContextSize.Default)
+    val loadedBook by remember { feature.bookContext.map(::StoredSpeechBook) }.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
+    val title = stringResource(R.string.read_aloud_context_switch)
+    val about = stringResource(R.string.read_aloud_context_about)
+
+    SwitchRow(
+        title = title,
+        subtitle = stringResource(
+            when {
+                supported -> R.string.read_aloud_context_switch_detail
+                enabled -> R.string.read_aloud_context_unavailable_kept
+                else -> R.string.read_aloud_context_unavailable
+            },
+        ),
+        checked = enabled && supported,
+        enabled = supported,
+        onCheckedChange = { checked -> scope.launch { feature.setContextEnabled(checked) } },
+        info = { InfoButton(title, about) },
+    )
+    if (!supported) {
+        TextButton(onClick = onChangeService, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) {
+            Text(stringResource(R.string.read_aloud_settings_provider_change))
+        }
+        return
+    }
+    if (!enabled) return
+    RowDivider()
+    SharedContextHeader(stringResource(R.string.context_shared_with_translation))
+    BookEarlierTextRow(
+        chosen = chosenSize,
+        unusedNote = null,
+        onSelect = { size -> scope.launch { feature.setContextSize(size) } },
+    )
+    loadedBook?.let { stored ->
+        BookDetailsTemplateSettings(
+            storedTemplate = stored.template,
+            unusedNote = null,
+            onSave = { template -> scope.launch { feature.setBookContext(template) } },
+        )
     }
 }
 

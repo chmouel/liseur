@@ -3,6 +3,8 @@ package com.chmouel.liseur.reader
 import com.chmouel.liseur.data.bookorbit.BookOrbitPullOffer
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.translate.BookFacts
+import com.chmouel.liseur.translate.PrecedingText
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.readium.r2.shared.publication.Locator
@@ -29,6 +31,15 @@ class OpenBookHandle internal constructor(
     private var closed = false
     private val closings = mutableListOf<() -> Unit>()
     private val positionsLock = Mutex()
+    private val precedingByLanguage = mutableMapOf<String?, PrecedingText>()
+
+    /** The book's facts by resource path, computed once across all holders. */
+    internal val bookFacts: suspend (href: String) -> BookFacts? = PublicationContext.bookFacts(publication)
+
+    /** The sentences before one in its chapter file, cached per tokenization [language]. */
+    internal fun preceding(language: String?): PrecedingText = synchronized(lock) {
+        precedingByLanguage.getOrPut(language) { PublicationContext.preceding(publication, language) }
+    }
 
     @Volatile
     private var positions: BookPositions? = positions

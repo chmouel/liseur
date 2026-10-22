@@ -133,16 +133,37 @@ internal class OpenAiSpeechService(
     /** The server's host names it in a notice better than its kind does. */
     override fun noticeName(s: AppSettings): String? = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())?.host
 
+    override fun supportsContext(s: AppSettings): Boolean =
+        OpenAiTts.baseUrl(s.speechServerUrl.orEmpty())
+            ?.let { OpenAiTts.supportsContext(it, s.speechServerModel) } == true
+
     override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? {
         val base = OpenAiTts.baseUrl(s.speechServerUrl.orEmpty()) ?: return null
         val model = s.speechServerModel?.takeIf { it.isNotBlank() } ?: return null
         val name = (voice ?: s.speechServerVoice)?.takeIf { it.isNotBlank() } ?: return null
         val key = connections.key(ServerKeys.origin(base))
+        val contextSupported = OpenAiTts.supportsContext(base, model)
         // One sentence at a time: a small self-hosted server only slows down with more.
-        return SessionVoice(name, 1) { text ->
-            requireAccess(base.toString())
-            client.synthesize(base, key, text, name, model)
-        }
+        return SessionVoice(
+            name = name,
+            maxConcurrent = 1,
+            configurationIdentity = "$base\n$model\n$name",
+            synthesizer = object : SpeechSynthesizer {
+                override suspend fun synthesize(text: String): SpeechAudio = synthesize(text, null)
+
+                override suspend fun synthesize(text: String, context: String?): SpeechAudio {
+                    requireAccess(base.toString())
+                    return client.synthesize(
+                        base,
+                        key,
+                        text,
+                        name,
+                        model,
+                        context.takeIf { contextSupported },
+                    )
+                }
+            },
+        )
     }
 
     /**

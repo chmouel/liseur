@@ -62,6 +62,49 @@ class SpeechCacheRetryTest {
         assertEquals(2, calls)
     }
 
+    @Test fun contextIsResolvedOnceOutsideRetriesAndPassedToEveryPiece() = runTest {
+        var contextCalls = 0
+        val seen = mutableListOf<Pair<String, String?>>()
+        var attempts = 0
+        val cache = SpeechCache(
+            scope = backgroundScope,
+            synthesize = { text, instructions ->
+                seen += text to instructions
+                if (text == "part-1" && ++attempts == 1) throw SpeechError.Service(503)
+                SpeechAudio(byteArrayOf(1, 2))
+            },
+            prepare = { _, _ -> listOf("part-1", "part-2") },
+            nowMillis = { testScheduler.currentTime },
+            context = { key, prev ->
+                contextCalls++
+                "ctx:${key.text}:$prev"
+            },
+        )
+        val request = cache.claim(SpeechKey("source", contextIdentity = "c1"), previous = "earlier")
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        request.await()
+        assertEquals(1, contextCalls)
+        assertEquals(
+            listOf(
+                "part-1" to "ctx:source:earlier",
+                "part-1" to "ctx:source:earlier",
+                "part-2" to "ctx:source:earlier",
+            ),
+            seen,
+        )
+    }
+
+    @Test fun contextIdentityChangeRestartsSpeculativeEntries() = runTest {
+        var calls = 0
+        val cache = SpeechCache(backgroundScope, { _, _ -> calls++; SpeechAudio(byteArrayOf(1, 2)) })
+        cache.prefetch(SpeechKey("same", contextIdentity = "ctx-1"))
+        runCurrent()
+        cache.claim(SpeechKey("same", contextIdentity = "ctx-2")).await()
+        assertEquals(2, calls)
+    }
+
     @Test fun speculativeAndClaimedCancellationStopRetryWaits() = runTest {
         var calls = 0
         val cache = SpeechCache(backgroundScope, { calls++; throw SpeechError.Service(503) }, nowMillis = { testScheduler.currentTime })

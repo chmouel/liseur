@@ -93,7 +93,27 @@ object OpenAiTts {
      */
     fun openAiModels(models: List<SpeechModel>): List<SpeechModel> = models.sortedBy { it.id != OPENAI_MODEL }
 
+    /**
+     * Whether [base] and [model] accept non-spoken context in `instructions`
+     * on `audio/speech`: OpenAI's `gpt-4o-mini-tts` family (on OpenAI or
+     * OpenRouter), and the local test stub (`stub-tts`).
+     */
+    fun supportsContext(base: HttpUrl, model: String?): Boolean {
+        if (GradiumTts.isGradium(base)) return false
+        val id = model?.trim()?.lowercase( java.util.Locale.ROOT)?.takeIf { it.isNotEmpty() } ?: return false
+        if (id == STUB_TTS) return true
+        val host = base.host.lowercase(java.util.Locale.ROOT)
+        return when {
+            host == OPENAI_HOST -> id.startsWith(OPENAI_MODEL)
+            host == OPENROUTER_HOST || host.endsWith(".$OPENROUTER_HOST") ->
+                id.removePrefix("openai/").startsWith(OPENAI_MODEL)
+            else -> false
+        }
+    }
+
     private const val OPENAI_MODEL = "gpt-4o-mini-tts"
+    private const val OPENROUTER_HOST = "openrouter.ai"
+    private const val STUB_TTS = "stub-tts"
 
     /**
      * Where DeepInfra describes [model], voices included, when [base] is
@@ -207,17 +227,18 @@ class OpenAiTtsClient(
         text: String,
         voice: String,
         model: String,
+        instructions: String? = null,
     ): SpeechAudio {
         if (GradiumTts.isGradium(base)) return gradiumSpeak(base, apiKey, text, voice)
         val key = base to model
-        if (key in mp3Models) return decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3)
-        return when (val reply = speak(base, apiKey, text, voice, model, WAV)) {
+        if (key in mp3Models) return decode(speak(base, apiKey, text, voice, model, instructions, MP3).orThrow(), MP3)
+        return when (val reply = speak(base, apiKey, text, voice, model, instructions, WAV)) {
             is Reply.Audio -> decode(reply, WAV)
             is Reply.Failure -> {
                 if (reply.code != 400 && reply.code != 422 || !reply.error.text.contains("response_format", ignoreCase = true)) {
                     throw speechErrorFor(reply.code, reply.error)
                 }
-                decode(speak(base, apiKey, text, voice, model, MP3).orThrow(), MP3).also { mp3Models += key }
+                decode(speak(base, apiKey, text, voice, model, instructions, MP3).orThrow(), MP3).also { mp3Models += key }
             }
         }
     }
@@ -228,6 +249,7 @@ class OpenAiTtsClient(
         text: String,
         voice: String,
         model: String,
+        instructions: String?,
         format: String,
     ): Reply {
         val body = JSONObject()
@@ -235,6 +257,9 @@ class OpenAiTtsClient(
             .put("input", text)
             .put("voice", voice)
             .put("response_format", format)
+            .apply {
+                instructions?.trim()?.takeIf { it.isNotEmpty() }?.let { put("instructions", it) }
+            }
             .toString()
         val request = request(base, "audio/speech", apiKey).post(body.toRequestBody(JSON)).build()
         return execute(request, ::speech)

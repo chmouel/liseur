@@ -570,8 +570,8 @@ internal fun ReaderScreen(
         publication.metadata.layout != Layout.FIXED
     }
     val reflowableTextNow by rememberUpdatedState(reflowableText)
-    // What an AI translator is told of where a passage is in the book.
-    val bookFacts = remember(publication) { TranslatedPages.bookFacts(publication) }
+    // What an AI translator or speech service is told of where a passage is in the book.
+    val bookFacts = remember(publication) { PublicationContext.bookFacts(publication) }
     // The chrome's answer, and the container's, which are not the same
     // one and must not be merged: see [chromeScrolls]/[containerScrolls].
     val effectiveScrolling = chromeScrolls(reflowableText, scrollMode, verticalText)
@@ -2484,7 +2484,7 @@ internal fun ReaderScreen(
             open = {
                 shared?.translations?.takeIf { it.acquire() }
                     ?: translate.openPage(source, target, wholeBook?.bookUrl ?: readAloud?.bookId)?.let {
-                        SentenceTranslations(it, pageTranslations, TranslatedPages.preceding(publication, source), bookFacts)
+                        SentenceTranslations(it, pageTranslations, PublicationContext.preceding(publication, source), bookFacts)
                     }
             },
             close = SentenceTranslations::release,
@@ -2492,7 +2492,7 @@ internal fun ReaderScreen(
             wanted = { attempt == pageTranslationStarts.get() && navigatorNow === nav },
         ) { translations, start ->
             val run = PageTranslation<Locator>(effectScope, translations, { place ->
-                TranslatedPages.sentences(publication, place, source)
+                PublicationContext.sentences(publication, place, source)
             }, behind = { sentence -> navigatorNow?.let { TranslatedPages.behind(it, sentence) } ?: false })
             cachedBookOrbitCfi = null
             // A place measured on the book's words is no longer the page's, nor will one measured from now on be.

@@ -71,6 +71,7 @@ internal class ReadAloudSession(
      * the translation's language. The session holds it until it ends.
      */
     val translation: SpeechTranslation? = null,
+    private val contextConfiguration: () -> SpeechContext.Configuration = { SpeechContext.Configuration.OFF },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val publication = handle.publication
@@ -103,12 +104,25 @@ internal class ReadAloudSession(
         )
     }
 
+    private val speechContext = SpeechContext(
+        preceding = handle.preceding((textLanguage ?: publication.metadata.language)?.locale?.toLanguageTag()),
+        bookFacts = handle.bookFacts,
+        sourceLanguage = if (translation != null) {
+            translation.source ?: publication.metadata.language?.locale?.toLanguageTag()
+        } else {
+            (textLanguage ?: publication.metadata.language)?.locale?.toLanguageTag()
+        },
+        spokenLanguage = { spoken.locale.toLanguageTag() },
+        configuration = contextConfiguration,
+    )
+
     private val cache = SpeechCache(
-        scope,
-        voice.synthesizer::synthesize,
-        voice.maxConcurrent,
+        scope = scope,
+        synthesize = { text, instructions -> voice.synthesizer.synthesize(text, instructions) },
+        maxConcurrent = voice.maxConcurrent,
         prepare = translatedSpeech?.let { it::prepare },
         configurationIdentity = voice.configurationIdentity,
+        context = speechContext::resolve,
     )
 
     private val tokenizerFactory = BoundedSentenceTokenizer.factory(sentencesPerRequest)
@@ -127,14 +141,14 @@ internal class ReadAloudSession(
                 settings?.overrideContentLanguage ?: (cutIn != null),
             )
         },
-        keyOf = if (translation != null) {
-            { u ->
-                val identity = translation.identity()
-                u.locator?.let { SpeechKey.at(u.text, it, identity) }
-                    ?: SpeechKey(u.text, translationIdentity = identity)
+        keyOf = { u ->
+            val tId = translation?.identity()
+            val cId = speechContext.identity()
+            if ((translation != null || cId != null) && u.locator != null) {
+                SpeechKey.at(u.text, u.locator, tId, cId)
+            } else {
+                SpeechKey(u.text, translationIdentity = tId, contextIdentity = cId)
             }
-        } else {
-            { u -> SpeechKey(u.text) }
         },
     )
 
@@ -150,6 +164,7 @@ internal class ReadAloudSession(
         prefetcher = prefetcher,
         anchored = translation != null,
         translationIdentity = { translation?.identity() },
+        contextIdentity = speechContext::identity,
         onStopRequested = { stop() },
         onChapterEnded = {
             settle()
@@ -271,7 +286,7 @@ internal class ReadAloudSession(
         // Read translated, the book is cut in the language translated from, whatever the voice.
         val recut = language != choice.value.language && translation == null
         mutableChoice.value = VoicePick(voice.name, language)
-        cache.swap(voice.synthesizer::synthesize, voice.configurationIdentity)
+        cache.swap({ text, instructions -> voice.synthesizer.synthesize(text, instructions) }, voice.configurationIdentity)
         // Still starting: the first sentence is fetched with the new voice.
         if (playback.navigator.value == null) return
         scope.launch {

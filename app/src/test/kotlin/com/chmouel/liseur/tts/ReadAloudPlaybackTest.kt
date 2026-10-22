@@ -179,7 +179,11 @@ class ReadAloudPlaybackTest {
         override fun release() {}
     }
 
-    private fun newPlayback(prefetcher: UtterancePrefetcher<Locator>? = null, anchored: Boolean = false): ReadAloudPlayback {
+    private fun newPlayback(
+        prefetcher: UtterancePrefetcher<Locator>? = null,
+        anchored: Boolean = false,
+        contextIdentity: suspend () -> String? = { null },
+    ): ReadAloudPlayback {
         val context = ApplicationProvider.getApplicationContext<Application>()
         return runBlocking(main) {
             ReadAloudPlayback(
@@ -200,6 +204,7 @@ class ReadAloudPlaybackTest {
                 },
                 onChapterEnded = { chapterStops.incrementAndGet() },
                 anchored = anchored,
+                contextIdentity = contextIdentity,
             )
         }
     }
@@ -953,6 +958,44 @@ class ReadAloudPlaybackTest {
         Thread.sleep(300)
         assertEquals(1, played.size)
         assertEquals(FIRST, playback.heard.value?.text?.highlight)
+    }
+
+    @Test
+    fun untranslatedReadingWithActiveContextAnchorsRepeatedSentencesSeparately() {
+        runBlocking(main) { playback.close() }
+        val contextKeys = Collections.synchronizedList(mutableListOf<SpeechKey>())
+        val instructionsSeen = Collections.synchronizedList(mutableListOf<Pair<String, String?>>())
+        cache = SpeechCache(
+            scope = scope,
+            synthesize = { text, instructions ->
+                instructionsSeen += text to instructions
+                synthesize(text)
+            },
+            context = { key, _ ->
+                contextKeys += key
+                "ctx:${key.place?.before}"
+            },
+        )
+        val prefetcher = UtterancePrefetcher<Locator>(
+            scope = scope,
+            cache = cache,
+            cursorAt = { locator ->
+                PublicationUtteranceCursor(publication, locator, tokenizerFactory, Language("en"), false)
+            },
+            keyOf = { u -> u.locator?.let { SpeechKey.at(u.text, it, contextIdentity = "ctx-on") } ?: SpeechKey(u.text, contextIdentity = "ctx-on") },
+        )
+        playback = newPlayback(prefetcher = prefetcher, anchored = false, contextIdentity = { "ctx-on" })
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(6)
+
+        val repeatKeys = synchronized(contextKeys) { contextKeys.filter { it.text == REPEATED } }
+        assertEquals(2, repeatKeys.size)
+        assertNotEquals(repeatKeys[0], repeatKeys[1])
+        val repeatInstructions = synchronized(instructionsSeen) {
+            instructionsSeen.filter { it.first == REPEATED }.map { it.second }
+        }
+        assertEquals(2, repeatInstructions.size)
+        assertNotEquals(repeatInstructions[0], repeatInstructions[1])
     }
 
     private fun writeEpub(target: File, repeatedCount: Int = 2) {

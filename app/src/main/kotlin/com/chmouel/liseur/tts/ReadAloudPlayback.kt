@@ -74,6 +74,7 @@ class ReadAloudPlayback(
      */
     private val anchored: Boolean = false,
     private val translationIdentity: suspend () -> String? = { null },
+    private val contextIdentity: suspend () -> String? = { null },
 ) : SpeechObserver {
 
     /** A sentence that could not be spoken; [anchor] is where resuming starts. */
@@ -353,7 +354,8 @@ class ReadAloudPlayback(
         text: String,
         reusingHeldAudio: Boolean,
     ): SpeechKey? {
-        if (!anchored) return SpeechKey(text)
+        val cId = contextIdentity()
+        if (!anchored && cId == null) return SpeechKey(text)
         val navigator = mutableNavigator.value ?: return null
         if (requestId !in spoken) return null
         val skipFromPlace = skipOrigins.remove(requestId)
@@ -384,14 +386,23 @@ class ReadAloudPlayback(
         } ?: return null
         if (mutableNavigator.value !== navigator || requestId !in spoken) return null
         places[requestId] = location.utteranceLocator
-        return SpeechKey.at(text, location.utteranceLocator, translationIdentity())
+        val tId = if (anchored) translationIdentity() else null
+        return SpeechKey.at(text, location.utteranceLocator, tId, cId)
     }
 
     override suspend fun refreshKey(
         requestId: TtsEngine.RequestId,
         text: String,
         key: SpeechKey,
-    ): SpeechKey = if (anchored) key.copy(translationIdentity = translationIdentity()) else key
+    ): SpeechKey {
+        val tId = if (anchored) translationIdentity() else null
+        val cId = contextIdentity()
+        return if (anchored || cId != null || key.contextIdentity != null) {
+            key.copy(translationIdentity = tId, contextIdentity = cId)
+        } else {
+            key
+        }
+    }
 
     override fun previousOf(requestId: TtsEngine.RequestId): String? {
         val place = places[requestId] ?: return null

@@ -25,7 +25,7 @@ import org.readium.r2.shared.publication.Locator
  */
 class SpeechCache(
     private val scope: CoroutineScope,
-    private var synthesize: suspend (String) -> SpeechAudio,
+    private var synthesize: suspend (String, String?) -> SpeechAudio,
     maxConcurrent: Int = MAX_CONCURRENT,
     private val maxBytes: Long = MAX_BYTES,
     /**
@@ -37,13 +37,37 @@ class SpeechCache(
     private val prepare: (suspend (SpeechKey, String?) -> List<String>)? = null,
     private val nowMillis: () -> Long = android.os.SystemClock::elapsedRealtime,
     private var configurationIdentity: String? = null,
+    /** Non-spoken reference context resolved for a request before synthesis. */
+    private val context: (suspend (SpeechKey, String?) -> String?)? = null,
 ) {
+    constructor(
+        scope: CoroutineScope,
+        synthesize: suspend (String) -> SpeechAudio,
+        maxConcurrent: Int = MAX_CONCURRENT,
+        maxBytes: Long = MAX_BYTES,
+        prepare: (suspend (SpeechKey, String?) -> List<String>)? = null,
+        nowMillis: () -> Long = android.os.SystemClock::elapsedRealtime,
+        configurationIdentity: String? = null,
+        context: (suspend (SpeechKey, String?) -> String?)? = null,
+    ) : this(
+        scope = scope,
+        synthesize = { text, _ -> synthesize(text) },
+        maxConcurrent = maxConcurrent,
+        maxBytes = maxBytes,
+        prepare = prepare,
+        nowMillis = nowMillis,
+        configurationIdentity = configurationIdentity,
+        context = context,
+    )
+
     private class Entry(val audio: Deferred<SpeechAudio>, var bytes: Long = 0)
 
     private val requests = Semaphore(maxConcurrent)
     private val entries = LinkedHashMap<Pair<String?, SpeechKey>, Entry>()
     private var currentTranslationIdentity: String? = null
     private var hasTranslationIdentity = false
+    private var currentContextIdentity: String? = null
+    private var hasContextIdentity = false
 
     /** Bumped on every restart; speculative work from an older generation is dropped. */
     var generation = 0L
@@ -61,10 +85,16 @@ class SpeechCache(
 
     val hasRoom: Boolean get() = !halted && cachedBytes < maxBytes
 
-    private fun selectTranslation(identity: String?) {
-        if (hasTranslationIdentity && currentTranslationIdentity != identity) restart()
-        currentTranslationIdentity = identity
+    private fun selectIdentity(key: SpeechKey) {
+        if ((hasTranslationIdentity && currentTranslationIdentity != key.translationIdentity) ||
+            (hasContextIdentity && currentContextIdentity != key.contextIdentity)
+        ) {
+            restart()
+        }
+        currentTranslationIdentity = key.translationIdentity
         hasTranslationIdentity = true
+        currentContextIdentity = key.contextIdentity
+        hasContextIdentity = true
     }
 
     /** Starts fetching [text] unless it is already here or on its way. */
@@ -72,7 +102,7 @@ class SpeechCache(
 
     /** Starts fetching [key], with [previous] the source text before it, unless it is already here or on its way. */
     fun prefetch(key: SpeechKey, previous: String? = null) {
-        selectTranslation(key.translationIdentity)
+        selectIdentity(key)
         val cacheKey = configurationIdentity to key
         if (!hasRoom || entries.containsKey(cacheKey)) return
         val generation = generation
@@ -102,7 +132,7 @@ class SpeechCache(
 
     /** As [claim] for [key]; [previous] is the source text before it, when known, for a request made now. */
     fun claim(key: SpeechKey, previous: String? = null): Deferred<SpeechAudio> {
-        selectTranslation(key.translationIdentity)
+        selectIdentity(key)
         return entries.remove(configurationIdentity to key)?.audio?.takeUnless { it.isCancelled }
             ?: request(key, previous, CoroutineStart.UNDISPATCHED) {}
     }
@@ -119,7 +149,10 @@ class SpeechCache(
     /** Speaks with [synthesize] from now on, forgetting what the old voice fetched. */
     fun swap(synthesize: suspend (String) -> SpeechAudio) = swap(synthesize, null)
 
-    fun swap(synthesize: suspend (String) -> SpeechAudio, configurationIdentity: String?) {
+    fun swap(synthesize: suspend (String) -> SpeechAudio, configurationIdentity: String?) =
+        swap({ text, _ -> synthesize(text) }, configurationIdentity)
+
+    fun swap(synthesize: suspend (String, String?) -> SpeechAudio, configurationIdentity: String? = null) {
         this.synthesize = synthesize
         this.configurationIdentity = configurationIdentity
         restart()
@@ -135,12 +168,13 @@ class SpeechCache(
         val synthesizer = synthesize
         return scope.async(start = start) {
             try {
-                // Translated outside the permits: those bound the speech service alone.
+                // Translated and placed outside the permits: those bound the speech service alone.
                 val pieces = prepare?.invoke(key, previous) ?: listOf(key.text)
+                val instructions = context?.invoke(key, previous)
                 val audio = ArrayList<SpeechAudio>(pieces.size)
                 var totalBytes = 0L
                 for (piece in pieces) {
-                    val next = synthesizeWithRetry(piece, synthesizer)
+                    val next = synthesizeWithRetry(piece, instructions, synthesizer)
                     val bytes = next.pcm.size.toLong()
                     if (bytes > MAX_BYTES - totalBytes) {
                         throw SpeechError.InvalidResponse("utterance audio too long")
@@ -168,7 +202,11 @@ class SpeechCache(
         }
     }
 
-    private suspend fun synthesizeWithRetry(piece: String, synthesizer: suspend (String) -> SpeechAudio): SpeechAudio {
+    private suspend fun synthesizeWithRetry(
+        piece: String,
+        instructions: String?,
+        synthesizer: suspend (String, String?) -> SpeechAudio,
+    ): SpeechAudio {
         var firstAttempt: Long? = null
         var failure: SpeechError? = null
         for (attempt in 0..2) {
@@ -178,7 +216,7 @@ class SpeechCache(
                     val now = nowMillis()
                     if (firstAttempt?.let { now - it >= 30_000L } == true) throw failure!!
                     if (firstAttempt == null) firstAttempt = now
-                    synthesizer(piece)
+                    synthesizer(piece, instructions)
                 }
             } catch (error: SpeechError) {
                 val retryable = error is SpeechError.Network ||

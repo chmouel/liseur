@@ -60,6 +60,8 @@ internal interface SpeechService {
 
     val supportsNarrationDirection: Boolean get() = false
 
+    fun supportsContext(s: AppSettings): Boolean = false
+
     suspend fun directedVoice(s: AppSettings, voice: String? = null, direction: String = ""): SessionVoice? = voice(s, voice)
 
     /**

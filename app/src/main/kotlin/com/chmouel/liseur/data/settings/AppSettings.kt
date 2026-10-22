@@ -291,6 +291,7 @@ data class AppSettings(
     val unsettledReadAloudServers: Set<String> = emptySet(),
     val readAloudSpeed: Float = 1f,
     val readAloudSentencesPerRequest: Int = 1,
+    val readAloudContext: Boolean = false,
     val deviceVoice: String? = null,
     /** The voice chosen for each language, per speech service; see [VoicePreference]. */
     val voicePreferences: List<VoicePreference> = emptyList(),
@@ -456,6 +457,7 @@ class AppSettingsRepository(
         val READ_ALOUD_PROVIDER = stringPreferencesKey("read_aloud_provider")
         val READ_ALOUD_SPEED = floatPreferencesKey("read_aloud_speed")
         val READ_ALOUD_SENTENCES_PER_REQUEST = intPreferencesKey("read_aloud_sentences_per_request")
+        val READ_ALOUD_CONTEXT = booleanPreferencesKey(READ_ALOUD_CONTEXT_NAME)
         val READ_ALOUD_DEVICE_VOICE = stringPreferencesKey("read_aloud_device_voice")
         val READ_ALOUD_VOICE_PREFERENCES = stringPreferencesKey("read_aloud_voice_preferences")
         val TRANSLATION_GEMINI_MODEL = stringPreferencesKey(TRANSLATION_GEMINI_MODEL_NAME)
@@ -555,6 +557,7 @@ class AppSettingsRepository(
             readAloudSpeed = p[Keys.READ_ALOUD_SPEED] ?: 1f,
             readAloudSentencesPerRequest = (p[Keys.READ_ALOUD_SENTENCES_PER_REQUEST] ?: 1)
                 .coerceIn(AppSettings.SENTENCES_PER_REQUEST),
+            readAloudContext = p[Keys.READ_ALOUD_CONTEXT] ?: false,
             deviceVoice = p[Keys.READ_ALOUD_DEVICE_VOICE],
             voicePreferences = VoicePreferences.decode(p[Keys.READ_ALOUD_VOICE_PREFERENCES]),
             translationProvider = p[ServerSettings.TRANSLATION_PROVIDER],
@@ -1155,6 +1158,11 @@ class AppSettingsRepository(
         store.edit { it[Keys.READ_ALOUD_SENTENCES_PER_REQUEST] = count.coerceIn(AppSettings.SENTENCES_PER_REQUEST) }
     }
 
+    /** Turns sending book facts and earlier sentences to supported speech services on or off. */
+    suspend fun setReadAloudContext(enabled: Boolean) {
+        store.edit { it[Keys.READ_ALOUD_CONTEXT] = enabled }
+    }
+
     private suspend fun setOrRemove(key: Preferences.Key<String>, value: String) {
         val trimmed = value.trim()
         store.edit { p -> if (trimmed.isEmpty()) p.remove(key) else p[key] = trimmed }
@@ -1213,6 +1221,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     ServerSettings.READ_ALOUD_STATE_NAME to BackupValueType.STRING,
     "read_aloud_speed" to BackupValueType.FLOAT,
     "read_aloud_sentences_per_request" to BackupValueType.INT,
+    READ_ALOUD_CONTEXT_NAME to BackupValueType.BOOLEAN,
     "read_aloud_device_voice" to BackupValueType.STRING,
     "read_aloud_voice_preferences" to BackupValueType.STRING,
     ServerSettings.TRANSLATION_PROVIDER_NAME to BackupValueType.STRING,
@@ -1232,6 +1241,7 @@ internal val APP_BACKUP_TYPES = mapOf(
 )
 
 private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
+private const val READ_ALOUD_CONTEXT_NAME = "read_aloud_context"
 private const val TRANSLATION_GEMINI_MODEL_NAME = "translation_gemini_model"
 private const val TRANSLATION_TARGET_NAME = "translation_target"
 private const val TRANSLATION_CONTEXT_NAME = "translation_context"

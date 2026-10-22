@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -156,10 +157,30 @@ internal class SpeechReadAloud(
 
     val service: Flow<SpeechService> = settings.settings.map(::serviceOf).distinctUntilChanged()
 
+    private val currentSettings: StateFlow<AppSettings> = settings.settings
+        .stateIn(scope, SharingStarted.Eagerly, AppSettings())
+
+    private fun contextConfiguration(s: AppSettings = currentSettings.value): SpeechContext.Configuration {
+        val service = serviceOf(s)
+        return SpeechContext.Configuration(
+            enabled = s.readAloudContext && service.supportsContext(s),
+            size = s.translationContext,
+            template = s.translationBookContext,
+        )
+    }
+
     init {
         // A choice asked of one service means nothing to another.
         scope.launch {
             service.collect { chosen -> if (mutablePending.value.let { it != null && it.service != chosen }) starting?.cancel() }
+        }
+        scope.launch {
+            // Only what reaches the request matters: an inactive context's size or template changes nothing.
+            settings.settings
+                .map { contextConfiguration(it).identity }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { switchVoice() }
         }
     }
 
@@ -233,6 +254,7 @@ internal class SpeechReadAloud(
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
                     onChapterEnded = { setSleepTimer(null) },
                     translation = translation,
+                    contextConfiguration = ::contextConfiguration,
                 )
                 held = false
                 translationHeld = false
@@ -495,6 +517,31 @@ internal class SpeechReadAloud(
 
     /** Saves [count]; a session already playing keeps cutting text as it started. */
     suspend fun setSentencesPerRequest(count: Int) = settings.setReadAloudSentencesPerRequest(count)
+
+    /** Whether read aloud sends book facts and earlier sentences to supported speech services. */
+    val contextEnabled: Flow<Boolean> = settings.settings.map { it.readAloudContext }.distinctUntilChanged()
+
+    /** Whether the selected speech service and model accept non-spoken context. */
+    val contextSupported: Flow<Boolean> = settings.settings
+        .map { s -> serviceOf(s).supportsContext(s) }
+        .distinctUntilChanged()
+
+    /** How much earlier text goes with each sentence when context is enabled. */
+    val contextSize: Flow<com.chmouel.liseur.data.settings.TranslationContextSize> = settings.settings
+        .map { it.translationContext }
+        .distinctUntilChanged()
+
+    /** The book-details template shared with translation. */
+    val bookContext: Flow<String?> = settings.settings
+        .map { it.translationBookContext }
+        .distinctUntilChanged()
+
+    suspend fun setContextEnabled(enabled: Boolean) = settings.setReadAloudContext(enabled)
+
+    suspend fun setContextSize(size: com.chmouel.liseur.data.settings.TranslationContextSize) =
+        settings.setTranslationContext(size)
+
+    suspend fun setBookContext(template: String?) = settings.setTranslationBookContext(template)
 
     @Composable
     override fun SettingsEntry(onClick: () -> Unit) = ReadAloudSettingsEntry(this, onClick)

@@ -3,15 +3,17 @@ package com.chmouel.liseur.translate
 import java.security.MessageDigest
 
 /**
- * What an AI translator may be told about where a passage comes from:
- * the book, its author, the chapter, and how far into the book that
- * chapter starts. Any of them may be unknown.
+ * What an AI translator or speech service may be told about where a
+ * passage comes from: the book, its author, its source language, the
+ * chapter, and how far into the book that chapter starts. Any of them may
+ * be unknown.
  */
 data class BookFacts(
     val title: String? = null,
     val author: String? = null,
     val chapter: String? = null,
     val percent: Int? = null,
+    val language: String? = null,
 ) {
     companion object {
         /**
@@ -27,6 +29,7 @@ data class BookFacts(
             hrefs: List<String>,
             titles: Map<Int, String>,
             starts: List<Double?>,
+            language: String? = null,
         ): Map<String, BookFacts> {
             var chapter: String? = null
             var chapterStart: Double? = null
@@ -37,20 +40,21 @@ data class BookFacts(
                     chapterStart = start
                 }
                 val percent = (if (chapter != null) chapterStart else start)?.let { (it.coerceIn(0.0, 1.0) * 100).toInt() }
-                href to BookFacts(title, author, chapter, percent)
+                href to BookFacts(title, author, chapter, percent, language)
             }.toMap()
         }
     }
 }
 
-/** The reader's template of what an AI translator is told about the book. */
+/** The reader's template of what an AI translator or speech service is told about the book. */
 internal object TranslationBookContext {
     const val TITLE = "{title}"
     const val AUTHOR = "{author}"
     const val CHAPTER = "{chapter}"
     const val PERCENT = "{percent}"
+    const val LANGUAGE = "{language}"
 
-    /** Used until the reader writes their own; [PERCENT] is left for readers who add it. */
+    /** Used until the reader writes their own; [PERCENT] and [LANGUAGE] are left for readers who add them. */
     const val DEFAULT_TEMPLATE = "Book: $TITLE\nAuthor: $AUTHOR\nChapter: $CHAPTER"
 
     /** The longest template kept. */
@@ -59,7 +63,7 @@ internal object TranslationBookContext {
     // A fact longer than this is not a title or a name.
     private const val LONGEST_FACT = 200
 
-    private val PLACEHOLDER = Regex("""\{(title|author|chapter|percent)\}""")
+    private val PLACEHOLDER = Regex("""\{(title|author|chapter|percent|language)\}""")
 
     /** The template in effect for what is [stored]: the default when unset, null when the reader cleared it. */
     fun template(stored: String?): String? = (stored ?: DEFAULT_TEMPLATE).trim().take(MAX_CHARACTERS).ifEmpty { null }
@@ -84,6 +88,7 @@ internal object TranslationBookContext {
                     TITLE -> facts?.title
                     AUTHOR -> facts?.author
                     CHAPTER -> facts?.chapter
+                    LANGUAGE -> facts?.language
                     else -> facts?.percent?.let { "$it%" }
                 }?.let(::fact)
                 if (value == null) missing = true

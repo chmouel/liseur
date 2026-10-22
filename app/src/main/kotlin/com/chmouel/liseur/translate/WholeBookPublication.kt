@@ -4,7 +4,7 @@ import com.chmouel.liseur.AppContainer
 import android.content.Context
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.library.permissionSafeAssetRetriever
-import com.chmouel.liseur.reader.TranslatedPages
+import com.chmouel.liseur.reader.PublicationContext
 import androidx.core.net.toUri
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -92,5 +92,5 @@ internal suspend fun Publication.translationSentences(
         progress(index + 1, readingOrder.size)
     }
     val first = readingOrder.firstOrNull()?.let(::locatorFromLink) ?: throw IOException("The EPUB has no starting point")
-    return TranslatedPages.sentences(this, first, source)
+    return PublicationContext.sentences(this, first, source)
 }

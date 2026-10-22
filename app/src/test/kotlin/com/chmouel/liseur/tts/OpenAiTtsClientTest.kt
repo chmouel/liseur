@@ -71,6 +71,43 @@ class OpenAiTtsClientTest {
         assertEquals("Bonjour le monde.", body.getString("input"))
         assertEquals("af_bella", body.getString("voice"))
         assertEquals("wav", body.getString("response_format"))
+        assertFalse(body.has("instructions"))
+    }
+
+    @Test
+    fun `includes non-spoken instructions when provided and preserves them across MP3 fallback`(): Unit = runBlocking {
+        val client = OpenAiTtsClient(decodeMp3 = { byteArrayOf(1, 0, 2, 0) })
+        server.enqueue(MockResponse(code = 400, body = """{"error":{"message":"Unsupported response_format"}}"""))
+        server.enqueue(pcm(byteArrayOf(1, 2, 3), "audio/mpeg"))
+
+        client.synthesize(base, null, "Speak this.", "coral", "gpt-4o-mini-tts", "Reference context.")
+
+        val first = JSONObject(server.takeRequest().body!!.utf8())
+        val second = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals("Speak this.", first.getString("input"))
+        assertEquals("Reference context.", first.getString("instructions"))
+        assertEquals("wav", first.getString("response_format"))
+        assertEquals("Speak this.", second.getString("input"))
+        assertEquals("Reference context.", second.getString("instructions"))
+        assertEquals("mp3", second.getString("response_format"))
+    }
+
+    @Test
+    fun `supportsContext matches verified OpenAI models and stub-tts only`() {
+        val openAi = OpenAiTts.baseUrl("https://api.openai.com/v1")!!
+        val openRouter = OpenAiTts.baseUrl("https://openrouter.ai/api/v1")!!
+        val selfHosted = OpenAiTts.baseUrl("http://127.0.0.1:8765/v1")!!
+        val gradium = OpenAiTts.baseUrl("https://api.gradium.ai/api")!!
+
+        assertTrue(OpenAiTts.supportsContext(openAi, "gpt-4o-mini-tts"))
+        assertTrue(OpenAiTts.supportsContext(openAi, "gpt-4o-mini-tts-2025-12-15"))
+        assertFalse(OpenAiTts.supportsContext(openAi, "tts-1"))
+        assertFalse(OpenAiTts.supportsContext(openAi, "tts-1-hd"))
+        assertTrue(OpenAiTts.supportsContext(openRouter, "openai/gpt-4o-mini-tts"))
+        assertFalse(OpenAiTts.supportsContext(openRouter, "openai/tts-1"))
+        assertTrue(OpenAiTts.supportsContext(selfHosted, "stub-tts"))
+        assertFalse(OpenAiTts.supportsContext(selfHosted, "kokoro"))
+        assertFalse(OpenAiTts.supportsContext(gradium, "gpt-4o-mini-tts"))
     }
 
     @Test

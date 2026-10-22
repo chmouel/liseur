@@ -1249,7 +1249,17 @@ changing reader behavior.
   language.
 - Temporary synthesis failures retry up to three attempts, with waits outside
   the concurrency permit and a 30-second retry-start budget (ADR-0054).
-  Translation preparation is outside these retries.
+  Translation preparation and reference-context resolution are outside these retries.
+- Optional speech context (`read_aloud_context`, default false; backed up, not
+  synced) shares `translation_context` and `translation_book_context` via
+  `PublicationContext` (`OpenBookHandle.bookFacts` and `preceding`). When on and
+  `SpeechService.supportsContext` is true (`OpenAiTts.supportsContext`:
+  `gpt-4o-mini-tts*` on OpenAI/OpenRouter, plus `stub-tts`), `ReadAloudPlayback`
+  and `UtterancePrefetcher` anchor `SpeechKey` with `contextIdentity` and
+  `SpeechContext` sends `<book>` and source-language `<context>` in
+  `POST /v1/audio/speech` `instructions` while keeping `input` verbatim.
+  A settings change that alters what is sent (`SpeechContext.Configuration.identity`)
+  swaps `SpeechCache` and replays the current sentence.
 - Gemini narration direction is local per book, loaded before synthesis and
   sent as a `speech_metadata` annotation (`style`) on the text of a structured
   `input`; applying it restarts the current sentence
@@ -1388,18 +1398,18 @@ changing reader behavior.
   builds it per sentence and answering identity
   (`SentenceTranslator.contextSize`), so page and voice send the same
   text and share one in-flight request. `PrecedingSentences`
-  (`TranslatedPages.preceding`) gives a sentence only strictly earlier
+  (`PublicationContext.preceding`, cached on `OpenBookHandle`) gives a sentence only strictly earlier
   text in its resource, never itself or later; the window
   (`TranslationContext.window`) stops at the resource and falls back to
   the caller's previous sentence. Only `TranslationService.usesContext`
   services take it; a server's Advanced context switch can turn it off.
 - Book details: `translation_book_context` template (`{title}`, `{author}`,
-  `{chapter}`, `{percent}`; `TranslationBookContext`,
+  `{language}`, `{chapter}`, `{percent}`; `TranslationBookContext`,
   `translate/BookFacts.kt`); unset is the current default, empty is off.
   Device-local, backed up, never synced. Sent first between `<book>` and
   `</book>` as reference only; `clean()` drops an echo. Only
   `TranslationService.usesBook` services take it, regardless of the context
-  switch. `TranslatedPages.bookFacts` takes the percentage from the
+  switch. `PublicationContext.bookFacts` takes the percentage from the
   resource's start in `positionsByReadingOrder()`, never the exact sentence,
   so facts are fixed per resource and saved pages stay valid; it joins
   `pageIdentity` as `book=<hash>` only for services that take it.

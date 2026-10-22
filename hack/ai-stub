@@ -71,7 +71,7 @@ def blocks(text: str) -> dict[str, str]:
     """The prompt's <book>, <context> and <passage> blocks, by name."""
     found = {}
     for name in BLOCKS:
-        tag = r"passage(?:_\d+)?" if name == "passage" else name
+        tag = rf"{name}(?:_\d+)?"
         match = re.search(rf"<({tag})>\n?(.*?)\n?</\1>", text, re.DOTALL)
         if match:
             found[name] = match.group(2)
@@ -202,6 +202,8 @@ def handler(stub: Stub):
             route = self.route()
             if route == "/chat/completions":
                 entry["blocks"] = blocks(user_text(body))
+            elif route == "/audio/speech" and isinstance(body.get("instructions"), str):
+                entry["blocks"] = blocks(body["instructions"])
             stub.record(entry)
             if route == "/api/post/speech/tts":
                 return self.gradium_speech(body) if self.gradium_authorized() else None

@@ -10,18 +10,23 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
@@ -31,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -61,6 +67,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -79,6 +86,7 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.ConnectionRow
+import com.chmouel.liseur.ui.settings.InfoDialog
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.RowDivider
@@ -264,9 +272,7 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     expanded = advancedOpen,
                     onExpandedChange = { advancedOpen = it },
                 ) {
-                    ContextGroup(feature)
-                    RowDivider()
-                    BookContextGroup(feature)
+                    SharedContextSection(feature, onChangeService = { picking = true })
                     feature.saved?.let {
                         RowDivider()
                         SavedTranslationsGroup(it.value, feature.accountClears, feature.requestFullSync)
@@ -308,71 +314,163 @@ private fun WholeBookTranslationsGroup() {
     selected?.let { WholeBookTranslationScreen(it, onDismiss = { selected = null }) }
 }
 
+private data class StoredBook(val template: String?)
+
 /**
- * How much of the book's earlier text goes with each sentence of a
- * translated page, with a note when the service chosen now takes none.
+ * Translation's half of the settings it shares with read aloud. When the
+ * service chosen now uses neither, one note under the header says so,
+ * with the way to another service; otherwise the note sits under the one
+ * it does not use, which comes down to the server's model.
  */
 @Composable
-private fun ContextGroup(feature: ServiceTranslate) {
+private fun SharedContextSection(feature: ServiceTranslate, onChangeService: () -> Unit) {
     val chosen by feature.context.collectAsState(initial = TranslationContextSize.Default)
-    val takes by feature.takesContext.collectAsState(initial = true)
+    val takesContext by feature.takesContext.collectAsState(initial = true)
+    val takesBook by feature.takesBook.collectAsState(initial = true)
+    val loaded by remember { feature.bookContext.map(::StoredBook) }.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
-    val numbers = NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0])
-    AdvancedSection(stringResource(R.string.translation_settings_context)) {
-        Text(
-            text = stringResource(R.string.translation_settings_context_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        for (size in TranslationContextSize.entries) {
-            val selected = size == chosen
-            ListItem(
-                modifier = Modifier.selectable(selected = selected, role = Role.RadioButton) {
-                    scope.launch { feature.setContext(size) }
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = {
-                    Text(
-                        stringResource(size.label),
-                        color = if (selected) MaterialTheme.colorScheme.primary else Color.Unspecified,
-                    )
-                },
-                supportingContent = {
-                    Text(
-                        if (size == TranslationContextSize.OFF) {
-                            stringResource(R.string.translation_context_off_detail)
-                        } else {
-                            pluralStringResource(
-                                R.plurals.translation_context_limit,
-                                size.sentences,
-                                size.sentences,
-                                numbers.format(size.characters),
-                            )
-                        },
-                    )
-                },
-                trailingContent = if (selected) {
-                    { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
-                } else {
-                    null
-                },
-            )
-        }
-        if (!takes) {
-            Text(
-                text = stringResource(R.string.translation_context_unused),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
+    val unused = stringResource(R.string.context_unused)
+    SharedContextHeader(stringResource(R.string.context_shared_with_read_aloud))
+    if (!takesContext && !takesBook) {
+        UnusedNote(unused)
+        TextButton(onClick = onChangeService, modifier = Modifier.padding(start = 4.dp)) {
+            Text(stringResource(R.string.translation_settings_provider_change))
         }
     }
+    BookEarlierTextRow(
+        chosen = chosen,
+        unusedNote = unused.takeIf { !takesContext && takesBook },
+        onSelect = { scope.launch { feature.setContext(it) } },
+    )
+    loaded?.let { stored ->
+        BookDetailsTemplateSettings(
+            storedTemplate = stored.template,
+            unusedNote = unused.takeIf { takesContext && !takesBook },
+            onSave = feature::setBookContext,
+        )
+    }
+}
+
+/**
+ * Heads the earlier-text and book-details rows, which are the same
+ * settings on the Translation and Read aloud screens. The whole row
+ * opens one dialog explaining both.
+ */
+@Composable
+internal fun SharedContextHeader(label: String) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button) { open = true }
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Link,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+        )
+        Icon(
+            Icons.Outlined.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+    if (open) {
+        InfoDialog(
+            title = stringResource(R.string.context_shared_title),
+            body = stringResource(R.string.context_shared_detail),
+            onDismiss = { open = false },
+        )
+    }
+}
+
+/**
+ * The shared earlier-text size as one row that opens a menu of the
+ * sizes. [unusedNote] says why it does nothing where it is shown.
+ */
+@Composable
+internal fun BookEarlierTextRow(
+    chosen: TranslationContextSize,
+    unusedNote: String?,
+    onSelect: (TranslationContextSize) -> Unit,
+) {
+    val numbers = NumberFormat.getIntegerInstance(LocalConfiguration.current.locales[0])
+    val limit = @Composable { size: TranslationContextSize ->
+        if (size == TranslationContextSize.OFF) {
+            null
+        } else {
+            pluralStringResource(R.plurals.translation_context_limit, size.sentences, size.sentences, numbers.format(size.characters))
+        }
+    }
+    var picking by remember { mutableStateOf(false) }
+    Box {
+        ListItem(
+            modifier = Modifier.clickable(role = Role.DropdownList) { picking = true },
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            headlineContent = { Text(stringResource(R.string.translation_settings_context)) },
+            supportingContent = {
+                val label = stringResource(chosen.label)
+                Text(limit(chosen)?.let { stringResource(R.string.translation_context_summary, label, it) } ?: label)
+            },
+            trailingContent = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null) },
+        )
+        DropdownMenu(expanded = picking, onDismissRequest = { picking = false }) {
+            for (size in TranslationContextSize.entries) {
+                val selected = size == chosen
+                DropdownMenuItem(
+                    text = {
+                        Column(Modifier.padding(vertical = 4.dp)) {
+                            Text(stringResource(size.label))
+                            limit(size)?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        picking = false
+                        onSelect(size)
+                    },
+                    trailingIcon = if (selected) {
+                        { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+                    } else {
+                        null
+                    },
+                    modifier = Modifier.semantics { this.selected = selected },
+                )
+            }
+        }
+    }
+    unusedNote?.let { UnusedNote(it) }
+}
+
+@Composable
+private fun UnusedNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+    )
 }
 
 /** One of the settings inside the Advanced card, under a title of its own. */
 @Composable
-private fun AdvancedSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+internal fun AdvancedSection(title: String, content: @Composable ColumnScope.() -> Unit) {
     Text(
         text = title,
         style = MaterialTheme.typography.labelLarge,
@@ -382,59 +480,111 @@ private fun AdvancedSection(title: String, content: @Composable ColumnScope.() -
     Column(content = content)
 }
 
-private data class StoredBook(val template: String?)
+/**
+ * Filled into the preview instead of a real book, which the settings
+ * screens do not have. Every placeholder has a value, so no line drops.
+ */
+private val SAMPLE_BOOK = BookFacts(
+    title = "Treasure Island",
+    author = "Robert Louis Stevenson",
+    chapter = "The Old Sea-dog at the Admiral Benbow",
+    percent = 2,
+    language = "en",
+)
 
 /**
- * What an AI translator is told about the book a passage comes from: on
- * with the default template until the reader writes their own or turns
- * it off, with a note when the service chosen now is told nothing.
+ * The shared book-details template: a switch, what the template gives
+ * for a sample book, and the raw template behind "Edit".
+ * [unusedNote] works as for [BookEarlierTextRow].
  */
 @Composable
-private fun BookContextGroup(feature: ServiceTranslate) {
-    val loaded by remember { feature.bookContext.map(::StoredBook) }.collectAsState(initial = null)
-    val takes by feature.takesBook.collectAsState(initial = true)
+internal fun BookDetailsTemplateSettings(
+    storedTemplate: String?,
+    unusedNote: String?,
+    onSave: (String?) -> Unit,
+) {
     // Bumped by the switch and reset, so an unsaved draft never overrides them as its field goes away.
     var overrides by remember { mutableIntStateOf(0) }
     val override = { template: String? ->
         overrides++
-        feature.setBookContext(template)
+        onSave(template)
     }
-    val stored = loaded ?: return
-    val on = TranslationBookContext.template(stored.template) != null
-    AdvancedSection(stringResource(R.string.translation_settings_book)) {
-        Text(
-            text = stringResource(R.string.translation_settings_book_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-        SwitchRow(
-            title = stringResource(R.string.translation_book_switch),
-            subtitle = stringResource(R.string.translation_book_switch_detail),
-            checked = on,
-            onCheckedChange = { checked -> override(if (checked) null else "") },
-        )
-        if (on) {
-            key(overrides) {
-                val mine = remember { overrides }
-                BookTemplateField(
-                    shown = stored.template ?: TranslationBookContext.DEFAULT_TEMPLATE,
-                    onSave = { if (overrides == mine) feature.setBookContext(it) },
-                )
-            }
-            if (stored.template != null) {
-                TextButton(
-                    onClick = { override(null) },
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                ) { Text(stringResource(R.string.translation_book_reset)) }
+    var editing by remember { mutableStateOf(false) }
+    // What the field holds while it is open, so the example follows the typing.
+    var draft by remember { mutableStateOf<String?>(null) }
+    val on = TranslationBookContext.template(storedTemplate) != null
+    SwitchRow(
+        title = stringResource(R.string.translation_book_switch),
+        subtitle = null,
+        checked = on,
+        onCheckedChange = { checked ->
+            editing = false
+            draft = null
+            override(if (checked) null else "")
+        },
+    )
+    unusedNote?.let { UnusedNote(it) }
+    if (!on) return
+    val shown = TranslationBookContext.template(draft ?: storedTemplate)
+    val example = remember(shown) { TranslationBookContext.render(shown, SAMPLE_BOOK) }
+    BookDetailsExample(
+        text = example,
+        editing = editing,
+        onEdit = {
+            editing = !editing
+            // Done leaves the field, which saves the draft as it goes.
+            if (!editing) draft = null
+        },
+    )
+    if (editing) {
+        key(overrides) {
+            val mine = remember { overrides }
+            BookTemplateField(
+                shown = storedTemplate ?: TranslationBookContext.DEFAULT_TEMPLATE,
+                onDraft = { draft = it },
+                onSave = { if (overrides == mine) onSave(it) },
+            )
+        }
+        if (storedTemplate != null) {
+            TextButton(
+                onClick = {
+                    draft = null
+                    override(null)
+                },
+                modifier = Modifier.padding(horizontal = 4.dp),
+            ) { Text(stringResource(R.string.translation_book_reset)) }
+        }
+    }
+}
+
+/**
+ * The template filled in for [SAMPLE_BOOK] under a "Sample book" label,
+ * with the Edit/Done toggle beside the label. A blank draft shows an
+ * empty box, so the toggle never goes away mid-edit.
+ */
+@Composable
+private fun BookDetailsExample(text: String?, editing: Boolean, onEdit: () -> Unit) {
+    Column(Modifier.padding(start = 16.dp, end = 4.dp, bottom = 16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.translation_book_example),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = onEdit) {
+                Text(stringResource(if (editing) R.string.done else R.string.translation_book_edit))
             }
         }
-        if (!takes) {
+        Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth().padding(end = 12.dp),
+        ) {
             Text(
-                text = stringResource(R.string.translation_book_unused),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                text = text.orEmpty(),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 12.dp, vertical = 8.dp),
             )
         }
     }
@@ -445,7 +595,7 @@ private fun BookContextGroup(feature: ServiceTranslate) {
  * unset, so it follows a later default, and an empty one as off.
  */
 @Composable
-private fun BookTemplateField(shown: String, onSave: (String?) -> Unit) {
+private fun BookTemplateField(shown: String, onDraft: (String) -> Unit, onSave: (String?) -> Unit) {
     var typed by remember { mutableStateOf(shown) }
     var synced by remember { mutableStateOf(shown) }
     LaunchedEffect(shown) {
@@ -462,13 +612,17 @@ private fun BookTemplateField(shown: String, onSave: (String?) -> Unit) {
     DisposableEffect(Unit) { onDispose { latestCommit() } }
     OutlinedTextField(
         value = typed,
-        onValueChange = { typed = it.take(TranslationBookContext.MAX_CHARACTERS) },
+        onValueChange = {
+            typed = it.take(TranslationBookContext.MAX_CHARACTERS)
+            onDraft(typed)
+        },
         label = { Text(stringResource(R.string.translation_book_template)) },
+        supportingText = { Text(stringResource(R.string.translation_book_placeholders)) },
         minLines = 3,
         maxLines = 8,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
             .onLeaving { commit() },
     )
 }

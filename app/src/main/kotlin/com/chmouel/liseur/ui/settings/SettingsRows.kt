@@ -16,16 +16,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -215,16 +223,21 @@ internal fun RowDivider() {
 @Composable
 internal fun SwitchRow(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
+    info: (@Composable () -> Unit)? = null,
 ) {
     ListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
+        supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
-            Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+            // The info button keeps its own click and TalkBack stop inside the toggleable row.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                info?.invoke()
+                Switch(checked = checked, onCheckedChange = null, enabled = enabled)
+            }
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = Modifier
@@ -238,6 +251,36 @@ internal fun SwitchRow(
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             ),
+    )
+}
+
+/**
+ * An info icon that keeps a longer explanation out of the way: tapping
+ * it opens [body] under [title]. TalkBack reads "About [title]".
+ */
+@Composable
+internal fun InfoButton(title: String, body: String) {
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }) {
+        Icon(
+            Icons.Outlined.Info,
+            contentDescription = stringResource(R.string.settings_info_about_section, title),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+    if (open) InfoDialog(title, body, onDismiss = { open = false })
+}
+
+@Composable
+internal fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(body) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
     )
 }
 

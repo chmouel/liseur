@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.data.library.openableUri
-import com.chmouel.liseur.reader.TranslatedPages
+import com.chmouel.liseur.reader.PublicationContext
 import com.chmouel.liseur.reader.ResourceAddress
 import java.io.IOException
 import java.util.Locale
@@ -127,7 +127,7 @@ internal class WholeBookTranslations(
                 val price = async { feature.wholeBookPrice() }
                 val identity = translator.answering()
                 val requestCharacters = feature.wholeBookPrompt(source, target, bookUrl)
-                val requests = SentenceRequests(translator, TranslatedPages.preceding(publication, source), TranslatedPages.bookFacts(publication))
+                val requests = SentenceRequests(translator, PublicationContext.preceding(publication, source), PublicationContext.bookFacts(publication))
                 val sentences = publication.translationSentences(source) { completed, total ->
                     progress(PreparationProgress(PreparationStage.VALIDATING, completed, total))
                 }
@@ -332,7 +332,7 @@ internal class WholeBookTranslations(
                     currentCoroutineContext().ensureActive()
                     val current = checkNotNull(record)
                     val requests = SentenceRequests(
-                        pinned, TranslatedPages.preceding(publication, preview.source), TranslatedPages.bookFacts(publication),
+                        pinned, PublicationContext.preceding(publication, preview.source), PublicationContext.bookFacts(publication),
                     )
                     WholeBookTranslation(
                         pinned, requests,
@@ -378,7 +378,7 @@ internal class WholeBookTranslations(
             try {
                 container.withTranslationPublication(preview.bookUrl) { publication ->
                     val requests = SentenceRequests(
-                        pinned, TranslatedPages.preceding(publication, preview.source), TranslatedPages.bookFacts(publication),
+                        pinned, PublicationContext.preceding(publication, preview.source), PublicationContext.bookFacts(publication),
                     )
                     saved.retain(preview) {
                         val coverage = WholeBookTranslation(pinned, requests, store(preview.bookUrl)) { 0 }

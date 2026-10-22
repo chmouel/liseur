@@ -4,7 +4,7 @@ import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.companion.CodexBookRow
 import com.chmouel.liseur.companion.CodexStore
 import com.chmouel.liseur.companion.PublicationCatalog
-import com.chmouel.liseur.reader.TranslatedPages
+import com.chmouel.liseur.reader.PublicationContext
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
@@ -19,7 +19,7 @@ internal suspend fun AppContainer.translationPlace(bookUrl: String, publication:
 internal suspend fun AppContainer.translationPassage(bookUrl: String, place: Locator?): Pair<String?, String> =
     withTranslationPublication(bookUrl) { publication ->
         val source = TranslationLanguages.source(publication.metadata.languages)
-        val sentences = TranslatedPages.sentences(publication, translationPlace(bookUrl, publication, place), source)
+        val sentences = PublicationContext.sentences(publication, translationPlace(bookUrl, publication, place), source)
         val texts = mutableListOf<String>()
         repeat(3) {
             val sentence = sentences.next()?.text ?: return@repeat

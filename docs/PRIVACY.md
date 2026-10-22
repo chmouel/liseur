@@ -177,8 +177,13 @@ the single word "Hello." with the model and voice you picked. Once you press pla
 the text being read, one sentence at a time by default or up to five
 together if you raise that in the read-aloud settings, a few sentences
 ahead of the voice, to that address together with the model and voice you picked
-and, if you entered one for that server, your API key. No book title, file, identifier
-or reading position goes with it. Who else can see
+and, if you entered one for that server, your API key. By default no book title, file, identifier
+or reading position goes with it. If you turn on "Send book context" in
+Settings, Read aloud, Advanced, and the chosen model accepts non-spoken
+instructions (such as OpenAI's `gpt-4o-mini-tts` models), each request
+also carries the book details and preceding source sentences from the
+same chapter according to the shared "Earlier text" and "Send book
+details" settings, even when reading a translated page aloud. Who else can see
 that text depends on the server and the network you chose; a plain
 `http://` address is not encrypted. With a hosted service, the text goes
 to that service under its own terms and privacy policy. "Get a key" on
@@ -240,10 +245,12 @@ characters, with its language and the language you want, the model you
 picked and, if you entered one, your API key. If you set any of the
 server's Advanced options in Settings, Translation, such as extra
 instructions, they go with every request to that server. Unless you turn
-off "Send book details" in Settings, Translation, Advanced, each request also
+off "Send book details" in Settings, Translation, Advanced (or Read aloud,
+Advanced), each request also
 carries the book's title and author and the title of the chapter the
 text comes from, written as your template there says. If you add
-`{percent}` to the template, it also carries how far into the book that
+`{language}` or `{percent}` to the template, it also carries the book's
+source language or how far into the book that
 chapter starts, as a percentage. No file, identifier or
 exact reading position goes with it. TranslateGemma models never get
 the book's details. A translation direction you saved for the book goes
@@ -254,7 +261,7 @@ text depends on the server and the network you chose; with a hosted
 service, the passage goes to that service under its own terms and
 privacy policy. When you translate a page in the reader, each sentence
 goes the same way, with some of the book's text before it from the same
-chapter, as set by "Earlier text for page translation" in Settings,
+chapter, as set by "Earlier text" in Settings,
 Translation, Advanced: by default up to 8 sentences and 4,000 characters, and
 some of it may come from before the place you started translating. Set
 it to Off, or turn off the server's Advanced option to send earlier

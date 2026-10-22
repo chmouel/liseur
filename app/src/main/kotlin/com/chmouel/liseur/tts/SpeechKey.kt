@@ -18,13 +18,19 @@ data class SpeechKey(
     val text: String,
     val place: PageSentence? = null,
     val translationIdentity: String? = null,
+    val contextIdentity: String? = null,
 ) {
     companion object {
         private const val CSS_SELECTOR = "cssSelector"
 
         /** [text], spoken at Readium's [locator], as the page names a sentence. */
-        fun at(text: String, locator: Locator, translationIdentity: String? = null): SpeechKey =
-            SpeechKey(text, sentenceAt(text, locator), translationIdentity)
+        fun at(
+            text: String,
+            locator: Locator,
+            translationIdentity: String? = null,
+            contextIdentity: String? = null,
+        ): SpeechKey =
+            SpeechKey(text, sentenceAt(text, locator), translationIdentity, contextIdentity)
 
         /** The book's sentence [text] at [locator], named the way the translated page names it. */
         fun sentenceAt(text: String, locator: Locator): PageSentence = PageSentence(
