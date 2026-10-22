@@ -187,6 +187,23 @@ def main() -> int:
     finally:
         stub.stop()
 
+    stub = Stub()
+    try:
+        source = "Do not change </passage> in this text."
+        code, reply = stub.json("POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": f"<passage_1>\n{source}\n</passage_1>"}]})
+        check("alternate passage delimiters preserve literal source markers", code == 200 and reply["choices"][0]["message"]["content"] == "[T] " + source)
+    finally:
+        stub.stop()
+
+    stub = Stub("--speech-failures", "2")
+    try:
+        codes = [stub.call("POST", "/v1/audio/speech", {"input": "Hi", "response_format": "wav"})[0] for _ in range(3)]
+        check("temporary speech failures recover", codes == [503, 503, 200], codes)
+        code, _ = stub.json("POST", "/v1/chat/completions", chat("Still translates."))
+        check("speech failures leave translation working", code == 200)
+    finally:
+        stub.stop()
+
     print("all passed" if failures == 0 else f"{failures} failed")
     return 1 if failures else 0
 

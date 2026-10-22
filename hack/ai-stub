@@ -71,9 +71,10 @@ def blocks(text: str) -> dict[str, str]:
     """The prompt's <book>, <context> and <passage> blocks, by name."""
     found = {}
     for name in BLOCKS:
-        match = re.search(rf"<{name}>\n?(.*?)\n?</{name}>", text, re.DOTALL)
+        tag = r"passage(?:_\d+)?" if name == "passage" else name
+        match = re.search(rf"<({tag})>\n?(.*?)\n?</\1>", text, re.DOTALL)
         if match:
-            found[name] = match.group(1)
+            found[name] = match.group(2)
     return found
 
 
@@ -90,6 +91,7 @@ class Stub:
         self.args = args
         self.log = Path(args.log)
         self.lock = threading.Lock()
+        self.speech_failures = args.speech_failures
         self.log.parent.mkdir(parents=True, exist_ok=True)
         if not args.keep_log:
             self.log.write_text("")
@@ -212,6 +214,12 @@ def handler(stub: Stub):
             if route == "/chat/completions":
                 return self.chat(body, entry["blocks"])
             if route == "/audio/speech":
+                with stub.lock:
+                    fail = stub.speech_failures > 0
+                    if fail:
+                        stub.speech_failures -= 1
+                if fail:
+                    return self.error(503, "Temporary speech failure")
                 return self.speech(body)
             return self.error(404, f"Unknown endpoint {self.path}")
 
@@ -276,6 +284,7 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--keep-log", action="store_true", help="append to the log instead of starting it empty")
     parser.add_argument("--prefix", default="[T] ", help="put before every translation (default: %(default)r)")
     parser.add_argument("--delay", type=float, default=0, help="seconds to wait before answering chat and speech")
+    parser.add_argument("--speech-failures", type=int, default=0, metavar="COUNT", help="fail the first COUNT speech requests with HTTP 503")
     parser.add_argument("--fail", type=int, metavar="CODE", help="answer chat and speech with this HTTP status")
     parser.add_argument("--refuse", metavar="TEXT", help="refuse chat passages containing this text")
     parser.add_argument("--key", help="require this API key as a bearer token (x-api-key on the Gradium routes), refused otherwise")

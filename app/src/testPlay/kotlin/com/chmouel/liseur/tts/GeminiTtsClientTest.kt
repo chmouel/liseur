@@ -118,6 +118,19 @@ class GeminiTtsClientTest {
     }
 
     @Test
+    fun `narration direction is separate metadata and clearing restores default`() = runBlocking {
+        repeat(2) { server.enqueue(MockResponse(code = 200, body = audioBody(byteArrayOf(1, 0)))) }
+        val text = "  I said: speak loudly.  "
+        client().synthesize("k", text, "Kore", direction = "Quietly, with dry humour")
+        val custom = JSONObject(server.takeRequest().body!!.utf8())
+        assertEquals(text, custom.getString("input"))
+        assertEquals("Quietly, with dry humour", custom.getJSONObject("speech_metadata").getString("style"))
+        assertFalse(custom.getBoolean("store"))
+        client().synthesize("k", text, "Kore", direction = "")
+        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("speech_metadata"))
+    }
+
+    @Test
     fun `sends the model asked for`() = runBlocking {
         server.enqueue(MockResponse(code = 200, body = audioBody(byteArrayOf(1, 0))))
 

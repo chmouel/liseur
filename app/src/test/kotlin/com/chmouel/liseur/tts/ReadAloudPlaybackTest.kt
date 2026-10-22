@@ -115,7 +115,7 @@ class ReadAloudPlaybackTest {
         holds[text]?.await()
         if (failures[text] == nth) {
             failures.remove(text)
-            throw SpeechError.Service(503)
+            throw SpeechError.Service(400)
         }
         SpeechAudio(text.toByteArray())
     }
@@ -533,13 +533,14 @@ class ReadAloudPlaybackTest {
     }
 
     @Test
-    fun replayingWhilePausedStaysPausedOnTheSameSentence() {
+    fun replayingChangedDirectionWhilePausedStaysPausedOnTheSameSentence() {
         runBlocking(main) {
             playback.start(chapterStart, target = {
                 if (it.utterance == FIRST) playback.pause()
                 it.utterance == THIRD
             })
             val before = playback.navigator.value
+            cache.swap(synthesize, "Kore\u0000quiet delivery")
 
             assertEquals(ReadAloudPlayback.Landing.Sentence, playback.replay())
             assertTrue(playback.navigator.value !== before)

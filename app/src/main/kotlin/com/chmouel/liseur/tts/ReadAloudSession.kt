@@ -35,7 +35,7 @@ import org.readium.r2.shared.util.tokenizer.DefaultTextContentTokenizer
 import org.readium.r2.shared.util.tokenizer.TextUnit
 
 /** What a session speaks with: the voice's name, how many sentences to fetch at once, and the service. */
-internal class SessionVoice(val name: String, val maxConcurrent: Int, val synthesizer: SpeechSynthesizer)
+internal class SessionVoice(val name: String, val maxConcurrent: Int, val configurationIdentity: String = name, val synthesizer: SpeechSynthesizer)
 
 /**
  * One book being read aloud: the voice, the sentences fetched ahead of
@@ -108,6 +108,7 @@ internal class ReadAloudSession(
         voice.synthesizer::synthesize,
         voice.maxConcurrent,
         prepare = translatedSpeech?.let { it::prepare },
+        configurationIdentity = voice.configurationIdentity,
     )
 
     private val tokenizerFactory = BoundedSentenceTokenizer.factory(sentencesPerRequest)
@@ -270,7 +271,7 @@ internal class ReadAloudSession(
         // Read translated, the book is cut in the language translated from, whatever the voice.
         val recut = language != choice.value.language && translation == null
         mutableChoice.value = VoicePick(voice.name, language)
-        cache.swap(voice.synthesizer::synthesize)
+        cache.swap(voice.synthesizer::synthesize, voice.configurationIdentity)
         // Still starting: the first sentence is fetched with the new voice.
         if (playback.navigator.value == null) return
         scope.launch {

@@ -153,7 +153,7 @@ internal class MlKitTranslationService(
     }
 
     /** One translator for the whole run, made at the first sentence and closed with the run. */
-    override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
+    override fun open(source: String?, target: String, s: AppSettings, preferences: BookTranslationPreferences): TranslationRun = object : TranslationRun {
         private val lock = Mutex()
         private var held: MlKitTranslator? = null
         private var closed = false

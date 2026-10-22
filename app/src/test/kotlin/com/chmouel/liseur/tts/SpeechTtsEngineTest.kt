@@ -394,7 +394,7 @@ class SpeechTtsEngineTest {
     @Test
     fun aFailureIsTheOnlyTerminalCall() {
         speak("1", "Hello.")
-        nextRequest().second.completeExceptionally(SpeechError.Service(500))
+        nextRequest().second.completeExceptionally(SpeechError.Service(400))
         assertEquals("error 1 Service@main", nextEvent())
         onMain { engine.stop() }
         noMoreEvents()
@@ -461,7 +461,7 @@ class SpeechTtsEngineTest {
         assertEquals("done waiting 1", nextWait())
 
         speak("2", "Two.")
-        nextRequest().second.completeExceptionally(SpeechError.Service(500))
+        nextRequest().second.completeExceptionally(SpeechError.Service(400))
         assertEquals("waiting 2", nextWait())
         assertEquals("done waiting 2", nextWait())
     }

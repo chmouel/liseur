@@ -70,6 +70,11 @@ All of this stays in the app's own private storage:
 - Which books you turned background recaps on or off for from the
   reader's menu, overriding the setting. Deleting the book removes it.
   It is not backed up and not synced.
+- The translation direction you saved for a book, the names and terms you
+  saved for it in the language you translate into, and in the Google Play
+  build the narration direction you saved for reading it aloud. Removing
+  the book keeps them for when it comes back; they are not synced, and
+  the ZIP backups you export from Settings do not carry them.
 
 Uninstalling the app removes all of it.
 
@@ -134,8 +139,14 @@ ahead of the voice; then its translation goes to the speech
 service you chose for reading aloud, as described below for that
 service, in place of the book's words. This carries on with the screen
 off or the book closed, for as long as the voice plays, and stops when
-you stop the voice or the translation. Nothing else goes with either
-request.
+you stop the voice or the translation. Saved translation direction and
+matching names and terms also go to the translation service. A saved
+Gemini narration direction goes to Gemini with speech requests.
+
+Temporary speech network and server failures are retried up to twice. A
+provider may charge for a request whose response was lost. The sentence
+is never skipped when retries fail. Translation preparation is not retried
+by speech recovery.
 
 ### Device voices, for reading aloud
 
@@ -199,16 +210,22 @@ settings.
 “Translate whole book” sends the downloaded EPUB to your chosen AI service
 after you confirm, a few dozen consecutive sentences per request. This can
 include later chapters you have not read. Each request uses the same book
-details and preceding text as page translation. The local preview sends no book text; fetching
-model prices only requests model metadata. Gemini whole-book translation
-is available only in the Play build and uses the same Gemini service
-described below. Pause or cancel stops new requests, but a request already
-received by the provider may still be charged. A request that fails on the
-way, or that a busy server turns down, is sent again a few times, so it can
-be charged twice. A job that Android or a passing server or connection
-problem stopped carries on by itself the next time you open Liseur, until
-you pause it or delete it. A job stopped by a spent quota or credit limit
-waits for you.
+details and preceding text as page translation, plus your saved translation
+direction and only the names and terms found in that batch. Preparation
+sends no book text; fetching model prices only requests model metadata.
+Tapping “Try a passage” sends a short passage at your reading position,
+with the draft direction and matching terminology, to the selected service.
+Previewing saves no preferences and does not approve a whole-book run.
+Companion name suggestions send nothing to any service: they offer the
+names the phone had already cached for the chapters before yours. Gemini
+whole-book translation is available only in the Play build and uses the
+same Gemini service described below. Pause or cancel stops new requests,
+but a request already received by the provider may still be charged. A
+request that fails on the way, or that a busy server turns down, is sent
+again a few times, so it can be charged twice. A job that Android or a
+passing server or connection problem stopped carries on by itself the
+next time you open Liseur, until you pause it or delete it. A job stopped
+by a spent quota or credit limit waits for you.
 
 Liseur can translate a selected passage with any server on the External
 services and API keys page that speaks OpenAI's chat API, such as
@@ -229,7 +246,10 @@ text comes from, written as your template there says. If you add
 `{percent}` to the template, it also carries how far into the book that
 chapter starts, as a percentage. No file, identifier or
 exact reading position goes with it. TranslateGemma models never get
-the book's details. Who else can see that
+the book's details. A translation direction you saved for the book goes
+with each request, and so do the book's saved names and terms whose
+original text the passage or the sentence holds, TranslateGemma
+included. Who else can see that
 text depends on the server and the network you chose; with a hosted
 service, the passage goes to that service under its own terms and
 privacy policy. When you translate a page in the reader, each sentence
@@ -293,6 +313,12 @@ companion settings stop this; the buttons on the tab still work.
 
 ### Google Gemini, for reading aloud (Google Play build only)
 
+Narration direction, when saved for a book, is sent separately as speech
+style metadata; the spoken passage stays unchanged and `store: false`
+remains set. Direction and translation preferences stay on this device
+across removal and reimport and are not synced or included in custom
+settings exports.
+
 The Google Play build can read a book aloud with a voice made by Google's
 Gemini service. The F-Droid and GitHub builds do not contain this voice
 at all.
@@ -303,8 +329,8 @@ read, one sentence or short passage at a time (up to five sentences
 together if you raise that in the read-aloud settings) and a few
 sentences ahead
 of the voice, to `generativelanguage.googleapis.com` over HTTPS,
-together with your key and the voice you picked. Nothing else goes with
-it: no book title, no file, no identifier, no reading position. Requests
+together with your key, the voice you picked and any saved narration
+direction. No book title, file, identifier or reading position is sent. Requests
 are billed to your key under Google's terms.
 
 "Get a key" next to the key field opens Google AI Studio's key page in
@@ -347,7 +373,9 @@ want, to the same address over HTTPS, together with your key and the
 model you picked. The book's details go with it as described for a
 server above, unless you turn them off; no file, identifier or exact
 reading position does. A page translated in the reader sends each sentence with
-some of the book's text before it, as described for a server above.
+some of the book's text before it, as described for a server above. A
+saved translation direction and the book's matching names and terms go
+too, as described there.
 Requests are billed to your key under Google's terms, and
 Google's retention policy for the Gemini API applies to them. A
 passage's translation is shown on screen and is never written to

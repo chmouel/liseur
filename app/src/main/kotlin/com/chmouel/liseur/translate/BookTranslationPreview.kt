@@ -1,0 +1,43 @@
+package com.chmouel.liseur.translate
+
+import com.chmouel.liseur.AppContainer
+import com.chmouel.liseur.companion.CodexBookRow
+import com.chmouel.liseur.companion.CodexStore
+import com.chmouel.liseur.companion.PublicationCatalog
+import com.chmouel.liseur.reader.TranslatedPages
+import kotlinx.coroutines.flow.first
+import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.Publication
+
+internal suspend fun AppContainer.translationPlace(bookUrl: String, publication: Publication, place: Locator?): Locator =
+    place ?: database.readingProgressDao().get(bookUrl)?.locatorJson?.takeIf { it.isNotBlank() }
+        ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+        ?: publication.readingOrder.firstOrNull()?.let(publication::locatorFromLink)
+        ?: throw TranslationError.Unsupported()
+
+internal suspend fun AppContainer.translationPassage(bookUrl: String, place: Locator?): Pair<String?, String> =
+    withTranslationPublication(bookUrl) { publication ->
+        val source = TranslationLanguages.source(publication.metadata.languages)
+        val sentences = TranslatedPages.sentences(publication, translationPlace(bookUrl, publication, place), source)
+        val texts = mutableListOf<String>()
+        repeat(3) {
+            val sentence = sentences.next()?.text ?: return@repeat
+            if (texts.sumOf { it.length + 1 } + sentence.length <= TranslationPrompt.MAX_CHARACTERS) texts += sentence
+        }
+        source to texts.joinToString(" ").ifEmpty { throw TranslationError.Empty() }
+    }
+
+internal suspend fun AppContainer.cachedTranslationNames(bookUrl: String, place: Locator?): List<String> {
+    if (!appSettings.settings.first().codexEnabled) return emptyList()
+    // A phone that never used the companion has no names to suggest, and none is made to say so.
+    if (!companionStoreExists()) return emptyList()
+    return withTranslationPublication(bookUrl) { publication ->
+        val catalog = PublicationCatalog(publication)
+        val scope = catalog.scopeOf(translationPlace(bookUrl, publication, place), translated = false) ?: return@withTranslationPublication emptyList()
+        val book = database.bookDao().getByUrl(bookUrl) ?: return@withTranslationPublication emptyList()
+        val sha = bookFingerprints.of(book)?.sha256 ?: return@withTranslationPublication emptyList()
+        val expected = CodexBookRow(bookUrl, CodexStore.identity(sha, catalog.map), catalog.map.chapterCount)
+        companionStore.codex.cachedNames(expected, scope.lo)
+    }
+}

@@ -1,5 +1,7 @@
 package com.chmouel.liseur.tts
 
+import android.util.Log
+import com.chmouel.liseur.BuildConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -7,6 +9,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.readium.r2.shared.publication.Locator
@@ -32,11 +35,13 @@ class SpeechCache(
      * its audio is asked for: a translation that fails fails the request.
      */
     private val prepare: (suspend (SpeechKey, String?) -> List<String>)? = null,
+    private val nowMillis: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private var configurationIdentity: String? = null,
 ) {
     private class Entry(val audio: Deferred<SpeechAudio>, var bytes: Long = 0)
 
     private val requests = Semaphore(maxConcurrent)
-    private val entries = LinkedHashMap<SpeechKey, Entry>()
+    private val entries = LinkedHashMap<Pair<String?, SpeechKey>, Entry>()
     private var currentTranslationIdentity: String? = null
     private var hasTranslationIdentity = false
 
@@ -68,21 +73,22 @@ class SpeechCache(
     /** Starts fetching [key], with [previous] the source text before it, unless it is already here or on its way. */
     fun prefetch(key: SpeechKey, previous: String? = null) {
         selectTranslation(key.translationIdentity)
-        if (!hasRoom || entries.containsKey(key)) return
+        val cacheKey = configurationIdentity to key
+        if (!hasRoom || entries.containsKey(cacheKey)) return
         val generation = generation
         lateinit var entry: Entry
         // Started only once stored: audio that comes back at once is looked up by its entry.
         entry = Entry(
             request(key, previous, CoroutineStart.LAZY) { audio ->
-                if (generation == this.generation && entries[key] === entry) {
+                if (generation == this.generation && entries[cacheKey] === entry) {
                     val bytes = audio.pcm.size.toLong()
                     // Requests in flight weigh nothing until they arrive, so
                     // the budget is held here; [claim] asks again if needed.
-                    if (cachedBytes + bytes > maxBytes) entries.remove(key) else entry.bytes = bytes
+                    if (cachedBytes + bytes > maxBytes) entries.remove(cacheKey) else entry.bytes = bytes
                 }
             },
         )
-        entries[key] = entry
+        entries[cacheKey] = entry
         entry.audio.start()
     }
 
@@ -97,7 +103,7 @@ class SpeechCache(
     /** As [claim] for [key]; [previous] is the source text before it, when known, for a request made now. */
     fun claim(key: SpeechKey, previous: String? = null): Deferred<SpeechAudio> {
         selectTranslation(key.translationIdentity)
-        return entries.remove(key)?.audio?.takeUnless { it.isCancelled }
+        return entries.remove(configurationIdentity to key)?.audio?.takeUnless { it.isCancelled }
             ?: request(key, previous, CoroutineStart.UNDISPATCHED) {}
     }
 
@@ -111,8 +117,11 @@ class SpeechCache(
     }
 
     /** Speaks with [synthesize] from now on, forgetting what the old voice fetched. */
-    fun swap(synthesize: suspend (String) -> SpeechAudio) {
+    fun swap(synthesize: suspend (String) -> SpeechAudio) = swap(synthesize, null)
+
+    fun swap(synthesize: suspend (String) -> SpeechAudio, configurationIdentity: String?) {
         this.synthesize = synthesize
+        this.configurationIdentity = configurationIdentity
         restart()
     }
 
@@ -123,6 +132,7 @@ class SpeechCache(
         onArrived: (SpeechAudio) -> Unit,
     ): Deferred<SpeechAudio> {
         requestsMade++
+        val synthesizer = synthesize
         return scope.async(start = start) {
             try {
                 // Translated outside the permits: those bound the speech service alone.
@@ -130,7 +140,7 @@ class SpeechCache(
                 val audio = ArrayList<SpeechAudio>(pieces.size)
                 var totalBytes = 0L
                 for (piece in pieces) {
-                    val next = requests.withPermit { synthesize(piece) }
+                    val next = synthesizeWithRetry(piece, synthesizer)
                     val bytes = next.pcm.size.toLong()
                     if (bytes > MAX_BYTES - totalBytes) {
                         throw SpeechError.InvalidResponse("utterance audio too long")
@@ -156,6 +166,29 @@ class SpeechCache(
                 throw e
             }
         }
+    }
+
+    private suspend fun synthesizeWithRetry(piece: String, synthesizer: suspend (String) -> SpeechAudio): SpeechAudio {
+        var firstAttempt: Long? = null
+        var failure: SpeechError? = null
+        for (attempt in 0..2) {
+            if (attempt > 0) delay(if (attempt == 1) 1_000L else 3_000L)
+            try {
+                return requests.withPermit {
+                    val now = nowMillis()
+                    if (firstAttempt?.let { now - it >= 30_000L } == true) throw failure!!
+                    if (firstAttempt == null) firstAttempt = now
+                    synthesizer(piece)
+                }
+            } catch (error: SpeechError) {
+                val retryable = error is SpeechError.Network ||
+                    (error is SpeechError.Service && error.code in setOf(408, 500, 502, 503, 504))
+                if (!retryable || attempt == 2 || nowMillis() - firstAttempt!! >= 30_000L) throw error
+                failure = error
+                if (BuildConfig.DEBUG) Log.d("SpeechCache", "Retrying synthesis, attempt ${attempt + 2}")
+            }
+        }
+        throw checkNotNull(failure)
     }
 
     /** Pieces of one request played as one: one place in the book, one stretch of audio. */

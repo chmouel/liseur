@@ -70,12 +70,12 @@ internal class GeminiTranslationService(
     override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String =
         ask(model.first(), passage, source, target, context, book)
 
-    override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
+    override fun open(source: String?, target: String, s: AppSettings, preferences: BookTranslationPreferences): TranslationRun = object : TranslationRun {
         override suspend fun translate(sentence: String, context: String?, book: String?) =
-            ask(model(s), sentence, source, target, context, book)
+            ask(model(s), sentence, source, target, context, book, preferences)
     }
 
-    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit): TranslationRun {
+    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit, preferences: BookTranslationPreferences): TranslationRun {
         beforeRequest()
         val key = account.key() ?: throw TranslationError.NotSetUp()
         beforeRequest()
@@ -86,6 +86,7 @@ internal class GeminiTranslationService(
                 client.translate(
                     key, model, source, target, sentence, context, book, beforeRequest,
                     allowTransportRetry = false, diagnostics = diagnostics,
+                    instructions = preferences.instructions(listOf(sentence)),
                 )
 
             override val batches = true
@@ -94,6 +95,7 @@ internal class GeminiTranslationService(
                 client.translateBatch(
                     key, model, source, target, sentences, context, book, beforeRequest,
                     allowTransportRetry = false, diagnostics = diagnostics,
+                    instructions = preferences.instructions(sentences),
                 )
 
             override fun cached(count: Int) = diagnostics.cached(count)
@@ -107,9 +109,9 @@ internal class GeminiTranslationService(
         }
     }
 
-    private suspend fun ask(model: String, passage: String, source: String?, target: String, context: String?, book: String?): String {
+    private suspend fun ask(model: String, passage: String, source: String?, target: String, context: String?, book: String?, preferences: BookTranslationPreferences = BookTranslationPreferences()): String {
         val key = account.key() ?: throw TranslationError.NotSetUp()
-        return client.translate(key, model, source, target, passage, context, book)
+        return client.translate(key, model, source, target, passage, context, book, instructions = preferences.instructions(listOf(passage)))
     }
 
     /** Saves in the service's scope, so a model typed as the screen closes is still saved. */

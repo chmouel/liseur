@@ -1611,4 +1611,21 @@
     <string name="whole_book_reason_service">Le service n’a pas pu continuer. Vérifiez ses identifiants, son modèle et son quota avant de reprendre.</string>
     <string name="whole_book_reason_code">Le service a répondu avec l’erreur %d.</string>
     <string name="whole_book_reason_storage">Impossible de lire ou d’écrire le livre ou ses traductions enregistrées. Vérifiez le fichier et l’espace disponible avant de reprendre.</string>
+    <string name="narration_direction">Direction de narration</string>
+    <string name="narration_direction_default">Direction de narration · Par défaut</string>
+    <string name="narration_direction_custom">Direction de narration · Personnalisée</string>
+    <string name="narration_direction_example">Exemple : Lire doucement et chaleureusement, à un rythme mesuré, avec des voix de personnages subtiles.</string>
+    <string name="book_preferences_clear">Effacer</string>
+    <string name="book_preferences_remove">Supprimer</string>
+    <string name="book_translation_preferences">Préférences de traduction</string>
+    <string name="book_translation_direction">Direction de traduction pour ce livre</string>
+    <string name="book_translation_direction_example">Exemple : Conserver la voix familière à la première personne, l’humour pince-sans-rire et les phrases courtes.</string>
+    <string name="book_translation_terms">Noms et termes</string>
+    <string name="book_translation_original">Original</string>
+    <string name="book_translation_preferred">Traduction préférée</string>
+    <string name="book_translation_add_term">Ajouter un terme</string>
+    <string name="book_translation_suggest_names">Suggérer des noms depuis le Compagnon</string>
+    <string name="book_translation_preview">Essayer un passage</string>
+    <string name="book_translation_preview_wait">Traduction…</string>
+    <string name="book_translation_preview_outdated">Cet aperçu est obsolète. Réessayez le passage.</string>
 </resources>

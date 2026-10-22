@@ -67,6 +67,18 @@ class WholeBookTranslationsTest {
                     evictionRevision = saved.evictionRevision(),
                 )
                 assertTrue(coordinator.validPreview(preview))
+                container.database.bookAiPreferencesDao().setTranslation(book, "Keep first person")
+                assertFalse(coordinator.validPreview(preview))
+                val pinned = feature.openPinned("en", "fr", bookUrl = book)
+                val approvedIdentity = pinned.answering()
+                container.database.bookAiPreferencesDao().setTranslation(book, "Use short sentences")
+                try {
+                    pinned.translate("I left.", null, approvedIdentity, null)
+                    org.junit.Assert.fail("Changed preferences must require fresh preparation")
+                } catch (_: TranslationError.SettingsChanged) {
+                } finally { pinned.close() }
+                container.database.bookAiPreferencesDao().setTranslation(book, "")
+                assertTrue(coordinator.validPreview(preview))
                 container.appSettings.setTranslationTarget("de")
                 assertFalse(coordinator.validPreview(preview))
                 container.appSettings.setTranslationTarget("fr")

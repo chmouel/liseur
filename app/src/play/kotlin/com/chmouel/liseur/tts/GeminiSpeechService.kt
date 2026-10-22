@@ -58,6 +58,7 @@ internal class GeminiSpeechService(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : SpeechService {
     override val id = "gemini"
+    override val supportsNarrationDirection = true
     override val label = R.string.read_aloud_provider_gemini
     override val summary = R.string.read_aloud_provider_gemini_summary
     override val icon = Icons.Outlined.Cloud
@@ -81,11 +82,13 @@ internal class GeminiSpeechService(
     val model: Flow<String> =
         settings.settings.map { GeminiTts.modelOf(it.readAloudModel) }.distinctUntilChanged()
 
-    override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? {
+    override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? = directedVoice(s, voice)
+
+    override suspend fun directedVoice(s: AppSettings, voice: String?, direction: String): SessionVoice? {
         val key = account.key() ?: return null
         val name = GeminiVoice.of(voice ?: s.readAloudVoice).id
         val model = GeminiTts.modelOf(s.readAloudModel)
-        return SessionVoice(name, SpeechCache.MAX_CONCURRENT) { text -> client.synthesize(key, text, name, model) }
+        return SessionVoice(name, SpeechCache.MAX_CONCURRENT, "$model\u0000$name\u0000$direction") { text -> client.synthesize(key, text, name, model, direction) }
     }
 
     /** Saves [voice], also as the one for the language being read when there is a session. */

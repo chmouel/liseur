@@ -308,7 +308,7 @@ class AppContainer(context: Context) {
     private val companionStoreFile = context.getDatabasePath(CompanionDatabase.NAME)
 
     /** Whether recaps may exist, without creating a store for a phone that never used the companion. */
-    private fun companionStoreExists() = companionStoreOpening.isInitialized() || companionStoreFile.exists()
+    internal fun companionStoreExists() = companionStoreOpening.isInitialized() || companionStoreFile.exists()
 
     init {
         applicationScope.launch {

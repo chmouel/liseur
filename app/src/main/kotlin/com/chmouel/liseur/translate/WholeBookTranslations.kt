@@ -78,11 +78,11 @@ internal class WholeBookTranslations(
         if (saved.evictionRevision() != preview.evictionRevision) return false
         val feature = container.translate as? ServiceTranslate ?: return false
         return try {
-            val configuration = feature.wholeBookConfiguration(preview.source, preview.target)
+            val configuration = feature.wholeBookConfiguration(preview.source, preview.target, preview.bookUrl)
             if (configuration != preview.configuration || fingerprint(preview.bookUrl) != preview.sourceFingerprint) return false
             saved.retentionStamp(preview.bookUrl) == preview.retentionStamp &&
                 saved.evictionRevision() == preview.evictionRevision &&
-                feature.wholeBookConfiguration(preview.source, preview.target) == configuration
+                feature.wholeBookConfiguration(preview.source, preview.target, preview.bookUrl) == configuration
         } catch (_: TranslationError.NotSetUp) {
             false
         }
@@ -97,7 +97,7 @@ internal class WholeBookTranslations(
         return container.withTranslationPublication(bookUrl) { publication ->
             val source = record?.source ?: TranslationLanguages.source(publication.metadata.languages)
             val identity = try {
-                (container.translate as? ServiceTranslate)?.wholeBookIdentity(source, target)
+                (container.translate as? ServiceTranslate)?.wholeBookIdentity(source, target, bookUrl)
             } catch (e: TranslationError.NotSetUp) {
                 null
             }
@@ -121,12 +121,12 @@ internal class WholeBookTranslations(
         openPublication(bookUrl) { publication ->
             val source = saved.getKept(bookUrl)?.source ?: TranslationLanguages.source(publication.metadata.languages)
             val target = currentTarget()
-            val configuration = feature.wholeBookConfiguration(source, target)
-            val translator = feature.openPinned(source, target)
+            val configuration = feature.wholeBookConfiguration(source, target, bookUrl)
+            val translator = feature.openPinned(source, target, bookUrl = bookUrl)
             try {
                 val price = async { feature.wholeBookPrice() }
                 val identity = translator.answering()
-                val requestCharacters = feature.wholeBookPrompt(source, target)
+                val requestCharacters = feature.wholeBookPrompt(source, target, bookUrl)
                 val requests = SentenceRequests(translator, TranslatedPages.preceding(publication, source), TranslatedPages.bookFacts(publication))
                 val sentences = publication.translationSentences(source) { completed, total ->
                     progress(PreparationProgress(PreparationStage.VALIDATING, completed, total))
@@ -144,7 +144,7 @@ internal class WholeBookTranslations(
                 progress(PreparationProgress(PreparationStage.FINISHING, sentences = coverage.total))
                 val cost = translationCost(coverage, price.await())
                 if (fingerprint(bookUrl) != fingerprint) throw IOException("The book changed while scanning")
-                if (translator.answering() != identity || feature.wholeBookConfiguration(source, target) != configuration) {
+                if (translator.answering() != identity || feature.wholeBookConfiguration(source, target, bookUrl) != configuration) {
                     throw TranslationError.Changed()
                 }
                 if (saved.retentionStamp(bookUrl) != retentionStamp) throw IOException("Saved translations changed while scanning")
@@ -179,7 +179,7 @@ internal class WholeBookTranslations(
         val feature = container.translate as? ServiceTranslate ?: return false
         try {
             if (currentTarget() != record.target) return false
-            if (feature.wholeBookIdentity(record.source, record.target) != record.identity) return false
+            if (feature.wholeBookIdentity(record.source, record.target, bookUrl) != record.identity) return false
             val book = container.database.bookDao().getByUrl(bookUrl) ?: return false
             if (fingerprint(bookUrl) != approved) return false
             if (synchronized(lock) { run != null }) return false
@@ -313,10 +313,10 @@ internal class WholeBookTranslations(
                 initialized.await()
                 if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
                 val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
-                if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target) != preview.configuration) {
+                if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target, preview.bookUrl) != preview.configuration) {
                     throw TranslationError.SettingsChanged()
                 }
-                val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
+                val pinned = feature.openPinned(preview.source, preview.target, preview.identity, preview.bookUrl)
                 translator = pinned
                 openPublication(preview.bookUrl) { publication ->
                     if (pinned.answering() != preview.identity) throw TranslationError.SettingsChanged()
@@ -338,7 +338,7 @@ internal class WholeBookTranslations(
                         pinned, requests,
                         store(preview.bookUrl, current.generation, preview.sourceFingerprint, preview.total, progress),
                         online = container.networkAvailability::isAvailable,
-                        requestCharacters = feature.wholeBookPrompt(preview.source, preview.target),
+                        requestCharacters = feature.wholeBookPrompt(preview.source, preview.target, preview.bookUrl),
                     ).run(publication.translationSentences(preview.source), preview.identity, preview.total)
                 }
                 saved.modeFor(preview.bookUrl).remember(PageTranslationModes.Mode(preview.source, preview.target))
@@ -371,10 +371,10 @@ internal class WholeBookTranslations(
             check(preview.total == preview.cached + preview.failed) { "Translation is not complete" }
             if (fingerprint(preview.bookUrl) != preview.sourceFingerprint) throw IOException("The book changed after scanning")
             val feature = container.translate as? ServiceTranslate ?: throw TranslationError.NotSetUp()
-            if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target) != preview.configuration) {
+            if (preview.configuration != null && feature.wholeBookConfiguration(preview.source, preview.target, preview.bookUrl) != preview.configuration) {
                 throw TranslationError.SettingsChanged()
             }
-            val pinned = feature.openPinned(preview.source, preview.target, preview.identity)
+            val pinned = feature.openPinned(preview.source, preview.target, preview.identity, preview.bookUrl)
             try {
                 container.withTranslationPublication(preview.bookUrl) { publication ->
                     val requests = SentenceRequests(

@@ -66,10 +66,11 @@ interface TranslateFeature {
         onDismiss: () -> Unit,
         onTranslatePage: ((source: String?, target: String) -> Unit)? = null,
         book: suspend () -> BookFacts? = { null },
+        bookUrl: String? = null,
     )
 
     /** The chosen service, ready to translate a page sentence by sentence; null when there is none. */
-    suspend fun openPage(source: String?, target: String): SentenceTranslator?
+    suspend fun openPage(source: String?, target: String, bookUrl: String? = null): SentenceTranslator?
 
     /**
      * The languages [Sheet] would offer to translate a page of a book that
@@ -127,9 +128,10 @@ interface TranslateFeature {
             onDismiss: () -> Unit,
             onTranslatePage: ((source: String?, target: String) -> Unit)?,
             book: suspend () -> BookFacts?,
+            bookUrl: String?,
         ) = Unit
 
-        override suspend fun openPage(source: String?, target: String): SentenceTranslator? = null
+        override suspend fun openPage(source: String?, target: String, bookUrl: String?): SentenceTranslator? = null
 
         override suspend fun pageLanguages(declared: List<String>, app: Locale): PageTranslationModes.Mode? = null
 

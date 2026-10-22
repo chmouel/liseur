@@ -150,6 +150,13 @@ class CodexStore(private val database: CompanionDatabase, private val present: s
         }
     }
 
+    suspend fun cachedNames(book: CodexBookRow, ceiling: Int): List<String> = database.withTransaction {
+        if (dao.book(book.bookUrl) != book || ceiling <= 0) return@withTransaction emptyList()
+        val completed = dao.completed(book.bookUrl).toSet()
+        if ((0 until ceiling).any { it !in completed }) return@withTransaction emptyList()
+        entries(book, ceiling).map { it.name }
+    }
+
     suspend fun graph(book: CodexBookRow, ceiling: Int, entries: List<CodexEntry>): CodexGraph = database.withTransaction {
         if (dao.book(book.bookUrl) != book) return@withTransaction CodexGraph(emptyList(), emptyList(), 1, ceiling)
         val nodes = entries.filter { it.occurrences >= 5 }.take(25).map {

@@ -52,9 +52,10 @@ class GeminiTtsClient(
         text: String,
         voice: String,
         model: String = GeminiTts.DEFAULT_MODEL,
+        direction: String = "",
     ): SpeechAudio {
         val request = request(endpoint, apiKey)
-            .post(requestBody(text, voice, model).toRequestBody(JSON))
+            .post(requestBody(text, voice, model, direction).toRequestBody(JSON))
             .build()
         return execute(request, ::parse)
     }
@@ -124,12 +125,13 @@ class GeminiTtsClient(
         return GeminiTts.speechModels((0 until models.length()).mapNotNull { models.optJSONObject(it)?.optString("name") })
     }
 
-    private fun requestBody(text: String, voice: String, model: String): String = JSONObject()
+    private fun requestBody(text: String, voice: String, model: String, direction: String): String = JSONObject()
         .put("model", model)
         // The API keeps interactions unless told not to. This does not
         // change Google's general retention terms; PRIVACY.md says so.
         .put("store", false)
         .put("input", text)
+        .apply { if (direction.isNotBlank()) put("speech_metadata", JSONObject().put("style", direction)) }
         .put(
             "response_format",
             JSONObject()

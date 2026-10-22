@@ -81,6 +81,19 @@ class CodexStoreTest {
         assertTrue(store.mentions(book, 2, "Mir", null, 0).isEmpty())
     }
 
+    @Test fun `translation names require a matching complete earlier scope`() = runTest {
+        assertTrue(store.cachedNames(book, 1).isEmpty())
+        store.prepare(book)
+        save(0, "At dawn, Mira waited. ".repeat(3))
+        save(2, "At dawn, Tobin waited. ".repeat(3))
+        assertEquals(listOf("Mira"), store.cachedNames(book, 1))
+        assertTrue(store.cachedNames(book, 2).isEmpty())
+        store.save(book, 1, emptyMap(), emptyList())
+        assertEquals(listOf("Mira"), store.cachedNames(book, 2))
+        assertTrue(store.cachedNames(book.copy(identity = "changed"), 2).isEmpty())
+        assertTrue(store.cachedNames(book, 0).isEmpty())
+    }
+
     @Test fun `names at the edges of a passage are found in details and graph edges`() = runTest {
         store.prepare(book)
         val text = "Mira waited for Tobin"

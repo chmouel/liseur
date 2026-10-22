@@ -2483,7 +2483,7 @@ internal fun ReaderScreen(
         return startPageTranslation(
             open = {
                 shared?.translations?.takeIf { it.acquire() }
-                    ?: translate.openPage(source, target)?.let {
+                    ?: translate.openPage(source, target, wholeBook?.bookUrl ?: readAloud?.bookId)?.let {
                         SentenceTranslations(it, pageTranslations, TranslatedPages.preceding(publication, source), bookFacts)
                     }
             },
@@ -4829,6 +4829,7 @@ internal fun ReaderScreen(
     translatePassage?.let { passage ->
         translate.Sheet(
             passage = passage.text,
+            bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
             declared = publication.metadata.languages,
             onDismiss = { translatePassage = null },
             // A fixed-layout page's text sits where its picture put it.
@@ -4877,6 +4878,11 @@ internal fun ReaderScreen(
     wholeBook?.takeIf { wholeBookOpen }?.let { book ->
         WholeBookTranslationScreen(
             bookUrl = book.bookUrl,
+            previewPosition = {
+                navigatorNow?.let { nav ->
+                    if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                }
+            },
             onDismiss = { wholeBookOpen = false },
             onOpenSettings = { wholeBookOpen = false; translationSettingsOpen = true },
         )

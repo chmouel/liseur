@@ -11,6 +11,7 @@ import com.chmouel.liseur.AppContainer
 object TranslateFeatureFactory {
     fun create(context: Context, container: AppContainer): TranslateFeature = ServiceTranslate(
         settings = container.appSettings,
+        database = container.database,
         connections = container.serverConnections,
         accounts = container.serviceAccounts,
         saved = lazy { container.savedTranslations },

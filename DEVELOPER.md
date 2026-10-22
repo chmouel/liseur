@@ -195,7 +195,7 @@ one-off stub. It serves `GET /v1/models` (`stub-chat`, `stub-tts`),
 voices), and `GET /_stub/requests`
 (all requests, `DELETE` empties; also `tmp/ai-stub/requests.jsonl`; chat
 entries split `<book>`, `<context>`, `<passage>` into `blocks`; the API
-key is never logged). Flags: `--fail CODE`, `--delay SECONDS`,
+key is never logged). Flags: `--speech-failures COUNT` (first speech requests return 503), `--fail CODE`, `--delay SECONDS`,
 `--key KEY` (require bearer), `--think` (prepend `<think>`).
 
 It binds `127.0.0.1` (emulator: `10.0.2.2`); `--host 0.0.0.0` exposes the
@@ -1247,6 +1247,12 @@ changing reader behavior.
   sentence in its play/pause state (`recut = true` after a language
   change). A settings pick is heard the same way, in the session's
   language.
+- Temporary synthesis failures retry up to three attempts, with waits outside
+  the concurrency permit and a 30-second retry-start budget (ADR-0054).
+  Translation preparation is outside these retries.
+- Gemini narration direction is local per book, loaded before synthesis and
+  sent as `speech_metadata.style`; applying it restarts the current sentence
+  in its play/pause state, even with the same voice.
 - Speed (`read_aloud_speed`, 0.75× to 2×) is applied by
   `AudioTrackPcmOutput` via `AudioTrack.playbackParams`: keeps pitch,
   applies mid-sentence, cached audio stays valid; the stall deadline
@@ -1418,6 +1424,12 @@ changing reader behavior.
   (`ServiceTranslate.openPinned`) check settings before every submission,
   never rebind or fall back, and send one-shot bodies. Invalid envelopes
   pause the job; only sentence-local refusals become failure markers.
+- Translation direction is stored per book and terminology per book and
+  target language in Room, without deletion when a book is removed. Drafts
+  save only on Apply; passage previews send draft preferences only on tap.
+  AI runs include preference identity in cache and pinned configurations,
+  and send only terms matching the source passage or batch. Companion
+  suggestions read a source-valid, complete earlier-chapter cache only.
 - Whole-book preparation lives in the application scope, not its full-screen
   page: Back leaves it running, Cancel stops it. Reopening reuses a checked
   result only while the file, pinned configuration, retention stamp and cache

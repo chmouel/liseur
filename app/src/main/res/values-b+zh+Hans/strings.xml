@@ -1557,4 +1557,21 @@
     <string name="whole_book_reason_service">服务无法继续。请检查凭据、模型和配额后再继续。</string>
     <string name="whole_book_reason_code">服务返回了错误 %d。</string>
     <string name="whole_book_reason_storage">无法读取或写入书籍及其已保存译文。请检查文件和可用存储空间后再继续。</string>
+    <string name="narration_direction">朗读指导</string>
+    <string name="narration_direction_default">朗读指导 · 默认</string>
+    <string name="narration_direction_custom">朗读指导 · 自定义</string>
+    <string name="narration_direction_example">例如：以温暖轻柔的语气、平稳的节奏朗读，细微区分人物的声音。</string>
+    <string name="book_preferences_clear">清除</string>
+    <string name="book_preferences_remove">移除</string>
+    <string name="book_translation_preferences">翻译偏好</string>
+    <string name="book_translation_direction">本书翻译指导</string>
+    <string name="book_translation_direction_example">例如：保留随意的第一人称叙述、冷幽默和短句。</string>
+    <string name="book_translation_terms">名称和术语</string>
+    <string name="book_translation_original">原文</string>
+    <string name="book_translation_preferred">首选译文</string>
+    <string name="book_translation_add_term">添加术语</string>
+    <string name="book_translation_suggest_names">从阅读助手建议名称</string>
+    <string name="book_translation_preview">试译一段</string>
+    <string name="book_translation_preview_wait">正在翻译…</string>
+    <string name="book_translation_preview_outdated">此预览已过时，请重新试译。</string>
 </resources>

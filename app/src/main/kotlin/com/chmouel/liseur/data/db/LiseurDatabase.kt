@@ -41,8 +41,9 @@ import androidx.sqlite.execSQL
         RemoteStatsDay::class,
         RemoteStatsWindow::class,
         GlossaryEntry::class,
+        BookAiPreferences::class,
     ],
-    version = 68,
+    version = 69,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -78,9 +79,16 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookOrbitPositionTraversalDao(): BookOrbitPositionTraversalDao
     abstract fun bookOrbitStatusAgreementDao(): BookOrbitStatusAgreementDao
     abstract fun remoteStatsDao(): RemoteStatsDao
+    abstract fun bookAiPreferencesDao(): BookAiPreferencesDao
     abstract fun glossaryDao(): GlossaryDao
 
     companion object {
+        val MIGRATION_68_69 = object : Migration(68, 69) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("CREATE TABLE IF NOT EXISTS `book_ai_preferences` (`book_url` TEXT NOT NULL, `translation_direction` TEXT NOT NULL, `narration_direction` TEXT NOT NULL, PRIMARY KEY(`book_url`))")
+            }
+        }
+
         val MIGRATION_67_68 = object : Migration(67, 68) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -1965,6 +1973,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_65_66,
             MIGRATION_66_67,
             MIGRATION_67_68,
+            MIGRATION_68_69,
         )
     }
 }

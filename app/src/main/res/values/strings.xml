@@ -1671,4 +1671,21 @@
     <string name="whole_book_reason_service">The service could not continue. Check its credentials, model and quota before resuming.</string>
     <string name="whole_book_reason_code">The service answered with error %d.</string>
     <string name="whole_book_reason_storage">The book or its saved translations could not be read or written. Check the file and available storage before resuming.</string>
+    <string name="narration_direction">Narration direction</string>
+    <string name="narration_direction_default">Narration direction · Default</string>
+    <string name="narration_direction_custom">Narration direction · Custom</string>
+    <string name="narration_direction_example">For example: Read warmly and quietly, with a measured pace and subtle character voices.</string>
+    <string name="book_preferences_clear">Clear</string>
+    <string name="book_preferences_remove">Remove</string>
+    <string name="book_translation_preferences">Translation preferences</string>
+    <string name="book_translation_direction">Translation direction for this book</string>
+    <string name="book_translation_direction_example">For example: Preserve the informal first-person voice, dry humour and short sentences.</string>
+    <string name="book_translation_terms">Names and terms</string>
+    <string name="book_translation_original">Original</string>
+    <string name="book_translation_preferred">Preferred translation</string>
+    <string name="book_translation_add_term">Add a term</string>
+    <string name="book_translation_suggest_names">Suggest names from Companion</string>
+    <string name="book_translation_preview">Try a passage</string>
+    <string name="book_translation_preview_wait">Translating…</string>
+    <string name="book_translation_preview_outdated">This preview is outdated. Try the passage again.</string>
 </resources>

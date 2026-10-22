@@ -126,6 +126,7 @@ internal fun TranslationSheet(
     onDismiss: () -> Unit,
     onTranslatePage: ((source: String?, target: String) -> Unit)? = null,
     book: suspend () -> BookFacts? = { null },
+    bookUrl: String? = null,
 ) {
     val ui = LocalConfiguration.current.locales[0]
     val scope = rememberCoroutineScope()
@@ -177,7 +178,7 @@ internal fun TranslationSheet(
         outcome = null
         if (step != TranslationStep.Translate || current == null || target == null) return@LaunchedEffect
         outcome = try {
-            Outcome.Done(feature.translate(current, passage, source, target, book()))
+            Outcome.Done(feature.translate(current, passage, source, target, book(), bookUrl))
         } catch (e: TranslationError) {
             Outcome.Failed(e)
         }

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.translate
 
 import androidx.compose.foundation.layout.Column
+import androidx.room.withTransaction
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,8 +52,20 @@ internal class ServiceTranslate(
     val requestFullSync: suspend () -> Unit = {},
     /** Whether the library offers the setup sheet; the Play build's. */
     override val offersSetup: Boolean = false,
+    private val database: com.chmouel.liseur.data.db.LiseurDatabase? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
 ) : TranslateFeature {
+    suspend fun preferences(bookUrl: String?, target: String): BookTranslationPreferences {
+        val db = database ?: return BookTranslationPreferences()
+        if (bookUrl == null) return BookTranslationPreferences()
+        return db.withTransaction {
+            BookTranslationPreferences.from(db.bookAiPreferencesDao().get(bookUrl)?.translationDirection.orEmpty(), db.glossaryDao().all(bookUrl), target)
+        }
+    }
+
+    private fun preferenceIdentity(identity: String, preferences: BookTranslationPreferences): String =
+        identity + preferences.identity.takeIf { it.isNotEmpty() }?.let { "\u0000preferences=$it" }.orEmpty()
+
     override val isAvailable = true
 
     val service: Flow<TranslationService> = settings.settings.map(::resolve).distinctUntilChanged()
@@ -146,33 +159,36 @@ internal class ServiceTranslate(
         source: String?,
         target: String,
         book: BookFacts? = null,
+        bookUrl: String? = null,
     ): String = requests.run({ service.owner(settings.settings.first()) }) {
         val about = TranslationBookContext.render(bookOf(service, settings.settings.first()), book)
-        service.translate(passage, source, target, book = about)
+        val run = service.open(source, target, settings.settings.first(), preferences(bookUrl, target))
+        try { run.translate(passage, null, about) } finally { run.close() }
     }
 
     /** A whole-book run never rebinds or falls back to an on-device translator. */
-    suspend fun wholeBookIdentity(source: String?, target: String): String {
+    suspend fun wholeBookIdentity(source: String?, target: String, bookUrl: String? = null): String {
         val snapshot = settings.settings.first()
         val service = wholeBookService(snapshot)
         if (!service.configured.first()) throw TranslationError.NotSetUp()
-        return pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot))
+        return preferenceIdentity(pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot)), preferences(bookUrl, target))
     }
 
-    suspend fun wholeBookConfiguration(source: String?, target: String): String {
+    suspend fun wholeBookConfiguration(source: String?, target: String, bookUrl: String? = null): String {
         val snapshot = settings.settings.first()
         val service = wholeBookService(snapshot)
         if (!service.configured.first()) throw TranslationError.NotSetUp()
         val owner = service.owner(snapshot) ?: throw TranslationError.NotSetUp()
-        return translationKey("${pinnedRecipe(snapshot, service, source, target)}\u0000${connections.generation(owner).value}")
+        return translationKey("${pinnedRecipe(snapshot, service, source, target)}\u0000${connections.generation(owner).value}\u0000${preferences(bookUrl, target).identity}")
     }
 
-    suspend fun openPinned(source: String?, target: String, expectedIdentity: String? = null): SentenceTranslator {
+    suspend fun openPinned(source: String?, target: String, expectedIdentity: String? = null, bookUrl: String? = null): SentenceTranslator {
         if (source != null && TranslationLanguages.same(source, target)) throw WholeBookSameLanguageException(target)
         val snapshot = settings.settings.first()
         val service = wholeBookService(snapshot)
         if (!service.configured.first()) throw TranslationError.NotSetUp()
-        val identity = pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot))
+        val preferences = preferences(bookUrl, target)
+        val identity = preferenceIdentity(pageIdentity(snapshot, service.id, service.model(snapshot), source, target, contextOf(service, snapshot), bookOf(service, snapshot)), preferences)
         if (expectedIdentity != null && identity != expectedIdentity) throw TranslationError.SettingsChanged()
         val owner = service.owner(snapshot) ?: throw TranslationError.NotSetUp()
         val generation = connections.generation(owner).value
@@ -184,6 +200,7 @@ internal class ServiceTranslate(
             val current = settings.settings.first()
             if (current.translationProvider != service.id ||
                 recipe != pinnedRecipe(current, service, source, target) ||
+                preferences(bookUrl, target) != preferences ||
                 connections.generation(owner).value != generation
             ) {
                 throw TranslationError.SettingsChanged()
@@ -191,7 +208,7 @@ internal class ServiceTranslate(
         }
 
         guard()
-        val run = service.openPinned(source, target, snapshot, ::guard)
+        val run = service.openPinned(source, target, snapshot, ::guard, preferences)
         try {
             guard()
         } catch (e: Exception) {
@@ -258,10 +275,11 @@ internal class ServiceTranslate(
     }
 
     /** The actual prompt size, frozen for a preview without submitting any book text. */
-    suspend fun wholeBookPrompt(source: String?, target: String): (SentenceRequest) -> Int {
+    suspend fun wholeBookPrompt(source: String?, target: String, bookUrl: String? = null): (SentenceRequest) -> Int {
         val s = settings.settings.first()
         val service = wholeBookService(s)
-        return { request -> service.requestCharacters(s, source, target, request) }
+        val preferences = preferences(bookUrl, target)
+        return { request -> service.requestCharacters(s, source, target, request, preferences) }
     }
 
     private fun wholeBookService(s: AppSettings): TranslationService =
@@ -285,7 +303,7 @@ internal class ServiceTranslate(
      * service and model chosen when it is asked, so one picked from the
      * bar after a refusal takes over the run.
      */
-    override suspend fun openPage(source: String?, target: String): SentenceTranslator? {
+    override suspend fun openPage(source: String?, target: String, bookUrl: String?): SentenceTranslator? {
         // A book left translated before translation was opt-in waits for the reader to choose.
         if (settings.settings.first().translationProvider == null) return null
 
@@ -302,22 +320,25 @@ internal class ServiceTranslate(
             var destination by mutableStateOf(destination)
         }
 
-        suspend fun wanted(): Triple<TranslationService, String, AppSettings> {
+        data class Wanted(val service: TranslationService, val identity: String, val settings: AppSettings, val preferences: BookTranslationPreferences)
+
+        suspend fun wanted(): Wanted {
             // One read, so the service and the identity it is known by come from the same settings.
             val s = settings.settings.first()
             val service = resolve(s)
-            val identity = pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s), bookOf(service, s))
-            return Triple(service, identity, s)
+            val preferences = if (service.supportsPinned) preferences(bookUrl, target) else BookTranslationPreferences()
+            val identity = preferenceIdentity(pageIdentity(s, service.id, service.model(s), source, target, contextOf(service, s), bookOf(service, s)), preferences)
+            return Wanted(service, identity, s, preferences)
         }
 
         // Opened last, after the suspending calls, so a cancelled bind holds nothing open.
-        suspend fun bind(): Bound {
-            val (service, identity, s) = wanted()
+        suspend fun bind(w: Wanted? = null): Bound {
+            val (service, identity, s, preferences) = w ?: wanted()
             val destination = service.destination(s)
             return Bound(
                 identity,
                 service,
-                service.open(source, target, s),
+                service.open(source, target, s, preferences),
                 destination,
                 service.owner(s),
                 chosen(s),
@@ -329,9 +350,10 @@ internal class ServiceTranslate(
         var bound by mutableStateOf(bind())
 
         suspend fun rebound(): Bound {
-            val (service, identity, s) = wanted()
+            val w = wanted()
+            val (service, identity, s) = w
             if (identity != bound.identity) {
-                val next = bind()
+                val next = bind(w)
                 bound.run.close()
                 bound = next
             } else if (chosen(s) != bound.choice) {
@@ -416,7 +438,8 @@ internal class ServiceTranslate(
         onDismiss: () -> Unit,
         onTranslatePage: ((source: String?, target: String) -> Unit)?,
         book: suspend () -> BookFacts?,
-    ) = TranslationSheet(this, passage, declared, onDismiss, onTranslatePage, book)
+        bookUrl: String?,
+    ) = TranslationSheet(this, passage, declared, onDismiss, onTranslatePage, book, bookUrl)
 
     @Composable
     override fun PageBar(

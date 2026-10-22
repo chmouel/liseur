@@ -69,6 +69,7 @@ internal class SpeechReadAloud(
     private val checkpoints: ListeningCheckpoints,
     private val connections: ServerConnections,
     private val accounts: ServiceAccounts,
+    private val bookPreferences: com.chmouel.liseur.data.db.BookAiPreferencesDao? = null,
     offered: (SessionControl) -> List<SpeechService>,
 ) : ReadAloudFeature {
 
@@ -218,7 +219,7 @@ internal class SpeechReadAloud(
                 val current = settings.settings.first()
                 val owner = service.owner(current)
                 startingOwner = owner
-                val voice = service.voice(current, pick.voice) ?: return@launch notSetUp(handle.bookId)
+                val voice = service.directedVoice(current, pick.voice, bookPreferences?.get(handle.bookId)?.narrationDirection.orEmpty()) ?: return@launch notSetUp(handle.bookId)
                 val session = ReadAloudSession(
                     application = application,
                     handle = handle,
@@ -386,6 +387,7 @@ internal class SpeechReadAloud(
             reason = reason,
             pending = pending,
             session = reading?.session,
+            narrationDirection = bookPreferences?.get(bookId)?.narrationDirection.orEmpty(),
         )
     }
 
@@ -397,8 +399,11 @@ internal class SpeechReadAloud(
      * server or its model changed since the sheet was shown, so nothing was
      * saved and the sheet must be shown again.
      */
-    suspend fun applyVoice(sheet: VoiceSheet, language: String, voice: String): Boolean {
+    suspend fun applyVoice(sheet: VoiceSheet, language: String, voice: String, narrationDirection: String = sheet.narrationDirection): Boolean {
         if (!sheet.service.remember(sheet.catalogue.scope, language, voice)) return false
+        val direction = narrationDirection.takeIf { sheet.service.supportsNarrationDirection } ?: sheet.narrationDirection
+        val directionChanged = direction != sheet.narrationDirection
+        if (directionChanged) bookPreferences?.setNarration(sheet.bookId, direction)
         val tag = sheet.choice?.language?.takeIf { SpeechLanguage.primary(it) == language }
             ?: VoiceResolver.sessionTag(language, sheet.book, sheet.catalogue.voices.firstOrNull { it.id == voice })
         val pick = VoicePick(voice, tag)
@@ -408,9 +413,9 @@ internal class SpeechReadAloud(
             return true
         }
         val reading = reading()?.takeIf { it.session === sheet.session && it.service == sheet.service } ?: return true
-        if (reading.session.choice.value == pick) return true
+        if (reading.session.choice.value == pick && !directionChanged) return true
         val switch = ++switches
-        val chosen = reading.service.voice(settings.settings.first(), voice) ?: return true
+        val chosen = reading.service.directedVoice(settings.settings.first(), voice, direction) ?: return true
         if (reading() === reading && switches == switch) reading.session.switchVoice(chosen, tag)
         return true
     }
@@ -471,7 +476,7 @@ internal class SpeechReadAloud(
         val language = reading.session.choice.value.language
         val catalogue = reading.service.catalogue(s) ?: return
         val name = VoiceResolver.voiceFor(language, catalogue, s.voicePreferences) ?: return
-        val voice = reading.service.voice(s, name) ?: return
+        val voice = reading.service.directedVoice(s, name, bookPreferences?.get(reading.session.handle.bookId)?.narrationDirection.orEmpty()) ?: return
         // The service may have changed, and the session with it, while the voices were listed.
         if (reading() === reading && switches == switch) reading.session.switchVoice(voice)
     }
@@ -556,4 +561,5 @@ internal class VoiceSheet(
     val reason: ChoiceReason?,
     val pending: PendingChoice?,
     val session: ReadAloudSession?,
+    val narrationDirection: String = "",
 )

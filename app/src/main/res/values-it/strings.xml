@@ -1611,4 +1611,21 @@
     <string name="whole_book_reason_service">Il servizio non ha potuto continuare. Controlla credenziali, modello e quota prima di riprendere.</string>
     <string name="whole_book_reason_code">Il servizio ha risposto con l\'errore %d.</string>
     <string name="whole_book_reason_storage">Impossibile leggere o scrivere il libro o le sue traduzioni salvate. Controlla il file e lo spazio disponibile prima di riprendere.</string>
+    <string name="narration_direction">Indicazioni di narrazione</string>
+    <string name="narration_direction_default">Indicazioni di narrazione · Predefinite</string>
+    <string name="narration_direction_custom">Indicazioni di narrazione · Personalizzate</string>
+    <string name="narration_direction_example">Esempio: Leggere con calore e a bassa voce, con ritmo misurato e voci dei personaggi appena accennate.</string>
+    <string name="book_preferences_clear">Cancella</string>
+    <string name="book_preferences_remove">Rimuovi</string>
+    <string name="book_translation_preferences">Preferenze di traduzione</string>
+    <string name="book_translation_direction">Indicazioni di traduzione per questo libro</string>
+    <string name="book_translation_direction_example">Esempio: Conservare la voce informale in prima persona, lo humour asciutto e le frasi brevi.</string>
+    <string name="book_translation_terms">Nomi e termini</string>
+    <string name="book_translation_original">Originale</string>
+    <string name="book_translation_preferred">Traduzione preferita</string>
+    <string name="book_translation_add_term">Aggiungi un termine</string>
+    <string name="book_translation_suggest_names">Suggerisci nomi dal Compagno</string>
+    <string name="book_translation_preview">Prova un brano</string>
+    <string name="book_translation_preview_wait">Traduzione…</string>
+    <string name="book_translation_preview_outdated">Questa anteprima non è aggiornata. Prova di nuovo il brano.</string>
 </resources>

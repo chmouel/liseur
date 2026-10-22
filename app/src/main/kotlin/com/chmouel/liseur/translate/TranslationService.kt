@@ -89,7 +89,7 @@ internal interface TranslationService {
      * asks with [s], the ones the page's identity was read from, so what
      * it answers is what the identity names.
      */
-    fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
+    fun open(source: String?, target: String, s: AppSettings, preferences: BookTranslationPreferences = BookTranslationPreferences()): TranslationRun = object : TranslationRun {
         override suspend fun translate(sentence: String, context: String?, book: String?) = translate(sentence, source, target, context, book)
     }
 
@@ -102,13 +102,14 @@ internal interface TranslationService {
         target: String,
         s: AppSettings,
         beforeRequest: suspend () -> Unit,
+        preferences: BookTranslationPreferences = BookTranslationPreferences(),
     ): TranslationRun = throw TranslationError.NotSetUp()
 
     /** Token pricing from server metadata, never an assumed price. */
     suspend fun wholeBookPrice(s: AppSettings): TextPrice? = null
 
-    fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest): Int =
-        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context, request.book)
+    fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest, preferences: BookTranslationPreferences = BookTranslationPreferences()): Int =
+        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context, request.book, preferences.instructions(listOf(request.sentence.text)))
 
     /** Its own rows on the Translation page, under the service picker; [onOpenPage] shows its [Page]. */
     @Composable
@@ -189,6 +190,6 @@ internal fun translationRequestCharacters(
 ): Int = if (TranslationPrompt.isTranslateGemma(model)) {
     TranslationPrompt.translateGemma(source, target, passage, instructions).length
 } else {
-    TranslationPrompt.system(source, target, context != null, instructions, book != null).length +
+    TranslationPrompt.system(source, target, context != null, instructions, book != null, passage).length +
         TranslationPrompt.user(passage, context, book).length
 }

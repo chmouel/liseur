@@ -34,9 +34,10 @@ class GeminiTranslationClient(
         beforeRequest: suspend () -> Unit = {},
         allowTransportRetry: Boolean = true,
         diagnostics: GeminiCacheDiagnostics? = null,
+        instructions: String? = null,
     ): String {
         val text = generate(
-            apiKey, model, TranslationPrompt.system(source, target, context != null, book = book != null),
+            apiKey, model, TranslationPrompt.system(source, target, context != null, instructions = instructions, book = book != null, passage = passage),
             TranslationPrompt.user(passage, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
         )
         return GeminiTranslation.translation(text)
@@ -59,10 +60,11 @@ class GeminiTranslationClient(
         beforeRequest: suspend () -> Unit = {},
         allowTransportRetry: Boolean = true,
         diagnostics: GeminiCacheDiagnostics? = null,
+        instructions: String? = null,
     ): List<String> {
         require(sentences.isNotEmpty() && sentences.all(TranslationPrompt::batchable))
         val text = generate(
-            apiKey, model, TranslationPrompt.batchSystem(source, target, context != null, book = book != null),
+            apiKey, model, TranslationPrompt.batchSystem(source, target, context != null, instructions = instructions, book = book != null, sentences = sentences),
             TranslationPrompt.batchUser(sentences, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
         )
         return TranslationPrompt.batchReply(GeminiTranslation.content(text), sentences.size)

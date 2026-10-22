@@ -86,11 +86,11 @@ internal class ServerTranslationService(
     override suspend fun translate(passage: String, source: String?, target: String, context: String?, book: String?): String =
         ask(settings.settings.first(), passage, source, target, context, book)
 
-    override fun open(source: String?, target: String, s: AppSettings): TranslationRun = object : TranslationRun {
-        override suspend fun translate(sentence: String, context: String?, book: String?) = ask(s, sentence, source, target, context, book)
+    override fun open(source: String?, target: String, s: AppSettings, preferences: BookTranslationPreferences): TranslationRun = object : TranslationRun {
+        override suspend fun translate(sentence: String, context: String?, book: String?) = ask(s, sentence, source, target, context, book, preferences = preferences)
     }
 
-    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit): TranslationRun {
+    override suspend fun openPinned(source: String?, target: String, s: AppSettings, beforeRequest: suspend () -> Unit, preferences: BookTranslationPreferences): TranslationRun {
         val server = s.translationServerConnection ?: throw TranslationError.NotSetUp()
         val base = OpenAiTts.baseUrl(server.url) ?: throw TranslationError.NotSetUp()
         if (model(s) == null) throw TranslationError.NotSetUp()
@@ -102,7 +102,7 @@ internal class ServerTranslationService(
             private val diagnostics = ChatCacheDiagnostics()
 
             override suspend fun translate(sentence: String, context: String?, book: String?) =
-                ask(s, sentence, source, target, context, book, pinned = true, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
+                ask(s, sentence, source, target, context, book, preferences = preferences, pinned = true, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
 
             // TranslateGemma's trained format has room for one passage only, and a reply
             // cap the reader set for one sentence would cut every batch short.
@@ -110,7 +110,7 @@ internal class ServerTranslationService(
 
             override suspend fun translateBatch(sentences: List<String>, context: String?, book: String?): List<String> {
                 check(batches)
-                return ask(s, sentences, source, target, context, book, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
+                return ask(s, sentences, source, target, context, book, preferences = preferences, frozenKey = key, beforeRequest = beforeRequest, usage = diagnostics::response)
             }
 
             override fun cached(count: Int) = diagnostics.cached(count)
@@ -128,8 +128,8 @@ internal class ServerTranslationService(
         return models(server.url).getOrNull()?.firstOrNull { it.id == model }?.price
     }
 
-    override fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest): Int =
-        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context.takeIf { usesContext(s) }, request.book, tuning(s).instructions)
+    override fun requestCharacters(s: AppSettings, source: String?, target: String, request: SentenceRequest, preferences: BookTranslationPreferences): Int =
+        translationRequestCharacters(model(s), source, target, request.sentence.text, request.context.takeIf { usesContext(s) }, request.book, listOfNotNull(tuning(s).instructions, preferences.instructions(listOf(request.sentence.text))).joinToString("\n").ifEmpty { null })
 
     private suspend fun ask(
         s: AppSettings,
@@ -138,6 +138,7 @@ internal class ServerTranslationService(
         target: String,
         context: String?,
         book: String?,
+        preferences: BookTranslationPreferences = BookTranslationPreferences(),
         pinned: Boolean = false,
         frozenKey: String? = null,
         beforeRequest: suspend () -> Unit = {},
@@ -154,7 +155,7 @@ internal class ServerTranslationService(
             passage,
             context.takeIf { call.tuning.context != false },
             temperature = call.temperature(),
-            instructions = call.tuning.instructions,
+            instructions = listOfNotNull(call.tuning.instructions, preferences.instructions(listOf(passage))).joinToString("\n").ifEmpty { null },
             maxTokens = call.tuning.maxTokens,
             keepAlive = call.tuning.keepAlive,
             book = book,
@@ -173,6 +174,7 @@ internal class ServerTranslationService(
         target: String,
         context: String?,
         book: String?,
+        preferences: BookTranslationPreferences = BookTranslationPreferences(),
         frozenKey: String?,
         beforeRequest: suspend () -> Unit,
         usage: (ChatUsage) -> Unit,
@@ -188,7 +190,7 @@ internal class ServerTranslationService(
             sentences,
             context.takeIf { call.tuning.context != false },
             temperature = call.temperature(),
-            instructions = call.tuning.instructions,
+            instructions = listOfNotNull(call.tuning.instructions, preferences.instructions(sentences)).joinToString("\n").ifEmpty { null },
             maxTokens = call.tuning.maxTokens,
             keepAlive = call.tuning.keepAlive,
             book = book,

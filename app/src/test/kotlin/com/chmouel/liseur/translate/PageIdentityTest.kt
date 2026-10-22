@@ -52,9 +52,9 @@ class PageIdentityTest {
     }
 
     @Test
-    fun `an untuned server keeps the identity pages were saved under before options existed`() {
+    fun `an untuned server keeps its identity across options that do not change replies`() {
         // The fields and their order as they were, written out, so no constant can move them.
-        val legacy = listOf("1", "1", ServerSettings.SERVER_PROVIDER, id, "small", "fr", "en").joinToString("\u0000")
+        val legacy = listOf("1", "2", ServerSettings.SERVER_PROVIDER, id, "small", "fr", "en").joinToString("\u0000")
         assertEquals(legacy, server(settings()))
         val untuned = settings().copy(translationStates = mapOf(id to ServerTranslationState(model = "small", keepAlive = "10m")))
         assertEquals(legacy, server(untuned))

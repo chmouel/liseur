@@ -181,6 +181,25 @@ class ServerTranslationServiceTest {
     }
 
     @Test
+    fun `per book directions stay apart from exact text and only matching terms travel`(): Unit = runBlocking {
+        settings.setTranslationServerModel(url, "llama3")
+        settings.editTranslationServer(url) { it.copy(instructions = "Use tu.") }
+        val preferences = BookTranslationPreferences("Keep first person", listOf(TranslationTerm("Anna", "Anne"), TranslationTerm("Bob", "Robert")))
+        web.enqueue(completion("Je suis partie."))
+        val run = service.open("en", "fr", settings.settings.first(), preferences)
+        val source = "  Anna said: I left.  "
+        run.translate(source, null)
+        val messages = body().getJSONArray("messages")
+        val system = messages.getJSONObject(0).getString("content")
+        assertTrue(system.contains("Keep first person"))
+        assertTrue(system.contains("Use tu."))
+        assertTrue(system.contains("Anna → Anne"))
+        assertFalse(system.contains("Robert"))
+        assertTrue(messages.getJSONObject(1).getString("content").contains("\n$source\n"))
+        run.close()
+    }
+
+    @Test
     fun `the server's options shape the request`(): Unit = runBlocking {
         settings.setTranslationServerModel(url, "llama3")
         settings.editTranslationServer(url) {

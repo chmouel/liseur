@@ -1,6 +1,6 @@
 # 54. Read aloud retries a failed request before it stops
 
-Status: proposed
+Status: implemented
 
 ## Context
 

@@ -1717,4 +1717,21 @@
     <string name="whole_book_reason_service">Сервис не смог продолжить работу. Проверьте учётные данные, модель и квоту перед продолжением.</string>
     <string name="whole_book_reason_code">Сервис ответил ошибкой %d.</string>
     <string name="whole_book_reason_storage">Не удалось прочитать или записать книгу или её сохранённые переводы. Проверьте файл и свободное место перед продолжением.</string>
+    <string name="narration_direction">Указания для озвучивания</string>
+    <string name="narration_direction_default">Указания для озвучивания · По умолчанию</string>
+    <string name="narration_direction_custom">Указания для озвучивания · Свои</string>
+    <string name="narration_direction_example">Пример: Читать тепло и негромко, в размеренном темпе, слегка меняя голоса персонажей.</string>
+    <string name="book_preferences_clear">Очистить</string>
+    <string name="book_preferences_remove">Удалить</string>
+    <string name="book_translation_preferences">Настройки перевода</string>
+    <string name="book_translation_direction">Указания для перевода этой книги</string>
+    <string name="book_translation_direction_example">Пример: Сохранить непринуждённое повествование от первого лица, сухой юмор и короткие предложения.</string>
+    <string name="book_translation_terms">Имена и термины</string>
+    <string name="book_translation_original">Оригинал</string>
+    <string name="book_translation_preferred">Предпочтительный перевод</string>
+    <string name="book_translation_add_term">Добавить термин</string>
+    <string name="book_translation_suggest_names">Предложить имена из Компаньона</string>
+    <string name="book_translation_preview">Попробовать отрывок</string>
+    <string name="book_translation_preview_wait">Перевод…</string>
+    <string name="book_translation_preview_outdated">Этот предварительный перевод устарел. Переведите отрывок ещё раз.</string>
 </resources>

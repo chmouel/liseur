@@ -58,6 +58,10 @@ internal interface SpeechService {
     /** Its voice, or its [voice] of that name instead; null when it is not set up. */
     suspend fun voice(s: AppSettings, voice: String? = null): SessionVoice?
 
+    val supportsNarrationDirection: Boolean get() = false
+
+    suspend fun directedVoice(s: AppSettings, voice: String? = null, direction: String = ""): SessionVoice? = voice(s, voice)
+
     /**
      * The voices it can read with now, with the languages each speaks when
      * known; null when it is not set up. Asking may reach the service.

@@ -17,6 +17,7 @@ object ReadAloudFeatureFactory {
     fun create(context: Context, container: AppContainer): ReadAloudFeature = SpeechReadAloud(
         application = context.applicationContext as Application,
         settings = container.appSettings,
+        bookPreferences = container.database.bookAiPreferencesDao(),
         checkpoints = container.listeningCheckpoints,
         connections = container.serverConnections,
         accounts = container.serviceAccounts,

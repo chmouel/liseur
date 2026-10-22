@@ -1623,4 +1623,21 @@
     <string name="whole_book_reason_service">Der Dienst konnte nicht fortfahren. Prüfe Zugangsdaten, Modell und Kontingent vor dem Fortsetzen.</string>
     <string name="whole_book_reason_code">Der Dienst antwortete mit Fehler %d.</string>
     <string name="whole_book_reason_storage">Das Buch oder seine gespeicherten Übersetzungen konnten nicht gelesen oder geschrieben werden. Prüfe die Datei und den freien Speicher vor dem Fortsetzen.</string>
+    <string name="narration_direction">Erzählanweisung</string>
+    <string name="narration_direction_default">Erzählanweisung · Standard</string>
+    <string name="narration_direction_custom">Erzählanweisung · Angepasst</string>
+    <string name="narration_direction_example">Beispiel: Warm und leise vorlesen, mit gemessenem Tempo und dezenten Figurenstimmen.</string>
+    <string name="book_preferences_clear">Leeren</string>
+    <string name="book_preferences_remove">Entfernen</string>
+    <string name="book_translation_preferences">Übersetzungseinstellungen</string>
+    <string name="book_translation_direction">Übersetzungsanweisung für dieses Buch</string>
+    <string name="book_translation_direction_example">Beispiel: Die lockere Ich-Erzählung, den trockenen Humor und die kurzen Sätze beibehalten.</string>
+    <string name="book_translation_terms">Namen und Begriffe</string>
+    <string name="book_translation_original">Original</string>
+    <string name="book_translation_preferred">Bevorzugte Übersetzung</string>
+    <string name="book_translation_add_term">Begriff hinzufügen</string>
+    <string name="book_translation_suggest_names">Namen aus dem Begleiter vorschlagen</string>
+    <string name="book_translation_preview">Textstelle ausprobieren</string>
+    <string name="book_translation_preview_wait">Wird übersetzt…</string>
+    <string name="book_translation_preview_outdated">Diese Vorschau ist veraltet. Die Textstelle erneut ausprobieren.</string>
 </resources>

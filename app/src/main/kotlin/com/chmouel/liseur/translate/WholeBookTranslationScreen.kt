@@ -77,6 +77,7 @@ internal fun WholeBookTranslationScreen(
     onDismiss: () -> Unit,
     onBack: (() -> Unit)? = null,
     onOpenSettings: (() -> Unit)? = null,
+    previewPosition: (suspend () -> org.readium.r2.shared.publication.Locator?)? = null,
 ) {
     Dialog(
         onDismissRequest = onBack ?: onDismiss,
@@ -88,7 +89,7 @@ internal fun WholeBookTranslationScreen(
     ) {
         Surface(Modifier.fillMaxSize()) {
             SystemBarIcons(dark = isDarkSurface(MaterialTheme.colorScheme.surface))
-            WholeBookTranslationContent(bookUrl, onDismiss, onBack, onOpenSettings)
+            WholeBookTranslationContent(bookUrl, onDismiss, onBack, onOpenSettings, previewPosition)
         }
     }
 }
@@ -100,6 +101,7 @@ private fun WholeBookTranslationContent(
     onDismiss: () -> Unit,
     onBack: (() -> Unit)?,
     onOpenSettings: (() -> Unit)?,
+    previewPosition: (suspend () -> org.readium.r2.shared.publication.Locator?)?,
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
@@ -264,6 +266,12 @@ private fun WholeBookTranslationContent(
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                }
+                if (target != null) {
+                    BookTranslationPreferencesEditor(container, bookUrl, target, previewPosition) {
+                        jobs.invalidatePreparation(bookUrl)
+                        refresh++
+                    }
                 }
                 val checked = preview
                 val missing = checked?.let { (it.total - it.cached - if (it.retryFailures) 0 else it.failed).coerceAtLeast(0) } ?: 0

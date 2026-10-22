@@ -109,10 +109,10 @@ internal fun ReadAloudVoiceSheet(
                     sheet = l.sheet,
                     onSettings = { settingsOpen = true },
                     onCancel = dismiss,
-                    onApply = { language, voice ->
+                    onApply = { language, voice, direction ->
                         scope.launch {
                             // Nothing saved: the service, server or model changed meanwhile.
-                            if (feature.applyVoice(l.sheet, language, voice)) onDismiss() else reload++
+                            if (feature.applyVoice(l.sheet, language, voice, direction)) onDismiss() else reload++
                         }
                     },
                 )
@@ -137,7 +137,7 @@ private fun ColumnScope.Choice(
     sheet: VoiceSheet,
     onSettings: () -> Unit,
     onCancel: () -> Unit,
-    onApply: (language: String, voice: String) -> Unit,
+    onApply: (language: String, voice: String, direction: String) -> Unit,
 ) {
     val locale = LocalConfiguration.current.locales[0]
     val catalogue = sheet.catalogue
@@ -148,6 +148,8 @@ private fun ColumnScope.Choice(
                 ?: sheet.language?.let { VoiceResolver.voiceFor(it, catalogue, sheet.preferences) },
         )
     }
+    var direction by remember(sheet) { mutableStateOf(sheet.narrationDirection) }
+    var directionOpen by remember(sheet) { mutableStateOf(false) }
     var applying by remember(sheet) { mutableStateOf(false) }
     val languages = remember(sheet, locale) { languageChoices(sheet, locale) }
 
@@ -233,6 +235,24 @@ private fun ColumnScope.Choice(
         if (catalogue.failed) Note(stringResource(R.string.read_aloud_voice_sheet_failed), error = true)
     }
 
+    if (sheet.service.supportsNarrationDirection) {
+        TextButton(onClick = { directionOpen = !directionOpen }) {
+            Text(stringResource(if (direction.isBlank()) R.string.narration_direction_default else R.string.narration_direction_custom))
+        }
+        if (directionOpen) {
+            OutlinedTextField(
+                value = direction,
+                onValueChange = { direction = it },
+                label = { Text(stringResource(R.string.narration_direction)) },
+                placeholder = { Text(stringResource(R.string.narration_direction_example)) },
+                minLines = 2,
+                maxLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(onClick = { direction = "" }) { Text(stringResource(R.string.book_preferences_clear)) }
+        }
+    }
+
     val offerSettings = sheet.pending != null || catalogue.failed || catalogue.voices.isEmpty() ||
         language?.let { l -> catalogue.voices.none { it.speaks(l) } } == true
     val ready = language != null && voice != null && !applying
@@ -244,7 +264,7 @@ private fun ColumnScope.Choice(
             val v = voice
             if (l != null && v != null) {
                 applying = true
-                onApply(l, v)
+                onApply(l, v, direction)
             }
         }.takeIf { ready },
     )

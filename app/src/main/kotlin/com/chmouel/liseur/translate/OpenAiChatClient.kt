@@ -60,7 +60,7 @@ class OpenAiChatClient(
             body.put(
                 "messages",
                 JSONArray()
-                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null, instructions, book != null)))
+                    .put(JSONObject().put("role", "system").put("content", TranslationPrompt.system(source, target, context != null, instructions, book != null, passage)))
                     .put(JSONObject().put("role", "user").put("content", TranslationPrompt.user(passage, context, book))),
             )
         }
@@ -101,7 +101,7 @@ class OpenAiChatClient(
         body.put(
             "messages",
             JSONArray()
-                .put(JSONObject().put("role", "system").put("content", TranslationPrompt.batchSystem(source, target, context != null, instructions, book != null)))
+                .put(JSONObject().put("role", "system").put("content", TranslationPrompt.batchSystem(source, target, context != null, instructions, book != null, sentences)))
                 .put(JSONObject().put("role", "user").put("content", TranslationPrompt.batchUser(sentences, context, book))),
         )
         val reply = send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry)
