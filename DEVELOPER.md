@@ -1251,7 +1251,8 @@ changing reader behavior.
   the concurrency permit and a 30-second retry-start budget (ADR-0054).
   Translation preparation is outside these retries.
 - Gemini narration direction is local per book, loaded before synthesis and
-  sent as `speech_metadata.style`; applying it restarts the current sentence
+  sent as a `speech_metadata` annotation (`style`) on the text of a structured
+  `input`; applying it restarts the current sentence
   in its play/pause state, even with the same voice.
 - Speed (`read_aloud_speed`, 0.75× to 2×) is applied by
   `AudioTrackPcmOutput` via `AudioTrack.playbackParams`: keeps pitch,

@@ -130,8 +130,7 @@ class GeminiTtsClient(
         // The API keeps interactions unless told not to. This does not
         // change Google's general retention terms; PRIVACY.md says so.
         .put("store", false)
-        .put("input", text)
-        .apply { if (direction.isNotBlank()) put("speech_metadata", JSONObject().put("style", direction)) }
+        .put("input", if (direction.isBlank()) text else styledInput(text, direction))
         .put(
             "response_format",
             JSONObject()
@@ -144,6 +143,24 @@ class GeminiTtsClient(
             JSONObject().put("speech_config", JSONArray().put(JSONObject().put("voice", voice))),
         )
         .toString()
+
+    // The API takes the style as an annotation on the text item, not as a request field.
+    private fun styledInput(text: String, direction: String): JSONArray = JSONArray().put(
+        JSONObject()
+            .put("type", "user_input")
+            .put(
+                "content",
+                JSONArray().put(
+                    JSONObject()
+                        .put("type", "text")
+                        .put("text", text)
+                        .put(
+                            "annotations",
+                            JSONArray().put(JSONObject().put("type", "speech_metadata").put("style", direction)),
+                        ),
+                ),
+            ),
+    )
 
     private fun parse(response: Response): SpeechAudio {
         val source = response.body.source()

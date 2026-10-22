@@ -123,11 +123,15 @@ class GeminiTtsClientTest {
         val text = "  I said: speak loudly.  "
         client().synthesize("k", text, "Kore", direction = "Quietly, with dry humour")
         val custom = JSONObject(server.takeRequest().body!!.utf8())
-        assertEquals(text, custom.getString("input"))
-        assertEquals("Quietly, with dry humour", custom.getJSONObject("speech_metadata").getString("style"))
+        val item = custom.getJSONArray("input").getJSONObject(0).getJSONArray("content").getJSONObject(0)
+        assertEquals(text, item.getString("text"))
+        val annotation = item.getJSONArray("annotations").getJSONObject(0)
+        assertEquals("speech_metadata", annotation.getString("type"))
+        assertEquals("Quietly, with dry humour", annotation.getString("style"))
+        assertFalse(custom.has("speech_metadata"))
         assertFalse(custom.getBoolean("store"))
         client().synthesize("k", text, "Kore", direction = "")
-        assertFalse(JSONObject(server.takeRequest().body!!.utf8()).has("speech_metadata"))
+        assertEquals(text, JSONObject(server.takeRequest().body!!.utf8()).getString("input"))
     }
 
     @Test
