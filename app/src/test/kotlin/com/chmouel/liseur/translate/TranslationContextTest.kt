@@ -131,6 +131,18 @@ class TranslationContextTest {
     }
 
     @Test
+    fun `a passage of several sentences is found at its first sentence`() = runTest {
+        val book = chapter("#p1" to "Un.", "#p1" to "Deux.", "#p1" to "Trois.", "#p1" to "Quatre.", "#p1" to "Cinq.")
+        val passage = { first: Int -> at("${book[first].text} ${book[first + 1].text}", "#p1", "ch1.xhtml", book[first].before) }
+        val preceding = PrecedingSentences(Opened(book)::open)
+        assertEquals(listOf("Un.", "Deux."), preceding.before(passage(2), 8)!!.map { it.text })
+        // Found again once walked, without reading on.
+        assertEquals(listOf("Un."), preceding.before(passage(1), 8)!!.map { it.text })
+        // Words that only share the start of a sentence are not that sentence.
+        assertNull(preceding.before(at("Troisième.", "#p1", "ch1.xhtml", book[2].before), 8))
+    }
+
+    @Test
     fun `a sentence not in its chapter is not found`() = runTest {
         val book = chapter("#p1" to "Un.", "#p1" to "Deux.")
         val preceding = PrecedingSentences(Opened(book)::open)

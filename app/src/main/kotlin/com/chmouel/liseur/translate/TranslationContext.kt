@@ -66,6 +66,9 @@ internal object TranslationContext {
  * A sentence is found by its element, its words and the words before it.
  * When the same sentence appears twice that way, the first place is taken:
  * a later repeat then gets less context, but never itself or what follows.
+ * A passage of several sentences, as read aloud may ask about, is found
+ * at its first sentence: the same element and words before, its words
+ * starting the passage.
  */
 class PrecedingSentences(
     private val open: suspend (href: String) -> PageSentences?,
@@ -76,6 +79,7 @@ class PrecedingSentences(
     private class Walk(val sentences: PageSentences?) {
         val walked = ArrayList<PageSentence>()
         val places = HashMap<String, Int>()
+        val starts = HashMap<String, Int>()
         var ended = false
     }
 
@@ -103,6 +107,10 @@ class PrecedingSentences(
     private suspend fun find(walk: Walk, sentence: PageSentence): Int? {
         val key = key(sentence)
         walk.places[key]?.let { return it }
+        val start = start(sentence)
+        val words = squash(sentence.text)
+        fun opens(at: Int) = squash(walk.walked[at].text).let { it.isNotEmpty() && words.startsWith(it) }
+        walk.starts[start]?.let { if (opens(it)) return it }
         while (!walk.ended) {
             currentCoroutineContext().ensureActive()
             // A resource that cannot be read further only means less context, never a failed translation.
@@ -120,8 +128,10 @@ class PrecedingSentences(
             val kept = next.copy(before = next.before?.let(::beforeTail))
             walk.walked += kept
             val walkedKey = key(kept)
+            val walkedStart = start(kept)
             walk.places.putIfAbsent(walkedKey, walk.walked.lastIndex)
-            if (walkedKey == key) return walk.walked.lastIndex
+            walk.starts.putIfAbsent(walkedStart, walk.walked.lastIndex)
+            if (walkedKey == key || (walkedStart == start && opens(walk.walked.lastIndex))) return walk.walked.lastIndex
         }
         return null
     }
@@ -141,5 +151,8 @@ class PrecedingSentences(
 
         fun key(sentence: PageSentence) =
             "${sentence.selector}\u0000${squash(sentence.text)}\u0000${squash(beforeTail(sentence.before.orEmpty()))}"
+
+        fun start(sentence: PageSentence) =
+            "${sentence.selector}\u0000${squash(beforeTail(sentence.before.orEmpty()))}"
     }
 }
