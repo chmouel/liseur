@@ -3952,6 +3952,10 @@ internal fun ReaderScreen(
                             confidence = offer.confidence,
                             theme = readingTheme,
                             onCatchUp = {
+                                // Taking the other device's place is the
+                                // reader's newest choice; the page it sends
+                                // them to counts as the app's own move.
+                                returnRequested = false
                                 effectScope.launch {
                                     if (onProgressAction.prepareCatchUp()) {
                                         onProgressAction.acceptCatchUp(offer)
