@@ -3996,6 +3996,7 @@ internal fun ReaderScreen(
                             returnRequested = true
                         }.takeIf { listeningPlaying && followDetached },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
+                        start = it.start,
                     )
                 }
                 // Above the scrubber, so a reader who stopped the page by

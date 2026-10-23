@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,12 +41,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import java.util.Locale
 import kotlinx.coroutines.launch
+import org.readium.r2.shared.publication.Locator
 
 private sealed interface SheetLoad {
     data object Loading : SheetLoad
@@ -65,15 +68,37 @@ internal fun ReadAloudVoiceSheet(
     feature: SpeechReadAloud,
     bookId: String,
     pending: PendingChoice?,
+    start: (Locator, SpeechTranslation?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     var reload by remember { mutableIntStateOf(0) }
     var load by remember { mutableStateOf<SheetLoad>(SheetLoad.Loading) }
     var settingsOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(reload) {
+    // Taken when the settings open: changing the service there ends the session.
+    var restart by remember { mutableStateOf<ReadAloudRestart?>(null) }
+    DisposableEffect(Unit) { onDispose { restart?.release() } }
+    LaunchedEffect(reload, pending) {
         load = SheetLoad.Loading
-        load = feature.voiceSheet(bookId)?.let(SheetLoad::Loaded) ?: SheetLoad.NotSetUp
+        val sheet = feature.voiceSheet(bookId, restart)
+        // Still read or asked with the same service: nothing to start again.
+        if (sheet != null && sheet.restart == null) {
+            restart?.release()
+            restart = null
+        }
+        load = sheet?.let(SheetLoad::Loaded) ?: SheetLoad.NotSetUp
+    }
+    // Reading ended some other way, from the notification or at the end of
+    // the book: there is nothing left to pick a voice for.
+    val reading = feature.session.collectAsStateWithLifecycle().value?.bookId == bookId
+    LaunchedEffect(settingsOpen, reading, pending) {
+        if (settingsOpen || reading || pending != null) return@LaunchedEffect
+        if (restart?.let { it.held && it.wanted } == true) return@LaunchedEffect
+        onDismiss()
+    }
+    val openSettings = {
+        if (restart?.held != true) restart = feature.holdForRestart(bookId, start)
+        settingsOpen = true
     }
     val dismiss = {
         if (pending != null) feature.cancelChoice(bookId)
@@ -100,14 +125,14 @@ internal fun ReadAloudVoiceSheet(
                 SheetLoad.NotSetUp -> {
                     Note(stringResource(R.string.read_aloud_notice_not_set_up), error = true)
                     Buttons(
-                        onSettings = { settingsOpen = true },
+                        onSettings = openSettings,
                         onCancel = dismiss,
                         onApply = null,
                     )
                 }
                 is SheetLoad.Loaded -> Choice(
                     sheet = l.sheet,
-                    onSettings = { settingsOpen = true },
+                    onSettings = openSettings,
                     onCancel = dismiss,
                     onApply = { language, voice, direction ->
                         scope.launch {
@@ -253,11 +278,9 @@ private fun ColumnScope.Choice(
         }
     }
 
-    val offerSettings = sheet.pending != null || catalogue.failed || catalogue.voices.isEmpty() ||
-        language?.let { l -> catalogue.voices.none { it.speaks(l) } } == true
     val ready = language != null && voice != null && !applying
     Buttons(
-        onSettings = onSettings.takeIf { offerSettings },
+        onSettings = onSettings,
         onCancel = onCancel,
         onApply = {
             val l = language
@@ -312,16 +335,14 @@ private fun Note(text: String, error: Boolean = false) {
     )
 }
 
-/** The sheet's buttons; a null action leaves its button out, or disabled for [onApply]. */
+/** The sheet's buttons; a null [onApply] disables Apply. */
 @Composable
-private fun Buttons(onSettings: (() -> Unit)?, onCancel: () -> Unit, onApply: (() -> Unit)?) {
+private fun Buttons(onSettings: () -> Unit, onCancel: () -> Unit, onApply: (() -> Unit)?) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (onSettings != null) {
-            TextButton(onClick = onSettings) { Text(stringResource(R.string.read_aloud_voice_sheet_settings)) }
-        }
+        TextButton(onClick = onSettings) { Text(stringResource(R.string.read_aloud_voice_sheet_settings)) }
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End) {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel)) }
             TextButton(onClick = { onApply?.invoke() }, enabled = onApply != null) {

@@ -44,7 +44,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,6 +76,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.readium.r2.shared.publication.Locator
 
 /**
  * The controls laid over the page while its book is read aloud, shown
@@ -91,6 +91,7 @@ internal fun ReadAloudPlayer(
     controls: Boolean,
     onReturnToVoice: (() -> Unit)?,
     modifier: Modifier,
+    start: (Locator, SpeechTranslation?) -> Unit,
 ) {
     val eInk = LocalEInk.current
     val session by feature.session.collectAsStateWithLifecycle()
@@ -108,9 +109,12 @@ internal fun ReadAloudPlayer(
     val pending by feature.pendingChoice.collectAsStateWithLifecycle()
     val asking = pending?.takeIf { it.bookId == bookId }
     var choosing by remember { mutableStateOf(false) }
-    // Asked before the book is read, or opened from the controls of the one being read.
-    if (asking != null || (choosing && here != null)) {
-        key(asking) { ReadAloudVoiceSheet(feature, bookId, asking, onDismiss = { choosing = false }) }
+    LaunchedEffect(asking) { if (asking != null) choosing = true }
+    // Asked before the book is read, or opened from the controls of the one
+    // being read. It stays when changing the service in its settings ends
+    // the session, until it is dismissed.
+    if (choosing || asking != null) {
+        ReadAloudVoiceSheet(feature, bookId, asking, start, onDismiss = { choosing = false })
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)

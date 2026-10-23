@@ -134,7 +134,9 @@ interface ReadAloudFeature {
      * show only while [controls] is set, which is when the reader has
      * raised the chrome; otherwise the page shows just the highlight.
      * [onReturnToVoice], set while the reader has moved away from the
-     * sentence being read, offers to take the page back to it.
+     * sentence being read, offers to take the page back to it. Reading
+     * that has to start again, as after changing the service from its
+     * voice sheet, goes through the reader's own [start].
      */
     @Composable
     fun Player(
@@ -143,6 +145,7 @@ interface ReadAloudFeature {
         controls: Boolean,
         onReturnToVoice: (() -> Unit)?,
         modifier: Modifier,
+        start: (Locator, SpeechTranslation?) -> Unit,
     )
 
     object None : ReadAloudFeature {
@@ -173,6 +176,7 @@ interface ReadAloudFeature {
             controls: Boolean,
             onReturnToVoice: (() -> Unit)?,
             modifier: Modifier,
+            start: (Locator, SpeechTranslation?) -> Unit,
         ) = Unit
     }
 }

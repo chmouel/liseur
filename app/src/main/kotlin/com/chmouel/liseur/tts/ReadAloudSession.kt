@@ -177,6 +177,16 @@ internal class ReadAloudSession(
     private var checkpointJob: Job? = null
     private var ended = false
 
+    /** Where reading resumes once the session has ended, null while it runs. */
+    var endedAt: Locator? = null
+        private set
+
+    // Where it was asked to start, which is where it resumes when it ends before a sentence was reached.
+    private var startedFrom: Locator? = null
+
+    /** Whether the listener has it playing, even while the first sentence is on its way. */
+    val playRequested: Boolean get() = playback.playRequested
+
     private val location = playback.navigator.flatMapLatest { it?.location ?: emptyFlow() }
     private val playWhenReady = playback.navigator
         .flatMapLatest { it?.playback?.map { p -> p.playWhenReady } ?: flowOf(false) }
@@ -240,13 +250,14 @@ internal class ReadAloudSession(
         }
     }
 
-    /** Plays from the sentence [selection] starts in. */
-    fun start(selection: Locator) {
+    /** Plays from the sentence [selection] starts in, or waits there paused without [play]. */
+    fun start(selection: Locator, play: Boolean = true) {
+        startedFrom = selection
         claim()
         scope.launch {
             val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, textLanguage ?: publication.metadata.language)
             val target = SelectionTarget.of(selection, sentences)
-            val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches })
+            val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches }, play = play)
             mutableStarting.value = false
             when (landing) {
                 ReadAloudPlayback.Landing.Sentence -> Unit
@@ -302,6 +313,7 @@ internal class ReadAloudSession(
     fun stop() {
         if (ended) return
         ended = true
+        endedAt = place() ?: startedFrom
         settle()
         checkpointJob?.cancel()
         playback.close()
@@ -335,15 +347,16 @@ internal class ReadAloudSession(
 
     private fun save(share: Boolean) {
         val held = generation ?: return
-        // The failed sentence was never heard, but it is where resuming starts.
-        // Read translated, a sentence can wait long on its translation: the
-        // place saved is the last one heard, never one only asked for.
-        val heard = playback.failure.value?.anchor?.locator
-            ?: playback.heard.value?.takeIf { translation != null }
-            ?: playback.navigator.value?.location?.value?.utteranceLocator
-            ?: return
+        val heard = place() ?: return
         checkpoints.save(handle, held, heard, spokenAt, share)
     }
+
+    // The failed sentence was never heard, but it is where resuming starts.
+    // Read translated, a sentence can wait long on its translation: the
+    // place is the last one heard, never one only asked for.
+    private fun place(): Locator? = playback.failure.value?.anchor?.locator
+        ?: playback.heard.value?.takeIf { translation != null }
+        ?: playback.navigator.value?.location?.value?.utteranceLocator
 
     private fun SpeechTtsEngine.Error.notice(): ReadAloudNotice = when (this) {
         is SpeechTtsEngine.Error.InvalidKey -> ReadAloudNotice.InvalidKey

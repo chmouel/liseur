@@ -1247,6 +1247,14 @@ changing reader behavior.
   sentence in its play/pause state (`recut = true` after a language
   change). A settings pick is heard the same way, in the session's
   language.
+- Voice settings from the sheet take a `ReadAloudRestart` hold (book,
+  translation, play state, sleep timer). Only a stop the settings cause
+  (service, server or key change) marks it wanted: the sheet then stays
+  with the new service's voices, and Apply starts again through the
+  reader's start (BookOrbit guards included) where it stopped
+  (`ReadAloudSession.endedAt`, else the start's selection), paused if it
+  was, with the timer kept. Any other end closes the sheet. Dismissing
+  releases the hold.
 - Temporary synthesis failures retry up to three attempts, with waits outside
   the concurrency permit and a 30-second retry-start budget (ADR-0054).
   Translation preparation and reference-context resolution are outside these retries.

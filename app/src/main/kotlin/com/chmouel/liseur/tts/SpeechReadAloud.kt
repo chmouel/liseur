@@ -87,7 +87,7 @@ internal class SpeechReadAloud(
     override val isAvailable = true
 
     private val control = object : SessionControl {
-        override fun stop() = this@SpeechReadAloud.stop()
+        override fun stop() = stopForSettings()
         override suspend fun switchVoice() = this@SpeechReadAloud.switchVoice()
         override fun sessionLanguage(service: SpeechService): String? =
             reading()?.takeIf { it.service == service }?.session?.choice?.value?.language
@@ -126,8 +126,14 @@ internal class SpeechReadAloud(
     private val previews = mutableMapOf<Job, Any?>()
 
     private fun connectionChanging(owner: String) {
-        if (startingOwner === UNKNOWN || startingOwner == owner) starting?.cancel()
-        reading()?.takeIf { it.owner == owner }?.session?.stop()
+        if (startingOwner === UNKNOWN || startingOwner == owner) {
+            restartWanted(startingBookId)
+            starting?.cancel()
+        }
+        reading()?.takeIf { it.owner == owner }?.session?.let {
+            restartWanted(it.handle.bookId)
+            it.stop()
+        }
         previews.filterValues { it === UNKNOWN || it == owner }.keys.forEach { it.cancel() }
     }
 
@@ -172,7 +178,13 @@ internal class SpeechReadAloud(
     init {
         // A choice asked of one service means nothing to another.
         scope.launch {
-            service.collect { chosen -> if (mutablePending.value.let { it != null && it.service != chosen }) starting?.cancel() }
+            service.collect { chosen ->
+                val pending = mutablePending.value
+                if (pending != null && pending.service != chosen) {
+                    restartWanted(pending.bookId)
+                    starting?.cancel()
+                }
+            }
         }
         scope.launch {
             // Only what reaches the request matters: an inactive context's size or template changes nothing.
@@ -207,10 +219,13 @@ internal class SpeechReadAloud(
         mutableCurrent.value?.takeIf { it.handle.bookId == bookId }?.translation?.takeIf { it.translations.open }
 
     override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) {
+        val again = carried?.takeIf { it.bookId == handle.bookId }
+        carried = null
         stop()
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
+        startingRequest = StartRequest(handle, selection, translation)
         startingOwner = UNKNOWN
         // The translation's hold is this start's until a session takes it,
         // given back however the start ends, even cancelled before it ran.
@@ -233,7 +248,7 @@ internal class SpeechReadAloud(
                     SpeechLanguage.ofBook(handle.publication.metadata.languages)
                 }
                 val catalogue = service.catalogue(s) ?: return@launch notSetUp(handle.bookId)
-                val pick = when (val resolved = VoiceResolver.resolve(book, catalogue, s.voicePreferences)) {
+                val pick = again?.pick ?: when (val resolved = VoiceResolver.resolve(book, catalogue, s.voicePreferences)) {
                     is VoiceResolution.Resolved -> resolved.pick
                     is VoiceResolution.NeedsChoice -> ask(PendingChoice(handle.bookId, service, book, resolved.reason))
                 }
@@ -260,6 +275,9 @@ internal class SpeechReadAloud(
                 translationHeld = false
                 reading = Reading(session, service, book, owner)
                 mutableCurrent.value = session
+                again?.timer
+                    ?.takeIf { it !is SleepTimer.Timed || it.endsAt > SystemClock.elapsedRealtime() }
+                    ?.let(::applySleepTimer)
                 // The reads above suspend, so the reader may have left the
                 // foreground and Android may refuse the start.
                 try {
@@ -269,7 +287,7 @@ internal class SpeechReadAloud(
                     mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.Output))
                     return@launch
                 }
-                session.start(selection)
+                session.start(selection, play = again?.play ?: true)
             } catch (e: CancellationException) {
                 throw e
             } finally {
@@ -277,6 +295,7 @@ internal class SpeechReadAloud(
                 if (startingToken === startToken) {
                     startingToken = null
                     startingBookId = null
+                    startingRequest = null
                     startingOwner = null
                 }
             }
@@ -288,6 +307,56 @@ internal class SpeechReadAloud(
                 }
             }
         }
+    }
+
+    /** What the start in progress was asked to read, for [holdForRestart]. */
+    private class StartRequest(val handle: OpenBookHandle, val selection: Locator, val translation: SpeechTranslation?)
+
+    private var startingRequest: StartRequest? = null
+
+    /** What a restart from the voice sheet hands the next [start] of its book. */
+    private class Carried(val bookId: String, val pick: VoicePick, val play: Boolean, val timer: SleepTimer?)
+
+    private var carried: Carried? = null
+
+    private var heldRestart: ReadAloudRestart? = null
+
+    /** A voice sheet holding [bookId] reads on once a voice is applied: the settings ended its reading. */
+    private fun restartWanted(bookId: String?) {
+        heldRestart?.takeIf { it.held && it.bookId == bookId }?.wanted = true
+    }
+
+    /**
+     * Holds [bookId]'s book and translation while the voice sheet opens the
+     * settings, with how it was playing: changing the service, server or
+     * key there ends the session, and applying a voice afterwards reads on
+     * where it stopped through the reader's [start]. Null when the book is
+     * neither being read nor waiting for a choice.
+     */
+    fun holdForRestart(bookId: String, start: (Locator, SpeechTranslation?) -> Unit): ReadAloudRestart? {
+        val reading = reading()?.takeIf { it.session.handle.bookId == bookId }
+        val pending = mutablePending.value?.takeIf { it.bookId == bookId }
+        val request = startingRequest?.takeIf { pending != null && it.handle.bookId == bookId }
+        val handle = reading?.session?.handle ?: request?.handle ?: return null
+        val translation = reading?.session?.translation ?: request?.translation
+        if (!handle.acquire()) return null
+        if (translation != null && !translation.translations.acquire()) {
+            handle.release()
+            return null
+        }
+        val session = reading?.session
+        return ReadAloudRestart(
+            bookId = bookId,
+            handle = handle,
+            translation = translation,
+            book = reading?.book ?: pending!!.book,
+            language = session?.choice?.value?.language,
+            place = if (session != null) session::endedAt else ({ request!!.selection }),
+            // Taken now, before a preview in the settings pauses the book.
+            play = session?.playRequested ?: true,
+            timer = sleepTimer.value.takeIf { session != null },
+            start = start,
+        ).also { heldRestart = it }
     }
 
     override fun pause() {
@@ -348,6 +417,13 @@ internal class SpeechReadAloud(
         mutableCurrent.value?.stop()
     }
 
+    /** [stop], because a setting changed what reading needs. */
+    private fun stopForSettings() {
+        restartWanted(startingBookId)
+        restartWanted(mutableCurrent.value?.handle?.bookId)
+        stop()
+    }
+
     override fun skipForward() {
         mutableCurrent.value?.skipForward()
     }
@@ -380,16 +456,18 @@ internal class SpeechReadAloud(
      * languages to pick among, and what is picked now. Null when the
      * service is not set up.
      */
-    suspend fun voiceSheet(bookId: String): VoiceSheet? {
+    suspend fun voiceSheet(bookId: String, restart: ReadAloudRestart? = null): VoiceSheet? {
         val s = settings.settings.first()
         val pending = mutablePending.value?.takeIf { it.bookId == bookId }
         val reading = reading()?.takeIf { it.session.handle.bookId == bookId }
+        // Only a book that stopped while the settings were open reads on from the hold.
+        val resuming = restart?.takeIf { pending == null && reading == null && it.bookId == bookId && it.held && it.wanted }
         val service = pending?.service ?: reading?.service ?: serviceOf(s)
-        val book = pending?.book ?: reading?.book ?: BookLanguage.Missing
+        val book = pending?.book ?: reading?.book ?: resuming?.book ?: BookLanguage.Missing
         val catalogue = service.catalogue(s) ?: return null
         val preferences = s.voicePreferences.filter(catalogue.scope::owns)
         val choice = reading?.session?.choice?.value
-        val language = choice?.language ?: (book as? BookLanguage.Known)?.tag
+        val language = choice?.language ?: resuming?.language ?: (book as? BookLanguage.Known)?.tag
         val reason = pending?.reason ?: if (catalogue.failed && catalogue.voices.isEmpty()) ChoiceReason.CatalogueFailed else null
         return VoiceSheet(
             bookId = bookId,
@@ -401,7 +479,7 @@ internal class SpeechReadAloud(
                 catalogue,
                 preferences,
                 book,
-                choice?.language,
+                choice?.language ?: resuming?.language,
                 SpeechLanguage.normalize(Locale.getDefault().toLanguageTag()),
             ),
             language = language?.let(SpeechLanguage::primary),
@@ -410,6 +488,7 @@ internal class SpeechReadAloud(
             pending = pending,
             session = reading?.session,
             narrationDirection = bookPreferences?.get(bookId)?.narrationDirection.orEmpty(),
+            restart = resuming,
         )
     }
 
@@ -417,11 +496,14 @@ internal class SpeechReadAloud(
      * Reads [sheet]'s book in [voice] for [language], a primary language,
      * and remembers it for that language. A book waiting to start starts
      * with it; one being read reads on in it from the start of the
-     * sentence, playing or paused as it was. False when the service, its
+     * sentence, playing or paused as it was; one that stopped while the
+     * settings were open starts again where it stopped, in this
+     * service. False when the service, its
      * server or its model changed since the sheet was shown, so nothing was
      * saved and the sheet must be shown again.
      */
     suspend fun applyVoice(sheet: VoiceSheet, language: String, voice: String, narrationDirection: String = sheet.narrationDirection): Boolean {
+        if (sheet.restart != null && serviceOf(settings.settings.first()) != sheet.service) return false
         if (!sheet.service.remember(sheet.catalogue.scope, language, voice)) return false
         val direction = narrationDirection.takeIf { sheet.service.supportsNarrationDirection } ?: sheet.narrationDirection
         val directionChanged = direction != sheet.narrationDirection
@@ -432,6 +514,24 @@ internal class SpeechReadAloud(
         val pending = sheet.pending
         if (pending != null) {
             pending.answer.complete(pick)
+            return true
+        }
+        val restart = sheet.restart
+        if (restart != null) {
+            val place = restart.place()
+            if (place == null || !restart.take()) {
+                restart.release()
+                return true
+            }
+            // The reader's start, which may refuse while it settles a
+            // BookOrbit place, takes the translation; the reader keeps the book open.
+            carried = Carried(restart.bookId, pick, restart.play, restart.timer)
+            try {
+                restart.start(place, restart.translation)
+            } finally {
+                carried = null
+                restart.handle.release()
+            }
             return true
         }
         val reading = reading()?.takeIf { it.session === sheet.session && it.service == sheet.service } ?: return true
@@ -478,7 +578,7 @@ internal class SpeechReadAloud(
 
     /** Switches service, ending a session read with another. */
     suspend fun setService(service: SpeechService) {
-        if (serviceOf(settings.settings.first()) != service) stop()
+        if (serviceOf(settings.settings.first()) != service) stopForSettings()
         settings.setReadAloudProvider(service.id)
     }
 
@@ -560,7 +660,8 @@ internal class SpeechReadAloud(
         controls: Boolean,
         onReturnToVoice: (() -> Unit)?,
         modifier: Modifier,
-    ) = ReadAloudPlayer(this, bookId, theme, controls, onReturnToVoice, modifier)
+        start: (Locator, SpeechTranslation?) -> Unit,
+    ) = ReadAloudPlayer(this, bookId, theme, controls, onReturnToVoice, modifier, start)
 }
 
 private const val SLEEP_CHECK_MS = 30_000L
@@ -609,4 +710,46 @@ internal class VoiceSheet(
     val pending: PendingChoice?,
     val session: ReadAloudSession?,
     val narrationDirection: String = "",
+    /** The hold to read on with, when the book stopped while the settings were open. */
+    val restart: ReadAloudRestart? = null,
 )
+
+/**
+ * A hold on a book read aloud, with what starting it again needs: see
+ * [SpeechReadAloud.holdForRestart]. Main thread only.
+ */
+internal class ReadAloudRestart(
+    val bookId: String,
+    val handle: OpenBookHandle,
+    val translation: SpeechTranslation?,
+    val book: BookLanguage,
+    /** The language the session read in, if there was one. */
+    val language: String?,
+    /** Where reading starts again. */
+    val place: () -> Locator?,
+    /** Whether it starts again playing rather than paused. */
+    val play: Boolean,
+    val timer: SleepTimer?,
+    /** The reader's own start. */
+    val start: (Locator, SpeechTranslation?) -> Unit,
+) {
+    var held = true
+        private set
+
+    /** Set when the settings ended the reading; any other end leaves it stopped. */
+    var wanted = false
+
+    /** Hands the holds over to whoever starts reading; false when already given back. */
+    fun take(): Boolean {
+        if (!held) return false
+        held = false
+        return true
+    }
+
+    fun release() {
+        if (!held) return
+        held = false
+        translation?.translations?.release()
+        handle.release()
+    }
+}

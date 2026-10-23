@@ -126,7 +126,10 @@ class ReadAloudPlayback(
      */
     val heard: StateFlow<Locator?> = mutableHeard.asStateFlow()
     private var closed = false
-    private var playRequested = false
+
+    /** Whether the listener wants it playing, before the first sentence sounds too. */
+    var playRequested = false
+        private set
 
     /** Skips so far, which tell the engine a stopped sentence is no longer the one to play on. */
     override var skips = 0
@@ -171,15 +174,17 @@ class ReadAloudPlayback(
      * element, else the one [looser] picks out, or from the element start
      * when there is no target or neither is found within [maxSteps]
      * sentences. The element is the first one on screen, so the search may
-     * cross a whole page of short sentences.
+     * cross a whole page of short sentences. Without [play] it lands there
+     * paused.
      */
     suspend fun start(
         locator: Locator,
         target: ((TtsNavigator.Location) -> Boolean)? = null,
         maxSteps: Int = START_STEPS,
         looser: ((TtsNavigator.Location) -> Boolean)? = null,
+        play: Boolean = true,
     ): Landing {
-        playRequested = true
+        playRequested = play
         mutableFailure.value = null
         return landing.withLock { land(locator.copy(text = Locator.Text()), target, maxSteps, looser = looser) }
     }
