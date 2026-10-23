@@ -143,6 +143,17 @@ class TranslationContextTest {
     }
 
     @Test
+    fun `a passage past an earlier sentence with the same start is found again`() = runTest {
+        val ending = " walked slowly back along the river towards the old stone bridge in the rain."
+        val book = chapter("#p1" to "Marie$ending", "#p1" to "Il attendait.", "#p1" to "Pierre$ending", "#p1" to "Il partit.", "#p1" to "Fin.")
+        val passage = at("Il partit. Fin.", "#p1", "ch1.xhtml", book[3].before)
+        val preceding = PrecedingSentences(Opened(book)::open)
+        val first = preceding.before(passage, 8)!!.map { it.text }
+        assertEquals(listOf("Marie$ending", "Il attendait.", "Pierre$ending"), first)
+        assertEquals(first, preceding.before(passage, 8)?.map { it.text })
+    }
+
+    @Test
     fun `a sentence not in its chapter is not found`() = runTest {
         val book = chapter("#p1" to "Un.", "#p1" to "Deux.")
         val preceding = PrecedingSentences(Opened(book)::open)

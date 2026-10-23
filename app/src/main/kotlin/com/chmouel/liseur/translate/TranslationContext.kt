@@ -131,7 +131,11 @@ class PrecedingSentences(
             val walkedStart = start(kept)
             walk.places.putIfAbsent(walkedKey, walk.walked.lastIndex)
             walk.starts.putIfAbsent(walkedStart, walk.walked.lastIndex)
-            if (walkedKey == key || (walkedStart == start && opens(walk.walked.lastIndex))) return walk.walked.lastIndex
+            if (walkedKey == key || (walkedStart == start && opens(walk.walked.lastIndex))) {
+                // A passage found past an earlier sentence with the same start is found here again, not walked past.
+                walk.places.putIfAbsent(key, walk.walked.lastIndex)
+                return walk.walked.lastIndex
+            }
         }
         return null
     }
