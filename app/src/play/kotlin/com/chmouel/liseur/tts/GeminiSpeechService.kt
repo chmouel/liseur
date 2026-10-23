@@ -82,6 +82,10 @@ internal class GeminiSpeechService(
     val model: Flow<String> =
         settings.settings.map { GeminiTts.modelOf(it.readAloudModel) }.distinctUntilChanged()
 
+    @Composable
+    override fun sourceLabel(): String =
+        "${stringResource(label)} · ${model.collectAsState(initial = GeminiTts.DEFAULT_MODEL).value}"
+
     override suspend fun voice(s: AppSettings, voice: String?): SessionVoice? = directedVoice(s, voice)
 
     override suspend fun directedVoice(s: AppSettings, voice: String?, direction: String): SessionVoice? {

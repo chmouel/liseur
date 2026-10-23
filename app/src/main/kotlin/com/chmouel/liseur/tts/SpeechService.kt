@@ -3,6 +3,7 @@ package com.chmouel.liseur.tts
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ReaderTheme
 import kotlinx.coroutines.flow.Flow
@@ -80,6 +81,10 @@ internal interface SpeechService {
     /** [voice] as the reader knows it, without its language. */
     @Composable
     fun voiceLabel(voice: String): String
+
+    /** What it reads with, under the voice in the player: its name, with its server and model when it has them. */
+    @Composable
+    fun sourceLabel(): String = stringResource(label)
 
     /** Permission needed to reach this service, shown in the reader. */
     @Composable

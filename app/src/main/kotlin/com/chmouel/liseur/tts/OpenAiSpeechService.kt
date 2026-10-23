@@ -127,6 +127,14 @@ internal class OpenAiSpeechService(
     @Composable
     override fun voiceName(): String = voice.collectAsState(initial = "").value
 
+    @Composable
+    override fun sourceLabel(): String {
+        val server by server.collectAsState(initial = null)
+        val model by model.collectAsState(initial = "")
+        val name = server?.name?.ifBlank { null } ?: server?.host ?: stringResource(label)
+        return listOf(name, model).filter { it.isNotBlank() }.joinToString(" · ")
+    }
+
     /** The voices the reader wants offered; empty offers all. */
     val chosenVoices: Flow<Set<String>> = settings.settings.map { it.speechServerVoices }.distinctUntilChanged()
 

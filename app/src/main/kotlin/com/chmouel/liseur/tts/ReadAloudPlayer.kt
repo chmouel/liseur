@@ -285,7 +285,9 @@ private fun rememberWaitShown(preparing: Boolean): Boolean {
 
 /**
  * Which voice is reading, and in what language: the session's, whatever
- * the settings now hold. A tap opens the voice sheet to change either.
+ * the settings now hold. Under it, the service and model it reads with;
+ * a voice or model change from the settings moves the session along, and
+ * a service change ends it. A tap opens the voice sheet to change either.
  */
 @Composable
 private fun VoiceChip(feature: SpeechReadAloud, bookId: String, modifier: Modifier, onClick: () -> Unit) {
@@ -307,21 +309,31 @@ private fun VoiceChip(feature: SpeechReadAloud, bookId: String, modifier: Modifi
             .padding(horizontal = 8.dp),
     ) {
         val reading = choice
-        if (name == null || reading == null) {
+        val source = service
+        if (name == null || reading == null || source == null) {
             Icon(Icons.Outlined.RecordVoiceOver, stringResource(R.string.read_aloud_change_voice))
             return@Row
         }
-        Icon(Icons.Outlined.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(20.dp))
+        Icon(source.icon, contentDescription = null, modifier = Modifier.size(20.dp))
         // The text, and the same without the flag for a screen reader.
         val text = "$name · ${VoiceLabel.languageLabel(reading.language, locale)}"
         val spoken = "$name · ${Locale.forLanguageTag(reading.language).getDisplayName(locale)}"
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false).semantics { contentDescription = spoken },
-        )
+        Column(Modifier.weight(1f, fill = false)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { contentDescription = spoken },
+            )
+            Text(
+                text = source.sourceLabel(),
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalContentColor.current.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Icon(
             Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
