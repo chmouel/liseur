@@ -1092,9 +1092,12 @@ changing reader behavior.
   stops following until the spoken sentence is on screen again,
   pause/resume, the reader returning to the book (`ON_START`, e.g. the
   screen woken) or the player's "Back to the voice" button; pausing
-  returns to the sentence heard. The follow effect checks it is still
-  active before acting on a page query: on wake a superseded run holds the
-  pre-sleep sentence and would move the page back. Auto-scroll and the
+  returns to the sentence heard. The follow effect validates the sentence
+  it captured against `ReadAloudFeature.session.value` before moving: on
+  wake the collected value lags a recomposition, and a superseded run
+  holds the pre-sleep sentence and would move the page back. A "Back to
+  the voice" request outlasts an outstanding move and is served once it
+  settles instead of being dropped. Auto-scroll and the
   voice exclude each other: starting one pauses or disarms the other.
 - Checkpoints go through `prepareLocator` (same `total_progression` as a
   page turn); local while playing (`signalSync = false`), synced on pause

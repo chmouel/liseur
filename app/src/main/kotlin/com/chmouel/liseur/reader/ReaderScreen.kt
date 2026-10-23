@@ -616,6 +616,10 @@ internal fun ReaderScreen(
     // to the book from elsewhere (the screen woken, say), or they ask for
     // the voice's page from the player.
     var followDetached by remember { mutableStateOf(false) }
+    // The reader asked for the voice's page while a move was still in the
+    // air. Kept until the page can go there, rather than dropped with the
+    // wait that the move forced.
+    var returnRequested by remember { mutableStateOf(false) }
     // When the reader's finger last moved the page, so reattaching waits
     // for the gesture to end rather than looking at a page about to move.
     var lastDragAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
@@ -1468,6 +1472,7 @@ internal fun ReaderScreen(
                         )
                 ) {
                     followDetached = true
+                    returnRequested = false
                 }
                 // This is fresher than anything a scroll watcher had in
                 // flight, so those answers are refused from here on. The
@@ -2163,24 +2168,55 @@ internal fun ReaderScreen(
     suspend fun spokenShowing(nav: EpubNavigatorFragment, utterance: Locator): Boolean =
         if (pageTranslated) TranslatedPages.isShowing(nav, utterance) else SpokenPassage.isShowing(nav, utterance)
 
+    // Whether [utterance] is still the sentence the voice is on. Read from
+    // the session itself rather than the collected value, which lags a
+    // resume by a recomposition: see the follow effect below.
+    fun voiceOn(utterance: Locator): Boolean {
+        val now = readAloudFeature.session.value ?: return false
+        return now.bookId == readAloud?.bookId && now.playing && now.utterance == utterance
+    }
+
     // The page follows the voice, but only once it has read past what
     // is on screen. A reader selecting text, or a page being rebuilt,
     // is left alone until they are done, and a reader who moved away
     // until the voice reaches the page they are on.
     val followBlocked = selection != null || tappedSelection != null
-    LaunchedEffect(navigator, spoken, listeningPlaying, followBlocked, followDetached, lifecycle) {
+    LaunchedEffect(
+        navigator,
+        spoken,
+        listeningPlaying,
+        followBlocked,
+        followDetached,
+        returnRequested,
+        lifecycle,
+    ) {
         val nav = navigator ?: return@LaunchedEffect
         val utterance = spoken ?: return@LaunchedEffect
         if (!listeningPlaying || followBlocked) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // The collected session can lag a resume: this effect may be
+            // relaunched on the pre-sleep sentence before the flow
+            // re-emits. Acting on it would take the page back to where
+            // it stood when the screen went off, so the voice's own
+            // state has the last word.
+            if (!voiceOn(utterance)) return@repeatOnLifecycle
             if (followDetached) {
                 // Detaching is noticed as the move begins, while the
                 // sentence is still on screen; looking now would undo it.
                 awaitPageAtRest(nav)
+                currentCoroutineContext().ensureActive()
+                if (!voiceOn(utterance)) return@repeatOnLifecycle
                 val showing = spokenShowing(nav, utterance)
                 currentCoroutineContext().ensureActive()
-                if (showing) followDetached = false
-                return@repeatOnLifecycle
+                if (showing) {
+                    followDetached = false
+                    returnRequested = false
+                    return@repeatOnLifecycle
+                }
+                // The reader asked to go back to the voice: that ask
+                // outlasts the move the wait above let settle, so serve
+                // it below instead of dropping it here.
+                if (!returnRequested) return@repeatOnLifecycle
             }
             // A move still in the air is the reader's, or the last
             // follow: going after the voice now would undo the one or
@@ -2204,6 +2240,9 @@ internal fun ReaderScreen(
             // take the page back there; loaded slowly, that move is taken
             // for the reader's and the page stops following.
             currentCoroutineContext().ensureActive()
+            if (!voiceOn(utterance)) return@repeatOnLifecycle
+            returnRequested = false
+            followDetached = false
             followedAt = SystemClock.elapsedRealtime()
             navigate(nav, target, NavigatorPositionEvent.TTS_FOLLOW)
         }
@@ -2219,6 +2258,7 @@ internal fun ReaderScreen(
             heldPlace.retire()
             autoScrollArmed = false
             followDetached = false
+            returnRequested = false
         } else if (wasListeningPlaying) {
             heldPlace.retire()
         }
@@ -3049,6 +3089,7 @@ internal fun ReaderScreen(
                         if (listeningPlayingNow && !isPinching()) {
                             lastDragAt = SystemClock.elapsedRealtime()
                             followDetached = true
+                            returnRequested = false
                         }
                         return false
                     }
@@ -3880,7 +3921,7 @@ internal fun ReaderScreen(
                         bookId = it.bookId,
                         theme = readingTheme,
                         controls = chromeVisible,
-                        onReturnToVoice = { followDetached = false }.takeIf { listeningPlaying && followDetached },
+                        onReturnToVoice = { returnRequested = true }.takeIf { listeningPlaying && followDetached },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
