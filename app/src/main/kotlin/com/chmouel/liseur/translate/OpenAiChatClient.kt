@@ -66,7 +66,7 @@ class OpenAiChatClient(
         }
         val reply = send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry)
         usage?.invoke(OpenAiChat.usage(reply))
-        return OpenAiChat.translation(reply)
+        return OpenAiChat.translation(reply, passage)
     }
 
     /**
@@ -106,7 +106,7 @@ class OpenAiChatClient(
         )
         val reply = send(base, apiKey, model, body, onTemperatureRefused, beforeRequest, allowTransportRetry)
         usage?.invoke(OpenAiChat.usage(reply))
-        return OpenAiChat.batch(reply, sentences.size)
+        return OpenAiChat.batch(reply, sentences)
     }
 
     private fun translationBody(model: String, temperature: Double?, maxTokens: Int?, keepAlive: String?): JSONObject {
@@ -258,10 +258,12 @@ internal object OpenAiChat {
      * The translation in a chat completion. Throws [TranslationError] for a
      * refusal, a filtered or empty answer, or anything not a completion.
      */
-    fun translation(text: String): String = TranslationPrompt.clean(content(text)).ifEmpty { throw TranslationError.Empty() }
+    fun translation(text: String, passage: String = ""): String =
+        TranslationPrompt.clean(content(text), passage).ifEmpty { throw TranslationError.Empty() }
 
-    /** The [count] translations in a reply to a batch, as [TranslationPrompt.batchReply] reads them. */
-    fun batch(text: String, count: Int): List<String> = TranslationPrompt.batchReply(content(text), count)
+    /** The translations of [sentences] in a reply to a batch, as [TranslationPrompt.batchReply] reads them. */
+    fun batch(text: String, sentences: List<String>): List<String> =
+        TranslationPrompt.batchReply(content(text), sentences.size, sentences)
 
     /**
      * The token counts a completion reports, each null when it does not:

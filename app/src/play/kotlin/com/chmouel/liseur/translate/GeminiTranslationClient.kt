@@ -40,7 +40,7 @@ class GeminiTranslationClient(
             apiKey, model, TranslationPrompt.system(source, target, context != null, instructions = instructions, book = book != null, passage = passage),
             TranslationPrompt.user(passage, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
         )
-        return GeminiTranslation.translation(text)
+        return GeminiTranslation.translation(text, passage)
     }
 
     /**
@@ -67,7 +67,7 @@ class GeminiTranslationClient(
             apiKey, model, TranslationPrompt.batchSystem(source, target, context != null, instructions = instructions, book = book != null, sentences = sentences),
             TranslationPrompt.batchUser(sentences, context, book), book, beforeRequest, allowTransportRetry, diagnostics,
         )
-        return TranslationPrompt.batchReply(GeminiTranslation.content(text), sentences.size)
+        return TranslationPrompt.batchReply(GeminiTranslation.content(text), sentences.size, sentences)
     }
 
     /** The raw generateContent reply to [system] and [user]. */
@@ -201,7 +201,8 @@ internal object GeminiTranslation {
     private val BLOCKED = setOf("SAFETY", "RECITATION", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "IMAGE_SAFETY")
 
     /** The translation in a generateContent reply. Throws [TranslationError] for a block, an empty answer or anything else. */
-    fun translation(text: String): String = TranslationPrompt.clean(content(text)).ifEmpty { throw TranslationError.Empty() }
+    fun translation(text: String, passage: String = ""): String =
+        TranslationPrompt.clean(content(text), passage).ifEmpty { throw TranslationError.Empty() }
 
     /**
      * A generateContent body for a chat: system messages joined as the

@@ -165,10 +165,11 @@ internal object TranslationPrompt {
      * The [count] translations in a reply to [batchUser], in order. Throws
      * [TranslationError.Malformed] unless there is exactly one non-empty
      * line per sentence, numbered 1 to [count]; the caller then asks again
-     * with fewer sentences.
+     * with fewer sentences. [sentences] are the ones sent, which chose the
+     * frame to drop.
      */
-    fun batchReply(reply: String, count: Int): List<String> {
-        val text = unframed(withoutReasoning(reply.trim()))
+    fun batchReply(reply: String, count: Int, sentences: List<String> = emptyList()): List<String> {
+        val text = unframed(withoutReasoning(reply.trim()), frame(sentences.joinToString("\n")))
         val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
         if (lines.size != count) throw TranslationError.Malformed("expected $count lines, got ${lines.size}")
         return lines.mapIndexed { i, line ->
@@ -193,9 +194,10 @@ internal object TranslationPrompt {
      * The translation in [reply]: trimmed, without the reasoning a thinking
      * model may have written before it, markers it may have kept around it,
      * nor the book's details and context it was told never to repeat. Throws
-     * [TranslationError.Truncated] when the reasoning never ends.
+     * [TranslationError.Truncated] when the reasoning never ends. [passage]
+     * is the one sent, which chose the frame to drop.
      */
-    fun clean(reply: String): String {
+    fun clean(reply: String, passage: String = ""): String {
         var text = withoutReasoning(reply.trim())
         if (text.startsWith(BOOK_OPEN, ignoreCase = true)) {
             val end = text.indexOf(BOOK_CLOSE, ignoreCase = true)
@@ -206,18 +208,19 @@ internal object TranslationPrompt {
             if (end >= 0) text = text.substring(end + CONTEXT_CLOSE.length)
         }
         // Markers inside the reply can be the translation's own words; only those around all of it are the frame.
-        return unframed(text)
+        return unframed(text, frame(passage))
     }
 
     /**
-     * [text] without the passage frame around all of it, plain or the
-     * numbered one [frame] picks when the source holds a marker of its own.
+     * [text] without the request's own [frame] around all of it. Any other
+     * marker is the source's, so it stays even at either end.
      */
-    private fun unframed(text: String): String =
-        FRAME_END.replace(FRAME_START.replace(text.trim(), ""), "").trim()
-
-    private val FRAME_START = Regex("\\A<passage(?:_\\d+)?>", RegexOption.IGNORE_CASE)
-    private val FRAME_END = Regex("</passage(?:_\\d+)?>\\z", RegexOption.IGNORE_CASE)
+    private fun unframed(text: String, frame: String): String {
+        var unframed = text.trim()
+        if (unframed.startsWith("<$frame>", ignoreCase = true)) unframed = unframed.substring(frame.length + 2)
+        if (unframed.endsWith("</$frame>", ignoreCase = true)) unframed = unframed.dropLast(frame.length + 3)
+        return unframed.trim()
+    }
 
     /**
      * [text] after a thinking model's reasoning, when a server left it in
