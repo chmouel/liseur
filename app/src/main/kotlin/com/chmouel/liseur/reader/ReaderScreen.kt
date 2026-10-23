@@ -2237,6 +2237,7 @@ internal fun ReaderScreen(
                 val dragAt = lastDragAt
                 val showing = spokenShowing(nav, utterance)
                 currentCoroutineContext().ensureActive()
+                if (!voiceOn(utterance)) return@repeatOnLifecycle
                 if (showing && moves.generation() == generation && lastDragAt == dragAt) {
                     followDetached = false
                     returnRequested = false
