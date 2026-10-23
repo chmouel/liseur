@@ -164,6 +164,15 @@ class TranslationPromptTest {
     }
 
     @Test
+    fun `a passage opening with a reference marker of its own keeps it`() {
+        for (tag in listOf("book", "context")) {
+            val passage = "<$tag>Hello.</$tag> Continue."
+            assertEquals("<$tag>Bonjour.</$tag> Suite.", TranslationPrompt.clean("<$tag>Bonjour.</$tag> Suite.", passage))
+            assertEquals("<$tag>Bonjour.</$tag>", TranslationPrompt.clean("<$tag>Bonjour.</$tag>", "<$tag>Hello.</$tag>"))
+        }
+    }
+
+    @Test
     fun `a thinking model's reasoning is not taken for the translation`() {
         assertEquals("Bonjour", TranslationPrompt.clean("<think>\nThe user wants French.\n</think>\n\nBonjour"))
         assertEquals("Bonjour", TranslationPrompt.clean("<THINKING>hmm</THINKING><passage>Bonjour</passage>"))

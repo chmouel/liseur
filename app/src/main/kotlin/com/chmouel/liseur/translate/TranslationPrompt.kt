@@ -195,15 +195,17 @@ internal object TranslationPrompt {
      * model may have written before it, markers it may have kept around it,
      * nor the book's details and context it was told never to repeat. Throws
      * [TranslationError.Truncated] when the reasoning never ends. [passage]
-     * is the one sent, which chose the frame to drop.
+     * is the one sent, which chose the frame to drop; a passage opening
+     * with a reference marker of its own keeps it in the translation.
      */
     fun clean(reply: String, passage: String = ""): String {
         var text = withoutReasoning(reply.trim())
-        if (text.startsWith(BOOK_OPEN, ignoreCase = true)) {
+        val source = passage.trimStart()
+        if (text.startsWith(BOOK_OPEN, ignoreCase = true) && !source.startsWith(BOOK_OPEN, ignoreCase = true)) {
             val end = text.indexOf(BOOK_CLOSE, ignoreCase = true)
             if (end >= 0) text = text.substring(end + BOOK_CLOSE.length).trim()
         }
-        if (text.startsWith(CONTEXT_OPEN, ignoreCase = true)) {
+        if (text.startsWith(CONTEXT_OPEN, ignoreCase = true) && !source.startsWith(CONTEXT_OPEN, ignoreCase = true)) {
             val end = text.indexOf(CONTEXT_CLOSE, ignoreCase = true)
             if (end >= 0) text = text.substring(end + CONTEXT_CLOSE.length)
         }
