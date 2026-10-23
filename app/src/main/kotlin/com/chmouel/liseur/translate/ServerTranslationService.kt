@@ -23,6 +23,7 @@ import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.ServerTranslationState
 import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServerConnections
+import com.chmouel.liseur.tts.GradiumTts
 import com.chmouel.liseur.tts.ListedField
 import com.chmouel.liseur.tts.ListedMenu
 import com.chmouel.liseur.tts.Listing
@@ -245,6 +246,24 @@ internal class ServerTranslationService(
 
     override suspend fun saveModel(server: ServerConnection?, model: String) {
         server?.let { settings.setTranslationServerModel(it.url, model) }
+    }
+
+    // Asked once per address and key: a server's list does not change while the app runs.
+    private val offered = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * False for a speech-only server: Gradium, or one whose model list has
+     * no model that writes text, such as Kokoro's. One that cannot be
+     * asked, offline or behind local network access, is still offered.
+     */
+    override suspend fun offers(server: ServerConnection): Boolean {
+        val base = OpenAiTts.baseUrl(server.url) ?: return true
+        if (GradiumTts.isGradium(base)) return false
+        val origin = ServerConnections.originOf(server.url) ?: return true
+        val key = "${server.url}\u0000${connections.generation(origin).value}"
+        offered[key]?.let { return it }
+        val listed = models(server.url).getOrNull() ?: return true
+        return listed.isNotEmpty().also { offered[key] = it }
     }
 
     @Composable

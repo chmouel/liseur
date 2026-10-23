@@ -659,9 +659,30 @@ internal fun TranslationConsent(service: TranslationService, onAgree: () -> Unit
     )
 }
 
-/** Every service, each listed server by name in place of the server kind. */
+/**
+ * Every service, each listed server by name in place of the server kind;
+ * a server found unable to translate is left out unless it is [selectedServer].
+ */
 @Composable
 internal fun translationServiceOptions(
+    services: List<TranslationService>,
+    servers: List<ServerConnection>,
+    selected: TranslationService?,
+    selectedServer: String?,
+    onPick: (TranslationService) -> Unit,
+    onPickServer: (ServerConnection) -> Unit,
+): List<ServiceOption> {
+    val serverService = services.firstOrNull { it.id == ServerSettings.SERVER_PROVIDER }
+    val refused by produceState(emptySet<String>(), serverService, servers) {
+        val asked = serverService ?: return@produceState
+        servers.forEach { server -> launch { if (!asked.offers(server)) value = value + server.id } }
+    }
+    val offered = servers.filter { it.id !in refused || it.id == selectedServer }
+    return serviceOptions(services, offered, selected, selectedServer, onPick, onPickServer)
+}
+
+@Composable
+private fun serviceOptions(
     services: List<TranslationService>,
     servers: List<ServerConnection>,
     selected: TranslationService?,

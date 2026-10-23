@@ -68,6 +68,9 @@ internal interface TranslationService {
     /** Saves [model] for [server], or for the service when it has no servers. */
     suspend fun saveModel(server: ServerConnection?, model: String) = Unit
 
+    /** Whether [server] can translate, for the services that use one; true unless known otherwise. */
+    suspend fun offers(server: ServerConnection): Boolean = true
+
     /** The models [server] offers, showing [model]; nothing is saved, each change goes to [onModel]. */
     @Composable
     fun ModelMenu(server: ServerConnection?, model: String, onModel: (String) -> Unit, modifier: Modifier) = Unit

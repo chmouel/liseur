@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import com.chmouel.liseur.data.security.SecretCipher
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ServerChange
+import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.tts.OpenAiTtsClient
@@ -100,6 +101,26 @@ class ServerTranslationServiceTest {
             e
         }
         assertTrue("Expected ${E::class.simpleName}, got $error", error is E)
+    }
+
+    @Test
+    fun `a server is offered for translation unless it lists only speech models`(): Unit = runBlocking {
+        fun listing(vararg ids: String) = MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+            .body(ids.joinToString(",", """{"data":[""", "]}") { """{"id":"$it"}""" }).build()
+        val home = settings.settings.first().servers.readable!!.single()
+        web.enqueue(listing("kokoro", "tts-1"))
+        assertFalse(service.offers(home))
+        assertFalse(service.offers(home))
+        assertEquals(1, web.requestCount)
+
+        val chat = ServerConnection("chat", "Chat", web.url("/chat/v1").toString())
+        web.enqueue(listing("kokoro", "llama3"))
+        assertTrue(service.offers(chat))
+
+        val down = ServerConnection("down", "Down", web.url("/down/v1").toString())
+        web.enqueue(MockResponse.Builder().code(500).build())
+        assertTrue(service.offers(down))
+        assertFalse(service.offers(ServerConnection("gradium", "Gradium", "https://eu.api.gradium.ai/api")))
     }
 
     @Test
