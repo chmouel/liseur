@@ -30,4 +30,14 @@ class BookTranslationPreferencesTest {
         assertNotEquals(empty.identity, custom.identity)
         assertNotEquals(custom.identity, custom.copy(terms = listOf(TranslationTerm("Anna", "Anne"))).identity)
     }
+
+    @Test fun previewStartsAtTheSentenceHoldingTheFirstVisibleWord() {
+        val paragraph = listOf("Il pleut.", "Il pleut encore sur la ville.", "Marie attend.")
+        assertEquals(0, sentenceHolding(paragraph, "", "Il"))
+        // The words before tell the repeated start apart.
+        assertEquals(1, sentenceHolding(paragraph, "Il pleut. Il pleut ", "encore"))
+        assertEquals(2, sentenceHolding(paragraph, "encore sur la ville. ", "Marie"))
+        assertNull(sentenceHolding(paragraph.take(1), "Il pleut. ", "Il"))
+        assertNull(sentenceHolding(paragraph, "", null))
+    }
 }

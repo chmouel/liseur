@@ -19,14 +19,43 @@ internal suspend fun AppContainer.translationPlace(bookUrl: String, publication:
 internal suspend fun AppContainer.translationPassage(bookUrl: String, place: Locator?): Pair<String?, String> =
     withTranslationPublication(bookUrl) { publication ->
         val source = TranslationLanguages.source(publication.metadata.languages)
-        val sentences = PublicationContext.sentences(publication, translationPlace(bookUrl, publication, place), source)
+        val start = translationPlace(bookUrl, publication, place)
+        val sentences = PublicationContext.sentences(publication, start, source)
+        // The cursor starts at the place's element: the passage starts at the sentence holding its first word.
+        val read = mutableListOf<String>()
+        var from = 0
+        if (!start.text.highlight.isNullOrBlank()) {
+            while (read.size < PREVIEW_SEEK) {
+                read += sentences.next()?.text ?: break
+                sentenceHolding(read, start.text.before, start.text.highlight)?.let { from = it; break }
+            }
+        }
+        val ahead = ArrayDeque(read.drop(from))
         val texts = mutableListOf<String>()
         repeat(3) {
-            val sentence = sentences.next()?.text ?: return@repeat
+            val sentence = ahead.removeFirstOrNull() ?: sentences.next()?.text ?: return@repeat
             if (texts.sumOf { it.length + 1 } + sentence.length <= TranslationPrompt.MAX_CHARACTERS) texts += sentence
         }
         source to texts.joinToString(" ").ifEmpty { throw TranslationError.Empty() }
     }
+
+private const val PREVIEW_SEEK = 64
+
+/**
+ * The index of the sentence, among [sentences] read from the start of an
+ * element, holding the word [highlight] after [before]; null when they do
+ * not hold it.
+ */
+internal fun sentenceHolding(sentences: List<String>, before: String?, highlight: String?): Int? {
+    val word = squash(highlight.orEmpty()).ifEmpty { return null }
+    val lead = squash(before.orEmpty())
+    val joined = StringBuilder()
+    val starts = sentences.map { sentence -> joined.length.also { joined.append(squash(sentence)) } }
+    val at = joined.indexOf(lead + word).takeIf { it >= 0 } ?: return null
+    return starts.indexOfLast { it <= at + lead.length }
+}
+
+private fun squash(text: String) = text.filterNot(Char::isWhitespace)
 
 internal suspend fun AppContainer.cachedTranslationNames(bookUrl: String, place: Locator?): List<String> {
     if (!appSettings.settings.first().codexEnabled) return emptyList()
