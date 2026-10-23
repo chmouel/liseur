@@ -287,7 +287,9 @@ internal class SpeechReadAloud(
                     mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.Output))
                     return@launch
                 }
-                session.start(selection, play = again?.play ?: true)
+                // A sleep timer that ran out while the settings were open leaves it paused.
+                val slept = (again?.timer as? SleepTimer.Timed)?.let { it.endsAt <= SystemClock.elapsedRealtime() } == true
+                session.start(selection, play = (again?.play ?: true) && !slept)
             } catch (e: CancellationException) {
                 throw e
             } finally {

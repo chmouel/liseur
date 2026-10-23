@@ -107,12 +107,13 @@ internal class ReadAloudSession(
     private val speechContext = SpeechContext(
         preceding = handle.preceding((textLanguage ?: publication.metadata.language)?.locale?.toLanguageTag()),
         bookFacts = handle.bookFacts,
+        // The languages of the text read, whatever the voice reading it.
         sourceLanguage = if (translation != null) {
             translation.source ?: publication.metadata.language?.locale?.toLanguageTag()
         } else {
-            (textLanguage ?: publication.metadata.language)?.locale?.toLanguageTag()
+            (publication.metadata.language ?: textLanguage)?.locale?.toLanguageTag()
         },
-        spokenLanguage = { spoken.locale.toLanguageTag() },
+        spokenLanguage = { translation?.target },
         configuration = contextConfiguration,
     )
 
