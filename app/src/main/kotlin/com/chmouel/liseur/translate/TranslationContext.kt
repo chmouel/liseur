@@ -79,7 +79,7 @@ class PrecedingSentences(
     private class Walk(val sentences: PageSentences?) {
         val walked = ArrayList<PageSentence>()
         val places = HashMap<String, Int>()
-        val starts = HashMap<String, Int>()
+        val starts = HashMap<String, ArrayList<Int>>()
         var ended = false
     }
 
@@ -110,7 +110,10 @@ class PrecedingSentences(
         val start = start(sentence)
         val words = squash(sentence.text)
         fun opens(at: Int) = squash(walk.walked[at].text).let { it.isNotEmpty() && words.startsWith(it) }
-        walk.starts[start]?.let { if (opens(it)) return it }
+        walk.starts[start]?.firstOrNull { opens(it) }?.let {
+            walk.places[key] = it
+            return it
+        }
         while (!walk.ended) {
             currentCoroutineContext().ensureActive()
             // A resource that cannot be read further only means less context, never a failed translation.
@@ -130,7 +133,7 @@ class PrecedingSentences(
             val walkedKey = key(kept)
             val walkedStart = start(kept)
             walk.places.putIfAbsent(walkedKey, walk.walked.lastIndex)
-            walk.starts.putIfAbsent(walkedStart, walk.walked.lastIndex)
+            walk.starts.getOrPut(walkedStart) { ArrayList() } += walk.walked.lastIndex
             if (walkedKey == key || (walkedStart == start && opens(walk.walked.lastIndex))) {
                 // A passage found past an earlier sentence with the same start is found here again, not walked past.
                 walk.places.putIfAbsent(key, walk.walked.lastIndex)

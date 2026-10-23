@@ -151,6 +151,10 @@ class TranslationContextTest {
         val first = preceding.before(passage, 8)!!.map { it.text }
         assertEquals(listOf("Marie$ending", "Il attendait.", "Pierre$ending"), first)
         assertEquals(first, preceding.before(passage, 8)?.map { it.text })
+        // Asked first after its start was already walked past, it is found as on a fresh walk.
+        val warm = PrecedingSentences(Opened(book)::open)
+        assertEquals(listOf("Marie$ending", "Il attendait.", "Pierre$ending", "Il partit."), warm.before(book[4], 8)!!.map { it.text })
+        assertEquals(first, warm.before(passage, 8)?.map { it.text })
     }
 
     @Test
