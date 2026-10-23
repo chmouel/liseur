@@ -160,16 +160,16 @@ internal fun BookTranslationPreferencesEditor(
                     val service = feature.service.first()
                     val owner = service.owner(s)
                     val generation = owner?.let { container.serverConnections.generation(it).value }
+                    // What the reader chose, not what a service learns while answering, such as a refused temperature.
+                    val chosen = feature.choice.first()
                     suspend fun guard() {
-                        if (container.appSettings.settings.first() != s || owner?.let { container.serverConnections.generation(it).value } != generation) {
+                        if (feature.choice.first() != chosen || owner?.let { container.serverConnections.generation(it).value } != generation) {
                             throw TranslationError.Changed()
                         }
                     }
                     val run = service.openPinned(source, target, s, ::guard, asked)
                     val text = try { run.translate(passage, null) } finally { run.close() }
-                    if (container.appSettings.settings.first() != s || owner?.let { container.serverConnections.generation(it).value } != generation) {
-                        throw TranslationError.Changed()
-                    }
+                    guard()
                     currentCoroutineContext().ensureActive()
                     resultChoice = choice
                     result = passage to text
