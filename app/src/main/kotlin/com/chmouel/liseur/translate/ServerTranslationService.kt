@@ -255,7 +255,8 @@ internal class ServerTranslationService(
     /**
      * False for a speech-only server: Gradium, or one whose model list has
      * no model that writes text, such as Kokoro's. One that cannot be
-     * asked, offline or behind local network access, is still offered.
+     * asked, offline, behind local network access or without a model
+     * list, is still offered.
      */
     override suspend fun offers(server: ServerConnection): Boolean {
         val base = OpenAiTts.baseUrl(server.url) ?: return true
@@ -263,7 +264,7 @@ internal class ServerTranslationService(
         val origin = ServerConnections.originOf(server.url) ?: return true
         val key = "${server.url}\u0000${connections.generation(origin).value}"
         offered[key]?.let { return it }
-        val listed = models(server.url).getOrNull() ?: return true
+        val listed = listed(server.url).getOrNull() ?: return true
         return listed.isNotEmpty().also { if (it) offered[key] = true }
     }
 
@@ -371,11 +372,14 @@ internal class ServerTranslationService(
         }
     }
 
-    private suspend fun models(url: String): Result<List<TextModel>> {
+    private suspend fun models(url: String): Result<List<TextModel>> = listed(url).map { it.orEmpty() }
+
+    /** As [models], but null when the server has no model list to ask. */
+    private suspend fun listed(url: String): Result<List<TextModel>?> {
         val base = OpenAiTts.baseUrl(url) ?: return Result.failure(TranslationError.NotSetUp())
         return try {
             if (connections.localNetwork.blocks(base.toString())) throw TranslationError.LocalNetworkBlocked()
-            Result.success(client.textModels(base, connections.key(ServerKeys.origin(base))))
+            Result.success(client.listedModels(base, connections.key(ServerKeys.origin(base))))
         } catch (e: TranslationError) {
             Result.failure(e)
         }

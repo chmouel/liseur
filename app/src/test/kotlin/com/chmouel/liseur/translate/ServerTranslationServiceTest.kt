@@ -123,6 +123,12 @@ class ServerTranslationServiceTest {
         val down = ServerConnection("down", "Down", web.url("/down/v1").toString())
         web.enqueue(MockResponse.Builder().code(500).build())
         assertTrue(service.offers(down))
+        // A chat server without a model list is still offered, its model typed in.
+        for (code in listOf(404, 405)) {
+            val unlisted = ServerConnection("unlisted$code", "Unlisted", web.url("/unlisted$code/v1").toString())
+            web.enqueue(MockResponse.Builder().code(code).build())
+            assertTrue(service.offers(unlisted))
+        }
         assertFalse(service.offers(ServerConnection("gradium", "Gradium", "https://eu.api.gradium.ai/api")))
     }
 

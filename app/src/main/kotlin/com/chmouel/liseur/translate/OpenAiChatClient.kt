@@ -208,7 +208,10 @@ class OpenAiChatClient(
      * The models the server lists that answer in text, by name; empty when
      * it lists none. Throws [TranslationError].
      */
-    suspend fun textModels(base: HttpUrl, apiKey: String?): List<TextModel> =
+    suspend fun textModels(base: HttpUrl, apiKey: String?): List<TextModel> = listedModels(base, apiKey).orEmpty()
+
+    /** As [textModels], but null when the server has no model list to ask. */
+    suspend fun listedModels(base: HttpUrl, apiKey: String?): List<TextModel>? =
         TranslationHttp.execute(client, request(base, "models", apiKey).get().build(), ::models)
 
     private fun request(base: HttpUrl, path: String, apiKey: String?): Request.Builder {
@@ -229,8 +232,8 @@ class OpenAiChatClient(
         class Failure(val code: Int, val body: String, val retryAfter: String? = null) : ChatReply
     }
 
-    private fun models(response: Response): List<TextModel> {
-        if (response.code == 404 || response.code == 405) return emptyList()
+    private fun models(response: Response): List<TextModel>? {
+        if (response.code == 404 || response.code == 405) return null
         val text = TranslationHttp.boundedText(response, TranslationHttp.MAX_LIST_BYTES)
         if (!response.isSuccessful) throw errorFor(response.code, text.orEmpty())
         if (text == null) throw TranslationError.Malformed("list too large")
