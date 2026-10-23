@@ -2526,6 +2526,8 @@ internal fun ReaderScreen(
         effectScope.launch {
             save()
             stopTranslatingPage()
+            // Taken before the wait: a start or read aloud meanwhile supersedes this change.
+            val attempt = pageTranslationStarts.get()
             // Measured on the book's words, with the restore finished rather than cut short by the new run.
             if (pageTranslated) {
                 withTimeoutOrNull(RESTORE_WAIT_MS) { snapshotFlow { pageTranslated }.first { !it } } ?: run {
@@ -2533,7 +2535,7 @@ internal fun ReaderScreen(
                     return@launch
                 }
             }
-            val attempt = pageTranslationStarts.get()
+            if (pageTranslationStarts.get() != attempt) return@launch
             val nav = navigatorNow ?: return@launch
             val place = placeOnScreen(nav) ?: return@launch
             if (pageTranslationStarts.get() != attempt || navigatorNow !== nav) return@launch
