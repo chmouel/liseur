@@ -2523,8 +2523,11 @@ internal fun ReaderScreen(
      * translated again from its first sentence on screen.
      */
     fun changeTranslation(source: String?, target: String, save: suspend () -> Unit) {
+        val asked = pageTranslationStarts.get()
         effectScope.launch {
             save()
+            // A Stop pressed while saving stays stopped.
+            if (pageTranslationStarts.get() != asked) return@launch
             stopTranslatingPage()
             // Taken before the wait: a start or read aloud meanwhile supersedes this change.
             val attempt = pageTranslationStarts.get()
