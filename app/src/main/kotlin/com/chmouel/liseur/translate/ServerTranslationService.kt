@@ -248,7 +248,8 @@ internal class ServerTranslationService(
         server?.let { settings.setTranslationServerModel(it.url, model) }
     }
 
-    // Asked once per address and key: a server's list does not change while the app runs.
+    // A server found to write text is asked once per address and key; one
+    // found speech-only is asked again, as it may gain a text model.
     private val offered = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
     /**
@@ -263,7 +264,7 @@ internal class ServerTranslationService(
         val key = "${server.url}\u0000${connections.generation(origin).value}"
         offered[key]?.let { return it }
         val listed = models(server.url).getOrNull() ?: return true
-        return listed.isNotEmpty().also { offered[key] = it }
+        return listed.isNotEmpty().also { if (it) offered[key] = true }
     }
 
     @Composable

@@ -110,8 +110,11 @@ class ServerTranslationServiceTest {
         val home = settings.settings.first().servers.readable!!.single()
         web.enqueue(listing("kokoro", "tts-1"))
         assertFalse(service.offers(home))
-        assertFalse(service.offers(home))
-        assertEquals(1, web.requestCount)
+        // Asked again: a text model added later makes it a translation service.
+        web.enqueue(listing("kokoro", "tts-1", "llama3"))
+        assertTrue(service.offers(home))
+        assertTrue(service.offers(home))
+        assertEquals(2, web.requestCount)
 
         val chat = ServerConnection("chat", "Chat", web.url("/chat/v1").toString())
         web.enqueue(listing("kokoro", "llama3"))
