@@ -1089,8 +1089,12 @@ changing reader behavior.
   Gemini; see `docs/adr/0044-read-aloud-in-the-f-droid-build.md`.
 - A playing session owns the reading place; only the voice writes it. A
   reader page move keeps the voice playing, is not saved, and the page
-  stops following until the spoken sentence is on screen again or
-  pause/resume; pausing returns to the sentence heard. Auto-scroll and the
+  stops following until the spoken sentence is on screen again,
+  pause/resume, the reader returning to the book (`ON_START`, e.g. the
+  screen woken) or the player's "Back to the voice" button; pausing
+  returns to the sentence heard. The follow effect checks it is still
+  active before acting on a page query: on wake a superseded run holds the
+  pre-sleep sentence and would move the page back. Auto-scroll and the
   voice exclude each other: starting one pauses or disarms the other.
 - Checkpoints go through `prepareLocator` (same `total_progression` as a
   page turn); local while playing (`signalSync = false`), synced on pause

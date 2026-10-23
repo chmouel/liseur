@@ -1180,6 +1180,7 @@
     <string name="read_aloud_settings_voice">Голос</string>
     <string name="read_aloud_previous_sentence">Предыдущее предложение</string>
     <string name="read_aloud_next_sentence">Следующее предложение</string>
+    <string name="read_aloud_return_to_voice">Вернуться к голосу</string>
     <string name="read_aloud_from_here">Читать вслух отсюда</string>
     <string name="reader_translate_into">Перевести на %1$s</string>
     <string name="reader_translate_book">Перевести книгу</string>

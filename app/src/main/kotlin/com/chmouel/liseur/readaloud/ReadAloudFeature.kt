@@ -133,9 +133,17 @@ interface ReadAloudFeature {
      * be told. Draws nothing for another book or no session. The controls
      * show only while [controls] is set, which is when the reader has
      * raised the chrome; otherwise the page shows just the highlight.
+     * [onReturnToVoice], set while the reader has moved away from the
+     * sentence being read, offers to take the page back to it.
      */
     @Composable
-    fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier)
+    fun Player(
+        bookId: String,
+        theme: ReaderTheme,
+        controls: Boolean,
+        onReturnToVoice: (() -> Unit)?,
+        modifier: Modifier,
+    )
 
     object None : ReadAloudFeature {
         override val isAvailable = false
@@ -159,6 +167,12 @@ interface ReadAloudFeature {
         override fun SettingsScreen(onBack: () -> Unit) = Unit
 
         @Composable
-        override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) = Unit
+        override fun Player(
+            bookId: String,
+            theme: ReaderTheme,
+            controls: Boolean,
+            onReturnToVoice: (() -> Unit)?,
+            modifier: Modifier,
+        ) = Unit
     }
 }

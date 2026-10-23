@@ -1141,6 +1141,7 @@
     <string name="read_aloud_settings_voice">Voice</string>
     <string name="read_aloud_previous_sentence">Previous sentence</string>
     <string name="read_aloud_next_sentence">Next sentence</string>
+    <string name="read_aloud_return_to_voice">Back to the voice</string>
     <string name="read_aloud_from_here">Read aloud from here</string>
     <string name="reader_translate_into">Translate into %1$s</string>
     <string name="reader_translate_book">Translate book</string>

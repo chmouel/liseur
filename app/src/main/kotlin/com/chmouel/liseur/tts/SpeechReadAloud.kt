@@ -502,8 +502,13 @@ internal class SpeechReadAloud(
     fun ServicesPage(onBack: () -> Unit) = ServicesScreen(connections, accounts, onBack)
 
     @Composable
-    override fun Player(bookId: String, theme: ReaderTheme, controls: Boolean, modifier: Modifier) =
-        ReadAloudPlayer(this, bookId, theme, controls, modifier)
+    override fun Player(
+        bookId: String,
+        theme: ReaderTheme,
+        controls: Boolean,
+        onReturnToVoice: (() -> Unit)?,
+        modifier: Modifier,
+    ) = ReadAloudPlayer(this, bookId, theme, controls, onReturnToVoice, modifier)
 }
 
 private const val SLEEP_CHECK_MS = 30_000L

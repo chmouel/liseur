@@ -1096,6 +1096,7 @@
     <string name="read_aloud_settings_voice">Voix</string>
     <string name="read_aloud_previous_sentence">Phrase précédente</string>
     <string name="read_aloud_next_sentence">Phrase suivante</string>
+    <string name="read_aloud_return_to_voice">Revenir à la voix</string>
     <string name="read_aloud_from_here">Lire à voix haute à partir d\'ici</string>
     <string name="reader_translate_into">Traduire en %1$s</string>
     <string name="reader_translate_book">Traduire le livre</string>

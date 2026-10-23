@@ -1053,6 +1053,7 @@
     <string name="read_aloud_settings_voice">声音</string>
     <string name="read_aloud_previous_sentence">上一句</string>
     <string name="read_aloud_next_sentence">下一句</string>
+    <string name="read_aloud_return_to_voice">回到朗读位置</string>
     <string name="read_aloud_from_here">从这里开始朗读</string>
     <string name="reader_translate_into">翻译成%1$s</string>
     <string name="reader_translate_book">翻译本书</string>

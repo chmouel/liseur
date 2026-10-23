@@ -612,7 +612,9 @@ internal fun ReaderScreen(
     var followedAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
     // The reader moved away while the voice plays on. The page stays
     // where they took it until the sentence being read is on screen
-    // again or the voice is paused and played again.
+    // again, the voice is paused and played again, the reader comes back
+    // to the book from elsewhere (the screen woken, say), or they ask for
+    // the voice's page from the player.
     var followDetached by remember { mutableStateOf(false) }
     // When the reader's finger last moved the page, so reattaching waits
     // for the gesture to end rather than looking at a page about to move.
@@ -2175,7 +2177,9 @@ internal fun ReaderScreen(
                 // Detaching is noticed as the move begins, while the
                 // sentence is still on screen; looking now would undo it.
                 awaitPageAtRest(nav)
-                if (spokenShowing(nav, utterance)) followDetached = false
+                val showing = spokenShowing(nav, utterance)
+                currentCoroutineContext().ensureActive()
+                if (showing) followDetached = false
                 return@repeatOnLifecycle
             }
             // A move still in the air is the reader's, or the last
@@ -2194,6 +2198,12 @@ internal fun ReaderScreen(
             } else {
                 utterance
             }
+            // The page queries above ignore cancellation. On waking, the
+            // run for the sentence heard before the screen went off is
+            // replaced by the current one, and acting on its answer would
+            // take the page back there; loaded slowly, that move is taken
+            // for the reader's and the page stops following.
+            currentCoroutineContext().ensureActive()
             followedAt = SystemClock.elapsedRealtime()
             navigate(nav, target, NavigatorPositionEvent.TTS_FOLLOW)
         }
@@ -2216,6 +2226,16 @@ internal fun ReaderScreen(
     }
     LaunchedEffect(autoScrollArmed) {
         if (autoScrollArmed && listeningPlayingNow) readAloudFeature.pause()
+    }
+    // Coming back to a book whose voice played on while it was out of
+    // sight (the screen off, another app) finds the page where the voice
+    // is, wherever the reader had left it.
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) followDetached = false
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
 
     // Listening saves the sentence it reached, measured off no page: its
@@ -3860,6 +3880,7 @@ internal fun ReaderScreen(
                         bookId = it.bookId,
                         theme = readingTheme,
                         controls = chromeVisible,
+                        onReturnToVoice = { followDetached = false }.takeIf { listeningPlaying && followDetached },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }

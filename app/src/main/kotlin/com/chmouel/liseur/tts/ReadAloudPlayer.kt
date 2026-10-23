@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -88,6 +89,7 @@ internal fun ReadAloudPlayer(
     bookId: String,
     theme: ReaderTheme,
     controls: Boolean,
+    onReturnToVoice: (() -> Unit)?,
     modifier: Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -170,8 +172,15 @@ internal fun ReadAloudPlayer(
                         modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
                     ) {
                         VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { choosing = true }
-                        ControlButton(feature::stop) {
-                            Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            onReturnToVoice?.let {
+                                ControlButton(it) {
+                                    Icon(Icons.Filled.MyLocation, stringResource(R.string.read_aloud_return_to_voice))
+                                }
+                            }
+                            ControlButton(feature::stop) {
+                                Icon(Icons.Filled.Close, stringResource(R.string.read_aloud_stop))
+                            }
                         }
                     }
                     Row(
