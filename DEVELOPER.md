@@ -1097,9 +1097,12 @@ changing reader behavior.
   wake the collected value lags a recomposition, and a superseded run
   holds the pre-sleep sentence and would move the page back. A "Back to
   the voice" request outlasts an outstanding move and is served once it
-  settles instead of being dropped. A follow whose page queries saw a
-  move issued (`IssuedMoves.unchangedSince`) looks again instead of
-  moving over it. Auto-scroll and the
+  settles instead of being dropped. It stands only while every move issued
+  since the ask is the app's own (a restore, a reflow, the follow); a
+  reader move cancels it when issued, not when its arrival is handled.
+  A follow whose page queries saw a move issued
+  (`IssuedMoves.unchangedSince`) or the reader detach looks again instead
+  of moving over it. Auto-scroll and the
   voice exclude each other: starting one pauses or disarms the other.
 - Checkpoints go through `prepareLocator` (same `total_progression` as a
   page turn); local while playing (`signalSync = false`), synced on pause

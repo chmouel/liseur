@@ -623,6 +623,18 @@ internal fun ReaderScreen(
     // The move count when the ask was made, so a late arrival for a move
     // issued earlier is not mistaken for a new reader action.
     var returnRequestedGeneration by remember { mutableIntStateOf(IssuedMoves.NONE) }
+    // Moves the app issues on its own: a restore, a reflow put back, the
+    // page following the voice. Anything else issued is the reader's.
+    var appMoves by remember { mutableIntStateOf(0) }
+    var returnRequestedAppMoves by remember { mutableIntStateOf(0) }
+
+    // Whether the reader has sent the page anywhere since asking for the
+    // voice's page. Counted as the move is issued, because its arrival
+    // can be handled after the page queries that would go back over it.
+    fun readerMovedSinceAsk(): Boolean =
+        moves.generation() - returnRequestedGeneration != appMoves - returnRequestedAppMoves
+    fun returnStillWanted(): Boolean = returnRequested && !readerMovedSinceAsk()
+
     // When the reader's finger last moved the page, so reattaching waits
     // for the gesture to end rather than looking at a page about to move.
     var lastDragAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
@@ -1111,6 +1123,7 @@ internal fun ReaderScreen(
     suspend fun go(nav: EpubNavigatorFragment, locator: Locator, event: NavigatorPositionEvent): Boolean {
         retargetGate(locator)
         markPendingPositionEvent(event)
+        if (event != NavigatorPositionEvent.LOCAL_JUMP) appMoves++
         val token = moves.issue(
             from = nav.currentLocator.value.restorePoint(),
             to = locator.destination(),
@@ -1157,6 +1170,7 @@ internal fun ReaderScreen(
             ?: return
         retargetGate(fallback)
         markPendingPositionEvent(event)
+        appMoves++
         val fallbackToken = moves.issue(
             from = nav.currentLocator.value.restorePoint(),
             to = fallback.destination(),
@@ -1476,8 +1490,8 @@ internal fun ReaderScreen(
                 ) {
                     // A locator emission can be a move issued before the
                     // ask arriving now, not a new reader action: cancel
-                    // only when something was issued after the ask.
-                    if (moves.generation() != returnRequestedGeneration) returnRequested = false
+                    // only when the reader issued something after the ask.
+                    if (readerMovedSinceAsk()) returnRequested = false
                     followDetached = true
                 }
                 // This is fresher than anything a scroll watcher had in
@@ -1795,6 +1809,7 @@ internal fun ReaderScreen(
         // looking like a page turn. Telling the gate where the reader is
         // now being sent keeps it closed until they get there.
         retargetGate(fallback)
+        appMoves++
         val fallbackToken = moves.issue(
             from = nav.currentLocator.value.restorePoint(),
             to = fallback.destination(),
@@ -2238,7 +2253,7 @@ internal fun ReaderScreen(
                     moves.mark(SystemClock.elapsedRealtime())
                 }
                 if (since == IssuedMoves.NONE) {
-                    if (!returnRequested) return@repeatOnLifecycle
+                    if (!returnStillWanted()) return@repeatOnLifecycle
                     delay(READ_ALOUD_CAPTURE_WAIT_MS)
                     currentCoroutineContext().ensureActive()
                     if (!voiceOn(utterance)) return@repeatOnLifecycle
@@ -2265,13 +2280,15 @@ internal fun ReaderScreen(
                 // for the reader's and the page stops following.
                 currentCoroutineContext().ensureActive()
                 if (!voiceOn(utterance)) return@repeatOnLifecycle
+                // The reader may have dragged or turned the page while the
+                // queries ran, and the effect is only relaunched for it on
+                // the next frame: their state is read live instead.
+                if (followDetached && !returnStillWanted()) return@repeatOnLifecycle
                 if (moves.unchangedSince(since)) break
-                // A page was turned while the queries ran, and its arrival
-                // may not have been reported yet. Going after the voice now
-                // would undo it, so look again: the guard above waits for
-                // it to land, and a reader's turn cancels the ask on its
-                // arrival while a layout move leaves it to be served.
-                if (!returnRequested) return@repeatOnLifecycle
+                // A move the app issued meanwhile may not have landed yet.
+                // Going after the voice now would race it, so look again
+                // once the guard above has waited it out.
+                if (!returnStillWanted()) return@repeatOnLifecycle
             }
             returnRequested = false
             followDetached = false
@@ -3955,6 +3972,7 @@ internal fun ReaderScreen(
                         controls = chromeVisible,
                         onReturnToVoice = {
                             returnRequestedGeneration = moves.generation()
+                            returnRequestedAppMoves = appMoves
                             returnRequested = true
                         }.takeIf { listeningPlaying && followDetached },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
