@@ -55,7 +55,8 @@ internal fun sentenceHolding(sentences: List<String>, before: String?, highlight
     return starts.indexOfLast { it <= at + lead.length }
 }
 
-private fun squash(text: String) = text.filterNot(Char::isWhitespace)
+// Readium leaves out the soft hyphens and zero-width spaces the page's own text keeps, as SpokenPassage allows for.
+private fun squash(text: String) = text.filterNot { it.isWhitespace() || it == '\u00AD' || it == '\u200B' }
 
 internal suspend fun AppContainer.cachedTranslationNames(bookUrl: String, place: Locator?): List<String> {
     if (!appSettings.settings.first().codexEnabled) return emptyList()

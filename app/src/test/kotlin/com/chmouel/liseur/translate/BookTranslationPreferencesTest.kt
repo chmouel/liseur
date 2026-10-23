@@ -37,6 +37,7 @@ class BookTranslationPreferencesTest {
         // The words before tell the repeated start apart.
         assertEquals(1, sentenceHolding(paragraph, "Il pleut. Il pleut ", "encore"))
         assertEquals(2, sentenceHolding(paragraph, "encore sur la ville. ", "Marie"))
+        assertEquals(2, sentenceHolding(paragraph, "en\u00ADcore sur la\u200B ville. ", "Ma\u00ADrie"))
         assertNull(sentenceHolding(paragraph.take(1), "Il pleut. ", "Il"))
         assertNull(sentenceHolding(paragraph, "", null))
     }
