@@ -69,9 +69,11 @@ internal class SpeechContext(
         val book = TranslationBookContext.render(resolvedTemplate, facts)
         val window = when {
             config.size == TranslationContextSize.OFF -> null
-            place != null -> preceding.before(place, config.size.sentences)
-                ?.let { TranslationContext.window(it, config.size) }
-                ?: previous?.let { TranslationContext.window(listOf(PageSentence(it, place.href, null, null)), config.size) }
+            place != null -> when (val found = preceding.before(place, config.size.sentences)) {
+                // An empty lookup is a chapter's start: [previous] may be the chapter before's.
+                null -> previous?.let { TranslationContext.window(listOf(PageSentence(it, place.href, null, null)), config.size) }
+                else -> TranslationContext.window(found, config.size)
+            }
             previous != null -> TranslationContext.window(listOf(PageSentence(previous, "", null, null)), config.size)
             else -> null
         }
