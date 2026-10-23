@@ -2209,6 +2209,9 @@ internal fun ReaderScreen(
         followBlocked,
         followDetached,
         returnRequested,
+        // A second ask after one a reader move left standing changes
+        // only this.
+        returnRequestedGeneration,
         lifecycle,
     ) {
         val nav = navigator ?: return@LaunchedEffect
@@ -2227,9 +2230,14 @@ internal fun ReaderScreen(
                 awaitPageAtRest(nav)
                 currentCoroutineContext().ensureActive()
                 if (!voiceOn(utterance)) return@repeatOnLifecycle
+                // The answer is stale if the reader moved while it was
+                // being worked out, and reattaching would pull the page
+                // back to the voice on its next sentence.
+                val generation = moves.generation()
+                val dragAt = lastDragAt
                 val showing = spokenShowing(nav, utterance)
                 currentCoroutineContext().ensureActive()
-                if (showing) {
+                if (showing && moves.generation() == generation && lastDragAt == dragAt) {
                     followDetached = false
                     returnRequested = false
                     return@repeatOnLifecycle
@@ -2237,7 +2245,7 @@ internal fun ReaderScreen(
                 // The reader asked to go back to the voice: that ask
                 // outlasts the move the wait above let settle, so serve
                 // it below instead of dropping it here.
-                if (!returnRequested) return@repeatOnLifecycle
+                if (!returnStillWanted()) return@repeatOnLifecycle
             }
             // A move still in the air is the reader's, or the last
             // follow: going after the voice now would undo the one or
@@ -2262,6 +2270,13 @@ internal fun ReaderScreen(
                 if (spokenShowing(nav, utterance)) {
                     currentCoroutineContext().ensureActive()
                     if (!voiceOn(utterance)) return@repeatOnLifecycle
+                    // Read live, as below: the reader may have moved
+                    // while the page was asked.
+                    if (followDetached && !returnStillWanted()) return@repeatOnLifecycle
+                    if (!moves.unchangedSince(since)) {
+                        if (!returnStillWanted()) return@repeatOnLifecycle
+                        continue
+                    }
                     followDetached = false
                     returnRequested = false
                     return@repeatOnLifecycle
