@@ -620,6 +620,9 @@ internal fun ReaderScreen(
     // air. Kept until the page can go there, rather than dropped with the
     // wait that the move forced.
     var returnRequested by remember { mutableStateOf(false) }
+    // The move count when the ask was made, so a late arrival for a move
+    // issued earlier is not mistaken for a new reader action.
+    var returnRequestedGeneration by remember { mutableIntStateOf(IssuedMoves.NONE) }
     // When the reader's finger last moved the page, so reattaching waits
     // for the gesture to end rather than looking at a page about to move.
     var lastDragAt by remember { mutableLongStateOf(Long.MIN_VALUE) }
@@ -1471,8 +1474,11 @@ internal fun ReaderScreen(
                             event == NavigatorPositionEvent.LOCAL_JUMP
                         )
                 ) {
+                    // A locator emission can be a move issued before the
+                    // ask arriving now, not a new reader action: cancel
+                    // only when something was issued after the ask.
+                    if (moves.generation() != returnRequestedGeneration) returnRequested = false
                     followDetached = true
-                    returnRequested = false
                 }
                 // This is fresher than anything a scroll watcher had in
                 // flight, so those answers are refused from here on. The
@@ -2220,12 +2226,28 @@ internal fun ReaderScreen(
             }
             // A move still in the air is the reader's, or the last
             // follow: going after the voice now would undo the one or
-            // repeat the other.
-            if (gate.isGated || reflow.active ||
-                moves.mark(SystemClock.elapsedRealtime()) == IssuedMoves.NONE ||
-                spokenShowing(nav, utterance)
-            ) {
-                return@repeatOnLifecycle
+            // repeat the other. A reader who asked for the voice's page
+            // waits these out instead: neither the gate nor a reflow is
+            // an effect key to come back on, so the ask must not die on
+            // the guard.
+            while (true) {
+                if (gate.isGated || reflow.active ||
+                    moves.mark(SystemClock.elapsedRealtime()) == IssuedMoves.NONE
+                ) {
+                    if (!returnRequested) return@repeatOnLifecycle
+                    delay(READ_ALOUD_CAPTURE_WAIT_MS)
+                    currentCoroutineContext().ensureActive()
+                    if (!voiceOn(utterance)) return@repeatOnLifecycle
+                    continue
+                }
+                if (spokenShowing(nav, utterance)) {
+                    currentCoroutineContext().ensureActive()
+                    if (!voiceOn(utterance)) return@repeatOnLifecycle
+                    followDetached = false
+                    returnRequested = false
+                    return@repeatOnLifecycle
+                }
+                break
             }
             // The book's words are not on a translated page to go to: the
             // translation shown in their place is, else their element.
@@ -3921,7 +3943,10 @@ internal fun ReaderScreen(
                         bookId = it.bookId,
                         theme = readingTheme,
                         controls = chromeVisible,
-                        onReturnToVoice = { returnRequested = true }.takeIf { listeningPlaying && followDetached },
+                        onReturnToVoice = {
+                            returnRequestedGeneration = moves.generation()
+                            returnRequested = true
+                        }.takeIf { listeningPlaying && followDetached },
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 }
