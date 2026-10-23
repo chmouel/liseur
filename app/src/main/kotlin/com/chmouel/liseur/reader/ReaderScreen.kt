@@ -2230,10 +2230,14 @@ internal fun ReaderScreen(
             // waits these out instead: neither the gate nor a reflow is
             // an effect key to come back on, so the ask must not die on
             // the guard.
+            var target: Locator
             while (true) {
-                if (gate.isGated || reflow.active ||
-                    moves.mark(SystemClock.elapsedRealtime()) == IssuedMoves.NONE
-                ) {
+                val since = if (gate.isGated || reflow.active) {
+                    IssuedMoves.NONE
+                } else {
+                    moves.mark(SystemClock.elapsedRealtime())
+                }
+                if (since == IssuedMoves.NONE) {
                     if (!returnRequested) return@repeatOnLifecycle
                     delay(READ_ALOUD_CAPTURE_WAIT_MS)
                     currentCoroutineContext().ensureActive()
@@ -2247,22 +2251,28 @@ internal fun ReaderScreen(
                     returnRequested = false
                     return@repeatOnLifecycle
                 }
-                break
+                // The book's words are not on a translated page to go to: the
+                // translation shown in their place is, else their element.
+                target = if (pageTranslated) {
+                    TranslatedPages.shownLocator(nav, utterance) ?: utterance.copy(text = Locator.Text())
+                } else {
+                    utterance
+                }
+                // The page queries above ignore cancellation. On waking, the
+                // run for the sentence heard before the screen went off is
+                // replaced by the current one, and acting on its answer would
+                // take the page back there; loaded slowly, that move is taken
+                // for the reader's and the page stops following.
+                currentCoroutineContext().ensureActive()
+                if (!voiceOn(utterance)) return@repeatOnLifecycle
+                if (moves.unchangedSince(since)) break
+                // A page was turned while the queries ran, and its arrival
+                // may not have been reported yet. Going after the voice now
+                // would undo it, so look again: the guard above waits for
+                // it to land, and a reader's turn cancels the ask on its
+                // arrival while a layout move leaves it to be served.
+                if (!returnRequested) return@repeatOnLifecycle
             }
-            // The book's words are not on a translated page to go to: the
-            // translation shown in their place is, else their element.
-            val target = if (pageTranslated) {
-                TranslatedPages.shownLocator(nav, utterance) ?: utterance.copy(text = Locator.Text())
-            } else {
-                utterance
-            }
-            // The page queries above ignore cancellation. On waking, the
-            // run for the sentence heard before the screen went off is
-            // replaced by the current one, and acting on its answer would
-            // take the page back there; loaded slowly, that move is taken
-            // for the reader's and the page stops following.
-            currentCoroutineContext().ensureActive()
-            if (!voiceOn(utterance)) return@repeatOnLifecycle
             returnRequested = false
             followDetached = false
             followedAt = SystemClock.elapsedRealtime()
