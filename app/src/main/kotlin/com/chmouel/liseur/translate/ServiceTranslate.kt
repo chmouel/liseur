@@ -219,6 +219,7 @@ internal class ServiceTranslate(
             override val source = source
             override val target = target
             override val destination = service.destination(snapshot)
+            override val model = service.model(snapshot)
 
             private suspend fun check(wanted: String = identity) {
                 guard()
@@ -313,6 +314,7 @@ internal class ServiceTranslate(
             val run: TranslationRun,
             destination: String?,
             val owner: String?,
+            val model: String?,
             var choice: List<Any?>,
             val context: TranslationContextSize,
             val book: String?,
@@ -341,6 +343,7 @@ internal class ServiceTranslate(
                 service.open(source, target, s, preferences),
                 destination,
                 service.owner(s),
+                service.model(s),
                 chosen(s),
                 contextOf(service, s),
                 bookOf(service, s),
@@ -368,6 +371,7 @@ internal class ServiceTranslate(
             override val source = source
             override val target = target
             override val destination get() = bound.destination
+            override val model get() = bound.model
 
             override suspend fun answering() = rebound().identity
 

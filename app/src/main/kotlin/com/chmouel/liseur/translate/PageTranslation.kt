@@ -76,6 +76,9 @@ interface SentenceTranslator {
     /** Where the text goes now, for "Translated by %s."; null for the device. */
     val destination: String?
 
+    /** The model that answers now, shown after [destination]; null when the service has none. */
+    val model: String? get() = null
+
     /**
      * How much of the book's earlier text [identity] takes with a
      * sentence: [TranslationContextSize.OFF] for a service that uses none.

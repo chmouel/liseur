@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -96,9 +95,7 @@ internal fun PageTranslationBar(
     val sourceTag = translator.source
     val sourceName = sourceTag?.let { TranslationLanguages.name(it, ui) }
     val targetName = TranslationLanguages.name(translator.target, ui)
-    val sourceLabel = sourceTag?.let { TranslationLanguages.flagged(it, ui) }
-    val targetLabel = TranslationLanguages.flagged(translator.target, ui)
-    val pageLanguageDescription = stringResource(
+    val pageLanguages = stringResource(
         R.string.translation_page_languages,
         sourceName ?: stringResource(R.string.translation_detected),
         targetName,
@@ -106,7 +103,8 @@ internal fun PageTranslationBar(
     val name = translator.destination ?: stringResource(service?.label ?: R.string.translation_provider_device)
     val status = when (state) {
         PageTranslationState.Translating -> stringResource(R.string.translation_loading)
-        PageTranslationState.Ahead -> translator.destination?.let { stringResource(R.string.translation_attribution_service, it) }
+        PageTranslationState.Ahead -> translator.destination
+            ?.let { stringResource(R.string.translation_attribution_service, listOfNotNull(it, translator.model?.ifBlank { null }).joinToString(" · ")) }
             ?: stringResource(R.string.translation_attribution_device)
         PageTranslationState.Ended -> stringResource(R.string.translation_page_ended)
         is PageTranslationState.Halted -> errorSentence(state.error, name, sourceName.orEmpty(), targetName)
@@ -125,15 +123,10 @@ internal fun PageTranslationBar(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             ) {
-                Icon(Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(service?.icon ?: Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(20.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(
-                            R.string.translation_page_languages,
-                            sourceLabel ?: stringResource(R.string.translation_detected),
-                            targetLabel,
-                        ),
-                        modifier = Modifier.semantics { contentDescription = pageLanguageDescription },
+                        text = pageLanguages,
                         style = MaterialTheme.typography.titleSmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
