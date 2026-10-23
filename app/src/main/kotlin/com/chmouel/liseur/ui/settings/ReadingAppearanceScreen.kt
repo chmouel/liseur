@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
@@ -97,8 +97,6 @@ fun ReadingAppearanceScreen(
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTint: (HighlightTint) -> Unit,
     fineTypography: FineTypographyActions,
-    appLanguage: AppLanguage,
-    onAppLanguage: (AppLanguage) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -123,7 +121,6 @@ fun ReadingAppearanceScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 val fontLibrary = rememberFontLibrary(onSelected = onFont)
                 ReadingPreview(
@@ -131,80 +128,91 @@ fun ReadingAppearanceScreen(
                     theme = resolved,
                     imported = fontLibrary.fonts,
                 )
-                ReadingThemeRow(
-                    selected = prefs.themeChoice,
-                    resolved = resolved,
-                    onSelected = onTheme,
-                )
-                ReadingFontSizeSlider(
-                    value = prefs.fontSize,
-                    // No book here, so nothing is refused: the reader is
-                    // choosing a default for every book they will open.
-                    enabled = true,
-                    onChanged = onFontSize,
-                )
-                ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
-                ReadingFontDropdown(
-                    selected = prefs.font,
-                    imported = fontLibrary.fonts,
-                    enabled = true,
-                    onSelected = onFont,
-                    onImport = fontLibrary.pick,
-                    onRemove = fontLibrary.remove,
-                )
-                Text(
-                    text = stringResource(R.string.settings_reading_appearance_detail),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                ) {
+                    Column(
+                        Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        ReadingThemeRow(
+                            selected = prefs.themeChoice,
+                            resolved = resolved,
+                            onSelected = onTheme,
+                        )
+                        ReadingFontSizeSlider(
+                            value = prefs.fontSize,
+                            // No book here, so nothing is refused: the reader is
+                            // choosing a default for every book they will open.
+                            enabled = true,
+                            onChanged = onFontSize,
+                        )
+                        ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
+                        ReadingFontDropdown(
+                            selected = prefs.font,
+                            imported = fontLibrary.fonts,
+                            enabled = true,
+                            onSelected = onFont,
+                            onImport = fontLibrary.pick,
+                            onRemove = fontLibrary.remove,
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_reading_appearance_detail),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 // Last, and closed, the way the "Aa" sheet's Advanced row
                 // is: the same settings should not be everyday on one
                 // surface and buried on the other.
-                // Saveable: picking an app language recreates the activity,
-                // and the reader should land back on the row they used.
                 var advancedOpen by rememberSaveable { mutableStateOf(false) }
-                SettingsExpandableSection(
+                SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
                     onExpandedChange = { advancedOpen = it },
                 ) {
-                    ReadingLayoutControls(
-                        lineHeight = prefs.lineHeight,
-                        pageMargins = prefs.pageMargins,
-                        columnMode = prefs.columnMode,
-                        // The sheet hides this in a scrolled book, where
-                        // columns don't apply. There is no book here to
-                        // check, so the preference is always offered; the
-                        // reader surface decides whether to honor it.
-                        showColumns = true,
-                        enabled = true,
-                        onLineHeightChanged = onLineHeight,
-                        onPageMarginsChanged = onPageMargins,
-                        onColumnModeChanged = onColumnMode,
-                    )
-                    // No book is open here, so nothing is disabled and the
-                    // wording names the writing systems a setting applies
-                    // to rather than claiming anything about one book.
-                    ReadingFineTypographyControls(
-                        prefs = prefs,
-                        css = ReadingCss.Unknown,
-                        actions = fineTypography,
-                    )
-                    ReadingFooterControls(
-                        footerMode = prefs.footerMode,
-                        footerLeft = prefs.footerLeft,
-                        footerRight = prefs.footerRight,
-                        onModeSelected = onFooterMode,
-                        onFieldSelected = onFooterField,
-                    )
-                    ReadingHighlightPaletteControls(
-                        palette = highlightPalette,
-                        onTintToggled = onHighlightTintToggled,
-                        onDefaultChanged = onHighlightDefaultTint,
-                    )
-                    // Here and not in the "Aa" sheet: changing it restarts
-                    // the screen, which mid-book would mean reopening it.
-                    AppLanguageControl(selected = appLanguage, onSelected = onAppLanguage)
+                    Column(
+                        Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        ReadingLayoutControls(
+                            lineHeight = prefs.lineHeight,
+                            pageMargins = prefs.pageMargins,
+                            columnMode = prefs.columnMode,
+                            // The sheet hides this in a scrolled book, where
+                            // columns don't apply. There is no book here to
+                            // check, so the preference is always offered; the
+                            // reader surface decides whether to honor it.
+                            showColumns = true,
+                            enabled = true,
+                            onLineHeightChanged = onLineHeight,
+                            onPageMarginsChanged = onPageMargins,
+                            onColumnModeChanged = onColumnMode,
+                        )
+                        // No book is open here, so nothing is disabled and the
+                        // wording names the writing systems a setting applies
+                        // to rather than claiming anything about one book.
+                        ReadingFineTypographyControls(
+                            prefs = prefs,
+                            css = ReadingCss.Unknown,
+                            actions = fineTypography,
+                        )
+                        ReadingFooterControls(
+                            footerMode = prefs.footerMode,
+                            footerLeft = prefs.footerLeft,
+                            footerRight = prefs.footerRight,
+                            onModeSelected = onFooterMode,
+                            onFieldSelected = onFooterField,
+                        )
+                        ReadingHighlightPaletteControls(
+                            palette = highlightPalette,
+                            onTintToggled = onHighlightTintToggled,
+                            onDefaultChanged = onHighlightDefaultTint,
+                        )
+                    }
                 }
             }
         }

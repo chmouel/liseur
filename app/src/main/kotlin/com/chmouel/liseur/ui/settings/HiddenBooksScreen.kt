@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.ListItem
@@ -64,17 +64,17 @@ fun HiddenBooksScreen(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
+                    .padding(top = 12.dp, bottom = 32.dp),
             ) {
-                if (hidden.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.hidden_books_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 24.dp),
-                    )
-                } else {
-                    SettingsGroup(stringResource(R.string.hidden_books)) {
+                Card(Modifier.fillMaxWidth()) {
+                    if (hidden.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.hidden_books_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
+                        )
+                    } else {
                         hidden.forEachIndexed { index, book ->
                             if (index > 0) RowDivider()
                             ListItem(

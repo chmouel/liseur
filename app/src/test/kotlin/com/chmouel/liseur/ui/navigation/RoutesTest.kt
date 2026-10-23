@@ -83,6 +83,8 @@ class RoutesTest {
         val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.Licences)
         stack.openDetail(Route.HiddenBooks)
         assertEquals(listOf(Route.Library, Route.Settings, Route.HiddenBooks), stack)
+        stack.openDetail(Route.WatchedFolders)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.WatchedFolders), stack)
     }
 
     @Test

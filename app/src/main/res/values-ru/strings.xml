@@ -19,6 +19,12 @@
     <string name="add_folder_hint">Укажите Liseur папку с EPUB — он будет следить за появлением новых файлов.</string>
     <string name="library_folders">Отслеживаемые папки</string>
     <string name="library_folders_empty">Ни одна папка не отслеживается.</string>
+    <plurals name="library_folders_count">
+        <item quantity="one">%d отслеживаемая папка</item>
+        <item quantity="few">%d отслеживаемые папки</item>
+        <item quantity="many">%d отслеживаемых папок</item>
+        <item quantity="other">%d отслеживаемых папок</item>
+    </plurals>
     <string name="remove_folder">Убрать папку</string>
     <string name="remove_folder_a11y">Убрать %1$s</string>
     <string name="remove_folder_warning">Liseur перестанет следить за «%1$s». Книги, которые были только в этой папке, исчезнут из библиотеки; книги из других отслеживаемых папок и книги, сохранённые на сервере, останутся. Файлы с устройства не удаляются.</string>
@@ -847,8 +853,6 @@
     <string name="settings_dictionary_alt_language_auto">Автоматически</string>
     <string name="settings_dictionary_alt_language_auto_detail">Язык приложения, для книг на другом языке</string>
     <string name="settings_library">Библиотека</string>
-    <string name="settings_remote_library">Удалённые библиотеки</string>
-    <string name="settings_export_import">Экспорт и импорт</string>
     <string name="books_export_title">Экспортировать книги офлайн</string>
     <string name="books_export_detail">Скопируйте все EPUB, доступные офлайн, в папку. Имена существующих файлов будут пропущены.</string>
     <string name="books_export_progress">Экспорт книг: %1$d из %2$d</string>

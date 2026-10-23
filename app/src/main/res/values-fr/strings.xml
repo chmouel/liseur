@@ -17,6 +17,10 @@
     <string name="add_folder_hint">Indiquez à Liseur un dossier d\'EPUB et il le surveille pour les nouveaux fichiers.</string>
     <string name="library_folders">Dossiers surveillés</string>
     <string name="library_folders_empty">Aucun dossier n\'est surveillé.</string>
+    <plurals name="library_folders_count">
+        <item quantity="one">%d dossier surveillé</item>
+        <item quantity="other">%d dossiers surveillés</item>
+    </plurals>
     <string name="remove_folder">Retirer le dossier</string>
     <string name="remove_folder_a11y">Retirer %1$s</string>
     <string name="remove_folder_warning">Liseur ne surveillera plus « %1$s ». Les livres que seul ce dossier contenait quitteront votre bibliothèque ; ceux qu\'un autre dossier surveillé détient, et ceux enregistrés sur votre serveur, restent. Aucun fichier n\'est supprimé de cet appareil.</string>
@@ -797,8 +801,6 @@
     <string name="settings_dictionary_alt_language_auto">Automatique</string>
     <string name="settings_dictionary_alt_language_auto_detail">La langue de l\'application, pour les livres écrits dans une autre langue</string>
     <string name="settings_library">Bibliothèque</string>
-    <string name="settings_remote_library">Bibliothèques distantes</string>
-    <string name="settings_export_import">Exporter et importer</string>
     <string name="books_export_title">Exporter les livres hors ligne</string>
     <string name="books_export_detail">Copiez tous les EPUB disponibles hors ligne dans un dossier. Les noms de fichiers existants sont ignorés.</string>
     <string name="books_export_progress">Export des livres : %1$d sur %2$d</string>

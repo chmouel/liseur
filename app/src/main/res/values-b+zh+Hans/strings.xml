@@ -140,6 +140,9 @@
     <string name="add_folder_hint">指定一个存放 EPUB 的文件夹，Liseur 会持续监视其中新增的书。</string>
     <string name="library_folders">监视文件夹</string>
     <string name="library_folders_empty">没有正在监视的文件夹。</string>
+    <plurals name="library_folders_count">
+        <item quantity="other">已监视 %d 个文件夹</item>
+    </plurals>
     <string name="remove_folder">移除文件夹</string>
     <string name="remove_folder_a11y">移除 %1$s</string>
     <string name="remove_folder_warning">Liseur 将停止监视“%1$s”。仅由该文件夹提供的图书会离开您的书库；由其他监视文件夹提供的图书，以及保存在服务器上的图书会保留。本设备上的文件不会被删除。</string>
@@ -824,8 +827,8 @@
     <string name="settings_dictionary_alt_language_auto">自动</string>
     <string name="settings_dictionary_alt_language_auto_detail">应用的语言，用于以其他语言写成的书</string>
     <string name="settings_library">书库</string>
-    <string name="settings_remote_library">远程书库</string>
-    <string name="settings_export_import">导出与导入</string>
+
+
     <string name="books_export_title">导出离线图书</string>
     <string name="books_export_detail">将所有离线 EPUB 复制到文件夹。已存在的文件名会跳过。</string>
     <string name="books_export_progress">正在导出图书：%1$d/%2$d</string>

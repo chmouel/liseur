@@ -135,18 +135,12 @@ internal fun SettingsExpandableGroup(
 }
 
 /**
- * The same section, for a screen built out of controls rather than rows.
+ * The same section, for a group of controls not wrapped in a card.
  *
- * Reading appearance is sliders, swatches and dropdowns laid straight
- * down a spaced column, not [ListItem]s stacked in a card, so
- * [SettingsExpandableGroup]'s rounded card would box a handful of
- * controls that are not rows and give them an edge nothing above them
- * has. The header is the one from there, unchanged — the reader is
- * opening the same kind of thing either way — and only what it opens
- * differs.
- *
- * The top padding is smaller because the column this sits in already
- * spaces its children apart, where the card variant's does not.
+ * The header is the one from [SettingsExpandableGroup], unchanged — the
+ * reader is opening the same kind of thing either way — and only what it
+ * opens differs. The top padding is smaller because the column this sits
+ * in already spaces its children apart, where the card variant's does not.
  */
 @Composable
 internal fun SettingsExpandableSection(

@@ -17,6 +17,10 @@
     <string name="add_folder_hint">Zeige Liseur einen Ordner mit EPUBs, und es behält ihn im Blick für neue Dateien.</string>
     <string name="library_folders">Überwachte Ordner</string>
     <string name="library_folders_empty">Es werden keine Ordner überwacht.</string>
+    <plurals name="library_folders_count">
+        <item quantity="one">%d überwachter Ordner</item>
+        <item quantity="other">%d überwachte Ordner</item>
+    </plurals>
     <string name="remove_folder">Ordner entfernen</string>
     <string name="remove_folder_a11y">%1$s entfernen</string>
     <string name="remove_folder_warning">Liseur überwacht „%1$s“ nicht mehr. Bücher, die nur in diesem Ordner lagen, verschwinden aus deiner Bibliothek; Bücher, die ein anderer überwachter Ordner hält, und Bücher, die auf deinem Server gespeichert sind, bleiben. Auf diesem Gerät werden keine Dateien gelöscht.</string>
@@ -808,8 +812,6 @@
     <string name="settings_dictionary_alt_language_auto">Automatisch</string>
     <string name="settings_dictionary_alt_language_auto_detail">Die Sprache der App, für Bücher in einer anderen Sprache</string>
     <string name="settings_library">Bibliothek</string>
-    <string name="settings_remote_library">Externe Bibliotheken</string>
-    <string name="settings_export_import">Export und Import</string>
     <string name="books_export_title">Offline-Bücher exportieren</string>
     <string name="books_export_detail">Kopiere alle offline verfügbaren EPUBs in einen Ordner. Vorhandene Dateinamen werden übersprungen.</string>
     <string name="books_export_progress">Bücher werden exportiert: %1$d von %2$d</string>

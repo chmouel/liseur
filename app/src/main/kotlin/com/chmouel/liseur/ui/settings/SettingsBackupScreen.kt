@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.LinearProgressIndicator
 import com.chmouel.liseur.data.library.BookExportResult
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.AlertDialog
@@ -172,83 +173,107 @@ fun SettingsBackupScreen(
                     .widthIn(max = contentWidthCap(windowWidth()))
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 12.dp, bottom = 32.dp),
             ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-                    Text(
-                        stringResource(R.string.settings_backup_detail),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(
-                    Modifier.fillMaxWidth().toggleable(value = includeConnections, enabled = !backup.busy, role = Role.Checkbox,
-                        onValueChange = { includeConnections = it })
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Checkbox(checked = includeConnections, onCheckedChange = null, enabled = !backup.busy)
-                    Text(stringResource(R.string.settings_backup_include_connections), Modifier.padding(start = 12.dp))
-                }
-                if (backup.hasTranslations) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text(
+                            stringResource(R.string.settings_backup_detail),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    RowDivider()
                     Row(
-                        Modifier.fillMaxWidth().toggleable(
-                            value = includeTranslations,
-                            enabled = !backup.busy,
-                            role = Role.Checkbox,
-                            onValueChange = { includeTranslations = it },
-                        ).padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = includeConnections,
+                                enabled = !backup.busy,
+                                role = Role.Checkbox,
+                                onValueChange = { includeConnections = it },
+                            )
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Checkbox(checked = includeTranslations, onCheckedChange = null, enabled = !backup.busy)
-                        Text(stringResource(R.string.whole_book_backup_include), Modifier.padding(start = 12.dp))
+                        Checkbox(checked = includeConnections, onCheckedChange = null, enabled = !backup.busy)
+                        Text(
+                            stringResource(R.string.settings_backup_include_connections),
+                            Modifier.padding(start = 12.dp),
+                        )
                     }
-                    Text(
-                        stringResource(R.string.whole_book_backup_unencrypted),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    if (backup.hasTranslations) {
+                        RowDivider()
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .toggleable(
+                                    value = includeTranslations,
+                                    enabled = !backup.busy,
+                                    role = Role.Checkbox,
+                                    onValueChange = { includeTranslations = it },
+                                )
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = includeTranslations, onCheckedChange = null, enabled = !backup.busy)
+                            Column(Modifier.padding(start = 12.dp)) {
+                                Text(stringResource(R.string.whole_book_backup_include))
+                                Text(
+                                    stringResource(R.string.whole_book_backup_unencrypted),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    RowDivider()
+                    BackupActionRow(
+                        icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
+                        title = stringResource(R.string.settings_backup_export),
+                        subtitle = stringResource(R.string.settings_backup_export_detail),
+                        enabled = !backup.busy,
+                        onClick = {
+                            if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
+                        },
+                    )
+                    RowDivider()
+                    BackupActionRow(
+                        icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
+                        title = stringResource(R.string.settings_backup_restore),
+                        subtitle = stringResource(R.string.settings_backup_restore_detail),
+                        enabled = !backup.busy,
+                        onClick = backup.restore,
                     )
                 }
-                BackupActionRow(
-                    icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
-                    title = stringResource(R.string.settings_backup_export),
-                    subtitle = stringResource(R.string.settings_backup_export_detail),
-                    enabled = !backup.busy,
-                    onClick = {
-                        if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
-                    },
-                )
-                BackupActionRow(
-                    icon = { Icon(Icons.Outlined.FileOpen, contentDescription = null) },
-                    title = stringResource(R.string.settings_backup_restore),
-                    subtitle = stringResource(R.string.settings_backup_restore_detail),
-                    enabled = !backup.busy,
-                    onClick = backup.restore,
-                )
-                BackupActionRow(
-                    icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
-                    title = stringResource(R.string.books_export_title),
-                    subtitle = stringResource(R.string.books_export_detail),
-                    enabled = !backup.busy,
-                    onClick = backup.exportBooks,
-                )
-                backup.bookProgress?.let { progress ->
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                        Text(
-                            stringResource(R.string.books_export_progress, progress.processed, progress.total),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        if (progress.total > 0) {
-                            LinearProgressIndicator(
-                                progress = { progress.processed.toFloat() / progress.total },
-                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+
+                SettingsGroup(stringResource(R.string.books_export_title)) {
+                    BackupActionRow(
+                        icon = { Icon(Icons.Outlined.FolderOpen, contentDescription = null) },
+                        title = stringResource(R.string.books_export_title),
+                        subtitle = stringResource(R.string.books_export_detail),
+                        enabled = !backup.busy,
+                        onClick = backup.exportBooks,
+                    )
+                    backup.bookProgress?.let { progress ->
+                        RowDivider()
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            Text(
+                                stringResource(R.string.books_export_progress, progress.processed, progress.total),
+                                style = MaterialTheme.typography.bodyMedium,
                             )
-                        } else {
-                            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
-                        }
-                        TextButton(onClick = backup.cancelBookExport) {
-                            Text(stringResource(R.string.cancel))
+                            if (progress.total > 0) {
+                                LinearProgressIndicator(
+                                    progress = { progress.processed.toFloat() / progress.total },
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                                )
+                            } else {
+                                LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                            }
+                            TextButton(onClick = backup.cancelBookExport) {
+                                Text(stringResource(R.string.cancel))
+                            }
                         }
                     }
                 }
@@ -362,13 +387,20 @@ fun SettingsBackupScreen(
                             status.counts.exported, status.counts.skipped, status.counts.failed,
                         )
                     }
-                    Text(
-                        text = message,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                            .semantics { liveRegion = LiveRegionMode.Polite },
-                    )
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                    ) {
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
                 }
             }
         }

@@ -17,6 +17,10 @@
     <string name="add_folder_hint">Indica a Liseur una carpeta de EPUBs y la vigilará por si aparecen nuevos.</string>
     <string name="library_folders">Carpetas vigiladas</string>
     <string name="library_folders_empty">No se está vigilando ninguna carpeta.</string>
+    <plurals name="library_folders_count">
+        <item quantity="one">%d carpeta vigilada</item>
+        <item quantity="other">%d carpetas vigiladas</item>
+    </plurals>
     <string name="remove_folder">Quitar carpeta</string>
     <string name="remove_folder_a11y">Quitar %1$s</string>
     <string name="remove_folder_warning">Liseur dejará de vigilar “%1$s”. Los libros que solo tenía esta carpeta saldrán de tu biblioteca; los que tenga otra carpeta vigilada, y los guardados en tu servidor, se quedan. No se borra ningún archivo de este dispositivo.</string>
@@ -797,8 +801,6 @@
     <string name="settings_dictionary_alt_language_auto">Automático</string>
     <string name="settings_dictionary_alt_language_auto_detail">El idioma de la aplicación, para libros escritos en otro idioma</string>
     <string name="settings_library">Biblioteca</string>
-    <string name="settings_remote_library">Bibliotecas remotas</string>
-    <string name="settings_export_import">Exportar e importar</string>
     <string name="books_export_title">Exportar libros sin conexión</string>
     <string name="books_export_detail">Copia todos los EPUB disponibles sin conexión a una carpeta. Se omiten los nombres de archivo existentes.</string>
     <string name="books_export_progress">Exportando libros: %1$d de %2$d</string>
