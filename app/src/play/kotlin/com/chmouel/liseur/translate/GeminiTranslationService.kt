@@ -21,9 +21,11 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.tts.GeminiAccount
 import com.chmouel.liseur.tts.ListedField
+import com.chmouel.liseur.tts.ListedMenu
 import com.chmouel.liseur.tts.Listing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -119,10 +121,59 @@ internal class GeminiTranslationService(
         scope.launch(start = CoroutineStart.UNDISPATCHED) { save() }
     }
 
+    override val hasModels = true
+
+    override fun savedModel(s: AppSettings, server: ServerConnection?) = model(s)
+
+    override suspend fun saveModel(server: ServerConnection?, model: String) = settings.setTranslationGeminiModel(model.trim())
+
     @Composable
     override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) {
         val configured by account.configured.collectAsState()
         val stored by model.collectAsState(initial = GeminiTranslation.DEFAULT_MODEL)
+        val models = rememberModels(configured)
+        if (!configured) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                Text(
+                    text = stringResource(R.string.translation_gemini_key_missing),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onManageServices) { Text(stringResource(R.string.translation_open_services)) }
+            }
+        }
+        ListedField(
+            title = stringResource(R.string.read_aloud_settings_server_model),
+            placeholder = GeminiTranslation.DEFAULT_MODEL,
+            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
+            stored = stored,
+            enabled = configured,
+            listing = models.first,
+            onSave = { name -> commit { settings.setTranslationGeminiModel(name) } },
+            onRetry = models.second,
+        )
+    }
+
+    @Composable
+    override fun ModelMenu(server: ServerConnection?, model: String, onModel: (String) -> Unit, modifier: Modifier) {
+        val configured by account.configured.collectAsState()
+        val models = rememberModels(configured)
+        ListedMenu(
+            value = model,
+            onValueChange = onModel,
+            label = stringResource(R.string.read_aloud_settings_server_model),
+            placeholder = GeminiTranslation.DEFAULT_MODEL,
+            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
+            enabled = configured,
+            listing = models.first,
+            onRetry = models.second,
+            modifier = modifier,
+        )
+    }
+
+    /** The models the key may use, asked for once the menu first opens, and how to ask again. */
+    @Composable
+    private fun rememberModels(configured: Boolean): Pair<Listing?, () -> Unit> {
         val generation by account.generation.collectAsState()
         var listing by remember(generation) { mutableStateOf<Listing?>(null) }
         var asked by remember(generation) { mutableIntStateOf(0) }
@@ -145,26 +196,7 @@ internal class GeminiTranslationService(
                 )
             }
         }
-        if (!configured) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text(
-                    text = stringResource(R.string.translation_gemini_key_missing),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TextButton(onClick = onManageServices) { Text(stringResource(R.string.translation_open_services)) }
-            }
-        }
-        ListedField(
-            title = stringResource(R.string.read_aloud_settings_server_model),
-            placeholder = GeminiTranslation.DEFAULT_MODEL,
-            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
-            stored = stored,
-            enabled = configured,
-            listing = listing,
-            onSave = { name -> commit { settings.setTranslationGeminiModel(name) } },
-            onRetry = { asked++ },
-        )
+        return listing to { asked++ }
     }
 
     private companion object {

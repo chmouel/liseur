@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import com.chmouel.liseur.BuildConfig
@@ -23,6 +24,7 @@ import com.chmouel.liseur.data.settings.ServerTranslationState
 import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.tts.ListedField
+import com.chmouel.liseur.tts.ListedMenu
 import com.chmouel.liseur.tts.Listing
 import com.chmouel.liseur.tts.OpenAiTts
 import com.chmouel.liseur.tts.SpeechLocalNetworkPrompt
@@ -233,6 +235,18 @@ internal class ServerTranslationService(
         scope.launch(start = CoroutineStart.UNDISPATCHED) { save() }
     }
 
+    override val hasModels = true
+
+    override fun savedModel(s: AppSettings, server: ServerConnection?): String =
+        server?.let { s.translationModels[it.id] }.orEmpty()
+
+    override fun readyWith(configured: Boolean, server: ServerConnection?, model: String) =
+        server != null && model.isNotBlank()
+
+    override suspend fun saveModel(server: ServerConnection?, model: String) {
+        server?.let { settings.setTranslationServerModel(it.url, model) }
+    }
+
     @Composable
     override fun SettingsRows(onManageServices: () -> Unit, onOpenPage: () -> Unit) {
         val server by server.collectAsState(initial = null)
@@ -240,6 +254,43 @@ internal class ServerTranslationService(
         val id = server?.id
         val stored by remember(id) { settings.settings.map { it.translationModels[id].orEmpty() } }
             .collectAsState(initial = "")
+        val models = rememberModels(url)
+        ListedField(
+            title = stringResource(R.string.read_aloud_settings_server_model),
+            placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
+            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
+            stored = stored,
+            enabled = true,
+            listing = models.listing,
+            onSave = { model -> commit { settings.setTranslationServerModel(url, model) } },
+            onRetry = models.retry,
+            detail = models.detail,
+        )
+    }
+
+    @Composable
+    override fun ModelMenu(server: ServerConnection?, model: String, onModel: (String) -> Unit, modifier: Modifier) {
+        val url = server?.url ?: return
+        val models = rememberModels(url)
+        ListedMenu(
+            value = model,
+            onValueChange = onModel,
+            label = stringResource(R.string.read_aloud_settings_server_model),
+            placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
+            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
+            enabled = true,
+            listing = models.listing,
+            onRetry = models.retry,
+            detail = models.detail,
+            modifier = modifier,
+        )
+    }
+
+    private class Models(val listing: Listing?, val retry: () -> Unit, val detail: @Composable (String) -> String?)
+
+    /** What [url] lists, asked once local network access allows it, with each model's price. */
+    @Composable
+    private fun rememberModels(url: String): Models {
         val allowed = SpeechLocalNetworkPrompt(connections.localNetwork, url)
         val origin = ServerConnections.originOf(url)
         // Moves on when the server's address or key changes on the Services page.
@@ -262,15 +313,9 @@ internal class ServerTranslationService(
                 onFailure = { Listing.Failed(url, listingMessage(it)) },
             )
         }
-        ListedField(
-            title = stringResource(R.string.read_aloud_settings_server_model),
-            placeholder = stringResource(R.string.read_aloud_settings_server_model_choose),
-            loading = stringResource(R.string.read_aloud_settings_server_models_loading),
-            stored = stored,
-            enabled = true,
+        return Models(
             listing = listing?.takeIf { it.url == url },
-            onSave = { model -> commit { settings.setTranslationServerModel(url, model) } },
-            onRetry = { asked++ },
+            retry = { asked++ },
             detail = { id ->
                 prices[id]?.let {
                     val locale = LocalConfiguration.current.locales[0]

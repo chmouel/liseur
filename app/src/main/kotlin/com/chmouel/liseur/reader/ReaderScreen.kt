@@ -2513,6 +2513,34 @@ internal fun ReaderScreen(
         effectScope.launch { startTranslatingPage(nav, selection, source, target) }
     }
 
+    // The first sentence on screen, measured on the words shown now.
+    suspend fun placeOnScreen(nav: EpubNavigatorFragment): Locator? =
+        if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+
+    /**
+     * The run's languages, service or model changed from its bar: [save]
+     * stores the choice, the book's words come back, and the page is
+     * translated again from its first sentence on screen.
+     */
+    fun changeTranslation(source: String?, target: String, save: suspend () -> Unit) {
+        effectScope.launch {
+            save()
+            stopTranslatingPage()
+            // Measured on the book's words, with the restore finished rather than cut short by the new run.
+            if (pageTranslated) {
+                withTimeoutOrNull(RESTORE_WAIT_MS) { snapshotFlow { pageTranslated }.first { !it } } ?: run {
+                    Toast.makeText(context, R.string.translation_page_change_failed, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+            }
+            val attempt = pageTranslationStarts.get()
+            val nav = navigatorNow ?: return@launch
+            val place = placeOnScreen(nav) ?: return@launch
+            if (pageTranslationStarts.get() != attempt || navigatorNow !== nav) return@launch
+            startTranslatingPage(nav, place, source, target)
+        }
+    }
+
     // A book left translated opens translated, once its page is where the
     // reader left it. Only until something else starts or stops a run on
     // this screen: from then on that is what the reader asked for.
@@ -3977,6 +4005,7 @@ internal fun ReaderScreen(
                         controls = chromeVisible || translationResumedCue,
                         onRetry = run::retry,
                         onStop = ::stopTranslatingBook,
+                        onChange = ::changeTranslation,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                 } ?: run {
@@ -4322,11 +4351,7 @@ internal fun ReaderScreen(
                         val translateFromHere: (PageTranslationModes.Mode) -> Unit = { languages ->
                             effectScope.launch {
                                 val nav = navigatorNow ?: return@launch
-                                val locator = if (effectiveScrollingNow) {
-                                    scrolledPlace(nav) ?: return@launch
-                                } else {
-                                    capture(nav, nav.currentLocator.value)
-                                }
+                                val locator = placeOnScreen(nav) ?: return@launch
                                 startTranslatingPage(nav, locator, languages.source, languages.target)
                             }
                         }

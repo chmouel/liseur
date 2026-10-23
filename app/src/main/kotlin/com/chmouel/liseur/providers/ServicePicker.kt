@@ -2,6 +2,7 @@ package com.chmouel.liseur.providers
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -10,10 +11,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +25,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -95,37 +99,61 @@ internal fun ServiceSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
-        Column(
-            Modifier
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .selectableGroup(),
-        ) {
+        ServiceOptions(title, options, manageDetail, onManage)
+    }
+}
+
+/**
+ * [ServiceSheet]'s list, for a sheet that shows it in place of its own
+ * content; [onBack], when given, leads its title back to that content.
+ */
+@Composable
+internal fun ServiceOptions(
+    title: String,
+    options: List<ServiceOption>,
+    manageDetail: String?,
+    onManage: () -> Unit,
+    onBack: (() -> Unit)? = null,
+) {
+    Column(
+        Modifier
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .selectableGroup(),
+    ) {
+        if (onBack != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.back))
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
+        } else {
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
             )
-            options.forEach { option ->
-                ListItem(
-                    modifier = Modifier.selectable(selected = option.selected, role = Role.RadioButton, onClick = option.onClick),
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    leadingContent = { Icon(option.icon, contentDescription = null) },
-                    headlineContent = { Text(option.headline) },
-                    supportingContent = { Text(option.supporting) },
-                    trailingContent = {
-                        // Null, not a second handler: the row carries the click.
-                        RadioButton(selected = option.selected, onClick = null)
-                    },
-                )
-            }
+        }
+        options.forEach { option ->
             ListItem(
-                modifier = Modifier.clickable(role = Role.Button, onClick = onManage),
+                modifier = Modifier.selectable(selected = option.selected, role = Role.RadioButton, onClick = option.onClick),
                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
-                headlineContent = { Text(stringResource(R.string.services_manage)) },
-                supportingContent = manageDetail?.let { { Text(it) } },
+                leadingContent = { Icon(option.icon, contentDescription = null) },
+                headlineContent = { Text(option.headline) },
+                supportingContent = { Text(option.supporting) },
+                trailingContent = {
+                    // Null, not a second handler: the row carries the click.
+                    RadioButton(selected = option.selected, onClick = null)
+                },
             )
         }
+        ListItem(
+            modifier = Modifier.clickable(role = Role.Button, onClick = onManage),
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+            leadingContent = { Icon(Icons.Outlined.Tune, contentDescription = null) },
+            headlineContent = { Text(stringResource(R.string.services_manage)) },
+            supportingContent = manageDetail?.let { { Text(it) } },
+        )
     }
 }

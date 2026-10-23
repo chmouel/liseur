@@ -573,7 +573,7 @@ private fun LanguageRow(
 }
 
 @Composable
-private fun SourcePicker(
+internal fun SourcePicker(
     service: TranslationService?,
     selected: String?,
     pinned: List<String>,
@@ -595,7 +595,7 @@ private fun SourcePicker(
 }
 
 @Composable
-private fun TargetPicker(
+internal fun TargetPicker(
     service: TranslationService?,
     source: String?,
     selected: String?,

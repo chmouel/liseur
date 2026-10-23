@@ -205,11 +205,8 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     onClick = { picking = true },
                 )
                 if (picking) {
-                    val device = remember { feature.services.firstOrNull { it.id == DeviceTranslationService.ID } }
-                    val deviceTranslates by remember(device) { device?.configured ?: flowOf(null) }.collectAsState(initial = null)
-                    val offered = offeredServiceIds(feature.services.map { it.id }, provider, deviceTranslates)
                     TranslationServiceSheet(
-                        services = feature.services.filter { it.id in offered },
+                        services = offeredServices(feature, provider),
                         servers = servers.readable.orEmpty(),
                         // Nothing is ticked until the reader chooses, whatever translation falls back to.
                         selected = service.takeIf { chosen },
@@ -234,19 +231,13 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                     )
                 }
                 agreeing?.let { asked ->
-                    AlertDialog(
-                        onDismissRequest = { agreeing = null },
-                        title = { Text(stringResource(R.string.translation_consent_title, stringResource(asked.label))) },
-                        text = { Text(stringResource(asked.consent ?: return@AlertDialog)) },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    agreeing = null
-                                    scope.launch { feature.choose(asked) }
-                                },
-                            ) { Text(stringResource(R.string.translation_consent_agree)) }
+                    TranslationConsent(
+                        service = asked,
+                        onAgree = {
+                            agreeing = null
+                            scope.launch { feature.choose(asked) }
                         },
-                        dismissButton = { TextButton(onClick = { agreeing = null }) { Text(stringResource(R.string.cancel)) } },
+                        onDismiss = { agreeing = null },
                     )
                 }
                 SettingsGroup(server?.name ?: stringResource(service.label)) {
@@ -646,6 +637,61 @@ internal fun offeredServiceIds(ids: List<String>, chosen: String?, deviceTransla
 internal fun shouldOfferTranslationSetup(offersSetup: Boolean, chosen: Boolean, ready: Boolean): Boolean =
     offersSetup && !(chosen && ready)
 
+/** The services the picker lists for [provider], the one chosen: the phone's translator only while it has languages. */
+@Composable
+internal fun offeredServices(feature: ServiceTranslate, provider: String?): List<TranslationService> {
+    val device = remember { feature.services.firstOrNull { it.id == DeviceTranslationService.ID } }
+    val deviceTranslates by remember(device) { device?.configured ?: flowOf(null) }.collectAsState(initial = null)
+    val offered = offeredServiceIds(feature.services.map { it.id }, provider, deviceTranslates)
+    return feature.services.filter { it.id in offered }
+}
+
+/** Asks before [service] is first chosen, saying what it sends where. */
+@Composable
+internal fun TranslationConsent(service: TranslationService, onAgree: () -> Unit, onDismiss: () -> Unit) {
+    val consent = service.consent ?: return
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.translation_consent_title, stringResource(service.label))) },
+        text = { Text(stringResource(consent)) },
+        confirmButton = { TextButton(onClick = onAgree) { Text(stringResource(R.string.translation_consent_agree)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** Every service, each listed server by name in place of the server kind. */
+@Composable
+internal fun translationServiceOptions(
+    services: List<TranslationService>,
+    servers: List<ServerConnection>,
+    selected: TranslationService?,
+    selectedServer: String?,
+    onPick: (TranslationService) -> Unit,
+    onPickServer: (ServerConnection) -> Unit,
+): List<ServiceOption> = services.flatMap { service ->
+    if (service.id == ServerSettings.SERVER_PROVIDER) {
+        servers.map { server ->
+            ServiceOption(
+                selected = selected?.id == service.id && server.id == selectedServer,
+                icon = service.icon,
+                headline = server.name,
+                supporting = server.host,
+                onClick = { onPickServer(server) },
+            )
+        }
+    } else {
+        listOf(
+            ServiceOption(
+                selected = service.id == selected?.id,
+                icon = service.icon,
+                headline = stringResource(service.label),
+                supporting = stringResource(service.summary),
+                onClick = { onPick(service) },
+            ),
+        )
+    }
+}
+
 /** Every service, each listed server by name in place of the server kind, then the way to the Services page. */
 @Composable
 private fun TranslationServiceSheet(
@@ -658,32 +704,9 @@ private fun TranslationServiceSheet(
     onManage: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val options = services.flatMap { service ->
-        if (service.id == ServerSettings.SERVER_PROVIDER) {
-            servers.map { server ->
-                ServiceOption(
-                    selected = selected?.id == service.id && server.id == selectedServer,
-                    icon = service.icon,
-                    headline = server.name,
-                    supporting = server.host,
-                    onClick = { onPickServer(server) },
-                )
-            }
-        } else {
-            listOf(
-                ServiceOption(
-                    selected = service.id == selected?.id,
-                    icon = service.icon,
-                    headline = stringResource(service.label),
-                    supporting = stringResource(service.summary),
-                    onClick = { onPick(service) },
-                ),
-            )
-        }
-    }
     ServiceSheet(
         title = stringResource(R.string.translation_settings_provider),
-        options = options,
+        options = translationServiceOptions(services, servers, selected, selectedServer, onPick, onPickServer),
         manageDetail = if (servers.isEmpty()) stringResource(R.string.translation_settings_manage_detail) else null,
         onManage = onManage,
         onDismiss = onDismiss,

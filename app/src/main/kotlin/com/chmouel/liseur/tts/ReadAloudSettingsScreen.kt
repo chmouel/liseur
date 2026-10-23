@@ -412,7 +412,6 @@ internal fun ListedField(
     onRetry: () -> Unit,
     detail: @Composable (String) -> String? = { null },
 ) {
-    val focus = LocalFocusManager.current
     var typed by remember { mutableStateOf(stored) }
     // The saved name the field last showed: a name chosen for the reader,
     // such as a new server's first model, does not replace one being typed.
@@ -423,7 +422,6 @@ internal fun ListedField(
             synced = stored
         }
     }
-    var open by remember { mutableStateOf(false) }
     // Picking from the menu, Done and leaving the field may all follow one another: one name is saved once.
     var saved by remember(stored) { mutableStateOf<String?>(null) }
     val commit = {
@@ -445,80 +443,120 @@ internal fun ListedField(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        ExposedDropdownMenuBox(
-            expanded = open,
-            onExpandedChange = { expand ->
-                open = expand && enabled
-                if (open && (listing == null || listing is Listing.Failed)) onRetry()
+        ListedMenu(
+            value = typed,
+            onValueChange = { typed = it },
+            placeholder = placeholder,
+            loading = loading,
+            enabled = enabled,
+            listing = listing,
+            onRetry = onRetry,
+            onCommit = commit,
+            detail = detail,
+            modifier = Modifier.padding(top = 12.dp),
+            fieldModifier = Modifier.onLeaving { commit() },
+        )
+    }
+}
+
+/**
+ * The field and menu of [ListedField] alone: [value] is the caller's, each
+ * keystroke and pick goes to [onValueChange], and [onCommit] follows a pick
+ * or Done. Nothing is saved on its own, so a sheet can hold a name until
+ * it applies it.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ListedMenu(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    loading: String,
+    enabled: Boolean,
+    listing: Listing?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+    label: String? = null,
+    onCommit: () -> Unit = {},
+    detail: @Composable (String) -> String? = { null },
+    fieldModifier: Modifier = Modifier,
+) {
+    val focus = LocalFocusManager.current
+    var open by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = open,
+        onExpandedChange = { expand ->
+            open = expand && enabled
+            if (open && (listing == null || listing is Listing.Failed)) onRetry()
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            enabled = enabled,
+            label = label?.let { { Text(it) } },
+            placeholder = { Text(placeholder) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(
+                    expanded = open,
+                    modifier = Modifier.menuAnchor(MenuAnchorType.SecondaryEditable, enabled),
+                )
             },
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        ) {
-            OutlinedTextField(
-                value = typed,
-                onValueChange = { typed = it },
-                singleLine = true,
-                enabled = enabled,
-                placeholder = { Text(placeholder) },
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(
-                        expanded = open,
-                        modifier = Modifier.menuAnchor(MenuAnchorType.SecondaryEditable, enabled),
-                    )
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Uri,
+                autoCorrectEnabled = false,
+                imeAction = ImeAction.Done,
+            ),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    open = false
+                    onCommit()
+                    focus.clearFocus()
                 },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Uri,
-                    autoCorrectEnabled = false,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        open = false
-                        commit()
-                        focus.clearFocus()
-                    },
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable, enabled)
-                    .onLeaving { commit() },
-            )
-            ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                when (listing) {
-                    is Listing.Loaded -> listing.items.forEach { choice ->
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(choice)
-                                    detail(choice)?.let {
-                                        Text(
-                                            text = it,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled)
+                .then(fieldModifier),
+        )
+        ExposedDropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            when (listing) {
+                is Listing.Loaded -> listing.items.forEach { choice ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(choice)
+                                detail(choice)?.let {
+                                    Text(
+                                        text = it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
-                            },
-                            onClick = {
-                                open = false
-                                typed = choice
-                                commit()
-                                focus.clearFocus()
-                            },
-                        )
-                    }
-                    is Listing.Failed -> {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(listing.message)) },
-                            onClick = {},
-                            enabled = false,
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.read_aloud_settings_server_retry)) },
-                            onClick = onRetry,
-                        )
-                    }
-                    else -> DropdownMenuItem(text = { Text(loading) }, onClick = {}, enabled = false)
+                            }
+                        },
+                        onClick = {
+                            open = false
+                            onValueChange(choice)
+                            onCommit()
+                            focus.clearFocus()
+                        },
+                    )
                 }
+                is Listing.Failed -> {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(listing.message)) },
+                        onClick = {},
+                        enabled = false,
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.read_aloud_settings_server_retry)) },
+                        onClick = onRetry,
+                    )
+                }
+                else -> DropdownMenuItem(text = { Text(loading) }, onClick = {}, enabled = false)
             }
         }
     }

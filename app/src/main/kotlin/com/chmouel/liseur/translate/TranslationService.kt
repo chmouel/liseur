@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.ServerConnection
 import kotlinx.coroutines.flow.Flow
 
 /** Whether a service translates one pair of languages as things stand. */
@@ -51,6 +52,25 @@ internal interface TranslationService {
 
     /** The model it sends a translation to under [s], as it resolves it; null when it has none. */
     fun model(s: AppSettings): String? = null
+
+    /** Whether the reader picks its model, from [ModelMenu]. */
+    val hasModels: Boolean get() = false
+
+    /** The model saved under [s] for [server], or for the service when it has no servers; blank when none. */
+    fun savedModel(s: AppSettings, server: ServerConnection?): String = ""
+
+    /**
+     * Whether it could translate with [model] on [server], held by a sheet
+     * before they are saved. [configured] is what it says of the saved choice.
+     */
+    fun readyWith(configured: Boolean, server: ServerConnection?, model: String): Boolean = configured
+
+    /** Saves [model] for [server], or for the service when it has no servers. */
+    suspend fun saveModel(server: ServerConnection?, model: String) = Unit
+
+    /** The models [server] offers, showing [model]; nothing is saved, each change goes to [onModel]. */
+    @Composable
+    fun ModelMenu(server: ServerConnection?, model: String, onModel: (String) -> Unit, modifier: Modifier) = Unit
 
     /**
      * Whether a page sentence it translates under [s] goes with the

@@ -1387,7 +1387,11 @@ changing reader behavior.
   into <language>" (reader ⋮ menu) translate a reflowable book in place
   from the first sentence on screen (`scrolledPlace` when scrolling, else
   the page locator) in `TranslateFeature.pageLanguages`; the translation
-  bar keeps Stop. While setup or a language choice is needed the ⋮ item
+  bar keeps Stop. Tapping the bar opens `PageTranslationSheet` for the
+  run's languages, service and model; nothing is saved until Apply, which
+  saves them, waits for the book's words to come back, and starts the run
+  again from the first sentence on screen, remembering the per-book
+  languages. While setup or a language choice is needed the ⋮ item
   reads "Translate book" and opens Translation settings; it is hidden on
   a translated page (`ReaderTranslateEntry`). Long-pressing it opens
   whole-book translation when the chosen service can prepare one

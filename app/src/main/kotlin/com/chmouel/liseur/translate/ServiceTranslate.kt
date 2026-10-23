@@ -11,6 +11,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.ServerConnection
 import com.chmouel.liseur.data.settings.ServerSettings
 import com.chmouel.liseur.data.settings.TranslationContextSize
 import com.chmouel.liseur.providers.ServerConnections
@@ -142,6 +143,10 @@ internal class ServiceTranslate(
     suspend fun choose(service: TranslationService) = settings.setTranslationProvider(service.id)
 
     suspend fun chooseServer(id: String) = settings.selectTranslationServer(id)
+
+    /** The model saved for [service] on [server], or for the service when it has none. */
+    suspend fun savedModel(service: TranslationService, server: ServerConnection?) =
+        service.savedModel(settings.settings.first(), server)
 
     /** Where [service] sends the text under the current settings, for "Translated by %s.". */
     suspend fun destination(service: TranslationService) = service.destination(settings.settings.first())
@@ -454,8 +459,9 @@ internal class ServiceTranslate(
         controls: Boolean,
         onRetry: () -> Unit,
         onStop: () -> Unit,
+        onChange: (source: String?, target: String, save: suspend () -> Unit) -> Unit,
         modifier: Modifier,
-    ) = PageTranslationBar(this, translator, state, answeredBy, theme, controls, onRetry, onStop, modifier)
+    ) = PageTranslationBar(this, translator, state, answeredBy, theme, controls, onRetry, onStop, onChange, modifier)
 
     @Composable
     override fun PageCredit(answeredBy: Set<String>, theme: ReaderTheme, modifier: Modifier) {

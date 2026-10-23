@@ -86,7 +86,9 @@ interface TranslateFeature {
      * The bar under a translated page, where read aloud's player sits: the
      * languages and Stop with the reader's [controls] up, and what stopped
      * the run even without them. [answeredBy] names what gave the
-     * translations on the page, as [PageSwap.by] does.
+     * translations on the page, as [PageSwap.by] does. Tapped, it opens a
+     * sheet whose Apply hands [onChange] the languages and what saves the
+     * service and model picked.
      */
     @Composable
     fun PageBar(
@@ -97,6 +99,7 @@ interface TranslateFeature {
         controls: Boolean,
         onRetry: () -> Unit,
         onStop: () -> Unit,
+        onChange: (source: String?, target: String, save: suspend () -> Unit) -> Unit,
         modifier: Modifier,
     )
 
@@ -144,6 +147,7 @@ interface TranslateFeature {
             controls: Boolean,
             onRetry: () -> Unit,
             onStop: () -> Unit,
+            onChange: (source: String?, target: String, save: suspend () -> Unit) -> Unit,
             modifier: Modifier,
         ) = Unit
 

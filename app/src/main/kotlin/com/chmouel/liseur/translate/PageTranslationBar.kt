@@ -5,14 +5,17 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.ButtonDefaults
@@ -33,9 +36,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,6 +74,7 @@ internal fun PageTranslationBar(
     controls: Boolean,
     onRetry: () -> Unit,
     onStop: () -> Unit,
+    onChange: (source: String?, target: String, save: suspend () -> Unit) -> Unit,
     modifier: Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -80,6 +86,7 @@ internal fun PageTranslationBar(
     val credits = feature.credits(answeredBy)
     // Null when closed; true opens it on the Services page.
     var settings by remember { mutableStateOf<Boolean?>(null) }
+    var changing by remember { mutableStateOf(false) }
     val halted = state as? PageTranslationState.Halted
     // Back from the system's language downloads, or anything else that may have fixed it.
     // The service looks again first: it remembers the languages it found missing.
@@ -120,26 +127,43 @@ internal fun PageTranslationBar(
         ChromeCard(theme = theme) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             ) {
-                Icon(service?.icon ?: Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(20.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = pageLanguages,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable(role = Role.Button, onClickLabel = stringResource(R.string.translation_page_change)) { changing = true }
+                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                ) {
+                    Icon(service?.icon ?: Icons.Outlined.Translate, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = pageLanguages,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (halted != null || eInk) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.72f),
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                        credits.forEach { it.Credit(theme.background, Modifier.padding(top = 4.dp)) }
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = LocalContentColor.current.copy(alpha = 0.6f),
                     )
-                    Text(
-                        text = status,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (halted != null || eInk) LocalContentColor.current else LocalContentColor.current.copy(alpha = 0.72f),
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                    )
-                    credits.forEach { it.Credit(theme.background, Modifier.padding(top = 4.dp)) }
                 }
                 action?.let {
                     TextButton(
@@ -152,6 +176,16 @@ internal fun PageTranslationBar(
                 }
             }
         }
+    }
+
+    if (changing) {
+        PageTranslationSheet(
+            feature = feature,
+            translator = translator,
+            onChange = onChange,
+            onSettingsClosed = onRetry,
+            onDismiss = { changing = false },
+        )
     }
 
     val downloads = service
