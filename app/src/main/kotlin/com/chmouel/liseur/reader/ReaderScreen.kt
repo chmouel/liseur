@@ -49,10 +49,14 @@ import androidx.compose.material.icons.outlined.CloudSync
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -99,7 +103,11 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -4384,86 +4392,118 @@ internal fun ReaderScreen(
                                     }
                                 }
                             }
-                        // Actions that start something from the first
-                        // sentence on screen, and syncing this book's
-                        // position; reading settings, this book's
-                        // background recaps among them, stay in Aa.
-                        // Hidden when none applies.
-                        if (codexEnabled || storyAvailable || translateEntry != null || readAloudFromHere != null || syncable) {
-                            var moreOpen by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { moreOpen = true }) {
-                                    Icon(
-                                        Icons.Outlined.MoreVert,
-                                        contentDescription = stringResource(R.string.more_options),
+                        var moreOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { moreOpen = true }) {
+                                Icon(
+                                    Icons.Outlined.MoreVert,
+                                    contentDescription = stringResource(R.string.more_options),
+                                )
+                            }
+                            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                                if (codexEnabled || storyAvailable) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.codex_title)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Hub, contentDescription = null) },
+                                        onClick = {
+                                            moreOpen = false
+                                            val lookups = companion
+                                            val nav = navigatorNow
+                                            if (lookups != null && nav != null) effectScope.launch {
+                                                // A peek's origin may have been on a translated
+                                                // page; placed as if it were, it shows no more.
+                                                val peekOrigin = lookups.peek.value?.origin
+                                                val origin = peekOrigin
+                                                    ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
+                                                if (origin != null && navigatorNow === nav) {
+                                                    lookups.close()
+                                                    lookups.codex.open(origin, peekOrigin != null || pageTranslated, story = storyAvailable)
+                                                }
+                                            }
+                                        },
                                     )
                                 }
-                                DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                                    if (codexEnabled || storyAvailable) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.codex_title)) },
-                                            leadingIcon = { Icon(Icons.Outlined.Hub, contentDescription = null) },
-                                            onClick = {
-                                                moreOpen = false
-                                                val lookups = companion
-                                                val nav = navigatorNow
-                                                if (lookups != null && nav != null) effectScope.launch {
-                                                    // A peek's origin may have been on a translated
-                                                    // page; placed as if it were, it shows no more.
-                                                    val peekOrigin = lookups.peek.value?.origin
-                                                    val origin = peekOrigin
-                                                        ?: if (effectiveScrollingNow) scrolledPlace(nav) else capture(nav, nav.currentLocator.value)
-                                                    if (origin != null && navigatorNow === nav) {
-                                                        lookups.close()
-                                                        lookups.codex.open(origin, peekOrigin != null || pageTranslated, story = storyAvailable)
-                                                    }
+                                translateEntry?.let { entry ->
+                                    ReaderTranslateMenuItem(
+                                        entry = entry,
+                                        uiLocale = uiLocale,
+                                        onClick = {
+                                            moreOpen = false
+                                            when (entry) {
+                                                is ReaderTranslateEntry.Into -> {
+                                                    chromeVisible = false
+                                                    translateFromHere(entry.languages)
                                                 }
-                                            },
+                                                is ReaderTranslateEntry.SetUp -> translationSettingsOpen = true
+                                            }
+                                        },
+                                        onLongClick = {
+                                            moreOpen = false
+                                            wholeBookOpen = true
+                                        },
+                                    )
+                                }
+                                readAloudFromHere?.let { action ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.reader_narrate_from_here)) },
+                                        leadingIcon = {
+                                            Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null)
+                                        },
+                                        onClick = {
+                                            moreOpen = false
+                                            chromeVisible = false
+                                            action()
+                                        },
+                                    )
+                                }
+                                if (syncable) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.reader_sync_book)) },
+                                        leadingIcon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
+                                        onClick = {
+                                            moreOpen = false
+                                            onBookSyncAction.start()
+                                        },
+                                    )
+                                }
+                                if (codexEnabled || storyAvailable || translateEntry != null || readAloudFromHere != null || syncable) {
+                                    HorizontalDivider()
+                                }
+                                DropdownMenuItem(
+                                    modifier = Modifier.semantics(mergeDescendants = true) {
+                                        role = Role.Checkbox
+                                        toggleableState = if (scrollMode) ToggleableState.On else ToggleableState.Off
+                                    },
+                                    text = { Text(stringResource(R.string.settings_scroll_mode)) },
+                                    leadingIcon = { Icon(Icons.Outlined.SwapVert, contentDescription = null) },
+                                    trailingIcon = {
+                                        Checkbox(
+                                            checked = scrollMode,
+                                            onCheckedChange = null,
+                                            enabled = readingCss.honoursAnything,
                                         )
-                                    }
-                                    translateEntry?.let { entry ->
-                                        ReaderTranslateMenuItem(
-                                            entry = entry,
-                                            uiLocale = uiLocale,
-                                            onClick = {
-                                                moreOpen = false
-                                                when (entry) {
-                                                    is ReaderTranslateEntry.Into -> {
-                                                        chromeVisible = false
-                                                        translateFromHere(entry.languages)
-                                                    }
-                                                    is ReaderTranslateEntry.SetUp -> translationSettingsOpen = true
-                                                }
-                                            },
-                                            onLongClick = {
-                                                moreOpen = false
-                                                wholeBookOpen = true
-                                            },
-                                        )
-                                    }
-                                    readAloudFromHere?.let { action ->
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.reader_narrate_from_here)) },
-                                            leadingIcon = {
-                                                Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null)
-                                            },
-                                            onClick = {
-                                                moreOpen = false
-                                                chromeVisible = false
-                                                action()
-                                            },
-                                        )
-                                    }
-                                    if (syncable) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.reader_sync_book)) },
-                                            leadingIcon = { Icon(Icons.Outlined.CloudSync, contentDescription = null) },
-                                            onClick = {
-                                                moreOpen = false
-                                                onBookSyncAction.start()
-                                            },
-                                        )
-                                    }
+                                    },
+                                    enabled = readingCss.honoursAnything,
+                                    onClick = { onScrollModeChanged(!scrollMode) },
+                                )
+                                if (effectiveScrolling) {
+                                    DropdownMenuItem(
+                                        modifier = Modifier.semantics(mergeDescendants = true) {
+                                            role = Role.Checkbox
+                                            toggleableState =
+                                                if (autoScrollArmed) ToggleableState.On else ToggleableState.Off
+                                        },
+                                        text = { Text(stringResource(R.string.reader_auto_scroll)) },
+                                        leadingIcon = { Icon(Icons.Outlined.PlayArrow, contentDescription = null) },
+                                        trailingIcon = {
+                                            Checkbox(checked = autoScrollArmed, onCheckedChange = null)
+                                        },
+                                        onClick = {
+                                            val enable = !autoScrollArmed
+                                            autoScrollArmed = enable
+                                            if (enable) moreOpen = false
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -4928,11 +4968,6 @@ internal fun ReaderScreen(
             onFontSizeChanged = onPrefsAction.setFontSize,
             onThemeSelected = onPrefsAction.setTheme,
             onBrightnessChanged = onPrefsAction.setBrightness,
-            scrollMode = scrollMode,
-            onScrollModeChanged = onScrollModeChanged,
-            scrolling = effectiveScrolling,
-            autoScrolling = autoScrollArmed,
-            onAutoScrollChanged = { autoScrollArmed = it },
             onOpenAdvanced = { sheet = ReaderSheet.ADVANCED },
             onDismiss = { sheet = ReaderSheet.NONE },
         )

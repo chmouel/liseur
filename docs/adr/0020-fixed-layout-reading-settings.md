@@ -42,7 +42,7 @@ documentation, the same way ADR 2 was:
 | `lineHeight` | `layout == REFLOWABLE && !publisherStyles && …` | line spacing, Advanced |
 | `pageMargins` | `layout == REFLOWABLE` | margins, Advanced |
 | `columnCount` | `layout == REFLOWABLE && !scroll` | columns, Advanced |
-| `scroll` | `layout == REFLOWABLE && !verticalText` | "read by scrolling", typography sheet |
+| `scroll` | `layout == REFLOWABLE && !verticalText` | "read by scrolling", reader overflow menu |
 | the six of ADR 2 | `layout == REFLOWABLE && …` | Advanced — already disabled |
 | `backgroundColor` | `preferences.backgroundColor != null` | reading theme |
 | `spread` | `layout == FIXED` | nowhere |

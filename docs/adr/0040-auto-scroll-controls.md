@@ -5,6 +5,9 @@ Status: accepted
 Amends [6. Auto-scroll](0006-auto-scroll.md) and
 [1. One Advanced entry, and nothing else](0001-advanced-reading-menu.md).
 
+> Amended by [ADR-0063](0063-reader-scrolling-controls-live-in-overflow.md):
+> both scrolling controls now live in the reader's overflow menu.
+
 ## Context
 
 Auto-scroll shipped as one row in the Advanced sheet: a switch and a
@@ -22,15 +25,16 @@ what the chrome does.
 
 ## Decision
 
-**The switch sits beside the scrolling switch.** "Scroll the page for
-me" moves to the typography sheet, directly under "Read by scrolling",
-and shows only while the book is effectively scrolled: vertical text
-counts, a fixed-layout book does not, the same test
+**At acceptance, the switch moved beside the scrolling switch.** "Scroll
+the page for me" moved to the typography sheet, directly under "Read by
+scrolling", and showed only while the book was effectively scrolled:
+vertical text counted, a fixed-layout book did not, the same test
 [ADR 6](0006-auto-scroll.md) uses everywhere else. It is turned on
 every time a reader sits down to read that way, which is the
 "changed frequently" exception `DEVELOPER.md` allows to the rule that
 new reading settings default to Advanced. Turning it on still closes
-the sheet and the chrome and starts the page moving.
+the sheet and the chrome and starts the page moving. Its current
+placement is in [ADR 63](0063-reader-scrolling-controls-live-in-overflow.md).
 
 **The speed stays in Advanced.** The pace is chosen once and left
 alone. The slider stays where it was, still shown only in a scrolled

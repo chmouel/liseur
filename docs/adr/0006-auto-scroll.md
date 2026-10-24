@@ -3,10 +3,11 @@
 Status: accepted
 GitHub issue: [#45](https://github.com/chmouel/liseur/issues/45)
 
-> Amended by [ADR-0040](0040-auto-scroll-controls.md): the switch now
-> sits under "Read by scrolling" in the typography sheet, the speed
-> stays in Advanced, and the page gains a small pause, speed and stop
-> control while auto-scroll is on.
+> Amended by [ADR-0040](0040-auto-scroll-controls.md) and
+> [ADR-0063](0063-reader-scrolling-controls-live-in-overflow.md): the
+> switch lives in the reader's overflow menu, the speed stays in
+> Advanced, and the page gains a small pause, speed and stop control
+> while auto-scroll is on.
 
 ## Context
 

@@ -82,9 +82,10 @@ cannot be empty. The rows that do not apply still hide themselves:
 auto-scroll only in a scrolled book, the page-turn animation only in a
 paginated one, columns only when there is width for two.
 
-The auto-scroll switch has since moved to the first sheet, under "Read
-by scrolling", leaving only its speed here
-([ADR 40](0040-auto-scroll-controls.md)).
+The auto-scroll switch has since moved beside "Read by scrolling" in the
+reader's overflow menu, leaving only its speed here
+([ADR 40](0040-auto-scroll-controls.md),
+[ADR 63](0063-reader-scrolling-controls-live-in-overflow.md)).
 
 Settings -> Reading appearance shows four of the six without a book,
 and behind an Advanced section of its own, closed on arrival. The

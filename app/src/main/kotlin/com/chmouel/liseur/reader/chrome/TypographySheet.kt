@@ -8,14 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,18 +43,17 @@ import com.chmouel.liseur.ui.windowWidth
  *
  * The controls themselves live in `ui/reading`, because Settings shows
  * the same ones on a screen of its own. This sheet is the quick path to
- * them with a book open, and adds the two answers that only make sense
- * with one: how the book is read, and whether the screen stays awake for
- * it.
+ * them with a book open, and adds the answer that only makes sense with
+ * one: whether the screen stays awake for it.
  *
  * It is deliberately short. Everything a reader sets once, if ever, is a
  * tap further in, behind the Advanced row at the bottom — see
  * `docs/adr/0001-advanced-reading-menu.md`.
  *
  * [readingCss] is what this book can honour. A fixed-layout book greys
- * the size, the face and the scrolling toggle, because Readium gates all
- * three on a reflowable publication, and the line at the top says so
- * once for the three of them. The theme and the brightness stay live:
+ * the size and the face, because Readium gates them on a reflowable
+ * publication, and the line at the top says so once for both. The theme
+ * and the brightness stay live:
  * the brightness is the screen's, and Liseur passes its own
  * `backgroundColor`, which Readium paints the pager with whatever the
  * layout — so the swatches still change the surround of a fixed page.
@@ -72,11 +69,6 @@ fun TypographySheet(
     onFontSizeChanged: (Double) -> Unit,
     onThemeSelected: (ReaderThemeChoice) -> Unit,
     onBrightnessChanged: (Float?) -> Unit,
-    scrollMode: Boolean,
-    onScrollModeChanged: (Boolean) -> Unit,
-    scrolling: Boolean,
-    autoScrolling: Boolean,
-    onAutoScrollChanged: (Boolean) -> Unit,
     onOpenAdvanced: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -112,20 +104,6 @@ fun TypographySheet(
                 onImport = fontLibrary.pick,
                 onRemove = fontLibrary.remove,
             )
-            ScrollModeToggle(
-                checked = scrollMode,
-                enabled = reshapeable,
-                onChanged = onScrollModeChanged,
-            )
-            // The page's answer rather than the switch above: vertical
-            // text scrolls whatever that says, and a fixed-layout book
-            // turns whatever it says.
-            if (scrolling) {
-                AutoScrollToggle(
-                    enabled = autoScrolling,
-                    onChanged = onAutoScrollChanged,
-                )
-            }
             // Last, and always. The sheet behind it has rows for any
             // book, read either way, so it can no longer open empty.
             AdvancedRow(onClick = onOpenAdvanced)
@@ -161,83 +139,4 @@ private fun AdvancedRow(onClick: () -> Unit) {
         )
     }
 }
-
-
-/**
- * Reads this book by scrolling rather than by turning pages.
- *
- * Settings holds the answer for the library, and it is what a book
- * starts from; flipping it here sets this book apart for good, the same
- * way the screen switch below does, so a later change in Settings leaves
- * this book where it was put.
- *
- * [enabled] is false in a fixed-layout book, which Readium paginates
- * whatever this says.
- */
-@Composable
-private fun ScrollModeToggle(
-    checked: Boolean,
-    enabled: Boolean,
-    onChanged: (Boolean) -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onChanged,
-            ),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.settings_scroll_mode),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
-        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
-    }
-}
-
-/**
- * Starts the page moving on its own.
- *
- * Right under the scrolling switch, because that is where a reader who
- * has just chosen to scroll looks next. Starting closes this sheet so
- * the reader sees the page they asked to move; the controls on the page
- * pause it, change its speed, and stop it. The speed is also kept in
- * the Advanced sheet, set once and left alone.
- *
- * See `docs/adr/0006-auto-scroll.md` and
- * `docs/adr/0040-auto-scroll-controls.md`.
- */
-@Composable
-private fun AutoScrollToggle(enabled: Boolean, onChanged: (Boolean) -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .toggleable(
-                value = enabled,
-                role = Role.Switch,
-                onValueChange = onChanged,
-            ),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = stringResource(R.string.reader_auto_scroll),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                text = stringResource(R.string.reader_auto_scroll_detail),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = enabled, onCheckedChange = null)
-    }
-}
-
 
