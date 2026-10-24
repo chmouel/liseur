@@ -20,7 +20,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -34,6 +33,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.settings.SettingsGroup
 
 /** One choice in a feature's service picker: a service, or a listed server by name. */
 internal data class ServiceOption(
@@ -59,16 +59,11 @@ internal fun ServiceRow(
     changeLabel: String,
     onClick: () -> Unit,
 ) {
-    OutlinedCard(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 24.dp),
-    ) {
+    SettingsGroup(overline) {
         ListItem(
+            modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Icon(icon, contentDescription = null) },
-            overlineContent = { Text(overline) },
             headlineContent = { Text(headline) },
             supportingContent = { Text(supporting) },
             trailingContent = {

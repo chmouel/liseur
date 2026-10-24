@@ -81,6 +81,8 @@ import com.chmouel.liseur.ui.settings.SettingsBackupScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
+import com.chmouel.liseur.ui.settings.RowDivider
+import com.chmouel.liseur.ui.settings.WatchedFoldersScreen
 import com.chmouel.liseur.ui.settings.rememberSettingsZipBackup
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.ProvideEInk
@@ -471,9 +473,7 @@ private fun LiseurApp(
                     }
 
                     Route.Settings -> {
-                        // Through the ViewModel so that removing a folder, which
-                        // walks SAF and can take a while, is not cancelled by a
-                        // rotation part-way through.
+                        val activity = LocalActivity.current
                         val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
                         SettingsScreen(
                             settings = settings,
@@ -481,24 +481,49 @@ private fun LiseurApp(
                             dynamicColorAvailable = dynamicColorAvailable,
                             onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                             onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
+                            appLanguage = remember { AppLocales.current(context) },
+                            onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
                             onOpenAccount = { openPage(Route.ServerAccount) },
                             onOpenReadingAppearance = { openPage(Route.ReadingAppearance) },
                             onOpenReadingNavigation = { openPage(Route.ReadingNavigation) },
+                            onOpenWatchedFolders = { openPage(Route.WatchedFolders) },
                             onOpenSettingsBackup = { openPage(Route.SettingsBackup) },
                             onOpenHiddenBooks = { openPage(Route.HiddenBooks) },
                             libraryFolders = library.libraryFolders,
-                            onRemoveFolder = { library.removeFolder(it) },
+                            hiddenBooks = library.hidden,
                             server = context.container.remoteAccount.server,
                             onOpenAbout = { openPage(Route.About) },
                             onBack = closeSettings,
                             flavorReadingRows = {
+                                RowDivider()
                                 context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
                             },
                             intelligenceRows = {
                                 context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
+                                RowDivider()
                                 CompanionSettingsEntry(context.container.companionServer, onClick = { openPage(Route.ReadingCompanion) })
+                                RowDivider()
                                 ServicesEntry(onClick = { openPage(Route.Services) })
                             },
+                        )
+                    }
+
+                    Route.WatchedFolders -> {
+                        // Through the ViewModel so that removing a folder, which
+                        // walks SAF and can take a while, is not cancelled by a
+                        // rotation part-way through.
+                        val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+                        val folders by library.libraryFolders.collectAsStateWithLifecycle(emptyList())
+                        val folderPicker = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.OpenDocumentTree(),
+                        ) { uri ->
+                            if (uri != null) library.addFolder(uri)
+                        }
+                        WatchedFoldersScreen(
+                            folders = folders,
+                            onAddFolder = { folderPicker.launch(null) },
+                            onRemoveFolder = { library.removeFolder(it) },
+                            onBack = back,
                         )
                     }
 
@@ -579,7 +604,6 @@ private fun LiseurApp(
                     }
 
                     Route.ReadingAppearance -> {
-                        val activity = LocalActivity.current
                         ReadingAppearanceScreen(
                             prefs = readerPrefs,
                             appIsDark = appIsDark,
@@ -613,8 +637,6 @@ private fun LiseurApp(
                                     scope.launch { readerPreferences.setParagraphSpacing(it) }
                                 },
                             ),
-                            appLanguage = remember { AppLocales.current(context) },
-                            onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
                             onBack = back,
                         )
                     }

@@ -17,6 +17,10 @@
     <string name="add_folder_hint">Indica a Liseur una cartella di EPUB e continuerà a controllarla per i nuovi.</string>
     <string name="library_folders">Cartelle osservate</string>
     <string name="library_folders_empty">Nessuna cartella è in osservazione.</string>
+    <plurals name="library_folders_count">
+        <item quantity="one">%d cartella osservata</item>
+        <item quantity="other">%d cartelle osservate</item>
+    </plurals>
     <string name="remove_folder">Rimuovi cartella</string>
     <string name="remove_folder_a11y">Rimuovi %1$s</string>
     <string name="remove_folder_warning">Liseur smetterà di osservare “%1$s”. I libri presenti solo in questa cartella usciranno dalla libreria; quelli in un\'altra cartella osservata, e quelli salvati sul server, restano. Nessun file viene eliminato da questo dispositivo.</string>
@@ -797,8 +801,6 @@
     <string name="settings_dictionary_alt_language_auto">Automatica</string>
     <string name="settings_dictionary_alt_language_auto_detail">La lingua dell\'app, per i libri scritti in un\'altra lingua</string>
     <string name="settings_library">Libreria</string>
-    <string name="settings_remote_library">Librerie remote</string>
-    <string name="settings_export_import">Esporta e importa</string>
     <string name="books_export_title">Esporta libri offline</string>
     <string name="books_export_detail">Copia tutti gli EPUB disponibili offline in una cartella. I nomi di file esistenti vengono saltati.</string>
     <string name="books_export_progress">Esportazione libri: %1$d di %2$d</string>

@@ -764,8 +764,8 @@ beside it. `play`-only strings live in `app/src/play/res`, same locales.
 - The app follows the system language, falling back to English for
   missing keys. `resourceConfigurations` must not freeze the APK to a
   language list.
-- The in-app language picker (`ui/settings/AppLocales.kt`) sits at the
-  end of Reading appearance's Advanced section, not the "Aa" sheet, since
+- The in-app language picker (`ui/settings/AppLocales.kt`) sits in
+  Settings > Appearance, not the "Aa" sheet, since
   changing it restarts the activity. On 13+ `LocaleManager` is the only
   record (`generateLocaleConfig` lists `values-*`;
   `res/resources.properties` names English the default), and the

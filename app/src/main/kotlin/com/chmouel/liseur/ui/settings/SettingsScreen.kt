@@ -1,28 +1,28 @@
 package com.chmouel.liseur.ui.settings
 
-import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.FileOpen
-import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.CloudDownload
-import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
@@ -33,19 +33,17 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.text.ClickableText
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,17 +51,20 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.BuildConfig
 import com.chmouel.liseur.R
-import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.RemoteServer
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 private const val LISEUR_SYNC_REPO_URL = "https://github.com/chmouel/liseur-sync"
 
@@ -76,12 +77,15 @@ fun SettingsScreen(
     dynamicColorAvailable: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
+    appLanguage: AppLanguage = AppLanguage.SYSTEM,
+    onAppLanguage: (AppLanguage) -> Unit = {},
     onOpenAccount: () -> Unit,
     onOpenReadingAppearance: () -> Unit,
     onOpenReadingNavigation: () -> Unit,
+    onOpenWatchedFolders: () -> Unit = {},
     onOpenHiddenBooks: () -> Unit,
     libraryFolders: Flow<List<LibraryFolder>>,
-    onRemoveFolder: (LibraryFolder) -> Unit,
+    hiddenBooks: Flow<List<Book>> = emptyFlow(),
     onOpenSettingsBackup: () -> Unit,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
@@ -94,35 +98,7 @@ fun SettingsScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
-    var folderToRemove by remember { mutableStateOf<LibraryFolder?>(null) }
-
-    folderToRemove?.let { folder ->
-        AlertDialog(
-            onDismissRequest = { folderToRemove = null },
-            title = { Text(stringResource(R.string.remove_folder)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.remove_folder_warning,
-                        folderName(folder),
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onRemoveFolder(folder)
-                    folderToRemove = null
-                }) {
-                    Text(stringResource(R.string.remove))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { folderToRemove = null }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
-    }
+    val hidden by hiddenBooks.collectAsStateWithLifecycle(emptyList())
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -154,7 +130,8 @@ fun SettingsScreen(
                     // tablet they become a column of sentences with a foot of
                     // nothing after each one, and the switch at the end is a
                     // reach away from the label that explains it.
-                    .padding(horizontal = 20.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
             ) {
                 SettingsGroup(stringResource(R.string.settings_appearance)) {
                     ChipRow(
@@ -174,6 +151,13 @@ fun SettingsScreen(
                         )
                     }
                     RowDivider()
+                    AppLanguageRow(
+                        selected = appLanguage,
+                        onSelected = onAppLanguage,
+                    )
+                }
+
+                SettingsGroup(stringResource(R.string.settings_reading)) {
                     // The theme above is the app's, and the page has one of
                     // its own; a reader who turns this screen dark and finds
                     // their books still white has nowhere to look unless
@@ -188,6 +172,35 @@ fun SettingsScreen(
                         ),
                         onClick = onOpenReadingAppearance,
                     )
+                    RowDivider()
+                    // The section behind this row had grown to eight
+                    // switches, a chip row and two rows that only some
+                    // screens ever show, which is a list to be read
+                    // through rather than a place to go. The dictionary
+                    // went with it: looking a word up is something you
+                    // do with a book open.
+                    ConnectionRow(
+                        icon = {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.MenuBook,
+                                contentDescription = null,
+                            )
+                        },
+                        title = stringResource(R.string.settings_reading_navigation),
+                        // Which side turns the page is nothing to a
+                        // scrolled book, so a scrolling reader is told
+                        // that instead of a side that does not apply.
+                        subtitle = if (settings.scrollMode) {
+                            stringResource(R.string.settings_reading_navigation_scrolling)
+                        } else {
+                            stringResource(
+                                R.string.settings_reading_navigation_paged,
+                                stringResource(settings.tapZones.label),
+                            )
+                        },
+                        onClick = onOpenReadingNavigation,
+                    )
+                    flavorReadingRows()
                 }
 
                 val showLibraryHelp = remember { mutableStateOf(false) }
@@ -243,7 +256,7 @@ fun SettingsScreen(
                     )
                 }
                 SettingsGroup(
-                    title = stringResource(R.string.settings_remote_library),
+                    title = stringResource(R.string.settings_library),
                     onHelp = { showLibraryHelp.value = true },
                     helpDescription = stringResource(R.string.settings_library_help_title),
                 ) {
@@ -267,9 +280,27 @@ fun SettingsScreen(
                         } ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
                     )
-                }
-
-                SettingsGroup(stringResource(R.string.settings_library)) {
+                    RowDivider()
+                    ConnectionRow(
+                        icon = {
+                            Icon(
+                                Icons.Outlined.FolderOpen,
+                                contentDescription = null,
+                            )
+                        },
+                        title = stringResource(R.string.library_folders),
+                        subtitle = if (folders.isEmpty()) {
+                            stringResource(R.string.library_folders_empty)
+                        } else {
+                            pluralStringResource(
+                                R.plurals.library_folders_count,
+                                folders.size,
+                                folders.size,
+                            )
+                        },
+                        onClick = onOpenWatchedFolders,
+                    )
+                    RowDivider()
                     ConnectionRow(
                         icon = {
                             Icon(
@@ -278,82 +309,18 @@ fun SettingsScreen(
                             )
                         },
                         title = stringResource(R.string.hidden_books),
-                        subtitle = stringResource(R.string.hidden_books_summary),
+                        subtitle = if (hidden.isEmpty()) {
+                            stringResource(R.string.hidden_books_summary)
+                        } else {
+                            pluralStringResource(
+                                R.plurals.library_book_count,
+                                hidden.size,
+                                hidden.size,
+                            )
+                        },
                         onClick = onOpenHiddenBooks,
                     )
-                }
-
-                SettingsGroup(stringResource(R.string.library_folders)) {
-                    if (folders.isEmpty()) {
-                        Text(
-                            text = stringResource(R.string.library_folders_empty),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                        )
-                    } else {
-                        folders.forEachIndexed { index, folder ->
-                            if (index > 0) RowDivider()
-                            ListItem(
-                                headlineContent = { Text(folderName(folder)) },
-                                supportingContent = { Text(folder.url) },
-                                leadingContent = {
-                                    Icon(Icons.Outlined.FileOpen, contentDescription = null)
-                                },
-                                trailingContent = {
-                                    IconButton(onClick = { folderToRemove = folder }) {
-                                        Icon(
-                                            Icons.Outlined.Delete,
-                                            contentDescription = stringResource(
-                                                R.string.remove_folder_a11y,
-                                                folderName(folder),
-                                            ),
-                                        )
-                                    }
-                                },
-                                colors = ListItemDefaults.colors(
-                                    containerColor = Color.Transparent,
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                SettingsGroup(stringResource(R.string.settings_reading)) {
-                    // The section behind this row had grown to eight
-                    // switches, a chip row and two rows that only some
-                    // screens ever show, which is a list to be read
-                    // through rather than a place to go. The dictionary
-                    // went with it: looking a word up is something you
-                    // do with a book open.
-                    ConnectionRow(
-                        icon = {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.MenuBook,
-                                contentDescription = null,
-                            )
-                        },
-                        title = stringResource(R.string.settings_reading_navigation),
-                        // Which side turns the page is nothing to a
-                        // scrolled book, so a scrolling reader is told
-                        // that instead of a side that does not apply.
-                        subtitle = if (settings.scrollMode) {
-                            stringResource(R.string.settings_reading_navigation_scrolling)
-                        } else {
-                            stringResource(
-                                R.string.settings_reading_navigation_paged,
-                                stringResource(settings.tapZones.label),
-                            )
-                        },
-                        onClick = onOpenReadingNavigation,
-                    )
-                    flavorReadingRows()
-                }
-
-                SettingsGroup(stringResource(R.string.settings_intelligence)) {
-                    intelligenceRows()
-                }
-
-                SettingsGroup(stringResource(R.string.settings_export_import)) {
+                    RowDivider()
                     ConnectionRow(
                         icon = { Icon(Icons.Outlined.FileUpload, contentDescription = null) },
                         title = stringResource(R.string.settings_backup_title),
@@ -362,17 +329,25 @@ fun SettingsScreen(
                     )
                 }
 
+                SettingsGroup(stringResource(R.string.settings_intelligence)) {
+                    intelligenceRows()
+                }
+
                 SettingsGroup(stringResource(R.string.settings_about)) {
-                    PlainRow(stringResource(R.string.about_open), onOpenAbout)
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.Info, contentDescription = null) },
+                        title = stringResource(R.string.about_open),
+                        subtitle = stringResource(
+                            R.string.about_version,
+                            BuildConfig.VERSION_NAME,
+                            BuildConfig.VERSION_CODE,
+                        ),
+                        onClick = onOpenAbout,
+                    )
                 }
             }
         }
     }
-}
-
-private fun folderName(folder: LibraryFolder): String {
-    val segment = Uri.parse(folder.url).lastPathSegment ?: return folder.url
-    return segment.substringAfterLast(':').takeIf { it.isNotBlank() } ?: folder.url
 }
 
 private val ThemeMode.label: Int
@@ -381,15 +356,6 @@ private val ThemeMode.label: Int
         ThemeMode.LIGHT -> R.string.theme_light
         ThemeMode.DARK -> R.string.theme_dark
     }
-
-@Composable
-private fun PlainRow(title: String, onClick: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(title) },
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
-    )
-}
 
 @Composable
 internal fun BackupActionRow(
