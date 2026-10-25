@@ -2,6 +2,10 @@ package com.chmouel.liseur.companion
 
 import android.app.Application
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
 import androidx.room.testing.MigrationTestHelper
 import androidx.test.core.app.ApplicationProvider
@@ -250,25 +254,35 @@ class CodexStoreTest {
         val liseurDb = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).allowMainThreadQueries().build()
         val epub = File(folder.root, "codex-vm.epub").also { writeVmEpub(it, chapters) }
         val publication = openPublication(context, epub)
+        // Clearing the store cancels the view model's scope before its publication and database go away.
+        val models = ViewModelStore()
         try {
             val url = epub.toURI().toString()
             library += url
             liseurDb.bookDao().upsert(Book(url = url, title = "Book", author = null, coverPath = null, source = null, addedAt = 1L, lastOpenedAt = null, fileModifiedAt = epub.lastModified()))
             liseurDb.workIdentityDao().upsert(BookFingerprintRow(url, "sha256", "md5", epub.length(), epub.lastModified(), 1L))
             val settings = AppSettingsRepository(PreferenceDataStoreFactory.create { File(folder.root, "vm.preferences_pb") })
-            val vm = CodexViewModel(
-                bookUrl = url,
-                store = store,
-                settings = settings,
-                books = liseurDb.bookDao(),
-                fingerprints = BookFingerprintStore(context, liseurDb.workIdentityDao()),
-                profilesFlow = profiles,
-                foregroundFlow = MutableStateFlow(true),
-                clock = clock,
-            )
+            val vm = ViewModelProvider(
+                models,
+                viewModelFactory {
+                    initializer {
+                        CodexViewModel(
+                            bookUrl = url,
+                            store = store,
+                            settings = settings,
+                            books = liseurDb.bookDao(),
+                            fingerprints = BookFingerprintStore(context, liseurDb.workIdentityDao()),
+                            profilesFlow = profiles,
+                            foregroundFlow = MutableStateFlow(true),
+                            clock = clock,
+                        )
+                    }
+                },
+            )[CodexViewModel::class.java]
             vm.attach(publication)
             block(vm, settings)
         } finally {
+            models.clear()
             publication.close()
             liseurDb.close()
         }
