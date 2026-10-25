@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 
@@ -21,9 +22,9 @@ private val Context.settingsSyncStore: DataStore<Preferences> by preferencesData
  * by this device and shows it to nobody else, so the only writer of
  * those rows is this device. That leaves one fact worth remembering per
  * account and key: the value this device last saw stored there. A key
- * with no record is one this device has never stored on that account,
- * which is what lets a sync pass tell its own earlier copy (to restore)
- * from a setting changed here (to upload).
+ * with no record or pending upload can restore its earlier server copy.
+ * Pending keys keep local edits authoritative when an upload loses its
+ * response, without claiming the server acknowledged them.
  *
  * The record is keyed by account because it describes that account's
  * copy, so it moves or goes with the account. The server keys its copy
@@ -44,6 +45,22 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
 
     private fun deviceKey(accountKey: String) = stringPreferencesKey("d:$accountKey")
 
+    private fun pendingKey(accountKey: String) = stringSetPreferencesKey("p:$accountKey")
+
+    suspend fun pendingKeys(accountKey: String): Set<String> {
+        ensureFormat()
+        return store.data.first()[pendingKey(accountKey)].orEmpty()
+    }
+
+    suspend fun markPending(accountKey: String, keys: Set<String>) {
+        if (keys.isEmpty()) return
+        ensureFormat()
+        store.edit { prefs ->
+            val key = pendingKey(accountKey)
+            prefs[key] = prefs[key].orEmpty() + keys
+        }
+    }
+
     /**
      * Ties the record for [accountKey] to the server's [deviceId] for this
      * device. A pasted token can keep the account and still sign in as a
@@ -62,6 +79,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             for (key in prefs.asMap().keys.toList()) {
                 if (key.name.startsWith(prefix)) prefs.remove(key)
             }
+            prefs.remove(pendingKey(accountKey))
             prefs[marker] = deviceId
         }
     }
@@ -91,6 +109,8 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
             for ((settingKey, value) in entries) {
                 prefs[valueKey(accountKey, settingKey)] = value
             }
+            val pending = pendingKey(accountKey)
+            prefs[pending] = prefs[pending].orEmpty() - entries.keys
         }
     }
 
@@ -111,6 +131,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                 prefs[valueKey(to, settingKey)] = value as? String ?: continue
             }
             prefs[deviceKey(from)]?.let { prefs[deviceKey(to)] = it }
+            prefs[pendingKey(to)] = prefs[pendingKey(from)].orEmpty()
         }
     }
 
@@ -123,6 +144,7 @@ class SettingsSyncRepository(private val store: DataStore<Preferences>) {
                 if (key.name.startsWith(prefix)) prefs.remove(key)
             }
             prefs.remove(deviceKey(accountKey))
+            prefs.remove(pendingKey(accountKey))
         }
     }
 

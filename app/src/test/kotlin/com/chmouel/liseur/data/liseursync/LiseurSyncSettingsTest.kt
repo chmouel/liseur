@@ -103,6 +103,29 @@ class LiseurSyncSettingsTest {
     // -- After that, this device decides -----------------------------------
 
     @Test
+    fun `losing the first upload response preserves later local edits after restart`() = runTest {
+        values["reader.font_size"] = "120"
+        enqueueGet()
+        server.enqueue(MockResponse(code = 500, body = ""))
+        assertTrue(runCatching { sync() }.isFailure)
+        assertNull(stored()["reader.font_size"])
+
+        values["reader.font_size"] = "150"
+        enqueueGet("reader.font_size" to Entry("120", NOW))
+        enqueuePut("reader.font_size" to Entry("150", LATER))
+        LiseurSyncSettings(syncState, settings(), now = { clock }).sync(
+            accountKey = ACCOUNT,
+            baseUrl = server.url("/").toString().removeSuffix("/"),
+            credentials = RemoteCredentials.Bearer("token"),
+        )
+
+        assertEquals("150", values["reader.font_size"])
+        assertEquals("150", pushed()["reader.font_size"])
+        assertEquals("150", stored()["reader.font_size"])
+        assertTrue(syncState.pendingKeys(ACCOUNT).isEmpty())
+    }
+
+    @Test
     fun `a change made here is uploaded`() = runTest {
         record("reader.font", "literata")
         values["reader.font"] = "bitter"
@@ -321,6 +344,27 @@ class LiseurSyncSettingsTest {
 
         assertEquals("bitter", values["reader.font"])
         assertEquals(emptyMap<String, String>(), stored())
+    }
+
+    @Test
+    fun `disconnect after recording upload intent clears it without sending`() = runTest {
+        values["reader.font_size"] = "120"
+        enqueueGet()
+        var connected = true
+
+        sync.sync(
+            accountKey = ACCOUNT,
+            baseUrl = server.url("/").toString().removeSuffix("/"),
+            credentials = RemoteCredentials.Bearer("token"),
+            stillConnected = {
+                if (syncState.pendingKeys(ACCOUNT).isNotEmpty()) connected = false
+                connected
+            },
+        )
+
+        assertEquals(0, puts())
+        assertTrue(syncState.pendingKeys(ACCOUNT).isEmpty())
+        assertTrue(stored().isEmpty())
     }
 
     @Test

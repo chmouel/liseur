@@ -64,10 +64,14 @@ class SettingsSyncRepositoryTest {
     fun `a reconnect carries the record to the new spelling`() = runTest {
         val repo = repo()
         repo.recordStored(A, mapOf("reader.font_size" to "1.4"))
+        repo.markPending(A, setOf("reader.theme"))
+
+        assertEquals(setOf("reader.theme"), repo().pendingKeys(A))
 
         repo.rekeyPeer(A, B)
 
         assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(B))
+        assertEquals(setOf("reader.theme"), repo.pendingKeys(B))
     }
 
     @Test
@@ -85,11 +89,15 @@ class SettingsSyncRepositoryTest {
         val repo = repo()
         repo.recordStored(A, mapOf("reader.font_size" to "1.4"))
         repo.recordStored(B, mapOf("reader.font_size" to "1.8"))
+        repo.markPending(A, setOf("reader.theme"))
+        repo.markPending(B, setOf("reader.theme"))
 
         repo.forgetPeer(A)
 
         assertEquals(emptyMap<String, String>(), repo.allStored(A))
         assertEquals(mapOf("reader.font_size" to "1.8"), repo.allStored(B))
+        assertTrue(repo.pendingKeys(A).isEmpty())
+        assertEquals(setOf("reader.theme"), repo.pendingKeys(B))
     }
 
     @Test
@@ -97,16 +105,19 @@ class SettingsSyncRepositoryTest {
         val repo = repo()
         repo.claimDevice(A, "phone")
         repo.recordStored(A, mapOf("reader.font_size" to "1.4"))
+        repo.markPending(A, setOf("reader.theme"))
         repo.recordStored(B, mapOf("reader.font_size" to "1.8"))
 
         repo.claimDevice(A, "phone")
         assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(A))
+        assertEquals(setOf("reader.theme"), repo.pendingKeys(A))
 
         repo.claimDevice(A, null)
         assertEquals(mapOf("reader.font_size" to "1.4"), repo.allStored(A))
 
         repo.claimDevice(A, "tablet")
         assertEquals(emptyMap<String, String>(), repo.allStored(A))
+        assertTrue(repo.pendingKeys(A).isEmpty())
         assertEquals(mapOf("reader.font_size" to "1.8"), repo.allStored(B))
     }
 

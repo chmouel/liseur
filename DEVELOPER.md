@@ -987,9 +987,10 @@ changing reader behavior.
 
 - Settings stay on the device
   ([ADR 0041](docs/adr/0041-settings-stay-on-the-device.md)); this device
-  is the only writer of its server copy. A key never stored on the account
-  is restored; anything else that differs is uploaded. Never read settings
-  from a server not answering `scope: device`.
+  is the only writer of its server copy. A key never stored or offered to
+  the account is restored; anything else that differs is uploaded. Persist
+  pending keys before uploading so a lost reply cannot undo local edits.
+  Never read settings from a server not answering `scope: device`.
 - Never apply a restored setting that changes the open page while a book
   is open (`SyncableSetting.affectsOpenBook`, per write). Device-shaped
   settings are never backed up.

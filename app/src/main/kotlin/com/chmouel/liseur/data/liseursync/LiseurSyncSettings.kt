@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter
  * values are always the ones that count.
  *
  * The one thing a pass has to tell apart is a key this device has never
- * stored on the account, which is when a value already on the server is
+ * stored or offered to the account, which is when a server value is
  * this device's own earlier copy and is restored, from a key it has
  * stored before, which is when any difference is a change made here and is uploaded. The copy is keyed by
  * the device id, so only a sign-in that keeps that id reaches it: one
@@ -42,8 +42,8 @@ class LiseurSyncSettings(
 
     /**
      * Restores what the server holds for keys this device has never
-     * stored there, then uploads every setting that differs from what
-     * the server holds.
+     * stored or offered there, then uploads every setting that differs
+     * from what the server holds.
      *
      * [canApplyReaderSettings] is asked again before every write rather
      * than once at the start, because a book can be opened while the
@@ -101,6 +101,7 @@ class LiseurSyncSettings(
 
         syncState.claimDevice(accountKey, deviceId)
         val stored = syncState.allStored(accountKey)
+        val pending = syncState.pendingKeys(accountKey)
         val recorded = mutableMapOf<String, String>()
         val toPush = JSONObject()
         var exchanged = 0
@@ -114,7 +115,7 @@ class LiseurSyncSettings(
                 continue
             }
 
-            if (server != null && entry.key !in stored) {
+            if (server != null && entry.key !in stored && entry.key !in pending) {
                 when (apply(entry, server.value, canApplyReaderSettings, stillConnected, localValue)) {
                     Applied.YES -> {
                         recorded[entry.key] = server.value
@@ -144,7 +145,14 @@ class LiseurSyncSettings(
 
         if (toPush.length() > 0) {
             if (!stillConnected()) return exchanged
-            exchanged += push(baseUrl, credentials, toPush, recorded)
+            // Persist intent before sending so a lost reply cannot restore stale settings
+            syncState.markPending(accountKey, toPush.keys().asSequence().toSet())
+            try {
+                if (!stillConnected()) return exchanged
+                exchanged += push(baseUrl, credentials, toPush, recorded)
+            } finally {
+                if (!stillConnected()) syncState.forgetPeer(accountKey)
+            }
         }
         if (!stillConnected()) return exchanged
         syncState.recordStored(accountKey, recorded)
