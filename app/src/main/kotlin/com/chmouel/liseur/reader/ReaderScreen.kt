@@ -286,6 +286,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -1866,6 +1867,19 @@ internal fun ReaderScreen(
         ) { p, (theme, columns, scrolling) ->
             p.toEpubPreferences(theme, columns, scrolling, readingCss)
         }
+            // Scrolling and columns are keys of the fragment: changing
+            // either builds a new navigator with them as its initial
+            // preferences, and this collector hears the change before
+            // [navigator] is swapped. Reflowing the outgoing navigator
+            // asks its torn-down page for JavaScript that never answers,
+            // and Readium waits for that answer without honouring
+            // cancellation, so the reflow scope would stay open for the
+            // rest of the session and every scrolled-place question
+            // (narrate from here among them) would get no answer.
+            .filter {
+                it.scroll == initialPreferences.scroll &&
+                    it.columnCount == initialPreferences.columnCount
+            }
             // What the book is rendered with, not what the reader
             // happens to be holding. Reading preferences carry answers
             // the page cannot see — the auto-scroll speed is one — and a
