@@ -795,7 +795,8 @@ class LiseurSyncPositionSync(
         )
 
         return if (firstFailure == null) {
-            forAccount(account) { serverDao.setPositionSyncedAt(at) }
+            // A fresh stamp would hold off the foreground sync that finishes the catch-up
+            if (caughtUp) forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
             if (caughtUp) named.outcome() else SyncOutcome.Incomplete
         } else {
@@ -1424,11 +1425,14 @@ class LiseurSyncPositionSync(
                         val keepPending = if (pending?.pendingSeq != null) {
                             pending.pendingSeq >= op.seq
                         } else {
-                            pending?.hasPending == true &&
+                            // Pending since before pending_seq existed: only its client time orders it
+                            pending?.hasPending == true && (
                                 pending.pendingProgression == op.progression &&
-                                pending.pendingLocatorJson == op.locatorJson &&
-                                pending.pendingEditionSha == op.editionSha &&
-                                pending.pendingUpdatedAt == op.clientTs.takeIf { it > 0 }
+                                    pending.pendingLocatorJson == op.locatorJson &&
+                                    pending.pendingEditionSha == op.editionSha &&
+                                    pending.pendingUpdatedAt == op.clientTs.takeIf { it > 0 } ||
+                                    op.clientTs > 0 && (pending.pendingUpdatedAt ?: 0) > op.clientTs
+                                )
                         }
                         if (!keepPending) peerStateDao.clearPending(alias.bookUrl, account.peerId)
                     } else {

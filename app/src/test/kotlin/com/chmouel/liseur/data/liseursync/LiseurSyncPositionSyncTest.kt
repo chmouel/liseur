@@ -1871,6 +1871,25 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a full sync cut short by the page budget is not stamped as fresh`() = runTest {
+        connect()
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body("""{"ops":[],"high_water":$requests,"has_more":true}""".toResponseBody())
+                .build()
+        }.build()
+
+        assertEquals(SyncOutcome.Incomplete, sync(http = LiseurSyncHttp(RemoteHttp(client))).syncAll(null))
+        assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
+    }
+
+    @Test
     fun `insights and annotations topics do not run the position publisher`() = runTest {
         connect()
         sync().refresh(
@@ -2543,6 +2562,35 @@ class LiseurSyncPositionSyncTest {
         assertEquals(exact, restored.locatorJson)
         assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
         assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
+    fun `an older own echo cannot clear a migrated seed across pages`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine", editionSha = "sha-a")
+        val exact = exactLocator("seeded before upgrade")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer("d-mine"),
+            progression = 0.8,
+            status = "Reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = exact,
+            editionSha = "sha-a",
+        )
+        db.remoteServerDao().setSyncCursor(9)
+        val older = op(10, 0.3, "d-mine", clientTs = NOW - 60_000)
+        val seed = op(11, 0.8, "d-mine", locatorJson = exact, editionSha = "sha-a")
+        server.enqueue(json("""{"ops":[$older],"has_more":true,"high_water":10}"""))
+        server.enqueue(json("""{"ops":[$seed],"high_water":11}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val restored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.8, restored.totalProgression!!, 0.0)
+        assertEquals(exact, restored.locatorJson)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
     }
 
     @Test
@@ -3220,13 +3268,14 @@ class LiseurSyncPositionSyncTest {
         deviceId: String? = null,
         locatorJson: String? = null,
         editionSha: String? = null,
+        clientTs: Long = NOW,
     ): String {
         val device = deviceId?.let { ""","device_id":"$it"""" } ?: ""
         val locator = locatorJson?.let { ""","locator":$it""" } ?: ""
         val edition = editionSha?.let { ""","edition_sha":"$it"""" } ?: ""
         return """{"op_id":"o-$seq","work_id":"w-1","seq":$seq,
             "progression":$progression,
-            "client_ts":"${SyncOps.formatTime(NOW)}"$device$locator$edition}
+            "client_ts":"${SyncOps.formatTime(clientTs)}"$device$locator$edition}
         """.trimIndent()
     }
 
