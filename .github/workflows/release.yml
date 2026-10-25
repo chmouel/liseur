@@ -253,6 +253,7 @@ jobs:
           ruby-version: "3.3"
 
       - name: Upload to the Play testing tracks
+        id: play_testing
         if: steps.play.outputs.enabled == 'true'
         continue-on-error: true
         env:
@@ -314,5 +315,22 @@ jobs:
         if: steps.play_screenshots.outcome == 'failure'
         run: |
           message='The Play listing screenshots were not synced. Retry with: fastlane android screenshots version_code:${{ steps.version.outputs.version_code }}'
+          printf '::warning::%s\n' "$message"
+          printf '%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
+
+      # The Play steps may fail without failing the release, so say so
+      # where it shows: a run that is green but never reached Play once
+      # hid a missing Play Console declaration.
+      - name: Report a failed Google Play upload
+        if: steps.play_testing.outcome == 'failure' || steps.play_production.outcome == 'failure'
+        env:
+          TESTING: ${{ steps.play_testing.outcome }}
+          PRODUCTION: ${{ steps.play_production.outcome }}
+        run: |
+          if [[ "$TESTING" == failure ]]; then
+            message='The Google Play testing-track step failed. The build may already be on the internal track; read the "Upload to the Play testing tracks" log for the reason.'
+          else
+            message='The build is on the Play testing tracks, but publishing it to production failed. Read the "Publish the final release to the Play production track" log for the reason.'
+          fi
           printf '::warning::%s\n' "$message"
           printf '%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"

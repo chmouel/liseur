@@ -463,8 +463,13 @@ make bundle     # ./gradlew bundlePlayRelease, for Play only
   `fastlane/Fastfile`; no Gradle publishing plugin is applied. The Play
   step in `release.yml` is `continue-on-error` and skips itself without
   the service account secret: a fork or rejected upload must not fail a
-  release. `--no-play` writes `release:no-play` in the annotated tag,
+  release, so a failed Play step adds a warning to the run summary
+  instead. `--no-play` writes `release:no-play` in the annotated tag,
   which the workflow checks before the stored credential.
+- A new foreground service type in the manifest (as `dataSync` was for
+  whole-book translation) makes Play refuse every upload until the Play
+  Console declaration under App content > Foreground service permissions
+  covers it. Declare it before tagging.
 - The upload runs `fastlane android internal` with `SUPPLY_JSON_KEY`
   pointing at a credential written to `$RUNNER_TEMP` and removed by a trap
   in the same step. The credential is
