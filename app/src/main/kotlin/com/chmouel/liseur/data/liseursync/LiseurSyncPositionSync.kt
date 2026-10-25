@@ -1421,12 +1421,16 @@ class LiseurSyncPositionSync(
                 for (alias in byWork[op.workId].orEmpty()) {
                     if (op.deviceId != null && op.deviceId == account.deviceId) {
                         val pending = peerStateDao.get(alias.bookUrl, account.peerId)
-                        val samePosition = pending?.hasPending == true &&
-                            pending.pendingProgression == op.progression &&
-                            pending.pendingLocatorJson == op.locatorJson &&
-                            pending.pendingEditionSha == op.editionSha &&
-                            pending.pendingUpdatedAt == op.clientTs.takeIf { it > 0 }
-                        if (!samePosition) peerStateDao.clearPending(alias.bookUrl, account.peerId)
+                        val keepPending = if (pending?.pendingSeq != null) {
+                            pending.pendingSeq >= op.seq
+                        } else {
+                            pending?.hasPending == true &&
+                                pending.pendingProgression == op.progression &&
+                                pending.pendingLocatorJson == op.locatorJson &&
+                                pending.pendingEditionSha == op.editionSha &&
+                                pending.pendingUpdatedAt == op.clientTs.takeIf { it > 0 }
+                        }
+                        if (!keepPending) peerStateDao.clearPending(alias.bookUrl, account.peerId)
                     } else {
                         land(account, alias.bookUrl, op)
                     }
@@ -1438,6 +1442,8 @@ class LiseurSyncPositionSync(
 
     private suspend fun land(account: Account, bookUrl: String, op: SyncOp) {
         observe(account, op)
+        val pending = peerStateDao.get(bookUrl, account.peerId)
+        if (pending?.pendingSeq != null && pending.pendingSeq > op.seq) return
         peerStateDao.persistPending(
             bookUrl = bookUrl,
             peerId = account.peerId,
@@ -1446,6 +1452,7 @@ class LiseurSyncPositionSync(
             remoteUpdatedAt = op.clientTs.takeIf { it > 0 },
             locatorJson = op.locatorJson,
             editionSha = op.editionSha,
+            seq = op.seq,
         )
     }
 

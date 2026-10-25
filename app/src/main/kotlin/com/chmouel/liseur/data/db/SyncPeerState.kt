@@ -47,6 +47,7 @@ data class SyncPeerState(
     @ColumnInfo(name = "pending_edition_sha") val pendingEditionSha: String? = null,
     @ColumnInfo(name = "pending_status") val pendingStatus: String? = null,
     @ColumnInfo(name = "pending_updated_at") val pendingUpdatedAt: Long? = null,
+    @ColumnInfo(name = "pending_seq") val pendingSeq: Long? = null,
     /** True once a partner has reported something waiting to be settled. */
     @ColumnInfo(name = "has_pending", defaultValue = "0") val hasPending: Boolean = false,
     /** The partner's own timestamp, for display. Never compared with ours. */
@@ -98,6 +99,7 @@ abstract class SyncPeerStateDao {
             pending_edition_sha = :editionSha,
             pending_status = :status,
             pending_updated_at = :remoteUpdatedAt,
+            pending_seq = :seq,
             has_pending = 1,
             remote_updated_at = :remoteUpdatedAt
         WHERE book_url = :bookUrl AND peer_id = :peerId
@@ -111,6 +113,7 @@ abstract class SyncPeerStateDao {
         remoteUpdatedAt: Long?,
         locatorJson: String? = null,
         editionSha: String? = null,
+        seq: Long? = null,
     ): Int
 
     @Query(
@@ -118,11 +121,11 @@ abstract class SyncPeerStateDao {
         INSERT OR IGNORE INTO sync_peer_state (
             book_url, peer_id, acked_revision,
             pending_progression, pending_locator_json, pending_edition_sha,
-            pending_status, pending_updated_at,
+            pending_status, pending_updated_at, pending_seq,
             has_pending, remote_updated_at
         )
         VALUES (:bookUrl, :peerId, 0, :progression, :locatorJson, :editionSha,
-                :status, :remoteUpdatedAt, 1,
+                :status, :remoteUpdatedAt, :seq, 1,
                 :remoteUpdatedAt)
         """,
     )
@@ -134,6 +137,7 @@ abstract class SyncPeerStateDao {
         remoteUpdatedAt: Long?,
         locatorJson: String? = null,
         editionSha: String? = null,
+        seq: Long? = null,
     )
 
     @Transaction
@@ -145,6 +149,7 @@ abstract class SyncPeerStateDao {
         remoteUpdatedAt: Long?,
         locatorJson: String? = null,
         editionSha: String? = null,
+        seq: Long? = null,
     ) {
         val updated = updatePending(
             bookUrl = bookUrl,
@@ -154,6 +159,7 @@ abstract class SyncPeerStateDao {
             remoteUpdatedAt = remoteUpdatedAt,
             locatorJson = locatorJson,
             editionSha = editionSha,
+            seq = seq,
         )
         if (updated == 0) {
             insertPending(
@@ -164,6 +170,7 @@ abstract class SyncPeerStateDao {
                 remoteUpdatedAt = remoteUpdatedAt,
                 locatorJson = locatorJson,
                 editionSha = editionSha,
+                seq = seq,
             )
         }
     }
@@ -173,7 +180,7 @@ abstract class SyncPeerStateDao {
         UPDATE sync_peer_state SET
             pending_progression = NULL, pending_locator_json = NULL,
             pending_edition_sha = NULL, pending_status = NULL,
-            pending_updated_at = NULL, has_pending = 0
+            pending_updated_at = NULL, pending_seq = NULL, has_pending = 0
         WHERE book_url = :bookUrl AND peer_id = :peerId
         """,
     )
@@ -197,7 +204,7 @@ abstract class SyncPeerStateDao {
             pending_locator_json = NULL,
             pending_edition_sha = NULL,
             pending_status = NULL,
-            pending_updated_at = NULL,
+            pending_updated_at = NULL, pending_seq = NULL,
             has_pending = 0,
             synced_at = :now
         WHERE book_url = :bookUrl AND peer_id = :peerId

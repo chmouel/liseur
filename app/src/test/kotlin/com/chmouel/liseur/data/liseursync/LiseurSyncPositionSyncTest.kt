@@ -2505,6 +2505,67 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a migrated seed without a sequence survives its matching own echo`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine", editionSha = "sha-a")
+        val exact = exactLocator("seeded before upgrade")
+        db.syncPeerStateDao().persistPending(
+            bookUrl = LOCAL,
+            peerId = peer("d-mine"),
+            progression = 0.8,
+            status = "Reading",
+            remoteUpdatedAt = NOW,
+            locatorJson = exact,
+            editionSha = "sha-a",
+        )
+        db.remoteServerDao().setSyncCursor(9)
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.pendingSeq)
+        server.enqueue(json("""{"ops":[${op(10, 0.8, "d-mine", locatorJson = exact, editionSha = "sha-a")}],"high_water":10}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val restored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.8, restored.totalProgression!!, 0.0)
+        assertEquals(exact, restored.locatorJson)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+        assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
+    fun `an older own echo cannot clear a newer seed across an interrupted pull`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine", seeded = false, editionSha = "sha-a")
+        val exact = exactLocator("seeded passage")
+        val position = op(10, 0.8, "d-mine", locatorJson = exact, editionSha = "sha-a")
+        server.enqueue(json("""{"ops":[$position]}"""))
+        server.enqueue(json("""{"ops":[${op(9, 0.3, "d-mine")}],"has_more":true,"high_water":10}"""))
+        server.enqueue(MockResponse(code = 503))
+
+        sync().syncBook(LOCAL)
+
+        val pending = requireNotNull(db.syncPeerStateDao().get(LOCAL, peer("d-mine")))
+        assertTrue(pending.hasPending)
+        assertEquals(10L, pending.pendingSeq)
+        assertEquals(0.8, pending.pendingProgression!!, 0.0)
+        assertNull(db.readingProgressDao().get(LOCAL))
+        assertTrue(db.workIdentityDao().alias(LOCAL, peer("d-mine"))!!.seeded)
+        assertEquals(9L, db.remoteServerDao().get()!!.syncCursorSeq)
+
+        server.enqueue(json("""{"ops":[$position],"high_water":10}"""))
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val restored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.8, restored.totalProgression!!, 0.0)
+        assertEquals(exact, restored.locatorJson)
+        val settled = requireNotNull(db.syncPeerStateDao().get(LOCAL, peer("d-mine")))
+        assertFalse(settled.hasPending)
+        assertNull(settled.pendingSeq)
+        assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
     fun `own echoes clear earlier pages but allow later foreign reading`() = runTest {
         connect(deviceId = "d-mine")
         db.bookDao().upsert(local())
