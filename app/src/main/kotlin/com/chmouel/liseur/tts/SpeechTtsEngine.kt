@@ -222,7 +222,15 @@ class SpeechTtsEngine(
                 finish(request) { onInterrupted(requestId) }
                 return@launch
             }
-            val key = observer.keyFor(requestId, text, reusingHeldAudio = resumed != null)
+            val key = try {
+                observer.keyFor(requestId, text, reusingHeldAudio = resumed != null)
+            } catch (e: TranslationError) {
+                request.audio?.cancel()
+                request.audio = null
+                request.key = null
+                fail(request, Error.Translation(e))
+                return@launch
+            }
             if (request.finished) return@launch
             if (key == null) {
                 request.audio?.cancel()

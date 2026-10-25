@@ -75,6 +75,7 @@ class SpeechTtsEngineTest {
     private val waits = LinkedBlockingQueue<String>()
     private val heldAudioResumes = LinkedBlockingQueue<Boolean>()
 
+    @Volatile private var keyFailure: TranslationError? = null
     @Volatile private var skipCount = 0
     @Volatile private var translationIdentity: String? = null
     private val engine = SpeechTtsEngine(
@@ -93,6 +94,7 @@ class SpeechTtsEngineTest {
                 text: String,
                 reusingHeldAudio: Boolean,
             ) = SpeechKey(text, translationIdentity = translationIdentity).also {
+                keyFailure?.let { error -> throw error }
                 heldAudioResumes.put(reusingHeldAudio)
             }
 
@@ -141,6 +143,21 @@ class SpeechTtsEngineTest {
 
     private fun nextHeldAudioResume() =
         requireNotNull(heldAudioResumes.poll(2, TimeUnit.SECONDS)) { "no key request" }
+
+    @Test
+    fun aTranslationServiceFailureWhileResolvingTheKeyCanBeRetried() {
+        keyFailure = TranslationError.NotSetUp()
+        speak("1", "Hello.")
+        assertEquals("error 1 Translation@main", nextEvent())
+        assertTrue(requests.isEmpty())
+        keyFailure = null
+        speak("2", "Hello.")
+        nextRequest().second.complete(SpeechAudio(ByteArray(8)))
+        assertEquals("start 2@main", nextEvent())
+        nextPlay().complete(Unit)
+        assertEquals("done 2@main", nextEvent())
+        noMoreEvents()
+    }
 
     @Test
     fun speaksThenReportsDoneOnMain() {

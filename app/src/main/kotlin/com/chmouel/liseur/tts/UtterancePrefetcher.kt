@@ -2,6 +2,7 @@ package com.chmouel.liseur.tts
 
 import android.util.Log
 import com.chmouel.liseur.BuildConfig
+import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -166,6 +167,7 @@ class SpeechCache(
     ): Deferred<SpeechAudio> {
         requestsMade++
         val synthesizer = synthesize
+        val generation = generation
         return scope.async(start = start) {
             try {
                 // Translated and placed outside the permits: those bound the speech service alone.
@@ -184,19 +186,19 @@ class SpeechCache(
                 }
                 (audio.singleOrNull() ?: joined(audio)).also(onArrived)
             } catch (e: SpeechError.RateLimited) {
-                halted = true
+                if (generation == this@SpeechCache.generation) halted = true
                 throw e
             } catch (e: SpeechError.InvalidKey) {
-                halted = true
+                if (generation == this@SpeechCache.generation) halted = true
                 throw e
             } catch (e: SpeechError.InvalidVoice) {
-                halted = true
+                if (generation == this@SpeechCache.generation) halted = true
                 throw e
             } catch (e: SpeechError.TermsRequired) {
-                halted = true
+                if (generation == this@SpeechCache.generation) halted = true
                 throw e
             } catch (e: SpeechError.NoSpeech) {
-                halted = true
+                if (generation == this@SpeechCache.generation) halted = true
                 throw e
             }
         }
@@ -353,7 +355,13 @@ class UtterancePrefetcher<L>(
             // The cursor starts at the element; find this sentence in it,
             // using the text before it to tell a repeated sentence apart.
             repeat(MAX_SEEK) {
-                val candidate = cursor.next() ?: return@launch
+                val candidate = try {
+                    cursor.next()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    return@launch
+                } ?: return@launch
                 if (candidate.isSentence(text, before)) {
                     this@UtterancePrefetcher.cursor = cursor
                     lastRead = candidate
@@ -380,8 +388,13 @@ class UtterancePrefetcher<L>(
             } catch (_: Exception) {
                 null
             } ?: return
+            val key = try {
+                keyOf(next)
+            } catch (_: TranslationError) {
+                return
+            }
             window.addLast(next)
-            cache.prefetch(keyOf(next), lastRead?.text)
+            cache.prefetch(key, lastRead?.text)
             lastRead = next
         }
     }

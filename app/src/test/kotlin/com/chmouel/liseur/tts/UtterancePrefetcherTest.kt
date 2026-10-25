@@ -2,6 +2,7 @@ package com.chmouel.liseur.tts
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -12,6 +13,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,6 +67,70 @@ class UtterancePrefetcherTest {
         scopes += scope
         val cache = SpeechCache(scope, synth::synthesize)
         return cache to UtterancePrefetcher(scope, cache, { cursors.getValue(it)() })
+    }
+
+    @Test
+    fun aCursorFailureWhileSeekingDoesNotEscapeAndTheNextJumpCanPrefetch() = runTest {
+        val errors = mutableListOf<Throwable>()
+        val scope = CoroutineScope(
+            StandardTestDispatcher(testScheduler) + SupervisorJob() +
+                CoroutineExceptionHandler { _, error -> errors += error },
+        )
+        scopes += scope
+        val cache = SpeechCache(scope, { audio() })
+        val prefetcher = UtterancePrefetcher<String>(scope, cache, { place ->
+            if (place == "broken") UtteranceCursor { throw IllegalStateException("Unreadable content") }
+            else cursor("A", "B")
+        })
+
+        prefetcher.onUtterance("A", null, "broken")
+        advanceUntilIdle()
+        assertTrue(errors.isEmpty())
+        prefetcher.onUtterance("A", null, "working")
+        advanceUntilIdle()
+        assertEquals(4L, cache.cachedBytes)
+    }
+
+    @Test
+    fun aClaimedOldVoiceFailureDoesNotHaltTheNewVoice() = runTest {
+        val synth = FakeSynth()
+        val (cache, _) = setUp(synth, emptyMap())
+        val claimed = cache.claim("old")
+        advanceUntilIdle()
+        cache.swap { _: String -> audio() }
+        synth.reply("old").completeExceptionally(SpeechError.InvalidVoice())
+        advanceUntilIdle()
+
+        assertTrue(claimed.isCancelled)
+        assertFalse(cache.halted)
+        cache.prefetch("new")
+        advanceUntilIdle()
+        assertEquals(4L, cache.cachedBytes)
+    }
+
+    @Test
+    fun aTranslationServiceFailureWhileResolvingAPrefetchKeyDoesNotEscape() = runTest {
+        val errors = mutableListOf<Throwable>()
+        val scope = CoroutineScope(
+            StandardTestDispatcher(testScheduler) + SupervisorJob() +
+                CoroutineExceptionHandler { _, error -> errors += error },
+        )
+        scopes += scope
+        val cache = SpeechCache(scope, { audio() })
+        var available = false
+        val prefetcher = UtterancePrefetcher<String>(scope, cache, { cursor("A", "B") }, keyOf = {
+            if (!available) throw com.chmouel.liseur.translate.TranslationError.NotSetUp()
+            SpeechKey(it.text)
+        })
+
+        prefetcher.onUtterance("A", null, "p")
+        advanceUntilIdle()
+        assertTrue(errors.isEmpty())
+        assertEquals(0, cache.requestsMade)
+        available = true
+        prefetcher.onUtterance("A", null, "q")
+        advanceUntilIdle()
+        assertEquals(4L, cache.cachedBytes)
     }
 
     @Test
