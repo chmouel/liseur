@@ -23,7 +23,8 @@ internal class SentenceRequests(
     suspend fun context(sentence: PageSentence, fallback: String?, identity: String): String? {
         val size = translator.contextSize(identity) ?: return fallback
         if (size.sentences <= 0) return null
-        val earlier = preceding?.before(sentence, size.sentences) ?: return fallback
+        val earlier = preceding?.before(sentence, size.sentences)
+            ?: listOfNotNull(fallback?.let { sentence.copy(text = it) })
         return TranslationContext.window(earlier, size)
     }
 

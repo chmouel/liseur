@@ -202,6 +202,19 @@ class TranslationContextTest {
     }
 
     @Test
+    fun `fallback context respects the selected size when the sentence cannot be found`() = runTest {
+        val size = TranslationContextSize.SMALL
+        val fallback = "x" + "\uD83D\uDE00".repeat(size.characters)
+        val expected = TranslationContext.window(listOf(at(fallback)), size)
+        for (preceding in listOf(null, PrecedingText { _, _ -> null })) {
+            val translator = Recording(size)
+            SentenceTranslations(translator, MemoryPageTranslationCache(), preceding)
+                .resolve(at("Ailleurs."), fallback)
+            assertEquals(listOf(expected), translator.asked)
+        }
+    }
+
+    @Test
     fun `a service that takes no context gets none, and one that cannot find the place gets the caller's`() = runTest {
         val book = chapter("#p1" to "Un.", "#p1" to "Deux.")
         val off = Recording(TranslationContextSize.OFF)
