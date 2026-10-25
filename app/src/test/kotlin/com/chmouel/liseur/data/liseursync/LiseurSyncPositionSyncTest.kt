@@ -2486,6 +2486,25 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a newly imported book restores its seeded position when its own echo arrives`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine", seeded = false, editionSha = "sha-a")
+        val exact = exactLocator("seeded passage")
+        val position = op(10, 0.8, "d-mine", locatorJson = exact, editionSha = "sha-a")
+        server.enqueue(json("""{"ops":[$position]}"""))
+        server.enqueue(json("""{"ops":[$position],"high_water":10}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val restored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.8, restored.totalProgression!!, 0.0)
+        assertEquals(exact, restored.locatorJson)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+        assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
     fun `own echoes clear earlier pages but allow later foreign reading`() = runTest {
         connect(deviceId = "d-mine")
         db.bookDao().upsert(local())

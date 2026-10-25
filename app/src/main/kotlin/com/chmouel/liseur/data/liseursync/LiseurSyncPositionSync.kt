@@ -1420,8 +1420,13 @@ class LiseurSyncPositionSync(
             for (op in newestByWork) {
                 for (alias in byWork[op.workId].orEmpty()) {
                     if (op.deviceId != null && op.deviceId == account.deviceId) {
-                        // An own echo supersedes foreign reading on this or an earlier page
-                        peerStateDao.clearPending(alias.bookUrl, account.peerId)
+                        val pending = peerStateDao.get(alias.bookUrl, account.peerId)
+                        val samePosition = pending?.hasPending == true &&
+                            pending.pendingProgression == op.progression &&
+                            pending.pendingLocatorJson == op.locatorJson &&
+                            pending.pendingEditionSha == op.editionSha &&
+                            pending.pendingUpdatedAt == op.clientTs.takeIf { it > 0 }
+                        if (!samePosition) peerStateDao.clearPending(alias.bookUrl, account.peerId)
                     } else {
                         land(account, alias.bookUrl, op)
                     }
