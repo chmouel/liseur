@@ -188,8 +188,9 @@ class LiseurSyncAnnotationsTest {
         db.annotationDao().upsert(mark())
         emptyFeed()
         server.enqueue(MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build())
+        server.enqueue(MockResponse(code = 503))
 
-        sync()
+        assertNotNull(sync().failure)
 
         val row = db.annotationSyncDao().get(peer(), "mark-1")!!
         assertEquals(AnnotationSync.PENDING_WRITE, row.pendingKind)

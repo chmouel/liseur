@@ -271,6 +271,7 @@ class OpdsSetupClientTest {
                     ),
                 ),
             )
+            server.enqueue(MockResponse(code = 404))
             elsewhere.enqueue(feed())
 
             val result = runBlocking {

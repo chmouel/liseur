@@ -29,7 +29,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build build-all debug release bundle test lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test test-fast lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -37,6 +37,7 @@ help:
 		'make release           Build the F-Droid/GitHub release APK (foss)' \
 		'make bundle            Build the release AAB for Google Play' \
 		'make test              Run JVM unit tests' \
+		'make test-fast         Run shared and Play unit tests once' \
 		'make lint              Run Android Lint' \
 		'make check             Run tests, lint, and debug builds of both flavors' \
 		'make verify-release-tools Check release tag and retention policies' \
@@ -84,6 +85,9 @@ bundle:
 
 test:
 	$(GRADLE) testFossDebugUnitTest testPlayDebugUnitTest
+
+test-fast:
+	$(GRADLE) testPlayDebugUnitTest
 
 lint:
 	$(GRADLE) lintFossDebug lintPlayDebug

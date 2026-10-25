@@ -54,6 +54,7 @@ class KomgaSetupClientTest {
 
     @Test
     fun `offers plain http when https cannot be reached`() = runBlocking {
+        server.enqueue(MockResponse(code = 400))
         val result = KomgaSetupClient().connect(address(), key)
 
         val failure = (result as SetupResult.Failure).reason

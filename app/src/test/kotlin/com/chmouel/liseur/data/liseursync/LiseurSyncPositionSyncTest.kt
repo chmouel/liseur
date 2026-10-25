@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SessionTransmission
 import com.chmouel.liseur.data.db.recordLocal
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.PreviewOutcome
@@ -30,6 +31,10 @@ import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
 import mockwebserver3.SocketEffect
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -1845,15 +1850,23 @@ class LiseurSyncPositionSyncTest {
     @Test
     fun `live topic does not complete when page budget is exhausted`() = runTest {
         connect()
-        server.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest) =
-                json("""{"ops":[],"high_water":${server.requestCount},"has_more":true}""")
-        }
-        val result = sync().refresh(
+        var requests = 0
+        val client = OkHttpClient.Builder().addInterceptor { chain ->
+            requests++
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body("""{"ops":[],"high_water":$requests,"has_more":true}""".toResponseBody())
+                .build()
+        }.build()
+        val result = sync(http = LiseurSyncHttp(RemoteHttp(client))).refresh(
             LiveIdentity.from(db.remoteServerDao().get()!!), setOf(LiveTopic.POSITIONS),
         )
         assertTrue(result.completed.isEmpty())
-        assertTrue(db.remoteServerDao().get()!!.syncCursorSeq > 0)
+        assertEquals(200, requests)
+        assertEquals(200L, db.remoteServerDao().get()!!.syncCursorSeq)
         assertNull(db.remoteServerDao().get()!!.positionSyncedAt)
     }
 
@@ -2618,9 +2631,11 @@ class LiseurSyncPositionSyncTest {
     private fun sync(
         online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false,
         furthest: Boolean = false,
+        http: LiseurSyncHttp = LiseurSyncHttp(),
     ): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
+            http = http,
             serverDao = db.remoteServerDao(),
             bookDao = db.bookDao(),
             progressDao = db.readingProgressDao(),

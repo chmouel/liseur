@@ -11,6 +11,9 @@ import mockwebserver3.RecordedRequest
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -84,10 +87,11 @@ class OpdsCatalogClientTest {
 
     private fun walk(
         credentials: RemoteCredentials = RemoteCredentials.Anonymous,
+        client: OpdsCatalogClient = OpdsCatalogClient(),
     ): Pair<Boolean, List<com.chmouel.liseur.data.remote.RemoteBook>> {
         val found = mutableListOf<com.chmouel.liseur.data.remote.RemoteBook>()
         val result = runBlocking {
-            OpdsCatalogClient().allBooks(root(), credentials) { found += it }
+            client.allBooks(root(), credentials) { found += it }
         }
         return result.complete to found
     }
@@ -348,15 +352,27 @@ class OpdsCatalogClientTest {
     fun `a catalog wider than the request budget says so`() {
         // Depth bounds how far in the walk goes, not how wide: an author
         // index is one level deep and ten thousand feeds across.
-        val shelves = (1..500).joinToString("") { navigation("Shelf $it", "/opds/s$it") }
+        val shelves = (1..400).joinToString("") { navigation("Shelf $it", "/opds/s$it") }
         pages["/opds"] = feed(shelves)
-        (1..500).forEach { pages["/opds/s$it"] = feed(book("$it")) }
+        (1..400).forEach { pages["/opds/s$it"] = feed(book("$it")) }
 
-        val (complete, books) = walk()
+        val http = OkHttpClient.Builder().addInterceptor { chain ->
+            val path = chain.request().url.encodedPath
+            asked += path
+            Response.Builder()
+                .request(chain.request())
+                .protocol(Protocol.HTTP_1_1)
+                .code(200)
+                .message("OK")
+                .body(checkNotNull(pages[path]).toResponseBody())
+                .build()
+        }.build()
+
+        val (complete, books) = walk(client = OpdsCatalogClient(OpdsHttp(http)))
 
         assertFalse(complete)
-        assertTrue(books.isNotEmpty())
-        assertTrue("spent ${asked.size} requests", asked.size <= 400)
+        assertEquals(399, books.size)
+        assertEquals(400, asked.size)
     }
 
     @Test

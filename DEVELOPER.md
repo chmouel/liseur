@@ -179,6 +179,13 @@ the library or downloads remote books.
 ./gradlew lintFossDebug lintPlayDebug                   # Android Lint (0 errors required)
 ```
 
+`make test-fast` runs shared and Play-specific unit tests once for local
+iteration. `make test` and the release checks run both flavors, including
+the FOSS-specific wiring.
+
+Use `make test-fast` most of the time; `make test` is for making use at the end
+of a change that nothing is broken in the other flavor.
+
 No instrumented suite; reader interactions (gestures, immersive mode,
 process-death restore, rotation) are checked manually on an AVD.
 

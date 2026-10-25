@@ -698,8 +698,9 @@ class KosyncPositionSyncTest {
         sync().syncAll(null)
         seen.clear()
         server.enqueue(json("{}"))
+        server.enqueue(json("{}"))
 
-        sync().syncAll(null)
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
 
         val put = requests().last()
         assertEquals("PUT", put.method)
