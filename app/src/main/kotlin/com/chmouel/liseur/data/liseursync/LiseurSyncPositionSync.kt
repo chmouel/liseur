@@ -1620,6 +1620,7 @@ class LiseurSyncPositionSync(
         var pushed = 0
         val prepared = mutableListOf<PendingPush>()
         for (item in pushes) {
+            if (!sameAccount(account)) return pushed
             val current = deliverPeak(account, item, trouble) ?: continue
             prepared += current
         }
@@ -1641,6 +1642,7 @@ class LiseurSyncPositionSync(
             // goes back on the queue: nothing from the rejected request
             // is settled.
             val answer = try {
+                if (!sameAccount(account)) return pushed
                 http.post(
                     LiseurSyncApi.url(account.baseUrl, LiseurSyncApi.OPS),
                     account.credentials,

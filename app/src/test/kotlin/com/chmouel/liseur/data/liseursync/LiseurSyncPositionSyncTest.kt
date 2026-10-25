@@ -2439,6 +2439,34 @@ class LiseurSyncPositionSyncTest {
         assertTrue(sent.all { it.getString("edition_sha") == "resolved-edition" })
     }
 
+    @Test
+    fun `no position is posted after disconnect during pull`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "Reading", NOW)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.target.startsWith("/v1/changes")) {
+                    runBlocking {
+                        db.withTransaction {
+                            db.syncPeerStateDao().forgetPeer(peer())
+                            db.workIdentityDao().forgetPeerAliases(peer())
+                            db.remoteServerDao().delete()
+                        }
+                    }
+                    return json("""{"ops":[],"high_water":0}""")
+                }
+                if (request.target == "/v1/ops") return applied(request)
+                return MockResponse(code = 404)
+            }
+        }
+
+        sync(furthest = true).syncAll(null)
+
+        assertFalse(requests().any { it.target == "/v1/ops" })
+    }
+
     private fun sync(
         online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false,
         furthest: Boolean = false,
