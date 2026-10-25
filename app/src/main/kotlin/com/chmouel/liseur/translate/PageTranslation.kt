@@ -364,7 +364,7 @@ internal class PageTranslation<P>(
 
     private suspend fun walk(first: PageSentences) {
         var sentences = first
-        var previous: String? = null
+        var previous: PageSentence? = null
         var pending: PageSentence? = null
         var ended = false
         while (true) {
@@ -400,7 +400,7 @@ internal class PageTranslation<P>(
                     pending = null
                     walked += sentence
                     seen = walked.size - 1
-                    previous = sentence.text
+                    previous = sentence
                     continue
                 }
                 catchingUp = false
@@ -410,7 +410,8 @@ internal class PageTranslation<P>(
             val translation = try {
                 coroutineScope {
                     val pageScope = checkNotNull(failureScope)
-                    val asked = async { translations.resolveForPage(pageScope, sentence, previous) }
+                    val context = previous?.takeIf { it.href == sentence.href }?.text
+                    val asked = async { translations.resolveForPage(pageScope, sentence, context) }
                     asking = asked
                     asked.await()
                 }
@@ -430,7 +431,7 @@ internal class PageTranslation<P>(
             asking = null
             pending = null
             walked += sentence
-            previous = sentence.text
+            previous = sentence
             if (translation != null && placed.add(sentence)) {
                 walked.getOrNull(walked.size - 2)?.let { predecessors[sentence] = it }
                 val swap = PageSwap(nextId++, sentence, translation.text, translation.by)

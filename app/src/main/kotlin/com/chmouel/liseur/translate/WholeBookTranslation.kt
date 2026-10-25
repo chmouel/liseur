@@ -52,7 +52,7 @@ internal class WholeBookTranslation(
         var input = 0L
         var output = 0L
         var missing = 0
-        var previous: String? = null
+        var previous: PageSentence? = null
         val counted = HashSet<String>()
         // The chunk being filled, as run() fills them: only its sizes, never the sentences.
         var open: SentenceRequest? = null
@@ -65,9 +65,9 @@ internal class WholeBookTranslation(
             for (i in 0 until SCAN_BATCH) {
                 val sentence = sentences.next() ?: break
                 check(++total <= MAX_SENTENCES) { "Too many sentences" }
-                batch += requests.prepare(sentence, previous, identity)
+                batch += requests.prepare(sentence, previous?.takeIf { it.href == sentence.href }?.text, identity)
                 characters += sentence.text.length
-                previous = sentence.text
+                previous = sentence
             }
             if (batch.isEmpty()) break
             val lookups = store.scanLookups(batch.map { it.key })
@@ -110,7 +110,7 @@ internal class WholeBookTranslation(
         var done = 0
         var failed = 0
         var read = 0
-        var previous: String? = null
+        var previous: PageSentence? = null
         val commits = Mutex()
         val window = if (translator.batches) PARALLEL_REQUESTS * BATCH_SENTENCES else PARALLEL_REQUESTS
 
@@ -139,8 +139,8 @@ internal class WholeBookTranslation(
                 val sentence = sentences.next() ?: break
                 check(++read <= total) { "The book changed after scanning" }
                 if (translator.answering() != identity) throw TranslationError.Changed()
-                batch += requests.prepare(sentence, previous, identity)
-                previous = sentence.text
+                batch += requests.prepare(sentence, previous?.takeIf { it.href == sentence.href }?.text, identity)
+                previous = sentence
             }
             if (batch.isEmpty()) break
             // Repeats in this window share one paid request; later windows find its saved row.

@@ -57,6 +57,34 @@ class WholeBookTranslationTest {
         WholeBookTranslation(translator, SentenceRequests(translator, null, null), store) { it.sentence.text.length }
 
     @Test
+    fun `scan and run reuse a chapter opening cached without earlier chapter context`() = runTest {
+        val asked = mutableListOf<Pair<String, String?>>()
+        val translator = object : Translator() {
+            override suspend fun translate(sentence: String, context: String?, identity: String, book: BookFacts?): Translated {
+                asked += sentence to context
+                return super.translate(sentence, context, identity, book)
+            }
+        }
+        val chapter = listOf(
+            PageSentence("one", "one.xhtml", "#p", null),
+            PageSentence("two", "two.xhtml", "#p", null),
+            PageSentence("three", "two.xhtml", "#p", "two"),
+        )
+        fun opened(): PageSentences {
+            var at = 0
+            return PageSentences { chapter.getOrNull(at++) }
+        }
+        val store = Store()
+        val requests = SentenceRequests(translator, null, null)
+        store.rows[requests.prepare(chapter[1], null, "test").key] = WholeBookLookup("TWO")
+
+        assertEquals(1, job(translator, store).scan(opened()).cached)
+        job(translator, store).run(opened(), "test", chapter.size)
+        assertEquals(listOf("one" to null, "three" to "two"), asked)
+        assertTrue(store.finished)
+    }
+
+    @Test
     fun `scan progress counts checked occurrences including cache hits and duplicates without sending text`() = runTest {
         val translator = object : Translator() {
             override suspend fun contextSize(identity: String) = TranslationContextSize.OFF

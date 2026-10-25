@@ -61,6 +61,24 @@ class PageTranslationTest {
     }
 
     @Test
+    fun `fallback context starts fresh in each chapter`() = runTest {
+        val sentences = listOf(
+            PageSentence("one", "ch1.xhtml", "#p", null),
+            PageSentence("two", "ch2.xhtml", "#p", null),
+            PageSentence("three", "ch2.xhtml", "#p", "two"),
+        )
+        val run = FakeRun()
+        val page = PageTranslation(backgroundScope, run, MemoryPageTranslationCache(), { start: Int ->
+            var at = start
+            PageSentences { sentences.getOrNull(at++) }
+        }, 4)
+        page.start(0, "start")
+        runCurrent()
+
+        assertEquals(listOf("one" to null, "two" to null, "three" to "two"), run.asked)
+    }
+
+    @Test
     fun `translates ahead of the reader and no further`() = runTest {
         val run = FakeRun()
         val page = translation(run)
