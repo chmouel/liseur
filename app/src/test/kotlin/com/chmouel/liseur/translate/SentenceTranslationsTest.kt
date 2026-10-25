@@ -208,6 +208,29 @@ class SentenceTranslationsTest {
     }
 
     @Test
+    fun `a new service does not join an old answer still being saved`() = runTest {
+        val translator = Translator()
+        val memory = MemoryPageTranslationCache()
+        val saving = CompletableDeferred<Unit>()
+        val cache = object : PageTranslationCache by memory {
+            override suspend fun put(key: String, value: String, stamp: Long) {
+                if (key.startsWith("svc\u0000")) saving.await()
+                memory.put(key, value, stamp)
+            }
+        }
+        val translations = SentenceTranslations(translator, cache)
+        val sentence = at("un", null)
+        val old = async(start = CoroutineStart.UNDISPATCHED) { translations.resolve(sentence, null) }
+        translator.identity = "other"
+        val current = async(start = CoroutineStart.UNDISPATCHED) { translations.resolve(sentence, null) }
+        saving.complete(Unit)
+
+        assertEquals("svc", old.await().by)
+        assertEquals("other", current.await().by)
+        assertEquals(2, translator.asked.size)
+    }
+
+    @Test
     fun `a waiter whose asker went away asks itself`() = runTest {
         val translator = Translator().apply { gate = CompletableDeferred() }
         val translations = SentenceTranslations(translator, MemoryPageTranslationCache())

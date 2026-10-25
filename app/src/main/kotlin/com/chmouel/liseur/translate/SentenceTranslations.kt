@@ -47,7 +47,7 @@ class SentenceTranslations(
     private class BoundFailure(val identity: String, val error: TranslationError) : Exception(error)
 
     private var holders = 1
-    private val inflight = HashMap<Triple<String, String?, String?>, CompletableDeferred<Translated>>()
+    private val inflight = HashMap<String, CompletableDeferred<Translated>>()
     private var pageScope: PageFailureScope? = null
 
     // Accepted translations by resource, element and sentence; the text before tells repeated ones apart.
@@ -133,7 +133,7 @@ class SentenceTranslations(
         acceptedFor(sentence, identity)?.let { return it }
         // What is sent, so the page and the voice asking for one place share the request.
         val prepared = requests.prepare(sentence, context, identity)
-        val key = Triple(sentence.text, prepared.context, prepared.book)
+        val key = prepared.key
         while (true) {
             val pending = inflight[key]
             if (pending != null) {
