@@ -404,10 +404,14 @@ Local signing is covered in
 Same build, same release key, for a few testers before the final release:
 
 ```bash
-hack/release --rc             # the next patch, numbered -rc.1, then .2
+hack/release --rc             # asks which version, numbered -rc.1, then .2
 hack/release --rc 0.16.0      # a version you are working towards
 hack/release --no-play --rc   # skip Google Play testing tracks
 ```
+
+- Without a version it asks: any version that already has candidates but
+  no final tag comes first, then the next patch, minor and major. With
+  no terminal it refuses, `-n` included.
 
 - Publishes a GitHub prerelease with the signed APK and uploads the bundle
   to Play's internal and closed (`Testing`) tracks. No F-Droid merge
@@ -442,6 +446,10 @@ hack/release --no-play --rc   # skip Google Play testing tracks
   per target version. Tags are never deleted: they keep `versionCode`
   allocation monotonic, number later RCs, and stay burned under GitHub's
   immutable-release rules.
+- To withdraw a bad RC, delete its release page but keep the tag so its
+  name and `versionCode` stay reserved. If a tag was already deleted,
+  raise `WITHDRAWN_VERSION_CODE` in `hack/release` to its `versionCode`
+  and restore the tag before creating another RC for that version.
 
 ### Google Play
 

@@ -11,6 +11,10 @@ readonly FDROID_FORK_PROJECT="chmouel%2Ffdroiddata"
 readonly FDROID_CATEGORIES="Cloud Storage & File Sync|Ebook Reader|Reading"
 readonly FDROID_TAG_POLICY_SCRIPT="hack/verify-fdroid-tags"
 readonly BUILD_FILE="app/build.gradle.kts"
+# The highest versionCode handed out by a withdrawn prerelease whose tag
+# was deleted, which highest_version_code can no longer find in the tags.
+# Its APK is still installed somewhere: v0.26.0-rc.1 took 55.
+readonly WITHDRAWN_VERSION_CODE=55
 readonly RELEASE_WAIT_SECONDS=1800
 readonly RELEASE_POLL_SECONDS=20
 # Long enough for the metadata checks, which take a couple of minutes,
@@ -70,7 +74,8 @@ yes, for a release run from a script or a CI job with nothing on the
 other end of stdin. Without it the run stops at "Continue?" and, reading
 end-of-file as no, exits having done nothing. It does not conjure up an
 answer that has no default: picking a version and writing a changelog
-still need a terminal, so a run with no VERSION refuses either way.
+still need a terminal, so a run with no VERSION refuses either way,
+--rc included.
 
 --rc builds the same signed APK and publishes it as a GitHub prerelease
 and uploads it to the Google Play testing tracks (unless --no-play is
@@ -78,8 +83,10 @@ given), without telling F-Droid about it. Because it
 carries the release signature, it installs over a copy that came from
 F-Droid or Google Play, and F-Droid updates over it once a real release
 goes out above its versionCode. VERSION is the version being worked towards
-(the next patch by default) and the tag numbers the candidates: v0.3.0-rc.1,
-then v0.3.0-rc.2. The version bump is committed but never pushed to a
+and the tag numbers the candidates: v0.3.0-rc.1, then v0.3.0-rc.2. Without
+VERSION it asks, offering any version that already has candidates but no
+release yet, then the next patch, minor and major. The version bump is
+committed but never pushed to a
 branch — only the tag that points at it — so main keeps a history of
 real releases. There is no changelog to write, but the JVM tests, Android
 lint and release build must pass against the candidate commit before its
@@ -203,6 +210,7 @@ highest_version_code() {
     local highest tag code
     highest=$(read_version_code)
     [[ -n "$highest" ]] || return 1
+    (( WITHDRAWN_VERSION_CODE > highest )) && highest=$WITHDRAWN_VERSION_CODE
 
     while IFS= read -r tag; do
         [[ -n "$tag" ]] || continue
@@ -612,6 +620,37 @@ warn_about_stale_screenshots() {
     printf '  hack/screenshots --setup\n\n'
 }
 
+# With no VERSION, --rc asks what the candidate is for. A version that
+# already has candidates but no final release is offered first, so a
+# series carries on instead of a new one starting by accident.
+choose_rc_version() {
+    local current base choice kind
+    local -a options=() offered=()
+    current=$(read_version_name)
+    [[ -n "$current" ]] || die "could not read the current app version"
+
+    while IFS= read -r base; do
+        [[ -n "$base" && "$base" != "$current" ]] || continue
+        [[ $(printf '%s\n%s\n' "$current" "$base" | sort -V | tail -n 1) == "$base" ]] ||
+            continue
+        ! git rev-parse -q --verify "refs/tags/v$base" >/dev/null || continue
+        options+=("$base (continue, rc.$(next_rc_iteration "$base"))")
+        offered+=("$base")
+    done < <(git tag --list 'v*-rc.*' |
+        sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)-rc\.[0-9]+$/\1/p' | sort -uV)
+
+    for kind in patch minor major; do
+        base=$(bump_version "$current" "$kind")
+        [[ " ${offered[*]} " != *" $base "* ]] || continue
+        options+=("$base ($kind, rc.$(next_rc_iteration "$base"))")
+    done
+
+    choice=$(pick_one "Release candidate for which version? (released: $current)" \
+        "${options[@]}") || die "release cancelled"
+    [[ -n "$choice" ]] || die "release cancelled"
+    printf '%s' "${choice%% *}"
+}
+
 last_final_tag() {
     git describe --tags --abbrev=0 \
         --match 'v[0-9]*.[0-9]*.[0-9]*' \
@@ -748,7 +787,6 @@ create_rc_release() {
 
     current=$(read_version_name)
     [[ -n "$current" ]] || die "could not read the current app version"
-    [[ -n "$base" ]] || base=$(bump_version "$current" patch)
     [[ "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
         die "VERSION must use X.Y.Z format"
     [[ "$base" != "$current" &&
@@ -1255,6 +1293,11 @@ if [[ "$rc_release" == true ]]; then
     [[ "$fdroid_only" == false ]] ||
         die "--rc and --fdroid-only are mutually exclusive"
     [[ $# -le 1 ]] || die "--rc takes at most a version"
+    # Picking a version needs someone to ask; -n only answers yes/no.
+    [[ $# -eq 1 || ( -t 0 && -t 1 ) ]] || {
+        usage >&2
+        exit 2
+    }
 
     for command in git gh jq sed awk pass curl python3; do
         require_command "$command"
@@ -1265,7 +1308,9 @@ if [[ "$rc_release" == true ]]; then
     [[ -f "$BUILD_FILE" ]] || die "run this script from the Liseur repository"
 
     git fetch --quiet origin --tags
-    create_rc_release "${1:-}"
+    rc_base=${1:-}
+    [[ -n "$rc_base" ]] || rc_base=$(choose_rc_version)
+    create_rc_release "$rc_base"
     exit 0
 fi
 
