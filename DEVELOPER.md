@@ -917,7 +917,9 @@ changing reader behavior.
   Local peaks keep a verified `work_alias` edition even without a local
   fingerprint row.
 - Observe every changes-page op, own echoes included, before picking the
-  newest foreign op for ordinary reconciliation.
+  newest op per work. An own echo clears older pending remote reading
+  without replacing the local position. Reconcile only after the pull
+  catches up, including when a failed or capped pull resumes next run.
 - Positions and heads snapshots carry a `furthest` array; its entries never
   become pending conflicts or automatic opening targets. A present array
   replaces that snapshot's cached observations; a missing one (older

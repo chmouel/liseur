@@ -2467,6 +2467,74 @@ class LiseurSyncPositionSyncTest {
         assertFalse(requests().any { it.target == "/v1/ops" })
     }
 
+    @Test
+    fun `an older foreign op cannot replace the newer acknowledged local op`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.8, null, "Reading", NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer("d-mine"), 1, 0.8, "Reading", NOW)
+        server.enqueue(json("""{"ops":[
+            ${op(seq = 9, progression = 0.3, deviceId = "d-other")},
+            ${op(seq = 10, progression = 0.8, deviceId = "d-mine")}
+            ],"high_water":10}"""))
+
+        sync().syncAll(null)
+
+        assertEquals(0.8, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+    }
+
+    @Test
+    fun `own echoes clear earlier pages but allow later foreign reading`() = runTest {
+        connect(deviceId = "d-mine")
+        db.bookDao().upsert(local())
+        alias(deviceId = "d-mine")
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.8, null, "Reading", NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer("d-mine"), 1, 0.8, "Reading", NOW)
+        server.enqueue(json("""{"ops":[${op(9, 0.3, "d-other")}],"has_more":true,"high_water":10}"""))
+        server.enqueue(json("""{"ops":[${op(10, 0.8, "d-mine")}],"high_water":10}"""))
+
+        sync().syncAll(null)
+
+        assertEquals(0.8, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+        assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+
+        server.enqueue(json("""{"ops":[${op(11, 0.9, "d-other")}],"high_water":11}"""))
+        sync().syncAll(null)
+
+        assertEquals(0.9, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+    }
+
+    @Test
+    fun `an interrupted pull keeps older remote reading pending until the own echo arrives`() = runTest {
+        for (live in listOf(false, true)) {
+            connect(deviceId = "d-mine")
+            db.bookDao().upsert(local())
+            alias(deviceId = "d-mine")
+            db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.8, null, "Reading", NOW)
+            val revision = db.readingProgressDao().get(LOCAL)!!.localRevision
+            db.syncPeerStateDao().settle(LOCAL, peer("d-mine"), revision, 0.8, "Reading", NOW)
+            server.enqueue(json("""{"ops":[${op(9, 0.3, "d-other")}],"has_more":true,"high_water":10}"""))
+            server.enqueue(MockResponse(code = 503))
+            val identity = LiveIdentity.from(db.remoteServerDao().get()!!)
+
+            if (live) sync().refresh(identity, setOf(LiveTopic.POSITIONS)) else sync().syncAll(null)
+
+            assertEquals(0.8, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+            assertTrue(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+            assertEquals(9L, db.remoteServerDao().get()!!.syncCursorSeq)
+
+            server.enqueue(json("""{"ops":[${op(10, 0.8, "d-mine")}],"high_water":10}"""))
+            if (live) sync().refresh(identity, setOf(LiveTopic.POSITIONS)) else sync().syncAll(null)
+
+            assertEquals(0.8, db.readingProgressDao().get(LOCAL)!!.totalProgression!!, 0.0)
+            assertFalse(db.syncPeerStateDao().get(LOCAL, peer("d-mine"))!!.hasPending)
+            assertEquals(10L, db.remoteServerDao().get()!!.syncCursorSeq)
+        }
+    }
+
     private fun sync(
         online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false,
         furthest: Boolean = false,

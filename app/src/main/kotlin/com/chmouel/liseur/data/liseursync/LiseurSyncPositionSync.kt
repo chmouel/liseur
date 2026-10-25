@@ -148,7 +148,7 @@ class LiseurSyncPositionSync(
             if (trouble.first == SyncFailure.Unauthorised) {
                 return LiveRefresh(completed, owed, failures)
             }
-            val aliases = if (trouble.first?.worthRetrying == false) {
+            val aliases = if (!caughtUp || trouble.first?.worthRetrying == false) {
                 emptyList()
             } else {
                 identityDao.aliasesFor(account.peerId).filter { it.usable }
@@ -716,22 +716,22 @@ class LiseurSyncPositionSync(
 
         giveUp()?.let { return it }
 
-        pull(account, trouble)
+        val caughtUp = pull(account, trouble)
 
         var pulled = 0
         val pushes = mutableListOf<PendingPush>()
-        // Reconciling asks the server nothing, so it is worth doing even
-        // when the pull above came back empty-handed: it settles what
-        // earlier pages already delivered.
-        for (candidate in aliases) {
-            when (val outcome = reconcile(account, candidate)) {
-                is Reconciled.Pulled -> {
-                    pulled++
-                    pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
+        // A later page may carry an own echo superseding the pending remote position
+        if (caughtUp) {
+            for (candidate in aliases) {
+                when (val outcome = reconcile(account, candidate)) {
+                    is Reconciled.Pulled -> {
+                        pulled++
+                        pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
+                    }
+                    is Reconciled.Owed -> pushes += outcome.push
+                    Reconciled.Nothing ->
+                        pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
                 }
-                is Reconciled.Owed -> pushes += outcome.push
-                Reconciled.Nothing ->
-                    pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
             }
         }
 
@@ -797,7 +797,7 @@ class LiseurSyncPositionSync(
         return if (firstFailure == null) {
             forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
-            named.outcome()
+            if (caughtUp) named.outcome() else SyncOutcome.Incomplete
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
             reporting.report(PositionSyncStatus.Failed(firstFailure))
@@ -1415,12 +1415,16 @@ class LiseurSyncPositionSync(
             historical.forEach { observe(account, it, retained = true) }
             val byWork = identityDao.aliasesFor(account.peerId).filter { it.usable }.groupBy { it.workId }
             val newestByWork = ops
-                .filterNot { it.deviceId != null && it.deviceId == account.deviceId }
                 .groupBy(SyncOp::workId)
                 .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
             for (op in newestByWork) {
                 for (alias in byWork[op.workId].orEmpty()) {
-                    land(account, alias.bookUrl, op)
+                    if (op.deviceId != null && op.deviceId == account.deviceId) {
+                        // An own echo supersedes foreign reading on this or an earlier page
+                        peerStateDao.clearPending(alias.bookUrl, account.peerId)
+                    } else {
+                        land(account, alias.bookUrl, op)
+                    }
                 }
             }
             serverDao.setSyncCursor(cursor)
