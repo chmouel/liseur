@@ -34,10 +34,6 @@ class AnnotationSurfacesTest {
 
     @Test
     fun `a book note has no locator to look a passage up by`() {
-        // What keeps it out of `annotationAt` even if the kind filter
-        // there were ever dropped: there is no passage to match, and
-        // reading the sentinel back does not throw on the way to finding
-        // that out.
         assertNull(bookNote().locator())
         assertNull(bookNote().copy(locatorJson = "not json").locator())
         assertNotNull(highlight().locator())

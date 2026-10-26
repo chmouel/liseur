@@ -2145,7 +2145,6 @@ internal fun ReaderScreen(
                     ActiveSelection(
                         locator = it.locator,
                         rect = it.rect,
-                        existing = onAnnotationAction.annotationAt(it.locator),
                     )
                 }
             },
@@ -4793,7 +4792,7 @@ internal fun ReaderScreen(
         if (navigatorNow !== nav || selection == null) return null
         if (read != null) {
             // An equal value keeps the instance the bar already holds.
-            selection = ActiveSelection(read.locator, read.rect, onAnnotationAction.annotationAt(read.locator))
+            selection = ActiveSelection(read.locator, read.rect)
         }
         return selection
     }
@@ -5109,7 +5108,6 @@ internal fun ReaderScreen(
                             selection = ActiveSelection(
                                 current.locator,
                                 current.rect,
-                                onAnnotationAction.annotationAt(current.locator),
                             )
                         } else {
                             dismissSelection()
@@ -5439,11 +5437,11 @@ internal fun ReaderScreen(
     }
 }
 
-/** A passage the reader has just selected, and any mark already on it. */
-private data class ActiveSelection(
+// Only a decoration tap supplies an existing annotation ID, never text proximity
+internal data class ActiveSelection(
     val locator: Locator,
     val rect: RectF?,
-    val existing: BookAnnotation?,
+    val existing: BookAnnotation? = null,
 ) {
     val text: String get() = locator.text.highlight.orEmpty()
 
@@ -5513,7 +5511,6 @@ class ReaderAnnotationActions(
     val highlight: (Locator, HighlightTint, String?) -> Unit,
     val addNote: (Locator, String, String?) -> Unit,
     val saveBookNote: (String, String?) -> Unit,
-    val annotationAt: (Locator) -> BookAnnotation?,
     val toggleBookmark: () -> Unit,
     val remove: (BookAnnotation) -> Unit,
     val notebookMarkdown: () -> String,

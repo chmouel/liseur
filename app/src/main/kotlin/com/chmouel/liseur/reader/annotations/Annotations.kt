@@ -6,8 +6,6 @@ import androidx.compose.ui.graphics.toArgb
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
-import com.chmouel.liseur.domain.MarkedPassage
-import com.chmouel.liseur.domain.isSamePassage
 import org.json.JSONObject
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -73,10 +71,3 @@ fun List<BookAnnotation>.toDecorations(): List<Decoration> =
 /** The stored locator, or null when it cannot be read back. */
 fun BookAnnotation.locator(): Locator? =
     runCatching { Locator.fromJSON(JSONObject(locatorJson)) }.getOrNull()
-
-/** A locator in the terms [isSamePassage] compares. */
-fun Locator.markedPassage(): MarkedPassage = MarkedPassage(
-    href = href.toString(),
-    progression = locations.progression,
-    text = text.highlight,
-)

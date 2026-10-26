@@ -82,12 +82,10 @@ import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
 import com.chmouel.liseur.domain.DictionaryUrl
-import com.chmouel.liseur.domain.isSamePassage
 import com.chmouel.liseur.domain.exportNotebookMarkdown
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.locator
-import com.chmouel.liseur.reader.annotations.markedPassage
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
@@ -2672,28 +2670,6 @@ class ReaderViewModel(
                 noteUpdatedAt = noteUpdatedAt,
             ),
         )
-    }
-
-    /**
-     * The mark covering this locator, if the reader selected one they
-     * had already made.
-     *
-     * Compared by the words as well as the place: positions are only
-     * accurate to about a page, so going by those alone made a second
-     * highlight in the same chapter edit the first one instead of
-     * joining it.
-     */
-    fun annotationAt(locator: Locator): BookAnnotation? {
-        val selection = locator.markedPassage()
-        return annotations.value
-            .filter {
-                it.kind != AnnotationKind.BOOKMARK.name &&
-                    it.kind != AnnotationKind.BOOK_NOTE.name
-            }
-            .firstOrNull { mark ->
-                val other = mark.locator()?.markedPassage() ?: return@firstOrNull false
-                isSamePassage(selection, other)
-            }
     }
 
     /** Puts a bookmark on the current page, or takes it off again. */
