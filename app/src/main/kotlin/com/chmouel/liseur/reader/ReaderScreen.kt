@@ -1587,6 +1587,7 @@ internal fun ReaderScreen(
                 retainedDictionarySelection = null
                 automaticSelection = null
                 defineWord = null
+                lookupGesture.clear()
             }
             val tapped = tappedSelection
             if (tapped != null) {
