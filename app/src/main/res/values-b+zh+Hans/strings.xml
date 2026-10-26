@@ -1415,7 +1415,6 @@
     <string name="settings_backup_password_restore">请输入此备份的密码。账号和凭据将被替换，无需登录。</string>
     <string name="settings_backup_password_error">密码错误或加密数据已损坏，请重试。</string>
     <string name="settings_backup_error_credential">此设备已无法读取保存的账号或 KOReader 凭据。请重新登录，或在不包含账号和密码的情况下导出。</string>
-    <string name="settings_backup_error_export_password_lost">选择文件时备份密码已丢失，因此未保存任何内容。请重新导出。</string>
 
     <!-- Offline codex -->
     <string name="codex_title">阅读伴侣</string>

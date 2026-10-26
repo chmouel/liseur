@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.library
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -382,6 +383,141 @@ class SettingsBackupRepositoryTest {
         val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
         assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repository.inspect(Uri.fromFile(archive)))
         assertEquals(ThemeMode.DARK, app.settings.first().themeMode)
+    }
+
+    @Test
+    fun `export prepares a complete archive before opening the destination`() = runTest {
+        val app = AppSettingsRepository(store("prepared-export-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("prepared-export-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val target = File(folder.root, "prepared.zip")
+
+        val preparation = repository.prepareExport()
+        assertTrue(preparation is SettingsBackupPreparation.Prepared)
+        val prepared = (preparation as SettingsBackupPreparation.Prepared).export
+        assertFalse(target.exists())
+        ZipFile(prepared.file).use { zip -> assertTrue(zip.getEntry("manifest.json") != null) }
+
+        assertEquals(
+            SettingsBackupExportResult.Exported(0),
+            repository.writeExport(prepared, Uri.fromFile(target)),
+        )
+        assertTrue(target.isFile)
+        assertFalse(prepared.file.exists())
+    }
+
+    @Test
+    fun `a prepared archive keeps its counts until the destination is written`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val fontBytes = SfntFixtures.sfnt(names = listOf(SfntFixtures.name(1, "Prepared Export Font")))
+        assertTrue(fonts.import(Uri.fromFile(writeFont(fontBytes)), "prepared-export.ttf") is FontImportResult.Imported)
+        db.bookDao().upsert(book("counted"))
+        db.annotationDao().upsert(BookAnnotation("counted-note", "counted", AnnotationKind.BOOK_NOTE.name, "", note = "Kept", createdAt = 1))
+        val repository = SettingsBackupRepository(
+            context,
+            AppSettingsRepository(store("counted-app.preferences_pb")),
+            ReaderPreferencesRepository(store("counted-reader.preferences_pb")),
+            fonts,
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+            exportConnections = { liseurSyncConnections() },
+            prepareConnectionRestore = { _, _ -> suspend {} },
+        )
+        val target = File(folder.root, "counted.zip")
+
+        val prepared = (repository.prepareExport("backup password".toCharArray()) as SettingsBackupPreparation.Prepared).export
+        assertEquals(1, prepared.fonts)
+        assertEquals(1, prepared.annotations)
+        assertTrue(prepared.liseurSyncNeedsPairing)
+        assertEquals(
+            SettingsBackupExportResult.Exported(1, 1, liseurSyncNeedsPairing = true),
+            repository.writeExport(prepared, Uri.fromFile(target)),
+        )
+        assertTrue(target.isFile)
+        assertFalse(prepared.file.exists())
+    }
+
+    @Test
+    fun `only stale prepared archives are swept from the cache`() = runTest {
+        val repository = repository(
+            AppSettingsRepository(store("sweep-app.preferences_pb")),
+            ReaderPreferencesRepository(store("sweep-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val stale = System.currentTimeMillis() - 25 * 60 * 60 * 1000
+        // The archive a picker never answered, aged past the cutoff.
+        val staleArchive = (repository.prepareExport() as SettingsBackupPreparation.Prepared).export.file
+        assertTrue(staleArchive.setLastModified(stale))
+        val staleStaging = listOf(
+            "annotations-export-987654321.json",
+            "positions-export-987654322.json",
+            "companion-export-987654323.json",
+            "translations-export-987654324.json",
+        ).map { name -> File(context.cacheDir, name).apply { writeText("old"); setLastModified(stale) } }
+        val awaited = File(context.cacheDir, "settings-export-1234567891.zip").apply { writeText("new") }
+        val unrelated = File(context.cacheDir, "liseur-backup-2020-01-01.zip")
+            .apply { writeText("keep"); setLastModified(stale) }
+
+        repository.discardProcessInspections()
+
+        assertFalse(staleArchive.exists())
+        staleStaging.forEach { assertFalse(it.name, it.exists()) }
+        assertTrue(awaited.exists())
+        assertTrue(unrelated.exists())
+
+        // A prepare sweeps as well, so the next picker cannot trip over an abandoned archive.
+        val planted = File(context.cacheDir, "settings-export-1234567899.zip")
+            .apply { writeText("old"); setLastModified(stale) }
+        repository.discardPreparedExport((repository.prepareExport() as SettingsBackupPreparation.Prepared).export)
+        assertFalse(planted.exists())
+    }
+
+    @Test
+    fun `a cache that cannot hold the archive reports a storage failure`() = runTest {
+        // A cache directory that does not exist fails the staged writes before any picker.
+        val unusable = object : ContextWrapper(context) {
+            override fun getCacheDir() = File(folder.root, "missing-cache")
+        }
+        val repository = SettingsBackupRepository(
+            unusable,
+            AppSettingsRepository(store("storage-app.preferences_pb")),
+            ReaderPreferencesRepository(store("storage-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+            AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
+            ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+            companionBackup(),
+        )
+
+        assertEquals(SettingsBackupPreparation.Failed(SettingsBackupFailure.STORAGE), repository.prepareExport())
+    }
+
+    @Test
+    fun `a failed copy removes the prepared archive as well as the incomplete document`() = runTest {
+        val docs = BookExportRepositoryTest.FakeDocs
+        docs.directory = folder.newFolder("failed-prepared-copy")
+        docs.names.clear()
+        docs.deleted.clear()
+        docs.failWrites.clear()
+        docs.names["backup"] = "backup.zip"
+        docs.failWrites += "backup.zip"
+        File(docs.directory, "backup").writeText("partial")
+        org.robolectric.Robolectric.buildContentProvider(BookExportRepositoryTest.FakeDocs::class.java)
+            .create("test.bookexport.documents")
+        val target = DocumentsContract.buildDocumentUri("test.bookexport.documents", "backup")
+        val app = AppSettingsRepository(store("failed-prepared-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("failed-prepared-reader.preferences_pb"))
+        val repository = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val prepared = (repository.prepareExport() as SettingsBackupPreparation.Prepared).export
+
+        assertEquals(
+            SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS),
+            repository.writeExport(prepared, target),
+        )
+        assertFalse(prepared.file.exists())
+        assertEquals(listOf("backup"), docs.deleted)
+        assertFalse(File(docs.directory, "backup").exists())
     }
 
     @Test
@@ -1091,6 +1227,32 @@ class SettingsBackupRepositoryTest {
 
     private fun companionBackup() = CompanionBackupRepository({ companionStore }, db.bookDao(), storeExists = { true })
 
+    private fun liseurSyncConnections() = JSONObject()
+        .put("version", 1)
+        .put(
+            "account",
+            AccountBackup.encode(
+                RemoteServer(
+                    kind = ServerKind.LISEUR_SYNC,
+                    baseUrl = "https://library.example",
+                    username = "reader",
+                    passwordCipher = null,
+                    apiKeyCipher = null,
+                    accountId = "device",
+                    userId = null,
+                    koboTokenCipher = null,
+                    canDownload = true,
+                    addedAt = 10,
+                    catalogSyncedAt = null,
+                    positionSyncedAt = null,
+                    syncToken = null,
+                ),
+            ),
+        )
+        .put("kosync", JSONObject.NULL)
+        .put("keys", JSONObject())
+        .put("gemini", JSONObject.NULL)
+
     private fun book(url: String) = Book(
         url = url, title = "A book", author = "An author", coverPath = null, source = null,
         addedAt = 0, lastOpenedAt = null,
@@ -1195,27 +1357,6 @@ class SettingsBackupRepositoryTest {
     fun `only backups containing a liseur sync account need a new pairing`() = runTest {
         val app = AppSettingsRepository(store("pairing-app.preferences_pb"))
         val reader = ReaderPreferencesRepository(store("pairing-reader.preferences_pb"))
-        val account = RemoteServer(
-            kind = ServerKind.LISEUR_SYNC,
-            baseUrl = "https://library.example",
-            username = "reader",
-            passwordCipher = null,
-            apiKeyCipher = null,
-            accountId = "device",
-            userId = null,
-            koboTokenCipher = null,
-            canDownload = true,
-            addedAt = 10,
-            catalogSyncedAt = null,
-            positionSyncedAt = null,
-            syncToken = null,
-        )
-        val payload = JSONObject()
-            .put("version", 1)
-            .put("account", AccountBackup.encode(account))
-            .put("kosync", JSONObject.NULL)
-            .put("keys", JSONObject())
-            .put("gemini", JSONObject.NULL)
         val repository = SettingsBackupRepository(
             context,
             app,
@@ -1224,7 +1365,7 @@ class SettingsBackupRepositoryTest {
             AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
             ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
             companionBackup(),
-            exportConnections = { payload },
+            exportConnections = { liseurSyncConnections() },
             prepareConnectionRestore = { _, _ -> suspend {} },
         )
         val uri = Uri.fromFile(File(folder.root, "pairing.zip"))

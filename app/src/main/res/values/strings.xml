@@ -1524,7 +1524,6 @@
     <string name="settings_backup_password_restore">Enter the password used to encrypt this backup. Accounts and credentials will be replaced without signing in.</string>
     <string name="settings_backup_password_error">Incorrect password or damaged encrypted data. Try again.</string>
     <string name="settings_backup_error_credential">A saved account or KOReader credential can no longer be read on this device. Sign in again, or export without accounts and passwords.</string>
-    <string name="settings_backup_error_export_password_lost">The backup password was lost while choosing the file, so nothing was saved. Export again.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Companion</string>

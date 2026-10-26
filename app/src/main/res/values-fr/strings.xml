@@ -1464,7 +1464,6 @@
     <string name="settings_backup_password_restore">Saisissez le mot de passe de cette sauvegarde. Les comptes et les identifiants seront remplacés sans nouvelle connexion.</string>
     <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
     <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut plus être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
-    <string name="settings_backup_error_export_password_lost">Le mot de passe de la sauvegarde a été perdu pendant le choix du fichier ; rien n’a été enregistré. Exportez à nouveau.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compagnon</string>

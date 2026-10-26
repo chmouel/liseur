@@ -1464,7 +1464,6 @@
     <string name="settings_backup_password_restore">Inserisci la password di questo backup. Account e credenziali saranno sostituiti senza effettuare l’accesso.</string>
     <string name="settings_backup_password_error">Password errata o dati cifrati danneggiati. Riprova.</string>
     <string name="settings_backup_error_credential">Una credenziale salvata di un account o di KOReader non è più leggibile su questo dispositivo. Accedi di nuovo, oppure esporta senza account e password.</string>
-    <string name="settings_backup_error_export_password_lost">La password del backup è andata persa durante la scelta del file, quindi non è stato salvato nulla. Esporta di nuovo.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compagno</string>

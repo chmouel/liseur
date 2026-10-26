@@ -1464,7 +1464,6 @@
     <string name="settings_backup_password_restore">Introduce la contraseña de esta copia. Las cuentas y credenciales se reemplazarán sin iniciar sesión.</string>
     <string name="settings_backup_password_error">Contraseña incorrecta o datos cifrados dañados. Inténtalo de nuevo.</string>
     <string name="settings_backup_error_credential">Ya no se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>
-    <string name="settings_backup_error_export_password_lost">La contraseña de la copia se perdió mientras elegías el archivo, así que no se guardó nada. Vuelve a exportar.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compañero</string>

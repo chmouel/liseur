@@ -1476,7 +1476,6 @@
     <string name="settings_backup_password_restore">Gib das Passwort dieses Backups ein. Konten und Zugangsdaten werden ohne Anmeldung ersetzt.</string>
     <string name="settings_backup_password_error">Falsches Passwort oder beschädigte verschlüsselte Daten. Versuche es erneut.</string>
     <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht mehr gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>
-    <string name="settings_backup_error_export_password_lost">Das Sicherungspasswort ging bei der Dateiauswahl verloren, daher wurde nichts gespeichert. Exportiere erneut.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Lesebegleiter</string>

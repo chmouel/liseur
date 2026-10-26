@@ -10,8 +10,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import com.chmouel.liseur.LiseurApplication
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -27,8 +30,10 @@ import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.library.SettingsBackupExportResult
 import com.chmouel.liseur.data.library.SettingsBackupFailure
 import com.chmouel.liseur.data.library.SettingsBackupInspection
+import com.chmouel.liseur.data.library.SettingsBackupPreparation
 import com.chmouel.liseur.data.library.SettingsBackupRepository
 import com.chmouel.liseur.data.library.SettingsBackupRestoreResult
+import com.chmouel.liseur.data.library.PreparedExport
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -84,86 +89,76 @@ sealed interface SettingsBackupUiStatus {
     data class BooksExportCancelled(val counts: BookExportProgress) : SettingsBackupUiStatus
 }
 
-private data class SettingsBackupState(
+internal data class SettingsBackupState(
     val preview: SettingsBackupInspection.Ready? = null,
     val status: SettingsBackupUiStatus? = null,
     val busy: Boolean = false,
     val bookProgress: BookExportProgress? = null,
+    /** A prepared archive is waiting for the picker to open. */
+    val saveRequest: String? = null,
 )
 
-/** What a document returned by the export picker becomes. */
-internal enum class PickedExport { RUN, ABANDON, DISCARD }
-
-/**
- * A plain export still runs when the app was recreated behind the picker. An
- * encrypted one has then lost its in-memory password, so it is abandoned rather
- * than written without the connections the user asked for.
- */
-internal fun pickedExport(pending: Boolean, needsPassword: Boolean, hasPassword: Boolean, available: Boolean) = when {
-    !pending || !available -> PickedExport.DISCARD
-    needsPassword && !hasPassword -> PickedExport.ABANDON
-    else -> PickedExport.RUN
-}
-
-private class SettingsBackupViewModel(
+internal class SettingsBackupViewModel(
     private val repository: SettingsBackupRepository,
     private val bookExport: BookExportRepository,
-    /** Holds only whether an export is pending and needs a password; never the password itself. */
+    /** Holds where the prepared archive waits; the password never leaves this call. */
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
     private var activeOperation: Job? = null
     private var closing = false
-    private var exportPassword: CharArray? = null
 
+    /** Builds the archive before the picker creates a destination document. */
     fun prepareExport(password: CharArray?, includeTranslations: Boolean) {
-        discardPassword()
-        exportPassword = password
-        savedState[EXPORT_PENDING] = true
-        savedState[EXPORT_NEEDS_PASSWORD] = password != null
-        savedState[EXPORT_TRANSLATIONS] = includeTranslations
-    }
-
-    fun discardPassword() {
-        wipePassword()
-        savedState[EXPORT_PENDING] = false
-        savedState[EXPORT_NEEDS_PASSWORD] = false
-    }
-
-    private fun wipePassword() {
-        exportPassword?.fill('\u0000')
-        exportPassword = null
-    }
-
-    override fun onCleared() {
-        wipePassword()
-        viewModelScope.launch(NonCancellable) { repository.discardProcessInspections() }
-    }
-
-    fun export(uri: Uri) {
-        val action = pickedExport(
-            pending = savedState[EXPORT_PENDING] ?: false,
-            needsPassword = savedState[EXPORT_NEEDS_PASSWORD] ?: false,
-            hasPassword = exportPassword != null,
-            available = !closing && !_state.value.busy,
-        )
-        val password = exportPassword
-        val includeTranslations = savedState[EXPORT_TRANSLATIONS] ?: true
-        exportPassword = null
-        savedState[EXPORT_PENDING] = false
-        savedState[EXPORT_NEEDS_PASSWORD] = false
-        if (action != PickedExport.RUN) {
+        if (closing || _state.value.busy) {
             password?.fill('\u0000')
-            discardExport(uri)
-            if (action == PickedExport.ABANDON) {
-                _state.update { it.copy(status = SettingsBackupUiStatus.Failed(SettingsBackupFailure.EXPORT_PASSWORD_LOST)) }
-            }
             return
         }
         runBusy {
             try {
-                val result = repository.exportTo(uri, password, includeTranslations = includeTranslations)
+                // A prepared archive the picker never consumed is dropped before a new one.
+                takePreparedExport()?.let { repository.discardPreparedExport(it) }
+                when (val preparation = repository.prepareExport(password, includeTranslations)) {
+                    is SettingsBackupPreparation.Prepared -> {
+                        rememberPrepared(preparation.export)
+                        _state.update { it.copy(status = null, saveRequest = exportFileName()) }
+                    }
+                    is SettingsBackupPreparation.Failed ->
+                        _state.update { it.copy(status = SettingsBackupUiStatus.Failed(preparation.failure)) }
+                }
+            } finally {
+                password?.fill('\u0000')
+            }
+        }
+    }
+
+    fun saveLaunched(name: String) {
+        if (_state.value.saveRequest == name) _state.update { it.copy(saveRequest = null) }
+    }
+
+    /** Copies the prepared archive after the picker returns, or discards it when cancelled. */
+    fun writeExport(target: Uri?) {
+        val prepared = takePreparedExport()
+        if (closing || _state.value.busy) {
+            viewModelScope.launch {
+                prepared?.let { repository.discardPreparedExport(it) }
+                target?.let { repository.discardExport(it) }
+            }
+            return
+        }
+        if (target == null) {
+            prepared?.let { viewModelScope.launch { repository.discardPreparedExport(it) } }
+            return
+        }
+        if (prepared == null) {
+            viewModelScope.launch { repository.discardExport(target) }
+            _state.update { it.copy(status = SettingsBackupUiStatus.Failed(SettingsBackupFailure.FILE_ACCESS)) }
+            return
+        }
+        runBusy {
+            try {
+                val result = repository.writeExport(prepared, target)
                 _state.update {
                     it.copy(status = when (result) {
                         is SettingsBackupExportResult.Exported ->
@@ -174,12 +169,45 @@ private class SettingsBackupViewModel(
                         is SettingsBackupExportResult.Failed -> SettingsBackupUiStatus.Failed(result.failure)
                     })
                 }
-            } finally { password?.fill('\u0000') }
+            } finally {
+                repository.discardPreparedExport(prepared)
+            }
         }
     }
 
-    fun discardExport(uri: Uri) {
-        viewModelScope.launch { repository.discardExport(uri) }
+    override fun onCleared() {
+        val prepared = takePreparedExport()
+        viewModelScope.launch(NonCancellable) {
+            prepared?.let { repository.discardPreparedExport(it) }
+            repository.discardProcessInspections()
+        }
+    }
+
+    private fun exportFileName(): String {
+        val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        return "liseur-backup-$date.zip"
+    }
+
+    private fun rememberPrepared(prepared: PreparedExport) {
+        savedState[PREPARED_NAME] = prepared.file.name
+        savedState[PREPARED_FONTS] = prepared.fonts
+        savedState[PREPARED_ANNOTATIONS] = prepared.annotations
+        savedState[PREPARED_PAIRING] = prepared.liseurSyncNeedsPairing
+        savedState[PREPARED_TRANSLATION_BOOKS] = prepared.translationBooks
+        savedState[PREPARED_TRANSLATION_SKIPPED] = prepared.translationBooksSkipped
+    }
+
+    private fun takePreparedExport(): PreparedExport? {
+        val name = savedState.remove<String>(PREPARED_NAME) ?: return null
+        val fonts = savedState.remove<Int>(PREPARED_FONTS) ?: 0
+        val annotations = savedState.remove<Int>(PREPARED_ANNOTATIONS) ?: 0
+        val pairing = savedState.remove<Boolean>(PREPARED_PAIRING) ?: false
+        val translationBooks = savedState.remove<Int>(PREPARED_TRANSLATION_BOOKS) ?: 0
+        val translationSkipped = savedState.remove<Int>(PREPARED_TRANSLATION_SKIPPED) ?: 0
+        // Saved state also starts from the launch intent's extras, so only a name this app generated counts.
+        // A prepared archive swept from the cache counts as absent, not as a failed copy.
+        val file = repository.preparedExportFile(name)?.takeIf { it.isFile } ?: return null
+        return PreparedExport(file, fonts, annotations, pairing, translationBooks, translationSkipped)
     }
 
     fun exportBooks(uri: Uri) = runBusy {
@@ -261,14 +289,15 @@ private class SettingsBackupViewModel(
     }
 
     fun close() {
-        discardPassword()
         if (closing) return
         closing = true
-        _state.update { it.copy(busy = true) }
+        _state.update { it.copy(busy = true, saveRequest = null) }
         val operation = activeOperation
+        val prepared = takePreparedExport()
         viewModelScope.launch {
             try {
                 operation?.cancelAndJoin()
+                prepared?.let { repository.discardPreparedExport(it) }
                 repository.discardProcessInspections()
             } finally {
                 closing = false
@@ -292,9 +321,12 @@ private class SettingsBackupViewModel(
     }
 
     companion object {
-        private const val EXPORT_PENDING = "export_pending"
-        private const val EXPORT_NEEDS_PASSWORD = "export_needs_password"
-        private const val EXPORT_TRANSLATIONS = "export_translations"
+        private const val PREPARED_NAME = "prepared_export_name"
+        private const val PREPARED_FONTS = "prepared_export_fonts"
+        private const val PREPARED_ANNOTATIONS = "prepared_export_annotations"
+        private const val PREPARED_PAIRING = "prepared_export_pairing"
+        private const val PREPARED_TRANSLATION_BOOKS = "prepared_export_translation_books"
+        private const val PREPARED_TRANSLATION_SKIPPED = "prepared_export_translation_skipped"
 
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
@@ -302,6 +334,23 @@ private class SettingsBackupViewModel(
                 SettingsBackupViewModel(app.container.settingsBackup, app.container.bookExport, createSavedStateHandle())
             }
         }
+    }
+}
+
+/**
+ * Opens the destination picker once per prepared request, and only on a resumed screen.
+ *
+ * The request is only re-read at recomposition, while [repeatOnLifecycle] runs its block
+ * again on every transition back to RESUMED, so the block checks the request itself: the
+ * resume that follows a closed picker finds it consumed and opens nothing.
+ */
+internal suspend fun Lifecycle.launchSaveRequest(
+    request: () -> String?,
+    consume: (String) -> Unit,
+) {
+    val requested = request() ?: return
+    repeatOnLifecycle(Lifecycle.State.RESUMED) {
+        if (request() == requested) consume(requested)
     }
 }
 
@@ -318,9 +367,18 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         if (!active) model.close()
     }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) {
-        if (it != null) {
-            if (active) model.export(it) else { model.discardPassword(); model.discardExport(it) }
-        } else model.discardPassword()
+        model.writeExport(it)
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    // A request prepared in the background waits for RESUMED instead of orphaning its archive.
+    LaunchedEffect(state.saveRequest) {
+        lifecycle.launchSaveRequest(
+            request = { model.state.value.saveRequest },
+            consume = { name ->
+                model.saveLaunched(name)
+                save.launch(name)
+            },
+        )
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) {
         if (it != null && active) model.inspect(it)
@@ -337,8 +395,6 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         cancelBookExport = model::cancelBookExport,
         export = { password, includeTranslations ->
             model.prepareExport(password, includeTranslations)
-            val date = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
-            save.launch("liseur-backup-$date.zip")
         },
         restore = { open.launch(arrayOf("*/*")) },
         confirmRestore = model::confirmRestore,

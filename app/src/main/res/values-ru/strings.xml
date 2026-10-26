@@ -1564,7 +1564,6 @@
     <string name="settings_backup_password_restore">Введите пароль этой резервной копии. Аккаунты и учётные данные будут заменены без входа в систему.</string>
     <string name="settings_backup_password_error">Неверный пароль или повреждены зашифрованные данные. Попробуйте ещё раз.</string>
     <string name="settings_backup_error_credential">Сохранённые учётные данные аккаунта или KOReader больше нельзя прочитать на этом устройстве. Войдите снова или экспортируйте без аккаунтов и паролей.</string>
-    <string name="settings_backup_error_export_password_lost">Пароль резервной копии был утерян во время выбора файла, поэтому ничего не сохранено. Повторите экспорт.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Помощник</string>

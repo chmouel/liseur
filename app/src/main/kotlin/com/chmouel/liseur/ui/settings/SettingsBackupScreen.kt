@@ -417,7 +417,6 @@ private val SettingsBackupFailure.message: Int
         SettingsBackupFailure.PASSWORD -> R.string.settings_backup_password_error
         SettingsBackupFailure.RESTORE -> R.string.settings_backup_error_restore
         SettingsBackupFailure.UNREADABLE_CREDENTIAL -> R.string.settings_backup_error_credential
-        SettingsBackupFailure.EXPORT_PASSWORD_LOST -> R.string.settings_backup_error_export_password_lost
     }
 
 @Composable

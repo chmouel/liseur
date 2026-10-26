@@ -64,8 +64,6 @@ enum class SettingsBackupFailure {
     PASSWORD,
     /** A saved account credential can no longer be read on this device. */
     UNREADABLE_CREDENTIAL,
-    /** The app was recreated behind the file picker, losing the in-memory backup password. */
-    EXPORT_PASSWORD_LOST,
 }
 
 data class SettingsBackupPreview(
@@ -94,6 +92,21 @@ sealed interface SettingsBackupExportResult {
         val translationBooksSkipped: Int = 0,
     ) : SettingsBackupExportResult
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupExportResult
+}
+
+/** A complete archive waiting in app-private cache for a destination chosen by the user. */
+data class PreparedExport(
+    val file: File,
+    val fonts: Int,
+    val annotations: Int = 0,
+    val liseurSyncNeedsPairing: Boolean = false,
+    val translationBooks: Int = 0,
+    val translationBooksSkipped: Int = 0,
+)
+
+sealed interface SettingsBackupPreparation {
+    data class Prepared(val export: PreparedExport) : SettingsBackupPreparation
+    data class Failed(val failure: SettingsBackupFailure) : SettingsBackupPreparation
 }
 
 sealed interface SettingsBackupRestoreResult {
@@ -133,7 +146,76 @@ class SettingsBackupRepository(
 
     suspend fun exportTo(target: Uri, password: CharArray? = null, includeTranslations: Boolean = true): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
+            when (val preparation = prepareExportLocked(password, includeTranslations)) {
+                is SettingsBackupPreparation.Failed ->
+                    SettingsBackupExportResult.Failed(preparation.failure)
+                is SettingsBackupPreparation.Prepared -> try {
+                    writePreparedExportLocked(preparation.export, target)
+                } finally {
+                    preparation.export.file.delete()
+                }
+            }
+        }
+    }
+
+    /** Builds the whole ZIP in cache so the document picker never creates an empty destination. */
+    suspend fun prepareExport(
+        password: CharArray? = null,
+        includeTranslations: Boolean = true,
+    ): SettingsBackupPreparation {
+        var prepared: PreparedExport? = null
+        try {
+            return withContext(Dispatchers.IO) {
+                operationMutex.withLock {
+                    prepareExportLocked(password, includeTranslations).also {
+                        if (it is SettingsBackupPreparation.Prepared) prepared = it.export
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            // A caller cancelled during the handoff never learns of the archive, so it goes now.
+            prepared?.let { discardPreparedExport(it) }
+            throw e
+        }
+    }
+
+    /** Copies a prepared archive to the user's document, removing it when the copy fails. */
+    suspend fun writeExport(prepared: PreparedExport, target: Uri): SettingsBackupExportResult {
+        var started = false
+        try {
+            return withContext(Dispatchers.IO) {
+                operationMutex.withLock {
+                    started = true
+                    try {
+                        writePreparedExportLocked(prepared, target)
+                    } finally {
+                        prepared.file.delete()
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            // Cancelled before the copy began, the picker's new document is still empty.
+            if (!started) discardExport(target)
+            throw e
+        }
+    }
+
+    /** Resolves a prepared archive name kept across recreation, refusing any file this app did not generate. */
+    fun preparedExportFile(name: String): File? =
+        name.takeIf { PREPARED_EXPORT_FILE.matches(it) }?.let { File(context.cacheDir, it) }
+
+    /** Deletes a prepared archive the picker never consumed; safe to call twice. */
+    suspend fun discardPreparedExport(prepared: PreparedExport) {
+        withContext(NonCancellable + Dispatchers.IO) { prepared.file.delete() }
+    }
+
+    private suspend fun prepareExportLocked(
+        password: CharArray?,
+        includeTranslations: Boolean,
+    ): SettingsBackupPreparation {
+        sweepStaleExports()
         var completed = false
+        var archiveFile: File? = null
         var annotationFile: File? = null
         var positionFile: File? = null
         var companionFile: File? = null
@@ -161,7 +243,7 @@ class SettingsBackupRepository(
             }
             val settingsBytes = settings.toString().toByteArray(Charsets.UTF_8)
             if (settingsBytes.size > MAX_SETTINGS_BYTES) {
-                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+                return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
             val stagedAnnotations = File.createTempFile("annotations-export-", ".json", context.cacheDir)
@@ -196,7 +278,7 @@ class SettingsBackupRepository(
 
             val fonts = userFonts.backupFonts()
             if (fonts.size > MAX_FONT_FILES) {
-                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+                return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
             val listed = ArrayList<EntryMetadata>(fonts.size + 4)
@@ -213,14 +295,14 @@ class SettingsBackupRepository(
                 currentCoroutineContext().ensureActive()
                 val path = "fonts/${font.fileName}"
                 if (!safePath(path)) {
-                    return@withContext SettingsBackupExportResult.Failed(
+                    return SettingsBackupPreparation.Failed(
                         SettingsBackupFailure.INVALID_ARCHIVE,
                     )
                 }
                 val metadata = hashFile(path, font.file)
                 totalBytes += metadata.size
                 if (totalBytes > MAX_TOTAL_BYTES) {
-                    return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+                    return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
                 }
                 fontMetadata += metadata
                 listed += metadata
@@ -245,12 +327,12 @@ class SettingsBackupRepository(
             val manifestBytes = manifest.toString().toByteArray(Charsets.UTF_8)
             totalBytes += manifestBytes.size
             if (manifestBytes.size > MAX_MANIFEST_BYTES || totalBytes > MAX_TOTAL_BYTES) {
-                return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.TOO_LARGE)
+                return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
-            val output = context.contentResolver.openOutputStream(target, "wt")
-                ?: return@withContext SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
-            ZipOutputStream(output).use { zip ->
+            val archive = File.createTempFile("settings-export-", ".zip", context.cacheDir)
+            archiveFile = archive
+            ZipOutputStream(archive.outputStream()).use { zip ->
                 writeEntry(zip, MANIFEST_PATH, manifestBytes)
                 writeEntry(zip, SETTINGS_PATH, settingsBytes)
                 writeFileEntry(zip, ANNOTATIONS_PATH, stagedAnnotations)
@@ -267,23 +349,61 @@ class SettingsBackupRepository(
                 }
             }
             completed = true
-            SettingsBackupExportResult.Exported(fonts.size, annotationCount, liseurSyncNeedsPairing,
-                translationResult.books, translationResult.skipped)
+            return SettingsBackupPreparation.Prepared(
+                PreparedExport(archive, fonts.size, annotationCount, liseurSyncNeedsPairing,
+                    translationResult.books, translationResult.skipped),
+            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: BackupFailureException) {
             e.cause?.let { Log.w(TAG, "Settings export failed", it) }
-            SettingsBackupExportResult.Failed(e.failure)
+            return SettingsBackupPreparation.Failed(e.failure)
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not write the prepared settings backup", e)
+            return SettingsBackupPreparation.Failed(SettingsBackupFailure.STORAGE)
         } catch (e: Exception) {
             Log.w(TAG, "Settings export failed", e)
-            SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+            return SettingsBackupPreparation.Failed(SettingsBackupFailure.FILE_ACCESS)
         } finally {
             annotationFile?.delete()
             positionFile?.delete()
             companionFile?.delete()
             translationFile?.delete()
-            if (!completed) discardExport(target)
+            if (!completed) archiveFile?.delete()
         }
+    }
+
+    private suspend fun writePreparedExportLocked(
+        prepared: PreparedExport,
+        target: Uri,
+    ): SettingsBackupExportResult {
+        var completed = false
+        try {
+            val output = context.contentResolver.openOutputStream(target, "wt")
+                ?: return SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+            output.use { sink ->
+                prepared.file.inputStream().use { source ->
+                    val buffer = ByteArray(BUFFER_SIZE)
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        sink.write(buffer, 0, count)
+                    }
+                }
+            }
+            completed = true
+            return SettingsBackupExportResult.Exported(
+                prepared.fonts, prepared.annotations, prepared.liseurSyncNeedsPairing,
+                prepared.translationBooks, prepared.translationBooksSkipped,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Settings export failed", e)
+            return SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+        } finally {
+            if (!completed) discardExport(target)
         }
     }
 
@@ -530,6 +650,7 @@ class SettingsBackupRepository(
                         STAGING_DIRECTORY.matches(it.name)
                 }
                 ?.forEach(::removeStaging)
+            sweepStaleExports()
         }
     }
 
@@ -1052,6 +1173,16 @@ class SettingsBackupRepository(
     private fun stagingDirectory(archiveId: String): File =
         File(context.cacheDir, "$PROCESS_STAGING_PREFIX$archiveId")
 
+    /** Deletes cache files a killed process left behind, never one a live picker still waits on. */
+    private fun sweepStaleExports() {
+        val cutoff = System.currentTimeMillis() - STALE_EXPORT_AGE_MS
+        context.cacheDir.listFiles()
+            ?.filter { it.isFile && EXPORT_TEMP_FILE.matches(it.name) && it.lastModified() < cutoff }
+            ?.forEach { file ->
+                if (!file.delete()) Log.w(TAG, "Could not remove a stale export staging file")
+            }
+    }
+
     private fun sweepStaleStaging() {
         val currentPrefix = PROCESS_STAGING_PREFIX
         context.cacheDir.listFiles()
@@ -1128,6 +1259,12 @@ class SettingsBackupRepository(
         private const val MAX_TOTAL_BYTES =
             MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES + BackupEncryption.MAX_BYTES + TranslationBackupRepository.MAX_BYTES
         private const val BUFFER_SIZE = 32 * 1024
+        // A picker left open in another window or during doze can stay unanswered for
+        // hours, so only a day-old staging file counts as one no live picker waits on.
+        private const val STALE_EXPORT_AGE_MS = 24L * 60 * 60 * 1000
+        private val EXPORT_TEMP_FILE =
+            Regex("(settings|annotations|positions|companion|translations)-export-[0-9]+\\.[a-z]+")
+        private val PREPARED_EXPORT_FILE = Regex("settings-export-[0-9]+\\.zip")
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")
 
