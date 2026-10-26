@@ -7,9 +7,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -118,104 +122,211 @@ fun SelectionPopup(
             },
             color = MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
-            Row(
-                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
-                // The colours are one choice among themselves, not among the
-                // actions beside them, so they are grouped on their own.
-                if (chips.isNotEmpty()) {
-                    Row(
-                        Modifier.selectableGroup(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        chips.forEach { tint ->
-                            TintChip(
-                                tint = tint,
-                                selected = tint == activeTint,
-                                onClick = { actions.onHighlight(tint) },
-                            )
-                        }
-                    }
-                }
-                // On a narrow phone with large text the actions outgrow the
-                // bar; they scroll behind the chips rather than fall off it.
+            SelectionActionRow(
+                actions = actions,
+                activeTint = activeTint,
+                palette = palette,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The colours and actions of [SelectionPopup], laid out as a full-width tonal
+ * bar at the foot of the definition sheet a long press opens. That sheet is
+ * the look-up already, so Define is omitted and the remaining actions spread
+ * across the width of the card.
+ */
+@Composable
+fun SheetSelectionActionBar(
+    actions: SelectionActions,
+    activeTint: HighlightTint?,
+    palette: HighlightPalette,
+    modifier: Modifier = Modifier,
+) {
+    val eInk = LocalEInk.current
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = if (eInk) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        } else {
+            null
+        },
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
+            if (chips.isNotEmpty()) {
                 Row(
                     Modifier
-                        .weight(1f, fill = false)
+                        .padding(horizontal = 4.dp)
+                        .selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    chips.forEach { tint ->
+                        TintChip(
+                            tint = tint,
+                            selected = tint == activeTint,
+                            onClick = { actions.onHighlight(tint) },
+                        )
+                    }
+                }
+                Box(
+                    Modifier
+                        .padding(start = 8.dp, end = 4.dp)
+                        .size(width = 1.dp, height = 22.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                )
+            }
+            BoxWithConstraints(Modifier.weight(1f)) {
+                Row(
+                    Modifier
+                        .widthIn(min = maxWidth)
                         .horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    if (actions.annotate) {
-                        if (palette.isEmpty) {
-                            PopupAction(
-                                label = stringResource(R.string.annotation_highlight),
-                                onClick = { actions.onHighlight(palette.default) },
-                            )
-                        }
-                        IconButton(onClick = actions.onNote, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Outlined.EditNote,
-                                contentDescription = stringResource(R.string.annotation_note),
-                            )
-                        }
-                    }
-                    IconButton(onClick = actions.onLookUp, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.MenuBook,
-                            contentDescription = stringResource(R.string.annotation_look_up),
-                        )
-                    }
-                    actions.onCompanion?.let { character ->
-                        IconButton(onClick = character, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Outlined.PersonSearch,
-                                contentDescription = stringResource(R.string.companion_action),
-                            )
-                        }
-                    }
-                    IconButton(onClick = actions.onSearch, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Outlined.Search,
-                            contentDescription = stringResource(R.string.annotation_search),
-                        )
-                    }
-                    actions.onDelete?.let { delete ->
-                        IconButton(onClick = delete, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Outlined.Delete,
-                                contentDescription = stringResource(R.string.annotation_delete),
-                            )
-                        }
-                    }
-                    actions.onTranslate?.let { translate ->
-                        IconButton(onClick = translate, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.Outlined.Translate,
-                                contentDescription = stringResource(actions.translateLabel),
-                            )
-                        }
-                    }
-                    actions.onReadAloud?.let { readAloud ->
-                        IconButton(onClick = readAloud, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.VolumeUp,
-                                contentDescription = stringResource(R.string.read_aloud_from_here),
-                            )
-                        }
-                    }
-                    IconButton(onClick = actions.onShare, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Outlined.Share,
-                            contentDescription = stringResource(R.string.annotation_share),
-                        )
-                    }
+                    ActionButtons(
+                        actions = actions,
+                        palette = palette,
+                        lookUp = false,
+                        buttonSize = 44.dp,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun SelectionActionRow(
+    actions: SelectionActions,
+    activeTint: HighlightTint?,
+    palette: HighlightPalette,
+    modifier: Modifier = Modifier,
+    lookUp: Boolean = true,
+) {
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
+        // The colours are one choice among themselves, not among the
+        // actions beside them, so they are grouped on their own.
+        if (chips.isNotEmpty()) {
+            Row(
+                Modifier.selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                chips.forEach { tint ->
+                    TintChip(
+                        tint = tint,
+                        selected = tint == activeTint,
+                        onClick = { actions.onHighlight(tint) },
+                    )
+                }
+            }
+        }
+        // On a narrow phone with large text the actions outgrow the
+        // bar; they scroll behind the chips rather than fall off it.
+        Row(
+            Modifier
+                .weight(1f, fill = false)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ActionButtons(
+                actions = actions,
+                palette = palette,
+                lookUp = lookUp,
+                buttonSize = 36.dp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActionButtons(
+    actions: SelectionActions,
+    palette: HighlightPalette,
+    lookUp: Boolean,
+    buttonSize: androidx.compose.ui.unit.Dp,
+) {
+    if (actions.annotate) {
+        if (palette.isEmpty) {
+            PopupAction(
+                label = stringResource(R.string.annotation_highlight),
+                onClick = { actions.onHighlight(palette.default) },
+            )
+        }
+        IconButton(onClick = actions.onNote, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.Outlined.EditNote,
+                contentDescription = stringResource(R.string.annotation_note),
+            )
+        }
+    }
+    if (lookUp) {
+        IconButton(onClick = actions.onLookUp, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.AutoMirrored.Outlined.MenuBook,
+                contentDescription = stringResource(R.string.annotation_look_up),
+            )
+        }
+    }
+    actions.onCompanion?.let { character ->
+        IconButton(onClick = character, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.Outlined.PersonSearch,
+                contentDescription = stringResource(R.string.companion_action),
+            )
+        }
+    }
+    IconButton(onClick = actions.onSearch, modifier = Modifier.size(buttonSize)) {
+        Icon(
+            Icons.Outlined.Search,
+            contentDescription = stringResource(R.string.annotation_search),
+        )
+    }
+    actions.onDelete?.let { delete ->
+        IconButton(onClick = delete, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.Outlined.Delete,
+                contentDescription = stringResource(R.string.annotation_delete),
+            )
+        }
+    }
+    actions.onTranslate?.let { translate ->
+        IconButton(onClick = translate, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.Outlined.Translate,
+                contentDescription = stringResource(actions.translateLabel),
+            )
+        }
+    }
+    actions.onReadAloud?.let { readAloud ->
+        IconButton(onClick = readAloud, modifier = Modifier.size(buttonSize)) {
+            Icon(
+                Icons.AutoMirrored.Outlined.VolumeUp,
+                contentDescription = stringResource(R.string.read_aloud_from_here),
+            )
+        }
+    }
+    IconButton(onClick = actions.onShare, modifier = Modifier.size(buttonSize)) {
+        Icon(
+            Icons.Outlined.Share,
+            contentDescription = stringResource(R.string.annotation_share),
+        )
     }
 }
 

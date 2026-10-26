@@ -1,6 +1,7 @@
 package com.chmouel.liseur.reader.dictionary
 
 import android.icu.util.ULocale
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.chmouel.liseur.ui.BusyIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
@@ -82,6 +85,7 @@ fun DefinitionSheet(
     onOpenInBrowser: (term: String, site: String) -> Unit,
     onDismiss: () -> Unit,
     onSelectText: (() -> Unit)? = null,
+    selectionActions: (@Composable () -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
     val term = remember(word) { normaliseLookupTerm(word) }
@@ -136,56 +140,76 @@ fun DefinitionSheet(
                 .align(Alignment.CenterHorizontally)
                 .widthIn(max = contentWidthCap(windowWidth()))
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = term,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            when (val current = state) {
-                DictionaryState.Disabled -> Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+            // Only the entry scrolls, so a long one never pushes the actions off screen.
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(
-                            R.string.dictionary_disabled_explanation,
-                            DictionaryUrl.hostOf(baseUrl),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = term,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
                     )
-                    Button(onClick = onEnable) {
-                        Text(stringResource(R.string.dictionary_enable))
+                    if (onSelectText != null) {
+                        AssistChip(
+                            onClick = onSelectText,
+                            label = { Text(stringResource(R.string.dictionary_select_text)) },
+                        )
                     }
                 }
 
-                else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
+                when (val current = state) {
+                    DictionaryState.Disabled -> Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.dictionary_disabled_explanation,
+                                DictionaryUrl.hostOf(baseUrl),
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(onClick = onEnable) {
+                            Text(stringResource(R.string.dictionary_enable))
+                        }
+                    }
+
+                    else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
+                }
+
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val translated = (translations as? TranslationsState.Found)?.first
+                    if (target != null && translated != null) {
+                        TranslationsPill(target, translated, onClick = { showTranslations = true })
+                    }
+                    DictionaryLink(
+                        label = stringResource(R.string.dictionary_other_app),
+                        onClick = { onOpenInDictionaryApp(term) },
+                    )
+                    DictionaryLink(
+                        label = stringResource(R.string.dictionary_open_full_entry),
+                        onClick = { onOpenInBrowser(term, baseUrl) },
+                    )
+                }
             }
 
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (onSelectText != null) {
-                    TextButton(onClick = onSelectText) {
-                        Text(stringResource(R.string.dictionary_select_text))
-                    }
-                }
-                val translated = (translations as? TranslationsState.Found)?.first
-                if (target != null && translated != null) {
-                    TranslationsPill(target, translated, onClick = { showTranslations = true })
-                }
-                TextButton(onClick = { onOpenInDictionaryApp(term) }) {
-                    Text(stringResource(R.string.dictionary_other_app))
-                }
-                TextButton(onClick = { onOpenInBrowser(term, baseUrl) }) {
-                    Text(stringResource(R.string.dictionary_open_full_entry))
-                }
-            }
+            selectionActions?.invoke()
         }
     }
 
@@ -291,6 +315,20 @@ private fun Sense(sense: DictionarySense, onOpenInBrowser: (String) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun DictionaryLink(label: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 6.dp),
+    )
 }
 
 /** [target]'s flag, where the language has a country it is most likely written in. */

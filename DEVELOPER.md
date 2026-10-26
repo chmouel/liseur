@@ -1040,8 +1040,12 @@ changing reader behavior.
 - `dictionaryOnLongPress` defaults off and applies only to the built-in
   dictionary. A fresh single-word selection opens the definition sheet;
   Select text returns to the same selection without reopening definitions.
+  The sheet also carries the selection bar's actions (`SheetSelectionActionBar`,
+  without Look up), which act on that selection and close the sheet.
   Online lookup consent remains separate. Retained DOM ranges must not
   survive document replacement or a change in the displayed translation.
+  A navigator rebuild (rotation) keeps the definition open without the
+  selection actions; a translation change closes it.
 
 - Dictionary lookups follow explicit grammatical links (en, fr, es, nl
   Wiktionary) one step only, matching source language and part of speech
@@ -1099,6 +1103,9 @@ changing reader behavior.
   view selection: grabbing a handle (a separate window) is an outside
   touch (#257). Only a tapped mark, with no platform selection, relies on
   the outside touch.
+- Selection bar actions re-read the page's live selection before acting
+  (`liveSelection`): the settled selection trails a handle drag, and a tap
+  in that gap would act on the long-pressed word (#388).
 - The selection bar keeps one height; Translate and Read aloud stay in its
   scrolling action row, not behind More
   ([ADR 0049](docs/adr/0049-selection-actions-stay-in-main-row.md), which

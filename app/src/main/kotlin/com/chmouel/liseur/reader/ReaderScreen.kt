@@ -162,6 +162,7 @@ import com.chmouel.liseur.reader.annotations.NoteSheetActions
 import com.chmouel.liseur.reader.annotations.NoteText
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
+import com.chmouel.liseur.reader.annotations.SheetSelectionActionBar
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.reader.annotations.lookUpExternally
 import com.chmouel.liseur.reader.annotations.openDictionaryEntry
@@ -4781,11 +4782,141 @@ internal fun ReaderScreen(
         }
     }
 
+    // The settled selection trails a handle drag by the settle delay and a
+    // slow read, so a tap in that gap would act on the word the long press
+    // landed on (#388). The page is asked again before the bar acts. A
+    // tapped mark has no page selection to ask.
+    suspend fun liveSelection(active: ActiveSelection): ActiveSelection? {
+        if (active === tappedSelection) return active
+        val nav = navigatorNow ?: return active
+        val read = nav.currentSelection()
+        if (navigatorNow !== nav || selection == null) return null
+        if (read != null) {
+            // An equal value keeps the instance the bar already holds.
+            selection = ActiveSelection(read.locator, read.rect, onAnnotationAction.annotationAt(read.locator))
+        }
+        return selection
+    }
+
+    // One set of actions for the bar and for the definition sheet a long
+    // press opens. The sheet acts on the selection it was opened for and
+    // closes first.
+    fun selectionActionsFor(active: ActiveSelection, inSheet: Boolean): SelectionActions {
+        fun act(block: (ActiveSelection) -> Unit) {
+            if (inSheet) {
+                defineWord = null
+                block(active)
+            } else {
+                effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    liveSelection(active)?.let(block)
+                }
+            }
+        }
+        return SelectionActions(
+            onHighlight = { tint ->
+                act { live ->
+                    onAnnotationAction.highlight(live.locator, tint, live.existing?.id)
+                    dismissSelection()
+                }
+            },
+            onNote = {
+                act { live ->
+                    noteFor = live
+                    dismissSelection()
+                }
+            },
+            onSearch = {
+                act { live ->
+                    searchFor = live.text
+                    dismissSelection()
+                }
+            },
+            onCompanion = companion?.let { lookups ->
+                {
+                    act { live ->
+                        // Readium's locator does not say where in its file the
+                        // selection is; ask the page while the selection is live.
+                        val nav = navigator.takeIf { tappedSelection == null }
+                        val translated = pageTranslated
+                        effectScope.launch {
+                            val block = nav?.let { SelectionBlock.selector(it, live.locator.href.toString()) }
+                            if (nav != null && navigatorNow !== nav) return@launch
+                            if (live !== tappedSelection && live !== selection && live !== automaticSelection) {
+                                return@launch
+                            }
+                            if (pageTranslated != translated) return@launch
+                            lookups.open(live.text, SelectionBlock.place(live.locator, block), translated)
+                            dismissSelection()
+                        }
+                    }
+                }
+            },
+            onLookUp = { act { lookUpSelection(it) } },
+            onShare = {
+                act { live ->
+                    context.shareText(live.text, publication.metadata.title)
+                    dismissSelection()
+                }
+            },
+            onDelete = active.existing?.let { existing ->
+                {
+                    onAnnotationAction.remove(existing)
+                    dismissSelection()
+                }
+            },
+            onTranslate = if (translate.isAvailable && translateReady && !pageTranslated) {
+                {
+                    act { live ->
+                        translatePassage = live
+                        dismissSelection()
+                    }
+                }
+            } else {
+                null
+            },
+            translateLabel = translateLabel,
+            onReadAloud = readAloud
+                ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
+                ?.let { reading ->
+                    {
+                        act { live ->
+                            val selectionWasTranslated = pageTranslated
+                            dismissSelection()
+                            val nav = navigator
+                            // Translated words are not in the book; read from the sentence they translate.
+                            val original = (pageTranslation ?: restoringPageTranslation)
+                                ?.let { TranslatedPages.original(it, live.locator) }
+                            suspend fun startingPoint(): Locator {
+                                val source = readAloudStartLocator(live.locator, original, selectionWasTranslated)
+                                if (original != null || nav == null) return source
+                                val spoken = SpokenPassage.startingPoint(nav, source)
+                                return if (selectionWasTranslated) capture(nav, spoken) else spoken
+                            }
+                            effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                startReadAloudFromHere(reading, ::startingPoint)
+                            }
+                        }
+                    }
+                },
+            annotate = !pageTranslated,
+        )
+    }
+
     DisposableEffect(Unit) {
         onDispose { retainedDictionarySelection?.discard() }
     }
 
-    LaunchedEffect(navigator, pageTranslatedTurns, dictionary.target) {
+    // A rebuilt navigator (rotation, scroll or font change) takes the
+    // retained range with it, so the sheet loses its selection actions
+    // and Select text, but the definition itself still stands.
+    LaunchedEffect(navigator) {
+        retainedDictionarySelection?.discard()
+        retainedDictionarySelection = null
+        automaticSelection = null
+        lookupGesture.clear()
+    }
+
+    LaunchedEffect(pageTranslatedTurns, dictionary.target) {
         retainedDictionarySelection?.discard()
         retainedDictionarySelection = null
         if (automaticSelection != null) defineWord = null
@@ -4885,77 +5016,7 @@ internal fun ReaderScreen(
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
                 actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, companion) {
-                    SelectionActions(
-                        onHighlight = { tint ->
-                            onAnnotationAction.highlight(active.locator, tint, active.existing?.id)
-                            dismissSelection()
-                        },
-                        onNote = {
-                            noteFor = active
-                            dismissSelection()
-                        },
-                        onSearch = {
-                            searchFor = active.text
-                            dismissSelection()
-                        },
-                        onCompanion = companion?.let { lookups ->
-                            {
-                                // Readium's locator does not say where in its file the
-                                // selection is; ask the page while the selection is live.
-                                val nav = navigator.takeIf { tappedSelection == null }
-                                val translated = pageTranslated
-                                effectScope.launch {
-                                    val block = nav?.let { SelectionBlock.selector(it, active.locator.href.toString()) }
-                                    if (nav != null && navigatorNow !== nav) return@launch
-                                    if ((tappedSelection ?: selection) !== active || pageTranslated != translated) return@launch
-                                    lookups.open(active.text, SelectionBlock.place(active.locator, block), translated)
-                                    dismissSelection()
-                                }
-                            }
-                        },
-                        onLookUp = { lookUpSelection(active) },
-                        onShare = {
-                            context.shareText(active.text, publication.metadata.title)
-                            dismissSelection()
-                        },
-                        onDelete = active.existing?.let { existing ->
-                            {
-                                onAnnotationAction.remove(existing)
-                                dismissSelection()
-                            }
-                        },
-                        onTranslate = if (translate.isAvailable && translateReady && !pageTranslated) {
-                            {
-                                translatePassage = active
-                                dismissSelection()
-                            }
-                        } else {
-                            null
-                        },
-                        translateLabel = translateLabel,
-                        onReadAloud = readAloud
-                            ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
-                            ?.let { reading ->
-                                {
-                                    val selectionWasTranslated = pageTranslated
-                                    dismissSelection()
-                                    val nav = navigator
-                                    // Translated words are not in the book; read from the sentence they translate.
-                                    val original = (pageTranslation ?: restoringPageTranslation)
-                                        ?.let { TranslatedPages.original(it, active.locator) }
-                                    suspend fun startingPoint(): Locator {
-                                        val source = readAloudStartLocator(active.locator, original, selectionWasTranslated)
-                                        if (original != null || nav == null) return source
-                                        val spoken = SpokenPassage.startingPoint(nav, source)
-                                        return if (selectionWasTranslated) capture(nav, spoken) else spoken
-                                    }
-                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                        startReadAloudFromHere(reading, ::startingPoint)
-                                    }
-                                }
-                            },
-                        annotate = !pageTranslated,
-                    )
+                    selectionActionsFor(active, inSheet = false)
                 },
                 onDismiss = {
                     // The bar and the selection go together: leaving the page
@@ -4993,6 +5054,18 @@ internal fun ReaderScreen(
                 context.openDictionaryEntry(term, site)
                 defineWord = null
                 if (automaticSelection != null) dismissSelection()
+            },
+            selectionActions = automaticSelection?.let { active ->
+                {
+                    val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion) {
+                        selectionActionsFor(active, inSheet = true)
+                    }
+                    SheetSelectionActionBar(
+                        actions = actions,
+                        activeTint = null,
+                        palette = highlightPalette,
+                    )
+                }
             },
             onSelectText = automaticSelection?.let { active ->
                 {

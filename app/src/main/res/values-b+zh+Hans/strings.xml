@@ -1589,6 +1589,6 @@
     <string name="book_translation_preview_wait">正在翻译…</string>
     <string name="book_translation_preview_outdated">此预览已过时，请重新试译。</string>
     <string name="settings_dictionary_on_long_press">长按打开词典</string>
-    <string name="settings_dictionary_on_long_press_detail">长按单词直接查看释义。在释义面板中点按“选择文本”可高亮或使用其他操作。在线查询仍需单独启用。</string>
+    <string name="settings_dictionary_on_long_press_detail">长按单词直接查看释义。释义面板保留选择操作。在线查询仍需单独启用。</string>
     <string name="dictionary_select_text">选择文本</string>
 </resources>

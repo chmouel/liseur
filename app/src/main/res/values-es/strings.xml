@@ -1642,6 +1642,6 @@
     <string name="book_translation_preview_wait">Traduciendo…</string>
     <string name="book_translation_preview_outdated">Esta vista previa está desactualizada. Vuelva a probar el pasaje.</string>
     <string name="settings_dictionary_on_long_press">Abrir el diccionario con una pulsación larga</string>
-    <string name="settings_dictionary_on_long_press_detail">Abre las definiciones al mantener pulsada una palabra. Usa Seleccionar texto en la ficha para resaltar y acceder a otras acciones. Las consultas en línea se activan por separado.</string>
+    <string name="settings_dictionary_on_long_press_detail">Abre las definiciones al mantener pulsada una palabra. La ficha conserva las acciones de selección. Las consultas en línea se activan por separado.</string>
     <string name="dictionary_select_text">Seleccionar texto</string>
 </resources>

@@ -29,7 +29,7 @@ fun Context.shareText(text: String, subject: String?) {
  */
 fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
     val word = text.trim().takeIf { it.isNotBlank() } ?: return
-    val browserWord = word.takeWhile { !it.isWhitespace() }
+    val browserWord = browserLookupTerm(word)
     val process = Intent(Intent.ACTION_PROCESS_TEXT).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_PROCESS_TEXT, word)
@@ -46,6 +46,19 @@ fun Context.lookUpExternally(text: String, dictionaryBaseUrl: String) {
         openDictionaryEntry(browserWord, dictionaryBaseUrl)
     }
 }
+
+/**
+ * What the browser fallback asks the dictionary site for. A short phrase on
+ * one line can be an entry of its own ("je ne sais quoi", #388); a longer
+ * passage cannot, so it gets its first word.
+ */
+internal fun browserLookupTerm(text: String): String {
+    val words = text.trim().split(Regex("\\s+"))
+    val oneLine = text.trim().none { it == '\n' || it == '\r' }
+    return if (oneLine && words.size <= MAX_PHRASE_WORDS) words.joinToString(" ") else words.first()
+}
+
+private const val MAX_PHRASE_WORDS = 5
 
 /** Opens the word's full entry on the configured dictionary site. */
 fun Context.openDictionaryEntry(word: String, dictionaryBaseUrl: String) {
