@@ -64,7 +64,7 @@ help:
 		'make promo-clips       Capture emulator footage (SERIAL=emulator-...)' \
 		'make promo-video       Render the promo (PROMO_ARGS="--stills --silent" for review)' \
 		'make icon              Generate the store icon' \
-		'make feature-graphic   Generate the store feature graphic' \
+		'make feature-graphic   Render the localized store feature graphics' \
 		'make store-status      Show each store, plus Play crashes (DAYS=7)' \
 		'' \
 		'Variables: AVD=liseur_phone_api36 SERIAL=... LOCALE=... FLAVOR=play|foss'
@@ -256,7 +256,7 @@ icon:
 	./hack/icon
 
 feature-graphic:
-	./hack/feature-graphic
+	cd promo && npm ci && npm run setup && npm run check && npm run feature-graphic
 
 store-status:
 	./hack/store-status $(if $(DAYS),--days $(DAYS))

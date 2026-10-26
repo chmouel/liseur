@@ -230,8 +230,30 @@ def main() -> int:
         (jpeg / "2.jpg").write_bytes(b"\xff\xd8\xff")
         expect("--check refuses a JPEG", run("--check", jpeg).returncode == 1)
 
+        # A browser screenshot of the feature graphic is opaque RGBA at
+        # 1024x500, wider than 2:1: flattened in place, never padded.
+        rows = gradient(1024, 500, 4)
+        feature = png(work / "feature.png", 1024, 500, colour=6, rows=rows)
+        expect("--check --feature-graphic rejects RGBA", run("--check", "--feature-graphic", feature).returncode == 1)
+        result = run("--feature-graphic", feature)
+        width, height, colour, px = decode(feature)
+        expect("feature graphic is flattened without padding", (width, height, colour) == (1024, 500, 2), result.stderr)
+        expect("feature graphic keeps its pixels",
+               px == b"".join(bytes(b for i, b in enumerate(r) if i % 4 != 3) for r in rows))
+        expect("--check --feature-graphic accepts it", run("--check", "--feature-graphic", feature).returncode == 0)
+        wrong = png(work / "wrong-size.png", 1024, 512)
+        before = digest(wrong)
+        expect("--feature-graphic refuses another size and leaves it alone",
+               run("--feature-graphic", wrong).returncode == 1 and digest(wrong) == before)
+        expect("--check --feature-graphic rejects another size",
+               run("--check", "--feature-graphic", wrong).returncode == 1)
+
     result = run("--check", COMMITTED / "phoneScreenshots", COMMITTED / "tenInchScreenshots")
     expect("the committed store screenshots pass --check", result.returncode == 0, result.stderr)
+    graphics = sorted(COMMITTED.parent.parent.glob("*/images/featureGraphic.png"))
+    result = run("--check", "--feature-graphic", *graphics)
+    expect("the committed feature graphics pass --check --feature-graphic",
+           bool(graphics) and result.returncode == 0, result.stderr)
 
     print(f"{failures} failure(s)" if failures else "all passed")
     return 1 if failures else 0

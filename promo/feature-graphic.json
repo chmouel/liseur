@@ -1,0 +1,65 @@
+{
+  "en-US": {
+    "lang": "en",
+    "headline": "Your books,<br><mark>spoken</mark> &amp;<br>understood.",
+    "chips": [
+      "Read aloud",
+      "Translate",
+      "Who's who"
+    ]
+  },
+  "fr-FR": {
+    "lang": "fr",
+    "headline": "Vos livres,<br><mark>écoutés</mark><br>et compris.",
+    "chips": [
+      "À voix haute",
+      "Traduction",
+      "Qui est qui"
+    ]
+  },
+  "de-DE": {
+    "lang": "de",
+    "headline": "Deine Bücher,<br><mark>vorgelesen</mark><br>&amp; verstanden.",
+    "chips": [
+      "Vorlesen",
+      "Übersetzen",
+      "Figuren"
+    ]
+  },
+  "es-ES": {
+    "lang": "es",
+    "headline": "Tus libros,<br><mark>narrados</mark><br>y entendidos.",
+    "chips": [
+      "En voz alta",
+      "Traducción",
+      "Personajes"
+    ]
+  },
+  "it-IT": {
+    "lang": "it",
+    "headline": "I tuoi libri,<br><mark>narrati</mark><br>e capiti.",
+    "chips": [
+      "Ad alta voce",
+      "Traduzione",
+      "Chi è chi"
+    ]
+  },
+  "ru-RU": {
+    "lang": "ru",
+    "headline": "Ваши книги:<br><mark>слушайте</mark><br>и понимайте.",
+    "chips": [
+      "Чтение вслух",
+      "Перевод",
+      "Кто есть кто"
+    ]
+  },
+  "zh-CN": {
+    "lang": "zh-Hans",
+    "headline": "每一本书，<br><mark>听得见</mark><br>也读得懂。",
+    "chips": [
+      "朗读",
+      "翻译",
+      "人物关系"
+    ]
+  }
+}

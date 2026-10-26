@@ -11,6 +11,8 @@ export async function prepare() {
   for (const font of ['Literata.ttf', 'Inter.ttf']) {
     await cp(resolve(root, 'app/src/main/assets/fonts', font), resolve(directory, 'public/fonts', font));
   }
+  await cp(resolve(directory, 'assets/fonts'), resolve(directory, 'public/fonts'),
+    {recursive: true, filter: file => !file.endsWith('.txt')});
   await cp(resolve(root, 'app/src/main/res/drawable-xxxhdpi/ic_brand_emblem.webp'), resolve(directory, 'public/emblem.webp'));
   const music = (await readdir(resolve(directory, 'assets'))).filter(name => /^music\.(mp3|wav|m4a|ogg|flac)$/.test(name));
   if (music.length > 1) throw new Error('Keep only one music track in promo/assets.');

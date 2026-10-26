@@ -121,13 +121,16 @@ target wrapping them. Run `make help` for the short list. See
   and buildable on its own for opening by hand.
 - `icon`: Renders the adaptive launcher icon (two vector drawables)
   to a flat PNG for the F-Droid listing and the README.
-- `feature-graphic`: Renders the 1024x500 store feature graphic
-  from the app's own emblem.
+- `feature-graphic-font`: Subsets Noto Serif SC to the Chinese
+  characters in `promo/feature-graphic.json`, for the feature graphic.
+  Run it with fontTools whenever the zh copy changes.
 - `store-images`: Converts screenshots in place to what Google Play
   accepts (no alpha, no more than 2:1, padded by repeating the edge
   pixels). `screenshots` runs it on every image it files with fastlane.
   `--check DIR...` validates without changing anything; the fastlane
   `screenshots` lane runs that before it contacts Play.
+  `--feature-graphic FILE...` flattens a 1024x500 feature graphic
+  without padding, and `--check --feature-graphic FILE...` checks one.
 - `test-store-images`: Runs the deterministic tests for `store-images` on
   synthetic PNGs, and checks the committed store screenshots. It is part
   of `make check` and CI.

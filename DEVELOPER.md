@@ -708,7 +708,7 @@ hack/screenshots --setup-only   # build the shelf and stop, to check it
 hack/screenshots --class tablet  # file the captures as a tablet set
 hack/screenshots --no-dictionary # skip the one capture that needs the network
 hack/icon                   # fastlane icon.png, from the vector drawables
-hack/feature-graphic        # fastlane featureGraphic.png, from the brand emblem
+make feature-graphic        # fastlane featureGraphic.png per locale, from promo/
 ```
 
 - `hack/screenshots` drives a device over adb and writes raw captures to
@@ -759,10 +759,30 @@ stay disabled. `PUPPETEER_EXECUTABLE_PATH` can select an installed browser.
 Upload the reviewed MP4 to YouTube manually (public/unlisted, no age
 restriction, ads off), put the URL in `fastlane/metadata/android/en-US/video.txt`
 (also read by F-Droid), and set it in Play Console: the current lanes skip
-metadata. Check the feature graphic's play-button overlay. Rendering also
+metadata. Rendering also
 writes `liseur-promo-thumbnail.jpg` from `promo/thumbnail.html`: set it as the YouTube
 thumbnail and copy it to `docs/video-thumbnail.jpg`, which the README links
 to the video. Keep the multi-frame contact sheet for release notes.
+
+The feature graphic is `promo/feature-graphic.html`, with per-locale
+copy in `promo/feature-graphic.json`; a locale without one (en-GB) gets
+the en-US image on Play and F-Droid. The render fails when copy leaves the
+column Play's hero crop keeps (x 76..425), reaches the video play button
+Play draws at (512,250), or wraps differently from its `<br>`s, and
+writes Play previews to `~/tmp/liseur/feature-graphic/`. Keep it free of
+price, ranking and call-to-action claims (Play policy). Chinese uses a
+committed Noto Serif SC subset: after editing zh copy, run
+`hack/feature-graphic-font NotoSerifSC.ttf` with fontTools (the full font
+is on github.com/google/fonts, OFL).
+
+To publish, run `PLAY_VALIDATE_ONLY=true fastlane android
+feature_graphic` (with `SUPPLY_JSON_KEY`), then again without the
+variable. It uploads only the feature graphics; `languages:en-US,fr-FR`
+limits it to languages the Play listing has a translation for. By hand: Play Console > Grow users > Store
+presence > Store listings > the listing > Graphics > Feature graphic, then
+each translation, then Publishing overview > Send changes for review.
+Check the public listing with `?hl=fr` and the like once it is live.
+F-Droid takes the per-locale images from the metadata on its next build.
 
 Inspect the images before committing:
 

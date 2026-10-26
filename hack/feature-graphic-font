@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Subset Noto Serif SC to the CJK characters the feature graphic uses.
+
+Literata and Inter cover Latin and Cyrillic but no CJK, so the Chinese
+headline needs its own face. The full font is 25 MB; the graphic needs a
+few dozen glyphs. This keeps exactly the characters at or above U+2E80
+found in promo/feature-graphic.json, writes them beside the font, and
+promo/feature-graphic.ts refuses to render copy that uses one missing from
+that list. Run it again whenever that copy changes.
+
+Needs fontTools (pip install fonttools) and the variable font from
+https://github.com/google/fonts/tree/main/ofl/notoserifsc (OFL, the
+licence sits beside the subset).
+
+Usage: hack/feature-graphic-font PATH/TO/NotoSerifSC[wght].ttf
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+from fontTools import subset
+
+ROOT = Path(__file__).resolve().parent.parent
+COPY = ROOT / "promo/feature-graphic.json"
+OUT = ROOT / "promo/assets/fonts/NotoSerifSC-Liseur.ttf"
+CHARS = OUT.with_suffix(".txt")
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 1:
+        print(__doc__.strip().splitlines()[-1], file=sys.stderr)
+        return 2
+    text = ""
+    for locale in json.loads(COPY.read_text()).values():
+        text += re.sub(r"<[^>]+>", "", locale["headline"]) + "".join(locale["chips"])
+    chars = "".join(sorted({c for c in text if ord(c) >= 0x2E80}))
+    if not chars:
+        print("no CJK characters in the copy", file=sys.stderr)
+        return 1
+    options = subset.Options()
+    options.layout_features = ["*"]
+    options.name_IDs = ["*"]
+    options.notdef_outline = True
+    font = subset.load_font(argv[0], options)
+    missing = [c for c in chars if ord(c) not in font.getBestCmap()]
+    if missing:
+        print(f"the font has no glyph for {''.join(missing)}", file=sys.stderr)
+        return 1
+    subsetter = subset.Subsetter(options)
+    subsetter.populate(text=chars)
+    subsetter.subset(font)
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    subset.save_font(font, str(OUT), options)
+    CHARS.write_text(chars + "\n")
+    print(f"wrote {OUT.relative_to(ROOT)} ({OUT.stat().st_size // 1024} KB, {len(chars)} characters)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -6,7 +6,8 @@
 # happens to be supply's native layout, so Play reads the same files. The
 # release lanes push the changelog and nothing else. The screenshots lane
 # pushes the phone and tablet screenshots, which the repository owns: the
-# set here replaces whatever the console holds. The rest of the listing is
+# set here replaces whatever the console holds, and the feature_graphic
+# lane does the same for the feature graphics. The rest of the listing is
 # edited in the console, because Play holds the declarations (data safety,
 # content rating, target audience) that no file in this repository
 # describes, and an accidental metadata push is a listing change under
@@ -142,6 +143,56 @@ platform :android do
       UI.success("Play accepted the screenshot edit; nothing was committed")
     else
       UI.success("the Play listing screenshots match the repository")
+    end
+  end
+
+  desc "Replace the Play listing's feature graphics with the repository's"
+  lane :feature_graphic do |options|
+    requested = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_s
+    unless requested.match?(/\A[1-9][0-9]*\z/)
+      UI.user_error!("version_code must be a positive integer, got #{requested.inspect}")
+    end
+
+    metadata = File.expand_path("metadata/android", __dir__)
+    graphics = Dir[File.join(metadata, "*", "images", "featureGraphic.png")]
+      .to_h { |path| [File.basename(File.dirname(path, 2)), path] }
+    # Play refuses images for a language the listing has no translation
+    # in, so languages:en-US,fr-FR limits the push to those.
+    languages = options[:languages] ? options[:languages].split(",").map(&:strip) : graphics.keys.sort
+    missing = languages - graphics.keys
+    UI.user_error!("no feature graphic for #{missing.join(", ")}") unless missing.empty?
+
+    checker = File.expand_path("../hack/store-images", __dir__)
+    unless system(checker, "--check", "--feature-graphic", *languages.map { |language| graphics[language] })
+      UI.user_error!("a feature graphic would be refused; run make feature-graphic")
+    end
+
+    # supply uploads every image type it finds, the icon included, so it
+    # reads a copy of the tree holding the feature graphics alone.
+    Dir.mktmpdir do |staged|
+      languages.each do |language|
+        images = File.join(staged, language, "images")
+        FileUtils.mkdir_p(images)
+        FileUtils.cp(graphics[language], images)
+      end
+      upload_to_play_store(
+        track: INTERNAL_TRACK,
+        version_code: requested.to_i,
+        metadata_path: staged,
+        skip_upload_aab: true,
+        skip_upload_apk: true,
+        skip_upload_metadata: true,
+        skip_upload_images: false,
+        skip_upload_changelogs: true,
+        skip_upload_screenshots: true,
+        sync_image_upload: true,
+        validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
+      )
+    end
+    if ENV["PLAY_VALIDATE_ONLY"] == "true"
+      UI.success("Play accepted the feature graphic edit for #{languages.join(", ")}; nothing was committed")
+    else
+      UI.success("the Play feature graphics for #{languages.join(", ")} match the repository")
     end
   end
 

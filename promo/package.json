@@ -8,6 +8,7 @@
   "scripts": {
     "start": "DISABLE_TELEMETRY=true tsx prepare.ts && DISABLE_TELEMETRY=true vite --host 127.0.0.1",
     "render": "DISABLE_TELEMETRY=true tsx render.ts",
+    "feature-graphic": "DISABLE_TELEMETRY=true tsx feature-graphic.ts",
     "check": "tsc --noEmit",
     "setup": "tsx setup.ts"
   },

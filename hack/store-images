@@ -18,6 +18,12 @@ guessing a colour that would show as a frame. The original pixels are not
 touched. A file that is already acceptable is left alone byte for byte, so
 running this twice changes nothing.
 
+    hack/store-images --feature-graphic FILE...          flatten, never pad
+    hack/store-images --check --feature-graphic FILE...  validate them
+
+A feature graphic is exactly 1024x500, which is wider than 2:1 on purpose,
+so it is only ever flattened and never padded; it may be up to 15 MB.
+
 --check is what the fastlane screenshots lane runs before it opens a Play
 edit: every PNG in each directory must be well formed, 8-bit RGB with no
 transparency, between 320 and 3840 pixels a side, no more than 2:1 and no
@@ -40,6 +46,8 @@ SIGNATURE = b"\x89PNG\r\n\x1a\n"
 MIN_SIDE = 320
 MAX_SIDE = 3840
 MAX_BYTES = 8 * 1024 * 1024
+FEATURE_SIZE = (1024, 500)
+FEATURE_MAX_BYTES = 15 * 1024 * 1024
 MAX_PER_TYPE = 8
 MIN_TOTAL = 2
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
@@ -244,6 +252,53 @@ def problems(path: Path) -> list[str]:
     return found
 
 
+def feature_problems(path: Path) -> list[str]:
+    """Why Play would refuse this file as a feature graphic, or nothing."""
+    try:
+        png = read_png(path)
+    except Rejected as error:
+        return [str(error)]
+    found = []
+    if png.colour != 2:
+        found.append("has an alpha channel")
+    if png.transparency:
+        found.append("has a tRNS transparency chunk")
+    if (png.width, png.height) != FEATURE_SIZE:
+        found.append(f"{png.width}x{png.height} is not {FEATURE_SIZE[0]}x{FEATURE_SIZE[1]}")
+    if path.stat().st_size > FEATURE_MAX_BYTES:
+        found.append("is larger than 15 MB")
+    return found
+
+
+def refile_feature(path: Path) -> None:
+    if not feature_problems(path):
+        print(f"{path}: already acceptable")
+        return
+    png = read_png(path)
+    if png.transparency:
+        raise Rejected("tRNS transparency is not supported")
+    if (png.width, png.height) != FEATURE_SIZE:
+        raise Rejected(f"{png.width}x{png.height} is not {FEATURE_SIZE[0]}x{FEATURE_SIZE[1]}")
+    rgb = to_rgb(png, unfilter(png))
+    write_checked(path, encode(png.width, png.height, rgb), feature_problems)
+    print(f"{path}: {png.width}x{png.height} RGB")
+
+
+def write_checked(path: Path, data: bytes, rules) -> None:
+    fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            out.write(data)
+        left = rules(Path(temp))
+        if left:
+            raise Rejected("converted image still " + "; ".join(left))
+        os.chmod(temp, path.stat().st_mode & 0o777)
+        os.replace(temp, path)
+    except BaseException:
+        os.unlink(temp)
+        raise
+
+
 def refile(path: Path) -> None:
     if not problems(path):
         print(f"{path}: already acceptable")
@@ -252,18 +307,7 @@ def refile(path: Path) -> None:
     if png.transparency:
         raise Rejected("tRNS transparency is not supported")
     width, height, rgb = pad(png.width, png.height, to_rgb(png, unfilter(png)))
-    fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(fd, "wb") as out:
-            out.write(encode(width, height, rgb))
-        left = problems(Path(temp))
-        if left:
-            raise Rejected("converted image still " + "; ".join(left))
-        os.chmod(temp, path.stat().st_mode & 0o777)
-        os.replace(temp, path)
-    except BaseException:
-        os.unlink(temp)
-        raise
+    write_checked(path, encode(width, height, rgb), problems)
     print(f"{path}: {png.width}x{png.height} -> {width}x{height} RGB")
 
 
@@ -294,20 +338,36 @@ def check(directories: list[Path]) -> bool:
     return ok
 
 
+def check_features(paths: list[Path]) -> bool:
+    ok = True
+    for path in paths:
+        if not path.is_file():
+            print(f"{path}: not a file", file=sys.stderr)
+            ok = False
+            continue
+        for problem in feature_problems(path):
+            print(f"{path}: {problem}", file=sys.stderr)
+            ok = False
+    return ok
+
+
 def main(argv: list[str]) -> int:
-    if argv[:1] == ["--check"]:
-        if len(argv) < 2:
-            print("usage: hack/store-images --check DIR...", file=sys.stderr)
-            return 2
-        return 0 if check([Path(a) for a in argv[1:]]) else 1
-    if not argv or argv[0].startswith("-"):
+    flags = {a for a in argv if a in ("--check", "--feature-graphic")}
+    args = [a for a in argv if a not in flags]
+    usage = "usage: hack/store-images [--feature-graphic] FILE... | --check DIR... | --check --feature-graphic FILE..."
+    if not args or any(a.startswith("-") for a in args):
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
-        print("usage: hack/store-images FILE... | --check DIR...", file=sys.stderr)
+        print(usage, file=sys.stderr)
         return 2
+    if flags == {"--check", "--feature-graphic"}:
+        return 0 if check_features([Path(a) for a in args]) else 1
+    if flags == {"--check"}:
+        return 0 if check([Path(a) for a in args]) else 1
+    convert = refile_feature if flags else refile
     failed = False
-    for arg in argv:
+    for arg in args:
         try:
-            refile(Path(arg))
+            convert(Path(arg))
         except (Rejected, OSError) as error:
             print(f"{arg}: {error}", file=sys.stderr)
             failed = True

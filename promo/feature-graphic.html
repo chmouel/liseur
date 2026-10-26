@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- Store feature graphic (1024x500): feature-graphic.ts fills the copy per locale, checks the layout and screenshots it. -->
+<html><head><meta charset="utf-8"><style>
+@font-face{font-family:Literata;src:url('public/fonts/Literata.ttf');font-weight:100 900}
+@font-face{font-family:Inter;src:url('public/fonts/Inter.ttf');font-weight:100 900}
+@font-face{font-family:'Noto Serif SC Liseur';src:url('public/fonts/NotoSerifSC-Liseur.ttf');font-weight:200 900}
+*{margin:0;box-sizing:border-box}
+body{width:1024px;height:500px;overflow:hidden;position:relative;font-family:Inter,'Noto Serif SC Liseur';color:#FAF8F4;
+  background:radial-gradient(circle at 770px 250px,rgba(246,211,101,.16) 0%,transparent 38%),
+    radial-gradient(circle at 780px 250px,#2A5683 0%,#183453 52%,#0F2238 100%)}
+/* Play crops ~68px off each side and draws the video's play button at (512,250), so the copy keeps to x 76..425. */
+.copy{position:absolute;left:76px;top:44px;width:349px;height:412px;display:flex;flex-direction:column;gap:26px}
+.brand{display:flex;align-items:center;gap:12px;align-self:flex-start}
+.brand img{width:48px;height:48px;border-radius:50%;background:#F0DFCA}
+.brand span{font-family:Literata;font-weight:700;font-size:30px;color:#F0DFCA}
+h1{white-space:nowrap;font-family:Literata,'Noto Serif SC Liseur';font-weight:800;font-size:54px;line-height:1.08;letter-spacing:-1.4px;align-self:flex-start;margin-top:auto}
+:lang(zh) h1{font-weight:900;line-height:1.3;letter-spacing:0}
+mark{color:#183453;padding:0 10px;margin:0 -2px;border-radius:8px;background:linear-gradient(transparent 10%,#F6D365 10%,#F6D365 94%,transparent 94%);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.chips{display:flex;gap:6px;margin-bottom:auto}
+.chip{font-weight:600;font-size:13.5px;padding:7px 11px;border-radius:999px;white-space:nowrap;background:rgba(240,223,202,.14);border:1px solid rgba(240,223,202,.38)}
+.chip:first-child{border-color:#F6D365}
+.phone{position:absolute;border-radius:30px;background:#0A1726;padding:7px;box-shadow:0 24px 60px rgba(0,0,0,.55)}
+.phone img{width:100%;height:100%;object-fit:cover;object-position:top;border-radius:24px;display:block}
+.back{left:736px;top:38px;width:205px;height:450px;transform:rotate(7deg)}
+.front{left:606px;top:22px;width:222px;height:484px;transform:rotate(-5deg)}
+.card{position:absolute;left:588px;top:344px;width:228px;height:140px;border-radius:18px;border:3px solid #F6D365;overflow:hidden;background:#fff;box-shadow:0 18px 40px rgba(0,0,0,.6)}
+.card img{position:absolute;max-width:none}
+</style></head><body>
+<div class="copy">
+  <div class="brand"><img src="public/emblem.webp" alt=""><span>Liseur</span></div>
+  <h1 id="headline"></h1>
+  <div class="chips" id="chips"></div>
+</div>
+<!-- data-max-x: the right edge the element may reach; the back phone may bleed into the crop. -->
+<div class="phone back" data-product data-max-x="1000"><img src="public/screenshots/27-translation.png" alt=""></div>
+<div class="phone front" data-product data-max-x="945"><img src="public/screenshots/24-read-aloud.png" alt=""></div>
+<!-- data-crop="x,y,w": the screenshot region from (x,y), w source pixels wide (screenshots are 1080 wide). -->
+<div class="card" data-product data-max-x="945" data-crop="250,1515,740"><img src="public/screenshots/26-codex-relationships.png" alt=""></div>
+<script>
+for (const el of document.querySelectorAll('[data-crop]')) {
+  const [x, y, w] = el.dataset.crop.split(',').map(Number);
+  const img = el.querySelector('img'), k = el.clientWidth / w;
+  Object.assign(img.style, {width: `${1080 * k}px`, left: `${-x * k}px`, top: `${-y * k}px`});
+}
+
+// Lines break only where the copy says; a long language steps the headline down, never below the floor.
+const HEADLINE_FLOOR = 42;
+window.apply = async ({lang, headline, chips}) => {
+  document.documentElement.lang = lang;
+  const h1 = document.getElementById('headline');
+  h1.innerHTML = headline;
+  document.getElementById('chips').replaceChildren(...chips.map(text => {
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = text;
+    return chip;
+  }));
+  await document.fonts.ready;
+  for (let size = parseFloat(getComputedStyle(h1).fontSize); size > HEADLINE_FLOOR && h1.getBoundingClientRect().right > COPY.right; size -= 1) {
+    h1.style.fontSize = `${size - 1}px`;
+  }
+};
+
+const COPY = {left: 76, top: 40, right: 425, bottom: 460};
+const PLAY = {x: 512, y: 250, r: 85};
+const PRODUCT_LEFT = 585;
+
+// The element's corners after its CSS transform, which turns about its centre.
+function corners(el) {
+  const {left, top, width, height} = el.getBoundingClientRect();
+  const transform = getComputedStyle(el).transform;
+  if (transform === 'none') return [[left, top], [left + width, top], [left + width, top + height], [left, top + height]];
+  const m = new DOMMatrix(transform), w = el.offsetWidth, h = el.offsetHeight;
+  const cx = el.offsetLeft + w / 2, cy = el.offsetTop + h / 2;
+  return [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]
+    .map(([x, y]) => [cx + m.a * x + m.c * y, cy + m.b * x + m.d * y]);
+}
+
+function distanceToPolygon([px, py], points) {
+  let inside = false, best = Infinity;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [ax, ay] = points[j], [bx, by] = points[i];
+    if ((ay > py) !== (by > py) && px < (bx - ax) * (py - ay) / (by - ay) + ax) inside = !inside;
+    const t = Math.max(0, Math.min(1, ((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / ((bx - ax) ** 2 + (by - ay) ** 2)));
+    best = Math.min(best, Math.hypot(px - ax - t * (bx - ax), py - ay - t * (by - ay)));
+  }
+  return inside ? 0 : best;
+}
+
+window.problems = expectedLines => {
+  const found = [];
+  const name = el => el.id || el.className;
+  const copy = [document.querySelector('.brand'), document.getElementById('headline'), ...document.querySelectorAll('.chip')];
+  for (const el of copy) {
+    const r = el.getBoundingClientRect();
+    if (r.left < COPY.left || r.top < COPY.top || r.right > COPY.right || r.bottom > COPY.bottom) {
+      found.push(`${name(el)} leaves the copy column: ${Math.round(r.left)},${Math.round(r.top)}..${Math.round(r.right)},${Math.round(r.bottom)}`);
+    }
+    if (el.scrollWidth > el.clientWidth + 1) found.push(`${name(el)} overflows its box`);
+  }
+  const range = document.createRange();
+  range.selectNodeContents(document.getElementById('headline'));
+  const bottoms = [...range.getClientRects()].filter(r => r.width > 1).map(r => r.bottom).sort((a, b) => a - b);
+  const lines = bottoms.filter((b, i) => i === 0 || b - bottoms[i - 1] > 20).length;
+  if (lines !== expectedLines) found.push(`headline wraps to ${lines} lines, written as ${expectedLines}`);
+  for (const el of [...copy, ...document.querySelectorAll('[data-product]')]) {
+    if (distanceToPolygon([PLAY.x, PLAY.y], corners(el)) < PLAY.r) found.push(`${name(el)} reaches under the play button`);
+  }
+  for (const el of document.querySelectorAll('[data-product]')) {
+    const xs = corners(el).map(([x]) => x);
+    if (Math.min(...xs) < PRODUCT_LEFT) found.push(`${name(el)} starts left of x ${PRODUCT_LEFT}`);
+    if (Math.max(...xs) > Number(el.dataset.maxX)) found.push(`${name(el)} reaches past x ${el.dataset.maxX}`);
+  }
+  return found;
+};
+</script>
+</body></html>
