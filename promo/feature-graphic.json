@@ -8,6 +8,15 @@
       "Who's who"
     ]
   },
+  "en-GB": {
+    "lang": "en",
+    "headline": "Your books,<br><mark>spoken</mark> &amp;<br>understood.",
+    "chips": [
+      "Read aloud",
+      "Translate",
+      "Who's who"
+    ]
+  },
   "fr-FR": {
     "lang": "fr",
     "headline": "Vos livres,<br><mark>écoutés</mark><br>et compris.",

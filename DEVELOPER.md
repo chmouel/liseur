@@ -765,8 +765,9 @@ thumbnail and copy it to `docs/video-thumbnail.jpg`, which the README links
 to the video. Keep the multi-frame contact sheet for release notes.
 
 The feature graphic is `promo/feature-graphic.html`, with per-locale
-copy in `promo/feature-graphic.json`; a locale without one (en-GB) gets
-the en-US image on Play and F-Droid. The render fails when copy leaves the
+copy in `promo/feature-graphic.json`. en-GB is Play's default language,
+and Play gives a translation without its own graphic the en-GB one, so
+en-GB needs an entry too. The render fails when copy leaves the
 column Play's hero crop keeps (x 76..425), reaches the video play button
 Play draws at (512,250), or wraps differently from its `<br>`s, and
 writes Play previews to `~/tmp/liseur/feature-graphic/`. Keep it free of
