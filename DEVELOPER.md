@@ -1037,6 +1037,12 @@ changing reader behavior.
 
 ### Reader behavior
 
+- `dictionaryOnLongPress` defaults off and applies only to the built-in
+  dictionary. A fresh single-word selection opens the definition sheet;
+  Select text returns to the same selection without reopening definitions.
+  Online lookup consent remains separate. Retained DOM ranges must not
+  survive document replacement or a change in the displayed translation.
+
 - Dictionary lookups follow explicit grammatical links (en, fr, es, nl
   Wiktionary) one step only, matching source language and part of speech
   (`WiktionaryClient`). Follow-ups share fetched entries, add at most four

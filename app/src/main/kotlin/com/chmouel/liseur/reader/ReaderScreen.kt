@@ -745,6 +745,9 @@ internal fun ReaderScreen(
     // started. This gives it a window onto the current value.
     val noteShowing by rememberUpdatedState(footnote != null)
     var selection by remember { mutableStateOf<ActiveSelection?>(null) }
+    var automaticSelection by remember { mutableStateOf<ActiveSelection?>(null) }
+    var retainedDictionarySelection by remember { mutableStateOf<DictionarySelection?>(null) }
+    val lookupGesture = remember(navigator) { SelectionLookupGesture() }
     // The settled selection drives the action bar, but it intentionally
     // waits for the WebView's reports to quiet down. Gesture arbitration
     // cannot wait: a handle can start moving during that window.
@@ -1578,6 +1581,13 @@ internal fun ReaderScreen(
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
         nav.currentLocator.collect { locator ->
+            val automatic = automaticSelection
+            if (automatic != null && locator.href != automatic.locator.href) {
+                retainedDictionarySelection?.discard()
+                retainedDictionarySelection = null
+                automaticSelection = null
+                defineWord = null
+            }
             val tapped = tappedSelection
             if (tapped != null) {
                 // A scroll that had already stopped before the tap can
@@ -2128,6 +2138,7 @@ internal fun ReaderScreen(
             settleMs = SELECTION_SETTLE_MS,
             read = { nav.currentSelection() },
             onSelection = { current ->
+                if (current == null && automaticSelection == null) lookupGesture.clear()
                 selection = current?.let {
                     ActiveSelection(
                         locator = it.locator,
@@ -4653,10 +4664,160 @@ internal fun ReaderScreen(
     // so the same event is raised here first, where it cancels that read
     // instead of racing it.
     fun dismissSelection() {
+        retainedDictionarySelection?.discard()
+        retainedDictionarySelection = null
+        automaticSelection = null
         onSelectionDismissed()
         navigator?.clearSelection()
         selection = null
         tappedSelection = null
+    }
+
+    fun lookUpSelection(active: ActiveSelection, automatically: Boolean = false) {
+        val translationRun = if (pageTranslated) pageTranslation ?: restoringPageTranslation else null
+        fun abandonAutomaticLookup() {
+            if (automatically && automaticSelection === active) {
+                retainedDictionarySelection?.discard()
+                retainedDictionarySelection = null
+                automaticSelection = null
+            }
+        }
+        val openLookup: (DefinitionQuery) -> Unit = { query ->
+            when (dictionary.target) {
+                DefinitionTarget.BUILT_IN -> defineWord = query
+                DefinitionTarget.EXTERNAL_APP -> {
+                    context.lookUpExternally(query.word, dictionary.baseUrl)
+                }
+            }
+        }
+        if (pageTranslated) {
+            val nav = navigatorNow
+            val run = translationRun
+            if (nav == null || run == null) {
+                dismissSelection()
+                Toast.makeText(
+                    context,
+                    R.string.dictionary_translated_selection_failed,
+                    Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    val displayedText = TranslatedPages.selectedText(nav)
+                    if (navigatorNow !== nav || (tappedSelection ?: selection ?: automaticSelection) !== active) {
+                        abandonAutomaticLookup()
+                        return@launch
+                    }
+                    if (
+                        !pageTranslated ||
+                        (pageTranslation ?: restoringPageTranslation) !== run
+                    ) {
+                        dismissSelection()
+                        return@launch
+                    }
+                    val originalSentence = displayedText?.let { text ->
+                        ResourceAddress.canonicalPath(active.locator.href.toString())?.let { href ->
+                            run.original(href, text, active.locator.text.before)
+                        }
+                    }
+                    val translatedSentence = originalSentence?.let { run.translationOf(it) }
+                    val intersectsAppliedSwap = translatedSentence?.let {
+                        TranslatedPages.selectionIntersectsAppliedSwap(nav, it.sentence)
+                    }
+                    if (navigatorNow !== nav || (tappedSelection ?: selection ?: automaticSelection) !== active) {
+                        abandonAutomaticLookup()
+                        return@launch
+                    }
+                    if (
+                        !pageTranslated ||
+                        (pageTranslation ?: restoringPageTranslation) !== run
+                    ) {
+                        dismissSelection()
+                        return@launch
+                    }
+                    val lookupLanguage = when {
+                        translatedSentence == null ->
+                            run.translator.source ?: publication.metadata.languages.firstOrNull()
+                        intersectsAppliedSwap == true -> run.translator.target
+                        intersectsAppliedSwap == false ->
+                            run.translator.source ?: publication.metadata.languages.firstOrNull()
+                        else -> {
+                            dismissSelection()
+                            Toast.makeText(
+                                context,
+                                R.string.dictionary_translated_selection_failed,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                            return@launch
+                        }
+                    }
+                    val query = definitionQuery(
+                        originalText = active.text,
+                        displayedText = displayedText,
+                        language = lookupLanguage,
+                        useDisplayedText = true,
+                    )
+                    if (!automatically) dismissSelection()
+                    if (query == null) {
+                        if (automatically) dismissSelection()
+                        Toast.makeText(
+                            context,
+                            R.string.dictionary_translated_selection_failed,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    } else {
+                        openLookup(query)
+                    }
+                }
+            }
+        } else {
+            definitionQuery(
+                originalText = active.text,
+                displayedText = null,
+                language = publication.metadata.languages.firstOrNull(),
+                useDisplayedText = false,
+            )?.let(openLookup)
+            if (!automatically) dismissSelection()
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { retainedDictionarySelection?.discard() }
+    }
+
+    LaunchedEffect(navigator, pageTranslatedTurns, dictionary.target) {
+        retainedDictionarySelection?.discard()
+        retainedDictionarySelection = null
+        if (automaticSelection != null) defineWord = null
+        automaticSelection = null
+        lookupGesture.clear()
+    }
+
+    val selectionLocale = LocalConfiguration.current.locales[0]
+    LaunchedEffect(selection, dictionary.onLongPress, dictionary.target) {
+        val active = selection ?: return@LaunchedEffect
+        if (!dictionary.onLongPress || dictionary.target != DefinitionTarget.BUILT_IN ||
+            tappedSelection != null || automaticSelection != null || defineWord != null ||
+            active.existing != null
+        ) return@LaunchedEffect
+        val nav = navigatorNow ?: return@LaunchedEffect
+        val translatedAt = pageTranslatedTurns
+        val text = if (pageTranslated) TranslatedPages.selectedText(nav) else active.text
+        if (navigatorNow !== nav || selection !== active || translatedAt != pageTranslatedTurns) return@LaunchedEffect
+        val language = if (pageTranslated) {
+            (pageTranslation ?: restoringPageTranslation)?.translator?.target
+        } else {
+            publication.metadata.languages.firstOrNull()
+        }
+        val locale = language?.let(java.util.Locale::forLanguageTag) ?: selectionLocale
+        if (text == null || !lookupGesture.select(text, locale)) return@LaunchedEffect
+        val retained = DictionarySelection.save(nav, active.locator.href.toString()) ?: return@LaunchedEffect
+        if (navigatorNow !== nav || selection !== active || translatedAt != pageTranslatedTurns) {
+            retained.discard()
+            return@LaunchedEffect
+        }
+        retainedDictionarySelection = retained
+        automaticSelection = active
+        lookUpSelection(active, automatically = true)
     }
 
     // Not composed at all while a picture is open, rather than hidden the
@@ -4711,7 +4872,7 @@ internal fun ReaderScreen(
         }
 
     (tappedSelection ?: selection)
-        ?.takeIf { viewedImage == null && notedTap == null }
+        ?.takeIf { viewedImage == null && notedTap == null && automaticSelection == null }
         ?.let { active ->
             val translationRun = if (pageTranslated) {
                 pageTranslation ?: restoringPageTranslation
@@ -4751,99 +4912,7 @@ internal fun ReaderScreen(
                                 }
                             }
                         },
-                        onLookUp = {
-                            val openLookup: (DefinitionQuery) -> Unit = { query ->
-                                when (dictionary.target) {
-                                    DefinitionTarget.BUILT_IN -> defineWord = query
-                                    DefinitionTarget.EXTERNAL_APP -> {
-                                        context.lookUpExternally(query.word, dictionary.baseUrl)
-                                    }
-                                }
-                            }
-                            if (pageTranslated) {
-                                val nav = navigatorNow
-                                val run = translationRun
-                                if (nav == null || run == null) {
-                                    dismissSelection()
-                                    Toast.makeText(
-                                        context,
-                                        R.string.dictionary_translated_selection_failed,
-                                        Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                        val displayedText = TranslatedPages.selectedText(nav)
-                                        if (navigatorNow !== nav) return@launch
-                                        if ((tappedSelection ?: selection) !== active) return@launch
-                                        if (
-                                            !pageTranslated ||
-                                            (pageTranslation ?: restoringPageTranslation) !== run
-                                        ) {
-                                            dismissSelection()
-                                            return@launch
-                                        }
-                                        val originalSentence = displayedText?.let { text ->
-                                            ResourceAddress.canonicalPath(active.locator.href.toString())?.let { href ->
-                                                run.original(href, text, active.locator.text.before)
-                                            }
-                                        }
-                                        val translatedSentence = originalSentence?.let { run.translationOf(it) }
-                                        val intersectsAppliedSwap = translatedSentence?.let {
-                                            TranslatedPages.selectionIntersectsAppliedSwap(nav, it.sentence)
-                                        }
-                                        if (navigatorNow !== nav) return@launch
-                                        if ((tappedSelection ?: selection) !== active) return@launch
-                                        if (
-                                            !pageTranslated ||
-                                            (pageTranslation ?: restoringPageTranslation) !== run
-                                        ) {
-                                            dismissSelection()
-                                            return@launch
-                                        }
-                                        val lookupLanguage = when {
-                                            translatedSentence == null ->
-                                                run.translator.source ?: publication.metadata.languages.firstOrNull()
-                                            intersectsAppliedSwap == true -> run.translator.target
-                                            intersectsAppliedSwap == false ->
-                                                run.translator.source ?: publication.metadata.languages.firstOrNull()
-                                            else -> {
-                                                dismissSelection()
-                                                Toast.makeText(
-                                                    context,
-                                                    R.string.dictionary_translated_selection_failed,
-                                                    Toast.LENGTH_SHORT,
-                                                ).show()
-                                                return@launch
-                                            }
-                                        }
-                                        val query = definitionQuery(
-                                            originalText = active.text,
-                                            displayedText = displayedText,
-                                            language = lookupLanguage,
-                                            useDisplayedText = true,
-                                        )
-                                        dismissSelection()
-                                        if (query == null) {
-                                            Toast.makeText(
-                                                context,
-                                                R.string.dictionary_translated_selection_failed,
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
-                                        } else {
-                                            openLookup(query)
-                                        }
-                                    }
-                                }
-                            } else {
-                                definitionQuery(
-                                    originalText = active.text,
-                                    displayedText = null,
-                                    language = publication.metadata.languages.firstOrNull(),
-                                    useDisplayedText = false,
-                                )?.let(openLookup)
-                                dismissSelection()
-                            }
-                        },
+                        onLookUp = { lookUpSelection(active) },
                         onShare = {
                             context.shareText(active.text, publication.metadata.title)
                             dismissSelection()
@@ -4917,12 +4986,67 @@ internal fun ReaderScreen(
             onOpenInDictionaryApp = {
                 context.lookUpExternally(it, dictionary.baseUrl)
                 defineWord = null
+                if (automaticSelection != null) dismissSelection()
             },
             onOpenInBrowser = { term, site ->
                 context.openDictionaryEntry(term, site)
                 defineWord = null
+                if (automaticSelection != null) dismissSelection()
             },
-            onDismiss = { defineWord = null },
+            onSelectText = automaticSelection?.let { active ->
+                {
+                    val nav = navigatorNow
+                    val retained = retainedDictionarySelection
+                    val translatedAt = pageTranslatedTurns
+                    val touchSerial = touch.serial
+                    lookupGesture.selectText()
+                    defineWord = null
+                    effectScope.launch {
+                        fun stillWanted(): Boolean = automaticSelection === active && navigatorNow === nav &&
+                            translatedAt == pageTranslatedTurns && touch.serial == touchSerial
+                        fun abandonRestore() {
+                            if (touch.serial != touchSerial) lookupGesture.clear()
+                            if (automaticSelection === active) {
+                                retained?.discard()
+                                retainedDictionarySelection = null
+                                automaticSelection = null
+                            }
+                        }
+                        withFrameNanos { }
+                        withFrameNanos { }
+                        if (!stillWanted()) {
+                            abandonRestore()
+                            return@launch
+                        }
+                        val restored = nav != null && retained?.restore(nav, ::stillWanted) == true
+                        if (!stillWanted()) {
+                            abandonRestore()
+                            return@launch
+                        }
+                        val current = if (restored) nav?.currentSelection() else null
+                        if (!stillWanted()) {
+                            abandonRestore()
+                            return@launch
+                        }
+                        retained?.discard()
+                        retainedDictionarySelection = null
+                        automaticSelection = null
+                        if (current != null) {
+                            selection = ActiveSelection(
+                                current.locator,
+                                current.rect,
+                                onAnnotationAction.annotationAt(current.locator),
+                            )
+                        } else {
+                            dismissSelection()
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                defineWord = null
+                if (automaticSelection != null) dismissSelection()
+            },
         )
     }
 

@@ -1749,4 +1749,7 @@
     <string name="book_translation_preview">Попробовать отрывок</string>
     <string name="book_translation_preview_wait">Перевод…</string>
     <string name="book_translation_preview_outdated">Этот предварительный перевод устарел. Переведите отрывок ещё раз.</string>
+    <string name="settings_dictionary_on_long_press">Открывать словарь долгим нажатием</string>
+    <string name="settings_dictionary_on_long_press_detail">Открывает определения при удержании слова. Нажмите «Выделить текст» в карточке, чтобы выделить цветом или выбрать другое действие. Онлайн-поиск нужно включить отдельно.</string>
+    <string name="dictionary_select_text">Выделить текст</string>
 </resources>

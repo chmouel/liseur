@@ -224,6 +224,11 @@ fun syncableSettings(
         write = { raw -> writeBoolean(raw) { app.setResumeLastBook(it) } },
     ),
     SyncableSetting(
+        key = "app.dictionary_on_long_press",
+        read = { app.current().dictionaryOnLongPress.toString() },
+        write = { raw -> writeBoolean(raw) { app.setDictionaryOnLongPress(it) } },
+    ),
+    SyncableSetting(
         key = "app.dictionary_enabled",
         read = { app.current().dictionaryLookupEnabled.toString() },
         write = { raw -> writeBoolean(raw) { app.setDictionaryLookupEnabled(it) } },

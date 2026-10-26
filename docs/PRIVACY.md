@@ -111,7 +111,10 @@ cover what the server does with the data it receives.
 
 Looking a word up online is off by default. When you switch it on, Liseur
 sends the selected word to the dictionary site configured in Settings,
-by default the public Wiktionary API, over HTTPS. For plural or conjugated
+by default the public Wiktionary API, over HTTPS. If you also enable
+“Open dictionary on long press”, holding a word opens its definition and
+sends it to that site without another tap. This gesture setting does not
+turn online lookups on. For plural or conjugated
 forms, it may also look up base words explicitly linked by that dictionary,
 on the same site. It follows these links one step only, with at most four
 additional requests. When the book declares a language other than Liseur's,

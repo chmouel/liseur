@@ -117,6 +117,7 @@ class SyncableSettingsTest {
                 "reader.auto_scroll_speed",
                 "app.scroll_mode",
                 "app.resume_last_book",
+                "app.dictionary_on_long_press",
                 "app.dictionary_enabled",
                 "app.dictionary_base_url",
                 "app.dictionary_alt_language",
@@ -425,6 +426,7 @@ class SyncableSettingsTest {
         a.setScrollMode(true)
         a.setLockFooterOn(false)
         a.setResumeLastBook(false)
+        a.setDictionaryOnLongPress(true)
         a.setDictionaryLookupEnabled(true)
         a.setOfferedHighlightTints(setOf(HighlightTint.BLUE.name, HighlightTint.GREEN.name))
         a.setHighlightDefaultTint(HighlightTint.BLUE)

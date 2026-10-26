@@ -1701,4 +1701,7 @@
     <string name="book_translation_preview">Try a passage</string>
     <string name="book_translation_preview_wait">Translating…</string>
     <string name="book_translation_preview_outdated">This preview is outdated. Try the passage again.</string>
+    <string name="settings_dictionary_on_long_press">Open dictionary on long press</string>
+    <string name="settings_dictionary_on_long_press_detail">Open definitions directly when you hold a word. Use Select text in the definition sheet for highlighting and other actions. Online lookups still need to be enabled separately.</string>
+    <string name="dictionary_select_text">Select text</string>
 </resources>

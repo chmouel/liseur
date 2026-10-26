@@ -81,6 +81,7 @@ fun DefinitionSheet(
     onOpenInDictionaryApp: (String) -> Unit,
     onOpenInBrowser: (term: String, site: String) -> Unit,
     onDismiss: () -> Unit,
+    onSelectText: (() -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
     val term = remember(word) { normaliseLookupTerm(word) }
@@ -169,6 +170,11 @@ fun DefinitionSheet(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) {
+                if (onSelectText != null) {
+                    TextButton(onClick = onSelectText) {
+                        Text(stringResource(R.string.dictionary_select_text))
+                    }
+                }
                 val translated = (translations as? TranslationsState.Found)?.first
                 if (target != null && translated != null) {
                     TranslationsPill(target, translated, onClick = { showTranslations = true })

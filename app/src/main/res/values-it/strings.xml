@@ -1641,4 +1641,7 @@
     <string name="book_translation_preview">Prova un brano</string>
     <string name="book_translation_preview_wait">Traduzione…</string>
     <string name="book_translation_preview_outdated">Questa anteprima non è aggiornata. Prova di nuovo il brano.</string>
+    <string name="settings_dictionary_on_long_press">Apri il dizionario con una pressione prolungata</string>
+    <string name="settings_dictionary_on_long_press_detail">Apre le definizioni tenendo premuta una parola. Usa Seleziona testo nella scheda per evidenziare e accedere alle altre azioni. Le ricerche online vanno attivate separatamente.</string>
+    <string name="dictionary_select_text">Seleziona testo</string>
 </resources>

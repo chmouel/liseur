@@ -1653,4 +1653,7 @@
     <string name="book_translation_preview">Textstelle ausprobieren</string>
     <string name="book_translation_preview_wait">Wird übersetzt…</string>
     <string name="book_translation_preview_outdated">Diese Vorschau ist veraltet. Die Textstelle erneut ausprobieren.</string>
+    <string name="settings_dictionary_on_long_press">Wörterbuch durch langes Drücken öffnen</string>
+    <string name="settings_dictionary_on_long_press_detail">Öffnet Definitionen, wenn du ein Wort gedrückt hältst. Mit Text auswählen in der Definitionskarte kannst du markieren und weitere Aktionen nutzen. Die Online-Suche muss separat aktiviert werden.</string>
+    <string name="dictionary_select_text">Text auswählen</string>
 </resources>

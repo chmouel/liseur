@@ -1641,4 +1641,7 @@
     <string name="book_translation_preview">Essayer un passage</string>
     <string name="book_translation_preview_wait">Traduction…</string>
     <string name="book_translation_preview_outdated">Cet aperçu est obsolète. Réessayez le passage.</string>
+    <string name="settings_dictionary_on_long_press">Ouvrir le dictionnaire par appui long</string>
+    <string name="settings_dictionary_on_long_press_detail">Affiche les définitions en maintenant un mot. Touchez Sélectionner le texte dans la fiche pour surligner ou utiliser les autres actions. Les recherches en ligne doivent être activées séparément.</string>
+    <string name="dictionary_select_text">Sélectionner le texte</string>
 </resources>

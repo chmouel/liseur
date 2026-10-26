@@ -590,6 +590,9 @@ private fun LiseurApp(
                             onDefinitionTarget = {
                                 scope.launch { repository.setDefinitionTarget(it) }
                             },
+                            onDictionaryOnLongPress = {
+                                scope.launch { repository.setDictionaryOnLongPress(it) }
+                            },
                             onDictionaryLookup = {
                                 scope.launch { repository.setDictionaryLookupEnabled(it) }
                             },

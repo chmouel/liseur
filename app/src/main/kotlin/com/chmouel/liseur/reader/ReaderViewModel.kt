@@ -302,6 +302,7 @@ class ReaderViewModel(
         val enabled: Boolean = false,
         val baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
         val altLanguage: String? = null,
+        val onLongPress: Boolean = false,
     )
 
     /** The dictionary's opt-in state, watched so the card reacts to it. */
@@ -312,6 +313,7 @@ class ReaderViewModel(
                 it.dictionaryLookupEnabled,
                 it.dictionaryBaseUrl,
                 it.dictionaryAltLanguage,
+                it.dictionaryOnLongPress,
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DictionarySettings())

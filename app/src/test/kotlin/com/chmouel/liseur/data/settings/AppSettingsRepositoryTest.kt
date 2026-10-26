@@ -25,6 +25,19 @@ class AppSettingsRepositoryTest {
         PreferenceDataStoreFactory.create { folder.newFile(name) }
 
     @Test
+    fun `automatic dictionary is opt in and survives backup without enabling online lookup`() = runTest {
+        val repo = AppSettingsRepository(store("dictionary.preferences_pb"))
+        assertFalse(repo.settings.first().dictionaryOnLongPress)
+        repo.setDictionaryOnLongPress(true)
+        assertTrue(repo.settings.first().dictionaryOnLongPress)
+        assertFalse(repo.settings.first().dictionaryLookupEnabled)
+        val restored = AppSettingsRepository(store("dictionary-restored.preferences_pb"))
+        restored.restoreBackupValues(repo.backupValues())
+        assertTrue(restored.settings.first().dictionaryOnLongPress)
+        assertFalse(restored.settings.first().dictionaryLookupEnabled)
+    }
+
+    @Test
     fun `codex is available by default and disabling it survives settings backup`() = runTest {
         val repo = AppSettingsRepository(store("codex.preferences_pb"))
         assertTrue(repo.settings.first().codexEnabled)

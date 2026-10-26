@@ -97,6 +97,7 @@ fun ReadingNavigationScreen(
     onVendorRefresh: (Boolean) -> Unit,
     onDefinitionTarget: (DefinitionTarget) -> Unit,
     onDictionaryLookup: (Boolean) -> Unit,
+    onDictionaryOnLongPress: (Boolean) -> Unit,
     onDictionaryBaseUrl: (String) -> Unit,
     onDictionaryAltLanguage: (String?) -> Unit,
     onBack: () -> Unit,
@@ -191,6 +192,13 @@ fun ReadingNavigationScreen(
                         onSelected = onDefinitionTarget,
                     )
                     if (settings.definitionTarget == DefinitionTarget.BUILT_IN) {
+                        RowDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dictionary_on_long_press),
+                            subtitle = stringResource(R.string.settings_dictionary_on_long_press_detail),
+                            checked = settings.dictionaryOnLongPress,
+                            onCheckedChange = onDictionaryOnLongPress,
+                        )
                         RowDivider()
                         SwitchRow(
                             title = stringResource(R.string.settings_dictionary_lookup),

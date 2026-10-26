@@ -275,6 +275,7 @@ data class AppSettings(
     val vendorRefresh: Boolean = false,
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
+    val dictionaryOnLongPress: Boolean = false,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val dictionaryAltLanguage: String? = null,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
@@ -443,6 +444,7 @@ class AppSettingsRepository(
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
         val DEFINITION_TARGET = stringPreferencesKey("definition_target")
         val DICTIONARY_ENABLED = booleanPreferencesKey("dictionary_lookup_enabled")
+        val DICTIONARY_ON_LONG_PRESS = booleanPreferencesKey("dictionary_on_long_press")
         val DICTIONARY_BASE_URL = stringPreferencesKey("dictionary_base_url")
         val DICTIONARY_ALT_LANGUAGE = stringPreferencesKey(DICTIONARY_ALT_LANGUAGE_NAME)
         val ACCOUNT_LOST = booleanPreferencesKey("calibre_account_lost_to_restore")
@@ -536,6 +538,7 @@ class AppSettingsRepository(
             vendorRefresh = p[Keys.VENDOR_REFRESH] ?: false,
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
+            dictionaryOnLongPress = p[Keys.DICTIONARY_ON_LONG_PRESS] ?: false,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
             dictionaryAltLanguage = p[Keys.DICTIONARY_ALT_LANGUAGE]
@@ -735,6 +738,10 @@ class AppSettingsRepository(
 
     suspend fun setDefinitionTarget(target: DefinitionTarget) {
         store.edit { it[Keys.DEFINITION_TARGET] = target.id }
+    }
+
+    suspend fun setDictionaryOnLongPress(enabled: Boolean) {
+        store.edit { it[Keys.DICTIONARY_ON_LONG_PRESS] = enabled }
     }
 
     suspend fun setDictionaryLookupEnabled(enabled: Boolean) {
@@ -1208,6 +1215,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
+    "dictionary_on_long_press" to BackupValueType.BOOLEAN,
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
     DICTIONARY_ALT_LANGUAGE_NAME to BackupValueType.STRING,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
