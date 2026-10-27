@@ -122,17 +122,23 @@ enum class VolumeKeyMode(val id: String) {
  * on the right there. The preset says which hand is holding the phone,
  * and leaves the book to say where its next page is.
  *
- * Only two, and deliberately: a zone editor is a settings hobby, and a
- * third preset has to earn its place by describing a hand position that
- * actually occurs. See `docs/adr/0009-tap-zone-customization.md`.
+ * [OFF] stops the sides turning pages at all. It is the answer for a
+ * reader whose grip keeps landing on the edge of the page: the centre
+ * and the top strip still reveal the chrome, and the volume keys and
+ * swipes still turn pages.
  *
- * The centre and the top strip still reveal the chrome under both, the
- * default volume-key mode still goes forward on down, and a book read by
- * scrolling has no page sides to tap in the first place.
+ * A zone editor is a settings hobby, and a fourth preset has to earn
+ * its place by describing a way of reading that actually occurs. See
+ * `docs/adr/0009-tap-zone-customization.md`.
+ *
+ * The centre and the top strip still reveal the chrome under all three,
+ * the default volume-key mode still goes forward on down, and a book read
+ * by scrolling has no page sides to tap in the first place.
  */
 enum class TapZones(val id: String) {
     STANDARD("standard"),
     SWAPPED("swapped"),
+    OFF("off"),
     ;
 
     /**
@@ -144,6 +150,9 @@ enum class TapZones(val id: String) {
      * [com.chmouel.liseur.reader.chrome.ReaderTapZones.forward].
      */
     val swapped: Boolean get() = this == SWAPPED
+
+    /** Whether tapping a side of the page turns it. */
+    val turnsPages: Boolean get() = this != OFF
 
     companion object {
         val Default = STANDARD

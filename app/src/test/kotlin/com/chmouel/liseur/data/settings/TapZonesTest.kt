@@ -31,5 +31,13 @@ class TapZonesTest {
     fun `only the swapped preset reorders the sides`() {
         assertEquals(false, TapZones.STANDARD.swapped)
         assertEquals(true, TapZones.SWAPPED.swapped)
+        assertEquals(false, TapZones.OFF.swapped)
+    }
+
+    @Test
+    fun `every preset but off turns a side into a page`() {
+        assertEquals(true, TapZones.STANDARD.turnsPages)
+        assertEquals(true, TapZones.SWAPPED.turnsPages)
+        assertEquals(false, TapZones.OFF.turnsPages)
     }
 }

@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.READER_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontImport
 import com.chmouel.liseur.data.settings.UserFontRepository
@@ -1018,7 +1019,7 @@ class SettingsBackupRepository(
         validateIds(app, mapOf(
             "theme_mode" to setOf("system", "light", "dark"),
             "volume_keys_mode" to VolumeKeyMode.entries.map { it.id }.toSet(),
-            "tap_zones" to setOf("standard", "swapped"),
+            "tap_zones" to TapZones.entries.map { it.id }.toSet(),
             "edge_brightness" to com.chmouel.liseur.data.settings.EdgeBrightness.entries.map { it.id }.toSet(),
             "library_sort" to setOf("recent", "title", "author", "added", "series"),
             "eink_mode" to setOf("auto", "on", "off"),

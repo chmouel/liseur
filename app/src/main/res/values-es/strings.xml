@@ -767,9 +767,10 @@
     <string name="settings_volume_keys_off">Desactivadas</string>
     <string name="settings_volume_keys_reversed">Invertidas</string>
     <string name="settings_tap_zones">Lados de paso de página</string>
-    <string name="settings_tap_zones_detail">Qué lado de la página avanza al tocarlo. Intercambiados pone el avance bajo el otro pulgar, para sujetar el teléfono con la otra mano: en la mayoría de los libros la izquierda de la página avanza y la derecha retrocede, y en un libro que se lee de derecha a izquierda es al revés. El centro sigue abriendo el menú, las teclas de volumen no cambian, y un libro leído desplazando no tiene lados que tocar.</string>
+    <string name="settings_tap_zones_detail">Qué lado de la página avanza al tocarlo. Intercambiados pone el avance bajo el otro pulgar, para sujetar el teléfono con la otra mano: en la mayoría de los libros la izquierda de la página avanza y la derecha retrocede, y en un libro que se lee de derecha a izquierda es al revés. El centro sigue abriendo el menú, las teclas de volumen no cambian, y un libro leído desplazando no tiene lados que tocar. Desactivados deja ambos lados inertes: solo el centro y la franja superior responden al toque.</string>
     <string name="tap_zones_standard">Estándar</string>
     <string name="tap_zones_swapped">Intercambiados</string>
+    <string name="tap_zones_off">Desactivados</string>
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
     <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
     <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que redibujan demasiado despacio la vista previa del tamaño. Usa en su lugar el control deslizante de Tamaño. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si esta no es una pantalla de tinta electrónica.</string>
