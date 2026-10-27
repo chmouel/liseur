@@ -163,6 +163,14 @@ class SettingsZipBackupUiTest {
         assertTrue(cached.exists())
     }
 
+    @Test
+    fun `malformed saved archive values are ignored instead of crashing`() = scenario {
+        val model = model(SavedStateHandle(mapOf("prepared_export_name" to 7, "prepared_export_fonts" to "many")))
+
+        model.close()
+        await { !model.state.value.busy }
+    }
+
     /** Runs [body] with Main on the unconfined test dispatcher, the way the app's ViewModels see it. */
     private fun scenario(body: suspend TestScope.() -> Unit) = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))

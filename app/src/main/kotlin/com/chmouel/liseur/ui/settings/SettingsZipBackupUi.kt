@@ -198,15 +198,16 @@ internal class SettingsBackupViewModel(
     }
 
     private fun takePreparedExport(): PreparedExport? {
-        val name = savedState.remove<String>(PREPARED_NAME) ?: return null
-        val fonts = savedState.remove<Int>(PREPARED_FONTS) ?: 0
-        val annotations = savedState.remove<Int>(PREPARED_ANNOTATIONS) ?: 0
-        val pairing = savedState.remove<Boolean>(PREPARED_PAIRING) ?: false
-        val translationBooks = savedState.remove<Int>(PREPARED_TRANSLATION_BOOKS) ?: 0
-        val translationSkipped = savedState.remove<Int>(PREPARED_TRANSLATION_SKIPPED) ?: 0
-        // Saved state also starts from the launch intent's extras, so only a name this app generated counts.
+        // Saved state also starts from the launch intent's extras, so every value is checked
+        // and only a name this app generated counts.
+        val name = savedState.remove<Any>(PREPARED_NAME) as? String
+        val fonts = savedState.remove<Any>(PREPARED_FONTS) as? Int ?: 0
+        val annotations = savedState.remove<Any>(PREPARED_ANNOTATIONS) as? Int ?: 0
+        val pairing = savedState.remove<Any>(PREPARED_PAIRING) as? Boolean ?: false
+        val translationBooks = savedState.remove<Any>(PREPARED_TRANSLATION_BOOKS) as? Int ?: 0
+        val translationSkipped = savedState.remove<Any>(PREPARED_TRANSLATION_SKIPPED) as? Int ?: 0
         // A prepared archive swept from the cache counts as absent, not as a failed copy.
-        val file = repository.preparedExportFile(name)?.takeIf { it.isFile } ?: return null
+        val file = name?.let(repository::preparedExportFile)?.takeIf { it.isFile } ?: return null
         return PreparedExport(file, fonts, annotations, pairing, translationBooks, translationSkipped)
     }
 
