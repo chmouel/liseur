@@ -802,9 +802,10 @@
     <string name="settings_volume_keys_off">Off</string>
     <string name="settings_volume_keys_reversed">Reversed</string>
     <string name="settings_tap_zones">Page-turn sides</string>
-    <string name="settings_tap_zones_detail">Which side of the page turns forward when you tap it. Swapped puts the forward turn under the other thumb, for holding the phone in the other hand: in most books the left of the page goes on and the right goes back, and in a book that reads right to left it is the other way about. The middle still opens the menu, the volume keys are unchanged, and a book read by scrolling has no sides to tap.</string>
+    <string name="settings_tap_zones_detail">Which side of the page turns forward when you tap it. Swapped puts the forward turn under the other thumb, for holding the phone in the other hand: in most books the left of the page goes on and the right goes back, and in a book that reads right to left it is the other way about. The middle still opens the menu, the volume keys are unchanged, and a book read by scrolling has no sides to tap. Off leaves both sides inert: only the middle and the top strip respond to a tap.</string>
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Swapped</string>
+    <string name="tap_zones_off">Off</string>
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
     <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
     <string name="settings_pinch_to_resize_eink">Off on e-ink screens, which redraw the live size preview too slowly. Use the Size slider instead. Pinching an image to enlarge it still works. Turn E-ink screen off above if this is not an e-ink screen.</string>

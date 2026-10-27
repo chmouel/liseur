@@ -767,9 +767,10 @@
     <string name="settings_volume_keys_off">Disattivo</string>
     <string name="settings_volume_keys_reversed">Invertito</string>
     <string name="settings_tap_zones">Lati di svolta pagina</string>
-    <string name="settings_tap_zones_detail">Quale lato della pagina va avanti quando lo tocchi. Invertito mette la svolta in avanti sotto l\'altro pollice, per tenere il telefono con l\'altra mano: nella maggior parte dei libri la sinistra della pagina va avanti e la destra torna indietro, e in un libro che si legge da destra a sinistra è al contrario. Il centro apre ancora il menu, i tasti volume non cambiano, e un libro letto a scorrimento non ha lati da toccare.</string>
+    <string name="settings_tap_zones_detail">Quale lato della pagina va avanti quando lo tocchi. Invertito mette la svolta in avanti sotto l\'altro pollice, per tenere il telefono con l\'altra mano: nella maggior parte dei libri la sinistra della pagina va avanti e la destra torna indietro, e in un libro che si legge da destra a sinistra è al contrario. Il centro apre ancora il menu, i tasti volume non cambiano, e un libro letto a scorrimento non ha lati da toccare. Disattivo lascia inerti entrambi i lati: solo il centro e la striscia superiore rispondono al tocco.</string>
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Invertito</string>
+    <string name="tap_zones_off">Disattivo</string>
     <string name="settings_pinch_to_resize">Pizzica per ridimensionare il testo</string>
     <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Disattivalo se il modo in cui impugni il telefono lo attiva per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
     <string name="settings_pinch_to_resize_eink">Spento sugli schermi e-ink, che ridisegnano troppo lentamente l\'anteprima della dimensione. Usa invece il cursore Dimensione. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se questo non è uno schermo e-ink.</string>

@@ -767,9 +767,10 @@
     <string name="settings_volume_keys_off">Désactivé</string>
     <string name="settings_volume_keys_reversed">Inversé</string>
     <string name="settings_tap_zones">Côtés pour tourner la page</string>
-    <string name="settings_tap_zones_detail">Quel côté de la page avance quand vous le touchez. Inversé place l\'avance sous l\'autre pouce, pour tenir le téléphone de l\'autre main : dans la plupart des livres, la gauche de la page avance et la droite recule, et dans un livre qui se lit de droite à gauche c\'est l\'inverse. Le milieu ouvre encore le menu, les touches de volume ne changent pas, et un livre lu par défilement n\'a pas de côtés à toucher.</string>
+    <string name="settings_tap_zones_detail">Quel côté de la page avance quand vous le touchez. Inversé place l\'avance sous l\'autre pouce, pour tenir le téléphone de l\'autre main : dans la plupart des livres, la gauche de la page avance et la droite recule, et dans un livre qui se lit de droite à gauche c\'est l\'inverse. Le milieu ouvre encore le menu, les touches de volume ne changent pas, et un livre lu par défilement n\'a pas de côtés à toucher. Désactivé laisse les deux côtés inertes : seuls le milieu et la bande supérieure réagissent à un toucher.</string>
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Inversé</string>
+    <string name="tap_zones_off">Désactivé</string>
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
     <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
     <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>

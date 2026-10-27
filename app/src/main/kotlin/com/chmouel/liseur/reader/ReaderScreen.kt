@@ -598,6 +598,7 @@ internal fun ReaderScreen(
     val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
     val lockFooterOn by lockFooterOnFlow.collectAsStateWithLifecycle()
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
+    val tapZonesTurnPagesNow by rememberUpdatedState(tapZones.turnsPages)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
     val edgeBrightness by edgeBrightnessFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
@@ -3254,6 +3255,7 @@ internal fun ReaderScreen(
                 isChromeVisible = { chromeVisibleNow },
                 isScrolling = { effectiveScrollingNow },
                 isSwapped = { swappedZonesNow },
+                turnsPages = { tapZonesTurnPagesNow },
                 isPinching = isPinching,
                 onTurnPage = pageTurner::turn,
                 onShowChrome = { chromeVisible = true },

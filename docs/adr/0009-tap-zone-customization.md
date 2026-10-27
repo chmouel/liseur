@@ -97,3 +97,14 @@ so the chip row is now in **Settings -> Reading & navigation**
 `docs/adr/0001-advanced-reading-menu.md`. Both rows have since moved
 together into that screen's Advanced section, since a reader sets them
 once when setting up the app.
+
+## Update: Off
+
+A third preset, **Off**, was added later for a grip that keeps landing
+on the edge of the page. It is not the "both edges forward" answer this
+ADR rejected: it does not move an action, it takes one off the page
+entirely. A tap on either side does nothing, while the centre and the
+top strip still reveal the chrome; the volume keys, swipes and the
+endpaper keep behaving as before. The endpaper stays live whatever the
+preset because it is the app's own page, not the book's, and its chrome
+zone does nothing — the same reason it ignores scroll mode.

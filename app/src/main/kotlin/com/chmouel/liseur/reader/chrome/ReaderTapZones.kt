@@ -40,6 +40,10 @@ import kotlin.math.abs
  * forward on the left, moves it back to the right. The chrome zones do
  * not move — only the two sides trade places.
  *
+ * [turnsPages] is the third preset: when it is false, a tap on either
+ * side does nothing. The chrome zones keep working, which is the point
+ * of turning the sides off rather than making them another chrome tap.
+ *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side
  * taps there would scroll by a screenful with no page-turn to make
@@ -59,6 +63,7 @@ class ReaderTapZones(
     private val isChromeVisible: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
     private val isSwapped: () -> Boolean = { false },
+    private val turnsPages: () -> Boolean = { true },
     private val isPinching: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
@@ -75,6 +80,7 @@ class ReaderTapZones(
             onHideChrome()
             return true
         }
+        if (!turnsPages()) return true
 
         val view = navigator.publicationView
         val width = view.width.toFloat()
