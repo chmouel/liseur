@@ -176,9 +176,9 @@ internal class SettingsBackupViewModel(
     }
 
     override fun onCleared() {
-        val prepared = takePreparedExport()
+        // A pending archive stays: Android can destroy the activity behind the picker and
+        // restore it, and the stale sweep removes one whose screen never came back.
         viewModelScope.launch(NonCancellable) {
-            prepared?.let { repository.discardPreparedExport(it) }
             repository.discardProcessInspections()
         }
     }

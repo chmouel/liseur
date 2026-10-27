@@ -4,7 +4,11 @@ import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.companion.CompanionDatabase
@@ -161,6 +165,26 @@ class SettingsZipBackupUiTest {
 
         assertTrue(victim.exists())
         assertTrue(cached.exists())
+    }
+
+    @Test
+    fun `a prepared archive survives the screen being destroyed behind the picker`() = scenario {
+        val savedState = SavedStateHandle()
+        val store = ViewModelStore()
+        val first = ViewModelProvider(store, viewModelFactory { initializer { model(savedState) } })[SettingsBackupViewModel::class.java]
+        first.prepareExport(null, includeTranslations = true)
+        await { first.state.value.saveRequest != null }
+        first.saveLaunched(first.state.value.saveRequest!!)
+
+        store.clear()
+        val restored = model(savedState)
+        val target = File(folder.root, "destination.zip")
+        restored.writeExport(Uri.fromFile(target))
+
+        await { restored.state.value.status != null }
+        assertTrue(restored.state.value.status is SettingsBackupUiStatus.Exported)
+        assertTrue(target.length() > 0)
+        await { preparedArchives().isEmpty() }
     }
 
     @Test
