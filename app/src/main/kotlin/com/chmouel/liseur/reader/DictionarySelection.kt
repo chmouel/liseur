@@ -19,6 +19,9 @@ internal class DictionarySelection private constructor(
     private val url: String,
     private val key: String,
 ) {
+    var displayedText: String = ""
+        private set
+
     private var pressStarted: Long? = null
     private var pressX = 0f
     private var pressY = 0f
@@ -139,10 +142,12 @@ internal class DictionarySelection private constructor(
                       if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
                       var range = selection.getRangeAt(0).cloneRange();
                       window[$key] = {range: range, text: range.toString()};
-                      return true;
+                      return range.toString();
                     })();
                 """.trimIndent())
-                if (result != "true" || !saved.stillShows(nav)) return null
+                val text = TranslatedPages.decodeSelectionText(result) ?: return null
+                if (!saved.stillShows(nav)) return null
+                saved.displayedText = text
                 retained = true
                 return saved
             } finally {

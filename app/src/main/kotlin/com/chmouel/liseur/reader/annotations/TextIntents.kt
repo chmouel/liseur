@@ -66,3 +66,41 @@ fun Context.openDictionaryEntry(word: String, dictionaryBaseUrl: String) {
     val url: Uri = DictionaryUrl.entryPage(dictionaryBaseUrl, term).toUri()
     runCatching { startActivity(Intent(Intent.ACTION_VIEW, url)) }
 }
+
+internal fun citationText(text: String, title: String?, authors: List<String>): String {
+    val source = listOfNotNull(
+        title?.trim()?.takeIf { it.isNotEmpty() },
+        authors.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ").takeIf { it.isNotEmpty() },
+    ).joinToString(" — ")
+    return if (source.isEmpty()) text else "$text\n\n$source"
+}
+
+internal fun processTextIntent(text: String = "") = Intent(Intent.ACTION_PROCESS_TEXT).apply {
+    type = "text/plain"
+    putExtra(Intent.EXTRA_PROCESS_TEXT, text)
+    putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+}
+
+internal fun webSearchIntent(text: String = "") = Intent(Intent.ACTION_WEB_SEARCH).apply {
+    putExtra(android.app.SearchManager.QUERY, text)
+}
+
+internal fun Context.canHandleSelectionIntent(intent: Intent): Boolean =
+    packageManager.queryIntentActivities(intent, 0).isNotEmpty()
+
+internal fun Context.launchSelectionIntent(intent: Intent, chooser: Boolean = false) {
+    try {
+        if (!canHandleSelectionIntent(intent)) throw ActivityNotFoundException()
+        startActivity(if (chooser) Intent.createChooser(intent, null) else intent)
+    } catch (_: ActivityNotFoundException) {
+        android.widget.Toast.makeText(this, com.chmouel.liseur.R.string.selection_no_handler, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}
+
+internal fun Context.copySelection(text: String) {
+    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText(null, text))
+    if (android.os.Build.VERSION.SDK_INT < 33) {
+        android.widget.Toast.makeText(this, com.chmouel.liseur.R.string.selection_copied, android.widget.Toast.LENGTH_SHORT).show()
+    }
+}

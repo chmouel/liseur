@@ -42,6 +42,7 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.ui.reading.SelectionToolbarRow
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.contentWidthCap
@@ -93,6 +94,7 @@ fun ReadingAppearanceScreen(
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
     onFooterField: (FooterSlot, FooterField) -> Unit,
+    onOpenSelectionToolbar: () -> Unit,
     highlightPalette: HighlightPalette,
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTint: (HighlightTint) -> Unit,
@@ -207,6 +209,7 @@ fun ReadingAppearanceScreen(
                             onModeSelected = onFooterMode,
                             onFieldSelected = onFooterField,
                         )
+                        SelectionToolbarRow(onOpenSelectionToolbar)
                         ReadingHighlightPaletteControls(
                             palette = highlightPalette,
                             onTintToggled = onHighlightTintToggled,

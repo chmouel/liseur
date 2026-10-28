@@ -16,6 +16,7 @@ import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
@@ -283,6 +284,7 @@ data class AppSettings(
     val clearTranslationsOnFinish: Boolean = true,
     val statsRange: StatsRange = StatsRange.Default,
     val highlightPalette: HighlightPalette = HighlightPalette(),
+    val selectionActionLayout: SelectionActionLayout = SelectionActionLayout.default,
     val readAloudVoice: String? = null,
     val readAloudModel: String? = null,
     val readAloudProvider: String? = null,
@@ -451,6 +453,7 @@ class AppSettingsRepository(
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
         val CLEAR_TRANSLATIONS_ON_FINISH = booleanPreferencesKey("clear_translations_on_finish")
         val STATS_RANGE = stringPreferencesKey("stats_range")
+        val SELECTION_ACTION_LAYOUT = stringPreferencesKey("selection_action_layout")
         val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
         val CATALOG_PARTIAL_DISMISSED = stringPreferencesKey("catalog_partial_dismissed")
@@ -546,6 +549,7 @@ class AppSettingsRepository(
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
             clearTranslationsOnFinish = p[Keys.CLEAR_TRANSLATIONS_ON_FINISH] ?: true,
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
+            selectionActionLayout = SelectionActionLayout.parse(p[Keys.SELECTION_ACTION_LAYOUT]),
             highlightPalette = HighlightPalette.of(
                 offeredNames = p[Keys.HIGHLIGHT_TINTS],
                 defaultName = p[Keys.HIGHLIGHT_TINT_DEFAULT],
@@ -780,6 +784,17 @@ class AppSettingsRepository(
         store.edit { p ->
             val next = HighlightPalette.of(p[Keys.HIGHLIGHT_TINTS], null).toggled(tint)
             p[Keys.HIGHLIGHT_TINTS] = next.offered.map { it.name }.toSet()
+        }
+    }
+
+    suspend fun setSelectionActionLayout(layout: SelectionActionLayout) {
+        updateSelectionActionLayout { layout }
+    }
+
+    suspend fun updateSelectionActionLayout(change: (SelectionActionLayout) -> SelectionActionLayout) {
+        store.edit { p ->
+            val current = SelectionActionLayout.parse(p[Keys.SELECTION_ACTION_LAYOUT])
+            p[Keys.SELECTION_ACTION_LAYOUT] = SelectionActionLayout.parse(change(current).serialize()).serialize()
         }
     }
 
@@ -1222,6 +1237,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "clear_translations_on_finish" to BackupValueType.BOOLEAN,
     "highlight_tints_offered" to BackupValueType.STRING_SET,"lock_footer_on" to BackupValueType.BOOLEAN,
     "highlight_tint_default" to BackupValueType.STRING,
+    "selection_action_layout" to BackupValueType.STRING,
     "read_aloud_voice" to BackupValueType.STRING, "read_aloud_model" to BackupValueType.STRING,
     "read_aloud_provider" to BackupValueType.STRING,
     ServerSettings.SERVERS_NAME to BackupValueType.STRING,

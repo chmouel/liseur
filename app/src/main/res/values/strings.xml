@@ -30,6 +30,7 @@
     <string name="add_book_hint">Pick a single EPUB from your device or your cloud storage.</string>
     <string name="connect_server_hint">Browse calibre-web, Komga, liseur-sync or any OPDS catalog.</string>
     <string name="search_books">Search books</string>
+    <string name="clear_search">Clear search</string>
     <string name="filter_menu">Filter</string>
     <string name="filter_availability">On the device</string>
     <string name="filter_reading">Reading</string>
@@ -361,6 +362,10 @@
     <string name="server_sync_clear_translations_on_finish">Clear a book\'s translations when I finish it</string>
     <string name="server_sync_clear_translations_on_finish_hint">Removes its saved sentence translations from this device and from your account.</string>
     <string name="server_sync_running">Syncing reading positions…</string>
+    <string name="library_sync_complete">Reading positions synced.</string>
+    <string name="library_sync_continuing">Reading positions updated. More books are syncing in the background.</string>
+    <string name="library_sync_unavailable">No reading-position sync is configured.</string>
+    <string name="library_sync_failed">Could not sync reading positions. Check your server settings and try again.</string>
     <string name="server_sync_offline">Could not reach the server; positions will sync later.</string>
     <string name="reader_sync_book">Sync this book</string>
     <string name="reader_sync_book_in_step">This book is already in sync with the server.</string>
@@ -1703,4 +1708,23 @@
     <string name="settings_dictionary_on_long_press">Open dictionary on long press</string>
     <string name="settings_dictionary_on_long_press_detail">Open definitions directly when you hold a word. The definition sheet keeps the selection actions. Online lookups still need to be enabled separately.</string>
     <string name="dictionary_select_text">Select text</string>
+    <string name="selection_copy">Copy</string>
+    <string name="selection_citation">Copy with citation</string>
+    <string name="selection_open_with">Open with</string>
+    <string name="selection_web_search">Web search</string>
+    <string name="selection_copied">Copied</string>
+    <string name="selection_no_handler">No app available</string>
+    <string name="selection_text_unavailable">Could not read the selected text. Select it again and retry.</string>
+    <string name="selection_arrange">Selection toolbar</string>
+    <string name="selection_availability_help">Some actions appear only when available for the selection or on this device.</string>
+    <string name="selection_move_up">Move %1$s up</string>
+    <string name="selection_move_down">Move %1$s down</string>
+    <string name="selection_reset">Reset toolbar</string>
+    <string name="selection_edit_label">Edit label for %1$s</string>
+    <string name="selection_label_help">Leave blank to use the default label.</string>
+    <string name="selection_label_default">Use default label</string>
+    <string name="selection_style_icon">Icon</string>
+    <string name="selection_style_label">Label</string>
+    <string name="selection_style_both">Icon and label</string>
+    <string name="selection_style_hidden">Hidden</string>
 </resources>

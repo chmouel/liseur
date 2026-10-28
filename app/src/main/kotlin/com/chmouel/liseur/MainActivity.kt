@@ -78,6 +78,8 @@ import com.chmouel.liseur.ui.settings.LicencesScreen
 import com.chmouel.liseur.ui.settings.SettingsPagePlaceholder
 import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.SettingsBackupScreen
+import com.chmouel.liseur.ui.settings.SelectionToolbarScreen
+import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
@@ -398,7 +400,7 @@ private fun LiseurApp(
                             onOpenStats = { backStack.push(Route.Stats) },
                             onOpenTranslation = { backStack.push(Route.Translation) },
                             onSyncNow = {
-                                scope.launch { context.container.requestFullSync() }
+                                context.container.positionSync.request(com.chmouel.liseur.sync.SyncScope.Full)
                             },
                             onOpenBookStats = { book ->
                                 backStack.push(Route.BookStats(book.url, book.displayTitle))
@@ -621,6 +623,7 @@ private fun LiseurApp(
                             onFooterField = { slot, field ->
                                 scope.launch { readerPreferences.setFooterField(slot, field) }
                             },
+                            onOpenSelectionToolbar = { backStack.push(Route.SelectionToolbar) },
                             highlightPalette = settings.highlightPalette,
                             onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
                             onHighlightDefaultTint = {
@@ -642,6 +645,16 @@ private fun LiseurApp(
                             ),
                             onBack = back,
                         )
+                    }
+
+                    Route.SelectionToolbar -> {
+                        NestedPage {
+                            SelectionToolbarScreen(
+                                layout = settings.selectionActionLayout,
+                                onChanged = { change -> scope.launch { repository.updateSelectionActionLayout(change) } },
+                                onBack = back,
+                            )
+                        }
                     }
 
                     Route.ServerAccount -> {
@@ -773,7 +786,7 @@ private fun LibraryRoute(
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTranslation: () -> Unit,
-    onSyncNow: () -> Unit,
+    onSyncNow: suspend () -> com.chmouel.liseur.data.remote.SyncOutcome,
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,

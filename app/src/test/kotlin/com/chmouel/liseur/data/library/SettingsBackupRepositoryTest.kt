@@ -550,6 +550,11 @@ class SettingsBackupRepositoryTest {
         val sourceApp = AppSettingsRepository(sourceStore)
         val sourceReader = ReaderPreferencesRepository(store("source-reader.preferences_pb"))
         sourceApp.setThemeMode(ThemeMode.DARK)
+        val arrangement = com.chmouel.liseur.reader.annotations.SelectionActionLayout.default
+            .move(com.chmouel.liseur.reader.annotations.SelectionAction.COPY, 0)
+            .withStyle(com.chmouel.liseur.reader.annotations.SelectionAction.COPY, com.chmouel.liseur.reader.annotations.SelectionActionStyle.LABEL)
+            .withLabel(com.chmouel.liseur.reader.annotations.SelectionAction.COPY, "Copier : 中文, 100%")
+        sourceApp.setSelectionActionLayout(arrangement)
         sourceReader.setFontSize(1.75)
         sourceReader.setHyphens(true)
 
@@ -559,7 +564,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(SettingsBackupExportResult.Exported(0), source.exportTo(uri))
         val inspected = source.inspect(uri) as SettingsBackupInspection.Ready
-        assertEquals(SettingsBackupPreview(settingCount = 3, fontCount = 0), inspected.preview)
+        assertEquals(SettingsBackupPreview(settingCount = 4, fontCount = 0), inspected.preview)
         source.discardInspection(inspected.archiveId)
 
         val settings = ZipFile(backup).use { zip ->
@@ -575,6 +580,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(restored, uri))
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
+        assertEquals(arrangement, restoredApp.settings.first().selectionActionLayout)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
     }

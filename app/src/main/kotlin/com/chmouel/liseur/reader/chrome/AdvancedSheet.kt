@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -37,6 +37,7 @@ import com.chmouel.liseur.data.settings.FooterSlot
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReadingCss
+import com.chmouel.liseur.ui.reading.SelectionToolbarRow
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
@@ -89,6 +90,7 @@ import com.chmouel.liseur.ui.windowWidth
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdvancedSheet(
+    scrollState: ScrollState,
     prefs: ReaderPrefs,
     scrolling: Boolean,
     autoScrollSpeed: Float,
@@ -101,6 +103,7 @@ fun AdvancedSheet(
     onFooterModeChanged: (FooterMode) -> Unit,
     onFooterFieldChanged: (FooterSlot, FooterField) -> Unit,
     onPageTurnStyleChanged: (PageTurnStyle) -> Unit,
+    onOpenSelectionToolbar: () -> Unit,
     highlightPalette: HighlightPalette,
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
@@ -121,7 +124,7 @@ fun AdvancedSheet(
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .align(Alignment.CenterHorizontally)
                 .widthIn(max = contentWidthCap(windowWidth()))
                 .padding(horizontal = 24.dp)
@@ -158,6 +161,7 @@ fun AdvancedSheet(
             // Not about the page but about what is done to it, so it
             // sits after everything that shapes the text and before the
             // motion rows.
+            SelectionToolbarRow(onOpenSelectionToolbar)
             ReadingHighlightPaletteControls(
                 palette = highlightPalette,
                 onTintToggled = onHighlightTintToggled,

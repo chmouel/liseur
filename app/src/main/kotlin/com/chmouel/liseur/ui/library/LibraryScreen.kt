@@ -152,6 +152,10 @@ import com.chmouel.liseur.LiseurApplication
 import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.data.remote.SyncOutcome
+import com.chmouel.liseur.ui.BusyBar
+import com.chmouel.liseur.ui.messageRes
+import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
@@ -209,7 +213,7 @@ fun LibraryScreen(
     onResetSharedSeries: (Book) -> Unit,
     deleteFailures: Flow<DeleteFailure>,
     onRefresh: () -> Unit,
-    onSyncNow: () -> Unit,
+    onSyncNow: suspend () -> SyncOutcome,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
     onDownloadAndOpen: (Book) -> Unit,
@@ -260,6 +264,38 @@ fun LibraryScreen(
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
+    var syncing by remember { mutableStateOf(false) }
+    val syncNow: () -> Unit = {
+        if (!syncing) {
+            syncing = true
+            scope.launch {
+                val outcome = try {
+                    onSyncNow()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                } finally {
+                    syncing = false
+                }
+                val message = when (outcome) {
+                    SyncOutcome.Success -> R.string.library_sync_complete
+                    SyncOutcome.Incomplete -> R.string.library_sync_continuing
+                    SyncOutcome.NotApplicable -> R.string.library_sync_unavailable
+                    is SyncOutcome.Partial -> outcome.reason.messageRes()
+                    is SyncOutcome.Failure -> outcome.reason.messageRes()
+                    null -> R.string.library_sync_failed
+                }
+                val needsAttention = outcome != SyncOutcome.Success && outcome != SyncOutcome.Incomplete
+                val result = snackbarHost.showSnackbar(
+                    message = context.getString(message),
+                    actionLabel = if (needsAttention) context.getString(R.string.settings) else null,
+                    withDismissAction = needsAttention,
+                )
+                if (result == SnackbarResult.ActionPerformed) onConnectServer()
+            }
+        }
+    }
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.server_credentials_lost)
@@ -701,12 +737,13 @@ fun LibraryScreen(
                                 }
                                 DropdownMenuItem(
                                   text = { Text(stringResource(R.string.server_sync_now)) },
+                                  enabled = !syncing,
                                   leadingIcon = {
                                     Icon(Icons.Outlined.Sync, contentDescription = null)
                                   },
                                   onClick = {
                                     moreOpen = false
-                                    onSyncNow()
+                                    syncNow()
                                   },
                                 )
                                 // Keep this setting action as the last item in the menu.
@@ -744,6 +781,14 @@ fun LibraryScreen(
                 .consumeWindowInsets(padding),
         ) {
             Column(Modifier.fillMaxSize()) {
+                if (syncing) {
+                    Text(
+                        text = stringResource(R.string.server_sync_running),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                    BusyBar(Modifier.fillMaxWidth())
+                }
                 // Above every branch below, deliberately. A notice that
                 // only appeared over a full shelf would be missing from
                 // the one case that needs it most: a new account whose
@@ -1481,6 +1526,7 @@ private fun BookGrid(
                 ContinueReadingCard(
                     entry = recent,
                     onClick = { onBookSelected(recent.book) },
+                    onActions = { onBookLongPress(recent.book) },
                 )
             }
         }
@@ -1592,6 +1638,7 @@ private fun BookGrid(
 private fun ContinueReadingCard(
     entry: ContinueReading,
     onClick: () -> Unit,
+    onActions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ElevatedCard(onClick = onClick, modifier = modifier.fillMaxWidth()) {
@@ -1613,7 +1660,7 @@ private fun ContinueReadingCard(
             Column(
                 Modifier
                     .padding(start = 16.dp)
-                    .fillMaxWidth(),
+                    .weight(1f),
             ) {
                 Text(
                     text = stringResource(R.string.continue_reading).uppercase(),
@@ -1658,6 +1705,9 @@ private fun ContinueReadingCard(
                     }
                 }
             }
+            IconButton(onClick = onActions) {
+                Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.book_actions))
+            }
         }
     }
 }
@@ -1680,8 +1730,6 @@ private fun BookCard(
     highlight: String? = null,
 ) {
     val haptics = LocalHapticFeedback.current
-    // The whole card is one thing to a screen reader: the cover, the badges
-    // and the two lines of text are all describing the same book.
     val state = bookStateDescription(book, progress)
     Column(
         modifier = modifier
@@ -1736,14 +1784,20 @@ private fun BookCard(
                 .padding(top = 6.dp)
                 .heightIn(min = 56.dp),
         ) {
-            Text(
-                text = searchHighlighted(book.displayTitle, highlight),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 18.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = searchHighlighted(book.displayTitle, highlight),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 18.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onLongClick) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.book_actions))
+                }
+            }
             book.displayAuthor?.let {
                 Spacer(Modifier.height(2.dp))
                 Text(

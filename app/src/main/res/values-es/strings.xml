@@ -27,6 +27,7 @@
     <string name="add_book_hint">Elige un solo EPUB de tu dispositivo o de tu almacenamiento en la nube.</string>
     <string name="connect_server_hint">Explora calibre-web, Komga, liseur-sync o cualquier catálogo OPDS.</string>
     <string name="search_books">Buscar libros</string>
+    <string name="clear_search">Borrar búsqueda</string>
     <string name="filter_menu">Filtrar</string>
     <string name="filter_availability">En el dispositivo</string>
     <string name="filter_reading">Lectura</string>
@@ -343,6 +344,10 @@
     <string name="server_sync_clear_translations_on_finish">Borrar las traducciones de un libro al terminarlo</string>
     <string name="server_sync_clear_translations_on_finish_hint">Elimina sus traducciones de frases guardadas de este dispositivo y de tu cuenta.</string>
     <string name="server_sync_running">Sincronizando posiciones de lectura…</string>
+    <string name="library_sync_complete">Posiciones de lectura sincronizadas.</string>
+    <string name="library_sync_continuing">Posiciones de lectura actualizadas. Se siguen sincronizando más libros en segundo plano.</string>
+    <string name="library_sync_unavailable">No se ha configurado la sincronización de posiciones de lectura.</string>
+    <string name="library_sync_failed">No se pudieron sincronizar las posiciones de lectura. Revisa la configuración del servidor e inténtalo de nuevo.</string>
     <string name="server_sync_offline">No se pudo contactar con el servidor; las posiciones se sincronizarán más tarde.</string>
     <string name="reader_sync_book">Sincronizar este libro</string>
     <string name="reader_sync_book_in_step">Este libro ya está sincronizado con el servidor.</string>
@@ -1643,4 +1648,23 @@
     <string name="settings_dictionary_on_long_press">Abrir el diccionario con una pulsación larga</string>
     <string name="settings_dictionary_on_long_press_detail">Abre las definiciones al mantener pulsada una palabra. La ficha conserva las acciones de selección. Las consultas en línea se activan por separado.</string>
     <string name="dictionary_select_text">Seleccionar texto</string>
+    <string name="selection_copy">Copiar</string>
+    <string name="selection_citation">Copiar con cita</string>
+    <string name="selection_open_with">Abrir con</string>
+    <string name="selection_web_search">Buscar en la web</string>
+    <string name="selection_copied">Copiado</string>
+    <string name="selection_no_handler">No hay ninguna aplicación disponible</string>
+    <string name="selection_text_unavailable">No se pudo leer el texto seleccionado. Vuelve a seleccionarlo e inténtalo de nuevo.</string>
+    <string name="selection_arrange">Barra de selección</string>
+    <string name="selection_availability_help">Algunas acciones solo aparecen cuando están disponibles para la selección o en este dispositivo.</string>
+    <string name="selection_move_up">Subir %1$s</string>
+    <string name="selection_move_down">Bajar %1$s</string>
+    <string name="selection_reset">Restablecer barra</string>
+    <string name="selection_style_icon">Icono</string>
+    <string name="selection_style_label">Texto</string>
+    <string name="selection_style_both">Icono y texto</string>
+    <string name="selection_style_hidden">Oculto</string>
+    <string name="selection_edit_label">Editar etiqueta de %1$s</string>
+    <string name="selection_label_help">Deja el campo vacío para usar la etiqueta predeterminada.</string>
+    <string name="selection_label_default">Usar etiqueta predeterminada</string>
 </resources>

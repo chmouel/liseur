@@ -4,6 +4,7 @@ import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.runtime.toMutableStateList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoutesTest {
@@ -19,6 +20,16 @@ class RoutesTest {
         assertEquals(deep, decodeRoutes(encodeRoutes(deep)))
         val settings = listOf(Route.Library, Route.Settings, Route.About, Route.Licences)
         assertEquals(settings, decodeRoutes(encodeRoutes(settings)))
+    }
+
+    @Test
+    fun selectionToolbarReturnsToReadingAppearanceAndSurvivesRestore() {
+        assertTrue(Route.SelectionToolbar.isSettingsPage)
+        val stack = mutableListOf<Route>(Route.Library, Route.Settings, Route.ReadingAppearance)
+        stack.push(Route.SelectionToolbar)
+        assertEquals(stack, decodeRoutes(encodeRoutes(stack)))
+        stack.pop()
+        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingAppearance), stack)
     }
 
     @Test

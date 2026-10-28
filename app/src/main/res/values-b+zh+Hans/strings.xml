@@ -149,6 +149,7 @@
     <string name="add_book_hint">从您的设备或云存储中选择单个 EPUB 文件。</string>
     <string name="connect_server_hint">浏览 calibre-web、Komga、liseur-sync 或任意 OPDS 书库。</string>
     <string name="search_books">搜索图书</string>
+    <string name="clear_search">清除搜索</string>
     <string name="filter_menu">筛选</string>
     <string name="filter_availability">在本机</string>
     <string name="filter_reading">在读</string>
@@ -405,6 +406,10 @@
     <string name="server_sync_clear_translations_on_finish">读完一本书时清除其翻译</string>
     <string name="server_sync_clear_translations_on_finish_hint">从此设备和你的账户中删除这本书已保存的句子翻译。</string>
     <string name="server_sync_running">正在同步阅读进度…</string>
+    <string name="library_sync_complete">阅读位置已同步。</string>
+    <string name="library_sync_continuing">阅读位置已更新。更多图书正在后台同步。</string>
+    <string name="library_sync_unavailable">尚未配置阅读位置同步。</string>
+    <string name="library_sync_failed">无法同步阅读位置。请检查服务器设置后重试。</string>
     <string name="server_sync_offline">无法连接服务器，阅读进度将在稍后同步。</string>
     <string name="reader_sync_book">同步这本书</string>
     <string name="reader_sync_book_in_step">这本书已与服务器同步。</string>
@@ -1590,4 +1595,23 @@
     <string name="settings_dictionary_on_long_press">长按打开词典</string>
     <string name="settings_dictionary_on_long_press_detail">长按单词直接查看释义。释义面板保留选择操作。在线查询仍需单独启用。</string>
     <string name="dictionary_select_text">选择文本</string>
+    <string name="selection_copy">复制</string>
+    <string name="selection_citation">复制并附引用</string>
+    <string name="selection_open_with">打开方式</string>
+    <string name="selection_web_search">网页搜索</string>
+    <string name="selection_copied">已复制</string>
+    <string name="selection_no_handler">没有可用的应用</string>
+    <string name="selection_text_unavailable">无法读取所选文本。请重新选择后重试。</string>
+    <string name="selection_arrange">选择工具栏</string>
+    <string name="selection_availability_help">部分操作仅在所选内容或设备支持时显示。</string>
+    <string name="selection_move_up">上移%1$s</string>
+    <string name="selection_move_down">下移%1$s</string>
+    <string name="selection_reset">重置工具栏</string>
+    <string name="selection_style_icon">图标</string>
+    <string name="selection_style_label">文字</string>
+    <string name="selection_style_both">图标和文字</string>
+    <string name="selection_style_hidden">隐藏</string>
+    <string name="selection_edit_label">编辑“%1$s”的标签</string>
+    <string name="selection_label_help">留空以使用默认标签。</string>
+    <string name="selection_label_default">使用默认标签</string>
 </resources>

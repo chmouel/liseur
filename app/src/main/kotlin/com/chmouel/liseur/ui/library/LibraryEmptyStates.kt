@@ -375,7 +375,7 @@ internal fun NothingMatched(
             onClick = onClear,
             modifier = Modifier.entrance(delayMillis = 2 * ENTRANCE_STEP_MS),
         ) {
-            Text(stringResource(R.string.show_all_books))
+            Text(stringResource(if (searching) R.string.clear_search else R.string.show_all_books))
         }
     }
 }
