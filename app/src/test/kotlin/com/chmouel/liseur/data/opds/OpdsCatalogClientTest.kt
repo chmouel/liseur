@@ -564,6 +564,23 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a shelf is found under its own entry's base`() {
+        pages["/opds"] = feed(
+            """
+            <entry xml:base="/opds/shelves/"><id>nav</id><title>Fiction</title>
+            <link rel="subsection" href="fiction.atom"
+                  type="application/atom+xml;profile=opds-catalog"/></entry>
+            """.trimIndent(),
+        )
+        pages["/opds/shelves/fiction.atom"] = feed(book("1"))
+
+        val (complete, books) = walk()
+
+        assertEquals(listOf("Book 1"), books.map { it.title })
+        assertTrue(complete)
+    }
+
+    @Test
     fun `a Latin-1 feed with no charset header keeps its accents`() {
         latin1["/opds"] = """<?xml version="1.0" encoding="ISO-8859-1"?>""" + feed(
             """

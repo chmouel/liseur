@@ -81,7 +81,7 @@ class OpdsCatalogClient(
             val base = fetched.url.resolveOrSelf(page.xmlBase)
             books += page.books.map { it.toRemote(scope, base) }
             page.navigation.forEach { link ->
-                val url = base.resolve(link.href)?.takeIf(scope::mayFetch)
+                val url = base.resolveLink(link)?.takeIf(scope::mayFetch)
                 if (url == null) complete = false
                 url?.let {
                     categories[it.toString()] = BrowseCategory(
@@ -273,7 +273,7 @@ class OpdsCatalogClient(
         // means what the feed says it means, and a redirect moves that
         // meaning with it.
         val base = fetched.url.resolveOrSelf(page.xmlBase)
-        val navigation = page.navigation.mapNotNull { base.resolve(it.href) }
+        val navigation = page.navigation.mapNotNull { base.resolveLink(it) }
         val nextUrl = page.nextHref?.let(base::resolve)
         return Resolved(
             books = page.books,
@@ -301,6 +301,10 @@ class OpdsCatalogClient(
 
     private fun HttpUrl.resolveOrSelf(href: String?): HttpUrl =
         href?.let { resolve(it) } ?: this
+
+    /** A navigation link, against its own entry's `xml:base` as a book's links are. */
+    private fun HttpUrl.resolveLink(link: OpdsLink): HttpUrl? =
+        resolveOrSelf(link.xmlBase).resolve(link.href)
 
     internal companion object {
         const val TAG = "opds-catalog"
