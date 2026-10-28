@@ -95,6 +95,14 @@ interface ReadAloudFeature {
     fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation? = null)
 
     /**
+     * Puts back, paused at [selection], the session [record] kept when the
+     * app closed, while nothing else is being read. It saves nothing until
+     * the listener plays, and gives up quietly unless it lands on the very
+     * sentence heard.
+     */
+    fun restorePaused(handle: OpenBookHandle, record: PausedReadAloud, selection: Locator, reader: Intent) = Unit
+
+    /**
      * The translation [bookId] is being read aloud in, for a translated
      * page to share, or null when it is not being read translated.
      */

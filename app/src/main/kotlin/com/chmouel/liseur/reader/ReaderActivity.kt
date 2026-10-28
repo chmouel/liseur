@@ -676,6 +676,12 @@ class ReaderActivity : FragmentActivity() {
                                                 )
                                             },
                                             awaitingCapture = viewModel::listenedPlaceAwaitingCapture,
+                                            captured = viewModel::listenedPlaceCaptured,
+                                            restorePaused = {
+                                                viewModel.restorePausedReadAloud(
+                                                    intent(this@ReaderActivity, open.url.toString(), open.id),
+                                                )
+                                            },
                                         )
                                     },
                                     translate = container.translate,

@@ -18,6 +18,7 @@ object ReadAloudFeatureFactory {
         settings = container.appSettings,
         bookPreferences = container.database.bookAiPreferencesDao(),
         checkpoints = container.listeningCheckpoints,
+        paused = container.pausedListening,
         connections = container.serverConnections,
         accounts = container.serviceAccounts,
     ) { control ->

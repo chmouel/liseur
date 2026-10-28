@@ -16,6 +16,8 @@ import com.chmouel.liseur.providers.ServiceAccounts
 import com.chmouel.liseur.providers.ServicesScreen
 import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
+import com.chmouel.liseur.readaloud.PausedListening
+import com.chmouel.liseur.readaloud.PausedReadAloud
 import com.chmouel.liseur.readaloud.ReadAloudBookNotice
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.readaloud.ReadAloudNotice
@@ -71,6 +73,7 @@ internal class SpeechReadAloud(
     private val connections: ServerConnections,
     private val accounts: ServiceAccounts,
     private val bookPreferences: com.chmouel.liseur.data.db.BookAiPreferencesDao? = null,
+    private val paused: PausedListening? = null,
     offered: (SessionControl) -> List<SpeechService>,
 ) : ReadAloudFeature {
 
@@ -218,10 +221,25 @@ internal class SpeechReadAloud(
     override fun translation(bookId: String): SpeechTranslation? =
         mutableCurrent.value?.takeIf { it.handle.bookId == bookId }?.translation?.takeIf { it.translations.open }
 
-    override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) {
-        val again = carried?.takeIf { it.bookId == handle.bookId }
-        carried = null
+    override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) =
+        start(handle, selection, reader, translation, restoring = null)
+
+    override fun restorePaused(handle: OpenBookHandle, record: PausedReadAloud, selection: Locator, reader: Intent) {
+        if (mutableCurrent.value != null || starting?.isActive == true) return
+        start(handle, selection, reader, translation = null, restoring = record)
+    }
+
+    private fun start(
+        handle: OpenBookHandle,
+        selection: Locator,
+        reader: Intent,
+        translation: SpeechTranslation?,
+        restoring: PausedReadAloud?,
+    ) {
+        val again = if (restoring == null) carried?.takeIf { it.bookId == handle.bookId }.also { carried = null } else null
         stop()
+        // Reading anything else from here on: the pause left before is over.
+        if (restoring == null) paused?.forget()
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
@@ -247,15 +265,22 @@ internal class SpeechReadAloud(
                 } else {
                     SpeechLanguage.ofBook(handle.publication.metadata.languages)
                 }
-                val catalogue = service.catalogue(s) ?: return@launch notSetUp(handle.bookId)
-                val pick = again?.pick ?: when (val resolved = VoiceResolver.resolve(book, catalogue, s.voicePreferences)) {
+                val catalogue = service.catalogue(s) ?: return@launch notSetUp(handle.bookId, quietly = restoring != null)
+                val kept = restoring?.let { r -> VoicePick(r.voice, r.language).takeIf { catalogue.voices.any { it.id == r.voice } } }
+                val pick = again?.pick ?: kept ?: when (val resolved = VoiceResolver.resolve(book, catalogue, s.voicePreferences)) {
                     is VoiceResolution.Resolved -> resolved.pick
-                    is VoiceResolution.NeedsChoice -> ask(PendingChoice(handle.bookId, service, book, resolved.reason))
+                    is VoiceResolution.NeedsChoice -> {
+                        // Nobody asked to listen yet: a pause put back never asks for a voice.
+                        if (restoring != null) return@launch
+                        ask(PendingChoice(handle.bookId, service, book, resolved.reason))
+                    }
                 }
                 val current = settings.settings.first()
                 val owner = service.owner(current)
                 startingOwner = owner
-                val voice = service.directedVoice(current, pick.voice, bookPreferences?.get(handle.bookId)?.narrationDirection.orEmpty()) ?: return@launch notSetUp(handle.bookId)
+                val voice = service.directedVoice(current, pick.voice, bookPreferences?.get(handle.bookId)?.narrationDirection.orEmpty()) ?: return@launch notSetUp(handle.bookId, quietly = restoring != null)
+                // A move saved while this was on its way wins over the pause put back.
+                if (restoring != null && paused?.stillStands(restoring) != true) return@launch
                 val session = ReadAloudSession(
                     application = application,
                     handle = handle,
@@ -268,6 +293,7 @@ internal class SpeechReadAloud(
                     onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
                     onChapterEnded = { setSleepTimer(null) },
+                    onPaused = ::pausedAt,
                     translation = translation,
                     contextConfiguration = ::contextConfiguration,
                 )
@@ -283,13 +309,17 @@ internal class SpeechReadAloud(
                 try {
                     startService()
                 } catch (e: RuntimeException) {
+                    if (restoring != null) {
+                        session.putAway()
+                        return@launch
+                    }
                     session.stop()
                     mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.Output))
                     return@launch
                 }
                 // A sleep timer that ran out while the settings were open leaves it paused.
                 val slept = (again?.timer as? SleepTimer.Timed)?.let { it.endsAt <= SystemClock.elapsedRealtime() } == true
-                session.start(selection, play = (again?.play ?: true) && !slept)
+                session.start(selection, play = restoring == null && (again?.play ?: true) && !slept, restoring = restoring != null)
             } catch (e: CancellationException) {
                 throw e
             } finally {
@@ -365,6 +395,19 @@ internal class SpeechReadAloud(
         mutableCurrent.value?.pause()
     }
 
+    private fun pausedAt(session: ReadAloudSession, heard: Locator?) {
+        val paused = paused ?: return
+        val bookId = session.handle.bookId
+        if (heard == null) return paused.forget(bookId)
+        val choice = session.choice.value
+        paused.paused(bookId, heard.toJSON().toString(), choice.voice, choice.language)
+    }
+
+    /** Ends the session as the app is put away, leaving a pause to come back to. */
+    fun putAway() {
+        mutableCurrent.value?.putAway()
+    }
+
     private val mutableSleepTimer = MutableStateFlow<SleepTimer?>(null)
 
     /** When reading aloud pauses by itself, or null for never. */
@@ -434,7 +477,8 @@ internal class SpeechReadAloud(
         mutableCurrent.value?.skipBackward()
     }
 
-    private fun notSetUp(bookId: String) {
+    private fun notSetUp(bookId: String, quietly: Boolean = false) {
+        if (quietly) return
         mutableNotices.tryEmit(ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp))
     }
 

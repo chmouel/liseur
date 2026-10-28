@@ -20,6 +20,10 @@ class ReaderReadAloud(
      * to be measured for BookOrbit; null when there is nothing to measure.
      */
     val awaitingCapture: () -> Locator?,
+    /** The page showing the place listening saved was saved as [Locator]. */
+    val captured: (Locator) -> Unit = {},
+    /** Puts back the session the book was paused in when the app closed, if it still stands. */
+    val restorePaused: suspend () -> Unit = {},
 )
 
 internal fun readAloudStartLocator(selected: Locator, original: Locator?, translated: Boolean): Locator =

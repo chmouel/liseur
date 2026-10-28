@@ -64,6 +64,12 @@ internal class ReadAloudSession(
     private val onNotice: (ReadAloudNotice) -> Unit,
     private val onEnded: (ReadAloudSession) -> Unit,
     private val onChapterEnded: () -> Unit,
+    /**
+     * Told the place heard each time it pauses there, read in the book's
+     * own words, and null once that pause no longer stands: playing on,
+     * or stopping other than by [putAway].
+     */
+    private val onPaused: (ReadAloudSession, Locator?) -> Unit = { _, _ -> },
     private val checkpointMillis: Long = CHECKPOINT_MILLIS,
     /**
      * Read in translation: each sentence is translated, the way the page
@@ -75,6 +81,9 @@ internal class ReadAloudSession(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val publication = handle.publication
+
+    // Read translated, the text must stay the page's own: translations are keyed and placed on it.
+    private val spokenPublication = if (translation == null) NoteMarks.withoutMarks(publication) else publication
     private val mutableChoice = MutableStateFlow(VoicePick(voice.name, language))
 
     /** The voice reading and the language it reads in, which may differ from what the settings hold. */
@@ -135,7 +144,7 @@ internal class ReadAloudSession(
             val settings = playback.navigator.value?.settings?.value
             val cutIn = textLanguage
             PublicationUtteranceCursor(
-                publication,
+                spokenPublication,
                 locator,
                 tokenizerFactory,
                 settings?.language ?: cutIn ?: publication.metadata.language,
@@ -158,7 +167,7 @@ internal class ReadAloudSession(
         opener = { initial, observer, listener ->
             val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, spoken))
             val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
-            TtsNavigatorFactory(application, publication, provider, tokenizerFactory)
+            TtsNavigatorFactory(application, spokenPublication, provider, tokenizerFactory)
                 ?.createNavigator(listener, initial, SpeechTtsPreferences(textLanguage))
                 ?.getOrNull()
         },
@@ -234,6 +243,7 @@ internal class ReadAloudSession(
                     // Playing on within the same sentence moves no location.
                     spokenAt = System.currentTimeMillis()
                     claim()
+                    onPaused(this@ReadAloudSession, null)
                 } else {
                     settle()
                 }
@@ -251,10 +261,15 @@ internal class ReadAloudSession(
         }
     }
 
-    /** Plays from the sentence [selection] starts in, or waits there paused without [play]. */
-    fun start(selection: Locator, play: Boolean = true) {
+    /**
+     * Plays from the sentence [selection] starts in, or waits there paused
+     * without [play], taking the place only once it plays. [restoring] a
+     * pause from before the app closed gives up unless it lands on the
+     * very sentence.
+     */
+    fun start(selection: Locator, play: Boolean = true, restoring: Boolean = false) {
         startedFrom = selection
-        claim()
+        if (play) claim()
         scope.launch {
             val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, textLanguage ?: publication.metadata.language)
             val target = SelectionTarget.of(selection, sentences)
@@ -262,8 +277,11 @@ internal class ReadAloudSession(
             mutableStarting.value = false
             when (landing) {
                 ReadAloudPlayback.Landing.Sentence -> Unit
-                ReadAloudPlayback.Landing.ElementStart -> onNotice(ReadAloudNotice.SelectionNotFound)
-                ReadAloudPlayback.Landing.Failed -> {
+                ReadAloudPlayback.Landing.ElementStart -> if (restoring) stop() else onNotice(ReadAloudNotice.SelectionNotFound)
+                // A pause put back that cannot play now is still there for the next opening.
+                ReadAloudPlayback.Landing.Failed -> if (restoring) {
+                    putAway()
+                } else {
                     onNotice(ReadAloudNotice.Unavailable)
                     stop()
                 }
@@ -313,6 +331,15 @@ internal class ReadAloudSession(
     /** Ends the session, saving the place heard if it still owns it. */
     fun stop() {
         if (ended) return
+        end()
+        onPaused(this, null)
+    }
+
+    /** [stop], as the system puts the app away: a pause still stands for when it comes back. */
+    fun putAway() = end()
+
+    private fun end() {
+        if (ended) return
         ended = true
         endedAt = place() ?: startedFrom
         settle()
@@ -341,15 +368,18 @@ internal class ReadAloudSession(
         val held = generation ?: return
         checkpointJob?.cancel()
         checkpointJob = null
-        if (handle.listeningHolds(held)) save(share = true)
+        val heard = if (handle.listeningHolds(held)) save(share = true) else null
         handle.handBack(held)
         generation = null
+        // Read translated, the place is only ever the sentence as the page shows it.
+        if (heard != null && !ended && translation == null) onPaused(this, heard)
     }
 
-    private fun save(share: Boolean) {
-        val held = generation ?: return
-        val heard = place() ?: return
-        checkpoints.save(handle, held, heard, spokenAt, share)
+    /** The place saved, or null when none was queued. */
+    private fun save(share: Boolean): Locator? {
+        val held = generation ?: return null
+        val heard = place() ?: return null
+        return heard.takeIf { checkpoints.save(handle, held, it, spokenAt, share) }
     }
 
     // The failed sentence was never heard, but it is where resuming starts.
