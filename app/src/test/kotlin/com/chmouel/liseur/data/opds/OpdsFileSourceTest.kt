@@ -2,9 +2,11 @@ package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -101,4 +103,63 @@ class OpdsFileSourceTest {
         remoteUuid = "1",
         downloadHref = href,
     )
+
+    /** Runs [href]'s download through the real transport, with [hops] standing in for the network. */
+    private fun followed(href: String, hops: Map<String, String>): Pair<Result<Int>, List<okhttp3.Request>> {
+        val sent = mutableListOf<okhttp3.Request>()
+        val client = OpdsFileSource().downloadHttp().client.newBuilder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                sent += req
+                val location = hops[req.url.toString()]
+                okhttp3.Response.Builder()
+                    .request(req)
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .code(if (location != null) 302 else 200)
+                    .message("")
+                    .apply { location?.let { header("Location", it) } }
+                    .body("epub".toResponseBody())
+                    .build()
+            }
+            .build()
+        val result = runCatching {
+            client.newCall(request(href)!!.build()).execute().use { it.code }
+        }
+        return result to sent
+    }
+
+    @Test
+    fun `a redirect to plain http is not followed`() {
+        val (result, sent) = followed(
+            "/get/1.epub",
+            mapOf("https://books.example/get/1.epub" to "http://books.example/get/1.epub"),
+        )
+
+        assertTrue(result.exceptionOrNull() is com.chmouel.liseur.data.remote.RemoteHttpFailure)
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun `a redirect into the house is not followed`() {
+        val (result, sent) = followed(
+            "/get/1.epub",
+            mapOf("https://books.example/get/1.epub" to "https://192.168.1.9/1.epub"),
+        )
+
+        assertTrue(result.isFailure)
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun `a redirect to another host is followed without the password`() {
+        val (result, sent) = followed(
+            "/get/1.epub",
+            mapOf("https://books.example/get/1.epub" to "https://cdn.example/1.epub"),
+        )
+
+        assertEquals(200, result.getOrThrow())
+        assertNotNull(sent[0].header("Authorization"))
+        assertEquals("https://cdn.example/1.epub", sent[1].url.toString())
+        assertNull(sent[1].header("Authorization"))
+    }
 }
