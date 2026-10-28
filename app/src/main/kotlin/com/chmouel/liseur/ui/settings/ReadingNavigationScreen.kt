@@ -194,13 +194,6 @@ fun ReadingNavigationScreen(
                     if (settings.definitionTarget == DefinitionTarget.BUILT_IN) {
                         RowDivider()
                         SwitchRow(
-                            title = stringResource(R.string.settings_dictionary_on_long_press),
-                            subtitle = stringResource(R.string.settings_dictionary_on_long_press_detail),
-                            checked = settings.dictionaryOnLongPress,
-                            onCheckedChange = onDictionaryOnLongPress,
-                        )
-                        RowDivider()
-                        SwitchRow(
                             title = stringResource(R.string.settings_dictionary_lookup),
                             subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
                             checked = settings.dictionaryLookupEnabled,
@@ -218,6 +211,13 @@ fun ReadingNavigationScreen(
                                 onSelected = onDictionaryAltLanguage,
                             )
                         }
+                        RowDivider()
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dictionary_on_long_press),
+                            subtitle = stringResource(R.string.settings_dictionary_on_long_press_detail),
+                            checked = settings.dictionaryOnLongPress,
+                            onCheckedChange = onDictionaryOnLongPress,
+                        )
                     }
                 }
 
