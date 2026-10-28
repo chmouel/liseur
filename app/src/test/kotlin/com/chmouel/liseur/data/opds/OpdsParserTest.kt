@@ -44,6 +44,36 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `keeps all named authors in feed order`() {
+        val multipleAuthors = feed.replace(
+            "<author><name>Ernest Hemingway</name></author>",
+            """
+            <author><name> Joseph Conrad </name></author>
+            <author><name>   </name></author>
+            <author><uri>https://example.org/unknown</uri></author>
+            <author><name> Ford Madox Ford </name></author>
+            <contributor><name>A translator</name></contributor>
+            """.trimIndent(),
+        )
+        val book = OpdsParser.parse(multipleAuthors).books.single()
+
+        assertEquals("Joseph Conrad, Ford Madox Ford", book.author)
+        assertEquals(book.author, book.toRemote().author)
+    }
+
+    @Test
+    fun `an entry without named authors has no author`() {
+        for (authors in listOf("", "<author/>", "<author><name>   </name></author>")) {
+            val withoutAuthors = feed.replace(
+                "<author><name>Ernest Hemingway</name></author>",
+                authors,
+            )
+
+            assertNull(OpdsParser.parse(withoutAuthors).books.single().author)
+        }
+    }
+
+    @Test
     fun `prefers the plain epub over the kepub`() {
         // Both are offered once the server has kepubify set up, and the
         // plain EPUB is the smaller download.
