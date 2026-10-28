@@ -1684,12 +1684,12 @@
     <string name="selection_url_help">Touchez un champ pour l’ajouter : {text} est la sélection, {page} et {pages} sont les pages de Liseur, pas celles du livre imprimé. Exemple : https://example.org/search?q={text}</string>
     <string name="selection_url_invalid">Saisissez une URL HTTPS avec un champ comme {text} après le nom d’hôte, sans nom d’utilisateur ni mot de passe.</string>
     <string name="selection_insert_placeholder">Insérer %1$s</string>
-    <string name="selection_ask_brave_reading">Je lis « %1$s ».</string>
-    <string name="selection_ask_brave_reading_by">Je lis « %1$s » de %2$s.</string>
-    <string name="selection_ask_brave_chapter">Le passage vient du chapitre « %1$s ».</string>
-    <string name="selection_ask_brave_language">Le passage est en %1$s.</string>
-    <string name="selection_ask_brave_explain">Explique ce passage : « %1$s »</string>
-    <string name="selection_ask_brave_no_spoilers">Ne révèle rien de ce qui se passe plus loin dans le livre.</string>
+    <string name="selection_ask_ai_reading">Je lis « %1$s ».</string>
+    <string name="selection_ask_ai_reading_by">Je lis « %1$s » de %2$s.</string>
+    <string name="selection_ask_ai_chapter">Le passage vient du chapitre « %1$s ».</string>
+    <string name="selection_ask_ai_language">Le passage est en %1$s.</string>
+    <string name="selection_ask_ai_explain">Explique ce passage : « %1$s »</string>
+    <string name="selection_ask_ai_no_spoilers">Ne révèle rien de ce qui se passe plus loin dans le livre.</string>
     <string name="selection_name_required">Saisissez un nom.</string>
     <string name="selection_delete_action">Supprimer l’action</string>
 </resources>

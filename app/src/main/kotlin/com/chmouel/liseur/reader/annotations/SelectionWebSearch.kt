@@ -32,6 +32,9 @@ internal fun selectionWebsiteTemplate(value: String): String? {
     return template
 }
 
+/** Built-ins that send an AI assistant a question about the passage rather than the bare selection. */
+internal val SelectionAction?.asksAi: Boolean get() = this == SelectionAction.ASK_BRAVE || this == SelectionAction.DUCK_AI
+
 internal fun selectionWebUrl(
     entry: SelectionActionEntry,
     text: String,
@@ -45,6 +48,7 @@ internal fun selectionWebUrl(
             SelectionAction.WIKIPEDIA -> "https://${wikipediaEdition(language)}.wikipedia.org/w/index.php?search={text}"
             SelectionAction.OPEN_LIBRARY -> "https://openlibrary.org/search?q={text}"
             SelectionAction.ASK_BRAVE -> "https://search.brave.com/ask?q={text}"
+            SelectionAction.DUCK_AI -> "https://duckduckgo.com/?q={text}&ia=chat&bang=true"
             else -> return null
         }
     }

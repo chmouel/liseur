@@ -1684,12 +1684,12 @@
     <string name="selection_url_help">Toca un marcador para añadirlo: {text} es la selección, {page} y {pages} son páginas de Liseur, no las impresas. Ejemplo: https://example.org/search?q={text}</string>
     <string name="selection_url_invalid">Introduce una URL HTTPS con un marcador como {text} después del nombre de host y sin usuario ni contraseña.</string>
     <string name="selection_insert_placeholder">Insertar %1$s</string>
-    <string name="selection_ask_brave_reading">Estoy leyendo «%1$s».</string>
-    <string name="selection_ask_brave_reading_by">Estoy leyendo «%1$s» de %2$s.</string>
-    <string name="selection_ask_brave_chapter">El pasaje es del capítulo «%1$s».</string>
-    <string name="selection_ask_brave_language">El pasaje está en %1$s.</string>
-    <string name="selection_ask_brave_explain">Explica este pasaje: «%1$s»</string>
-    <string name="selection_ask_brave_no_spoilers">No reveles nada de lo que pasa más adelante en el libro.</string>
+    <string name="selection_ask_ai_reading">Estoy leyendo «%1$s».</string>
+    <string name="selection_ask_ai_reading_by">Estoy leyendo «%1$s» de %2$s.</string>
+    <string name="selection_ask_ai_chapter">El pasaje es del capítulo «%1$s».</string>
+    <string name="selection_ask_ai_language">El pasaje está en %1$s.</string>
+    <string name="selection_ask_ai_explain">Explica este pasaje: «%1$s»</string>
+    <string name="selection_ask_ai_no_spoilers">No reveles nada de lo que pasa más adelante en el libro.</string>
     <string name="selection_name_required">Introduce un nombre.</string>
     <string name="selection_delete_action">Eliminar acción</string>
 </resources>

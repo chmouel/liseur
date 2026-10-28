@@ -1744,16 +1744,18 @@
     <string name="selection_url_help">Tap a placeholder to add it: {text} is the selection, {page} and {pages} are Liseur pages, not printed ones. Example: https://example.org/search?q={text}</string>
     <string name="selection_url_invalid">Enter an HTTPS URL with a placeholder such as {text} after the hostname and no username or password.</string>
     <string name="selection_insert_placeholder">Insert %1$s</string>
-    <string name="selection_ask_brave_reading">I’m reading “%1$s”.</string>
-    <string name="selection_ask_brave_reading_by">I’m reading “%1$s” by %2$s.</string>
-    <string name="selection_ask_brave_chapter">The passage comes from the chapter “%1$s”.</string>
-    <string name="selection_ask_brave_language">The passage is in %1$s.</string>
-    <string name="selection_ask_brave_explain">Please explain this passage: “%1$s”</string>
-    <string name="selection_ask_brave_no_spoilers">Don’t reveal anything that happens later in the book.</string>
+    <string name="selection_ask_ai_reading">I’m reading “%1$s”.</string>
+    <string name="selection_ask_ai_reading_by">I’m reading “%1$s” by %2$s.</string>
+    <string name="selection_ask_ai_chapter">The passage comes from the chapter “%1$s”.</string>
+    <string name="selection_ask_ai_language">The passage is in %1$s.</string>
+    <string name="selection_ask_ai_explain">Please explain this passage: “%1$s”</string>
+    <string name="selection_ask_ai_no_spoilers">Don’t reveal anything that happens later in the book.</string>
     <string name="selection_name_required">Enter a name.</string>
     <string name="selection_delete_action">Delete action</string>
     <string name="selection_wikipedia" translatable="false">Wikipedia</string>
     <string name="selection_open_library" translatable="false">Open Library</string>
     <string name="selection_ask_brave" translatable="false">Ask Brave</string>
     <string name="selection_icon_brave" translatable="false">Brave</string>
+    <string name="selection_duck_ai" translatable="false">Duck.ai</string>
+    <string name="selection_icon_duckduckgo" translatable="false">DuckDuckGo</string>
 </resources>
