@@ -38,15 +38,12 @@ import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReadingCss
 import com.chmouel.liseur.ui.reading.SelectionToolbarRow
-import com.chmouel.liseur.reader.annotations.HighlightPalette
-import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
 import com.chmouel.liseur.ui.reading.ReadingFooterControls
-import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
@@ -104,9 +101,6 @@ fun AdvancedSheet(
     onFooterFieldChanged: (FooterSlot, FooterField) -> Unit,
     onPageTurnStyleChanged: (PageTurnStyle) -> Unit,
     onOpenSelectionToolbar: () -> Unit,
-    highlightPalette: HighlightPalette,
-    onHighlightTintToggled: (HighlightTint) -> Unit,
-    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     onAutoScrollSpeedChanged: (Float) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnChanged: (Boolean) -> Unit,
@@ -162,11 +156,6 @@ fun AdvancedSheet(
             // sits after everything that shapes the text and before the
             // motion rows.
             SelectionToolbarRow(onOpenSelectionToolbar)
-            ReadingHighlightPaletteControls(
-                palette = highlightPalette,
-                onTintToggled = onHighlightTintToggled,
-                onDefaultChanged = onHighlightDefaultTintChanged,
-            )
             // Nothing lifts off the screen when the text is scrolled, so
             // there is no page whose motion this could describe.
             if (!scrolling) {

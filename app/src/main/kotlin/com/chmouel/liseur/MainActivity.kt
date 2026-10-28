@@ -624,11 +624,6 @@ private fun LiseurApp(
                                 scope.launch { readerPreferences.setFooterField(slot, field) }
                             },
                             onOpenSelectionToolbar = { backStack.push(Route.SelectionToolbar) },
-                            highlightPalette = settings.highlightPalette,
-                            onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
-                            onHighlightDefaultTint = {
-                                scope.launch { repository.setHighlightDefaultTint(it) }
-                            },
                             fineTypography = FineTypographyActions(
                                 onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
                                 onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },
@@ -652,6 +647,11 @@ private fun LiseurApp(
                             SelectionToolbarScreen(
                                 layout = settings.selectionActionLayout,
                                 onChanged = { change -> scope.launch { repository.updateSelectionActionLayout(change) } },
+                                highlightPalette = settings.highlightPalette,
+                                onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
+                                onHighlightDefaultTintChanged = {
+                                    scope.launch { repository.setHighlightDefaultTint(it) }
+                                },
                                 onBack = back,
                             )
                         }

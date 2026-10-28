@@ -19,6 +19,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingSelectionActions
@@ -29,6 +31,9 @@ import com.chmouel.liseur.ui.windowWidth
 fun SelectionToolbarScreen(
     layout: SelectionActionLayout,
     onChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     onBack: () -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -49,6 +54,9 @@ fun SelectionToolbarScreen(
             ReadingSelectionActions(
                 layout,
                 onChanged,
+                palette = highlightPalette,
+                onTintToggled = onHighlightTintToggled,
+                onDefaultTintChanged = onHighlightDefaultTintChanged,
                 modifier = Modifier.widthIn(max = contentWidthCap(windowWidth())).fillMaxWidth(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
                 showTitle = false,

@@ -7,6 +7,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
@@ -18,12 +20,18 @@ import com.chmouel.liseur.ui.windowWidth
 fun SelectionToolbarSheet(
     layout: SelectionActionLayout,
     onChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
         ReadingSelectionActions(
             layout,
             onChanged,
+            palette = highlightPalette,
+            onTintToggled = onHighlightTintToggled,
+            onDefaultTintChanged = onHighlightDefaultTintChanged,
             modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = contentWidthCap(windowWidth())),
             contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
         )

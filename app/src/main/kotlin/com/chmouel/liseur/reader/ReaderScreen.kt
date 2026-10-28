@@ -5340,6 +5340,9 @@ internal fun ReaderScreen(
         SelectionToolbarSheet(
             layout = selectionActionLayout,
             onChanged = onSelectionActionLayoutChanged,
+            highlightPalette = highlightPalette,
+            onHighlightTintToggled = onHighlightTintToggled,
+            onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
             onDismiss = { sheet = ReaderSheet.ADVANCED },
         )
     }
@@ -5363,9 +5366,6 @@ internal fun ReaderScreen(
             onFooterFieldChanged = onProgressAction.setFooterField,
             onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
             onOpenSelectionToolbar = { sheet = ReaderSheet.SELECTION_TOOLBAR },
-            highlightPalette = highlightPalette,
-            onHighlightTintToggled = onHighlightTintToggled,
-            onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
             onAutoScrollSpeedChanged = onPrefsAction.setAutoScrollSpeed,
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
