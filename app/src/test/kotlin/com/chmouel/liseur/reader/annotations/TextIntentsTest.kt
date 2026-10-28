@@ -26,7 +26,7 @@ class TextIntentsTest {
         val entry = SelectionActionEntry(SelectionAction.WIKIPEDIA, SelectionActionStyle.BOTH)
         for (inSheet in listOf(false, true)) {
             val text = selectionActionText("original words", true, inSheet, "mots affichés") { "mots affichés" }
-            val language = selectionSearchLanguage(listOf("en"), true, "fr")
+            val language = selectionSearchLanguage(listOf("en"), "fr")
             val intent = selectionWebsiteIntent(entry, requireNotNull(text), language)!!
             assertEquals(Intent.ACTION_VIEW, intent.action)
             assertEquals("https://fr.wikipedia.org/w/index.php?search=mots%20affich%C3%A9s", intent.dataString)

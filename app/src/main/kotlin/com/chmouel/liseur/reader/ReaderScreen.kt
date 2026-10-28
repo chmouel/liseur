@@ -4705,6 +4705,23 @@ internal fun ReaderScreen(
         tappedSelection = null
     }
 
+    // On a translated page, text before the sentence the translation started
+    // from stays in the book's language. Null when the page cannot tell.
+    suspend fun selectionShowsTranslation(
+        nav: EpubNavigatorFragment,
+        run: PageTranslation<Locator>,
+        active: ActiveSelection,
+        displayedText: String?,
+    ): Boolean? {
+        val originalSentence = displayedText?.let { text ->
+            ResourceAddress.canonicalPath(active.locator.href.toString())?.let { href ->
+                run.original(href, text, active.locator.text.before)
+            }
+        }
+        val translatedSentence = originalSentence?.let { run.translationOf(it) } ?: return false
+        return TranslatedPages.selectionIntersectsAppliedSwap(nav, translatedSentence.sentence)
+    }
+
     fun lookUpSelection(active: ActiveSelection, automatically: Boolean = false) {
         val translationRun = if (pageTranslated) pageTranslation ?: restoringPageTranslation else null
         fun abandonAutomaticLookup() {
@@ -4746,15 +4763,7 @@ internal fun ReaderScreen(
                         dismissSelection()
                         return@launch
                     }
-                    val originalSentence = displayedText?.let { text ->
-                        ResourceAddress.canonicalPath(active.locator.href.toString())?.let { href ->
-                            run.original(href, text, active.locator.text.before)
-                        }
-                    }
-                    val translatedSentence = originalSentence?.let { run.translationOf(it) }
-                    val intersectsAppliedSwap = translatedSentence?.let {
-                        TranslatedPages.selectionIntersectsAppliedSwap(nav, it.sentence)
-                    }
+                    val showsTranslation = selectionShowsTranslation(nav, run, active, displayedText)
                     if (navigatorNow !== nav || (tappedSelection ?: selection ?: automaticSelection) !== active) {
                         abandonAutomaticLookup()
                         return@launch
@@ -4766,13 +4775,10 @@ internal fun ReaderScreen(
                         dismissSelection()
                         return@launch
                     }
-                    val lookupLanguage = when {
-                        translatedSentence == null ->
-                            run.translator.source ?: publication.metadata.languages.firstOrNull()
-                        intersectsAppliedSwap == true -> run.translator.target
-                        intersectsAppliedSwap == false ->
-                            run.translator.source ?: publication.metadata.languages.firstOrNull()
-                        else -> {
+                    val lookupLanguage = when (showsTranslation) {
+                        true -> run.translator.target
+                        false -> run.translator.source ?: publication.metadata.languages.firstOrNull()
+                        null -> {
                             dismissSelection()
                             Toast.makeText(
                                 context,
@@ -4843,7 +4849,11 @@ internal fun ReaderScreen(
     val webSearchAvailable = remember(intentAvailability) { context.canHandleSelectionIntent(webSearchIntent()) }
 
     fun selectionActionsFor(active: ActiveSelection, inSheet: Boolean): SelectionActions {
-        fun actOnDisplayedText(block: (String) -> Unit) {
+        // The language is that of the text as shown, which on a translated
+        // page can still be the book's own. The sheet keeps the one its
+        // lookup resolved.
+        fun actOnShownText(withLanguage: Boolean, block: (String, String?) -> Unit) {
+            val sheetLanguage = defineWord?.language
             effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
                 val nav = navigatorNow
                 val translatedAt = pageTranslatedTurns
@@ -4856,6 +4866,14 @@ internal fun ReaderScreen(
                     retainedText = retainedDictionarySelection?.displayedText,
                     readDisplayedText = { nav?.let { TranslatedPages.selectedText(it) } },
                 )
+                val run = pageTranslation ?: restoringPageTranslation
+                val shownLanguage = when {
+                    !withLanguage || !pageTranslated -> null
+                    inSheet -> sheetLanguage
+                    nav == null || run == null || text == null -> run?.translator?.target
+                    selectionShowsTranslation(nav, run, live, text) == false -> run.translator.source
+                    else -> run.translator.target
+                }
                 val stillSelected = if (inSheet) automaticSelection === active else
                     live === selection || live === tappedSelection
                 if (!stillSelected || navigatorNow !== nav || translatedAt != pageTranslatedTurns) return@launch
@@ -4864,9 +4882,10 @@ internal fun ReaderScreen(
                     return@launch
                 }
                 if (inSheet) defineWord = null
-                block(text)
+                block(text, if (withLanguage) selectionSearchLanguage(publication.metadata.languages, shownLanguage) else null)
             }
         }
+        fun actOnDisplayedText(block: (String) -> Unit) = actOnShownText(false) { text, _ -> block(text) }
         fun act(block: (ActiveSelection) -> Unit) {
             if (inSheet) {
                 defineWord = null
@@ -4879,9 +4898,7 @@ internal fun ReaderScreen(
         }
         return SelectionActions(
             layout = selectionActionLayout,
-            onWebsite = { entry -> actOnDisplayedText { text ->
-                val language = selectionSearchLanguage(publication.metadata.languages, pageTranslated,
-                    (pageTranslation ?: restoringPageTranslation)?.translator?.target)
+            onWebsite = { entry -> actOnShownText(withLanguage = true) { text, language ->
                 val here = progressFlow.value
                 val shownPage = footerPages(reflowableText, sectionScreens, here, bookScreens)
                 val book = SelectionBookContext(

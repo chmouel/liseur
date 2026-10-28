@@ -90,7 +90,7 @@ internal fun isbnOf(identifier: String?): String? {
     val digits = identifier?.trim()?.replace(Regex("^(urn:)?isbn:", RegexOption.IGNORE_CASE), "")
         ?.filterNot { it == '-' || it == ' ' }?.uppercase(Locale.ROOT) ?: return null
     val valid = when {
-        digits.matches(Regex("\\d{13}")) ->
+        digits.matches(Regex("97[89]\\d{10}")) ->
             digits.mapIndexed { i, c -> (c - '0') * if (i % 2 == 0) 1 else 3 }.sum() % 10 == 0
         digits.matches(Regex("\\d{9}[\\dX]")) ->
             digits.mapIndexed { i, c -> (if (c == 'X') 10 else c - '0') * (10 - i) }.sum() % 11 == 0
@@ -99,8 +99,8 @@ internal fun isbnOf(identifier: String?): String? {
     return digits.takeIf { valid }
 }
 
-internal fun selectionSearchLanguage(declared: List<String>, translated: Boolean, target: String?): String? =
-    if (translated) SpeechLanguage.normalize(target) else (SpeechLanguage.ofBook(declared) as? BookLanguage.Known)?.tag
+internal fun selectionSearchLanguage(declared: List<String>, shown: String?): String? =
+    SpeechLanguage.normalize(shown) ?: (SpeechLanguage.ofBook(declared) as? BookLanguage.Known)?.tag
 
 internal fun wikipediaEdition(language: String?): String {
     val normal = SpeechLanguage.normalize(language)?.lowercase(Locale.ROOT) ?: return "en"

@@ -349,7 +349,7 @@
     <string name="server_sync_running">Lesepositionen werden synchronisiert…</string>
     <string name="library_sync_complete">Lesepositionen synchronisiert.</string>
     <string name="library_sync_continuing">Lesepositionen aktualisiert. Weitere Bücher werden im Hintergrund synchronisiert.</string>
-    <string name="library_sync_unavailable">Die Synchronisierung der Lesepositionen ist nicht eingerichtet.</string>
+    <string name="library_sync_nothing">Nichts zu synchronisieren.</string>
     <string name="library_sync_failed">Lesepositionen konnten nicht synchronisiert werden. Prüfe die Servereinstellungen und versuche es erneut.</string>
     <string name="server_sync_offline">Server nicht erreichbar; Positionen synchronisieren später.</string>
     <string name="reader_sync_book">Dieses Buch synchronisieren</string>
@@ -1675,6 +1675,10 @@
     <string name="selection_zone_hidden_help">Ziehe eine Aktion hierher, um sie aus der Leiste zu nehmen.</string>
     <string name="selection_website">Website</string>
     <string name="selection_cannot_hide">Immer sichtbar</string>
+    <string name="selection_move_up">Nach oben</string>
+    <string name="selection_move_down">Nach unten</string>
+    <string name="selection_hide_action">Aus der Leiste entfernen</string>
+    <string name="selection_show_action">Zur Leiste hinzufügen</string>
     <string name="selection_drag_action">%1$s ziehen</string>
     <string name="selection_show_as">Anzeigen als</string>
     <string name="selection_show_as_help">So erscheint die Aktion in der Leiste.</string>

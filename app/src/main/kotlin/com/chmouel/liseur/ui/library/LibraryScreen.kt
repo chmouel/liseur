@@ -283,12 +283,13 @@ fun LibraryScreen(
                 val message = when (outcome) {
                     SyncOutcome.Success -> R.string.library_sync_complete
                     SyncOutcome.Incomplete -> R.string.library_sync_continuing
-                    SyncOutcome.NotApplicable -> R.string.library_sync_unavailable
+                    SyncOutcome.NotApplicable -> R.string.library_sync_nothing
                     is SyncOutcome.Partial -> outcome.reason.messageRes()
                     is SyncOutcome.Failure -> outcome.reason.messageRes()
                     null -> R.string.library_sync_failed
                 }
-                val needsAttention = outcome != SyncOutcome.Success && outcome != SyncOutcome.Incomplete
+                val needsAttention = outcome !is SyncOutcome.Success && outcome !is SyncOutcome.Incomplete &&
+                    outcome !is SyncOutcome.NotApplicable
                 val result = snackbarHost.showSnackbar(
                     message = resources.getString(message),
                     actionLabel = if (needsAttention) resources.getString(R.string.settings) else null,
