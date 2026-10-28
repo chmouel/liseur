@@ -1,10 +1,7 @@
 package com.chmouel.liseur.reader.chrome
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,12 +21,11 @@ fun SelectionToolbarSheet(
     onDismiss: () -> Unit,
 ) {
     LiseurModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier.verticalScroll(rememberScrollState()).align(Alignment.CenterHorizontally)
-                .widthIn(max = contentWidthCap(windowWidth()))
-                .padding(horizontal = 24.dp).padding(bottom = 24.dp),
-        ) {
-            ReadingSelectionActions(layout, onChanged)
-        }
+        ReadingSelectionActions(
+            layout,
+            onChanged,
+            modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = contentWidthCap(windowWidth())),
+            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 24.dp),
+        )
     }
 }

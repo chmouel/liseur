@@ -551,7 +551,7 @@ class SettingsBackupRepositoryTest {
         val sourceReader = ReaderPreferencesRepository(store("source-reader.preferences_pb"))
         sourceApp.setThemeMode(ThemeMode.DARK)
         val arrangement = com.chmouel.liseur.reader.annotations.SelectionActionLayout.default
-            .move(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, 0)
+            .moveTo(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, 0, toHidden = false)
             .withStyle(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, com.chmouel.liseur.reader.annotations.SelectionActionStyle.LABEL)
             .withLabel(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, "Copier : 中文, 100%")
             .withIcon(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, com.chmouel.liseur.reader.annotations.SelectionActionIcon.STAR)
