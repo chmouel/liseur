@@ -533,9 +533,9 @@ object OpdsParser {
             bookId = href?.let(::bookIdFromHref) ?: cover?.getAttribute("href")?.let(::bookIdFromHref),
             title = title.trim(),
             author = entry.children("author")
-                .firstNotNullOfOrNull { it.childText("name") }
-                ?.trim()
-                ?.takeIf { it.isNotEmpty() },
+                .mapNotNull { it.childText("name")?.trim()?.takeIf(String::isNotEmpty) }
+                .joinToString(", ")
+                .ifBlank { null },
             coverHref = cover?.href(),
             downloadHref = href,
             sizeBytes = download?.getAttribute("length")?.toLongOrNull(),
