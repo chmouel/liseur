@@ -1,0 +1,1 @@
+You can now customize the text-selection toolbar, choose highlight colours, and add website searches, Wikipedia and other known web provider. Long-press and drag across up to six words to look up a phrase in the dictionary. Horizontal toolbars show when more actions are available. Backup export is more reliable, and sync messages now better reflect your account and app language.
