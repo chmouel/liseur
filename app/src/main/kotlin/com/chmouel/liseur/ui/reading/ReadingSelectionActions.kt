@@ -68,11 +68,17 @@ private const val ZONE_DIVIDER = "selection_zone_divider"
  * a drag handle on each row to reorder or move it across the divider. The
  * order lives in a draft while a finger is down so the list follows the drag,
  * and is committed to the layout once the finger lifts.
+ *
+ * The highlight colours close the editor, after Reset, because they are the
+ * other half of the same bar but a separate setting that Reset leaves alone.
  */
 @Composable
 fun ReadingSelectionActions(
     layout: SelectionActionLayout,
     onChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
+    palette: HighlightPalette,
+    onTintToggled: (HighlightTint) -> Unit,
+    onDefaultTintChanged: (HighlightTint) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(),
     showTitle: Boolean = true,
@@ -120,7 +126,7 @@ fun ReadingSelectionActions(
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         item(key = "preview") {
-            SelectionPreview(order.take(divider).mapNotNull(byId::get), Modifier.padding(top = 16.dp, bottom = 24.dp))
+            SelectionPreview(order.take(divider).mapNotNull(byId::get), palette, Modifier.padding(top = 16.dp, bottom = 24.dp))
         }
         item(key = "toolbar_header") {
             ZoneHeader(stringResource(R.string.selection_zone_toolbar), divider)
@@ -159,6 +165,12 @@ fun ReadingSelectionActions(
                 Text(stringResource(R.string.selection_reset))
             }
         }
+        item(key = "colours") {
+            Column(Modifier.padding(top = 28.dp)) {
+                ZoneHeader(stringResource(R.string.reader_highlight_colours), palette.shown.size)
+                ReadingHighlightPaletteControls(palette, onTintToggled, onDefaultTintChanged)
+            }
+        }
     }
     val editing = layout.entries.firstOrNull { it.id == editingId }
     if (addingWebsite || editing != null) {
@@ -185,9 +197,13 @@ fun ReadingSelectionActions(
     }
 }
 
-/** A stand-in for the popup that opens over selected text, built from the actions in the toolbar. */
+/**
+ * A stand-in for the popup that opens over selected text, built from the
+ * colours offered and the actions in the toolbar, laid out as
+ * [SelectionPopup] lays out the real one.
+ */
 @Composable
-private fun SelectionPreview(entries: List<SelectionActionEntry>, modifier: Modifier = Modifier) {
+private fun SelectionPreview(entries: List<SelectionActionEntry>, palette: HighlightPalette, modifier: Modifier = Modifier) {
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth()) {
         Column(
             Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
@@ -201,7 +217,7 @@ private fun SelectionPreview(entries: List<SelectionActionEntry>, modifier: Modi
                     val rest = sample.drop(start)
                     val gap = rest.takeWhile(Char::isWhitespace)
                     append(sample.take(start) + gap)
-                    withStyle(SpanStyle(background = HighlightTint.YELLOW.color.copy(alpha = 0.45f))) { append(rest.drop(gap.length)) }
+                    withStyle(SpanStyle(background = palette.passageNoteTint.color.copy(alpha = 0.45f))) { append(rest.drop(gap.length)) }
                 },
                 style = MaterialTheme.typography.bodyLarge.copy(
                     fontFamily = MaterialTheme.typography.headlineSmall.fontFamily, fontStyle = FontStyle.Italic,
@@ -213,11 +229,17 @@ private fun SelectionPreview(entries: List<SelectionActionEntry>, modifier: Modi
                     Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    listOf(HighlightTint.YELLOW, HighlightTint.GREEN, HighlightTint.PINK).forEach {
+                    palette.shown.forEach {
                         Box(Modifier.padding(horizontal = 3.dp).size(16.dp).clip(CircleShape).background(it.color))
                     }
-                    Box(Modifier.padding(horizontal = 8.dp).size(width = 1.dp, height = 22.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant))
+                    if (palette.isEmpty) {
+                        Row(Modifier.height(40.dp).padding(horizontal = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.annotation_highlight), maxLines = 1, style = selectionLabelStyle(36.dp))
+                        }
+                    } else if (entries.isNotEmpty()) {
+                        Box(Modifier.padding(horizontal = 8.dp).size(width = 1.dp, height = 22.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant))
+                    }
                     entries.forEach { entry ->
                         Row(Modifier.height(40.dp).padding(horizontal = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                             if (entry.style != SelectionActionStyle.LABEL) Icon(entry.icon, contentDescription = null, modifier = Modifier.size(22.dp))

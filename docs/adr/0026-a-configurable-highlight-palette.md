@@ -99,10 +99,14 @@ would mean a reader who wanted no chips got three back on next launch.
 
 ### Where it is set
 
-The reader's Advanced sheet, and Settings → Reading appearance →
-Advanced, through one shared control so the two cannot drift. Advanced
-on both surfaces, as ADR 0001 requires: this is a thing a reader sets
-once, if ever, and the typography sheet is not to grow for it.
+At the end of the selection toolbar editor, the one shared screen that
+also orders the bar's actions, because the colours are the other half of
+the same bar. The editor opens from the reader's Advanced sheet and from
+Settings → Reading appearance → Advanced, so the colours stay behind
+Advanced on both surfaces, as ADR 0001 requires: this is a thing a reader
+sets once, if ever, and the typography sheet is not to grow for it. The
+editor's Reset puts back the actions only; the colours are a setting of
+their own.
 
 All six are drawn whatever is ticked, at the size the bar will draw
 them, so the control is the bar rather than a description of it and a

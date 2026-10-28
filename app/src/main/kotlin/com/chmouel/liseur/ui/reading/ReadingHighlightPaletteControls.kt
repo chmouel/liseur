@@ -34,9 +34,11 @@ import com.chmouel.liseur.reader.annotations.HighlightTint
  * Which colours the bar over a selected passage offers, and which one a
  * mark gets when none was picked.
  *
- * One control shown in two places — the reader's Advanced sheet and
- * Settings → Reading appearance → Advanced — so that the two cannot
- * drift, as `ReadingPageTurnStyleControl` is.
+ * Shown at the end of the selection toolbar editor
+ * (`ReadingSelectionActions`), which supplies its section header, so the
+ * colours are set where the rest of the same bar is. That editor is reached
+ * from the reader's Advanced sheet and from Settings → Reading appearance →
+ * Advanced.
  *
  * All six are always on screen, ticked or not, because a set is a
  * clearer thing to be shown than a count: the row is the bar, at the
@@ -63,7 +65,6 @@ fun ReadingHighlightPaletteControls(
     onDefaultChanged: (HighlightTint) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        ReadingSectionLabel(stringResource(R.string.reader_highlight_colours))
         FlowRow(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
