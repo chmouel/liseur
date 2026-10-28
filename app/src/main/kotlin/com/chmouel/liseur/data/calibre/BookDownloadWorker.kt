@@ -171,8 +171,13 @@ class BookDownloadWorker(
                     // cannot access this particular library/file. A
                     // single book denial must not turn a valid account
                     // capability off for the whole shelf. Its setup
-                    // capability is refreshed explicitly instead.
-                    if (book.browseServerId == null && server.kind != ServerKind.BOOKORBIT) {
+                    // capability is refreshed explicitly instead. A plain
+                    // OPDS catalog has no account-wide permission at all,
+                    // so one refused file only ever means that file.
+                    if (book.browseServerId == null &&
+                        server.kind != ServerKind.BOOKORBIT &&
+                        server.kind != ServerKind.CUSTOM
+                    ) {
                         container.database.remoteServerDao().setCanDownload(false)
                     }
                     fail(bookUrl)
