@@ -2457,7 +2457,18 @@ internal fun ReaderScreen(
                 NavigatorPositionEvent.LOCAL_JUMP,
                 expectedNative = native.takeUnless { effectiveScrollingNow },
             )
+            readAloud.captured(captured)
         }
+    }
+
+    // Closed while paused reading aloud: the paused player comes back once the page has landed.
+    LaunchedEffect(navigator, readAloudConfigured) {
+        navigator ?: return@LaunchedEffect
+        val reading = readAloud ?: return@LaunchedEffect
+        if (!readAloudFeature.isAvailable || !readAloudConfigured) return@LaunchedEffect
+        while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
+        if (pageTranslated) return@LaunchedEffect
+        reading.restorePaused()
     }
 
     // The book's words go back on the page in the effect below.

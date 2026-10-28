@@ -114,10 +114,10 @@ class ReadAloudService : MediaSessionService() {
         mediaSession?.takeIf { accepts(it, controllerInfo) }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // Swiped away: playing carries on, a paused book is put away.
-        val session = feature?.current?.value
-        if (session?.ui?.value?.playing != true) {
-            session?.stop()
+        // Swiped away: playing carries on, a paused book is put away, to come back paused.
+        val feature = feature
+        if (feature?.current?.value?.ui?.value?.playing != true) {
+            feature?.putAway()
             release()
             stopSelf()
         }

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
+import com.chmouel.liseur.readaloud.PausedListening
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.reader.chrome.BookSyncChoice
 import com.chmouel.liseur.reader.chrome.BookSyncVerdict
@@ -180,6 +181,7 @@ class ReaderViewModel(
     private val requestBookSync: (String) -> Unit = {},
     private val openBookHandles: OpenBookHandles = OpenBookHandles(),
     val readAloud: ReadAloudFeature = ReadAloudFeature.None,
+    private val pausedListening: PausedListening? = null,
 ) : ViewModel() {
 
     /**
@@ -1686,6 +1688,36 @@ class ReaderViewModel(
         readAloud.start(handle, selection, reader, translation)
     }
 
+    private var pausedRestoreTried = false
+
+    /**
+     * Puts back the read-aloud session this book was paused in when the
+     * app closed, paused on the sentence last heard, provided the book's
+     * saved place is still the one that pause left. Tried once per
+     * opening, after the page has landed.
+     */
+    suspend fun restorePausedReadAloud(reader: Intent) {
+        if (pausedRestoreTried) return
+        pausedRestoreTried = true
+        val paused = pausedListening ?: return
+        val handle = bookHandle ?: return
+        val publication = publication ?: return
+        if (readAloud.session.value != null) return
+        val record = paused.toRestore(bookId) ?: return
+        val heard = runCatching { Locator.fromJSON(JSONObject(record.heardJson)) }.getOrNull()
+        if (heard == null || publication.readingOrder.indexOfFirstWithHref(heard.href) == null) {
+            paused.forget(bookId)
+            return
+        }
+        if (readAloud.session.value != null || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) return
+        readAloud.restorePaused(handle, record, heard, reader)
+    }
+
+    /** The reader saved [locator] as the page showing the sentence heard. */
+    fun listenedPlaceCaptured(locator: Locator) {
+        pausedListening?.captured(bookId, prepareLocator(locator).toJSON().toString())
+    }
+
     /**
      * The place listening saved last, while it is not yet an exact
      * anchor and has no BookOrbit CFI: both are only measured from the
@@ -3150,6 +3182,7 @@ class ReaderViewModel(
                     requestBookSync = container::requestBookSync,
                     openBookHandles = container.openBookHandles,
                     readAloud = container.readAloud,
+                    pausedListening = container.pausedListening,
                 )
             }
         }

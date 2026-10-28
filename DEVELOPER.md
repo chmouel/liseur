@@ -1322,6 +1322,21 @@ changing reader behavior.
   (`ReadAloudSession.endedAt`, else the start's selection), paused if it
   was, with the timer kept. Any other end closes the sheet. Dismissing
   releases the hold.
+- A paused untranslated session survives the app closing: the pause
+  writes a device-only record (`PausedListening`, DataStore
+  `read_aloud_paused`) holding the heard sentence, the voice and the
+  book's saved place (`positionRevision`, `locator_json`) as a baseline.
+  Every write and check runs through the position publisher's queue. On
+  reopening, the reader puts the player back, paused, on the heard
+  sentence only while the saved place still equals the baseline (the
+  post-listening page capture moves the baseline). Any later move drops
+  it. Removing the task (`onTaskRemoved`) puts the session away without
+  forgetting it. An explicit stop, the end, or a new start forgets it.
+- Untranslated read aloud skips note reference marks (`NoteMarks`):
+  `epub:type`/`role` noterefs and bare superscript links lose their
+  text in a TTS-only `Publication` view, keeping elements so selectors
+  and highlights still match. Note bodies are still read. Translated
+  narration is untouched.
 - Temporary synthesis failures retry up to three attempts, with waits outside
   the concurrency permit and a 30-second retry-start budget (ADR-0054).
   Translation preparation and reference-context resolution are outside these retries.

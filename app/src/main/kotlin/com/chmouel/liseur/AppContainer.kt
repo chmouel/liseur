@@ -881,6 +881,17 @@ class AppContainer(context: Context) {
 
     val listeningCheckpoints = ListeningCheckpoints(readingPositions)
 
+    /** The book left paused while read aloud, put back when it reopens after the app closed. */
+    val pausedListening = com.chmouel.liseur.readaloud.PausedListening(
+        store = com.chmouel.liseur.readaloud.DataStorePausedReadAloudStore(context.applicationContext),
+        queue = readingPositions::afterQueuedWrites,
+        saved = { book ->
+            database.readingProgressDao().get(book)?.let {
+                com.chmouel.liseur.readaloud.SavedPlace(it.positionRevision, it.locatorJson)
+            }
+        },
+    )
+
     /** The servers and keys on the Services page, shared by every feature that reaches one. */
     internal val serverConnections: ServerConnections by lazy {
         ServerConnections(appSettings, ServerKeys(context.applicationContext), localNetwork)
