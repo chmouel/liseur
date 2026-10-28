@@ -53,6 +53,14 @@ class BookDownloaderTest {
     }
 
     @Test
+    fun `a redirect the catalog refuses fails the download for good`() = runTest {
+        val outcome = failingWith(RemoteHttpFailure(SyncFailure.InsecureTransport))
+            .download(request, folder.root.resolve("book.epub"))
+
+        assertEquals(DownloadOutcome.Failed(DownloadFailure.Gone), outcome)
+    }
+
+    @Test
     fun `a dropped connection is retried as network`() = runTest {
         val outcome = failingWith(IOException("reset"))
             .download(request, folder.root.resolve("book.epub"))
