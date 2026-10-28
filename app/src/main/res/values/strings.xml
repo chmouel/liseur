@@ -364,7 +364,7 @@
     <string name="server_sync_running">Syncing reading positions…</string>
     <string name="library_sync_complete">Reading positions synced.</string>
     <string name="library_sync_continuing">Reading positions updated. More books are syncing in the background.</string>
-    <string name="library_sync_unavailable">No reading-position sync is configured.</string>
+    <string name="library_sync_nothing">Nothing to sync.</string>
     <string name="library_sync_failed">Could not sync reading positions. Check your server settings and try again.</string>
     <string name="server_sync_offline">Could not reach the server; positions will sync later.</string>
     <string name="reader_sync_book">Sync this book</string>
@@ -1723,6 +1723,10 @@
     <string name="selection_zone_hidden_help">Drag an action here to keep it off the toolbar.</string>
     <string name="selection_website">Website</string>
     <string name="selection_cannot_hide">Always shown</string>
+    <string name="selection_move_up">Move up</string>
+    <string name="selection_move_down">Move down</string>
+    <string name="selection_hide_action">Hide from toolbar</string>
+    <string name="selection_show_action">Add to toolbar</string>
     <string name="selection_drag_action">Drag %1$s</string>
     <string name="selection_show_as">Show as</string>
     <string name="selection_show_as_help">How the action appears in the toolbar.</string>

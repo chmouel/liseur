@@ -24,12 +24,11 @@ class SelectionWebSearchTest {
         assertEquals("en", wikipediaEdition(null))
     }
 
-    @Test fun `language comes from the displayed translation rather than book or changed settings`() {
-        assertEquals("fr", selectionSearchLanguage(listOf("en"), true, "fr"))
-        assertEquals("en-GB", selectionSearchLanguage(listOf("en-GB"), false, "fr"))
-        assertNull(selectionSearchLanguage(listOf("en", "fr"), false, "de"))
-        assertNull(selectionSearchLanguage(emptyList(), false, "de"))
-        assertNull(selectionSearchLanguage(listOf("en"), true, null))
+    @Test fun `language comes from the shown text and falls back to the book`() {
+        assertEquals("fr", selectionSearchLanguage(listOf("en"), "fr"))
+        assertEquals("en-GB", selectionSearchLanguage(listOf("en-GB"), null))
+        assertNull(selectionSearchLanguage(listOf("en", "fr"), null))
+        assertNull(selectionSearchLanguage(emptyList(), null))
     }
 
     @Test fun `custom templates accept path query fragment and repeated placeholders`() {
@@ -77,7 +76,7 @@ class SelectionWebSearchTest {
         assertEquals("9782070612758", isbnOf("urn:isbn:978-2-07-061275-8"))
         assertEquals("9782070612758", isbnOf("ISBN:978 2 07 061275 8"))
         assertEquals("080442957X", isbnOf("0-8044-2957-x"))
-        listOf(null, "", "urn:uuid:6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "9782070612759", "0804429571", "12345")
+        listOf(null, "", "urn:uuid:6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "9782070612759", "4006381333931", "0804429571", "12345")
             .forEach { assertNull(it, isbnOf(it)) }
     }
 }

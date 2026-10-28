@@ -31,8 +31,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -140,6 +142,26 @@ fun ReadingSelectionActions(
                 } else {
                     val entry = byId[id] ?: return@ReorderableItem
                     val hidden = index > divider
+                    // A drag is out of reach of a screen reader or a switch.
+                    val at = if (hidden) index - divider - 1 else index
+                    val zoneSize = if (hidden) order.size - divider - 1 else divider
+                    val moveUp = stringResource(R.string.selection_move_up)
+                    val moveDown = stringResource(R.string.selection_move_down)
+                    val hide = stringResource(R.string.selection_hide_action)
+                    val show = stringResource(R.string.selection_show_action)
+                    val actions = listOfNotNull(
+                        CustomAccessibilityAction(moveUp) {
+                            currentOnChanged { it.moveTo(id, at - 1, hidden) }; true
+                        }.takeIf { at > 0 },
+                        CustomAccessibilityAction(moveDown) {
+                            currentOnChanged { it.moveTo(id, at + 1, hidden) }; true
+                        }.takeIf { at < zoneSize - 1 },
+                        if (hidden) CustomAccessibilityAction(show) {
+                            currentOnChanged { it.moveTo(id, divider, toHidden = false) }; true
+                        } else CustomAccessibilityAction(hide) {
+                            currentOnChanged { it.moveTo(id, 0, toHidden = true) }; true
+                        }.takeIf { entry.action != SelectionAction.DELETE },
+                    )
                     ActionRow(
                         entry = entry,
                         hidden = hidden,
@@ -153,6 +175,7 @@ fun ReadingSelectionActions(
                             },
                             onDragStopped = { commit(id) },
                         ),
+                        accessibilityActions = actions,
                         onClick = { editingId = id },
                     )
                 }
@@ -312,6 +335,7 @@ private fun ActionRow(
     last: Boolean,
     dragging: Boolean,
     dragHandle: Modifier,
+    accessibilityActions: List<CustomAccessibilityAction>,
     onClick: () -> Unit,
 ) {
     val name = entry.action?.let { stringResource(it.label) } ?: entry.customLabel.orEmpty()
@@ -332,7 +356,8 @@ private fun ActionRow(
     ) {
         if (!first && !dragging) HorizontalDivider(Modifier.padding(start = 54.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
         Row(
-            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(start = 16.dp),
+            Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick)
+                .semantics { customActions = accessibilityActions }.padding(start = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(entry.icon, contentDescription = null, tint = content, modifier = Modifier.size(22.dp))

@@ -346,7 +346,7 @@
     <string name="server_sync_running">Sincronizzazione delle posizioni…</string>
     <string name="library_sync_complete">Posizioni di lettura sincronizzate.</string>
     <string name="library_sync_continuing">Posizioni di lettura aggiornate. La sincronizzazione degli altri libri continua in background.</string>
-    <string name="library_sync_unavailable">La sincronizzazione delle posizioni di lettura non è configurata.</string>
+    <string name="library_sync_nothing">Niente da sincronizzare.</string>
     <string name="library_sync_failed">Impossibile sincronizzare le posizioni di lettura. Controlla le impostazioni del server e riprova.</string>
     <string name="server_sync_offline">Impossibile raggiungere il server; le posizioni si sincronizzeranno dopo.</string>
     <string name="reader_sync_book">Sincronizza questo libro</string>
@@ -1663,6 +1663,10 @@
     <string name="selection_zone_hidden_help">Trascina qui un’azione per toglierla dalla barra.</string>
     <string name="selection_website">Sito web</string>
     <string name="selection_cannot_hide">Sempre visibile</string>
+    <string name="selection_move_up">Sposta su</string>
+    <string name="selection_move_down">Sposta giù</string>
+    <string name="selection_hide_action">Togli dalla barra</string>
+    <string name="selection_show_action">Aggiungi alla barra</string>
     <string name="selection_drag_action">Trascina %1$s</string>
     <string name="selection_show_as">Mostra come</string>
     <string name="selection_show_as_help">Come appare l’azione nella barra.</string>

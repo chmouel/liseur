@@ -380,7 +380,7 @@
     <string name="server_sync_running">Синхронизация позиций чтения…</string>
     <string name="library_sync_complete">Позиции чтения синхронизированы.</string>
     <string name="library_sync_continuing">Позиции чтения обновлены. Синхронизация остальных книг продолжается в фоне.</string>
-    <string name="library_sync_unavailable">Синхронизация позиций чтения не настроена.</string>
+    <string name="library_sync_nothing">Нечего синхронизировать.</string>
     <string name="library_sync_failed">Не удалось синхронизировать позиции чтения. Проверьте настройки сервера и повторите попытку.</string>
     <string name="server_sync_offline">Не удалось связаться с сервером; позиции синхронизируются позже.</string>
     <string name="reader_sync_book">Синхронизировать эту книгу</string>
@@ -1771,6 +1771,10 @@
     <string name="selection_zone_hidden_help">Перетащите сюда действие, чтобы убрать его с панели.</string>
     <string name="selection_website">Сайт</string>
     <string name="selection_cannot_hide">Всегда видно</string>
+    <string name="selection_move_up">Выше</string>
+    <string name="selection_move_down">Ниже</string>
+    <string name="selection_hide_action">Убрать с панели</string>
+    <string name="selection_show_action">Добавить на панель</string>
     <string name="selection_drag_action">Перетащить: %1$s</string>
     <string name="selection_show_as">Вид</string>
     <string name="selection_show_as_help">Как действие выглядит на панели.</string>
