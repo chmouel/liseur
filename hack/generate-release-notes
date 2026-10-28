@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Writes the GitHub release notes for a tag, by asking Gemini to turn the
-# commits since the previous tag into something a reader would want to
-# read. Retries transient API failures, then falls back to the F-Droid
-# changelog when there is no API key or generation still fails.
+# Writes the GitHub release notes for a tag, by asking an OpenAI model to
+# turn the commits since the previous tag into something a reader would
+# want to read. Retries transient API failures, then falls back to the
+# F-Droid changelog when there is no API key or generation still fails.
 #
 # The F-Droid changelog stays the canonical short summary: it is capped
 # at 500 characters and written by hand. These notes are the long form.
@@ -13,7 +13,9 @@ set -euo pipefail
 readonly BUILD_FILE="app/build.gradle.kts"
 readonly CHANGELOG_DIR="fastlane/metadata/android/en-US/changelogs"
 readonly GH_REPO="chmouel/liseur"
-readonly MODEL="gemini-flash-latest"
+readonly MODEL="${LISEUR_NOTES_MODEL:-gpt-6-luna}"
+# Any OpenAI-compatible server with the Responses API will do.
+readonly OPENAI_URL="${OPENAI_API_BASE:-https://api.openai.com/v1}"
 # Screenshots come from pull-request bodies, where they were sized for a
 # wide review page. At full size they push a release note apart, so every
 # one of them is re-sized here, in pixels. Only the width is set: the
@@ -38,8 +40,8 @@ cleanup() {
 usage() {
     cat <<'EOF'
 Usage:
-  hack/generate-release-notes [--output FILE] [--copilot] [--no-fallback] [TAG]
-  hack/generate-release-notes [--output FILE] [--copilot] [--no-fallback] \
+  hack/generate-release-notes [--output FILE] [--pi] [--copilot] [--no-fallback] [TAG]
+  hack/generate-release-notes [--output FILE] [--pi] [--copilot] [--no-fallback] \
       --range RANGE --changelog FILE
 
 Writes release notes for TAG (the current tag, or the newest one, by
@@ -47,12 +49,46 @@ default) to FILE, or to standard output. With --range and --changelog
 it writes them before the tag exists, from the commits in RANGE and the
 F-Droid changelog in FILE; hack/release uses this.
 
-GEMINI_API_KEY enables the generated notes. --copilot tries
-`copilot -p` (LISEUR_NOTES_COPILOT_MODEL, default gpt-6-luna) when
-Gemini is unavailable or fails. Without either, the F-Droid changelog
-is used instead, unless --no-fallback is given: then nothing is written
-and the exit status is 3.
+The notes come from LISEUR_NOTES_MODEL (default gpt-6-luna). --pi asks
+it first through `pi -p` (model openai/LISEUR_NOTES_MODEL), then
+OPENAI_API_KEY calls the Responses API at OPENAI_API_BASE (default
+https://api.openai.com/v1). --copilot tries `copilot -p`
+(LISEUR_NOTES_COPILOT_MODEL, default gpt-6-luna) when those fail.
+Without any of them, the F-Droid changelog is used instead, unless
+--no-fallback is given: then nothing is written and the exit status
+is 3.
 EOF
+}
+
+# pi, like copilot below, gets the prompt and nothing else: an empty
+# directory, no tools, no extensions and no context files.
+generate_with_pi() {
+    local prompt=$1 output=$2
+    local dir status=0
+
+    if ! command -v pi >/dev/null; then
+        printf 'pi: pi is not installed.\n' >&2
+        return 1
+    fi
+
+    printf 'Asking pi (openai/%s) for the release notes.\n' "$MODEL" >&2
+    dir=$(mktemp -d -p "$workdir")
+    (
+        cd "$dir" &&
+            timeout 300 pi -p --no-session --model "openai/$MODEL" \
+                --no-tools --no-extensions --no-skills --no-prompt-templates \
+                --no-context-files --no-mcp --no-approve --offline < "$prompt"
+    ) > "$output" || status=$?
+
+    if ((status == 124)); then
+        printf 'pi timed out after 300s.\n' >&2
+    elif ((status != 0)); then
+        printf 'pi exited with status %s.\n' "$status" >&2
+    elif ! grep -q '[^[:space:]]' "$output"; then
+        printf 'pi returned no text.\n' >&2
+        status=1
+    fi
+    return $status
 }
 
 # Copilot gets the prompt and nothing else: an empty directory to run in
@@ -272,41 +308,47 @@ generate() {
     request=$(mktemp -p "$workdir")
     response=$(mktemp -p "$workdir")
 
-    jq -n --rawfile prompt "$prompt" \
-        '{contents: [{parts: [{text: $prompt}]}]}' > "$request"
+    jq -n --rawfile prompt "$prompt" --arg model "$MODEL" \
+        '{model: $model, input: $prompt, store: false}' > "$request"
 
+    printf 'Asking %s for the release notes.\n' "$MODEL" >&2
     for ((attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++)); do
-        if ! status=$(curl -sS --max-time 120 \
+        # The key goes through a config file on stdin, so it never shows
+        # up in the process list.
+        if ! status=$(printf 'header = "Authorization: Bearer %s"\n' \
+            "$OPENAI_API_KEY" | curl -sS --max-time 300 -K - \
             --write-out '%{http_code}' --output "$response" \
-            "https://generativelanguage.googleapis.com/v1beta/models/$MODEL:generateContent" \
+            "${OPENAI_URL%/}/responses" \
             -H "Content-Type: application/json" \
-            -H "x-goog-api-key: $GEMINI_API_KEY" \
             -X POST -d @"$request"); then
             status=000
         fi
 
         case "$status" in
         2??)
-            if jq -er '.candidates[0].content.parts | map(.text // "") | join("")
+            if jq -er '[.output[]? | select(.type == "message") | .content[]?
+                | select(.type == "output_text") | .text] | join("")
                 | select(length > 0)' "$response" > "$output"; then
                 return 0
             fi
-            printf 'Gemini returned an invalid successful response.\n' >&2
+            printf 'OpenAI returned an invalid successful response.\n' >&2
             return 1
             ;;
         408 | 425 | 429 | 500 | 502 | 503 | 504 | 000)
             if (( attempt == MAX_GENERATION_ATTEMPTS )); then
-                printf 'Gemini request failed after %d attempts (HTTP %s).\n' \
+                printf 'OpenAI request failed after %d attempts (HTTP %s).\n' \
                     "$attempt" "$status" >&2
                 return 1
             fi
             delay=$((RETRY_DELAY_SECONDS * 2 ** (attempt - 1)))
-            printf 'Gemini returned HTTP %s; retrying in %ss (attempt %d/%d).\n' \
+            printf 'OpenAI returned HTTP %s; retrying in %ss (attempt %d/%d).\n' \
                 "$status" "$delay" "$((attempt + 1))" "$MAX_GENERATION_ATTEMPTS" >&2
             sleep "$delay"
             ;;
         *)
-            printf 'Gemini request failed with HTTP %s.\n' "$status" >&2
+            printf 'OpenAI request failed with HTTP %s: %s\n' "$status" \
+                "$(jq -r '.error.message // empty' "$response" 2>/dev/null |
+                    head -n 1)" >&2
             return 1
             ;;
         esac
@@ -315,7 +357,7 @@ generate() {
 
 main() {
     local output="" tag="${TAG:-}" range="" changelog_file=""
-    local use_copilot=false fallback=true
+    local use_pi=false use_copilot=false fallback=true
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -333,6 +375,10 @@ main() {
             changelog_file=${2:-}
             [[ -n "$changelog_file" ]] || die "--changelog needs a file"
             shift 2
+            ;;
+        --pi)
+            use_pi=true
+            shift
             ;;
         --copilot)
             use_copilot=true
@@ -397,23 +443,29 @@ main() {
     notes=$(mktemp -p "$workdir")
 
     local generated=false
-    if [[ -n "${GEMINI_API_KEY:-}" || "$use_copilot" == true ]]; then
+    if [[ -n "${OPENAI_API_KEY:-}" || "$use_pi" == true ||
+        "$use_copilot" == true ]]; then
         local prompt
         prompt=$(mktemp -p "$workdir")
         pull_requests=$(mktemp -p "$workdir")
         pull_requests_for_range "$range" "$pull_requests"
         build_prompt "$range" "$prompt" "$changelog" "$pull_requests"
-        if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-            printf 'No GEMINI_API_KEY.\n' >&2
-        elif generate "$prompt" "$notes"; then
+        if [[ "$use_pi" == true ]] && generate_with_pi "$prompt" "$notes"; then
             generated=true
+        fi
+        if [[ "$generated" == false ]]; then
+            if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+                printf 'No OPENAI_API_KEY.\n' >&2
+            elif generate "$prompt" "$notes"; then
+                generated=true
+            fi
         fi
         if [[ "$generated" == false && "$use_copilot" == true ]] &&
             generate_with_copilot "$prompt" "$notes"; then
             generated=true
         fi
     else
-        printf 'No GEMINI_API_KEY.\n' >&2
+        printf 'No OPENAI_API_KEY.\n' >&2
     fi
 
     if [[ "$generated" == true ]]; then

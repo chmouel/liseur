@@ -52,8 +52,9 @@ target wrapping them. Run `make help` for the short list. See
   update. `--rc` publishes only to a GitHub prerelease and Google Play's
   testing tracks. Final releases are also published to Google Play
   production. With no version given, it drafts the F-Droid changelog
-  with Gemini, falling back to `copilot -p` (model
-  `LISEUR_NOTES_COPILOT_MODEL`, default `gpt-6-luna`) when Gemini fails.
+  with `pi -p` (model `openai/$LISEUR_NOTES_MODEL`, default `gpt-6-luna`),
+  falling back to `copilot -p` (model `LISEUR_NOTES_COPILOT_MODEL`, default
+  `gpt-6-luna`) when pi fails.
   See `DEVELOPER.md` for the full workflow and flags.
 - `prune-prereleases`: Deletes every legacy `vX.Y.Z-test.N` GitHub release
   page and all but the newest `vX.Y.Z-rc.N` page for each target version.
@@ -68,12 +69,12 @@ target wrapping them. Run `make help` for the short list. See
   tag-policy verifier. It does not contact F-Droid and is part of `make check`
   and CI.
 - `generate-release-notes`: Writes the GitHub release notes for a
-  tag by asking Gemini to turn the commits since the previous tag into
+  tag by asking an OpenAI model to turn the commits since the previous tag into
   prose. It also reads the pull requests associated with those commits,
   links each described change back to its PR, and carries over a relevant
   screenshot from the PR body when one is present. It falls back to the
   F-Droid changelog if generation fails. `hack/release` runs it before
-  tagging (`--range`, `--changelog`, `--copilot`, `--no-fallback`) and
+  tagging (`--range`, `--changelog`, `--pi`, `--copilot`, `--no-fallback`) and
   commits the reviewed result as `docs/release-notes/vX.Y.Z.md`, which
   the release workflow then uses as it is.
 - `store-status`: Answers "where is Liseur published, and how is it

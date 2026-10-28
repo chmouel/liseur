@@ -129,7 +129,8 @@ jobs:
 
       - name: Write the release notes
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
           GH_TOKEN: ${{ github.token }}
           PLAY_REQUESTED: ${{ steps.version.outputs.play_requested }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
