@@ -539,4 +539,24 @@ class OpdsParserTest {
             </feed>
         """.trimIndent()
     }
+
+    private fun latinFeed(declared: String) = """<?xml version="1.0" encoding="$declared"?>
+        <feed xmlns="http://www.w3.org/2005/Atom"><title>t</title>
+        <entry><id>1</id><title>x</title><author><name>García</name></author></entry></feed>"""
+
+    @Test
+    fun `text already decoded is not decoded again by its declaration`() {
+        val page = OpdsParser.parse(latinFeed("ISO-8859-1"))
+
+        assertEquals("García", page.books.single().author)
+    }
+
+    @Test
+    fun `a feed is decoded by its header charset, else by its declaration`() {
+        val bytes = latinFeed("ISO-8859-1").toByteArray(Charsets.ISO_8859_1)
+        assertTrue(OpdsParser.decode(bytes, null).contains("García"))
+
+        val utf8 = latinFeed("ISO-8859-1").toByteArray(Charsets.UTF_8)
+        assertTrue(OpdsParser.decode(utf8, Charsets.UTF_8).contains("García"))
+    }
 }

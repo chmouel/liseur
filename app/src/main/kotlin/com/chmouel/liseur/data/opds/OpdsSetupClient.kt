@@ -128,7 +128,7 @@ class OpdsSetupClient(private val http: OpdsHttp = OpdsHttp()) : ServerSetup {
                         return Probe.Failed(refusal(credentials))
                     !response.isSuccessful ->
                         return Probe.Failed(SetupFailure.WrongServer)
-                    else -> OpdsParser.parse(response.body.string())
+                    else -> OpdsParser.parse(response.feedText())
                 }
             }
             Probe.Ok(
