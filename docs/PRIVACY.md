@@ -132,6 +132,16 @@ installed on your device instead. When you pick or type a dictionary site in
 Settings, Liseur checks it once with a fixed word ("book"). A dead address
 fails then, and opening the screen makes no request.
 
+### Selection searches in other apps
+
+Wikipedia, Open Library and custom website actions open the selected text
+as a search in your browser or an app registered for that website. This
+happens only when you tap the action. On a translated page, the search
+uses the displayed translation. No book title, account or reading position
+is included. Liseur makes no request to check these websites or their search
+results; the receiving browser or app handles the connection. Custom search
+addresses and names are stored in your toolbar settings and settings backups.
+
 ### Reading a translated book aloud
 
 Reading aloud a book you are reading translated in the page reads the

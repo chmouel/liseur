@@ -85,6 +85,9 @@ internal fun webSearchIntent(text: String = "") = Intent(Intent.ACTION_WEB_SEARC
     putExtra(android.app.SearchManager.QUERY, text)
 }
 
+internal fun selectionWebsiteIntent(entry: SelectionActionEntry, text: String, language: String?): Intent? =
+    selectionWebUrl(entry, text, language)?.let { Intent(Intent.ACTION_VIEW, it.toUri()) }
+
 internal fun Context.canHandleSelectionIntent(intent: Intent): Boolean =
     packageManager.queryIntentActivities(intent, 0).isNotEmpty()
 

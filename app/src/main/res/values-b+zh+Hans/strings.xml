@@ -1611,7 +1611,17 @@
     <string name="selection_style_label">文字</string>
     <string name="selection_style_both">图标和文字</string>
     <string name="selection_style_hidden">隐藏</string>
-    <string name="selection_edit_label">编辑“%1$s”的标签</string>
+    <string name="selection_edit_action">自定义“%1$s”</string>
     <string name="selection_label_help">留空以使用默认标签。</string>
     <string name="selection_label_default">使用默认标签</string>
+    <string name="selection_icon_default">使用默认图标</string>
+    <string name="selection_icon_star">星形</string>
+    <string name="selection_icon_heart">心形</string>
+    <string name="selection_icon_check">对勾</string>
+    <string name="selection_add_website">添加网站操作</string>
+    <string name="selection_url_template">搜索网址</string>
+    <string name="selection_url_help">使用 {text} 代表所选文本，例如 https://example.org/search?q={text}。</string>
+    <string name="selection_url_invalid">请输入 HTTPS 网址，{text} 须位于主机名之后，且不能包含用户名或密码。</string>
+    <string name="selection_name_required">请输入名称。</string>
+    <string name="selection_delete_action">删除操作</string>
 </resources>

@@ -2,46 +2,113 @@ package com.chmouel.liseur.reader.annotations
 
 import java.net.URLDecoder
 import java.net.URLEncoder
+import java.util.UUID
 
-enum class SelectionAction(val id: String, val defaultStyle: SelectionActionStyle = SelectionActionStyle.ICON) {
-    NOTE("note"), LOOK_UP("look_up"), COMPANION("companion"), SEARCH("search"),
+enum class SelectionAction(
+    val id: String,
+    val defaultIcon: SelectionActionIcon,
+    val defaultStyle: SelectionActionStyle = SelectionActionStyle.ICON,
+) {
+    NOTE("note", SelectionActionIcon.NOTE), LOOK_UP("look_up", SelectionActionIcon.BOOK),
+    COMPANION("companion", SelectionActionIcon.COMPANION), SEARCH("search", SelectionActionIcon.SEARCH),
+    DELETE("delete", SelectionActionIcon.DELETE), TRANSLATE("translate", SelectionActionIcon.TRANSLATE),
+    READ_ALOUD("read_aloud", SelectionActionIcon.READ_ALOUD), SHARE("share", SelectionActionIcon.SHARE),
+    COPY("copy", SelectionActionIcon.COPY, SelectionActionStyle.HIDDEN),
+    CITATION("citation", SelectionActionIcon.QUOTE, SelectionActionStyle.HIDDEN),
+    OPEN_WITH("open_with", SelectionActionIcon.OPEN_WITH, SelectionActionStyle.HIDDEN),
+    WEB_SEARCH("web_search", SelectionActionIcon.GLOBE, SelectionActionStyle.HIDDEN),
+    WIKIPEDIA("wikipedia", SelectionActionIcon.GLOBE, SelectionActionStyle.HIDDEN),
+    OPEN_LIBRARY("open_library", SelectionActionIcon.BOOK, SelectionActionStyle.HIDDEN),
+}
+
+enum class SelectionActionIcon(val id: String) {
+    NOTE("note"), BOOK("book"), COMPANION("companion"), SEARCH("search"),
     DELETE("delete"), TRANSLATE("translate"), READ_ALOUD("read_aloud"), SHARE("share"),
-    COPY("copy", SelectionActionStyle.HIDDEN), CITATION("citation", SelectionActionStyle.HIDDEN),
-    OPEN_WITH("open_with", SelectionActionStyle.HIDDEN), WEB_SEARCH("web_search", SelectionActionStyle.HIDDEN),
+    COPY("copy"), QUOTE("quote"), OPEN_WITH("open_with"), GLOBE("globe"),
+    STAR("star"), BOOKMARK("bookmark"), HEART("heart"), CHECK("check"),
 }
 
 enum class SelectionActionStyle(val id: String) {
     ICON("icon"), LABEL("label"), BOTH("both"), HIDDEN("hidden"),
 }
 
-data class SelectionActionEntry(val action: SelectionAction, val style: SelectionActionStyle, val customLabel: String? = null)
+sealed interface SelectionActionTarget {
+    val id: String
+
+    data class BuiltIn(val action: SelectionAction) : SelectionActionTarget {
+        override val id: String get() = action.id
+    }
+
+    data class Website(override val id: String, val urlTemplate: String) : SelectionActionTarget
+}
+
+data class SelectionActionEntry(
+    val target: SelectionActionTarget,
+    val style: SelectionActionStyle,
+    val customLabel: String? = null,
+    val customIcon: SelectionActionIcon? = null,
+) {
+    constructor(action: SelectionAction, style: SelectionActionStyle, customLabel: String? = null, customIcon: SelectionActionIcon? = null) :
+        this(SelectionActionTarget.BuiltIn(action), style, customLabel, customIcon)
+
+    val id: String get() = target.id
+    val action: SelectionAction? get() = (target as? SelectionActionTarget.BuiltIn)?.action
+    val defaultIcon: SelectionActionIcon get() = action?.defaultIcon ?: SelectionActionIcon.GLOBE
+}
 
 data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
     fun serialize(): String = entries.joinToString(",") {
-        "${it.action.id}:${it.style.id}" + (it.customLabel?.let { label -> ":${URLEncoder.encode(label, "UTF-8")}" } ?: "")
+        val label = it.customLabel?.let { label -> URLEncoder.encode(label, "UTF-8") }
+        val website = it.target as? SelectionActionTarget.Website
+        "${it.id}:${it.style.id}" +
+            (if (label != null || it.customIcon != null || website != null) ":${label.orEmpty()}" else "") +
+            (if (it.customIcon != null || website != null) ":${it.customIcon?.id.orEmpty()}" else "") +
+            (website?.let { site -> ":${URLEncoder.encode(site.urlTemplate, "UTF-8")}" } ?: "")
     }
 
-    fun move(action: SelectionAction, index: Int): SelectionActionLayout {
-        val entry = entries.firstOrNull { it.action == action } ?: return this
-        val remaining = entries.filterNot { it.action == action }.toMutableList()
+    fun move(id: String, index: Int): SelectionActionLayout {
+        val entry = entries.firstOrNull { it.id == id } ?: return this
+        val remaining = entries.filterNot { it.id == id }.toMutableList()
         remaining.add(index.coerceIn(0, remaining.size), entry)
         return SelectionActionLayout(remaining)
     }
 
-    fun moveBy(action: SelectionAction, offset: Int): SelectionActionLayout {
-        val index = entries.indexOfFirst { it.action == action }
-        return if (index < 0) this else move(action, index + offset)
+    fun moveBy(id: String, offset: Int): SelectionActionLayout {
+        val index = entries.indexOfFirst { it.id == id }
+        return if (index < 0) this else move(id, index + offset)
     }
 
-    fun withStyle(action: SelectionAction, style: SelectionActionStyle): SelectionActionLayout =
+    fun withStyle(id: String, style: SelectionActionStyle): SelectionActionLayout =
         SelectionActionLayout(entries.map {
-            if (it.action == action) it.copy(style = validStyle(action, style)) else it
+            if (it.id == id) it.copy(style = validStyle(it.action, style)) else it
         })
 
-    fun withLabel(action: SelectionAction, label: String?): SelectionActionLayout =
+    fun withLabel(id: String, label: String?): SelectionActionLayout =
         SelectionActionLayout(entries.map {
-            if (it.action == action) it.copy(customLabel = label?.trim()?.takeIf { text -> text.isNotEmpty() }) else it
+            val name = label?.trim()?.takeIf { text -> text.isNotEmpty() }
+            if (it.id == id && (it.action != null || name != null)) it.copy(customLabel = name) else it
         })
+
+    fun withIcon(id: String, icon: SelectionActionIcon?): SelectionActionLayout =
+        SelectionActionLayout(entries.map {
+            if (it.id == id) it.copy(customIcon = icon?.takeIf { selected -> selected != it.defaultIcon }) else it
+        })
+
+    fun withWebsite(id: String, name: String, urlTemplate: String, icon: SelectionActionIcon?): SelectionActionLayout {
+        val template = selectionWebsiteTemplate(urlTemplate) ?: return this
+        if (!isWebsiteId(id) || name.isBlank()) return this
+        val previous = entries.firstOrNull { it.id == id }
+        val entry = SelectionActionEntry(SelectionActionTarget.Website(id, template),
+            previous?.style ?: SelectionActionStyle.BOTH, name.trim(), icon?.takeIf { it != SelectionActionIcon.GLOBE })
+        return SelectionActionLayout(if (previous == null) entries + entry else entries.map { if (it.id == id) entry else it })
+    }
+
+    fun removeWebsite(id: String): SelectionActionLayout =
+        SelectionActionLayout(entries.filterNot { it.id == id && it.target is SelectionActionTarget.Website })
+
+    fun reset(): SelectionActionLayout = SelectionActionLayout(default.entries + entries
+        .filter { it.target is SelectionActionTarget.Website }
+        .map { it.copy(style = SelectionActionStyle.BOTH, customIcon = null) })
 
     companion object {
         val default = SelectionActionLayout(SelectionAction.entries.map { SelectionActionEntry(it, it.defaultStyle) })
@@ -50,15 +117,23 @@ data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
             if (value == null) return default
             val result = mutableListOf<SelectionActionEntry>()
             value.split(',').forEach { part ->
-                val fields = part.split(':', limit = 3)
-                val action = SelectionAction.entries.firstOrNull { it.id == fields[0] } ?: return@forEach
-                if (result.any { it.action == action }) return@forEach
-                val style = SelectionActionStyle.entries.firstOrNull { it.id == fields.getOrNull(1) }
-                    ?: action.defaultStyle
-                val label = fields.getOrNull(2)?.let { encoded ->
-                    runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+                val fields = part.split(':', limit = 5)
+                val id = fields[0]
+                if (result.any { it.id == id }) return@forEach
+                val action = SelectionAction.entries.firstOrNull { it.id == id }
+                val target = if (action != null) SelectionActionTarget.BuiltIn(action) else {
+                    if (!isWebsiteId(id)) return@forEach
+                    val template = fields.getOrNull(4)?.let(::decode)?.let(::selectionWebsiteTemplate) ?: return@forEach
+                    SelectionActionTarget.Website(id, template)
                 }
-                result.add(SelectionActionEntry(action, validStyle(action, style), label))
+                val style = SelectionActionStyle.entries.firstOrNull { it.id == fields.getOrNull(1) }
+                    ?: action?.defaultStyle ?: SelectionActionStyle.BOTH
+                val label = fields.getOrNull(2)?.let(::decode)?.trim()?.takeIf { it.isNotEmpty() }
+                if (action == null && label == null) return@forEach
+                val icon = SelectionActionIcon.entries.firstOrNull {
+                    it.id == fields.getOrNull(3) && it != (action?.defaultIcon ?: SelectionActionIcon.GLOBE)
+                }
+                result.add(SelectionActionEntry(target, validStyle(action, style), label, icon))
             }
             SelectionAction.entries.forEachIndexed { index, action ->
                 if (result.none { it.action == action }) {
@@ -71,7 +146,12 @@ data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
             return SelectionActionLayout(result)
         }
 
-        private fun validStyle(action: SelectionAction, style: SelectionActionStyle): SelectionActionStyle =
-            if (action == SelectionAction.DELETE && style == SelectionActionStyle.HIDDEN) action.defaultStyle else style
+        private fun decode(value: String): String? = runCatching { URLDecoder.decode(value, "UTF-8") }.getOrNull()
+
+        private fun isWebsiteId(id: String): Boolean = id.startsWith("custom_") &&
+            runCatching { UUID.fromString(id.removePrefix("custom_")).toString() == id.removePrefix("custom_") }.getOrDefault(false)
+
+        private fun validStyle(action: SelectionAction?, style: SelectionActionStyle): SelectionActionStyle =
+            if (action == SelectionAction.DELETE && style == SelectionActionStyle.HIDDEN) SelectionAction.DELETE.defaultStyle else style
     }
 }

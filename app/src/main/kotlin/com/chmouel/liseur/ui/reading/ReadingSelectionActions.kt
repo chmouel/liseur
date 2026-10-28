@@ -1,12 +1,17 @@
 package com.chmouel.liseur.ui.reading
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.ArrowUpward
@@ -18,8 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -30,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.reader.annotations.*
+import java.util.UUID
 
 @Composable
 fun SelectionToolbarRow(onClick: () -> Unit) {
@@ -49,16 +55,17 @@ fun ReadingSelectionActions(
     showTitle: Boolean = true,
 ) {
     val currentOnChanged by rememberUpdatedState(onChanged)
-    var editingAction by rememberSaveable { mutableStateOf<SelectionAction?>(null) }
+    var editingId by rememberSaveable { mutableStateOf<String?>(null) }
+    var addingWebsite by rememberSaveable { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (showTitle) Text(stringResource(R.string.selection_arrange), style = MaterialTheme.typography.titleMedium)
         Text(stringResource(R.string.selection_availability_help), style = MaterialTheme.typography.bodySmall)
         Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
             layout.entries.filter { it.style != SelectionActionStyle.HIDDEN }.forEach { entry ->
                 Row(Modifier.height(36.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (entry.style != SelectionActionStyle.LABEL) Icon(entry.action.icon, contentDescription = null)
+                    if (entry.style != SelectionActionStyle.LABEL) Icon(entry.icon, contentDescription = null)
                     if (entry.style != SelectionActionStyle.ICON) Text(
-                        entry.customLabel ?: stringResource(entry.action.label),
+                        entry.customLabel ?: stringResource(requireNotNull(entry.action).label),
                         modifier = Modifier.padding(start = if (entry.style == SelectionActionStyle.BOTH) 6.dp else 0.dp),
                         maxLines = 1, style = selectionLabelStyle(36.dp),
                     )
@@ -66,19 +73,20 @@ fun ReadingSelectionActions(
             }
         }
         layout.entries.forEachIndexed { index, entry ->
-            key(entry.action) {
-                var expanded by remember(entry.action) { mutableStateOf(false) }
-                var drag by remember(entry.action) { mutableFloatStateOf(0f) }
+            key(entry.id) {
+                val name = entry.action?.let { stringResource(it.label) } ?: entry.customLabel.orEmpty()
+                var expanded by remember(entry.id) { mutableStateOf(false) }
+                var drag by remember(entry.id) { mutableFloatStateOf(0f) }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(48.dp).pointerInput(entry.action) {
+                        modifier = Modifier.size(48.dp).pointerInput(entry.id) {
                             detectDragGestures(onDragEnd = { drag = 0f }, onDragCancel = { drag = 0f }) { change, amount ->
                                 change.consume()
                                 drag += amount.y
                                 if (kotlin.math.abs(drag) >= 48.dp.toPx()) {
                                     val offset = if (drag > 0) 1 else -1
-                                    currentOnChanged { it.moveBy(entry.action, offset) }
+                                    currentOnChanged { it.moveBy(entry.id, offset) }
                                     drag = 0f
                                 }
                             }
@@ -87,13 +95,17 @@ fun ReadingSelectionActions(
                         Icon(Icons.Outlined.DragHandle, contentDescription = null, modifier = Modifier.size(32.dp))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text(stringResource(entry.action.label), style = MaterialTheme.typography.bodyMedium)
-                        entry.customLabel?.let {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(entry.icon, contentDescription = null, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        }
+                        entry.customLabel?.takeIf { entry.action != null }?.let {
                             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Box {
-                            val styleDescription = "${stringResource(entry.action.label)}, ${stringResource(entry.style.label)}"
+                            val styleDescription = "$name, ${stringResource(entry.style.label)}"
                             TextButton(onClick = { expanded = true }, modifier = Modifier.semantics { contentDescription = styleDescription }, contentPadding = PaddingValues(0.dp)) {
                                 Text(stringResource(entry.style.label))
                             }
@@ -101,60 +113,137 @@ fun ReadingSelectionActions(
                                 SelectionActionStyle.entries.filter { entry.action != SelectionAction.DELETE || it != SelectionActionStyle.HIDDEN }.forEach { style ->
                                     DropdownMenuItem(text = { Text(stringResource(style.label)) }, onClick = {
                                         expanded = false
-                                        onChanged { it.withStyle(entry.action, style) }
+                                        onChanged { it.withStyle(entry.id, style) }
                                     })
                                 }
                             }
                         }
                     }
-                    IconButton(onClick = { editingAction = entry.action }) {
-                        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.selection_edit_label, stringResource(entry.action.label)))
+                    IconButton(onClick = { editingId = entry.id }) {
+                        Icon(Icons.Outlined.Edit, contentDescription = stringResource(R.string.selection_edit_action, name))
                     }
-                    IconButton(onClick = { onChanged { it.moveBy(entry.action, -1) } }, enabled = index > 0) {
-                        Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.selection_move_up, stringResource(entry.action.label)))
+                    IconButton(onClick = { onChanged { it.moveBy(entry.id, -1) } }, enabled = index > 0) {
+                        Icon(Icons.Outlined.ArrowUpward, contentDescription = stringResource(R.string.selection_move_up, name))
                     }
-                    IconButton(onClick = { onChanged { it.moveBy(entry.action, 1) } }, enabled = index < layout.entries.lastIndex) {
-                        Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.selection_move_down, stringResource(entry.action.label)))
+                    IconButton(onClick = { onChanged { it.moveBy(entry.id, 1) } }, enabled = index < layout.entries.lastIndex) {
+                        Icon(Icons.Outlined.ArrowDownward, contentDescription = stringResource(R.string.selection_move_down, name))
                     }
                 }
             }
         }
-        TextButton(onClick = { onChanged { SelectionActionLayout.default } }) { Text(stringResource(R.string.selection_reset)) }
+        TextButton(onClick = { addingWebsite = true }) { Text(stringResource(R.string.selection_add_website)) }
+        TextButton(onClick = { onChanged { it.reset() } }) { Text(stringResource(R.string.selection_reset)) }
     }
-    editingAction?.let { action ->
-        val entry = layout.entries.first { it.action == action }
-        val defaultLabel = stringResource(action.label)
-        var label by rememberSaveable(action) { mutableStateOf(entry.customLabel.orEmpty()) }
-        val focusRequester = remember { FocusRequester() }
-        val save = {
-            val savedLabel = label
-            onChanged { it.withLabel(action, savedLabel) }
-            editingAction = null
-        }
-        AlertDialog(
-            onDismissRequest = { editingAction = null },
-            title = { Text(stringResource(R.string.selection_edit_label, defaultLabel)) },
-            text = {
-                Column {
+    val editing = layout.entries.firstOrNull { it.id == editingId }
+    if (addingWebsite || editing != null) {
+        SelectionActionEditor(
+            entry = editing,
+            onDismiss = { editingId = null; addingWebsite = false },
+            onSave = { label, template, icon ->
+                val id = editing?.id ?: "custom_${UUID.randomUUID()}"
+                onChanged {
+                    if (editing == null || editing.target is SelectionActionTarget.Website) it.withWebsite(id, label, template, icon)
+                    else it.withLabel(id, label).withIcon(id, icon)
+                }
+                editingId = null
+                addingWebsite = false
+            },
+            onDelete = editing?.takeIf { it.target is SelectionActionTarget.Website }?.let { entry ->
+                {
+                    onChanged { it.removeWebsite(entry.id) }
+                    editingId = null
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SelectionActionEditor(
+    entry: SelectionActionEntry?,
+    onDismiss: () -> Unit,
+    onSave: (String, String, SelectionActionIcon?) -> Unit,
+    onDelete: (() -> Unit)?,
+) {
+    val website = entry == null || entry.target is SelectionActionTarget.Website
+    val defaultLabel = entry?.action?.let { stringResource(it.label) } ?: entry?.customLabel.orEmpty()
+    var label by rememberSaveable(entry?.id) { mutableStateOf(entry?.customLabel.orEmpty()) }
+    var template by rememberSaveable(entry?.id) {
+        mutableStateOf((entry?.target as? SelectionActionTarget.Website)?.urlTemplate.orEmpty())
+    }
+    var customIcon by rememberSaveable(entry?.id) { mutableStateOf(entry?.customIcon) }
+    var submitted by rememberSaveable(entry?.id) { mutableStateOf(false) }
+    val nameValid = !website || label.isNotBlank()
+    val templateValid = !website || selectionWebsiteTemplate(template) != null
+    val save = {
+        submitted = true
+        if (nameValid && templateValid) onSave(label, template, customIcon)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (entry == null) stringResource(R.string.selection_add_website)
+            else stringResource(R.string.selection_edit_action, defaultLabel)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = { label = it },
+                    label = { Text(stringResource(if (website) R.string.services_server_name else R.string.selection_style_label)) },
+                    placeholder = { if (!website) Text(defaultLabel) },
+                    supportingText = {
+                        if (submitted && !nameValid) Text(stringResource(R.string.selection_name_required))
+                        else if (!website) Text(stringResource(R.string.selection_label_help))
+                    },
+                    isError = submitted && !nameValid,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = if (website) ImeAction.Next else ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { save() }),
+                )
+                if (website) {
                     OutlinedTextField(
-                        value = label,
-                        onValueChange = { label = it },
-                        label = { Text(stringResource(R.string.selection_style_label)) },
-                        placeholder = { Text(defaultLabel) },
-                        supportingText = { Text(stringResource(R.string.selection_label_help)) },
+                        value = template,
+                        onValueChange = { template = it },
+                        label = { Text(stringResource(R.string.selection_url_template)) },
+                        supportingText = { Text(stringResource(if (submitted && !templateValid)
+                            R.string.selection_url_invalid else R.string.selection_url_help)) },
+                        isError = submitted && !templateValid,
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { save() }),
                     )
+                } else {
                     TextButton(onClick = { label = "" }) { Text(stringResource(R.string.selection_label_default)) }
                 }
-            },
-            confirmButton = { TextButton(onClick = save) { Text(stringResource(R.string.save)) } },
-            dismissButton = { TextButton(onClick = { editingAction = null }) { Text(stringResource(R.string.cancel)) } },
-        )
-        LaunchedEffect(action) { focusRequester.requestFocus() }
-    }
+                Text(stringResource(R.string.selection_style_icon), style = MaterialTheme.typography.titleSmall)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().selectableGroup(),
+                    maxItemsInEachRow = 4,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    SelectionActionIcon.entries.forEach { icon ->
+                        val selected = icon == (customIcon ?: entry?.defaultIcon ?: SelectionActionIcon.GLOBE)
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(48.dp).clip(CircleShape)
+                                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+                                .selectable(selected = selected, role = Role.RadioButton, onClick = { customIcon = icon }),
+                        ) {
+                            Icon(icon.vector, contentDescription = stringResource(icon.label),
+                                tint = if (selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                TextButton(onClick = { customIcon = null }) { Text(stringResource(R.string.selection_icon_default)) }
+                onDelete?.let { delete ->
+                    TextButton(onClick = delete) { Text(stringResource(R.string.selection_delete_action), color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { save() }) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 private val SelectionActionStyle.label: Int get() = when (this) {

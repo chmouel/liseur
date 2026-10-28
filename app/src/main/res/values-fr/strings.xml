@@ -1664,7 +1664,17 @@
     <string name="selection_style_label">Texte</string>
     <string name="selection_style_both">Icône et texte</string>
     <string name="selection_style_hidden">Masqué</string>
-    <string name="selection_edit_label">Modifier le libellé de %1$s</string>
+    <string name="selection_edit_action">Personnaliser %1$s</string>
     <string name="selection_label_help">Laissez vide pour utiliser le libellé par défaut.</string>
     <string name="selection_label_default">Utiliser le libellé par défaut</string>
+    <string name="selection_icon_default">Utiliser l’icône par défaut</string>
+    <string name="selection_icon_star">Étoile</string>
+    <string name="selection_icon_heart">Cœur</string>
+    <string name="selection_icon_check">Coche</string>
+    <string name="selection_add_website">Ajouter une action de recherche web</string>
+    <string name="selection_url_template">URL de recherche</string>
+    <string name="selection_url_help">Utilisez {text} pour le texte sélectionné, par exemple https://example.org/search?q={text}.</string>
+    <string name="selection_url_invalid">Saisissez une URL HTTPS avec {text} après le nom d’hôte, sans nom d’utilisateur ni mot de passe.</string>
+    <string name="selection_name_required">Saisissez un nom.</string>
+    <string name="selection_delete_action">Supprimer l’action</string>
 </resources>

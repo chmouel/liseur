@@ -168,6 +168,8 @@ import com.chmouel.liseur.reader.annotations.canHandleSelectionIntent
 import com.chmouel.liseur.reader.annotations.launchSelectionIntent
 import com.chmouel.liseur.reader.annotations.processTextIntent
 import com.chmouel.liseur.reader.annotations.webSearchIntent
+import com.chmouel.liseur.reader.annotations.selectionWebsiteIntent
+import com.chmouel.liseur.reader.annotations.selectionSearchLanguage
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.SheetSelectionActionBar
@@ -4861,6 +4863,12 @@ internal fun ReaderScreen(
         }
         return SelectionActions(
             layout = selectionActionLayout,
+            onWebsite = { entry -> actOnDisplayedText { text ->
+                val language = selectionSearchLanguage(publication.metadata.languages, pageTranslated,
+                    (pageTranslation ?: restoringPageTranslation)?.translator?.target)
+                selectionWebsiteIntent(entry, text, language)?.let { context.launchSelectionIntent(it) }
+                dismissSelection()
+            } },
             onCopy = { actOnDisplayedText { text -> context.copySelection(text); dismissSelection() } },
             onCitation = { actOnDisplayedText { text ->
                 context.copySelection(citationText(text, publication.metadata.title, publication.metadata.authors.map { it.name }))

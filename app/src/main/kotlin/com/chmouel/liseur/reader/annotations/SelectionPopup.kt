@@ -33,6 +33,10 @@ import androidx.compose.material.icons.outlined.PersonSearch
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +75,7 @@ class SelectionActions(
     val onCitation: (() -> Unit)? = null,
     val onOpenWith: (() -> Unit)? = null,
     val onWebSearch: (() -> Unit)? = null,
+    val onWebsite: ((SelectionActionEntry) -> Unit)? = null,
     val onDelete: (() -> Unit)? = null,
     /** Translates the passage, when a service can. */
     val onTranslate: (() -> Unit)? = null,
@@ -302,17 +307,18 @@ private fun ActionButtons(
             SelectionAction.CITATION -> actions.onCitation
             SelectionAction.OPEN_WITH -> actions.onOpenWith
             SelectionAction.WEB_SEARCH -> actions.onWebSearch
+            SelectionAction.WIKIPEDIA, SelectionAction.OPEN_LIBRARY, null -> actions.onWebsite?.let { open -> { open(entry) } }
         }
         if (callback != null && entry.style != SelectionActionStyle.HIDDEN) {
-            val label = entry.customLabel ?: stringResource(if (action == SelectionAction.TRANSLATE) actions.translateLabel else action.label)
+            val label = entry.customLabel ?: stringResource(if (action == SelectionAction.TRANSLATE) actions.translateLabel else requireNotNull(action).label)
             Row(
                 Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(50))
                     .clickable(role = Role.Button, onClick = callback)
-                    .semantics { contentDescription = label }
+                    .semantics { if (entry.style == SelectionActionStyle.ICON) contentDescription = label }
                     .padding(horizontal = if (entry.style == SelectionActionStyle.ICON) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (entry.style != SelectionActionStyle.LABEL) Icon(action.icon, contentDescription = null)
+                if (entry.style != SelectionActionStyle.LABEL) Icon(entry.icon, contentDescription = null)
                 if (entry.style != SelectionActionStyle.ICON) {
                     Text(label, modifier = Modifier.padding(start = if (entry.style == SelectionActionStyle.BOTH) 6.dp else 0.dp),
                         style = selectionLabelStyle(buttonSize), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -391,19 +397,46 @@ internal val SelectionAction.label: Int get() = when (this) {
     SelectionAction.CITATION -> R.string.selection_citation
     SelectionAction.OPEN_WITH -> R.string.selection_open_with
     SelectionAction.WEB_SEARCH -> R.string.selection_web_search
+    SelectionAction.WIKIPEDIA -> R.string.selection_wikipedia
+    SelectionAction.OPEN_LIBRARY -> R.string.selection_open_library
 }
 
-internal val SelectionAction.icon: ImageVector get() = when (this) {
-    SelectionAction.NOTE -> Icons.Outlined.EditNote
-    SelectionAction.LOOK_UP -> Icons.AutoMirrored.Outlined.MenuBook
-    SelectionAction.COMPANION -> Icons.Outlined.PersonSearch
-    SelectionAction.SEARCH -> Icons.Outlined.Search
-    SelectionAction.DELETE -> Icons.Outlined.Delete
-    SelectionAction.TRANSLATE -> Icons.Outlined.Translate
-    SelectionAction.READ_ALOUD -> Icons.AutoMirrored.Outlined.VolumeUp
-    SelectionAction.SHARE -> Icons.Outlined.Share
-    SelectionAction.COPY -> Icons.Outlined.ContentCopy
-    SelectionAction.CITATION -> Icons.Outlined.FormatQuote
-    SelectionAction.OPEN_WITH -> Icons.AutoMirrored.Outlined.OpenInNew
-    SelectionAction.WEB_SEARCH -> Icons.Outlined.Public
+internal val SelectionActionEntry.icon: ImageVector get() = (customIcon ?: defaultIcon).vector
+
+internal val SelectionActionIcon.vector: ImageVector get() = when (this) {
+    SelectionActionIcon.NOTE -> Icons.Outlined.EditNote
+    SelectionActionIcon.BOOK -> Icons.AutoMirrored.Outlined.MenuBook
+    SelectionActionIcon.COMPANION -> Icons.Outlined.PersonSearch
+    SelectionActionIcon.SEARCH -> Icons.Outlined.Search
+    SelectionActionIcon.DELETE -> Icons.Outlined.Delete
+    SelectionActionIcon.TRANSLATE -> Icons.Outlined.Translate
+    SelectionActionIcon.READ_ALOUD -> Icons.AutoMirrored.Outlined.VolumeUp
+    SelectionActionIcon.SHARE -> Icons.Outlined.Share
+    SelectionActionIcon.COPY -> Icons.Outlined.ContentCopy
+    SelectionActionIcon.QUOTE -> Icons.Outlined.FormatQuote
+    SelectionActionIcon.OPEN_WITH -> Icons.AutoMirrored.Outlined.OpenInNew
+    SelectionActionIcon.GLOBE -> Icons.Outlined.Public
+    SelectionActionIcon.STAR -> Icons.Outlined.StarBorder
+    SelectionActionIcon.BOOKMARK -> Icons.Outlined.BookmarkBorder
+    SelectionActionIcon.HEART -> Icons.Outlined.FavoriteBorder
+    SelectionActionIcon.CHECK -> Icons.Outlined.Check
+}
+
+internal val SelectionActionIcon.label: Int get() = when (this) {
+    SelectionActionIcon.NOTE -> R.string.annotation_note
+    SelectionActionIcon.BOOK -> R.string.annotation_look_up
+    SelectionActionIcon.COMPANION -> R.string.companion_action
+    SelectionActionIcon.SEARCH -> R.string.reader_search
+    SelectionActionIcon.DELETE -> R.string.annotation_delete
+    SelectionActionIcon.TRANSLATE -> R.string.translation_action
+    SelectionActionIcon.READ_ALOUD -> R.string.read_aloud_from_here
+    SelectionActionIcon.SHARE -> R.string.annotation_share
+    SelectionActionIcon.COPY -> R.string.selection_copy
+    SelectionActionIcon.QUOTE -> R.string.selection_citation
+    SelectionActionIcon.OPEN_WITH -> R.string.selection_open_with
+    SelectionActionIcon.GLOBE -> R.string.selection_web_search
+    SelectionActionIcon.STAR -> R.string.selection_icon_star
+    SelectionActionIcon.BOOKMARK -> R.string.reader_bookmarks
+    SelectionActionIcon.HEART -> R.string.selection_icon_heart
+    SelectionActionIcon.CHECK -> R.string.selection_icon_check
 }
