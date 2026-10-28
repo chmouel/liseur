@@ -47,8 +47,13 @@ data class OpdsBook(
     val xmlBase: String? = null,
 )
 
-/** A link out of a feed: a sub-feed to walk, or the next page. */
-data class OpdsLink(val href: String, val title: String? = null)
+/**
+ * A link out of a feed: a sub-feed to walk, or the next page.
+ *
+ * [xmlBase] is the `xml:base` of the entry the link came from,
+ * unresolved, for the same reason as [OpdsBook.xmlBase].
+ */
+data class OpdsLink(val href: String, val title: String? = null, val xmlBase: String? = null)
 
 /**
  * The same book, said in the way the rest of the app speaks.
@@ -544,7 +549,7 @@ object OpdsParser {
 
     private fun navigationLink(entry: Element): OpdsLink? {
         val href = entry.children("link").firstOrNull(::pointsAtAFeed)?.href() ?: return null
-        return OpdsLink(href, entry.childText("title")?.trim())
+        return OpdsLink(href, entry.childText("title")?.trim(), entry.xmlBase())
     }
 
     private fun parseEntry(entry: Element): OpdsBook? {
