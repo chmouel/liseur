@@ -55,6 +55,24 @@ class TextIntentsTest {
     }
 
     @Test
+    fun `ask brave quotes the passage after the known book details`() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val book = SelectionBookContext(title = "A Study in Scarlet", authors = listOf("Arthur Conan Doyle", " "), chapter = " I: Mr. Holmes ")
+        assertEquals(
+            "I’m reading “A Study in Scarlet” by Arthur Conan Doyle. The passage comes from the chapter “I: Mr. Holmes”. " +
+                "The passage is in French. Please explain this passage: “mots affichés” Don’t reveal anything that happens later in the book.",
+            activity.askBravePrompt(" mots affichés ", "fr", book),
+        )
+        assertEquals("Please explain this passage: “the rest” Don’t reveal anything that happens later in the book.", activity.askBravePrompt("the rest", "xx", SelectionBookContext(authors = listOf("Doyle"))))
+
+        val entry = SelectionActionEntry(SelectionAction.ASK_BRAVE, SelectionActionStyle.BOTH)
+        assertEquals(
+            "https://search.brave.com/ask?q=I%E2%80%99m%20reading%20%E2%80%9CA%20%26%20B%E2%80%9D.%20Please%20explain%20this%20passage%3A%20%E2%80%9Cx%E2%80%9D%20Don%E2%80%99t%20reveal%20anything%20that%20happens%20later%20in%20the%20book.",
+            selectionWebsiteIntent(entry, activity.askBravePrompt("x", null, SelectionBookContext(title = "A & B")), null)!!.dataString,
+        )
+    }
+
+    @Test
     fun `external app fallback sends only the first word of a passage`() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         for (text in listOf("harnesses in the book on the shelf", "harnesses\nin the book", "harnesses\r\nin")) {

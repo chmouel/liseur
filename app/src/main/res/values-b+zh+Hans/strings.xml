@@ -1628,8 +1628,15 @@
     <string name="selection_icon_check">对勾</string>
     <string name="selection_add_website">添加网站操作</string>
     <string name="selection_url_template">搜索网址</string>
-    <string name="selection_url_help">使用 {text} 代表所选文本，例如 https://example.org/search?q={text}。</string>
-    <string name="selection_url_invalid">请输入 HTTPS 网址，{text} 须位于主机名之后，且不能包含用户名或密码。</string>
+    <string name="selection_url_help">轻触占位符即可插入：{text} 为所选文本，{page} 和 {pages} 是 Liseur 的页码，而非纸质书页码。例如 https://example.org/search?q={text}</string>
+    <string name="selection_url_invalid">请输入 HTTPS 网址，主机名之后须包含 {text} 等占位符，且不能包含用户名或密码。</string>
+    <string name="selection_insert_placeholder">插入 %1$s</string>
+    <string name="selection_ask_brave_reading">我正在读《%1$s》。</string>
+    <string name="selection_ask_brave_reading_by">我正在读%2$s的《%1$s》。</string>
+    <string name="selection_ask_brave_chapter">这段文字出自章节“%1$s”。</string>
+    <string name="selection_ask_brave_language">这段文字的语言是%1$s。</string>
+    <string name="selection_ask_brave_explain">请解释这段文字：“%1$s”</string>
+    <string name="selection_ask_brave_no_spoilers">不要透露书中后面发生的任何情节。</string>
     <string name="selection_name_required">请输入名称。</string>
     <string name="selection_delete_action">删除操作</string>
 </resources>

@@ -6,28 +6,93 @@ import java.net.URI
 import java.net.URLEncoder
 import java.util.Locale
 
+/** Book details a custom website address can ask for; [text] and the language are passed separately. */
+internal data class SelectionBookContext(
+    val title: String? = null,
+    val authors: List<String> = emptyList(),
+    val chapter: String? = null,
+    val progress: Int? = null,
+    val page: Int? = null,
+    val pages: Int? = null,
+    val isbn: String? = null,
+)
+
+internal val SELECTION_WEB_PLACEHOLDERS = listOf("text", "title", "author", "chapter", "progress", "page", "pages", "language", "isbn")
+
+private val PLACEHOLDER = Regex("""\{([a-z]+)\}""")
+
 internal fun selectionWebsiteTemplate(value: String): String? {
     val template = value.trim()
-    if (!template.contains("{text}")) return null
-    val uri = runCatching { URI(template.replace("{text}", "liseur-selection")) }.getOrNull() ?: return null
+    if (PLACEHOLDER.findAll(template).none { it.groupValues[1] in SELECTION_WEB_PLACEHOLDERS }) return null
+    val authority = template.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
+    if (authority.contains('{') || authority.contains('}')) return null
+    val uri = runCatching { URI(expand(template) { "liseur" }) }.getOrNull() ?: return null
     if (!uri.scheme.equals("https", ignoreCase = true) || uri.host.isNullOrBlank() || uri.rawUserInfo != null ||
         uri.port !in -1..65535) return null
-    val authority = template.substringAfter("://").substringBefore('/').substringBefore('?').substringBefore('#')
-    if (authority.contains("{text}")) return null
     return template
 }
 
-internal fun selectionWebUrl(entry: SelectionActionEntry, text: String, language: String?): String? {
+internal fun selectionWebUrl(
+    entry: SelectionActionEntry,
+    text: String,
+    language: String?,
+    book: SelectionBookContext = SelectionBookContext(),
+): String? {
     val term = text.trim().takeIf { it.isNotEmpty() } ?: return null
     val template = when (val target = entry.target) {
         is SelectionActionTarget.Website -> selectionWebsiteTemplate(target.urlTemplate) ?: return null
         is SelectionActionTarget.BuiltIn -> when (target.action) {
             SelectionAction.WIKIPEDIA -> "https://${wikipediaEdition(language)}.wikipedia.org/w/index.php?search={text}"
             SelectionAction.OPEN_LIBRARY -> "https://openlibrary.org/search?q={text}"
+            SelectionAction.ASK_BRAVE -> "https://search.brave.com/ask?q={text}"
             else -> return null
         }
     }
-    return template.replace("{text}", URLEncoder.encode(term, "UTF-8").replace("+", "%20"))
+    return expand(template) { name ->
+        when (name) {
+            "text" -> term
+            "title" -> book.title
+            "author" -> book.authors.filter { it.isNotBlank() }.joinToString(", ")
+            "chapter" -> book.chapter
+            "progress" -> book.progress?.toString()
+            "page" -> book.page?.toString()
+            "pages" -> book.pages?.toString()
+            "language" -> language
+            "isbn" -> book.isbn
+            else -> null
+        }.orEmpty().trim().let { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+    }
+}
+
+// One pass, so a value that itself looks like a placeholder is never expanded again; braces left
+// over from unknown placeholders are kept as typed, percent-encoded so the address stays valid.
+private fun expand(template: String, value: (String) -> String): String = buildString {
+    var at = 0
+    for (match in PLACEHOLDER.findAll(template)) {
+        if (match.groupValues[1] !in SELECTION_WEB_PLACEHOLDERS) continue
+        appendLiteral(template.substring(at, match.range.first))
+        append(value(match.groupValues[1]))
+        at = match.range.last + 1
+    }
+    appendLiteral(template.substring(at))
+}
+
+private fun StringBuilder.appendLiteral(part: String) {
+    append(part.replace("{", "%7B").replace("}", "%7D"))
+}
+
+/** The ISBN in an EPUB identifier such as `urn:isbn:978-2-07-036822-8`, or null when it is not one. */
+internal fun isbnOf(identifier: String?): String? {
+    val digits = identifier?.trim()?.replace(Regex("^(urn:)?isbn:", RegexOption.IGNORE_CASE), "")
+        ?.filterNot { it == '-' || it == ' ' }?.uppercase(Locale.ROOT) ?: return null
+    val valid = when {
+        digits.matches(Regex("\\d{13}")) ->
+            digits.mapIndexed { i, c -> (c - '0') * if (i % 2 == 0) 1 else 3 }.sum() % 10 == 0
+        digits.matches(Regex("\\d{9}[\\dX]")) ->
+            digits.mapIndexed { i, c -> (if (c == 'X') 10 else c - '0') * (10 - i) }.sum() % 11 == 0
+        else -> false
+    }
+    return digits.takeIf { valid }
 }
 
 internal fun selectionSearchLanguage(declared: List<String>, translated: Boolean, target: String?): String? =

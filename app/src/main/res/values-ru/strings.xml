@@ -1789,8 +1789,15 @@
     <string name="selection_icon_check">Галочка</string>
     <string name="selection_add_website">Добавить действие для сайта</string>
     <string name="selection_url_template">URL поиска</string>
-    <string name="selection_url_help">Используйте {text} для выделенного текста, например https://example.org/search?q={text}.</string>
-    <string name="selection_url_invalid">Введите HTTPS-адрес с {text} после имени хоста, без имени пользователя и пароля.</string>
+    <string name="selection_url_help">Нажмите на поле, чтобы вставить его: {text} — выделенный текст, {page} и {pages} — страницы Liseur, а не печатного издания. Пример: https://example.org/search?q={text}</string>
+    <string name="selection_url_invalid">Введите HTTPS-адрес с полем, например {text}, после имени хоста, без имени пользователя и пароля.</string>
+    <string name="selection_insert_placeholder">Вставить %1$s</string>
+    <string name="selection_ask_brave_reading">Я читаю «%1$s».</string>
+    <string name="selection_ask_brave_reading_by">Я читаю «%1$s», автор: %2$s.</string>
+    <string name="selection_ask_brave_chapter">Отрывок из главы «%1$s».</string>
+    <string name="selection_ask_brave_language">Язык отрывка: %1$s.</string>
+    <string name="selection_ask_brave_explain">Объясни этот отрывок: «%1$s»</string>
+    <string name="selection_ask_brave_no_spoilers">Не раскрывай ничего из того, что происходит дальше в книге.</string>
     <string name="selection_name_required">Введите название.</string>
     <string name="selection_delete_action">Удалить действие</string>
 </resources>

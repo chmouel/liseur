@@ -1693,8 +1693,15 @@
     <string name="selection_icon_check">Häkchen</string>
     <string name="selection_add_website">Website-Aktion hinzufügen</string>
     <string name="selection_url_template">Such-URL</string>
-    <string name="selection_url_help">Verwende {text} für den ausgewählten Text, zum Beispiel https://example.org/search?q={text}.</string>
-    <string name="selection_url_invalid">Gib eine HTTPS-URL mit {text} nach dem Hostnamen und ohne Benutzername oder Passwort ein.</string>
+    <string name="selection_url_help">Tippe auf einen Platzhalter, um ihn einzufügen: {text} ist die Auswahl, {page} und {pages} sind Liseur-Seiten, nicht die gedruckten. Beispiel: https://example.org/search?q={text}</string>
+    <string name="selection_url_invalid">Gib eine HTTPS-URL mit einem Platzhalter wie {text} nach dem Hostnamen und ohne Benutzername oder Passwort ein.</string>
+    <string name="selection_insert_placeholder">%1$s einfügen</string>
+    <string name="selection_ask_brave_reading">Ich lese „%1$s“.</string>
+    <string name="selection_ask_brave_reading_by">Ich lese „%1$s“ von %2$s.</string>
+    <string name="selection_ask_brave_chapter">Die Stelle stammt aus dem Kapitel „%1$s“.</string>
+    <string name="selection_ask_brave_language">Die Stelle ist auf %1$s.</string>
+    <string name="selection_ask_brave_explain">Erkläre diese Stelle: „%1$s“</string>
+    <string name="selection_ask_brave_no_spoilers">Verrate nichts, was später im Buch passiert.</string>
     <string name="selection_name_required">Gib einen Namen ein.</string>
     <string name="selection_delete_action">Aktion löschen</string>
 </resources>
