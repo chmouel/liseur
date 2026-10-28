@@ -554,6 +554,16 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a next link that is not a url leaves the walk incomplete`() {
+        pages["/opds"] = feed(book("1") + """<link rel="next" href="http://"/>""")
+
+        val (complete, books) = walk()
+
+        assertEquals(listOf("Book 1"), books.map { it.title })
+        assertFalse("pages behind a broken next link would be read as deleted", complete)
+    }
+
+    @Test
     fun `a Latin-1 feed with no charset header keeps its accents`() {
         latin1["/opds"] = """<?xml version="1.0" encoding="ISO-8859-1"?>""" + feed(
             """

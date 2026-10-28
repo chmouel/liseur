@@ -188,6 +188,9 @@ class OpdsCatalogClient(
             }
             val books = page.books
             onPage(books.map { it.toRemote(scope, page.base) })
+            // A link the page advertised but that is not a URL hides
+            // whatever it led to just as surely as a failed fetch.
+            if (page.unresolved) complete = false
 
             // A link the fetch rule refuses is skipped, not followed
             // and not fatal. Handing it to `OpdsHttp` would throw and
@@ -241,6 +244,8 @@ class OpdsCatalogClient(
         val navigation: List<HttpUrl>,
         val nextUrl: HttpUrl?,
         val base: HttpUrl,
+        /** Whether a navigation or next link on the page could not be made into a URL. */
+        val unresolved: Boolean,
     )
 
     private fun fetch(url: HttpUrl, scope: OpdsScope, credentials: RemoteCredentials): Resolved {
@@ -268,11 +273,14 @@ class OpdsCatalogClient(
         // means what the feed says it means, and a redirect moves that
         // meaning with it.
         val base = fetched.url.resolveOrSelf(page.xmlBase)
+        val navigation = page.navigation.mapNotNull { base.resolve(it.href) }
+        val nextUrl = page.nextHref?.let(base::resolve)
         return Resolved(
             books = page.books,
-            navigation = page.navigation.mapNotNull { base.resolve(it.href) },
-            nextUrl = page.nextHref?.let(base::resolve),
+            navigation = navigation,
+            nextUrl = nextUrl,
             base = base,
+            unresolved = navigation.size < page.navigation.size || (page.nextHref != null && nextUrl == null),
         )
     }
 
