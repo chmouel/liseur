@@ -32,6 +32,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -336,9 +340,11 @@ private fun SelectionActionEditor(
     val website = entry == null || entry.target is SelectionActionTarget.Website
     val defaultLabel = entry?.action?.let { stringResource(it.label) } ?: entry?.customLabel.orEmpty()
     var label by rememberSaveable(entry?.id) { mutableStateOf(entry?.customLabel.orEmpty()) }
-    var template by rememberSaveable(entry?.id) {
-        mutableStateOf((entry?.target as? SelectionActionTarget.Website)?.urlTemplate.orEmpty())
+    var templateField by rememberSaveable(entry?.id, stateSaver = TextFieldValue.Saver) {
+        val initial = (entry?.target as? SelectionActionTarget.Website)?.urlTemplate.orEmpty()
+        mutableStateOf(TextFieldValue(initial, TextRange(initial.length)))
     }
+    val template = templateField.text
     var customIcon by rememberSaveable(entry?.id) { mutableStateOf(entry?.customIcon) }
     var style by rememberSaveable(entry?.id) {
         mutableStateOf(if (entry == null) SelectionActionStyle.BOTH else entry.style.takeIf { it != SelectionActionStyle.HIDDEN })
@@ -394,8 +400,8 @@ private fun SelectionActionEditor(
                 )
                 if (website) {
                     OutlinedTextField(
-                        value = template,
-                        onValueChange = { template = it },
+                        value = templateField,
+                        onValueChange = { templateField = it },
                         label = { Text(stringResource(R.string.selection_url_template)) },
                         supportingText = { Text(stringResource(if (submitted && !templateValid)
                             R.string.selection_url_invalid else R.string.selection_url_help)) },
@@ -405,6 +411,26 @@ private fun SelectionActionEditor(
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { save() }),
                     )
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        SELECTION_WEB_PLACEHOLDERS.forEach { name ->
+                            val token = "{$name}"
+                            val insert = stringResource(R.string.selection_insert_placeholder, token)
+                            SuggestionChip(
+                                onClick = {
+                                    val at = templateField.selection
+                                    templateField = TextFieldValue(
+                                        templateField.text.replaceRange(at.min, at.max, token),
+                                        TextRange(at.min + token.length),
+                                    )
+                                },
+                                label = { Text(token, style = MaterialTheme.typography.labelMedium) },
+                                modifier = Modifier.semantics { contentDescription = insert },
+                            )
+                        }
+                    }
                 } else {
                     TextButton(onClick = { label = "" }) { Text(stringResource(R.string.selection_label_default)) }
                 }

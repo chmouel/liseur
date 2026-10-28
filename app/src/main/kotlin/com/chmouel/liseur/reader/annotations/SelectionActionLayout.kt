@@ -19,6 +19,7 @@ enum class SelectionAction(
     WEB_SEARCH("web_search", SelectionActionIcon.GLOBE, SelectionActionStyle.HIDDEN),
     WIKIPEDIA("wikipedia", SelectionActionIcon.GLOBE, SelectionActionStyle.HIDDEN),
     OPEN_LIBRARY("open_library", SelectionActionIcon.BOOK, SelectionActionStyle.HIDDEN),
+    ASK_BRAVE("ask_brave", SelectionActionIcon.BRAVE, SelectionActionStyle.HIDDEN),
 }
 
 enum class SelectionActionIcon(val id: String) {
@@ -26,6 +27,7 @@ enum class SelectionActionIcon(val id: String) {
     DELETE("delete"), TRANSLATE("translate"), READ_ALOUD("read_aloud"), SHARE("share"),
     COPY("copy"), QUOTE("quote"), OPEN_WITH("open_with"), GLOBE("globe"),
     STAR("star"), BOOKMARK("bookmark"), HEART("heart"), CHECK("check"),
+    BRAVE("brave"),
 }
 
 enum class SelectionActionStyle(val id: String) {

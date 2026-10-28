@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
+import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.DictionaryUrl
+import java.util.Locale
 
 /** Hands a passage to whatever the reader uses to share things. */
 fun Context.shareText(text: String, subject: String?) {
@@ -85,8 +87,37 @@ internal fun webSearchIntent(text: String = "") = Intent(Intent.ACTION_WEB_SEARC
     putExtra(android.app.SearchManager.QUERY, text)
 }
 
-internal fun selectionWebsiteIntent(entry: SelectionActionEntry, text: String, language: String?): Intent? =
-    selectionWebUrl(entry, text, language)?.let { Intent(Intent.ACTION_VIEW, it.toUri()) }
+internal fun selectionWebsiteIntent(
+    entry: SelectionActionEntry,
+    text: String,
+    language: String?,
+    book: SelectionBookContext = SelectionBookContext(),
+): Intent? = selectionWebUrl(entry, text, language, book)?.let { Intent(Intent.ACTION_VIEW, it.toUri()) }
+
+/**
+ * The question Ask Brave receives: the passage in quotes, preceded by whatever book details are
+ * known (title and author, chapter, the passage's language by name), and a request not to spoil
+ * what comes later, in the app's language.
+ */
+internal fun Context.askBravePrompt(text: String, language: String?, book: SelectionBookContext): String {
+    val title = book.title?.trim().orEmpty()
+    val author = book.authors.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
+    val chapter = book.chapter?.trim().orEmpty()
+    val languageName = language?.takeIf { it.isNotBlank() }
+        ?.let { Locale.forLanguageTag(it).getDisplayLanguage(resources.configuration.locales[0]) }
+        ?.takeIf { it.isNotBlank() && !it.equals(language, ignoreCase = true) }
+    return listOfNotNull(
+        when {
+            title.isEmpty() -> null
+            author.isEmpty() -> getString(R.string.selection_ask_brave_reading, title)
+            else -> getString(R.string.selection_ask_brave_reading_by, title, author)
+        },
+        chapter.takeIf { it.isNotEmpty() }?.let { getString(R.string.selection_ask_brave_chapter, it) },
+        languageName?.let { getString(R.string.selection_ask_brave_language, it) },
+        getString(R.string.selection_ask_brave_explain, text.trim()),
+        getString(R.string.selection_ask_brave_no_spoilers),
+    ).joinToString(" ")
+}
 
 internal fun Context.canHandleSelectionIntent(intent: Intent): Boolean =
     packageManager.queryIntentActivities(intent, 0).isNotEmpty()

@@ -44,8 +44,40 @@ class SelectionWebSearchTest {
         listOf("", "https://example.org/", "http://example.org/?q={text}", "javascript:{text}",
             "intent://example.org/{text}", "file:///{text}", "https://{text}.example.org/",
             "https://example.org{text}/", "https://user:pass@example.org/?q={text}",
-            "https://example.org:99999/?q={text}", "https://example.org/{unknown}?q={text}",
+            "https://example.org:99999/?q={text}", "https://example.org/{unknown}",
+            "https://{title}.example.org/", "https://example.org:{page}/",
             "https://example.org/\n?q={text}", "https://example.org/space here/{text}")
             .forEach { assertNull(it, selectionWebsiteTemplate(it)) }
+    }
+
+    @Test fun `custom templates fill book and position placeholders`() {
+        val template = "https://example.org/{language}/s?t={title}&a={author}&c={chapter}&p={progress}&n={page}/{pages}&i={isbn}"
+        val entry = SelectionActionEntry(SelectionActionTarget.Website("custom_test", template), SelectionActionStyle.BOTH, "Mine")
+        val book = SelectionBookContext(
+            title = "Le Petit Prince & co", authors = listOf("Antoine de Saint-Exupéry", " ", "B"),
+            chapter = "{title} 2/3", progress = 42, page = 7, pages = 120, isbn = "9782070612758",
+        )
+        assertEquals(
+            "https://example.org/fr/s?t=Le%20Petit%20Prince%20%26%20co&a=Antoine%20de%20Saint-Exup%C3%A9ry%2C%20B" +
+                "&c=%7Btitle%7D%202%2F3&p=42&n=7/120&i=9782070612758",
+            selectionWebUrl(entry, "word", "fr", book),
+        )
+        assertEquals("https://example.org//s?t=&a=&c=&p=&n=/&i=", selectionWebUrl(entry, "word", null))
+    }
+
+    @Test fun `any known placeholder is enough and unknown ones are kept as typed`() {
+        val template = "https://example.org/{chaptr}/?q={title}"
+        assertEquals(template, selectionWebsiteTemplate(template))
+        val entry = SelectionActionEntry(SelectionActionTarget.Website("custom_test", template), SelectionActionStyle.BOTH, "Mine")
+        assertEquals("https://example.org/%7Bchaptr%7D/?q=Dune", selectionWebUrl(entry, "word", null, SelectionBookContext(title = "Dune")))
+        assertNull(selectionWebUrl(entry, " ", null, SelectionBookContext(title = "Dune")))
+    }
+
+    @Test fun `ISBN comes only from a valid ISBN identifier`() {
+        assertEquals("9782070612758", isbnOf("urn:isbn:978-2-07-061275-8"))
+        assertEquals("9782070612758", isbnOf("ISBN:978 2 07 061275 8"))
+        assertEquals("080442957X", isbnOf("0-8044-2957-x"))
+        listOf(null, "", "urn:uuid:6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "9782070612759", "0804429571", "12345")
+            .forEach { assertNull(it, isbnOf(it)) }
     }
 }
