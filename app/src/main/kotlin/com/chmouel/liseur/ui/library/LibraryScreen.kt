@@ -127,6 +127,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -264,6 +265,7 @@ fun LibraryScreen(
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
     val scope = rememberCoroutineScope()
+    val resources = LocalResources.current
     var syncing by remember { mutableStateOf(false) }
     val syncNow: () -> Unit = {
         if (!syncing) {
@@ -288,8 +290,8 @@ fun LibraryScreen(
                 }
                 val needsAttention = outcome != SyncOutcome.Success && outcome != SyncOutcome.Incomplete
                 val result = snackbarHost.showSnackbar(
-                    message = context.getString(message),
-                    actionLabel = if (needsAttention) context.getString(R.string.settings) else null,
+                    message = resources.getString(message),
+                    actionLabel = if (needsAttention) resources.getString(R.string.settings) else null,
                     withDismissAction = needsAttention,
                 )
                 if (result == SnackbarResult.ActionPerformed) onConnectServer()
