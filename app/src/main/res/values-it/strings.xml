@@ -381,9 +381,9 @@
     <string name="reader_position_not_saved">Questa posizione di lettura non è stata salvata. Tieni il libro aperto e gira un\'altra pagina per riprovare.</string>
     <string name="reader_open_position_not_saved">Non è stato possibile salvare l’ultima posizione di lettura. Il libro potrebbe aprirsi in una posizione precedente.</string>
     <string name="server_sync_timeout">Il server ha impiegato troppo a rispondere; le posizioni si sincronizzeranno dopo.</string>
-    <string name="server_sync_unauthorised">Il server non accetta più questo accesso. Ricollega l\'account per sincronizzare di nuovo le posizioni.</string>
+    <string name="server_sync_unauthorised">Il server rifiuta questo accesso. Ricollega l\'account per sincronizzare di nuovo le posizioni.</string>
     <string name="server_sync_forbidden">Questo account non può sincronizzare le posizioni di lettura. Chiedi a chi gestisce il server i diritti di sync Kobo.</string>
-    <string name="server_sync_missing">Il server non ha più uno di questi libri, quindi la sua posizione non è stata sincronizzata.</string>
+    <string name="server_sync_missing">Uno di questi libri non è sul server, quindi la sua posizione non è stata sincronizzata.</string>
     <string name="server_sync_insecure">Questo server rifiuta le credenziali su HTTP in chiaro. Usa un indirizzo https://.</string>
     <string name="server_sync_malformed">Il server ha risposto in modo inatteso; le posizioni si sincronizzeranno dopo.</string>
     <string name="server_sync_stale_identity">L\'identità del libro sul server è cambiata; la sync riproverà.</string>
@@ -775,7 +775,7 @@
     <string name="settings_scroll_mode">Lettura a scorrimento</string>
     <string name="settings_scroll_mode_detail">Ogni capitolo è una lunga pagina da scorrere invece di pagine da girare. Puoi cambiarlo per un singolo libro nel lettore.</string>
     <string name="settings_lock_footer">Blocca il piè di pagina</string>
-    <string name="settings_lock_footer_detail">Toccare il piè di pagina durante la lettura non lo modifica. Una pressione prolungata apre comunque le sue opzioni.</string>
+    <string name="settings_lock_footer_detail">Toccare il piè di pagina non lo modifica durante la lettura. Una pressione prolungata apre comunque le sue opzioni.</string>
     <string name="settings_eink">Schermo e-ink</string>
     <string name="settings_eink_detail">Disattiva le animazioni, che sugli schermi e-ink non si vedono bene. Liseur rileva l\'e-ink automaticamente, ma puoi cambiarlo qui.</string>
     <string name="settings_color_eink">E-ink a colori</string>
@@ -881,8 +881,8 @@
     <string name="state_download_queued">In attesa di download</string>
     <string name="catalog_failed_offline">Impossibile raggiungere il server. Mostro il catalogo salvato.</string>
     <string name="catalog_failed_timeout">Il server ha impiegato troppo a rispondere. Mostro il catalogo salvato.</string>
-    <string name="catalog_failed_unauthorised">Il server non accetta più questo accesso. Ricollega l\'account per vedere i nuovi libri.</string>
-    <string name="catalog_failed_forbidden">Il catalogo ha rifiutato l\'accesso. Per un server Grimmory, abilita il server OPDS di Grimmory, poi riconnettiti. Altrimenti chiedi a chi gestisce il server.</string>
+    <string name="catalog_failed_unauthorised">Il server rifiuta questo accesso. Ricollega l\'account per vedere i nuovi libri.</string>
+    <string name="catalog_failed_forbidden">Il catalogo ha rifiutato l\'accesso. Per una connessione Grimmory migrata, abilita il server OPDS di Grimmory, poi riconnettiti. Altrimenti chiedi a chi gestisce il server.</string>
     <string name="catalog_failed_not_found">Nessun catalogo ha risposto a quell\'indirizzo. Controllalo nelle impostazioni del server.</string>
     <string name="catalog_failed_malformed">Il server ha risposto in modo inatteso. Mostro il catalogo salvato.</string>
     <string name="catalog_failed_insecure">Questo server richiede un indirizzo https://. Mostro il catalogo salvato.</string>
@@ -1468,7 +1468,7 @@
     <string name="settings_backup_password_export">Scegli una password per cifrare account e credenziali. Servirà per ripristinarli. I dati di lettura, le impostazioni, gli indirizzi dei servizi e i caratteri restano non cifrati.</string>
     <string name="settings_backup_password_restore">Inserisci la password di questo backup. Account e credenziali saranno sostituiti senza effettuare l’accesso.</string>
     <string name="settings_backup_password_error">Password errata o dati cifrati danneggiati. Riprova.</string>
-    <string name="settings_backup_error_credential">Una credenziale salvata di un account o di KOReader non è più leggibile su questo dispositivo. Accedi di nuovo, oppure esporta senza account e password.</string>
+    <string name="settings_backup_error_credential">Una credenziale salvata di un account o di KOReader non è leggibile su questo dispositivo. Accedi di nuovo, oppure esporta senza account e password.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compagno</string>
