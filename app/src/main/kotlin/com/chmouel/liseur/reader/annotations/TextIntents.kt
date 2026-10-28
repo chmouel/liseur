@@ -95,11 +95,11 @@ internal fun selectionWebsiteIntent(
 ): Intent? = selectionWebUrl(entry, text, language, book)?.let { Intent(Intent.ACTION_VIEW, it.toUri()) }
 
 /**
- * The question Ask Brave receives: the passage in quotes, preceded by whatever book details are
+ * The question Ask Brave and Duck.ai receive: the passage in quotes, preceded by whatever book details are
  * known (title and author, chapter, the passage's language by name), and a request not to spoil
  * what comes later, in the app's language.
  */
-internal fun Context.askBravePrompt(text: String, language: String?, book: SelectionBookContext): String {
+internal fun Context.askAiPrompt(text: String, language: String?, book: SelectionBookContext): String {
     val title = book.title?.trim().orEmpty()
     val author = book.authors.map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ")
     val chapter = book.chapter?.trim().orEmpty()
@@ -109,13 +109,13 @@ internal fun Context.askBravePrompt(text: String, language: String?, book: Selec
     return listOfNotNull(
         when {
             title.isEmpty() -> null
-            author.isEmpty() -> getString(R.string.selection_ask_brave_reading, title)
-            else -> getString(R.string.selection_ask_brave_reading_by, title, author)
+            author.isEmpty() -> getString(R.string.selection_ask_ai_reading, title)
+            else -> getString(R.string.selection_ask_ai_reading_by, title, author)
         },
-        chapter.takeIf { it.isNotEmpty() }?.let { getString(R.string.selection_ask_brave_chapter, it) },
-        languageName?.let { getString(R.string.selection_ask_brave_language, it) },
-        getString(R.string.selection_ask_brave_explain, text.trim()),
-        getString(R.string.selection_ask_brave_no_spoilers),
+        chapter.takeIf { it.isNotEmpty() }?.let { getString(R.string.selection_ask_ai_chapter, it) },
+        languageName?.let { getString(R.string.selection_ask_ai_language, it) },
+        getString(R.string.selection_ask_ai_explain, text.trim()),
+        getString(R.string.selection_ask_ai_no_spoilers),
     ).joinToString(" ")
 }
 

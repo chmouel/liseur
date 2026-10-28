@@ -1684,12 +1684,12 @@
     <string name="selection_url_help">Tocca un segnaposto per aggiungerlo: {text} è la selezione, {page} e {pages} sono pagine di Liseur, non quelle stampate. Esempio: https://example.org/search?q={text}</string>
     <string name="selection_url_invalid">Inserisci un URL HTTPS con un segnaposto come {text} dopo il nome host, senza nome utente né password.</string>
     <string name="selection_insert_placeholder">Inserisci %1$s</string>
-    <string name="selection_ask_brave_reading">Sto leggendo «%1$s».</string>
-    <string name="selection_ask_brave_reading_by">Sto leggendo «%1$s» di %2$s.</string>
-    <string name="selection_ask_brave_chapter">Il passaggio viene dal capitolo «%1$s».</string>
-    <string name="selection_ask_brave_language">Il passaggio è in %1$s.</string>
-    <string name="selection_ask_brave_explain">Spiega questo passaggio: «%1$s»</string>
-    <string name="selection_ask_brave_no_spoilers">Non rivelare nulla di ciò che accade più avanti nel libro.</string>
+    <string name="selection_ask_ai_reading">Sto leggendo «%1$s».</string>
+    <string name="selection_ask_ai_reading_by">Sto leggendo «%1$s» di %2$s.</string>
+    <string name="selection_ask_ai_chapter">Il passaggio viene dal capitolo «%1$s».</string>
+    <string name="selection_ask_ai_language">Il passaggio è in %1$s.</string>
+    <string name="selection_ask_ai_explain">Spiega questo passaggio: «%1$s»</string>
+    <string name="selection_ask_ai_no_spoilers">Non rivelare nulla di ciò che accade più avanti nel libro.</string>
     <string name="selection_name_required">Inserisci un nome.</string>
     <string name="selection_delete_action">Elimina azione</string>
 </resources>

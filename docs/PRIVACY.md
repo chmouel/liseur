@@ -134,20 +134,21 @@ fails then, and opening the screen makes no request.
 
 ### Selection searches in other apps
 
-Wikipedia, Open Library, Ask Brave and custom website actions open the
-selected text as a search in your browser or an app registered for that
-website. This happens only when you tap the action. On a translated page,
-the search uses the displayed translation. Wikipedia and Open Library
-receive only the selected text, plus the language in the Wikipedia
-address. Ask Brave sends Brave Search a question that holds the selected
-text and, when known, the book's title, authors, current chapter and the
-passage's language. A custom
-address can also carry the book's title, authors, ISBN and language, and
-the current chapter, page and percentage read, but only the ones you put
-in the address as placeholders. No account is included. Liseur makes no
-request to check these websites or their search results; the receiving
-browser or app handles the connection. Custom search addresses and names
-are stored in your toolbar settings and settings backups.
+Wikipedia, Open Library, Ask Brave, Duck.ai and custom website actions
+open the selected text as a search in your browser or an app registered
+for that website. This happens only when you tap the action. On a
+translated page, the search uses the displayed translation. Wikipedia
+and Open Library receive only the selected text, plus the language in
+the Wikipedia address. Ask Brave and Duck.ai send Brave Search or
+DuckDuckGo a question that holds the selected text and, when known, the
+book's title, authors, current chapter and the passage's language. A
+custom address can also carry the book's title, authors, ISBN and
+language, and the current chapter, page and percentage read, but only
+the ones you put in the address as placeholders. No account is included.
+Liseur makes no request to check these websites or their search results;
+the receiving browser or app handles the connection. Custom search
+addresses and names are stored in your toolbar settings and settings
+backups.
 
 ### Reading a translated book aloud
 

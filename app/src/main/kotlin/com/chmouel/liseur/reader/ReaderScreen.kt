@@ -161,7 +161,6 @@ import com.chmouel.liseur.reader.annotations.NoteDialog
 import com.chmouel.liseur.reader.annotations.NoteSheet
 import com.chmouel.liseur.reader.annotations.NoteSheetActions
 import com.chmouel.liseur.reader.annotations.NoteText
-import com.chmouel.liseur.reader.annotations.SelectionAction
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.citationText
 import com.chmouel.liseur.reader.annotations.copySelection
@@ -170,7 +169,8 @@ import com.chmouel.liseur.reader.annotations.launchSelectionIntent
 import com.chmouel.liseur.reader.annotations.processTextIntent
 import com.chmouel.liseur.reader.annotations.webSearchIntent
 import com.chmouel.liseur.reader.annotations.selectionWebsiteIntent
-import com.chmouel.liseur.reader.annotations.askBravePrompt
+import com.chmouel.liseur.reader.annotations.askAiPrompt
+import com.chmouel.liseur.reader.annotations.asksAi
 import com.chmouel.liseur.reader.annotations.SelectionBookContext
 import com.chmouel.liseur.reader.annotations.isbnOf
 import com.chmouel.liseur.reader.progress.footerPages
@@ -4883,7 +4883,7 @@ internal fun ReaderScreen(
                     pages = shownPage?.pages,
                     isbn = isbnOf(publication.metadata.identifier),
                 )
-                val query = if (entry.action == SelectionAction.ASK_BRAVE) context.askBravePrompt(text, language, book) else text
+                val query = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
                 selectionWebsiteIntent(entry, query, language, book)?.let { context.launchSelectionIntent(it) }
                 dismissSelection()
             } },
