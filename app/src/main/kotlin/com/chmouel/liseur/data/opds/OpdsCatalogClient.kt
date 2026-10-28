@@ -175,7 +175,9 @@ class OpdsCatalogClient(
             // every book the walk had already handed over.
             val page = try {
                 fetch(step.url, scope, credentials)
-            } catch (e: RemoteHttpFailure) {
+            } catch (e: IOException) {
+                // A timeout or a dropped connection on one shelf is the
+                // same story as an error page from it.
                 if (isRoot) throw e
                 Log.i(TAG, "A feed in this catalog could not be read; walking on", e)
                 // What was behind it was not seen, so this is no longer

@@ -8,6 +8,7 @@ import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
 import mockwebserver3.RecordedRequest
+import mockwebserver3.SocketEffect
 import okhttp3.Headers
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
@@ -37,6 +38,7 @@ class OpdsCatalogClientTest {
     private val pages = mutableMapOf<String, String>()
     private val codes = mutableMapOf<String, Int>()
     private val asked = mutableListOf<String>()
+    private val drops = mutableSetOf<String>()
     private val latin1 = mutableMapOf<String, String>()
 
     @Before
@@ -48,6 +50,9 @@ class OpdsCatalogClientTest {
                     (request.url.encodedQuery?.let { "?$it" } ?: "")
                 asked += path
                 codes[path]?.let { return MockResponse(code = it) }
+                if (path in drops) {
+                    return MockResponse.Builder().onResponseStart(SocketEffect.CloseSocket()).build()
+                }
                 latin1[path]?.let {
                     return MockResponse.Builder()
                         .setHeader("Content-Type", "application/atom+xml")
@@ -531,6 +536,21 @@ class OpdsCatalogClientTest {
         }
 
         assertTrue(failure is RemoteHttpFailure)
+    }
+
+    @Test
+    fun `a shelf whose connection drops costs that shelf, not the library`() {
+        pages["/opds"] = feed(
+            navigation("Dropped", "/opds/dropped") +
+                navigation("Here", "/opds/here"),
+        )
+        drops += "/opds/dropped"
+        pages["/opds/here"] = feed(book("kept"))
+
+        val (complete, books) = walk()
+
+        assertEquals(listOf("Book kept"), books.map { it.title })
+        assertFalse(complete)
     }
 
     @Test
