@@ -26,19 +26,18 @@ readonly RELEASE_NOTES_DIR="docs/release-notes"
 readonly PASS_KEYSTORE="android/liseur.keystore.p12"
 readonly PASS_KEYSTORE_PASSWORD="android/liseur.keystore-password"
 readonly PASS_KEY_ALIAS="android/liseur.keystore-alias"
-readonly PASS_GEMINI_KEY="google/gemini-api"
 readonly PASS_PLAY_SERVICE_ACCOUNT="android/google.play.service.serviceaccount"
 readonly LOCAL_SIGNING_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/liseur/signing"
 readonly LOCAL_KEYSTORE="$LOCAL_SIGNING_DIR/release.p12"
 readonly KEYSTORE_PROPERTIES="keystore.properties"
-readonly NOTES_MODEL="gemini-flash-latest"
+readonly NOTES_MODEL="${LISEUR_NOTES_MODEL:-gpt-6-luna}"
 readonly NOTES_COPILOT_MODEL="${LISEUR_NOTES_COPILOT_MODEL:-gpt-6-luna}"
 readonly REQUIRED_SECRETS=(
     LISEUR_KEYSTORE_BASE64
     LISEUR_KEYSTORE_PASSWORD
     LISEUR_KEY_ALIAS
     LISEUR_KEY_PASSWORD
-    GEMINI_API_KEY
+    OPENAI_API_KEY
     LISEUR_PLAY_SERVICE_ACCOUNT_JSON
 )
 # Set by --no-play. The tag records the per-release decision so an existing
@@ -356,7 +355,19 @@ sync_release_secrets() {
     set_release_secret LISEUR_KEY_ALIAS "$(pass_show "$PASS_KEY_ALIAS")"
     set_release_secret LISEUR_KEY_PASSWORD \
         "$(pass_show "$PASS_KEYSTORE_PASSWORD")"
-    set_release_secret GEMINI_API_KEY "$(pass_show "$PASS_GEMINI_KEY")"
+    # The release-notes key comes from the environment (.envrc), and
+    # OPENAI_API_BASE with it when the key is for another OpenAI-compatible
+    # server.
+    [[ -n "${OPENAI_API_KEY:-}" ]] ||
+        die "OPENAI_API_KEY is not set; load .envrc first"
+    set_release_secret OPENAI_API_KEY "$OPENAI_API_KEY"
+    if [[ -n "${OPENAI_API_BASE:-}" ]]; then
+        set_release_secret OPENAI_API_BASE "$OPENAI_API_BASE"
+    elif gh secret list --repo "$GH_REPO" --env release | cut -f1 |
+        grep -qx OPENAI_API_BASE; then
+        gh secret delete OPENAI_API_BASE --repo "$GH_REPO" --env release ||
+            die "could not delete release secret OPENAI_API_BASE"
+    fi
     if [[ "$skip_play" == false ]]; then
         set_release_secret LISEUR_PLAY_SERVICE_ACCOUNT_JSON \
             "$(pass_show "$PASS_PLAY_SERVICE_ACCOUNT")"
@@ -479,11 +490,11 @@ bump_version() {
 }
 
 # The changelog is what F-Droid shows, so it is worth a moment of the
-# maintainer's attention. Gemini drafts it from the commits, Copilot
-# steps in when Gemini cannot, and the editor is where it gets fixed. A
-# failed draft says why on stderr.
+# maintainer's attention. pi drafts it from the commits, Copilot steps
+# in when pi cannot, and the editor is where it gets fixed. A failed
+# draft says why on stderr.
 draft_release_notes() {
-    draft_with_gemini "$@" && return
+    draft_with_pi "$@" && return
     printf 'Falling back to copilot (%s)...\n' "$NOTES_COPILOT_MODEL" >&2
     draft_with_copilot "$@"
 }
@@ -530,43 +541,38 @@ Reply with the changelog text only."
     return $status
 }
 
-draft_with_gemini() {
+# pi gets the same bare treatment as copilot: an empty directory, no
+# tools, no extensions and no context files.
+draft_with_pi() {
     local range=$1 draft=$2
-    local key request response http_code curl_error status=1
+    local workdir prompt status=0
 
-    if ! key=$(pass show "$PASS_GEMINI_KEY" 2>/dev/null) || [[ -z "$key" ]]; then
-        printf 'Gemini draft: could not read %s from pass.\n' \
-            "$PASS_GEMINI_KEY" >&2
+    if ! command -v pi >/dev/null; then
+        printf 'pi draft: pi is not installed.\n' >&2
         return 1
     fi
 
-    request=$(mktemp)
-    response=$(mktemp)
-    jq -n --rawfile text <(release_notes_prompt "$range") \
-        '{contents: [{parts: [{text: $text}]}]}' > "$request"
+    prompt="$(release_notes_prompt "$range")
+Reply with the changelog text only."
+    printf 'Asking pi (openai/%s) for a changelog draft...\n' "$NOTES_MODEL" >&2
+    workdir=$(mktemp -d)
+    (
+        cd "$workdir" &&
+            timeout 180 pi -p --no-session --model "openai/$NOTES_MODEL" \
+                --no-tools --no-extensions --no-skills --no-prompt-templates \
+                --no-context-files --no-mcp --no-approve --offline \
+                <<<"$prompt"
+    ) > "$draft" || status=$?
+    rm -rf "$workdir"
 
-    printf 'Asking %s for a changelog draft...\n' "$NOTES_MODEL" >&2
-    if ! http_code=$(curl -sS --max-time 120 -o "$response" -w '%{http_code}' \
-        "https://generativelanguage.googleapis.com/v1beta/models/$NOTES_MODEL:generateContent" \
-        -H "Content-Type: application/json" \
-        -H "x-goog-api-key: $key" \
-        -X POST -d @"$request" 2>&1); then
-        curl_error=${http_code##*curl: }
-        printf 'Gemini draft: request failed: %s\n' "${curl_error:-unknown error}" >&2
-    elif [[ "$http_code" != 2* ]]; then
-        printf 'Gemini draft: HTTP %s: %s\n' "$http_code" \
-            "$(jq -r '.error.message // empty' "$response" 2>/dev/null |
-                head -n 1)" >&2
-    elif jq -er '.candidates[0].content.parts // [] | map(.text // "")
-        | join("") | select(length > 0)' "$response" > "$draft" 2>/dev/null; then
-        status=0
-    else
-        printf 'Gemini draft: no text in the reply (finishReason: %s).\n' \
-            "$(jq -r '.candidates[0].finishReason // .promptFeedback.blockReason // "none"' \
-                "$response" 2>/dev/null)" >&2
+    if ((status == 124)); then
+        printf 'pi draft: timed out after 180s.\n' >&2
+    elif ((status != 0)); then
+        printf 'pi draft: pi exited with status %s.\n' "$status" >&2
+    elif ! grep -q '[^[:space:]]' "$draft"; then
+        printf 'pi draft: no text in the reply.\n' >&2
+        status=1
     fi
-
-    rm -f "$request" "$response"
     return $status
 }
 
@@ -657,19 +663,18 @@ last_final_tag() {
         --exclude '*-rc.*' --exclude '*-test.*' 2>/dev/null || true
 }
 
-# The GitHub release is immutable once CI publishes it, and CI's Gemini
+# The GitHub release is immutable once CI publishes it, and CI's OpenAI
 # call can fail as easily as ours. So the long notes are written here,
 # reviewed, and committed with the release; CI uses them when they are
 # in the tag and writes its own otherwise.
 prepare_github_notes() {
     local range=$1 output=$2
-    local changelog key status=0 editor
+    local changelog status=0 editor
 
     changelog=$(mktemp)
     printf '%s\n' "$release_notes" > "$changelog"
-    key=$(pass show "$PASS_GEMINI_KEY" 2>/dev/null) || key=""
     printf 'Writing the GitHub release notes for %s...\n' "$range"
-    GEMINI_API_KEY="$key" hack/generate-release-notes --copilot --no-fallback \
+    hack/generate-release-notes --pi --copilot --no-fallback \
         --range "$range" --changelog "$changelog" --output "$output" ||
         status=$?
     rm -f "$changelog"
