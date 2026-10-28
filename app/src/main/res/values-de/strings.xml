@@ -14,7 +14,7 @@
     <string name="add_book">Buch hinzufügen</string>
     <string name="add_folder">Ordner hinzufügen</string>
     <string name="add_books">Bücher hinzufügen</string>
-    <string name="add_folder_hint">Zeige Liseur einen Ordner mit EPUBs, und es behält ihn im Blick für neue Dateien.</string>
+    <string name="add_folder_hint">Wähle einen Ordner mit EPUBs. Liseur fügt neue Bücher hinzu, die darin auftauchen.</string>
     <string name="library_folders">Überwachte Ordner</string>
     <string name="library_folders_empty">Es werden keine Ordner überwacht.</string>
     <plurals name="library_folders_count">
@@ -23,7 +23,7 @@
     </plurals>
     <string name="remove_folder">Ordner entfernen</string>
     <string name="remove_folder_a11y">%1$s entfernen</string>
-    <string name="remove_folder_warning">Liseur überwacht „%1$s“ nicht mehr. Bücher, die nur in diesem Ordner lagen, verschwinden aus deiner Bibliothek; Bücher, die ein anderer überwachter Ordner hält, und Bücher, die auf deinem Server gespeichert sind, bleiben. Auf diesem Gerät werden keine Dateien gelöscht.</string>
+    <string name="remove_folder_warning">Liseur überwacht „%1$s“ nicht mehr. Bücher, die nur in diesem Ordner liegen, verschwinden aus deiner Bibliothek. Bücher, die auch in einem anderen überwachten Ordner oder auf deinem Server sind, bleiben. Auf diesem Gerät werden keine Dateien gelöscht.</string>
     <string name="add_book_hint">Wähle ein einzelnes EPUB von deinem Gerät oder aus deinem Cloud-Speicher.</string>
     <string name="connect_server_hint">Durchsuche calibre-web, Komga, liseur-sync oder einen beliebigen OPDS-Katalog.</string>
     <string name="search_books">Bücher suchen</string>
@@ -52,8 +52,8 @@
     <string name="series_all_read">Du hast die ganze Reihe gelesen</string>
     <string name="series_caught_up">Du bist bei dieser Reihe auf dem Stand</string>
     <string name="series_all_known_read">Du hast hier jedes Buch gelesen</string>
-    <string name="series_missing_volume">Band %s — nicht in deiner Bibliothek</string>
-    <string name="series_not_published_yet">Band %s — noch nicht erschienen</string>
+    <string name="series_missing_volume">Band %s: nicht in deiner Bibliothek</string>
+    <string name="series_not_published_yet">Band %s: noch nicht erschienen</string>
     <string name="series_download_missing">Den Rest herunterladen</string>
     <string name="series_mark_read">Reihe als gelesen markieren</string>
     <string name="series_archive">Reihe archivieren</string>
@@ -66,13 +66,13 @@
     <string name="series_rename">Reihe umbenennen…</string>
     <string name="series_rename_title">Reihe umbenennen</string>
     <string name="series_rename_field">Name der Reihe</string>
-    <string name="series_rename_hint">Nur du siehst diesen Namen. Dein Server nennt die Reihe weiter so, wie er sie aus deiner Bibliothek gelesen hat, damit später hinzugefügte Bücher trotzdem auf diesem Regal landen.</string>
+    <string name="series_rename_hint">Nur du siehst diesen Namen. Dein Server behält den ursprünglichen Namen, damit neue Bücher der Reihe trotzdem auf diesem Regal erscheinen.</string>
     <string name="series_rename_save">Umbenennen</string>
     <string name="series_rename_reset">Ursprünglichen Namen verwenden</string>
     <string name="series_rename_taken">Eine andere Reihe heißt schon so. Eine Reihe auf eine andere umzubenennen würde sie zusammenführen, und das macht dein Server nicht.</string>
     <string name="series_rename_failed">Die Reihe konnte nicht umbenannt werden. Dafür brauchst du deinen Bibliotheksserver, und ein Name wird nicht gespeichert, um später gesendet zu werden.</string>
     <string name="series_clear_numbers">Eigene Bandnummern löschen</string>
-    <string name="series_clear_numbers_warning">Die Bücher bekommen wieder die Nummern von Server und Dateien. Selbst eingetippte Nummern werden ebenfalls gelöscht — sie lassen sich von einer Neuordnung nicht unterscheiden.</string>
+    <string name="series_clear_numbers_warning">Die Bücher bekommen wieder die Nummern von Server und Dateien. Selbst eingetippte Nummern werden ebenfalls gelöscht, da sie sich von einer Neuordnung nicht unterscheiden lassen.</string>
     <string name="series_clear_numbers_confirm">Löschen</string>
     <string name="done">Fertig</string>
     <string name="series_actions">Aktionen für die Reihe</string>
@@ -243,12 +243,12 @@
     <string name="liseur_sync_token">Gerätetoken</string>
     <string name="liseur_sync_token_help">Erstelle eines auf dem Server mit „liseur-sync admin mint-token“ und füge das Geheimnis hier ein.</string>
     <string name="sync_server_same_book_title">Ist das dasselbe Buch?</string>
-    <string name="sync_server_same_book_detail">Dein Server hat diese nur nach Titel und Autor zugeordnet. Zwei Übersetzungen oder zwei Ausgaben mit anderem Text wirken so gleich — deshalb wird nichts synchronisiert, bis du es sagst.</string>
+    <string name="sync_server_same_book_detail">Dein Server hat diese nur nach Titel und Autor zugeordnet. Zwei Übersetzungen oder Ausgaben können beides gemeinsam haben, deshalb synchronisiert Liseur sie erst, wenn du es bestätigst.</string>
     <string name="sync_server_same_book_yes">Dasselbe Buch</string>
     <string name="sync_server_same_book_no">Unterschiedlich</string>
     <plurals name="sync_server_ambiguous">
-        <item quantity="one">Ein Buch passt zu mehr als einem Buch auf deinem Server. Liseur hat es lieber in Ruhe gelassen, statt zu raten; zusammenführen kannst nur du, vom Server aus.</item>
-        <item quantity="other">%1$d Bücher passen zu mehr als einem Buch auf deinem Server. Liseur hat sie lieber in Ruhe gelassen, statt zu raten; zusammenführen kannst nur du, vom Server aus.</item>
+        <item quantity="one">Ein Buch passt zu mehr als einem Buch auf deinem Server. Liseur hat es lieber in Ruhe gelassen, statt zu raten. Wenn es dasselbe Buch ist, führe die Einträge auf dem Server zusammen.</item>
+        <item quantity="other">%1$d Bücher passen zu mehr als einem Buch auf deinem Server. Liseur hat sie lieber in Ruhe gelassen, statt zu raten. Wenn es dasselbe Buch ist, führe die Einträge auf dem Server zusammen.</item>
     </plurals>
     <string name="server_account">Buchserver</string>
     <string name="server_connected" formatted="true">Verbunden mit %1$s als %2$s</string>
@@ -275,10 +275,10 @@
     <string name="server_tagline_custom">Ein OPDS-Katalog, ein KOReader-Sync-Server oder beides</string>
     <string name="server_section_sync">Lesepositionen</string>
     <string name="server_api_key">API-Schlüssel</string>
-    <string name="server_api_key_help">Öffne in Komga deine Kontoeinstellungen und erstelle einen API-Schlüssel. Die ganze Seitenadresse einzufügen ist in Ordnung — Liseur findet den Server daraus.</string>
+    <string name="server_api_key_help">Öffne in Komga deine Kontoeinstellungen und erstelle einen API-Schlüssel. Die ganze Seitenadresse einzufügen ist in Ordnung; Liseur findet den Server daraus.</string>
     <string name="server_url">Serveradresse</string>
     <string name="server_url_opds">OPDS-Katalogadresse</string>
-    <string name="server_custom_catalog_help">Die Adresse deines OPDS-Katalogs. Der Anfang genügt — Liseur folgt den Regalen bis zu deinen Büchern. Leer lassen, wenn diese Verbindung nur für Lesepositionen sein soll.</string>
+    <string name="server_custom_catalog_help">Die Adresse deines OPDS-Katalogs. Der Anfang genügt: Liseur folgt den Regalen bis zu deinen Büchern. Leer lassen, wenn diese Verbindung nur für Lesepositionen sein soll.</string>
     <string name="server_custom_credentials_help">Benutzername und Passwort leer lassen, wenn der Katalog für alle offen ist.</string>
     <string name="server_custom_kosync_help">Ein KOReader-Sync-Server (kosync), der deine Stelle im Buch geräteübergreifend hält. Leer lassen, wenn du nur browsen willst.</string>
     <string name="server_custom_kosync_section">KOReader-Sync (optional)</string>
@@ -294,7 +294,7 @@
     <string name="server_check_again">Erneut prüfen</string>
     <string name="server_try_http">Ohne Verschlüsselung verbinden</string>
     <string name="server_http_title">Ohne Verschlüsselung verbinden?</string>
-    <string name="server_http_warning">Liseur spricht mit diesem Server über normales HTTP. Benutzername und Passwort werden bei jeder Anfrage gesendet, und jeder im Netzwerk — oder irgendwo zwischen dir und dem Server — kann sie lesen, sehen, was du liest, und ändern, was zurückkommt. Tu das nur in einem Netz, dem du vertraust.</string>
+    <string name="server_http_warning">Dieser Server nutzt normales HTTP. Benutzername, Passwort und deine Leseaktivität können abgefangen und Antworten verändert werden. Nutze das nur in einem Netz, dem du vertraust.</string>
     <string name="server_http_confirm">Trotzdem verbinden</string>
     <string name="server_error_credentials">Dieser Benutzername oder dieses Passwort wurde vom Server abgelehnt.</string>
     <string name="server_error_credentials_komga">Dieser API-Schlüssel wurde vom Server abgelehnt. Prüfe, ob er vollständig kopiert und seitdem nicht widerrufen wurde.</string>
@@ -305,9 +305,9 @@
     <string name="server_error_not_liseur_sync">Diese Adresse hat geantwortet, aber nicht wie ein liseur-sync-Server.</string>
     <string name="server_error_not_bookorbit">Diese Adresse hat geantwortet, aber nicht wie ein BookOrbit-Server.</string>
     <string name="server_error_not_custom">Diese Adresse hat geantwortet, aber nicht mit einem OPDS-Katalog. Prüfe die Adresse, einschließlich eines Ordners, aus dem sie ausgeliefert wird.</string>
-    <string name="server_error_credentials_custom">Dieser Benutzername oder dieses Passwort wurde vom Katalog abgelehnt. Wenn das eine migrierte Grimmory-Verbindung ist, aktiviere zuerst den OPDS-Server von Grimmory. Beide leer lassen, wenn der Katalog für alle offen ist.</string>
-    <string name="server_error_sign_in_custom">Der Katalog hat die Anfrage abgelehnt. Wenn das eine migrierte Grimmory-Verbindung ist, aktiviere zuerst den OPDS-Server von Grimmory; sonst, wenn er privat ist, Benutzername und Passwort hinzufügen oder die Adresse prüfen.</string>
-    <string name="server_error_scopes_liseur_sync">Dieses Token funktioniert, synchronisiert aber möglicherweise keine Lesepositionen. Erstelle eines mit mindestens dem Geltungsbereich „sync“ — vollständig sind sync, read-insights und library-read.</string>
+    <string name="server_error_credentials_custom">Dieser Benutzername oder dieses Passwort wurde vom Katalog abgelehnt. Bei einem Grimmory-Server aktiviere zuerst den OPDS-Server von Grimmory. Beide leer lassen, wenn der Katalog für alle offen ist.</string>
+    <string name="server_error_sign_in_custom">Der Katalog hat die Anfrage abgelehnt. Bei einem Grimmory-Server aktiviere zuerst den OPDS-Server von Grimmory; sonst, wenn er privat ist, Benutzername und Passwort hinzufügen oder die Adresse prüfen.</string>
+    <string name="server_error_scopes_liseur_sync">Dieses Token darf Lesepositionen möglicherweise nicht synchronisieren. Erstelle eines mit dem Geltungsbereich „sync“.</string>
     <string name="server_error_rate_limited">Zu viele Versuche. Warte einen Moment und versuche es erneut.</string>
     <string name="server_error_unreachable">Der Server hat nicht geantwortet. Prüfe die Adresse und ob du online bist.</string>
     <string name="server_error_https">Der Server hat über eine sichere Verbindung nicht geantwortet.</string>
@@ -318,15 +318,15 @@
     <string name="server_no_download_right">Dieses Konto darf keine Bücher herunterladen. Bitte die Person, die den Server betreibt, in calibre-web für dich „Allow Downloads“ zu aktivieren, und prüfe dann erneut.</string>
     <string name="server_no_download_right_komga">Dieser API-Schlüssel darf keine Bücher herunterladen. Bitte die Person, die den Server betreibt, deinem Konto die Rolle für Datei-Downloads zu geben, und prüfe dann erneut.</string>
     <string name="server_no_download_right_custom">Dieser Katalog bietet keine Bücher zum Download an.</string>
-    <string name="server_no_download_right_liseur_sync">Dieses Token darf die Bibliothek nicht lesen — Tokens von früher, bevor liseur-sync Bücher ausgeliefert hat, können sie nicht durchsuchen. Erstelle ein neues mit dem Geltungsbereich library-read, oder trenne die Verbindung und melde dich erneut an, und prüfe dann erneut.</string>
+    <string name="server_no_download_right_liseur_sync">Dieses Token darf die Bibliothek nicht lesen. Erstelle ein neues mit dem Geltungsbereich library-read, oder trenne die Verbindung und melde dich erneut an, und prüfe dann erneut.</string>
     <string name="server_no_download_right_bookorbit">Dieses Konto darf keine Bücher von BookOrbit herunterladen. Eine Administration kann die Download-Berechtigung erteilen, dann prüfe erneut.</string>
     <string name="server_token_storage_note">Dein Gerätetoken bleibt auf diesem Gerät, verschlüsselt. Es wird bei jedem Gespräch von Liseur mit dem Server gesendet. Widerrufe es auf dem Server, wenn du das Handy verlierst.</string>
     <string name="server_bookorbit_storage_note">Dein Passwort wird nicht gespeichert. Es wird einmal gegen eine Sitzung getauscht, die Liseur selbst erneuert und verschlüsselt auf diesem Gerät ablegt. Beim Abmelden von BookOrbit wird sie widerrufen.</string>
     <string name="server_bookorbit_password_help">BookOrbit gibt Apps keinen eigenen Schlüssel, das ist also dein Kontopasswort. Es wird gegen eine kurzlebige Sitzung getauscht und nie gespeichert.</string>
-    <string name="server_sync_on">Deine Leseposition folgt dir zwischen Geräten.</string>
+    <string name="server_sync_on">Deine Leseposition wird zwischen Geräten synchronisiert.</string>
     <string name="server_sync_off">Lesepositionen werden nicht synchronisiert. Der Server hat möglicherweise die Kobo-Sync-Funktion ausgeschaltet.</string>
-    <string name="server_sync_unsupported_custom">OPDS kann Lesepositionen nicht mitführen. Füge unten eine KOReader-Sync-Adresse hinzu, dann folgt deine Stelle dir zwischen Geräten.</string>
-    <string name="server_sync_none_custom">Diese Verbindung führt von sich aus keine Lesepositionen mit. Füge unten eine KOReader-Sync-Adresse hinzu, dann folgt deine Stelle dir zwischen Geräten.</string>
+    <string name="server_sync_unsupported_custom">OPDS kann keine Lesepositionen synchronisieren. Füge unten eine KOReader-Sync-Adresse hinzu, um deine Stelle geräteübergreifend zu behalten.</string>
+    <string name="server_sync_none_custom">Diese Verbindung synchronisiert von sich aus keine Lesepositionen. Füge unten eine KOReader-Sync-Adresse hinzu, um deine Stelle geräteübergreifend zu behalten.</string>
     <string name="server_sync_kosync_paired">Deine Stelle wird vom unten eingerichteten KOReader-Sync-Server gehalten.</string>
     <string name="calibre_show_advanced">Erweitert</string>
     <string name="calibre_hide_advanced">Erweitert ausblenden</string>
@@ -334,8 +334,8 @@
     <string name="calibre_save_token">Token speichern</string>
     <string name="calibre_token_help">Liseur holt das normalerweise selbst. Wenn Lesepositionen nicht synchronisieren, füge hier die Kobo-Sync-URL von deiner calibre-web-Profilseite ein.</string>
     <string name="server_password_storage_note">Dein Passwort bleibt auf diesem Gerät, verschlüsselt. Es wird bei jedem Gespräch von Liseur mit dem Server gesendet, weil diese Serverart das verlangt.</string>
-    <string name="server_custom_storage_note">Alles, was du hier eingibst, bleibt auf diesem Gerät, verschlüsselt. Das Katalogpasswort wird bei jedem Gespräch von Liseur mit dem Katalog gesendet; das KOReader-Sync-Passwort verlässt dieses Handy nie — nur ein davon abgeleiteter Wert wird gesendet.</string>
-    <string name="server_custom_kosync_storage_note">Alles, was du hier eingibst, bleibt auf diesem Gerät, verschlüsselt. Das KOReader-Sync-Passwort verlässt dieses Handy nie — nur ein davon abgeleiteter Wert wird gesendet.</string>
+    <string name="server_custom_storage_note">Alles, was du hier eingibst, bleibt auf diesem Gerät, verschlüsselt. Das Katalogpasswort wird bei jedem Gespräch von Liseur mit dem Katalog gesendet; das KOReader-Sync-Passwort verlässt dieses Handy nie. Nur ein davon abgeleiteter Wert wird gesendet.</string>
+    <string name="server_custom_kosync_storage_note">Alles, was du hier eingibst, bleibt auf diesem Gerät, verschlüsselt. Das KOReader-Sync-Passwort verlässt dieses Handy nie. Nur ein davon abgeleiteter Wert wird gesendet.</string>
     <string name="server_api_key_storage_note">Dein API-Schlüssel bleibt auf diesem Gerät, verschlüsselt. Er wird bei jedem Gespräch von Liseur mit dem Server gesendet. Widerrufe ihn in Komga, wenn du das Handy verlierst.</string>
     <string name="book_on_server">Auf dem Server</string>
     <string name="book_not_downloaded">Dieses Buch liegt noch auf dem Server.</string>
@@ -348,7 +348,7 @@
     <string name="server_sync_running">Lesepositionen werden synchronisiert…</string>
     <string name="server_sync_offline">Server nicht erreichbar; Positionen synchronisieren später.</string>
     <string name="reader_sync_book">Dieses Buch synchronisieren</string>
-    <string name="reader_sync_book_in_step">Dieses Buch ist bereits mit dem Server im Einklang.</string>
+    <string name="reader_sync_book_in_step">Dieses Buch ist bereits mit dem Server synchronisiert.</string>
     <string name="reader_sync_book_no_remote">Der Server hat für dieses Buch noch keine Leseposition.</string>
     <string name="reader_sync_book_not_synced">Dieses Buch kennt der Server nicht, deshalb gibt es nichts zu synchronisieren.</string>
     <string name="reader_sync_book_moved">Während das offen war, hat sich etwas bewegt, deshalb wurde nichts geändert. Versuche, dieses Buch erneut zu synchronisieren.</string>
@@ -402,7 +402,7 @@
 
     <string name="download_all">Alle Bücher herunterladen</string>
     <string name="download_all_summary">Hole jedes Buch aus dieser Bibliothek, das noch nicht auf deinem Gerät ist. Archivierte Bücher bleiben, wo sie sind.</string>
-    <string name="download_all_working">Wird ermittelt, wie viel Platz dafür nötig ist…</string>
+    <string name="download_all_working">Wird geprüft, wie viel Platz dafür nötig ist…</string>
     <string name="download_all_none">Jedes Buch ist bereits auf diesem Gerät.</string>
     <string name="download_all_how_many">Wie viele holen, von %1$d</string>
     <string name="download_all_every">Alle %1$d</string>
@@ -430,10 +430,10 @@
         <item quantity="one">%1$d Buch heruntergeladen · %2$s</item>
         <item quantity="other">%1$d Bücher heruntergeladen · %2$s</item>
     </plurals>
-    <string name="server_lost_to_restore">Dein Serverkonto wurde abgemeldet. Passwörter und API-Schlüssel sind mit einem Schlüssel verschlüsselt, der das Handy, auf dem er erzeugt wurde, nie verlässt — einer aus einer Sicherung oder auf einem neuen Gerät kann nicht gelesen werden. Melde dich erneut an, um es zurückzubekommen.</string>
+    <string name="server_lost_to_restore">Dein Serverkonto wurde abgemeldet. Passwörter und API-Schlüssel sind mit einem Schlüssel verschlüsselt, der auf dem Handy bleibt, das sie gespeichert hat, daher können sie nach einer Wiederherstellung oder einem Umzug auf ein neues Gerät nicht gelesen werden. Melde dich erneut an, um es zurückzubekommen.</string>
     <string name="server_sync_identity">Positionen synchronisieren als %1$s. Unter einer anderen Anmeldung gelesenes bleibt auf diesem Gerät.</string>
     <string name="kosync_section">KOReader-Sync</string>
-    <string name="kosync_summary_custom">Dein Katalog hält deine Bücher, aber nicht deine Stelle darin. Koppeln mit einem KOReader-Sync-Server (kosync), und deine Leseposition folgt dir geräteübergreifend — für die Bücher, die du heruntergeladen hast.</string>
+    <string name="kosync_summary_custom">Dein Katalog hält deine Bücher, aber nicht deine Stelle darin. Kopple einen KOReader-Sync-Server (kosync), um Lesepositionen heruntergeladener Bücher geräteübergreifend zu synchronisieren.</string>
     <string name="kosync_url">Adresse des Sync-Servers</string>
     <string name="kosync_register">Konto auf dem Server anlegen</string>
     <string name="kosync_register_help_custom">Für Server, die neue Konten so annehmen. Viele tun das nicht; ihre KOReader-Nutzer werden stattdessen in den eigenen Einstellungen des Servers angelegt.</string>
@@ -443,14 +443,14 @@
     <string name="kosync_disconnect">KOReader-Sync trennen</string>
     <string name="kosync_error_credentials">Dieser Benutzername oder dieses Passwort wurde vom Sync-Server abgelehnt.</string>
     <string name="kosync_error_not_kosync">Unter dieser Adresse hat kein KOReader-Sync-Server geantwortet. Prüfe die Adresse, einschließlich des Pfads, aus dem sie ausgeliefert wird.</string>
-    <string name="server_sync_moved_both">Letzter Sync: %1$d hierher, %2$d hochgeschickt</string>
+    <string name="server_sync_moved_both">Lesepositionen beim letzten Sync: %1$d empfangen, %2$d gesendet</string>
     <plurals name="server_sync_pulled">
-        <item quantity="one">Letzter Sync: %1$d Buch hierher</item>
-        <item quantity="other">Letzter Sync: %1$d Bücher hierher</item>
+        <item quantity="one">Letzter Sync: %1$d Leseposition empfangen</item>
+        <item quantity="other">Letzter Sync: %1$d Lesepositionen empfangen</item>
     </plurals>
     <plurals name="server_sync_pushed">
-        <item quantity="one">Letzter Sync: %1$d Buch hochgeschickt</item>
-        <item quantity="other">Letzter Sync: %1$d Bücher hochgeschickt</item>
+        <item quantity="one">Letzter Sync: %1$d Leseposition gesendet</item>
+        <item quantity="other">Letzter Sync: %1$d Lesepositionen gesendet</item>
     </plurals>
     <plurals name="server_sync_unresolved">
         <item quantity="one">%1$d Buch wartet darauf, dass du eine Position wählst. Du wirst gefragt, wenn du es öffnest.</item>
@@ -514,7 +514,7 @@
     <string name="no_books_match">Keine Bücher passen zu deiner Suche</string>
     <string name="no_books_in_filter">Hier keine Bücher</string>
     <string name="show_all_books">Alle Bücher anzeigen</string>
-    <string name="search_result_count_capped">Erste %1$d Treffer — suche enger, um den Rest zu sehen</string>
+    <string name="search_result_count_capped">Erste %1$d Treffer. Suche enger, um den Rest zu sehen.</string>
     <string name="dictionary_loading">Wird nachgeschlagen…</string>
     <string name="dictionary_not_found">Kein Eintrag für „%1$s“.</string>
     <string name="dictionary_translated_selection_failed">Das ausgewählte Wort auf der übersetzten Seite konnte nicht nachgeschlagen werden.</string>
@@ -550,33 +550,33 @@
     <string name="remove_copy_warning">Die heruntergeladene Kopie von „%1$s“ wird von diesem Gerät entfernt. Du kannst sie erneut vom Server herunterladen.</string>
     <string name="remove">Entfernen</string>
     <string name="delete_from_server_failed">„%1$s“ konnte nicht vom Server gelöscht werden.</string>
-    <string name="delete_local_failed">Die Datei für „%1$s“ konnte nicht gelöscht werden. Liseur darf diesen Ordner vielleicht nur lesen — füge ihn erneut hinzu, um das Löschen zu erlauben.</string>
+    <string name="delete_local_failed">Die Datei für „%1$s“ konnte nicht gelöscht werden. Liseur darf diesen Ordner vielleicht nur lesen. Füge ihn erneut hinzu, um das Löschen zu erlauben.</string>
     <string name="account_translation_clear_before_removal_failed">Die Anfrage zum Löschen der Übersetzungen aus deinem Konto konnte nicht gespeichert werden. „%1$s“ wurde nicht entfernt; versuche es erneut.</string>
     <string name="delete">Löschen</string>
 
     <string name="remove_from_library">Aus der Bibliothek entfernen</string>
-    <string name="remove_from_library_warning">„%1$s“ wird vom Regal genommen. Die Datei bleibt auf diesem Gerät, und du kannst das Buch unter Einstellungen → Ausgeblendete Bücher zurückholen.</string>
+    <string name="remove_from_library_warning">„%1$s“ wird aus deiner Bibliothek entfernt. Die Datei bleibt auf diesem Gerät. Du kannst das Buch unter Einstellungen → Ausgeblendete Bücher wieder hinzufügen.</string>
     <string name="book_hidden">„%1$s“ aus der Bibliothek entfernt.</string>
     <string name="undo">Rückgängig</string>
     <string name="already_shelved_title">Bereits in deiner Bibliothek</string>
     <string name="already_shelved_message">„%1$s“ liegt schon auf deinem Regal, deshalb wurde es nicht erneut hinzugefügt.</string>
     <string name="already_shelved_open">Öffnen</string>
     <string name="hidden_books">Ausgeblendete Bücher</string>
-    <string name="hidden_books_summary">Vom Regal genommene Bücher, deren Dateien behalten wurden</string>
+    <string name="hidden_books_summary">Aus der Bibliothek entfernte Bücher, die noch auf dem Gerät sind</string>
     <string name="hidden_books_empty">Nichts ist ausgeblendet. Bücher, die du aus der Bibliothek nimmst, ohne die Datei zu löschen, stehen hier.</string>
     <string name="hidden_books_put_back">Zurückholen</string>
 
     <string name="upload_to_server">Zum Server hochladen</string>
     <string name="upload_offer_title">Zum Server senden?</string>
     <plurals name="upload_offer_message">
-        <item quantity="one">%d Buch ist nur auf diesem Gerät. Zum Server zu senden legt es auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin bleibt, wo sie ist.</item>
-        <item quantity="other">%d Bücher sind nur auf diesem Gerät. Zum Server zu senden legt sie auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin bleibt, wo sie ist.</item>
+        <item quantity="one">%d Buch ist nur auf diesem Gerät. Zum Server zu senden legt es auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin ändert sich nicht.</item>
+        <item quantity="other">%d Bücher sind nur auf diesem Gerät. Zum Server zu senden legt sie auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin ändert sich nicht.</item>
     </plurals>
     <string name="upload_offer_confirm">Senden</string>
     <string name="upload_offer_dismiss">Nicht jetzt</string>
     <string name="upload_offer_always">Immer senden</string>
     <string name="upload_offer_one_title">%1$s zum Server senden?</string>
-    <string name="upload_offer_one_message">Dieses Buch ist nur auf diesem Gerät. Zu senden legt es auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin bleibt, wo sie ist.</string>
+    <string name="upload_offer_one_message">Dieses Buch ist nur auf diesem Gerät. Zu senden legt es auch in der Bibliothek auf deinen anderen Geräten ab. Deine Stelle darin ändert sich nicht.</string>
     <string name="upload_sending">%1$s wird an deinen Server gesendet</string>
     <string name="upload_refused">Dein Server hat %1$s nicht angenommen. Es bleibt auf diesem Gerät.</string>
     <string name="upload_refused_reason">Dein Server hat %1$s nicht angenommen: %2$s</string>
@@ -592,7 +592,7 @@
     <string name="upload_policy_ask">Vor dem Senden fragen</string>
     <string name="upload_policy_ask_detail">Du wirst jedes Mal gefragt und kannst Nein sagen.</string>
     <string name="upload_policy_always">Automatisch senden</string>
-    <string name="upload_policy_always_detail">Neue Bücher gehen von allein hoch.</string>
+    <string name="upload_policy_always_detail">Neue Bücher werden automatisch hochgeladen.</string>
     <string name="upload_policy_never">Hier behalten</string>
     <string name="upload_policy_never_detail">Nichts wird gesendet. Bücher bleiben auf diesem Gerät.</string>
     <string name="upload_policy_summary">Ein Buch, das du öffnest oder in einen überwachten Ordner legst, kann zum Server hochgeschickt werden, damit deine anderen Geräte es auch sehen.</string>
@@ -637,10 +637,10 @@
     <string name="reader_page_turn_style_none">Keins</string>
     <string name="reader_page_turn_style_lift_detail">Die fertige Seite hebt sich von der darunter, wie ein Blatt Papier von einem Stapel.</string>
     <string name="reader_page_turn_style_slide_detail">Beide Seiten wandern zusammen, wie wenn du die Seite mit dem Finger querziehst.</string>
-    <string name="reader_page_turn_style_none_detail">Die nächste Seite ist einfach da. Das bekommt ein E-Ink-Bildschirm, egal welche der drei gewählt ist.</string>
+    <string name="reader_page_turn_style_none_detail">Die nächste Seite ist einfach da. E-Ink-Bildschirme nutzen immer diese Einstellung.</string>
 
     <string name="reader_highlight_colours">Verfügbare Farben</string>
-    <string name="reader_highlight_colours_help">Tippe eine Farbe an, um sie beim Markieren einer Passage anzubieten. Halte eine gedrückt, um sie zum Standard zu machen, das ist %1$s: eine Markierung ohne Auswahl bekommt sie, und eine Notiz nutzt die erste Farbe in der Reihenfolge der Leiste.</string>
+    <string name="reader_highlight_colours_help">Tippe eine Farbe an, um sie beim Markieren einer Passage anzubieten. Halte eine gedrückt, um sie zum Standard zu machen (derzeit %1$s). Markierungen ohne gewählte Farbe nutzen den Standard; Notizen nutzen die erste Farbe in der Leiste.</string>
     <string name="reader_highlight_colours_none">Es werden keine Farben angeboten, deshalb wird eine Passage in %1$s markiert. Tippe eine Farbe an, um die Auswahl zurückzubringen.</string>
     <string name="reader_highlight_state_offered">Angeboten</string>
     <string name="reader_highlight_state_offered_default">Angeboten und Standard</string>
@@ -656,7 +656,7 @@
     <string name="reader_hyphens_default">Standard</string>
     <string name="reader_hyphens_off">Aus</string>
     <string name="reader_hyphens_on">An</string>
-    <string name="reader_hyphens_justified_note">Blocksatz trennt Silben von allein. Setze die Silbentrennung auf Aus, um das zu stoppen.</string>
+    <string name="reader_hyphens_justified_note">Blocksatz trennt Silben automatisch. Schalte die Silbentrennung aus, um das zu stoppen.</string>
     <string name="reader_font_weight">Stärke</string>
     <string name="reader_font_weight_default">Standard</string>
     <string name="reader_font_weight_light">Leicht</string>
@@ -692,7 +692,7 @@
     <string name="reader_font_add">Schrift hinzufügen…</string>
     <string name="reader_font_remove">%1$s entfernen</string>
     <string name="reader_font_remove_title">%1$s entfernen?</string>
-    <string name="reader_font_remove_body">Die Schriftdatei wird aus Liseur gelöscht. Bücher, die sie nutzen, fallen vorerst auf die Standardschrift zurück — dieselbe Datei erneut hinzufügen, und sie greifen wieder darauf zu.</string>
+    <string name="reader_font_remove_body">Die Schriftdatei wird aus Liseur gelöscht. Bücher, die sie nutzen, fallen vorerst auf die Standardschrift zurück; wird dieselbe Datei erneut hinzugefügt, greifen sie wieder darauf zu.</string>
     <string name="reader_font_remove_confirm">Entfernen</string>
     <string name="reader_font_imported">%1$s hinzugefügt</string>
     <string name="reader_font_already_present">%1$s ist bereits unter deinen Schriften</string>
@@ -773,24 +773,24 @@
     <string name="tap_zones_swapped">Vertauscht</string>
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
     <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
-    <string name="settings_pinch_to_resize_eink">Auf elektronischem Papier aus. Das Ziehen zeigt die Größe, während die Finger sich bewegen, und eine Vorschau, die viele Male pro Sekunde neu zeichnet, ist das, was so ein Bildschirm am schlechtesten verträgt. Ohne sie würdest du blind zielen, und jeder Versuch kostet ein volles Neuzeichnen der Seite — der Größenregler macht das besser. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das nicht so ein Bildschirm ist.</string>
+    <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen aus, da sie die Live-Vorschau der Größe zu langsam neu zeichnen. Nutze stattdessen den Größenregler. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das kein E-Ink-Bildschirm ist.</string>
     <string name="settings_resume">Beim Buch öffnen, das du gelesen hast</string>
     <string name="settings_resume_detail">Die Bibliothek überspringen, wenn du mitten im Buch aufgehört hast.</string>
     <string name="settings_keep_screen_on">Bildschirm anlassen</string>
-    <string name="settings_keep_screen_on_detail">Der Bildschirm bleibt wach, solange ein Buch offen ist, egal wie dein Gerät den Schlaf einstellt. Kostet Akku, und ein einzelnes Buch lässt sich vom eigenen Schalter des Lesers getrennt einstellen.</string>
+    <string name="settings_keep_screen_on_detail">Der Bildschirm bleibt wach, solange ein Buch offen ist, egal wie dein Gerät den Schlaf einstellt. Kostet Akku. Im Leser kannst du das für ein einzelnes Buch ändern.</string>
     <string name="settings_scroll_mode">Durch Scrollen lesen</string>
-    <string name="settings_scroll_mode_detail">Das Kapitel läuft als eine lange Seite weiter, statt in umblätterbare Seiten zerlegt zu werden. Ein einzelnes Buch lässt sich vom eigenen Schalter des Lesers getrennt einstellen.</string>
+    <string name="settings_scroll_mode_detail">Jedes Kapitel ist eine lange Seite zum Scrollen statt Seiten zum Umblättern. Im Leser kannst du das für ein einzelnes Buch ändern.</string>
     <string name="settings_lock_footer">Fußzeile sperren</string>
-    <string name="settings_lock_footer_detail">Tippen auf die Fußzeile ändert sie beim Lesen nicht mehr. Langes Drücken öffnet weiterhin ihre Optionen.</string>
+    <string name="settings_lock_footer_detail">Tippen auf die Fußzeile ändert sie beim Lesen nicht. Langes Drücken öffnet weiterhin ihre Optionen.</string>
     <string name="settings_eink">E-Ink-Bildschirm</string>
-    <string name="settings_eink_detail">Lässt Animationen weg, die elektronisches Papier eher verschmiert als zeichnet. Wird automatisch erkannt; stelle es selbst ein, wenn die Vermutung falsch ist.</string>
+    <string name="settings_eink_detail">Schaltet Animationen ab, die auf E-Ink-Bildschirmen schlecht dargestellt werden. Liseur erkennt E-Ink automatisch, du kannst es hier aber selbst einstellen.</string>
     <string name="settings_color_eink">Farb-E-Ink</string>
     <string name="settings_color_eink_detail">Nützliche Akzente und Markierfarben mit einer kleinen, festen Palette behalten.</string>
     <string name="eink_auto">Auto</string>
     <string name="eink_on">An</string>
     <string name="eink_off">Aus</string>
     <string name="settings_vendor_refresh">Bildschirmsteuerung nutzen</string>
-    <string name="settings_vendor_refresh_found">Fragt die eigene Steuerung von %1$s, die Seite im für Text gedachten Modus neu zu zeichnen. Experimentell: erreicht per Reflection in Firmware, die zwischen Geräten unter demselben Namen unterschiedlich ist.</string>
+    <string name="settings_vendor_refresh_found">Nutzt die eigene Bildschirmsteuerung von %1$s, um Text neu zu zeichnen. Experimentell; die Unterstützung kann zwischen Geräten variieren, selbst bei Modellen mit demselben Namen.</string>
     <string name="settings_dictionary">Wörterbuch</string>
     <string name="settings_define_with">Nachschlagen mit</string>
     <string name="definition_target_builtin">Eingebaut</string>
@@ -798,7 +798,7 @@
     <string name="settings_dictionary_lookup">Definitionen online nachschlagen</string>
     <string name="settings_dictionary_lookup_detail">Standardmäßig aus. Beim Nachschlagen werden das Wort und seine verlinkten Grundformen an die unten angegebene Wörterbuchseite gesendet.</string>
     <string name="settings_dictionary_site">Wörterbuchseite</string>
-    <string name="settings_dictionary_site_detail">Wähle das Wiktionary deiner Sprache, um dessen Definitionen in dessen Worten zu bekommen.</string>
+    <string name="settings_dictionary_site_detail">Wähle, welches Wiktionary für Definitionen genutzt wird.</string>
     <string name="settings_dictionary_site_custom">Eigene Seite…</string>
     <string name="settings_dictionary_site_hint">https://en.wiktionary.org</string>
     <string name="settings_dictionary_site_invalid">Muss eine https-Adresse sein, etwa https://fr.wiktionary.org</string>
@@ -807,7 +807,7 @@
     <string name="settings_dictionary_site_ok">%1$s antwortet.</string>
     <string name="settings_dictionary_site_unreachable">%1$s hat nicht geantwortet: %2$s</string>
     <string name="settings_dictionary_alt_language">Zweitsprache</string>
-    <string name="settings_dictionary_alt_language_detail">Fügt der Definitionskarte eine Schaltfläche hinzu, die die Übersetzungen des Wortes öffnet, aus den Übersetzungstabellen von Wiktionary. Automatisch nimmt die Sprache der App für Bücher in einer anderen Sprache. Nur Wörter in der Sprache der Wörterbuchseite haben welche.</string>
+    <string name="settings_dictionary_alt_language_detail">Fügt Wörterbuchdefinitionen eine Übersetzungsschaltfläche hinzu, die die Übersetzungstabellen von Wiktionary nutzt. Automatisch nimmt die Sprache der App für Bücher in einer anderen Sprache. Nur Wörter in der Sprache der Wörterbuchseite haben Übersetzungen.</string>
     <string name="settings_dictionary_alt_language_off">Aus</string>
     <string name="settings_dictionary_alt_language_auto">Automatisch</string>
     <string name="settings_dictionary_alt_language_auto_detail">Die Sprache der App, für Bücher in einer anderen Sprache</string>
@@ -859,28 +859,28 @@
     <string name="settings_backup_restored_settings">Sicherung wiederhergestellt.</string>
     <string name="settings_backup_error_file">Diese Sicherungsdatei konnte nicht geöffnet oder gespeichert werden.</string>
     <string name="settings_backup_error_invalid">Dies ist keine gültige Sicherung oder die Datei ist beschädigt.</string>
-    <string name="settings_backup_error_version">Diese Sicherung wurde mit einer nicht unterstützten App-Version erstellt.</string>
+    <string name="settings_backup_error_version">Diese Version von Liseur kann diese Sicherung nicht lesen.</string>
     <string name="settings_backup_error_size">Diese Sicherung ist zu groß, um sie wiederherzustellen.</string>
     <string name="settings_backup_error_storage">Die Sicherung konnte nicht im Gerätespeicher vorbereitet werden.</string>
     <string name="settings_backup_error_restore">Die Sicherung konnte nicht wiederhergestellt werden.</string>
     <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, aber der Rest konnte nicht angewendet werden. Prüfe Einstellungen, Schriftarten, Anmerkungen, Lesepositionen, Begleiter-Zusammenfassungen, Konten und Dienste.</string>
     <string name="settings_library_help_title">Buchserver</string>
-    <string name="settings_library_help_body" formatted="true">Ein Buchserver — calibre-web, Komga, liseur-sync oder ein OPDS-Katalog — hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync ist der, der auch Bücher mitführt, die nur von diesem Handy kamen: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
-    <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten — OPDS über einen gekoppelten KOReader-Sync-Server.</string>
+    <string name="settings_library_help_body" formatted="true">Ein Buchserver (calibre-web, Komga, liseur-sync oder ein OPDS-Katalog) hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync hält auch Bücher im Einklang, die es nur auf diesem Handy gibt: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
+    <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten (bei OPDS über einen gekoppelten KOReader-Sync-Server).</string>
     <string name="settings_about">Über</string>
     <string name="about_title">Über</string>
     <string name="about_open">Über Liseur</string>
     <string name="about_author">Mit \u2763\ufe0f gemacht von Chmouel Boudjnah</string>
     <string name="about_sponsor">Entwicklung unterstützen</string>
     <string name="about_quote_attribution">\u2014 %1$s</string>
-    <string name="about_tagline">Ein quelloffener EPUB-Buchleser und calibre-web- / Komga- / liseur-sync-Client für Android.</string>
+    <string name="about_tagline">Ein quelloffener EPUB-Leser für Android, der sich mit calibre-web, Komga und liseur-sync verbindet.</string>
     <string name="about_version">Version %1$s (%2$d)</string>
     <string name="about_source">Quellcode</string>
     <string name="about_licences">Open-Source-Lizenzen</string>
-    <string name="about_star_prompt">Gefällt dir Liseur? Gib ihm einen Stern auf GitHub \u2b50\ufe0f</string>
+    <string name="about_star_prompt">Wenn dir Liseur gefällt, gib ihm einen Stern auf GitHub \u2b50\ufe0f</string>
     <string name="about_licence_line">Liseur ist freie Software unter der MIT-Lizenz.</string>
     <string name="licences_intro">Liseur ist vollständig aus freien und quelloffenen Komponenten gebaut.</string>
-    <string name="licences_read">%1$s \u2014 lesen</string>
+    <string name="licences_read">%1$s: lesen</string>
     <string name="read_book">Lesen</string>
     <string name="book_actions">Buchaktionen</string>
     <string name="state_downloading">Wird heruntergeladen</string>
@@ -889,7 +889,7 @@
     <string name="catalog_failed_offline">Dein Server war nicht erreichbar. Der gespeicherte Katalog wird angezeigt.</string>
     <string name="catalog_failed_timeout">Dein Server hat zu lange gebraucht. Der gespeicherte Katalog wird angezeigt.</string>
     <string name="catalog_failed_unauthorised">Dein Server akzeptiert diese Anmeldung nicht mehr. Verbinde das Konto erneut, um neue Bücher zu sehen.</string>
-    <string name="catalog_failed_forbidden">Der Katalog hat den Zugriff verweigert. Bei einer migrierten Grimmory-Verbindung aktiviere den OPDS-Server von Grimmory und verbinde dann erneut. Sonst frage die Person, die den Server betreibt.</string>
+    <string name="catalog_failed_forbidden">Der Katalog hat den Zugriff verweigert. Bei einem Grimmory-Server aktiviere den OPDS-Server von Grimmory und verbinde dann erneut. Sonst frage die Person, die den Server betreibt.</string>
     <string name="catalog_failed_not_found">Unter dieser Adresse hat kein Katalog geantwortet. Prüfe sie in den Servereinstellungen.</string>
     <string name="catalog_failed_malformed">Dein Server hat etwas Unerwartetes geantwortet. Der gespeicherte Katalog wird angezeigt.</string>
     <string name="catalog_failed_insecure">Dieser Server braucht eine https://-Adresse. Der gespeicherte Katalog wird angezeigt.</string>
@@ -949,7 +949,7 @@
     <string name="reading_stats_time_left_note">Im Tempo, in dem du gelesen hast</string>
     <string name="reading_stats_book_elsewhere">Auf einem anderen Gerät gelesen</string>
     <string name="reading_stats_empty_title">Noch nichts aufgezeichnet.</string>
-    <string name="reading_stats_empty_detail">Liseur zählt ab dem Moment, in dem du ein Buch öffnest. Früheres Lesen steht nicht hier, weil es keinen ehrlichen Weg gibt, herauszufinden, wie lange es gedauert hat.</string>
+    <string name="reading_stats_empty_detail">Liseur erfasst die Lesezeit ab dem Öffnen eines Buchs. Früheres Lesen ist nicht enthalten, weil es sich nicht messen lässt.</string>
     <string name="reading_stats_book_empty">Du hast von diesem noch nichts gelesen.</string>
     <string name="reading_stats_last_read_label">Zuletzt gelesen</string>
     <string name="reading_stats_started_label">Begonnen</string>
@@ -1023,7 +1023,7 @@
     <string name="reader_external_link_body">Dieser Link öffnet %1$s in deinem Browser. Liseur folgt ihm nicht für dich.</string>
     <string name="reader_external_link_open">Öffnen</string>
     <string name="reader_external_link_failed">Keine App auf diesem Gerät kann diesen Link öffnen.</string>
-    <string name="server_sync_bookorbit">Lesepositionen werden bei jeder Seite für überprüfte EPUBs synchronisiert, und eine anderswo gespeicherte Position wird dir beim Lesen angeboten. Der letzte Schreibvorgang auf dem Server gewinnt. Gelesen- und Ungelesen-Markierungen werden ebenfalls synchronisiert, Anmerkungen nicht.</string>
+    <string name="server_sync_bookorbit">Lesepositionen werden bei jedem Umblättern für überprüfte EPUBs synchronisiert. Hat ein anderes Gerät eine neuere Position, bietet Liseur sie dir beim Lesen an. Die letzte Speicherung auf dem Server gewinnt. Gelesen- und Ungelesen-Status werden ebenfalls synchronisiert, Anmerkungen aber nicht.</string>
     <string name="server_sync_off_bookorbit">Lesepositionen werden nicht mit BookOrbit synchronisiert.</string>
     <string name="browse_libraries">Entfernte Bibliotheken durchsuchen</string>
     <string name="browse_add_connection">Katalog hinzufügen</string>
@@ -1275,7 +1275,7 @@
     <string name="translation_options_temperature_detail">Bei 0 wird derselbe Abschnitt immer gleich übersetzt. Höhere Werte variieren die Formulierung.</string>
     <string name="translation_options_temperature_refused">Dieses Modell lehnt eine Temperatur ab, daher wird keine gesendet.</string>
     <string name="translation_options_context">Vorherigen Text mitsenden</string>
-    <string name="translation_options_context_detail">Beim Übersetzen einer Seite wird jeder Satz mit einem Teil des vorangehenden Buchtexts gesendet, so viel die Übersetzungseinstellungen erlauben. Das hilft bei Pronomen und Namen.</string>
+    <string name="translation_options_context_detail">Jeder Satz wird mit etwas vorangehendem Text gesendet, bis zur Grenze in den Übersetzungseinstellungen. Das hilft bei Pronomen und Namen.</string>
     <string name="translation_options_context_gemma">TranslateGemma übersetzt jeden Satz einzeln und erhält nie den vorangehenden Text.</string>
     <string name="context_shared_title">Gemeinsame Einstellungen</string>
     <string name="context_shared_detail">Vorheriger Text und Angaben zum Buch sind in Übersetzung und Vorlesen dieselben Einstellungen. Eine Änderung hier gilt für beide.\n\nVorheriger Text: Sätze vor der Passage aus demselben Kapitel. Sie helfen dem Modell zu erkennen, wer spricht und worauf sich ein Pronomen bezieht. Mehr Text ist langsamer und kann mehr kosten.\n\nAngaben zum Buch: Die Vorlage wird ausgefüllt und mit jeder Anfrage gesendet. {language} fügt die Sprache des Buchs hinzu, {percent}, wo im Buch das Kapitel beginnt.</string>
@@ -1300,7 +1300,7 @@
     <string name="translation_book_example">Beispielbuch</string>
     <string name="read_aloud_context_switch">Buchkontext senden</string>
     <string name="read_aloud_context_switch_detail">Hilft der Stimme bei Tonfall und Namen</string>
-    <string name="read_aloud_context_about">Mit jeder Anfrage kann das Vorlesen die Angaben zum Buch und einige vorherige Sätze aus demselben Kapitel senden. Die Stimme nutzt sie, um den Tonfall zu wählen, Figuren zu unterscheiden und Namen richtig auszusprechen. Sie werden nie vorgelesen, und die gesprochenen Worte bleiben die des Buchs, auch beim Vorlesen einer Übersetzung. Nur manche Stimmmodelle nehmen sie an. Vorheriger Text und Angaben zum Buch sind mit Übersetzung geteilt.</string>
+    <string name="read_aloud_context_about">Mit jeder Anfrage kann das Vorlesen die Angaben zum Buch und einige vorherige Sätze aus demselben Kapitel senden. Die Stimme nutzt sie, um den Tonfall zu wählen, Figuren zu unterscheiden und Namen richtig auszusprechen. Sie werden nie vorgelesen, und die gesprochenen Worte bleiben die des Buchs, selbst beim Vorlesen einer Übersetzung. Nur manche Stimmmodelle nehmen sie an. Vorheriger Text und Angaben zum Buch sind mit Übersetzung geteilt.</string>
     <string name="read_aloud_context_unavailable">Mit diesem Stimmmodell nicht verfügbar</string>
     <string name="read_aloud_context_unavailable_kept">Mit diesem Stimmmodell nicht verfügbar. Deine Wahl bleibt gespeichert.</string>
     <string name="translation_options_instructions">Zusätzliche Anweisungen</string>
@@ -1336,7 +1336,7 @@
     <string name="reader_clear_translations_confirm">Löschen</string>
     <string name="translation_settings_test_passed">Es funktioniert: %1$s</string>
     <string name="translation_settings_device_unavailable">Dieses Telefon hat keinen Übersetzer, den Apps nutzen können. Wähle einen anderen Dienst.</string>
-    <string name="translation_settings_device_downloads_detail">Eine Sprache wird übersetzt, sobald sie in den Systemeinstellungen heruntergeladen ist.</string>
+    <string name="translation_settings_device_downloads_detail">Eine Sprache funktioniert, sobald du sie in den Systemeinstellungen herunterlädst.</string>
     <string name="translation_download">Sprachen herunterladen</string>
     <string name="translation_action">Übersetzen</string>
     <string name="translation_loading">Wird übersetzt…</string>
@@ -1496,7 +1496,7 @@
     <string name="codex_story">Handlung</string>
     <string name="codex_search">Namen suchen</string>
     <string name="codex_empty">Noch keine passenden Namen in früheren Kapiteln.</string>
-    <string name="codex_scripts">Die automatische Namenserkennung nutzt Großschreibung. Sprachen ohne Großbuchstaben werden noch nicht unterstützt.</string>
+    <string name="codex_scripts">Die Namenserkennung stützt sich auf Großbuchstaben und funktioniert daher nicht für Sprachen, die keine haben.</string>
     <string name="codex_entry">%1$s · Erwähnungen: %2$d</string>
     <string name="codex_person">Person</string>
     <string name="codex_place">Ort</string>

@@ -48,7 +48,7 @@
         <item quantity="other">%d 小时</item>
     </plurals>
     <plurals name="sync_server_ambiguous">
-        <item quantity="other">%1$d 本书与您服务器上的多本书匹配。Liseur 没有贸然猜测，而是保持原样；是否合并只能由您在服务器端决定。</item>
+        <item quantity="other">%1$d 本书与您服务器上的多本书匹配。Liseur 没有贸然猜测，而是保持原样。如果它们是同一本书，请在服务器上合并。</item>
     </plurals>
     <plurals name="download_all_confirm">
         <item quantity="other">下载 %1$d 本书？</item>
@@ -60,10 +60,10 @@
         <item quantity="other">已下载 %1$d 本书 · %2$s</item>
     </plurals>
     <plurals name="server_sync_pulled">
-        <item quantity="other">上次同步：拉取了 %1$d 本书</item>
+        <item quantity="other">上次同步：接收了 %1$d 条阅读位置</item>
     </plurals>
     <plurals name="server_sync_pushed">
-        <item quantity="other">上次同步：上传了 %1$d 本书</item>
+        <item quantity="other">上次同步：发送了 %1$d 条阅读位置</item>
     </plurals>
     <plurals name="server_sync_unresolved">
         <item quantity="other">%1$d 本书等待您选择阅读位置。打开时会询问您。</item>
@@ -75,7 +75,7 @@
         <item quantity="other">%1$d 条结果</item>
     </plurals>
     <plurals name="upload_offer_message">
-        <item quantity="other">%d 本书仅在本机。发送到服务器后，它也会出现在您其他设备的书库中。您的阅读位置保持不变。</item>
+        <item quantity="other">%d 本书仅在本机。发送到服务器后，它也会出现在您其他设备的书库中。您的阅读位置不会改变。</item>
     </plurals>
     <plurals name="settings_backup_setting_count">
         <item quantity="other">%1$d 项设置</item>
@@ -137,7 +137,7 @@
     <string name="add_book">添加图书</string>
     <string name="add_folder">添加文件夹</string>
     <string name="add_books">添加图书</string>
-    <string name="add_folder_hint">指定一个存放 EPUB 的文件夹，Liseur 会持续监视其中新增的书。</string>
+    <string name="add_folder_hint">选择一个存放 EPUB 的文件夹。Liseur 会添加其中新出现的图书。</string>
     <string name="library_folders">监视文件夹</string>
     <string name="library_folders_empty">没有正在监视的文件夹。</string>
     <plurals name="library_folders_count">
@@ -145,7 +145,7 @@
     </plurals>
     <string name="remove_folder">移除文件夹</string>
     <string name="remove_folder_a11y">移除 %1$s</string>
-    <string name="remove_folder_warning">Liseur 将停止监视“%1$s”。仅由该文件夹提供的图书会离开您的书库；由其他监视文件夹提供的图书，以及保存在服务器上的图书会保留。本设备上的文件不会被删除。</string>
+    <string name="remove_folder_warning">Liseur 将停止监视“%1$s”。仅在该文件夹中找到的图书会离开您的书库。同时存在于其他监视文件夹或服务器上的图书会保留。本设备上的文件不会被删除。</string>
     <string name="add_book_hint">从您的设备或云存储中选择单个 EPUB 文件。</string>
     <string name="connect_server_hint">浏览 calibre-web、Komga、liseur-sync 或任意 OPDS 书库。</string>
     <string name="search_books">搜索图书</string>
@@ -169,8 +169,8 @@
     <string name="series_all_read">您已读完整个系列</string>
     <string name="series_caught_up">这个系列您已经看完了</string>
     <string name="series_all_known_read">这里每本书您都读过了</string>
-    <string name="series_missing_volume">第 %s 卷 — 不在您的书库中</string>
-    <string name="series_not_published_yet">第 %s 卷 — 尚未出版</string>
+    <string name="series_missing_volume">第 %s 卷：不在您的书库中</string>
+    <string name="series_not_published_yet">第 %s 卷：尚未出版</string>
     <string name="series_download_missing">下载其余部分</string>
     <string name="series_mark_read">将系列标记为已读</string>
     <string name="series_archive">归档该系列</string>
@@ -183,13 +183,13 @@
     <string name="series_rename">重命名系列…</string>
     <string name="series_rename_title">重命名系列</string>
     <string name="series_rename_field">系列名称</string>
-    <string name="series_rename_hint">只有您能看到此名称。您的服务器仍会用从书库中读取到的名称来称呼该系列，因此之后添加的图书仍会归入此书架。</string>
+    <string name="series_rename_hint">只有您能看到此名称。您的服务器保留原名称，因此该系列的新书仍会出现在此书架上。</string>
     <string name="series_rename_save">重命名</string>
     <string name="series_rename_reset">使用原名称</string>
     <string name="series_rename_taken">已有另一个系列使用该名称。将其中一个重命名为另一个会合并二者，而您的服务器不会这样做。</string>
     <string name="series_rename_failed">无法重命名该系列。此操作需要您的书库服务器，而且名称不会被保存以便稍后发送。</string>
     <string name="series_clear_numbers">清除自定义卷号</string>
-    <string name="series_clear_numbers_warning">图书将恢复为服务器和文件赋予它们的编号。您手动输入的编号也会被清除——它们无法与重新排序区分开。</string>
+    <string name="series_clear_numbers_warning">图书将恢复为服务器和文件赋予它们的编号。您手动输入的编号也会被清除，因为它们无法与重新排序区分开。</string>
     <string name="series_clear_numbers_confirm">清除</string>
     <string name="done">完成</string>
     <string name="series_actions">系列操作</string>
@@ -306,7 +306,7 @@
     <string name="liseur_sync_token">设备令牌</string>
     <string name="liseur_sync_token_help">在服务器上运行“liseur-sync admin mint-token”创建一个，然后在此粘贴密钥。</string>
     <string name="sync_server_same_book_title">这是同一本书吗？</string>
-    <string name="sync_server_same_book_detail">您的服务器仅凭书名和作者匹配了这些书。两个译本，或正文不同的两个版本，用这种方式看起来是一样的——所以在您说之前，它们不会同步任何内容。</string>
+    <string name="sync_server_same_book_detail">您的服务器仅凭书名和作者匹配了这些书。两个译本或版本可能书名和作者都相同，因此在您确认之前，Liseur 不会同步它们。</string>
     <string name="sync_server_same_book_yes">同一本书</string>
     <string name="sync_server_same_book_no">不同</string>
     <string name="server_account">图书服务器</string>
@@ -334,10 +334,10 @@
     <string name="server_tagline_custom">OPDS 书库、KOReader 同步服务器，或两者兼有</string>
     <string name="server_section_sync">阅读位置</string>
     <string name="server_api_key">API 密钥</string>
-    <string name="server_api_key_help">在 Komga 中打开您的账户设置并创建 API 密钥。粘贴整页地址也可以——Liseur 会从中找到服务器。</string>
+    <string name="server_api_key_help">在 Komga 中打开您的账户设置并创建 API 密钥。粘贴整页地址也可以，Liseur 会从中找到服务器。</string>
     <string name="server_url">服务器地址</string>
     <string name="server_url_opds">OPDS 书库地址</string>
-    <string name="server_custom_catalog_help">您的 OPDS 书库地址。填顶层地址即可——Liseur 会顺着书架找到您的图书。留空则此连接仅用于阅读位置。</string>
+    <string name="server_custom_catalog_help">您的 OPDS 书库地址。填顶层地址即可：Liseur 会顺着书架找到您的图书。留空则此连接仅用于阅读位置。</string>
     <string name="server_custom_credentials_help">如果书库对所有人开放，请将用户名和密码留空。</string>
     <string name="server_custom_kosync_help">KOReader 同步（kosync）服务器，可在多台设备间保留您在书中的阅读位置。如果只想浏览，请留空。</string>
     <string name="server_custom_kosync_section">KOReader 同步（可选）</string>
@@ -353,7 +353,7 @@
     <string name="server_check_again">重新检查</string>
     <string name="server_try_http">不使用加密连接</string>
     <string name="server_http_title">不使用加密连接？</string>
-    <string name="server_http_warning">Liseur 将通过明文 HTTP 与此服务器通信。您的用户名和密码会随每次请求发送，网络上的其他人——或您与服务器之间的任何环节——都能读取它们、读取您正在阅读的内容，并篡改返回的数据。请仅在您信任的网络上这样做。</string>
+    <string name="server_http_warning">此服务器使用明文 HTTP。您的用户名、密码和阅读活动可能被截获，返回的数据也可能被篡改。请仅在可信的网络上使用。</string>
     <string name="server_http_confirm">仍然连接</string>
     <string name="server_error_credentials">服务器拒绝了该用户名或密码。</string>
     <string name="server_error_credentials_komga">服务器拒绝了该 API 密钥。请检查是否完整复制，且此后未被撤销。</string>
@@ -364,9 +364,9 @@
     <string name="server_error_not_liseur_sync">该地址有响应，但不像 liseur-sync 服务器。</string>
     <string name="server_error_not_bookorbit">该地址有响应，但不像 BookOrbit 服务器。</string>
     <string name="server_error_not_custom">该地址有响应，但不是 OPDS 书库。请检查地址，包括它所在的文件夹路径。</string>
-    <string name="server_error_credentials_custom">书库拒绝了该用户名或密码。如果这是迁移过来的 Grimmory 连接，请先启用 Grimmory 的 OPDS 服务器。如果书库对所有人开放，请将两者都留空。</string>
-    <string name="server_error_sign_in_custom">书库拒绝了该请求。如果这是迁移过来的 Grimmory 连接，请先启用 Grimmory 的 OPDS 服务器；否则，如果它是私有的，请添加用户名和密码，或检查地址。</string>
-    <string name="server_error_scopes_liseur_sync">该令牌可用，但可能无法同步阅读位置。请创建一个至少具有“sync”权限范围的令牌——完整权限集为 sync、read-insights 和 library-read。</string>
+    <string name="server_error_credentials_custom">书库拒绝了该用户名或密码。如果是 Grimmory 服务器，请先启用 Grimmory 的 OPDS 服务器。如果书库对所有人开放，请将两者都留空。</string>
+    <string name="server_error_sign_in_custom">书库拒绝了该请求。如果是 Grimmory 服务器，请先启用 Grimmory 的 OPDS 服务器；否则，如果它是私有的，请添加用户名和密码，或检查地址。</string>
+    <string name="server_error_scopes_liseur_sync">该令牌可能没有同步阅读位置的权限。请创建一个具有“sync”权限范围的令牌。</string>
     <string name="server_error_rate_limited">尝试次数过多。请稍候再试。</string>
     <string name="server_error_unreachable">服务器没有响应。请检查地址以及您的网络连接。</string>
     <string name="server_error_https">服务器未通过安全连接响应。</string>
@@ -377,15 +377,15 @@
     <string name="server_no_download_right">该账户不允许下载图书。请让服务器管理员在 calibre-web 中为您的用户勾选“Allow Downloads”，然后重新检查。</string>
     <string name="server_no_download_right_komga">该 API 密钥不允许下载图书。请让服务器管理员为您的账户授予文件下载角色，然后重新检查。</string>
     <string name="server_no_download_right_custom">该书库未提供任何可下载的图书。</string>
-    <string name="server_no_download_right_liseur_sync">该令牌不允许读取书库——在 liseur-sync 提供图书之前签发的令牌无法浏览书库。请创建一个具有 library-read 权限范围的新令牌，或断开连接后重新登录，然后重新检查。</string>
+    <string name="server_no_download_right_liseur_sync">该令牌不允许读取书库。请创建一个具有 library-read 权限范围的新令牌，或断开连接后重新登录，然后重新检查。</string>
     <string name="server_no_download_right_bookorbit">该账户可能无法从 BookOrbit 下载图书。管理员可以授予下载权限，然后重新检查。</string>
     <string name="server_token_storage_note">您的设备令牌保存在本机，并经过加密。每次 Liseur 与服务器通信时都会发送它。如果手机丢失，请在服务器上撤销它。</string>
     <string name="server_bookorbit_storage_note">不会保存您的密码。它会一次性换取一个会话，Liseur 会自动续期并将该会话加密保存在本机。退出 BookOrbit 即会撤销它。</string>
     <string name="server_bookorbit_password_help">BookOrbit 不向应用提供单独的密钥，因此这里填写的是您的账户密码。它会换取一个短期会话，绝不存储。</string>
     <string name="server_sync_on">您的阅读位置会在各设备之间同步。</string>
     <string name="server_sync_off">阅读位置未同步。服务器可能已关闭 Kobo 同步。</string>
-    <string name="server_sync_unsupported_custom">OPDS 无法传输阅读位置。在下方部分添加 KOReader 同步地址，您的阅读位置就会在各设备之间同步。</string>
-    <string name="server_sync_none_custom">此连接本身不传输阅读位置。在下方部分添加 KOReader 同步地址，您的阅读位置就会在各设备之间同步。</string>
+    <string name="server_sync_unsupported_custom">OPDS 无法同步阅读位置。在下方添加 KOReader 同步地址，即可在各设备之间同步阅读位置。</string>
+    <string name="server_sync_none_custom">此连接本身不同步阅读位置。在下方添加 KOReader 同步地址，即可在各设备之间同步阅读位置。</string>
     <string name="server_sync_kosync_paired">您的阅读位置由下方设置的 KOReader 同步服务器保存。</string>
     <string name="calibre_show_advanced">高级</string>
     <string name="calibre_hide_advanced">隐藏高级选项</string>
@@ -393,8 +393,8 @@
     <string name="calibre_save_token">保存令牌</string>
     <string name="calibre_token_help">Liseur 通常会自动获取此项。如果阅读位置未同步，请在此粘贴 calibre-web 个人资料页面中的 Kobo 同步 URL。</string>
     <string name="server_password_storage_note">您的密码保存在本机，并经过加密。此类服务器要求下，每次 Liseur 与服务器通信时都会发送密码。</string>
-    <string name="server_custom_storage_note">您在此输入的任何内容都保存在本机，并经过加密。每次 Liseur 与书库通信时都会发送书库密码；KOReader 同步密码绝不会离开本手机——只会发送由它派生出的值。</string>
-    <string name="server_custom_kosync_storage_note">您在此输入的任何内容都保存在本机，并经过加密。KOReader 同步密码绝不会离开本手机——只会发送由它派生出的值。</string>
+    <string name="server_custom_storage_note">您在此输入的任何内容都保存在本机，并经过加密。每次 Liseur 与书库通信时都会发送书库密码；KOReader 同步密码绝不会离开本手机。只会发送由它派生出的值。</string>
+    <string name="server_custom_kosync_storage_note">您在此输入的任何内容都保存在本机，并经过加密。KOReader 同步密码绝不会离开本手机。只会发送由它派生出的值。</string>
     <string name="server_api_key_storage_note">您的 API 密钥保存在本机，并经过加密。每次 Liseur 与服务器通信时都会发送它。如果手机丢失，请在 Komga 中撤销它。</string>
     <string name="book_on_server">在服务器上</string>
     <string name="book_not_downloaded">这本书仍在服务器上。</string>
@@ -407,7 +407,7 @@
     <string name="server_sync_running">正在同步阅读进度…</string>
     <string name="server_sync_offline">无法连接服务器，阅读进度将在稍后同步。</string>
     <string name="reader_sync_book">同步这本书</string>
-    <string name="reader_sync_book_in_step">这本书已与服务器保持一致。</string>
+    <string name="reader_sync_book_in_step">这本书已与服务器同步。</string>
     <string name="reader_sync_book_no_remote">服务器上还没有这本书的阅读进度。</string>
     <string name="reader_sync_book_not_synced">服务器不认识这本书，因此没有可同步的内容。</string>
     <string name="reader_sync_book_moved">打开期间进度发生了变化，因此未做任何更改。请再次同步这本书。</string>
@@ -460,7 +460,7 @@
     <string name="server_credentials_lost">请重新登录您的图书服务器。</string>
     <string name="download_all">下载全部图书</string>
     <string name="download_all_summary">下载此书库中所有尚未在本设备上的图书。已归档的图书保持不变。</string>
-    <string name="download_all_working">正在计算所需空间…</string>
+    <string name="download_all_working">正在检查所需空间…</string>
     <string name="download_all_none">所有图书都已在本设备上。</string>
     <string name="download_all_how_many">要下载多少本，共 %1$d 本</string>
     <string name="download_all_every">全部 %1$d 本</string>
@@ -476,10 +476,10 @@
     <string name="download_all_stopped_cancelled">已停止。已下载的图书保持不变。</string>
     <string name="download_all_stopped_space">已停止：设备空间已满。请释放一些空间后重新开始，以继续下载剩余图书。</string>
     <string name="download_all_stopped_account">已停止：服务器账户已变更。</string>
-    <string name="server_lost_to_restore">您的服务器账户已退出登录。密码和 API 密钥使用一把从不离开创建手机的密钥加密，因此从备份恢复或迁移到新设备的账户无法解密。请重新登录以恢复。</string>
+    <string name="server_lost_to_restore">您的服务器账户已退出登录。密码和 API 密钥使用一把只保存在原手机上的密钥加密，因此从备份恢复或迁移到新设备后无法读取。请重新登录以恢复。</string>
     <string name="server_sync_identity">以 %1$s 的身份同步进度。其他登录账号下的阅读记录保留在本设备上。</string>
     <string name="kosync_section">KOReader 同步</string>
-    <string name="kosync_summary_custom">您的书库保存了图书，但不保存您的阅读位置。配对 KOReader 同步（kosync）服务器后，已下载图书的阅读进度即可跨设备同步。</string>
+    <string name="kosync_summary_custom">您的书库保存了图书，但不保存您的阅读位置。配对 KOReader 同步（kosync）服务器，即可跨设备同步已下载图书的阅读位置。</string>
     <string name="kosync_url">同步服务器地址</string>
     <string name="kosync_register">在服务器上创建账户</string>
     <string name="kosync_register_help_custom">适用于以此方式接受新账户的服务器。许多服务器并不支持，其 KOReader 用户需在服务器自身的设置中创建。</string>
@@ -489,7 +489,7 @@
     <string name="kosync_disconnect">断开 KOReader 同步</string>
     <string name="kosync_error_credentials">同步服务器拒绝了该用户名或密码。</string>
     <string name="kosync_error_not_kosync">该地址没有 KOReader 同步服务器响应。请检查地址，包括其服务路径。</string>
-    <string name="server_sync_moved_both">上次同步：拉取 %1$d 条，上传 %2$d 条</string>
+    <string name="server_sync_moved_both">上次同步的阅读位置：接收 %1$d 条，发送 %2$d 条</string>
     <string name="save">保存</string>
     <string name="cancel">取消</string>
     <string name="reader_navigate">导航</string>
@@ -540,7 +540,7 @@
     <string name="no_books_match">没有匹配的图书</string>
     <string name="no_books_in_filter">这里没有图书</string>
     <string name="show_all_books">显示全部图书</string>
-    <string name="search_result_count_capped">前 %1$d 条结果——请缩小搜索范围以查看其余内容</string>
+    <string name="search_result_count_capped">前 %1$d 条结果。请缩小搜索范围以查看其余内容。</string>
     <string name="dictionary_loading">正在查询…</string>
     <string name="dictionary_not_found">未找到“%1$s”的词条。</string>
     <string name="dictionary_translated_selection_failed">无法查询译文页面中选定的单词。</string>
@@ -576,18 +576,18 @@
     <string name="remove_copy_warning">“%1$s”的已下载副本将从此设备移除。您可以再次从服务器下载。</string>
     <string name="remove">移除</string>
     <string name="delete_from_server_failed">无法从服务器删除“%1$s”。</string>
-    <string name="delete_local_failed">无法删除“%1$s”的文件。Liseur 可能仅有该文件夹的读取权限——请重新添加该文件夹以授予删除权限。</string>
+    <string name="delete_local_failed">无法删除“%1$s”的文件。Liseur 可能仅有该文件夹的读取权限。请重新添加该文件夹以授予删除权限。</string>
     <string name="account_translation_clear_before_removal_failed">无法保存从账号中清除翻译的请求。“%1$s”未被移除；请重试。</string>
     <string name="delete">删除</string>
     <string name="remove_from_library">从书库移除</string>
-    <string name="remove_from_library_warning">“%1$s”将从书架移除。文件仍保留在本设备上，您可以从“设置 → 隐藏的图书”中把书放回。</string>
+    <string name="remove_from_library_warning">“%1$s”将从您的书库移除。文件仍保留在本设备上。您可以从“设置 → 隐藏的图书”中重新添加。</string>
     <string name="book_hidden">“%1$s”已从书库移除。</string>
     <string name="undo">撤销</string>
     <string name="already_shelved_title">已在您的书库中</string>
     <string name="already_shelved_message">“%1$s”已在您的书架上，因此未重复添加。</string>
     <string name="already_shelved_open">打开</string>
     <string name="hidden_books">隐藏的图书</string>
-    <string name="hidden_books_summary">已从书架移除但保留了文件的图书</string>
+    <string name="hidden_books_summary">已从书库移除但仍保留在本设备上的图书</string>
     <string name="hidden_books_empty">没有隐藏的图书。从书库移除但未删除文件的书会列在此处。</string>
     <string name="hidden_books_put_back">放回</string>
     <string name="upload_to_server">上传到服务器</string>
@@ -596,7 +596,7 @@
     <string name="upload_offer_dismiss">暂不</string>
     <string name="upload_offer_always">总是发送</string>
     <string name="upload_offer_one_title">将 %1$s 发送到服务器？</string>
-    <string name="upload_offer_one_message">这本书仅在本设备上。发送后，其他设备的书库中也会出现它。您的阅读位置保持不变。</string>
+    <string name="upload_offer_one_message">这本书仅在本设备上。发送后，其他设备的书库中也会出现它。您的阅读位置不会改变。</string>
     <string name="upload_sending">正在将 %1$s 发送到您的服务器</string>
     <string name="upload_refused">您的服务器未接收 %1$s。它仍保留在本设备上。</string>
     <string name="upload_refused_reason">您的服务器拒收了 %1$s：%2$s</string>
@@ -655,9 +655,9 @@
     <string name="reader_page_turn_style_none">无</string>
     <string name="reader_page_turn_style_lift_detail">读完的页面会从下方页面掀起，就像从一叠纸中翻起一张。</string>
     <string name="reader_page_turn_style_slide_detail">两页一起移动，就像用手指把页面拖过去一样。</string>
-    <string name="reader_page_turn_style_none_detail">下一页直接呈现。无论选择这三种中的哪一种，墨水屏都是这种效果。</string>
+    <string name="reader_page_turn_style_none_detail">下一页直接呈现。墨水屏始终使用这种效果。</string>
     <string name="reader_highlight_colours">可用颜色</string>
-    <string name="reader_highlight_colours_help">点击一种颜色即可在标注文段时提供该选项。长按可将其设为默认色，当前默认色为 %1$s：未选择颜色时所作的标注会使用它，批注则使用颜色栏中排在最前的颜色。</string>
+    <string name="reader_highlight_colours_help">点击一种颜色即可在标注文段时提供该选项。长按可将其设为默认色（当前为 %1$s）。未选择颜色时所作的标注使用默认色；批注使用颜色栏中的第一种颜色。</string>
     <string name="reader_highlight_colours_none">当前未提供任何颜色，因此标注文段时将使用 %1$s 色。点击一种颜色即可恢复选择。</string>
     <string name="reader_highlight_state_offered">已提供</string>
     <string name="reader_highlight_state_offered_default">已提供，且为默认色</string>
@@ -672,7 +672,7 @@
     <string name="reader_hyphens_default">默认</string>
     <string name="reader_hyphens_off">关</string>
     <string name="reader_hyphens_on">开</string>
-    <string name="reader_hyphens_justified_note">两端对齐的文本会自动断字。将断字设为“关”即可停用。</string>
+    <string name="reader_hyphens_justified_note">两端对齐的文本会自动断字。关闭断字即可停用。</string>
     <string name="reader_font_weight">字重</string>
     <string name="reader_font_weight_default">默认</string>
     <string name="reader_font_weight_light">细体</string>
@@ -708,7 +708,7 @@
     <string name="reader_font_add">添加字体…</string>
     <string name="reader_font_remove">移除 %1$s</string>
     <string name="reader_font_remove_title">移除 %1$s？</string>
-    <string name="reader_font_remove_body">该字体文件将从 Liseur 中删除。使用它的图书暂时回退到默认字体——再次添加同一文件即可恢复。</string>
+    <string name="reader_font_remove_body">该字体文件将从 Liseur 中删除。使用它的图书暂时回退到默认字体；再次添加同一文件即可恢复。</string>
     <string name="reader_font_remove_confirm">移除</string>
     <string name="reader_font_imported">已添加 %1$s</string>
     <string name="reader_font_already_present">%1$s 已在您的字体列表中</string>
@@ -788,24 +788,24 @@
     <string name="tap_zones_swapped">互换</string>
     <string name="settings_pinch_to_resize">双指捏合调整文字</string>
     <string name="settings_pinch_to_resize_detail">在页面上双指捏合可放大或缩小文字，且不会打开菜单。如果握持手机的方式导致误触，可将其关闭。捏合放大的图片仍可正常使用。</string>
-    <string name="settings_pinch_to_resize_eink">在电子纸上不可用。捏合缩放在手指移动时实时显示尺寸，而这种每秒重绘多次的预览正是此类屏幕最不擅长的。没有它，您只能盲猜，且每次尝试都要整页重绘，因此用字号滑块效果更好。捏合放大的图片仍可正常使用。如果这不是墨水屏，请在上方关闭“墨水屏”。</string>
+    <string name="settings_pinch_to_resize_eink">在墨水屏上不可用，因为此类屏幕重绘实时尺寸预览太慢。请改用字号滑块。捏合放大的图片仍可正常使用。如果这不是墨水屏，请在上方关闭“墨水屏”。</string>
     <string name="settings_resume">打开上次阅读的书</string>
     <string name="settings_resume_detail">中途放下书时跳过书库直接打开。</string>
     <string name="settings_keep_screen_on">保持屏幕常亮</string>
-    <string name="settings_keep_screen_on_detail">打开书本时屏幕保持唤醒，不受设备睡眠设置影响。会增加耗电，单本书也可设为与阅读器开关不同。</string>
+    <string name="settings_keep_screen_on_detail">打开书本时屏幕保持唤醒，不受设备睡眠设置影响。会增加耗电。您可以在阅读器中为单本书单独更改。</string>
     <string name="settings_scroll_mode">滚动阅读</string>
-    <string name="settings_scroll_mode_detail">章节作为一整页连续滚动，而不再分成可翻动的页面。单本书也可设为与阅读器开关不同。</string>
+    <string name="settings_scroll_mode_detail">每章作为一整页连续滚动，而不是分成可翻动的页面。您可以在阅读器中为单本书单独更改。</string>
     <string name="settings_lock_footer">锁定页脚</string>
-    <string name="settings_lock_footer_detail">阅读时轻触页脚不再更改它。长按仍可打开页脚选项。</string>
+    <string name="settings_lock_footer_detail">阅读时轻触页脚不会更改它。长按仍可打开页脚选项。</string>
     <string name="settings_eink">墨水屏</string>
-    <string name="settings_eink_detail">关闭动画，因为电子纸只会拖影而无法流畅绘制。可自动检测；若判断有误可手动设置。</string>
+    <string name="settings_eink_detail">关闭在墨水屏上显示效果不佳的动画。Liseur 会自动检测墨水屏，您也可以在此手动设置。</string>
     <string name="settings_color_eink">彩色墨水屏</string>
     <string name="settings_color_eink_detail">用小而静态的配色保留实用的强调色与标注颜色。</string>
     <string name="eink_auto">自动</string>
     <string name="eink_on">开</string>
     <string name="eink_off">关</string>
     <string name="settings_vendor_refresh">使用屏幕控制器</string>
-    <string name="settings_vendor_refresh_found">请求 %1$s 自带的控制器以适合文字的模式重绘页面。实验性功能：通过反射调用固件实现，而同一名称的不同设备固件并不相同。</string>
+    <string name="settings_vendor_refresh_found">使用 %1$s 自带的屏幕控制器刷新文字。实验性功能；不同设备的支持情况可能不同，即使是同名型号也是如此。</string>
     <string name="settings_dictionary">词典</string>
     <string name="settings_define_with">查询方式</string>
     <string name="definition_target_builtin">内置</string>
@@ -813,7 +813,7 @@
     <string name="settings_dictionary_lookup">在线查询释义</string>
     <string name="settings_dictionary_lookup_detail">默认关闭。查询释义时，会将单词及其链接指向的原形发送至下方词典网站。</string>
     <string name="settings_dictionary_site">词典网站</string>
-    <string name="settings_dictionary_site_detail">选择您所使用语言的维基词典，即可获取该语言的释义。</string>
+    <string name="settings_dictionary_site_detail">选择用于查询释义的维基词典。</string>
     <string name="settings_dictionary_site_custom">自定义网站…</string>
     <string name="settings_dictionary_site_hint">https://en.wiktionary.org</string>
     <string name="settings_dictionary_site_invalid">必须是 https 地址，例如 https://fr.wiktionary.org</string>
@@ -822,7 +822,7 @@
     <string name="settings_dictionary_site_ok">%1$s 有响应。</string>
     <string name="settings_dictionary_site_unreachable">%1$s 无响应：%2$s</string>
     <string name="settings_dictionary_alt_language">备选语言</string>
-    <string name="settings_dictionary_alt_language_detail">在释义卡片中添加一个按钮，用于打开单词的译法，取自维基词典的翻译表。自动模式下，以其他语言写成的书使用应用的语言。只有词典网站本身语言的单词才有翻译表。</string>
+    <string name="settings_dictionary_alt_language_detail">在词典释义中添加翻译按钮，取自维基词典的翻译表。自动模式下，其他语言的书使用应用的语言。只有词典网站本身语言的单词才有翻译。</string>
     <string name="settings_dictionary_alt_language_off">关闭</string>
     <string name="settings_dictionary_alt_language_auto">自动</string>
     <string name="settings_dictionary_alt_language_auto_detail">应用的语言，用于以其他语言写成的书</string>
@@ -852,28 +852,28 @@
     <string name="settings_backup_restored_settings">备份已恢复。</string>
     <string name="settings_backup_error_file">无法打开或保存此备份文件。</string>
     <string name="settings_backup_error_invalid">这不是有效的备份，或文件已损坏。</string>
-    <string name="settings_backup_error_version">此备份由无法读取的应用版本创建。</string>
+    <string name="settings_backup_error_version">此版本的 Liseur 无法读取该备份。</string>
     <string name="settings_backup_error_size">此备份过大，无法恢复。</string>
     <string name="settings_backup_error_storage">无法在设备存储中准备备份。</string>
     <string name="settings_backup_error_restore">无法恢复此备份。</string>
     <string name="settings_backup_error_partial">备份的一部分已恢复，但其余部分无法应用。请检查您的设置、字体、批注、阅读进度、阅读伴侣摘要、账号和服务。</string>
     <string name="settings_library_help_title">图书服务器</string>
-    <string name="settings_library_help_body">图书服务器——calibre-web、Komga、liseur-sync 或 OPDS 书库——存放着您的书库：Liseur 浏览并从中下载图书，并在服务器支持时同步您的阅读进度。自定义 OPDS 连接可搭配 KOReader 同步服务器以同步阅读位置。同一时间只能连接一台服务器。\n\nliseur-sync 还能同步仅来自本机的图书：从 SD 卡导入的文件也会同步其位置。您可以在 %1$s 上自建。</string>
-    <string name="settings_account_detail">从 calibre-web、Komga、liseur-sync 或 OPDS 服务器浏览和下载，并同步您的阅读进度——OPDS 通过配对的 KOReader 同步服务器实现。</string>
+    <string name="settings_library_help_body">图书服务器（calibre-web、Komga、liseur-sync 或 OPDS 书库）存放着您的书库：Liseur 浏览并从中下载图书，并在服务器支持时同步您的阅读进度。自定义 OPDS 连接可搭配 KOReader 同步服务器以同步阅读位置。同一时间只能连接一台服务器。\n\nliseur-sync 还能同步仅存在于本机的图书：从 SD 卡导入的文件也会同步其位置。您可以在 %1$s 上自建。</string>
+    <string name="settings_account_detail">从 calibre-web、Komga、liseur-sync 或 OPDS 服务器浏览和下载，并同步您的阅读进度（OPDS 通过配对的 KOReader 同步服务器实现）。</string>
     <string name="settings_about">关于</string>
     <string name="about_title">关于</string>
     <string name="about_open">关于 Liseur</string>
     <string name="about_author">由 Chmouel Boudjnah 用 \u2763\ufe0f 制作</string>
     <string name="about_sponsor">支持开发</string>
     <string name="about_quote_attribution">\u2014 %1$s</string>
-    <string name="about_tagline">面向 Android 的开源 EPUB 图书阅读器，兼 calibre-web / Komga / liseur-sync 客户端。</string>
+    <string name="about_tagline">面向 Android 的开源 EPUB 阅读器，可连接 calibre-web、Komga 和 liseur-sync。</string>
     <string name="about_version">版本 %1$s (%2$d)</string>
     <string name="about_source">源代码</string>
     <string name="about_licences">开源许可</string>
-    <string name="about_star_prompt">喜欢 Liseur？欢迎在 GitHub 上给它点个星 \u2b50\ufe0f</string>
+    <string name="about_star_prompt">如果您喜欢 Liseur，请在 GitHub 上给它点个星 \u2b50\ufe0f</string>
     <string name="about_licence_line">Liseur 是遵循 MIT 许可的自由软件。</string>
     <string name="licences_intro">Liseur 完全由自由和开源组件构建。</string>
-    <string name="licences_read">%1$s \u2014 阅读</string>
+    <string name="licences_read">%1$s：阅读</string>
     <string name="read_book">阅读</string>
     <string name="book_actions">图书操作</string>
     <string name="state_downloading">正在下载</string>
@@ -881,7 +881,7 @@
     <string name="catalog_failed_offline">无法连接您的服务器。正在显示已保存的书库目录。</string>
     <string name="catalog_failed_timeout">您的服务器响应超时。正在显示已保存的书库目录。</string>
     <string name="catalog_failed_unauthorised">您的服务器不再接受此登录。请重新连接账户以查看新书。</string>
-    <string name="catalog_failed_forbidden">书库目录拒绝访问。若是迁移的 Grimmory 连接，请启用 Grimmory 的 OPDS 服务器后重新连接。否则请询问服务器管理员。</string>
+    <string name="catalog_failed_forbidden">书库目录拒绝访问。如果是 Grimmory 服务器，请启用 Grimmory 的 OPDS 服务器后重新连接。否则请询问服务器管理员。</string>
     <string name="catalog_failed_not_found">该地址没有书库目录响应。请在服务器设置中检查。</string>
     <string name="catalog_failed_malformed">您的服务器返回了意外的内容。正在显示已保存的书库目录。</string>
     <string name="catalog_failed_insecure">此服务器需要 https:// 地址。正在显示已保存的书库目录。</string>
@@ -933,7 +933,7 @@
     <string name="reading_stats_time_left_note">按您目前的阅读速度</string>
     <string name="reading_stats_book_elsewhere">在其他设备上阅读</string>
     <string name="reading_stats_empty_title">暂无记录。</string>
-    <string name="reading_stats_empty_detail">Liseur 从您打开一本书的那一刻开始计时。在此之前的阅读不会计入，因为无法准确推算当时花了多长时间。</string>
+    <string name="reading_stats_empty_detail">Liseur 从您打开一本书时开始记录阅读时间。之前的阅读不会计入，因为无法测量。</string>
     <string name="reading_stats_book_empty">这本书您还没有读过。</string>
     <string name="reading_stats_last_read_label">上次阅读</string>
     <string name="reading_stats_started_label">开始于</string>
@@ -999,7 +999,7 @@
     <string name="reader_external_link_body">此链接将在浏览器中打开 %1$s。Liseur 不会替您打开。</string>
     <string name="reader_external_link_open">打开</string>
     <string name="reader_external_link_failed">本设备上没有可打开该链接的应用。</string>
-    <string name="server_sync_bookorbit">对于已验证的 EPUB，阅读位置会在每一页同步；在别处保存的位置会在您阅读时提示。以服务器最后写入的为准。已读完和未读标记也会同步；批注不会。</string>
+    <string name="server_sync_bookorbit">对于已验证的 EPUB，阅读位置会在每次翻页时同步。如果其他设备上有更新的位置，Liseur 会在您阅读时提示。以服务器上最新保存的为准。已读完和未读状态也会同步，但批注不会。</string>
     <string name="server_sync_off_bookorbit">阅读位置不会与 BookOrbit 同步。</string>
     <string name="browse_libraries">浏览远程书库</string>
     <string name="browse_add_connection">添加书库目录</string>
@@ -1217,7 +1217,7 @@
     <string name="translation_options_temperature_detail">为 0 时，同一段文字每次的译文都相同。数值越高，措辞变化越多。</string>
     <string name="translation_options_temperature_refused">此模型不接受温度参数，因此不会发送。</string>
     <string name="translation_options_context">发送前文</string>
-    <string name="translation_options_context_detail">翻译整页时，每句会连同书中它之前的一部分文字一起发送，长度以翻译设置为准。有助于处理代词和名字。</string>
+    <string name="translation_options_context_detail">每句会连同它之前的一部分文字一起发送，长度以翻译设置中的上限为准。这有助于处理代词和名字。</string>
     <string name="translation_options_context_gemma">TranslateGemma 逐句单独翻译，从不接收前文。</string>
     <string name="context_shared_title">共享设置</string>
     <string name="context_shared_detail">前文和书籍信息在“翻译”和“朗读”中是同一组设置，在这里修改会同时生效。\n\n前文：段落之前、同一章节中的句子。它们帮助模型判断谁在说话、代词指代什么。前文越多，速度越慢，费用也可能更高。\n\n书籍信息：模板填好后随每个请求发送。{language} 加入书的语言，{percent} 表示该章节在书中的起始位置。</string>
@@ -1241,7 +1241,7 @@
     <string name="translation_book_example">示例书籍</string>
     <string name="read_aloud_context_switch">发送书籍上下文</string>
     <string name="read_aloud_context_switch_detail">帮助语音把握语气和名字</string>
-    <string name="read_aloud_context_about">每次请求时，朗读可以发送书籍信息以及同一章节中前面的几句话。语音会用它们来选择语气、区分角色并读准名字。这些内容不会被读出来，朗读的文字始终是书中的原文，朗读译文时也是如此。只有部分语音模型支持。前文和书籍信息与翻译共用。</string>
+    <string name="read_aloud_context_about">每次请求时，朗读可以发送书籍信息以及同一章节中前面的几句话。语音会用它们来选择语气、区分角色并读准名字。这些内容不会被读出来，朗读的文字始终是书中的原文，即使朗读译文时也是如此。只有部分语音模型支持。前文和书籍信息与翻译共用。</string>
     <string name="read_aloud_context_unavailable">此语音模型不可用</string>
     <string name="read_aloud_context_unavailable_kept">此语音模型不可用。你的选择会保留。</string>
     <string name="translation_options_instructions">附加说明</string>
@@ -1276,7 +1276,7 @@
     <string name="reader_clear_translations_confirm">清除</string>
     <string name="translation_settings_test_passed">可以使用：%1$s</string>
     <string name="translation_settings_device_unavailable">本机没有可供应用使用的翻译功能。请选择其他服务。</string>
-    <string name="translation_settings_device_downloads_detail">在系统设置中下载语言后即可翻译。</string>
+    <string name="translation_settings_device_downloads_detail">在系统设置中下载语言后即可使用。</string>
     <string name="translation_download">下载语言</string>
     <string name="translation_action">翻译</string>
     <string name="translation_loading">正在翻译…</string>
@@ -1435,7 +1435,7 @@
     <string name="codex_story">前情</string>
     <string name="codex_search">搜索名称</string>
     <string name="codex_empty">之前的章节中尚无匹配名称。</string>
-    <string name="codex_scripts">自动名称识别依赖大写字母，暂不支持没有大写字母的语言。</string>
+    <string name="codex_scripts">名称识别依赖大写字母，因此不适用于没有大写字母的语言。</string>
     <string name="codex_entry">%1$s · 提及次数：%2$d</string>
     <string name="codex_person">人物</string>
     <string name="codex_place">地点</string>
