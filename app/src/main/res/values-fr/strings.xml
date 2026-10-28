@@ -1646,7 +1646,7 @@
     <string name="book_translation_preview_wait">Traduction…</string>
     <string name="book_translation_preview_outdated">Cet aperçu est obsolète. Réessayez le passage.</string>
     <string name="settings_dictionary_on_long_press">Ouvrir le dictionnaire par appui long</string>
-    <string name="settings_dictionary_on_long_press_detail">Affiche les définitions en maintenant un mot. La fiche garde les actions de sélection. Les recherches en ligne doivent être activées séparément.</string>
+    <string name="settings_dictionary_on_long_press_detail">Affiche les définitions quand vous relâchez un mot maintenu. Faites glisser sans relâcher pour chercher une courte expression. La fiche garde les actions de sélection. Les recherches en ligne doivent être activées séparément.</string>
     <string name="dictionary_select_text">Sélectionner le texte</string>
     <string name="selection_copy">Copier</string>
     <string name="selection_citation">Copier avec la référence</string>

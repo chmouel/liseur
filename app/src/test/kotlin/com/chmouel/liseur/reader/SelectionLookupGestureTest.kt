@@ -26,8 +26,11 @@ class SelectionLookupGestureTest {
     }
 
     @Test
-    fun `multiple words and punctuation alone keep the toolbar`() {
-        for (text in listOf("two words", "two\nwords", "…", "")) {
+    fun `short phrases look up and long passages or punctuation keep the toolbar`() {
+        for (text in listOf("kick the bucket", "two\nwords", "one two three four five six")) {
+            assertTrue(text, SelectionLookupGesture().select(text, Locale.ENGLISH))
+        }
+        for (text in listOf("one two three four five six seven", "…", "")) {
             val gesture = SelectionLookupGesture()
             assertFalse(text, gesture.select(text, Locale.ENGLISH))
             assertFalse(gesture.select("word", Locale.ENGLISH))

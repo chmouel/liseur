@@ -1059,7 +1059,14 @@ changing reader behavior.
 ### Reader behavior
 
 - `dictionaryOnLongPress` defaults off and applies only to the built-in
-  dictionary. A fresh single-word selection opens the definition sheet;
+  dictionary. A long press arms a lookup (`pendingLookup`) that waits for
+  the finger to lift, so a drag can grow the selection first; it is keyed
+  on the arming, not the selection, which keeps changing during the drag.
+  On lift the live selection is re-read, and one of 1 to
+  `MAX_LOOKUP_WORDS` words opens the definition sheet; anything else
+  keeps the selection bar, which stays hidden while the lookup is
+  pending. One automatic lookup per selection: a lookup that gives up
+  marks the gesture handled until the selection clears.
   Select text returns to the same selection without reopening definitions.
   The sheet also carries the selection bar's actions (`SheetSelectionActionBar`,
   without Look up), which act on that selection and close the sheet.
