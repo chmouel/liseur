@@ -310,14 +310,14 @@ object OpdsParser {
     /**
      * The text of a feed as it came off the wire.
      *
-     * The charset in `Content-Type` wins when there is one. Without it a
-     * feed says what it is in its byte-order mark or XML declaration, and
+     * A byte-order mark wins, then the charset in `Content-Type`. Without
+     * either a feed says what it is in its XML declaration, and
      * an old catalog written in Latin-1 that only says so there would
      * otherwise be read as UTF-8 and lose every accented name.
      */
     fun decode(bytes: ByteArray, headerCharset: Charset?): String {
-        val (charset, skip) = headerCharset?.let { it to 0 }
-            ?: bom(bytes)
+        val (charset, skip) = bom(bytes)
+            ?: headerCharset?.let { it to 0 }
             ?: ((declaredEncoding(bytes) ?: Charsets.UTF_8) to 0)
         return String(bytes, skip, bytes.size - skip, charset).removePrefix("\uFEFF")
     }
