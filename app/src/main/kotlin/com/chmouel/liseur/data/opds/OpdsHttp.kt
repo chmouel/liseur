@@ -100,3 +100,7 @@ class OpdsHttp(private val client: OkHttpClient = default()) {
             .build()
     }
 }
+
+/** The body of a feed response, decoded the way [OpdsParser.decode] reads a feed. */
+internal fun Response.feedText(): String =
+    OpdsParser.decode(body.bytes(), body.contentType()?.charset())

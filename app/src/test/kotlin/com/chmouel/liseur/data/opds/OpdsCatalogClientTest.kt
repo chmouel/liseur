@@ -37,6 +37,7 @@ class OpdsCatalogClientTest {
     private val pages = mutableMapOf<String, String>()
     private val codes = mutableMapOf<String, Int>()
     private val asked = mutableListOf<String>()
+    private val latin1 = mutableMapOf<String, String>()
 
     @Before
     fun start() {
@@ -47,6 +48,12 @@ class OpdsCatalogClientTest {
                     (request.url.encodedQuery?.let { "?$it" } ?: "")
                 asked += path
                 codes[path]?.let { return MockResponse(code = it) }
+                latin1[path]?.let {
+                    return MockResponse.Builder()
+                        .setHeader("Content-Type", "application/atom+xml")
+                        .body(okio.Buffer().write(it.toByteArray(Charsets.ISO_8859_1)))
+                        .build()
+                }
                 val body = pages[path] ?: return MockResponse(code = 404)
                 return MockResponse(
                     code = 200,
@@ -524,6 +531,22 @@ class OpdsCatalogClientTest {
         }
 
         assertTrue(failure is RemoteHttpFailure)
+    }
+
+    @Test
+    fun `a Latin-1 feed with no charset header keeps its accents`() {
+        latin1["/opds"] = """<?xml version="1.0" encoding="ISO-8859-1"?>""" + feed(
+            """
+            <entry><id>1</id><title>Cien años</title><author><name>García Márquez</name></author>
+            <link rel="http://opds-spec.org/acquisition" href="/get/1.epub"
+                  type="application/epub+zip"/></entry>
+            """.trimIndent(),
+        )
+
+        val book = walk().second.single()
+
+        assertEquals("Cien años", book.title)
+        assertEquals("García Márquez", book.author)
     }
 
     private fun path(depth: Int) = if (depth == 0) "/opds" else "/opds/d$depth"

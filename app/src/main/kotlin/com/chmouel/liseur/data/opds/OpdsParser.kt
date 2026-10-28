@@ -1,10 +1,12 @@
 package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.remote.RemoteBook
-import java.io.ByteArrayInputStream
+import java.io.StringReader
+import java.nio.charset.Charset
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Element
 import org.w3c.dom.Node
+import org.xml.sax.InputSource
 import org.xml.sax.SAXException
 
 /** A book as an OPDS catalog describes it. */
@@ -300,11 +302,47 @@ object OpdsParser {
     private fun malformed(): Nothing =
         throw SAXException("the feed's prolog is not well-formed XML")
 
+    /**
+     * The text of a feed as it came off the wire.
+     *
+     * The charset in `Content-Type` wins when there is one. Without it a
+     * feed says what it is in its byte-order mark or XML declaration, and
+     * an old catalog written in Latin-1 that only says so there would
+     * otherwise be read as UTF-8 and lose every accented name.
+     */
+    fun decode(bytes: ByteArray, headerCharset: Charset?): String {
+        val (charset, skip) = headerCharset?.let { it to 0 }
+            ?: bom(bytes)
+            ?: ((declaredEncoding(bytes) ?: Charsets.UTF_8) to 0)
+        return String(bytes, skip, bytes.size - skip, charset).removePrefix("\uFEFF")
+    }
+
+    private fun bom(bytes: ByteArray): Pair<Charset, Int>? {
+        fun starts(vararg b: Int) = bytes.size >= b.size && b.indices.all { bytes[it] == b[it].toByte() }
+        return when {
+            starts(0xEF, 0xBB, 0xBF) -> Charsets.UTF_8 to 3
+            starts(0xFE, 0xFF) -> Charsets.UTF_16BE to 2
+            starts(0xFF, 0xFE) -> Charsets.UTF_16LE to 2
+            else -> null
+        }
+    }
+
+    private fun declaredEncoding(bytes: ByteArray): Charset? {
+        val head = String(bytes, 0, minOf(bytes.size, 256), Charsets.ISO_8859_1)
+        val name = XML_ENCODING.find(head)?.groupValues?.get(1) ?: return null
+        return runCatching { Charset.forName(name) }.getOrNull()
+    }
+
+    private val XML_ENCODING = Regex("""^\s*<\?xml\s[^>]*?encoding\s*=\s*["']([A-Za-z0-9._:-]+)["']""")
+
     fun parse(xml: String): OpdsPage {
         rejectsDoctype(xml)
+        // A character stream, not bytes: the text is already decoded, and
+        // bytes would send the parser back to the XML declaration to
+        // decode it a second time with whatever encoding it names.
         val document = safeDocumentBuilderFactory()
             .newDocumentBuilder()
-            .parse(ByteArrayInputStream(xml.toByteArray()))
+            .parse(InputSource(StringReader(xml)))
 
         val root = document.documentElement
         // Well-formed is not the same as a feed. An HTML sign-in page is

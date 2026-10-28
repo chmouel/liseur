@@ -73,7 +73,7 @@ class OpdsCatalogClient(
             val page = fetched.response.use { response ->
                 if (!response.isSuccessful) throw RemoteHttpFailure(failureForCode(response.code))
                 try {
-                    OpdsParser.parse(response.body.string())
+                    OpdsParser.parse(response.feedText())
                 } catch (e: SAXException) {
                     throw RemoteHttpFailure(SyncFailure.Malformed)
                 }
@@ -254,7 +254,7 @@ class OpdsCatalogClient(
                 throw RemoteHttpFailure(failureForCode(response.code))
             }
             try {
-                OpdsParser.parse(response.body.string())
+                OpdsParser.parse(response.feedText())
             } catch (e: SAXException) {
                 Log.i(TAG, "A catalog feed was not readable XML", e)
                 throw RemoteHttpFailure(SyncFailure.Malformed)
