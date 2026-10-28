@@ -443,9 +443,9 @@
     <string name="reader_position_not_saved">此阅读位置无法保存。请保持书本打开并再翻一页以重试。</string>
     <string name="reader_open_position_not_saved">无法保存你最新的阅读位置。此书可能会在之前的位置打开。</string>
     <string name="server_sync_timeout">服务器响应超时，阅读进度将在稍后同步。</string>
-    <string name="server_sync_unauthorised">服务器不再接受此登录凭据。请重新连接账户以恢复进度同步。</string>
+    <string name="server_sync_unauthorised">服务器拒绝此登录凭据。请重新连接账户以恢复进度同步。</string>
     <string name="server_sync_forbidden">此账户无权同步阅读进度。请联系服务器管理员授予 Kobo 同步权限。</string>
-    <string name="server_sync_missing">服务器上已不存在其中一本书，因此其进度无法同步。</string>
+    <string name="server_sync_missing">服务器上没有其中一本书，因此其进度无法同步。</string>
     <string name="server_sync_insecure">此服务器拒绝通过明文 HTTP 接收凭据。请使用 https:// 地址。</string>
     <string name="server_sync_malformed">服务器返回了异常内容，阅读进度将在稍后同步。</string>
     <string name="server_sync_stale_identity">服务器上的图书标识已更改，将重试同步。</string>
@@ -885,8 +885,8 @@
     <string name="state_download_queued">等待下载</string>
     <string name="catalog_failed_offline">无法连接您的服务器。正在显示已保存的书库目录。</string>
     <string name="catalog_failed_timeout">您的服务器响应超时。正在显示已保存的书库目录。</string>
-    <string name="catalog_failed_unauthorised">您的服务器不再接受此登录。请重新连接账户以查看新书。</string>
-    <string name="catalog_failed_forbidden">书库目录拒绝访问。如果是 Grimmory 服务器，请启用 Grimmory 的 OPDS 服务器后重新连接。否则请询问服务器管理员。</string>
+    <string name="catalog_failed_unauthorised">您的服务器拒绝此登录。请重新连接账户以查看新书。</string>
+    <string name="catalog_failed_forbidden">书库目录拒绝访问。若是迁移的 Grimmory 连接，请启用 Grimmory 的 OPDS 服务器后重新连接。否则请询问服务器管理员。</string>
     <string name="catalog_failed_not_found">该地址没有书库目录响应。请在服务器设置中检查。</string>
     <string name="catalog_failed_malformed">您的服务器返回了意外的内容。正在显示已保存的书库目录。</string>
     <string name="catalog_failed_insecure">此服务器需要 https:// 地址。正在显示已保存的书库目录。</string>
@@ -1419,7 +1419,7 @@
     <string name="settings_backup_password_export">请设置密码以加密账号和凭据，恢复时需要此密码。阅读数据、设置、服务地址和字体不会被加密。</string>
     <string name="settings_backup_password_restore">请输入此备份的密码。账号和凭据将被替换，无需登录。</string>
     <string name="settings_backup_password_error">密码错误或加密数据已损坏，请重试。</string>
-    <string name="settings_backup_error_credential">此设备已无法读取保存的账号或 KOReader 凭据。请重新登录，或在不包含账号和密码的情况下导出。</string>
+    <string name="settings_backup_error_credential">此设备无法读取保存的账号或 KOReader 凭据。请重新登录，或在不包含账号和密码的情况下导出。</string>
 
     <!-- Offline codex -->
     <string name="codex_title">阅读伴侣</string>

@@ -384,9 +384,9 @@
     <string name="reader_position_not_saved">Diese Leseposition konnte nicht gespeichert werden. Lass das Buch offen und blättere eine Seite weiter, um es erneut zu versuchen.</string>
     <string name="reader_open_position_not_saved">Deine letzte Leseposition konnte nicht gespeichert werden. Dieses Buch wird möglicherweise an einer früheren Stelle geöffnet.</string>
     <string name="server_sync_timeout">Der Server hat zu lange gebraucht; Positionen synchronisieren später.</string>
-    <string name="server_sync_unauthorised">Der Server akzeptiert diese Anmeldung nicht mehr. Verbinde das Konto erneut, um Positionen wieder zu synchronisieren.</string>
+    <string name="server_sync_unauthorised">Der Server lehnt diese Anmeldung ab. Verbinde das Konto erneut, um Positionen wieder zu synchronisieren.</string>
     <string name="server_sync_forbidden">Dieses Konto darf keine Lesepositionen synchronisieren. Bitte die Person, die den Server betreibt, um Kobo-Sync-Rechte.</string>
-    <string name="server_sync_missing">Der Server hat eines dieser Bücher nicht mehr, deshalb konnte seine Position nicht synchronisiert werden.</string>
+    <string name="server_sync_missing">Eines dieser Bücher fehlt auf dem Server, deshalb konnte seine Position nicht synchronisiert werden.</string>
     <string name="server_sync_insecure">Dieser Server nimmt Anmeldedaten nicht über normales HTTP an. Verwende eine https://-Adresse.</string>
     <string name="server_sync_malformed">Der Server hat etwas Unerwartetes geantwortet; Positionen synchronisieren später.</string>
     <string name="server_sync_stale_identity">Die Buchidentität des Servers hat sich geändert; Sync wird erneut versucht.</string>
@@ -893,8 +893,8 @@
 
     <string name="catalog_failed_offline">Dein Server war nicht erreichbar. Der gespeicherte Katalog wird angezeigt.</string>
     <string name="catalog_failed_timeout">Dein Server hat zu lange gebraucht. Der gespeicherte Katalog wird angezeigt.</string>
-    <string name="catalog_failed_unauthorised">Dein Server akzeptiert diese Anmeldung nicht mehr. Verbinde das Konto erneut, um neue Bücher zu sehen.</string>
-    <string name="catalog_failed_forbidden">Der Katalog hat den Zugriff verweigert. Bei einem Grimmory-Server aktiviere den OPDS-Server von Grimmory und verbinde dann erneut. Sonst frage die Person, die den Server betreibt.</string>
+    <string name="catalog_failed_unauthorised">Dein Server lehnt diese Anmeldung ab. Verbinde das Konto erneut, um neue Bücher zu sehen.</string>
+    <string name="catalog_failed_forbidden">Der Katalog hat den Zugriff verweigert. Bei einer migrierten Grimmory-Verbindung aktiviere den OPDS-Server von Grimmory und verbinde dann erneut. Sonst frage die Person, die den Server betreibt.</string>
     <string name="catalog_failed_not_found">Unter dieser Adresse hat kein Katalog geantwortet. Prüfe sie in den Servereinstellungen.</string>
     <string name="catalog_failed_malformed">Dein Server hat etwas Unerwartetes geantwortet. Der gespeicherte Katalog wird angezeigt.</string>
     <string name="catalog_failed_insecure">Dieser Server braucht eine https://-Adresse. Der gespeicherte Katalog wird angezeigt.</string>
@@ -1480,7 +1480,7 @@
     <string name="settings_backup_password_export">Wähle ein Passwort zum Verschlüsseln der Konten und Zugangsdaten. Du benötigst es zur Wiederherstellung. Lesedaten, Einstellungen, Dienstadressen und Schriftarten bleiben unverschlüsselt.</string>
     <string name="settings_backup_password_restore">Gib das Passwort dieses Backups ein. Konten und Zugangsdaten werden ohne Anmeldung ersetzt.</string>
     <string name="settings_backup_password_error">Falsches Passwort oder beschädigte verschlüsselte Daten. Versuche es erneut.</string>
-    <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht mehr gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>
+    <string name="settings_backup_error_credential">Gespeicherte Zugangsdaten eines Kontos oder von KOReader können auf diesem Gerät nicht gelesen werden. Melde dich erneut an oder exportiere ohne Konten und Passwörter.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Lesebegleiter</string>

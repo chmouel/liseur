@@ -399,9 +399,9 @@
     <string name="reader_position_not_saved">This reading position could not be saved. Keep the book open and turn another page to try again.</string>
     <string name="reader_open_position_not_saved">Your latest reading position could not be saved. This book may open at an earlier position.</string>
     <string name="server_sync_timeout">The server took too long to answer; positions will sync later.</string>
-    <string name="server_sync_unauthorised">The server no longer accepts this sign-in. Reconnect the account to sync positions again.</string>
+    <string name="server_sync_unauthorised">The server rejected this sign-in. Reconnect the account to sync positions again.</string>
     <string name="server_sync_forbidden">This account is not allowed to sync reading positions. Ask whoever runs the server for Kobo sync rights.</string>
-    <string name="server_sync_missing">The server no longer has one of these books, so its position could not be synced.</string>
+    <string name="server_sync_missing">One of these books is not on the server, so its position could not be synced.</string>
     <string name="server_sync_insecure">This server refuses to take credentials over plain HTTP. Use an https:// address.</string>
     <string name="server_sync_malformed">The server answered with something unexpected; positions will sync later.</string>
     <string name="server_sync_stale_identity">The server’s book identity changed; sync will retry.</string>
@@ -810,7 +810,7 @@
     <string name="settings_scroll_mode">Read by scrolling</string>
     <string name="settings_scroll_mode_detail">Each chapter is one long page you scroll instead of pages you turn. You can change this for a single book in the reader.</string>
     <string name="settings_lock_footer">Lock footer</string>
-    <string name="settings_lock_footer_detail">Tapping the footer while reading does not change it. A long press still opens its options.</string>
+    <string name="settings_lock_footer_detail">Taps on the footer do not change it while reading. A long press still opens its options.</string>
     <string name="settings_eink">E-ink screen</string>
     <string name="settings_eink_detail">Disables animations that don\'t render well on e-ink screens. Liseur detects e-ink automatically, but you can override it here.</string>
     <string name="settings_color_eink">Colour E-ink</string>
@@ -922,8 +922,8 @@
     -->
     <string name="catalog_failed_offline">Couldn\'t reach your server. Showing the saved catalog.</string>
     <string name="catalog_failed_timeout">Your server took too long to answer. Showing the saved catalog.</string>
-    <string name="catalog_failed_unauthorised">Your server no longer accepts this sign-in. Reconnect the account to see new books.</string>
-    <string name="catalog_failed_forbidden">The catalog refused access. For a Grimmory server, enable Grimmory\'s OPDS server, then reconnect. Otherwise ask whoever runs the server.</string>
+    <string name="catalog_failed_unauthorised">Your server rejected this sign-in. Reconnect the account to see new books.</string>
+    <string name="catalog_failed_forbidden">The catalog refused access. For a migrated Grimmory connection, enable Grimmory\'s OPDS server, then reconnect. Otherwise ask whoever runs the server.</string>
     <string name="catalog_failed_not_found">No catalog answered at that address. Check it in the server settings.</string>
     <string name="catalog_failed_malformed">Your server answered with something unexpected. Showing the saved catalog.</string>
     <string name="catalog_failed_insecure">This server needs an https:// address. Showing the saved catalog.</string>
@@ -1528,7 +1528,7 @@
     <string name="settings_backup_password_export">Choose a password to encrypt accounts and credentials. You will need it to restore them. Reading data, settings, service addresses and fonts remain unencrypted.</string>
     <string name="settings_backup_password_restore">Enter the password used to encrypt this backup. Accounts and credentials will be replaced without signing in.</string>
     <string name="settings_backup_password_error">Incorrect password or damaged encrypted data. Try again.</string>
-    <string name="settings_backup_error_credential">A saved account or KOReader credential can no longer be read on this device. Sign in again, or export without accounts and passwords.</string>
+    <string name="settings_backup_error_credential">A saved account or KOReader credential cannot be read on this device. Sign in again, or export without accounts and passwords.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Companion</string>

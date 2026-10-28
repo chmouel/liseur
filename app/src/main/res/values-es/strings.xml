@@ -381,9 +381,9 @@
     <string name="reader_position_not_saved">No se pudo guardar esta posición de lectura. Mantén el libro abierto y pasa otra página para intentarlo de nuevo.</string>
     <string name="reader_open_position_not_saved">No se pudo guardar tu última posición de lectura. Puede que este libro se abra en una posición anterior.</string>
     <string name="server_sync_timeout">El servidor tardó demasiado en responder; las posiciones se sincronizarán más tarde.</string>
-    <string name="server_sync_unauthorised">El servidor ya no acepta este inicio de sesión. Vuelve a conectar la cuenta para sincronizar posiciones.</string>
+    <string name="server_sync_unauthorised">El servidor rechaza este inicio de sesión. Vuelve a conectar la cuenta para sincronizar posiciones.</string>
     <string name="server_sync_forbidden">Esta cuenta no puede sincronizar posiciones de lectura. Pide a quien administre el servidor derechos de sincronización Kobo.</string>
-    <string name="server_sync_missing">El servidor ya no tiene uno de estos libros, así que no se pudo sincronizar su posición.</string>
+    <string name="server_sync_missing">Uno de estos libros no está en el servidor, así que no se pudo sincronizar su posición.</string>
     <string name="server_sync_insecure">Este servidor se niega a recibir credenciales por HTTP sin cifrar. Usa una dirección https://.</string>
     <string name="server_sync_malformed">El servidor respondió con algo inesperado; las posiciones se sincronizarán más tarde.</string>
     <string name="server_sync_stale_identity">La identidad del libro en el servidor cambió; la sincronización lo reintentará.</string>
@@ -775,7 +775,7 @@
     <string name="settings_scroll_mode">Leer desplazando</string>
     <string name="settings_scroll_mode_detail">Cada capítulo es una página larga que desplazas en lugar de páginas que pasas. Puedes cambiarlo para un solo libro en el lector.</string>
     <string name="settings_lock_footer">Bloquear el pie de página</string>
-    <string name="settings_lock_footer_detail">Tocar el pie de página durante la lectura no lo cambia. Una pulsación larga sigue abriendo sus opciones.</string>
+    <string name="settings_lock_footer_detail">Tocar el pie de página no lo cambia durante la lectura. Una pulsación larga sigue abriendo sus opciones.</string>
     <string name="settings_eink">Pantalla de tinta electrónica</string>
     <string name="settings_eink_detail">Desactiva las animaciones, que no se ven bien en pantallas de tinta electrónica. Liseur detecta la tinta electrónica automáticamente, pero puedes cambiarlo aquí.</string>
     <string name="settings_color_eink">Tinta electrónica en color</string>
@@ -881,8 +881,8 @@
     <string name="state_download_queued">Esperando para descargar</string>
     <string name="catalog_failed_offline">No se pudo contactar con tu servidor. Mostrando el catálogo guardado.</string>
     <string name="catalog_failed_timeout">Tu servidor tardó demasiado en responder. Mostrando el catálogo guardado.</string>
-    <string name="catalog_failed_unauthorised">Tu servidor ya no acepta este inicio de sesión. Vuelve a conectar la cuenta para ver libros nuevos.</string>
-    <string name="catalog_failed_forbidden">El catálogo denegó el acceso. Si es un servidor Grimmory, activa el servidor OPDS de Grimmory y vuelve a conectar. Si no, pregunta a quien administre el servidor.</string>
+    <string name="catalog_failed_unauthorised">Tu servidor rechaza este inicio de sesión. Vuelve a conectar la cuenta para ver libros nuevos.</string>
+    <string name="catalog_failed_forbidden">El catálogo denegó el acceso. Si es una conexión Grimmory migrada, activa el servidor OPDS de Grimmory y vuelve a conectar. Si no, pregunta a quien administre el servidor.</string>
     <string name="catalog_failed_not_found">Ningún catálogo respondió en esa dirección. Compruébala en los ajustes del servidor.</string>
     <string name="catalog_failed_malformed">Tu servidor respondió con algo inesperado. Mostrando el catálogo guardado.</string>
     <string name="catalog_failed_insecure">Este servidor necesita una dirección https://. Mostrando el catálogo guardado.</string>
@@ -1468,7 +1468,7 @@
     <string name="settings_backup_password_export">Elige una contraseña para cifrar las cuentas y credenciales. La necesitarás para restaurarlas. Los datos de lectura, los ajustes, las direcciones de los servicios y las fuentes seguirán sin cifrar.</string>
     <string name="settings_backup_password_restore">Introduce la contraseña de esta copia. Las cuentas y credenciales se reemplazarán sin iniciar sesión.</string>
     <string name="settings_backup_password_error">Contraseña incorrecta o datos cifrados dañados. Inténtalo de nuevo.</string>
-    <string name="settings_backup_error_credential">Ya no se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>
+    <string name="settings_backup_error_credential">No se puede leer en este dispositivo una credencial guardada de una cuenta o de KOReader. Vuelve a iniciar sesión o exporta sin cuentas ni contraseñas.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compañero</string>

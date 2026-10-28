@@ -381,9 +381,9 @@
     <string name="reader_position_not_saved">Cette position de lecture n\'a pas pu être enregistrée. Gardez le livre ouvert et tournez une autre page pour réessayer.</string>
     <string name="reader_open_position_not_saved">Votre dernière position de lecture n’a pas pu être enregistrée. Ce livre risque de s’ouvrir à une position antérieure.</string>
     <string name="server_sync_timeout">Le serveur a mis trop longtemps à répondre ; les positions se synchroniseront plus tard.</string>
-    <string name="server_sync_unauthorised">Le serveur n\'accepte plus cette connexion. Reconnectez le compte pour synchroniser à nouveau les positions.</string>
+    <string name="server_sync_unauthorised">Le serveur refuse cette connexion. Reconnectez le compte pour synchroniser à nouveau les positions.</string>
     <string name="server_sync_forbidden">Ce compte n\'est pas autorisé à synchroniser les positions de lecture. Demandez à qui gère le serveur les droits de sync Kobo.</string>
-    <string name="server_sync_missing">Le serveur n\'a plus l\'un de ces livres, donc sa position n\'a pas pu être synchronisée.</string>
+    <string name="server_sync_missing">L\'un de ces livres n\'est pas sur le serveur, donc sa position n\'a pas pu être synchronisée.</string>
     <string name="server_sync_insecure">Ce serveur refuse de prendre des identifiants en HTTP simple. Utilisez une adresse https://.</string>
     <string name="server_sync_malformed">Le serveur a répondu avec quelque chose d\'inattendu ; les positions se synchroniseront plus tard.</string>
     <string name="server_sync_stale_identity">L\'identité du livre sur le serveur a changé ; la synchronisation réessaiera.</string>
@@ -775,7 +775,7 @@
     <string name="settings_scroll_mode">Lire par défilement</string>
     <string name="settings_scroll_mode_detail">Chaque chapitre est une longue page que vous faites défiler, au lieu de pages à tourner. Vous pouvez changer ce réglage pour un seul livre dans le lecteur.</string>
     <string name="settings_lock_footer">Verrouiller le pied de page</string>
-    <string name="settings_lock_footer_detail">Toucher le pied de page pendant la lecture ne le modifie pas. Un appui long ouvre toujours ses options.</string>
+    <string name="settings_lock_footer_detail">Toucher le bas de la page ne le modifie pas pendant la lecture. Un appui long ouvre toujours ses options.</string>
     <string name="settings_eink">Écran e-ink</string>
     <string name="settings_eink_detail">Désactive les animations qui s\'affichent mal sur les écrans e-ink. Liseur détecte l\'e-ink automatiquement, mais vous pouvez changer ce réglage ici.</string>
     <string name="settings_color_eink">E-ink couleur</string>
@@ -881,8 +881,8 @@
     <string name="state_download_queued">En attente de téléchargement</string>
     <string name="catalog_failed_offline">Impossible d\'atteindre votre serveur. Affichage du catalogue enregistré.</string>
     <string name="catalog_failed_timeout">Votre serveur a mis trop longtemps à répondre. Affichage du catalogue enregistré.</string>
-    <string name="catalog_failed_unauthorised">Votre serveur n\'accepte plus cette connexion. Reconnectez le compte pour voir les nouveaux livres.</string>
-    <string name="catalog_failed_forbidden">Le catalogue a refusé l\'accès. Pour un serveur Grimmory, activez le serveur OPDS de Grimmory, puis reconnectez-vous. Sinon demandez à qui gère le serveur.</string>
+    <string name="catalog_failed_unauthorised">Votre serveur refuse cette connexion. Reconnectez le compte pour voir les nouveaux livres.</string>
+    <string name="catalog_failed_forbidden">Le catalogue a refusé l\'accès. Pour une connexion Grimmory migrée, activez le serveur OPDS de Grimmory, puis reconnectez-vous. Sinon demandez à qui gère le serveur.</string>
     <string name="catalog_failed_not_found">Aucun catalogue n\'a répondu à cette adresse. Vérifiez-la dans les paramètres du serveur.</string>
     <string name="catalog_failed_malformed">Votre serveur a répondu avec quelque chose d\'inattendu. Affichage du catalogue enregistré.</string>
     <string name="catalog_failed_insecure">Ce serveur a besoin d\'une adresse https://. Affichage du catalogue enregistré.</string>
@@ -1468,7 +1468,7 @@
     <string name="settings_backup_password_export">Choisissez un mot de passe pour chiffrer les comptes et les identifiants. Il sera nécessaire à la restauration. Les données de lecture, les réglages, les adresses des services et les polices restent non chiffrés.</string>
     <string name="settings_backup_password_restore">Saisissez le mot de passe de cette sauvegarde. Les comptes et les identifiants seront remplacés sans nouvelle connexion.</string>
     <string name="settings_backup_password_error">Mot de passe incorrect ou données chiffrées endommagées. Réessayez.</string>
-    <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut plus être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
+    <string name="settings_backup_error_credential">Un identifiant de compte ou de KOReader enregistré ne peut pas être lu sur cet appareil. Reconnectez-vous, ou exportez sans les comptes et mots de passe.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Compagnon</string>

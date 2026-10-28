@@ -415,9 +415,9 @@
     <string name="reader_position_not_saved">Эту позицию чтения не удалось сохранить. Оставьте книгу открытой и перелистните страницу, чтобы попробовать снова.</string>
     <string name="reader_open_position_not_saved">Не удалось сохранить последнее место чтения. Книга может открыться на более раннем месте.</string>
     <string name="server_sync_timeout">Сервер слишком долго не отвечал; позиции синхронизируются позже.</string>
-    <string name="server_sync_unauthorised">Сервер больше не принимает этот вход. Подключите учётную запись заново, чтобы снова синхронизировать позиции.</string>
+    <string name="server_sync_unauthorised">Сервер не принимает этот вход. Подключите учётную запись заново, чтобы снова синхронизировать позиции.</string>
     <string name="server_sync_forbidden">Этой учётной записи нельзя синхронизировать позиции чтения. Попросите у администратора сервера права синхронизации Kobo.</string>
-    <string name="server_sync_missing">Одной из этих книг больше нет на сервере, поэтому её позицию не удалось синхронизировать.</string>
+    <string name="server_sync_missing">Одной из этих книг нет на сервере, поэтому её позицию не удалось синхронизировать.</string>
     <string name="server_sync_insecure">Этот сервер не принимает учётные данные по обычному HTTP. Используйте адрес https://.</string>
     <string name="server_sync_malformed">Сервер ответил чем-то неожиданным; позиции синхронизируются позже.</string>
     <string name="server_sync_stale_identity">Идентификатор книги на сервере изменился; синхронизация повторится.</string>
@@ -827,7 +827,7 @@
     <string name="settings_scroll_mode">Читать прокруткой</string>
     <string name="settings_scroll_mode_detail">Каждая глава показывается одной длинной страницей, которую вы прокручиваете, а не листаете. Для одной книги это можно изменить в читалке.</string>
     <string name="settings_lock_footer">Заблокировать нижнюю строку</string>
-    <string name="settings_lock_footer_detail">Касание нижней строки во время чтения не меняет её. Долгое нажатие по-прежнему открывает её настройки.</string>
+    <string name="settings_lock_footer_detail">Касание нижней строки не меняет её во время чтения. Долгое нажатие по-прежнему открывает её настройки.</string>
     <string name="settings_eink">Экран электронных чернил</string>
     <string name="settings_eink_detail">Отключает анимации, которые плохо отображаются на экранах электронных чернил. Liseur определяет такой экран автоматически, но здесь это можно изменить.</string>
     <string name="settings_color_eink">Цветные электронные чернила</string>
@@ -945,8 +945,8 @@
     <string name="state_download_queued">Ожидание загрузки</string>
     <string name="catalog_failed_offline">Не удалось связаться с сервером. Показан сохранённый каталог.</string>
     <string name="catalog_failed_timeout">Сервер слишком долго не отвечал. Показан сохранённый каталог.</string>
-    <string name="catalog_failed_unauthorised">Сервер больше не принимает этот вход. Подключите учётную запись заново, чтобы видеть новые книги.</string>
-    <string name="catalog_failed_forbidden">Каталог отказал в доступе. Для сервера Grimmory включите OPDS-сервер Grimmory, затем подключитесь снова. Иначе обратитесь к администратору сервера.</string>
+    <string name="catalog_failed_unauthorised">Сервер не принимает этот вход. Подключите учётную запись заново, чтобы видеть новые книги.</string>
+    <string name="catalog_failed_forbidden">Каталог отказал в доступе. Для перенесённого подключения Grimmory включите OPDS-сервер Grimmory, затем подключитесь снова. Иначе обратитесь к администратору сервера.</string>
     <string name="catalog_failed_not_found">По этому адресу каталог не ответил. Проверьте его в настройках сервера.</string>
     <string name="catalog_failed_malformed">Сервер ответил чем-то неожиданным. Показан сохранённый каталог.</string>
     <string name="catalog_failed_insecure">Этому серверу нужен адрес https://. Показан сохранённый каталог.</string>
@@ -1568,7 +1568,7 @@
     <string name="settings_backup_password_export">Выберите пароль для шифрования аккаунтов и учётных данных. Он понадобится для восстановления. Данные чтения, настройки, адреса сервисов и шрифты останутся незашифрованными.</string>
     <string name="settings_backup_password_restore">Введите пароль этой резервной копии. Аккаунты и учётные данные будут заменены без входа в систему.</string>
     <string name="settings_backup_password_error">Неверный пароль или повреждены зашифрованные данные. Попробуйте ещё раз.</string>
-    <string name="settings_backup_error_credential">Сохранённые учётные данные аккаунта или KOReader больше нельзя прочитать на этом устройстве. Войдите снова или экспортируйте без аккаунтов и паролей.</string>
+    <string name="settings_backup_error_credential">Сохранённые учётные данные аккаунта или KOReader нельзя прочитать на этом устройстве. Войдите снова или экспортируйте без аккаунтов и паролей.</string>
 
     <!-- Offline codex -->
     <string name="codex_title">Помощник</string>
