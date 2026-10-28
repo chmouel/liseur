@@ -559,4 +559,15 @@ class OpdsParserTest {
         val utf8 = latinFeed("ISO-8859-1").toByteArray(Charsets.UTF_8)
         assertTrue(OpdsParser.decode(utf8, Charsets.UTF_8).contains("García"))
     }
+
+    @Test
+    fun `a byte-order mark wins over a conflicting header charset`() {
+        val bytes = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) +
+            latinFeed("UTF-8").toByteArray(Charsets.UTF_8)
+
+        val text = OpdsParser.decode(bytes, Charsets.ISO_8859_1)
+
+        assertTrue(text.startsWith("<?xml"))
+        assertTrue(text.contains("García"))
+    }
 }
