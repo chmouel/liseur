@@ -18,6 +18,7 @@ sealed interface Route {
     data object Settings : Route
     data object SettingsBackup : Route
     data object ReadingAppearance : Route
+    data object SelectionToolbar : Route
     data object ReadingNavigation : Route
     data object ReadAloud : Route
     data object Translation : Route
@@ -43,6 +44,7 @@ private val Route.tag: String
         Route.Settings -> "Settings"
         Route.SettingsBackup -> "SettingsBackup"
         Route.ReadingAppearance -> "ReadingAppearance"
+        Route.SelectionToolbar -> "SelectionToolbar"
         Route.ReadingNavigation -> "ReadingNavigation"
         Route.ReadAloud -> "ReadAloud"
         Route.Translation -> "Translation"
@@ -59,7 +61,7 @@ private val Route.tag: String
     }
 
 private val objectRoutes: Map<String, Route> = listOf(
-    Route.Library, Route.Settings, Route.SettingsBackup, Route.ReadingAppearance,
+    Route.Library, Route.Settings, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
     Route.About, Route.Stats,
@@ -120,7 +122,7 @@ fun MutableList<Route>.pop() {
 /** Pages opened from Settings, shown beside it on a wide window. */
 val Route.isSettingsPage: Boolean
     get() = when (this) {
-        Route.ReadingAppearance, Route.ReadingNavigation, Route.ReadAloud,
+        Route.ReadingAppearance, Route.SelectionToolbar, Route.ReadingNavigation, Route.ReadAloud,
         Route.Translation, Route.ReadingCompanion, Route.Services, Route.SettingsBackup,
         Route.WatchedFolders, Route.HiddenBooks, Route.About, Route.ServerAccount,
         -> true

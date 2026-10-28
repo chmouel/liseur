@@ -83,6 +83,7 @@ import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.seriesIdForExtras
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.exportNotebookMarkdown
+import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.reader.annotations.locator
@@ -1280,6 +1281,12 @@ class ReaderViewModel(
     val highlightPalette: StateFlow<HighlightPalette> = appSettings.settings
         .map { it.highlightPalette }
         .stateIn(viewModelScope, SharingStarted.Eagerly, HighlightPalette())
+
+    val selectionActionLayout = appSettings.settings.map { it.selectionActionLayout }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SelectionActionLayout.default)
+
+    fun updateSelectionActionLayout(change: (SelectionActionLayout) -> SelectionActionLayout) =
+        viewModelScope.launch { appSettings.updateSelectionActionLayout(change) }
 
     private val _place = MutableStateFlow<Locator?>(null)
 
@@ -2530,7 +2537,7 @@ class ReaderViewModel(
             val truncated: Boolean = false,
         ) : SearchState
 
-        data class Failure(val message: String) : SearchState
+        data class Failure(val message: String, val query: String) : SearchState
     }
 
     private val _search = MutableStateFlow<SearchState>(SearchState.Idle)
@@ -2560,14 +2567,14 @@ class ReaderViewModel(
             // A publication without a search service cannot be searched;
             // the reader is told rather than left with an empty result.
             val iterator = publication.search(trimmed) ?: run {
-                _search.value = SearchState.Failure("")
+                _search.value = SearchState.Failure("", trimmed)
                 return@launch
             }
             val hits = mutableListOf<Locator>()
             try {
                 while (true) {
                     val page = iterator.next().getOrElse {
-                        _search.value = SearchState.Failure(it.message)
+                        _search.value = SearchState.Failure(it.message, trimmed)
                         return@launch
                     } ?: break
                     hits += page.locators

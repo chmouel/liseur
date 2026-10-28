@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -160,6 +161,13 @@ import com.chmouel.liseur.reader.annotations.NoteDialog
 import com.chmouel.liseur.reader.annotations.NoteSheet
 import com.chmouel.liseur.reader.annotations.NoteSheetActions
 import com.chmouel.liseur.reader.annotations.NoteText
+import com.chmouel.liseur.reader.annotations.SelectionActionLayout
+import com.chmouel.liseur.reader.annotations.citationText
+import com.chmouel.liseur.reader.annotations.copySelection
+import com.chmouel.liseur.reader.annotations.canHandleSelectionIntent
+import com.chmouel.liseur.reader.annotations.launchSelectionIntent
+import com.chmouel.liseur.reader.annotations.processTextIntent
+import com.chmouel.liseur.reader.annotations.webSearchIntent
 import com.chmouel.liseur.reader.annotations.SelectionActions
 import com.chmouel.liseur.reader.annotations.SelectionPopup
 import com.chmouel.liseur.reader.annotations.SheetSelectionActionBar
@@ -192,6 +200,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.reader.chrome.CatchUpPill
+import com.chmouel.liseur.reader.chrome.SelectionToolbarSheet
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
 import com.chmouel.liseur.reader.chrome.AUTO_SCROLL_CONTROLS_LINGER_MS
 import com.chmouel.liseur.reader.chrome.AutoScrollControls
@@ -404,7 +413,7 @@ private const val SCREEN_SETTLE_POLLS = 12
  * modal sheets composed at once is a state the reader can neither see
  * nor get out of cleanly.
  */
-private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED }
+private enum class ReaderSheet { NONE, TYPOGRAPHY, ADVANCED, SELECTION_TOOLBAR }
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -498,6 +507,8 @@ internal fun ReaderScreen(
     onScrollingChanged: (Boolean) -> Unit = {},
     tapZonesFlow: StateFlow<TapZones>,
     pinchToResizeFlow: StateFlow<Boolean>,
+    selectionActionLayoutFlow: StateFlow<SelectionActionLayout>,
+    onSelectionActionLayoutChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
     highlightPaletteFlow: StateFlow<HighlightPalette>,
     onHighlightTintToggled: (HighlightTint) -> Unit,
     onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
@@ -541,6 +552,7 @@ internal fun ReaderScreen(
     var wholeBookOpen by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
+    val advancedScrollState = rememberScrollState()
     // Which footer slot a long press opened a picker for. Its own state
     // rather than a ReaderSheet: the footer is only ever drawn with the
     // chrome away, so a picker reached from it is not the chrome's
@@ -566,6 +578,7 @@ internal fun ReaderScreen(
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
+    val selectionActionLayout by selectionActionLayoutFlow.collectAsStateWithLifecycle()
     // Readium reads vertical text off the book rather than off the
     // reader: it cannot paginate lines that run down the page, so such a
     // book is scrolled whatever the setting says. Everything that asks
@@ -4800,7 +4813,42 @@ internal fun ReaderScreen(
     // One set of actions for the bar and for the definition sheet a long
     // press opens. The sheet acts on the selection it was opened for and
     // closes first.
+    var intentAvailability by remember { mutableStateOf(0) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) intentAvailability++
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    val processAvailable = remember(intentAvailability) { context.canHandleSelectionIntent(processTextIntent()) }
+    val webSearchAvailable = remember(intentAvailability) { context.canHandleSelectionIntent(webSearchIntent()) }
+
     fun selectionActionsFor(active: ActiveSelection, inSheet: Boolean): SelectionActions {
+        fun actOnDisplayedText(block: (String) -> Unit) {
+            effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                val nav = navigatorNow
+                val translatedAt = pageTranslatedTurns
+                val live = if (inSheet) active else liveSelection(active) ?: return@launch
+                if (navigatorNow !== nav || translatedAt != pageTranslatedTurns) return@launch
+                val text = selectionActionText(
+                    original = live.text,
+                    translated = pageTranslated,
+                    inSheet = inSheet,
+                    retainedText = retainedDictionarySelection?.displayedText,
+                    readDisplayedText = { nav?.let { TranslatedPages.selectedText(it) } },
+                )
+                val stillSelected = if (inSheet) automaticSelection === active else
+                    live === selection || live === tappedSelection
+                if (!stillSelected || navigatorNow !== nav || translatedAt != pageTranslatedTurns) return@launch
+                if (text == null) {
+                    Toast.makeText(context, R.string.selection_text_unavailable, Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                if (inSheet) defineWord = null
+                block(text)
+            }
+        }
         fun act(block: (ActiveSelection) -> Unit) {
             if (inSheet) {
                 defineWord = null
@@ -4812,6 +4860,18 @@ internal fun ReaderScreen(
             }
         }
         return SelectionActions(
+            layout = selectionActionLayout,
+            onCopy = { actOnDisplayedText { text -> context.copySelection(text); dismissSelection() } },
+            onCitation = { actOnDisplayedText { text ->
+                context.copySelection(citationText(text, publication.metadata.title, publication.metadata.authors.map { it.name }))
+                dismissSelection()
+            } },
+            onOpenWith = if (processAvailable) ({ actOnDisplayedText { text ->
+                context.launchSelectionIntent(processTextIntent(text), chooser = true); dismissSelection()
+            } }) else null,
+            onWebSearch = if (webSearchAvailable) ({ actOnDisplayedText { text ->
+                context.launchSelectionIntent(webSearchIntent(text)); dismissSelection()
+            } }) else null,
             onHighlight = { tint ->
                 act { live ->
                     onAnnotationAction.highlight(live.locator, tint, live.existing?.id)
@@ -5011,10 +5071,10 @@ internal fun ReaderScreen(
                 null
             }
             SelectionPopup(
-                offset = active.popupOffset(),
+                offset = active.popupOffset(density),
                 activeTint = active.existing?.tint?.let(HighlightTint::fromName),
                 palette = highlightPalette,
-                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, companion) {
+                actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, translationRun, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
                     selectionActionsFor(active, inSheet = false)
                 },
                 onDismiss = {
@@ -5056,7 +5116,7 @@ internal fun ReaderScreen(
             },
             selectionActions = automaticSelection?.let { active ->
                 {
-                    val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion) {
+                    val actions = remember(active, dictionary, translateReady, translateLabel, pageTranslated, companion, selectionActionLayout, processAvailable, webSearchAvailable) {
                         selectionActionsFor(active, inSheet = true)
                     }
                     SheetSelectionActionBar(
@@ -5200,8 +5260,17 @@ internal fun ReaderScreen(
         )
     }
 
+    if (sheet == ReaderSheet.SELECTION_TOOLBAR) {
+        SelectionToolbarSheet(
+            layout = selectionActionLayout,
+            onChanged = onSelectionActionLayoutChanged,
+            onDismiss = { sheet = ReaderSheet.ADVANCED },
+        )
+    }
+
     if (sheet == ReaderSheet.ADVANCED) {
         AdvancedSheet(
+            scrollState = advancedScrollState,
             prefs = prefs,
             // Not the reader's own answer but the page's: vertical text
             // runs rather than turns whatever the setting says, and a
@@ -5217,6 +5286,7 @@ internal fun ReaderScreen(
             onFooterModeChanged = onProgressAction.setFooterMode,
             onFooterFieldChanged = onProgressAction.setFooterField,
             onPageTurnStyleChanged = onPrefsAction.setPageTurnStyle,
+            onOpenSelectionToolbar = { sheet = ReaderSheet.SELECTION_TOOLBAR },
             highlightPalette = highlightPalette,
             onHighlightTintToggled = onHighlightTintToggled,
             onHighlightDefaultTintChanged = onHighlightDefaultTintChanged,
@@ -5449,9 +5519,9 @@ internal data class ActiveSelection(
      * Where to put the action bar: above the selection when it fits, below
      * it otherwise, so the words being acted on are never covered.
      */
-    fun popupOffset(): IntOffset {
+    fun popupOffset(density: Float): IntOffset {
         val r = rect ?: return IntOffset(0, 0)
-        val above = r.top - POPUP_HEIGHT_PX
+        val above = r.top - POPUP_HEIGHT_DP * density - POPUP_GAP_PX
         val y = if (above > 0) above else r.bottom + POPUP_GAP_PX
         return IntOffset(0, y.toInt())
     }
@@ -5489,7 +5559,7 @@ private const val TRANSLATION_RESUME_WAIT_MS = 10_000L
 private const val TRANSLATION_RESUMED_CUE_MS = 3_500L
 private val SEARCH_HIT_TINT = Color(0xFF80CBC4)
 
-private const val POPUP_HEIGHT_PX = 160f
+private const val POPUP_HEIGHT_DP = 64f
 private const val POPUP_GAP_PX = 24f
 
 /**

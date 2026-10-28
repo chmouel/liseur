@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -89,6 +90,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf(initialQuery) }
+    val currentState = state.forQuery(query)
     val focus = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -117,6 +119,15 @@ fun SearchScreen(
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                             keyboardActions = KeyboardActions(onSearch = { onSearch(query) }),
+                            trailingIcon = {
+                                IconButton(onClick = { onSearch(query) }, enabled = query.isNotBlank()) {
+                                    Icon(
+                                        Icons.Outlined.Search,
+                                        contentDescription = stringResource(R.string.reader_search),
+                                        tint = theme.foreground,
+                                    )
+                                }
+                            },
                             colors = TextFieldDefaults.colors(
                                 focusedContainerColor = Color.Transparent,
                                 unfocusedContainerColor = Color.Transparent,
@@ -145,13 +156,13 @@ fun SearchScreen(
                         navigationIconContentColor = theme.foreground,
                     ),
                 )
-                if (state is SearchState.Running) {
+                if (currentState is SearchState.Running) {
                     BusyBar(Modifier.fillMaxWidth())
                 }
             }
         },
     ) { padding ->
-        val hits = state.hits()
+        val hits = currentState.hits()
         // The hit list takes the bottom inset, keyboard included, as its own
         // content padding so hits scroll on under it; the centred messages
         // keep clear of it as before.
@@ -173,19 +184,19 @@ fun SearchScreen(
                 when {
                     hits.isNotEmpty() -> HitList(
                         hits = hits,
-                        capped = (state as? SearchState.Done)?.truncated == true,
+                        capped = (currentState as? SearchState.Done)?.truncated == true,
                         theme = theme,
                         onHitSelected = onHitSelected,
                         bottomInset = bottomInset,
                     )
 
-                    state is SearchState.Done ->
-                        Message(theme, stringResource(R.string.search_no_results, state.query), bottomInset)
+                    currentState is SearchState.Done ->
+                        Message(theme, stringResource(R.string.search_no_results, currentState.query), bottomInset)
 
-                    state is SearchState.Failure ->
+                    currentState is SearchState.Failure ->
                         Message(theme, stringResource(R.string.search_failed), bottomInset)
 
-                    state is SearchState.Running -> Unit
+                    currentState is SearchState.Running -> Unit
 
                     else -> Message(theme, stringResource(R.string.search_prompt), bottomInset)
                 }
@@ -330,4 +341,14 @@ private fun SearchState.hits(): List<Locator> = when (this) {
     is SearchState.Running -> hits
     is SearchState.Done -> hits
     else -> emptyList()
+}
+
+internal fun SearchState.forQuery(query: String): SearchState {
+    val searched = when (this) {
+        is SearchState.Running -> this.query
+        is SearchState.Done -> this.query
+        is SearchState.Failure -> this.query
+        SearchState.Idle -> return this
+    }
+    return if (searched == query.trim()) this else SearchState.Idle
 }

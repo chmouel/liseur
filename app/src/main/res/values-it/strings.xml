@@ -27,6 +27,7 @@
     <string name="add_book_hint">Scegli un singolo EPUB dal dispositivo o dallo spazio cloud.</string>
     <string name="connect_server_hint">Sfoglia calibre-web, Komga, liseur-sync o qualsiasi catalogo OPDS.</string>
     <string name="search_books">Cerca libri</string>
+    <string name="clear_search">Cancella ricerca</string>
     <string name="filter_menu">Filtro</string>
     <string name="filter_availability">Sul dispositivo</string>
     <string name="filter_reading">Lettura</string>
@@ -343,6 +344,10 @@
     <string name="server_sync_clear_translations_on_finish">Cancella le traduzioni di un libro quando lo finisco</string>
     <string name="server_sync_clear_translations_on_finish_hint">Rimuove le traduzioni delle frasi salvate da questo dispositivo e dal tuo account.</string>
     <string name="server_sync_running">Sincronizzazione delle posizioni…</string>
+    <string name="library_sync_complete">Posizioni di lettura sincronizzate.</string>
+    <string name="library_sync_continuing">Posizioni di lettura aggiornate. La sincronizzazione degli altri libri continua in background.</string>
+    <string name="library_sync_unavailable">La sincronizzazione delle posizioni di lettura non è configurata.</string>
+    <string name="library_sync_failed">Impossibile sincronizzare le posizioni di lettura. Controlla le impostazioni del server e riprova.</string>
     <string name="server_sync_offline">Impossibile raggiungere il server; le posizioni si sincronizzeranno dopo.</string>
     <string name="reader_sync_book">Sincronizza questo libro</string>
     <string name="reader_sync_book_in_step">Questo libro è già sincronizzato con il server.</string>
@@ -1643,4 +1648,23 @@
     <string name="settings_dictionary_on_long_press">Apri il dizionario con una pressione prolungata</string>
     <string name="settings_dictionary_on_long_press_detail">Apre le definizioni tenendo premuta una parola. La scheda mantiene le azioni di selezione. Le ricerche online vanno attivate separatamente.</string>
     <string name="dictionary_select_text">Seleziona testo</string>
+    <string name="selection_copy">Copia</string>
+    <string name="selection_citation">Copia con citazione</string>
+    <string name="selection_open_with">Apri con</string>
+    <string name="selection_web_search">Cerca sul web</string>
+    <string name="selection_copied">Copiato</string>
+    <string name="selection_no_handler">Nessuna app disponibile</string>
+    <string name="selection_text_unavailable">Impossibile leggere il testo selezionato. Selezionalo di nuovo e riprova.</string>
+    <string name="selection_arrange">Barra di selezione</string>
+    <string name="selection_availability_help">Alcune azioni appaiono solo quando sono disponibili per la selezione o sul dispositivo.</string>
+    <string name="selection_move_up">Sposta %1$s in alto</string>
+    <string name="selection_move_down">Sposta %1$s in basso</string>
+    <string name="selection_reset">Ripristina barra</string>
+    <string name="selection_style_icon">Icona</string>
+    <string name="selection_style_label">Testo</string>
+    <string name="selection_style_both">Icona e testo</string>
+    <string name="selection_style_hidden">Nascosto</string>
+    <string name="selection_edit_label">Modifica etichetta di %1$s</string>
+    <string name="selection_label_help">Lascia vuoto per usare l’etichetta predefinita.</string>
+    <string name="selection_label_default">Usa etichetta predefinita</string>
 </resources>

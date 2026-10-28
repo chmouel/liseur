@@ -6,6 +6,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
+import com.chmouel.liseur.reader.annotations.SelectionAction
+import com.chmouel.liseur.reader.annotations.SelectionActionStyle
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -23,6 +27,20 @@ class AppSettingsRepositoryTest {
 
     private fun store(name: String = "app.preferences_pb") =
         PreferenceDataStoreFactory.create { folder.newFile(name) }
+
+    @Test
+    fun `concurrent selection toolbar edits preserve every change`() = runTest {
+        val repo = AppSettingsRepository(store("selection-layout.preferences_pb"))
+        coroutineScope {
+            repeat(4) { launch { repo.updateSelectionActionLayout { it.moveBy(SelectionAction.NOTE, 1) } } }
+            launch { repo.updateSelectionActionLayout { it.withStyle(SelectionAction.COPY, SelectionActionStyle.LABEL) } }
+            launch { repo.updateSelectionActionLayout { it.withLabel(SelectionAction.COPY, "Copy, please: 中文") } }
+        }
+        val entries = repo.settings.first().selectionActionLayout.entries
+        assertEquals(4, entries.indexOfFirst { it.action == SelectionAction.NOTE })
+        assertEquals(SelectionActionStyle.LABEL, entries.first { it.action == SelectionAction.COPY }.style)
+        assertEquals("Copy, please: 中文", entries.first { it.action == SelectionAction.COPY }.customLabel)
+    }
 
     @Test
     fun `automatic dictionary is opt in and survives backup without enabling online lookup`() = runTest {

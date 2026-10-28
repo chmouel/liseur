@@ -31,6 +31,7 @@
     <string name="add_book_hint">Выберите один EPUB с устройства или из облачного хранилища.</string>
     <string name="connect_server_hint">Просматривайте calibre-web, Komga, liseur-sync или любой каталог OPDS.</string>
     <string name="search_books">Поиск книг</string>
+    <string name="clear_search">Очистить поиск</string>
     <string name="filter_menu">Фильтр</string>
     <string name="filter_availability">На устройстве</string>
     <string name="filter_reading">Чтение</string>
@@ -377,6 +378,10 @@
     <string name="server_sync_clear_translations_on_finish">Удалять переводы книги, когда я её дочитываю</string>
     <string name="server_sync_clear_translations_on_finish_hint">Удаляет сохранённые переводы предложений с этого устройства и из вашей учётной записи.</string>
     <string name="server_sync_running">Синхронизация позиций чтения…</string>
+    <string name="library_sync_complete">Позиции чтения синхронизированы.</string>
+    <string name="library_sync_continuing">Позиции чтения обновлены. Синхронизация остальных книг продолжается в фоне.</string>
+    <string name="library_sync_unavailable">Синхронизация позиций чтения не настроена.</string>
+    <string name="library_sync_failed">Не удалось синхронизировать позиции чтения. Проверьте настройки сервера и повторите попытку.</string>
     <string name="server_sync_offline">Не удалось связаться с сервером; позиции синхронизируются позже.</string>
     <string name="reader_sync_book">Синхронизировать эту книгу</string>
     <string name="reader_sync_book_in_step">Эта книга уже синхронизирована с сервером.</string>
@@ -1751,4 +1756,23 @@
     <string name="settings_dictionary_on_long_press">Открывать словарь долгим нажатием</string>
     <string name="settings_dictionary_on_long_press_detail">Открывает определения при удержании слова. В карточке остаются действия с выделением. Онлайн-поиск нужно включить отдельно.</string>
     <string name="dictionary_select_text">Выделить текст</string>
+    <string name="selection_copy">Копировать</string>
+    <string name="selection_citation">Копировать с цитатой</string>
+    <string name="selection_open_with">Открыть с помощью</string>
+    <string name="selection_web_search">Поиск в интернете</string>
+    <string name="selection_copied">Скопировано</string>
+    <string name="selection_no_handler">Нет доступных приложений</string>
+    <string name="selection_text_unavailable">Не удалось прочитать выделенный текст. Выделите его заново и повторите попытку.</string>
+    <string name="selection_arrange">Панель выделения</string>
+    <string name="selection_availability_help">Некоторые действия отображаются только тогда, когда они доступны для выделения или на этом устройстве.</string>
+    <string name="selection_move_up">Переместить %1$s вверх</string>
+    <string name="selection_move_down">Переместить %1$s вниз</string>
+    <string name="selection_reset">Сбросить панель</string>
+    <string name="selection_style_icon">Значок</string>
+    <string name="selection_style_label">Текст</string>
+    <string name="selection_style_both">Значок и текст</string>
+    <string name="selection_style_hidden">Скрыто</string>
+    <string name="selection_edit_label">Изменить подпись для «%1$s»</string>
+    <string name="selection_label_help">Оставьте поле пустым, чтобы использовать стандартную подпись.</string>
+    <string name="selection_label_default">Использовать стандартную подпись</string>
 </resources>

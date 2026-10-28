@@ -559,6 +559,8 @@ class ReaderActivity : FragmentActivity() {
                                     onScrollingChanged = viewModel::onScrollingChanged,
                                     tapZonesFlow = viewModel.tapZones,
                                     pinchToResizeFlow = viewModel.pinchToResize,
+                                    selectionActionLayoutFlow = viewModel.selectionActionLayout,
+                                    onSelectionActionLayoutChanged = viewModel::updateSelectionActionLayout,
                                     highlightPaletteFlow = viewModel.highlightPalette,
                                     onHighlightTintToggled =
                                         viewModel::toggleHighlightTint,
