@@ -57,7 +57,9 @@ class OpdsFileSource(private val http: OpdsHttp = OpdsHttp()) : FileSource {
  * Follows a download's redirects under its catalog's [OpdsScope], hop by
  * hop, the way [OpdsHttp.get] does for feeds. Left to OkHttp, a file
  * link on the catalog could send the download to plain HTTP or to an
- * address on the reader's own network.
+ * address on the reader's own network. Every refusal, including a loop
+ * or an unreadable `Location`, is reported as [SyncFailure.InsecureTransport]
+ * so the download fails for good instead of being retried.
  */
 internal class ScopedRedirects : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -69,8 +71,8 @@ internal class ScopedRedirects : Interceptor {
             val location = if (response.isRedirect) response.header("Location") else null
             if (location == null) return response
             response.close()
-            if (++hops > OpdsHttp.MAX_HOPS) throw RemoteHttpFailure(SyncFailure.Malformed)
-            val next = request.url.resolve(location) ?: throw RemoteHttpFailure(SyncFailure.Malformed)
+            if (++hops > OpdsHttp.MAX_HOPS) throw RemoteHttpFailure(SyncFailure.InsecureTransport)
+            val next = request.url.resolve(location) ?: throw RemoteHttpFailure(SyncFailure.InsecureTransport)
             if (!scope.mayFetch(next)) throw RemoteHttpFailure(SyncFailure.InsecureTransport)
             request = request.newBuilder().url(next).apply {
                 if (!scope.signs(next)) removeHeader("Authorization")

@@ -160,6 +160,10 @@ class BookDownloader(
             // not renew the session. Retrying would only fail again.
             if (e.reason == SyncFailure.Unauthorised) {
                 DownloadOutcome.Failed(DownloadFailure.Authentication)
+            } else if (e.reason == SyncFailure.InsecureTransport) {
+                // A redirect the catalog's rules refuse will be refused
+                // again, so the book fails instead of being retried.
+                DownloadOutcome.Failed(DownloadFailure.Gone)
             } else {
                 DownloadOutcome.Failed(DownloadFailure.Network(e.message ?: "The download stopped"))
             }
