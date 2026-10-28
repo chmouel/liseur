@@ -82,7 +82,7 @@ class OpdsHttp(private val client: OkHttpClient = default()) {
         .build()
 
     companion object {
-        private const val MAX_HOPS = 5
+        internal const val MAX_HOPS = 5
 
         /**
          * Both OPDS profiles, then anything. Servers that serve a web
