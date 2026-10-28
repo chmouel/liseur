@@ -33,7 +33,9 @@ class AppSettingsRepositoryTest {
     fun `concurrent selection toolbar edits preserve every change`() = runTest {
         val repo = AppSettingsRepository(store("selection-layout.preferences_pb"))
         coroutineScope {
-            repeat(4) { launch { repo.updateSelectionActionLayout { it.moveBy(SelectionAction.NOTE.id, 1) } } }
+            repeat(4) { launch { repo.updateSelectionActionLayout { layout ->
+                layout.moveTo(SelectionAction.NOTE.id, layout.shown.indexOfFirst { it.action == SelectionAction.NOTE } + 1, toHidden = false)
+            } } }
             launch { repo.updateSelectionActionLayout { it.withStyle(SelectionAction.COPY.id, SelectionActionStyle.LABEL) } }
             launch { repo.updateSelectionActionLayout { it.withLabel(SelectionAction.COPY.id, "Copy, please: 中文") } }
             launch { repo.updateSelectionActionLayout { it.withIcon(SelectionAction.COPY.id, SelectionActionIcon.STAR) } }

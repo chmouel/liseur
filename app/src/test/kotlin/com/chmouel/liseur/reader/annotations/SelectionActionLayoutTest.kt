@@ -19,13 +19,12 @@ class SelectionActionLayoutTest {
         val layout = SelectionActionLayout.default
             .withWebsite(firstSite, "Référence, 中文 : +", "https://example.org/search?q={text}&kind=book,author", SelectionActionIcon.STAR)
             .withWebsite(secondSite, "Other", "https://other.example/wiki/{text}", null)
-            .move(firstSite, 0)
-            .withStyle(firstSite, SelectionActionStyle.HIDDEN)
+            .moveTo(firstSite, 0, toHidden = true)
             .withWebsite(firstSite, "Renamed", "https://example.org/find/{text}?mode=a:b", SelectionActionIcon.HEART)
-        assertEquals(firstSite, layout.entries.first().id)
-        assertEquals(SelectionActionStyle.HIDDEN, layout.entries.first().style)
+        assertEquals(firstSite, layout.hidden.first().id)
+        assertEquals(SelectionActionStyle.HIDDEN, layout.hidden.first().style)
         assertEquals(layout, SelectionActionLayout.parse(layout.serialize()))
-        assertEquals("Renamed", layout.withLabel(firstSite, " ").entries.first().customLabel)
+        assertEquals("Renamed", layout.withLabel(firstSite, " ").hidden.first().customLabel)
         val removed = layout.removeWebsite(firstSite)
         assertEquals(listOf(secondSite), removed.entries.filter { it.action == null }.map { it.id })
         assertEquals(removed, removed.removeWebsite(SelectionAction.NOTE.id))
@@ -34,13 +33,14 @@ class SelectionActionLayoutTest {
     @Test fun `reset restores built ins and retains website definitions with default appearance`() {
         val layout = SelectionActionLayout.default.withStyle(SelectionAction.WIKIPEDIA.id, SelectionActionStyle.BOTH)
             .withWebsite(firstSite, "Mine", "https://example.org/?q={text}", SelectionActionIcon.HEART)
-            .withStyle(firstSite, SelectionActionStyle.HIDDEN).move(firstSite, 0)
+            .moveTo(firstSite, 0, toHidden = true)
         val reset = layout.reset()
-        assertEquals(SelectionActionLayout.default.entries, reset.entries.dropLast(1))
-        assertEquals(firstSite, reset.entries.last().id)
-        assertEquals("Mine", reset.entries.last().customLabel)
-        assertEquals(SelectionActionStyle.BOTH, reset.entries.last().style)
-        assertEquals(null, reset.entries.last().customIcon)
+        assertEquals(SelectionActionLayout.default.entries, reset.entries.filter { it.action != null })
+        val site = reset.shown.last()
+        assertEquals(firstSite, site.id)
+        assertEquals("Mine", site.customLabel)
+        assertEquals(SelectionActionStyle.BOTH, site.style)
+        assertEquals(null, site.customIcon)
         assertEquals(reset, SelectionActionLayout.parse(reset.serialize()))
     }
 
@@ -54,7 +54,7 @@ class SelectionActionLayoutTest {
     }
 
     @Test fun `round trip preserves order styles labels with delimiters and custom icons`() {
-        val layout = SelectionActionLayout.default.move(SelectionAction.SHARE.id, 0)
+        val layout = SelectionActionLayout.default.moveTo(SelectionAction.SHARE.id, 0, toHidden = false)
             .withStyle(SelectionAction.NOTE.id, SelectionActionStyle.BOTH)
             .withLabel(SelectionAction.SHARE.id, "Partager, citer : 100% + 中文 📖")
             .withIcon(SelectionAction.SHARE.id, SelectionActionIcon.HEART)
@@ -67,7 +67,7 @@ class SelectionActionLayoutTest {
             .withIcon(SelectionAction.COPY.id, SelectionActionIcon.STAR)
             .withLabel(SelectionAction.COPY.id, "Keep this label")
             .withStyle(SelectionAction.COPY.id, SelectionActionStyle.BOTH)
-            .move(SelectionAction.COPY.id, 0)
+            .moveTo(SelectionAction.COPY.id, 0, toHidden = false)
         assertEquals(SelectionActionIcon.STAR, layout.entries.first().customIcon)
         listOf(null, SelectionAction.COPY.defaultIcon).forEach { icon ->
             val reset = layout.withIcon(SelectionAction.COPY.id, icon)
@@ -93,7 +93,7 @@ class SelectionActionLayoutTest {
         val layout = SelectionActionLayout.parse("share:label,note:icon")
             .withLabel(SelectionAction.NOTE.id, "  My note  ")
             .withStyle(SelectionAction.NOTE.id, SelectionActionStyle.BOTH)
-            .move(SelectionAction.NOTE.id, 0)
+            .moveTo(SelectionAction.NOTE.id, 0, toHidden = false)
         assertEquals("My note", layout.entries.first().customLabel)
         listOf(null, "", "  ").forEach { label ->
             val reset = layout.withLabel(SelectionAction.NOTE.id, label)
@@ -129,6 +129,40 @@ class SelectionActionLayoutTest {
             actions.filter { it in setOf(SelectionAction.SHARE, SelectionAction.SEARCH, SelectionAction.NOTE) })
         assertEquals(actions.indexOf(SelectionAction.SEARCH) - 1, actions.indexOf(SelectionAction.COMPANION))
         assertEquals(actions.indexOf(SelectionAction.COMPANION) - 1, actions.indexOf(SelectionAction.LOOK_UP))
+    }
+
+    @Test fun `saved layouts keep toolbar order and put hidden actions after it`() {
+        val layout = SelectionActionLayout.parse("copy:hidden,share:icon,note:hidden,search:label")
+        val shownCount = layout.shown.size
+        assertEquals(layout.shown, layout.entries.take(shownCount))
+        assertEquals(listOf(SelectionAction.SHARE, SelectionAction.SEARCH),
+            layout.shown.map { it.action }.filter { it == SelectionAction.SHARE || it == SelectionAction.SEARCH })
+        assertEquals(layout, SelectionActionLayout.parse(layout.serialize()))
+    }
+
+    @Test fun `moving between zones hides, restores a visible style, and never hides delete`() {
+        val hidden = SelectionActionLayout.default.moveTo(SelectionAction.NOTE.id, 1, toHidden = true)
+        assertEquals(SelectionAction.NOTE, hidden.hidden[1].action)
+        assertEquals(SelectionActionStyle.HIDDEN, hidden.hidden[1].style)
+
+        val shown = hidden.moveTo(SelectionAction.COPY.id, 0, toHidden = false)
+            .moveTo(SelectionAction.NOTE.id, 2, toHidden = false)
+        assertEquals(SelectionAction.COPY, shown.shown[0].action)
+        assertEquals(SelectionActionStyle.ICON, shown.shown[0].style)
+        assertEquals(SelectionAction.NOTE, shown.shown[2].action)
+
+        val site = shown.withWebsite(firstSite, "Mine", "https://example.org/?q={text}", null)
+            .moveTo(firstSite, 0, toHidden = true).moveTo(firstSite, 0, toHidden = false)
+        assertEquals(SelectionActionStyle.BOTH, site.shown.first().style)
+
+        assertEquals(shown, shown.moveTo(SelectionAction.DELETE.id, 0, toHidden = true))
+    }
+
+    @Test fun `showing a hidden action through its style appends it to the toolbar`() {
+        val layout = SelectionActionLayout.default.withStyle(SelectionAction.OPEN_LIBRARY.id, SelectionActionStyle.LABEL)
+        assertEquals(SelectionAction.OPEN_LIBRARY, layout.shown.last().action)
+        val hidden = layout.withStyle(SelectionAction.NOTE.id, SelectionActionStyle.HIDDEN)
+        assertEquals(SelectionAction.NOTE, hidden.hidden.first().action)
     }
 
     @Test fun `citation omits missing fields`() {

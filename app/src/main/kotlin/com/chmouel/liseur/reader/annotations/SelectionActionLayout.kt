@@ -66,22 +66,29 @@ data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
             (website?.let { site -> ":${URLEncoder.encode(site.urlTemplate, "UTF-8")}" } ?: "")
     }
 
-    fun move(id: String, index: Int): SelectionActionLayout {
+    val shown: List<SelectionActionEntry> get() = entries.filter { it.style != SelectionActionStyle.HIDDEN }
+    val hidden: List<SelectionActionEntry> get() = entries.filter { it.style == SelectionActionStyle.HIDDEN }
+
+    /** Places [id] at [index] within the toolbar or the hidden zone; Delete cannot be hidden. */
+    fun moveTo(id: String, index: Int, toHidden: Boolean): SelectionActionLayout {
         val entry = entries.firstOrNull { it.id == id } ?: return this
-        val remaining = entries.filterNot { it.id == id }.toMutableList()
-        remaining.add(index.coerceIn(0, remaining.size), entry)
-        return SelectionActionLayout(remaining)
+        if (toHidden && entry.action == SelectionAction.DELETE) return this
+        val moved = when {
+            toHidden -> entry.copy(style = SelectionActionStyle.HIDDEN)
+            entry.style == SelectionActionStyle.HIDDEN -> entry.copy(style = shownStyle(entry))
+            else -> entry
+        }
+        val rest = SelectionActionLayout(entries.filterNot { it.id == id })
+        val zone = (if (toHidden) rest.hidden else rest.shown).toMutableList()
+        zone.add(index.coerceIn(0, zone.size), moved)
+        return SelectionActionLayout(if (toHidden) rest.shown + zone else zone + rest.hidden)
     }
 
-    fun moveBy(id: String, offset: Int): SelectionActionLayout {
-        val index = entries.indexOfFirst { it.id == id }
-        return if (index < 0) this else move(id, index + offset)
-    }
-
+    /** A newly shown entry lands at the end of the toolbar, a newly hidden one at the top of the hidden zone. */
     fun withStyle(id: String, style: SelectionActionStyle): SelectionActionLayout =
         SelectionActionLayout(entries.map {
             if (it.id == id) it.copy(style = validStyle(it.action, style)) else it
-        })
+        }).partitioned()
 
     fun withLabel(id: String, label: String?): SelectionActionLayout =
         SelectionActionLayout(entries.map {
@@ -100,15 +107,18 @@ data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
         val previous = entries.firstOrNull { it.id == id }
         val entry = SelectionActionEntry(SelectionActionTarget.Website(id, template),
             previous?.style ?: SelectionActionStyle.BOTH, name.trim(), icon?.takeIf { it != SelectionActionIcon.GLOBE })
-        return SelectionActionLayout(if (previous == null) entries + entry else entries.map { if (it.id == id) entry else it })
+        return if (previous == null) SelectionActionLayout(shown + entry + hidden)
+        else SelectionActionLayout(entries.map { if (it.id == id) entry else it })
     }
 
     fun removeWebsite(id: String): SelectionActionLayout =
         SelectionActionLayout(entries.filterNot { it.id == id && it.target is SelectionActionTarget.Website })
 
-    fun reset(): SelectionActionLayout = SelectionActionLayout(default.entries + entries
+    private fun partitioned(): SelectionActionLayout = SelectionActionLayout(shown + hidden)
+
+    fun reset(): SelectionActionLayout = SelectionActionLayout(default.shown + entries
         .filter { it.target is SelectionActionTarget.Website }
-        .map { it.copy(style = SelectionActionStyle.BOTH, customIcon = null) })
+        .map { it.copy(style = SelectionActionStyle.BOTH, customIcon = null) } + default.hidden)
 
     companion object {
         val default = SelectionActionLayout(SelectionAction.entries.map { SelectionActionEntry(it, it.defaultStyle) })
@@ -143,13 +153,17 @@ data class SelectionActionLayout(val entries: List<SelectionActionEntry>) {
                     result.add(position, SelectionActionEntry(action, action.defaultStyle))
                 }
             }
-            return SelectionActionLayout(result)
+            return SelectionActionLayout(result).partitioned()
         }
 
         private fun decode(value: String): String? = runCatching { URLDecoder.decode(value, "UTF-8") }.getOrNull()
 
         private fun isWebsiteId(id: String): Boolean = id.startsWith("custom_") &&
             runCatching { UUID.fromString(id.removePrefix("custom_")).toString() == id.removePrefix("custom_") }.getOrDefault(false)
+
+        private fun shownStyle(entry: SelectionActionEntry): SelectionActionStyle =
+            entry.action?.defaultStyle?.takeIf { it != SelectionActionStyle.HIDDEN }
+                ?: if (entry.action == null) SelectionActionStyle.BOTH else SelectionActionStyle.ICON
 
         private fun validStyle(action: SelectionAction?, style: SelectionActionStyle): SelectionActionStyle =
             if (action == SelectionAction.DELETE && style == SelectionActionStyle.HIDDEN) SelectionAction.DELETE.defaultStyle else style

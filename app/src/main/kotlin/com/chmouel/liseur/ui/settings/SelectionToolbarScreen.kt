@@ -1,17 +1,16 @@
 package com.chmouel.liseur.ui.settings
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,18 +38,22 @@ fun SelectionToolbarScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.selection_arrange)) },
                 navigationIcon = { PaneBackButton(onBack) },
+                actions = {
+                    TextButton(onClick = { onChanged { it.reset() } }) { Text(stringResource(R.string.selection_reset_short)) }
+                },
                 scrollBehavior = scrollBehavior,
             )
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.TopCenter) {
-            Column(
-                Modifier.widthIn(max = contentWidthCap(windowWidth())).fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp).padding(bottom = 32.dp),
-            ) {
-                ReadingSelectionActions(layout, onChanged, showTitle = false)
-            }
+            ReadingSelectionActions(
+                layout,
+                onChanged,
+                modifier = Modifier.widthIn(max = contentWidthCap(windowWidth())).fillMaxWidth(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
+                showTitle = false,
+                showReset = false,
+            )
         }
     }
 }
