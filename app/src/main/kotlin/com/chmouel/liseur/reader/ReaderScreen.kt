@@ -769,6 +769,9 @@ internal fun ReaderScreen(
     var automaticSelection by remember { mutableStateOf<ActiveSelection?>(null) }
     var retainedDictionarySelection by remember { mutableStateOf<DictionarySelection?>(null) }
     val lookupGesture = remember(navigator) { SelectionLookupGesture() }
+    // A long press waiting for its finger to lift before it looks up, so
+    // the reader can drag the selection over a phrase first.
+    var pendingLookup by remember { mutableStateOf<PendingLookup?>(null) }
     // The settled selection drives the action bar, but it intentionally
     // waits for the WebView's reports to quiet down. Gesture arbitration
     // cannot wait: a handle can start moving during that window.
@@ -1603,6 +1606,10 @@ internal fun ReaderScreen(
         val nav = navigator ?: return@LaunchedEffect
         nav.currentLocator.collect { locator ->
             val automatic = automaticSelection
+            if (pendingLookup?.let { locator.href != it.href } == true) {
+                pendingLookup = null
+                lookupGesture.clear()
+            }
             if (automatic != null && locator.href != automatic.locator.href) {
                 retainedDictionarySelection?.discard()
                 retainedDictionarySelection = null
@@ -2160,7 +2167,10 @@ internal fun ReaderScreen(
             settleMs = SELECTION_SETTLE_MS,
             read = { nav.currentSelection() },
             onSelection = { current ->
-                if (current == null && automaticSelection == null) lookupGesture.clear()
+                if (current == null && automaticSelection == null) {
+                    pendingLookup = null
+                    lookupGesture.clear()
+                }
                 selection = current?.let {
                     ActiveSelection(
                         locator = it.locator,
@@ -4688,6 +4698,7 @@ internal fun ReaderScreen(
         retainedDictionarySelection?.discard()
         retainedDictionarySelection = null
         automaticSelection = null
+        pendingLookup = null
         onSelectionDismissed()
         navigator?.clearSelection()
         selection = null
@@ -4998,6 +5009,7 @@ internal fun ReaderScreen(
         retainedDictionarySelection?.discard()
         retainedDictionarySelection = null
         automaticSelection = null
+        pendingLookup = null
         lookupGesture.clear()
     }
 
@@ -5006,6 +5018,7 @@ internal fun ReaderScreen(
         retainedDictionarySelection = null
         if (automaticSelection != null) defineWord = null
         automaticSelection = null
+        pendingLookup = null
         lookupGesture.clear()
     }
 
@@ -5014,26 +5027,63 @@ internal fun ReaderScreen(
         val active = selection ?: return@LaunchedEffect
         if (!dictionary.onLongPress || dictionary.target != DefinitionTarget.BUILT_IN ||
             tappedSelection != null || automaticSelection != null || defineWord != null ||
-            active.existing != null
+            active.existing != null || pendingLookup != null || lookupGesture.handled
         ) return@LaunchedEffect
         val nav = navigatorNow ?: return@LaunchedEffect
-        val translatedAt = pageTranslatedTurns
+        pendingLookup = PendingLookup(touch.serial, nav, pageTranslatedTurns, active.locator.href)
+    }
+
+    // Keyed on the pending lookup rather than the selection, which keeps
+    // changing while the finger drags it over more words.
+    LaunchedEffect(pendingLookup) {
+        val pending = pendingLookup ?: return@LaunchedEffect
+        val nav = pending.navigator
+        fun stillWanted(): Boolean = pendingLookup === pending && navigatorNow === nav &&
+            pageTranslatedTurns == pending.translatedAt && touch.serial == pending.touchSerial &&
+            selection != null && tappedSelection == null && automaticSelection == null && defineWord == null
+        // Handle drags on the selection left behind must not arm another lookup.
+        fun giveUp() {
+            if (pendingLookup !== pending) return
+            pendingLookup = null
+            if (selection != null) lookupGesture.selectText()
+        }
+        snapshotFlow { fingerDown }.first { !it }
+        // The settled selection trails the last step of the drag.
+        val read = if (stillWanted()) nav.currentSelection() else null
+        if (read == null || !stillWanted() || read.locator.href != pending.href) {
+            giveUp()
+            return@LaunchedEffect
+        }
+        // An equal value keeps the instance the selection already holds.
+        selection = ActiveSelection(read.locator, read.rect)
+        val active = selection ?: run {
+            giveUp()
+            return@LaunchedEffect
+        }
         val text = if (pageTranslated) TranslatedPages.selectedText(nav) else active.text
-        if (navigatorNow !== nav || selection !== active || translatedAt != pageTranslatedTurns) return@LaunchedEffect
+        if (!stillWanted() || selection !== active) {
+            giveUp()
+            return@LaunchedEffect
+        }
         val language = if (pageTranslated) {
             (pageTranslation ?: restoringPageTranslation)?.translator?.target
         } else {
             publication.metadata.languages.firstOrNull()
         }
         val locale = language?.let(java.util.Locale::forLanguageTag) ?: selectionLocale
-        if (text == null || !lookupGesture.select(text, locale)) return@LaunchedEffect
-        val retained = DictionarySelection.save(nav, active.locator.href.toString()) ?: return@LaunchedEffect
-        if (navigatorNow !== nav || selection !== active || translatedAt != pageTranslatedTurns) {
-            retained.discard()
+        if (text == null || !lookupGesture.select(text, locale)) {
+            giveUp()
+            return@LaunchedEffect
+        }
+        val retained = DictionarySelection.save(nav, active.locator.href.toString())
+        if (retained == null || !stillWanted() || selection !== active) {
+            retained?.discard()
+            giveUp()
             return@LaunchedEffect
         }
         retainedDictionarySelection = retained
         automaticSelection = active
+        pendingLookup = null
         lookUpSelection(active, automatically = true)
     }
 
@@ -5089,7 +5139,7 @@ internal fun ReaderScreen(
         }
 
     (tappedSelection ?: selection)
-        ?.takeIf { viewedImage == null && notedTap == null && automaticSelection == null }
+        ?.takeIf { viewedImage == null && notedTap == null && automaticSelection == null && pendingLookup == null }
         ?.let { active ->
             val translationRun = if (pageTranslated) {
                 pageTranslation ?: restoringPageTranslation
@@ -5978,6 +6028,13 @@ internal fun Locator.restorePoint(exact: Boolean = false) = RestorePoint(
     href = href.toString(),
     progression = locations.totalProgression,
     exact = exact,
+)
+
+private class PendingLookup(
+    val touchSerial: Int,
+    val navigator: EpubNavigatorFragment,
+    val translatedAt: Int,
+    val href: Url,
 )
 
 /**

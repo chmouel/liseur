@@ -3,8 +3,13 @@ package com.chmouel.liseur.reader
 import java.text.BreakIterator
 import java.util.Locale
 
+// Long enough for most idioms a dictionary has an entry for; a longer
+// selection is a passage and keeps the selection bar.
+internal const val MAX_LOOKUP_WORDS = 6
+
 internal class SelectionLookupGesture {
-    private var handled = false
+    var handled = false
+        private set
 
     fun clear() {
         handled = false
@@ -24,11 +29,11 @@ internal class SelectionLookupGesture {
         var end = words.next()
         while (end != BreakIterator.DONE) {
             if (text.substring(start, end).codePoints().anyMatch { Character.isLetterOrDigit(it) }) {
-                if (++count > 1) return false
+                if (++count > MAX_LOOKUP_WORDS) return false
             }
             start = end
             end = words.next()
         }
-        return count == 1
+        return count >= 1
     }
 }

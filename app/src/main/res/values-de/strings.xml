@@ -1658,7 +1658,7 @@
     <string name="book_translation_preview_wait">Wird übersetzt…</string>
     <string name="book_translation_preview_outdated">Diese Vorschau ist veraltet. Die Textstelle erneut ausprobieren.</string>
     <string name="settings_dictionary_on_long_press">Wörterbuch durch langes Drücken öffnen</string>
-    <string name="settings_dictionary_on_long_press_detail">Öffnet Definitionen, wenn du ein Wort gedrückt hältst. Die Definitionskarte behält die Auswahlaktionen. Die Online-Suche muss separat aktiviert werden.</string>
+    <string name="settings_dictionary_on_long_press_detail">Öffnet Definitionen, wenn du ein gedrückt gehaltenes Wort loslässt. Zieh ohne loszulassen, um eine kurze Wendung nachzuschlagen. Die Definitionskarte behält die Auswahlaktionen. Die Online-Suche muss separat aktiviert werden.</string>
     <string name="dictionary_select_text">Text auswählen</string>
     <string name="selection_copy">Kopieren</string>
     <string name="selection_citation">Mit Quellenangabe kopieren</string>
