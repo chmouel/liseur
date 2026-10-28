@@ -1720,11 +1720,23 @@
     <string name="selection_move_up">Move %1$s up</string>
     <string name="selection_move_down">Move %1$s down</string>
     <string name="selection_reset">Reset toolbar</string>
-    <string name="selection_edit_label">Edit label for %1$s</string>
+    <string name="selection_edit_action">Customize %1$s</string>
     <string name="selection_label_help">Leave blank to use the default label.</string>
     <string name="selection_label_default">Use default label</string>
     <string name="selection_style_icon">Icon</string>
     <string name="selection_style_label">Label</string>
     <string name="selection_style_both">Icon and label</string>
     <string name="selection_style_hidden">Hidden</string>
+    <string name="selection_icon_default">Use default icon</string>
+    <string name="selection_icon_star">Star</string>
+    <string name="selection_icon_heart">Heart</string>
+    <string name="selection_icon_check">Checkmark</string>
+    <string name="selection_add_website">Add website action</string>
+    <string name="selection_url_template">Search URL</string>
+    <string name="selection_url_help">Use {text} for the selected text, for example https://example.org/search?q={text}.</string>
+    <string name="selection_url_invalid">Enter an HTTPS URL with {text} after the hostname and no username or password.</string>
+    <string name="selection_name_required">Enter a name.</string>
+    <string name="selection_delete_action">Delete action</string>
+    <string name="selection_wikipedia" translatable="false">Wikipedia</string>
+    <string name="selection_open_library" translatable="false">Open Library</string>
 </resources>

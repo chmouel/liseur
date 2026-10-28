@@ -1772,7 +1772,17 @@
     <string name="selection_style_label">Текст</string>
     <string name="selection_style_both">Значок и текст</string>
     <string name="selection_style_hidden">Скрыто</string>
-    <string name="selection_edit_label">Изменить подпись для «%1$s»</string>
+    <string name="selection_edit_action">Настроить «%1$s»</string>
     <string name="selection_label_help">Оставьте поле пустым, чтобы использовать стандартную подпись.</string>
     <string name="selection_label_default">Использовать стандартную подпись</string>
+    <string name="selection_icon_default">Использовать стандартный значок</string>
+    <string name="selection_icon_star">Звезда</string>
+    <string name="selection_icon_heart">Сердце</string>
+    <string name="selection_icon_check">Галочка</string>
+    <string name="selection_add_website">Добавить действие для сайта</string>
+    <string name="selection_url_template">URL поиска</string>
+    <string name="selection_url_help">Используйте {text} для выделенного текста, например https://example.org/search?q={text}.</string>
+    <string name="selection_url_invalid">Введите HTTPS-адрес с {text} после имени хоста, без имени пользователя и пароля.</string>
+    <string name="selection_name_required">Введите название.</string>
+    <string name="selection_delete_action">Удалить действие</string>
 </resources>

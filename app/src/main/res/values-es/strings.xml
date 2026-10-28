@@ -1664,7 +1664,17 @@
     <string name="selection_style_label">Texto</string>
     <string name="selection_style_both">Icono y texto</string>
     <string name="selection_style_hidden">Oculto</string>
-    <string name="selection_edit_label">Editar etiqueta de %1$s</string>
+    <string name="selection_edit_action">Personalizar %1$s</string>
     <string name="selection_label_help">Deja el campo vacío para usar la etiqueta predeterminada.</string>
     <string name="selection_label_default">Usar etiqueta predeterminada</string>
+    <string name="selection_icon_default">Usar icono predeterminado</string>
+    <string name="selection_icon_star">Estrella</string>
+    <string name="selection_icon_heart">Corazón</string>
+    <string name="selection_icon_check">Marca de verificación</string>
+    <string name="selection_add_website">Añadir acción de sitio web</string>
+    <string name="selection_url_template">URL de búsqueda</string>
+    <string name="selection_url_help">Usa {text} para el texto seleccionado, por ejemplo https://example.org/search?q={text}.</string>
+    <string name="selection_url_invalid">Introduce una URL HTTPS con {text} después del nombre de host y sin usuario ni contraseña.</string>
+    <string name="selection_name_required">Introduce un nombre.</string>
+    <string name="selection_delete_action">Eliminar acción</string>
 </resources>

@@ -1676,7 +1676,17 @@
     <string name="selection_style_label">Text</string>
     <string name="selection_style_both">Symbol und Text</string>
     <string name="selection_style_hidden">Ausgeblendet</string>
-    <string name="selection_edit_label">Beschriftung für %1$s bearbeiten</string>
+    <string name="selection_edit_action">%1$s anpassen</string>
     <string name="selection_label_help">Leer lassen, um die Standardbeschriftung zu verwenden.</string>
     <string name="selection_label_default">Standardbeschriftung verwenden</string>
+    <string name="selection_icon_default">Standardsymbol verwenden</string>
+    <string name="selection_icon_star">Stern</string>
+    <string name="selection_icon_heart">Herz</string>
+    <string name="selection_icon_check">Häkchen</string>
+    <string name="selection_add_website">Website-Aktion hinzufügen</string>
+    <string name="selection_url_template">Such-URL</string>
+    <string name="selection_url_help">Verwende {text} für den ausgewählten Text, zum Beispiel https://example.org/search?q={text}.</string>
+    <string name="selection_url_invalid">Gib eine HTTPS-URL mit {text} nach dem Hostnamen und ohne Benutzername oder Passwort ein.</string>
+    <string name="selection_name_required">Gib einen Namen ein.</string>
+    <string name="selection_delete_action">Aktion löschen</string>
 </resources>

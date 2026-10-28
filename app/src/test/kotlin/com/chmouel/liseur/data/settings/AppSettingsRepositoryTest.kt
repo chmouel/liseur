@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import com.chmouel.liseur.reader.annotations.SelectionAction
+import com.chmouel.liseur.reader.annotations.SelectionActionIcon
 import com.chmouel.liseur.reader.annotations.SelectionActionStyle
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -32,14 +33,23 @@ class AppSettingsRepositoryTest {
     fun `concurrent selection toolbar edits preserve every change`() = runTest {
         val repo = AppSettingsRepository(store("selection-layout.preferences_pb"))
         coroutineScope {
-            repeat(4) { launch { repo.updateSelectionActionLayout { it.moveBy(SelectionAction.NOTE, 1) } } }
-            launch { repo.updateSelectionActionLayout { it.withStyle(SelectionAction.COPY, SelectionActionStyle.LABEL) } }
-            launch { repo.updateSelectionActionLayout { it.withLabel(SelectionAction.COPY, "Copy, please: 中文") } }
+            repeat(4) { launch { repo.updateSelectionActionLayout { it.moveBy(SelectionAction.NOTE.id, 1) } } }
+            launch { repo.updateSelectionActionLayout { it.withStyle(SelectionAction.COPY.id, SelectionActionStyle.LABEL) } }
+            launch { repo.updateSelectionActionLayout { it.withLabel(SelectionAction.COPY.id, "Copy, please: 中文") } }
+            launch { repo.updateSelectionActionLayout { it.withIcon(SelectionAction.COPY.id, SelectionActionIcon.STAR) } }
+            launch { repo.updateSelectionActionLayout {
+                it.withWebsite("custom_6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "One", "https://one.example/?q={text}", null)
+            } }
+            launch { repo.updateSelectionActionLayout {
+                it.withWebsite("custom_4bdbd75e-b8a0-4826-80ca-51c50660464d", "Two", "https://two.example/{text}", SelectionActionIcon.BOOK)
+            } }
         }
         val entries = repo.settings.first().selectionActionLayout.entries
         assertEquals(4, entries.indexOfFirst { it.action == SelectionAction.NOTE })
         assertEquals(SelectionActionStyle.LABEL, entries.first { it.action == SelectionAction.COPY }.style)
         assertEquals("Copy, please: 中文", entries.first { it.action == SelectionAction.COPY }.customLabel)
+        assertEquals(SelectionActionIcon.STAR, entries.first { it.action == SelectionAction.COPY }.customIcon)
+        assertEquals(setOf("One", "Two"), entries.filter { it.action == null }.map { it.customLabel }.toSet())
     }
 
     @Test
