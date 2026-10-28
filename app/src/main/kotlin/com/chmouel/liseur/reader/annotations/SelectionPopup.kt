@@ -64,6 +64,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.chmouel.liseur.R
 import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.scrollEdgeCue
 
 /** What the reader can do with a passage they have just selected. */
 class SelectionActions(
@@ -182,14 +183,17 @@ fun SheetSelectionActionBar(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
             val paletteMaxWidth = maxWidth / 2
+            val cueColor = MaterialTheme.colorScheme.onSurfaceVariant
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val chips = if (actions.annotate) palette.chipsFor(activeTint) else emptyList()
                 if (chips.isNotEmpty()) {
+                    val chipScroll = rememberScrollState()
                     Row(
                         Modifier
                             .widthIn(max = paletteMaxWidth)
                             .padding(horizontal = 4.dp)
-                            .horizontalScroll(rememberScrollState())
+                            .scrollEdgeCue(chipScroll, eInk, cueColor)
+                            .horizontalScroll(chipScroll)
                             .selectableGroup(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -210,10 +214,12 @@ fun SheetSelectionActionBar(
                     )
                 }
                 BoxWithConstraints(Modifier.weight(1f)) {
+                    val actionScroll = rememberScrollState()
                     Row(
                         Modifier
                             .widthIn(min = maxWidth)
-                            .horizontalScroll(rememberScrollState()),
+                            .scrollEdgeCue(actionScroll, eInk, cueColor)
+                            .horizontalScroll(actionScroll),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
@@ -238,6 +244,8 @@ internal fun SelectionActionRow(
     modifier: Modifier = Modifier,
     lookUp: Boolean = true,
 ) {
+    val eInk = LocalEInk.current
+    val cueColor = MaterialTheme.colorScheme.onSurfaceVariant
     BoxWithConstraints(modifier) {
         val paletteMaxWidth = maxWidth / 2
         Row(
@@ -248,10 +256,12 @@ internal fun SelectionActionRow(
             // The colours are one choice among themselves, not among the
             // actions beside them, so they are grouped on their own.
             if (chips.isNotEmpty()) {
+                val chipScroll = rememberScrollState()
                 Row(
                     Modifier
                         .widthIn(max = paletteMaxWidth)
-                        .horizontalScroll(rememberScrollState())
+                        .scrollEdgeCue(chipScroll, eInk, cueColor)
+                        .horizontalScroll(chipScroll)
                         .selectableGroup(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
@@ -263,15 +273,24 @@ internal fun SelectionActionRow(
                         )
                     }
                 }
+                // Each side scrolls on its own and fades on its own; the
+                // rule keeps the two fades from reading as one blurred bar.
+                Box(
+                    Modifier
+                        .size(width = 1.dp, height = 22.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                )
             }
             // On a narrow phone with large text the actions outgrow the
             // bar; they scroll behind the chips rather than fall off it.
+            val actionScroll = rememberScrollState()
             Row(
                 Modifier
                     .weight(1f, fill = false)
-                    .horizontalScroll(rememberScrollState()),
+                    .scrollEdgeCue(actionScroll, eInk, cueColor)
+                    .horizontalScroll(actionScroll),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 ActionButtons(
                     actions = actions,

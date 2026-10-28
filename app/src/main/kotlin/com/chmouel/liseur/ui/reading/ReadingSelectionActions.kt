@@ -46,6 +46,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.reader.annotations.*
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.scrollEdgeCue
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.util.UUID
@@ -225,8 +227,12 @@ private fun SelectionPreview(entries: List<SelectionActionEntry>, palette: Highl
                 textAlign = TextAlign.Center, maxLines = 3, overflow = TextOverflow.Ellipsis,
             )
             Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, shadowElevation = 3.dp) {
+                val barScroll = rememberScrollState()
                 Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp),
+                    Modifier
+                        .scrollEdgeCue(barScroll, LocalEInk.current, MaterialTheme.colorScheme.onSurfaceVariant)
+                        .horizontalScroll(barScroll)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     palette.shown.forEach {
