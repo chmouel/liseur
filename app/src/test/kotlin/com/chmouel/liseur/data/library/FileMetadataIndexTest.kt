@@ -243,6 +243,19 @@ class FileMetadataIndexTest {
     }
 
     @Test
+    fun `a series read that finishes after its download was removed writes nothing`() = runTest {
+        val url = "calibre:1"
+        val epub = folder.newFile("series.epub").also { writeEpub(it, RICH_METADATA + SERIES) }
+        db.bookDao().upsert(book(url))
+        removal.downloadArrived(url, Uri.fromFile(epub).toString(), downloadedAt = 1, fileModifiedAt = null)
+        meanwhile = { removal.downloadRemoved(url) }
+
+        library.backfillSeries()
+
+        assertNull(db.bookDao().getByUrl(url)!!.seriesName)
+    }
+
+    @Test
     fun `a different book at the same path drops both sources of the old one`() = runTest {
         val url = "file:///shelf/a.epub"
         db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED))
