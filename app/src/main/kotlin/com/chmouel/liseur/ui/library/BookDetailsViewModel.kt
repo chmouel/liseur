@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.resolveMetadata
+import com.chmouel.liseur.domain.validPageCount
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -90,7 +91,11 @@ class BookDetailsViewModel(
                 BookDetailsUiState.Ready(
                     BookDetails(
                         book = current,
-                        metadata = resolved,
+                        // The count a server listed with the book, until
+                        // a catalog refresh stores it with the rest.
+                        metadata = resolved.copy(
+                            pageCount = resolved.pageCount ?: validPageCount(current.remotePageCount),
+                        ),
                         provenance = BookProvenance.of(current.url, current.source),
                         folderName = folderName,
                         progression = progression,

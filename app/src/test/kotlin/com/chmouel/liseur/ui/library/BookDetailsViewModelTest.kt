@@ -55,6 +55,7 @@ class BookDetailsViewModelTest {
                     source = null,
                     addedAt = 1,
                     lastOpenedAt = null,
+                    remotePageCount = 320,
                 ),
             )
             db.bookMetadataDao().upsert(
@@ -74,6 +75,8 @@ class BookDetailsViewModelTest {
             val ready = state.first { it is BookDetailsUiState.Ready } as BookDetailsUiState.Ready
             assertEquals("From the file", ready.details.metadata.description)
             assertEquals(0, ready.details.annotations)
+            // No catalog row yet, as after an upgrade: the server's count still shows.
+            assertEquals(320, ready.details.metadata.pageCount)
 
             db.bookDao().deleteByUrls(listOf(url))
             assertEquals(BookDetailsUiState.Gone, state.first { it is BookDetailsUiState.Gone })
