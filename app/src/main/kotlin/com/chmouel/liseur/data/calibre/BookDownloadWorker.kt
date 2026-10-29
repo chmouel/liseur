@@ -139,9 +139,9 @@ class BookDownloadWorker(
         return when (outcome) {
             is DownloadOutcome.Done -> {
                 val localUri = downloads.localUriFor(fileKey)
-                downloads.markDownloaded(bookUrl, fileKey)
+                val downloadedAt = downloads.markDownloaded(bookUrl, fileKey)
                 AbsoluteUrl(localUri)?.let { fileUrl ->
-                    container.libraryRepository.indexDownloadedFile(fileUrl, bookUrl)
+                    container.libraryRepository.indexDownloadedFile(fileUrl, bookUrl, downloadedAt)
                 }
                 Result.success()
             }

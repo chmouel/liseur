@@ -140,12 +140,19 @@ class BookRemoval(
      *
      * Nothing is written for a book that was removed, or whose download
      * was, while its file was being read: the row would describe a file
-     * the book no longer has.
+     * the book no longer has. [downloadedAt] is the book's download stamp
+     * from before the read, so a download removed and fetched again in
+     * the meantime is told apart from the one that was read.
      */
-    suspend fun fileMetadataRead(bookUrl: String, row: com.chmouel.liseur.data.db.BookMetadata?) {
+    suspend fun fileMetadataRead(
+        bookUrl: String,
+        row: com.chmouel.liseur.data.db.BookMetadata?,
+        downloadedAt: Long?,
+    ) {
         val dao = metadataDao ?: return
         inTransaction {
-            if (bookDao.getByUrl(bookUrl)?.openableUrl == null) return@inTransaction
+            val book = bookDao.getByUrl(bookUrl) ?: return@inTransaction
+            if (book.openableUrl == null || book.downloadedAt != downloadedAt) return@inTransaction
             if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
             bookDao.setFileMetadataChecked(bookUrl, true)
         }

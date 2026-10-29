@@ -628,48 +628,57 @@ object OpdsParser {
      * Atom types the text as `text`, `html` or `xhtml`, and anything else
      * is not guessed at. calibre-web writes its rating, tags and series
      * as bare lines in an xhtml `<content>`, and the blurb in a paragraph
-     * after them (see [directText]), so in a block carrying those lines
-     * only what is nested in an element counts. Any other feed's block is
-     * read whole, text written straight into its `<div>` included.
+     * after them (see [directText]), so those labelled lines are dropped
+     * from text written straight into the block or its `<div>`s. Every
+     * other line is kept, nested or not, so another feed's blurb is read
+     * whole even when it happens to carry such a line.
      * calibre-web escapes the blurb's own HTML into that paragraph, so
      * xhtml text is left to be checked for markup.
      */
     private fun parseDescription(entry: Element): OpdsDescription? =
-        entry.children("summary").firstNotNullOfOrNull { typedText(it, nestedOnly = false) }
-            ?: entry.children("content").firstNotNullOfOrNull { content ->
-                typedText(content, nestedOnly = directText(content).lineSequence().any { CALIBRE_LINE.matches(it.trim()) })
-            }
+        entry.children("summary").firstNotNullOfOrNull { typedText(it) }
+            ?: entry.children("content").firstNotNullOfOrNull { typedText(it) }
 
-    private fun typedText(element: Element, nestedOnly: Boolean): OpdsDescription? {
+    private fun typedText(element: Element): OpdsDescription? {
         val description = when (element.getAttribute("type").trim().lowercase().ifEmpty { "text" }) {
             "text" -> OpdsDescription(element.textContent, html = false)
             "html" -> OpdsDescription(element.textContent, html = true)
-            "xhtml" -> OpdsDescription(blockText(element, nestedOnly), html = null)
+            "xhtml" -> OpdsDescription(blockText(element), html = null)
             else -> null
         }
         return description?.takeIf { it.text.isNotBlank() }
     }
 
     /**
-     * The text of an xhtml block with its paragraphs kept apart. With
-     * [nestedOnly], text written straight into the block or its wrapper
-     * `<div>`s is skipped, as [directText] reads exactly that.
+     * The text of an xhtml block with its paragraphs kept apart, less
+     * calibre-web's labelled lines where [directText] would find them.
      */
-    private fun blockText(element: Element, nestedOnly: Boolean): String {
+    private fun blockText(element: Element): String {
         val out = StringBuilder()
         fun walk(node: Node, top: Boolean) {
             val children = node.childNodes
             for (index in 0 until children.length) {
                 val child = children.item(index)
-                val skipped = nestedOnly && top
                 when (child.nodeType) {
-                    Node.TEXT_NODE, Node.CDATA_SECTION_NODE ->
-                        if (!skipped) out.append(child.textContent.replace(WHITESPACE, " "))
+                    Node.TEXT_NODE, Node.CDATA_SECTION_NODE -> {
+                        val text = if (top) {
+                            child.textContent.lineSequence()
+                                .filterNot { CALIBRE_LINE.matches(it.trim()) }
+                                .joinToString("\n")
+                        } else {
+                            child.textContent
+                        }
+                        out.append(text.replace(WHITESPACE, " "))
+                    }
                     Node.ELEMENT_NODE -> {
                         val name = child.localName?.lowercase()
                         when {
-                            name == "br" -> if (!skipped) out.append('\n')
-                            skipped && name == "div" -> walk(child, top = true)
+                            name == "br" -> out.append('\n')
+                            top && name == "div" -> {
+                                out.append("\n\n")
+                                walk(child, top = true)
+                                out.append("\n\n")
+                            }
                             else -> {
                                 val block = name in BLOCKS
                                 if (block) out.append("\n\n")

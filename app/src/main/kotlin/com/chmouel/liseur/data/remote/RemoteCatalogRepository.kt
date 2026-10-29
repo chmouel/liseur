@@ -483,6 +483,7 @@ class RemoteCatalogRepository(
                     book = merged,
                     remote = remote,
                     snapshotUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
+                    snapshotRemoteUuid = existing?.remoteUuid,
                     expectedBrowseServerId = browseServerId,
                 )
             }
@@ -518,6 +519,10 @@ class RemoteCatalogRepository(
                 seriesId = book.seriesId,
                 personalSeriesUpdatedAt = book.personalSeriesUpdatedAt,
                 sizeBytes = book.sizeBytes,
+                // A book whose content was replaced while the page was
+                // in flight was cut loose from this server copy, and
+                // must not be linked back to it.
+                expectedRemoteUuid = update.snapshotRemoteUuid,
                 expectedBrowseServerId = update.expectedBrowseServerId,
                 promoteBrowse = update.expectedBrowseServerId != null,
             )
@@ -728,6 +733,7 @@ private data class CatalogUpdate(
     val book: Book,
     val remote: RemoteBook,
     val snapshotUserSeriesUpdatedAt: Long?,
+    val snapshotRemoteUuid: String?,
     val expectedBrowseServerId: Long?,
 )
 
