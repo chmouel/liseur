@@ -63,45 +63,64 @@ that does not host the actions sheet and is not on `MainActivity`'s
 back stack, so an entry point there is an activity contract,
 not a row: a separate decision, and not this one.
 
-Read-only. Correcting what a book says about itself is a different
-feature with a different shape. An edit has to survive every catalog
-refresh and every re-index, which means a third precedence layer: the
-one the series columns already carry in `user_series_name`, with its
-own conflict rules. Series editing exists and stays where it is. This
-screen displays.
+The metadata is read-only. Correcting what a book says about itself is a
+different feature with a different shape. An edit has to survive every
+catalog refresh and every re-index, which means a third precedence
+layer: the one the series columns already carry in `user_series_name`,
+with its own conflict rules. Series editing exists and stays where it
+is. This screen displays.
 
-Five bands, and a field with nothing behind it is not drawn.
+It does carry one primary action, because a page about a book that
+cannot open the book is a dead end: Read, Continue reading or Read
+again when there is a copy on this device, Download (or Retry download)
+for a catalog-only book the account may download, and the existing
+in-progress state while a download runs. It goes through the library's
+own open and download paths, so it never branches on the server kind.
+Reading stats sit under it as the secondary action.
 
-- *The book*: cover, title, subtitle, contributors with their roles,
-  series and position.
-- *About*: description, subjects.
+The book and its reading come first; the file comes last and folded.
+A field with nothing behind it is not drawn.
+
+- *The book*: cover, series and position, title, subtitle, authors,
+  other credited roles, languages and year; then the actions and the
+  reading status. On a window 600dp or wider the actions and status sit
+  beside the cover instead of under it.
+- *About*: description, folded to a few lines with Read more, and
+  subjects as tags.
 - *Publication*: publishers, imprints, publication date, languages,
-  identifiers, page count, and the accessibility record when the file
-  declares one: conformance, content and sufficient access modes,
-  features, hazards, exemptions, the summary and the certification. A
-  record holding nothing the screen can name draws no heading.
-- *This copy*: format, size, where it came from, added, downloaded and
-  file-modified dates, and the two hashes when they have already been
-  computed. Nothing here computes a hash: reading a whole book off a
-  document provider to fill in a row the reader did not ask for is the
-  wrong trade, and `BookFingerprintStore` will fill it in the first time
-  sync needs it. A book with no file on this device shows no hash, even
-  if a row survives from a copy that used to be here.
-- *Reading*: progress, time left, finished and archived dates, one
-  total of the book's highlights and notes (bookmarks are not counted), and a way into
-  `BookReadingStatsScreen`. Time left is the estimate the server's
+  contributors, identifiers and page count.
+- *File info*, collapsed by default behind a one-line summary (where it
+  came from, format, size): format, size, added, downloaded and
+  file-modified dates, the two hashes when they have already been
+  computed, and the accessibility record when the file declares one:
+  conformance, content and sufficient access modes, features, hazards,
+  exemptions, the summary and the certification. A record holding
+  nothing the screen can name draws no heading. Nothing here computes a
+  hash: reading a whole book off a document provider to fill in a row
+  the reader did not ask for is the wrong trade, and
+  `BookFingerprintStore` will fill it in the first time sync needs it. A
+  book with no file on this device shows no hash, even if a row survives
+  from a copy that used to be here.
+- *Reading status*, under the actions: progress, time left, finished
+  and archived dates, and one total of the book's highlights and notes
+  (bookmarks are not counted). Time left is the estimate the server's
   reading insights already give (`WorkInsights.etaSeconds`) and is left
   out when there is none; it is not approximated from a page count,
   which is in the server's units or the publisher's and says nothing
   about how this reader reads.
 
 A screen of em dashes says less than a short screen, so an absent field
-is absent, and a band whose fields are all absent is not drawn either. A
-sideloaded EPUB with a bare OPF shows a cover, a title and a file size,
-and that is an honest answer.
+is absent, and a section whose fields are all absent is not drawn
+either. A sideloaded EPUB with a bare OPF shows a cover, a title and a
+file size, and that is an honest answer.
 
-The reading band links rather than repeats. Everything on it is one
+The reading status links rather than repeats. Everything on it is one
 line; the moment it wants a chart it is the stats screen, which exists.
+
+The details are live and can grow while the screen is open, when a
+backfill or a catalog refresh lands. The body is a lazy list with one
+stable key per section, so a section appearing above the one being read
+does not move it.
 
 Stored, with a backfill pass, not read while the reader waits.
 Mounting a document provider, opening a container and parsing an OPF is
@@ -199,7 +218,7 @@ should lose a screen's worth of detail, not another version's data.
 
 Blank is normalised to null on the way in, before precedence runs.
 Otherwise a catalog that sends `<summary></summary>` beats a file that
-has a description, and the reader gets a blank band instead of the
+has a description, and the reader gets a blank section instead of the
 blurb.
 
 ### Resolving two sources
@@ -371,7 +390,7 @@ is not that two servers must supply a field: `calibreBookId`,
 `pageCount`, `seriesId` and `sha256` are each one server's and each on
 the contract already. It is that provider-neutral catalog data with a
 common destination belongs on the contract, and everything here has one:
-a `book_metadata` row and a band on the screen.
+a `book_metadata` row and a section on the screen.
 
 `docs/SERVER_CAPABILITIES.md` gains a row saying what each server
 actually fills in, because the answers differ and a reader switching

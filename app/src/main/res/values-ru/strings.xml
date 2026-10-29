@@ -1805,13 +1805,8 @@
     <string name="selection_name_required">Введите название.</string>
     <string name="selection_delete_action">Удалить действие</string>
     <string name="book_details">О книге</string>
-    <string name="book_details_about">Описание</string>
     <string name="book_details_publication">Издание</string>
-    <string name="book_details_this_copy">Этот экземпляр</string>
-    <string name="book_details_reading">Чтение</string>
-    <string name="book_details_series">Серия</string>
     <string name="book_details_subjects">Темы</string>
-    <string name="book_details_role_author">Автор</string>
     <string name="book_details_role_translator">Перевод</string>
     <string name="book_details_role_editor">Редактор</string>
     <string name="book_details_role_illustrator">Иллюстрации</string>
@@ -1862,9 +1857,13 @@
     <string name="book_details_downloaded">Загружено</string>
     <string name="book_details_file_modified">Файл изменён</string>
     <string name="book_details_partial_md5">Частичный MD5</string>
-    <string name="book_details_progress">Прогресс</string>
-    <string name="book_details_status">Статус</string>
     <string name="book_details_finished_on">Прочитано %1$s</string>
     <string name="book_details_archived_on">В архиве с %1$s</string>
     <string name="book_details_annotations">Выделения и заметки</string>
+    <string name="book_details_read">Читать</string>
+    <string name="book_details_read_again">Читать снова</string>
+    <string name="book_details_retry_download">Повторить загрузку</string>
+    <string name="book_details_file_info">О файле</string>
+    <string name="book_details_read_more">Читать дальше</string>
+    <string name="book_details_show_less">Свернуть</string>
 </resources>

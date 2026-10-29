@@ -1644,13 +1644,8 @@
     <string name="selection_name_required">请输入名称。</string>
     <string name="selection_delete_action">删除操作</string>
     <string name="book_details">图书详情</string>
-    <string name="book_details_about">简介</string>
     <string name="book_details_publication">出版信息</string>
-    <string name="book_details_this_copy">此副本</string>
-    <string name="book_details_reading">阅读</string>
-    <string name="book_details_series">系列</string>
     <string name="book_details_subjects">主题</string>
-    <string name="book_details_role_author">作者</string>
     <string name="book_details_role_translator">翻译</string>
     <string name="book_details_role_editor">编辑</string>
     <string name="book_details_role_illustrator">插图</string>
@@ -1701,9 +1696,13 @@
     <string name="book_details_downloaded">下载时间</string>
     <string name="book_details_file_modified">文件修改时间</string>
     <string name="book_details_partial_md5">部分 MD5</string>
-    <string name="book_details_progress">进度</string>
-    <string name="book_details_status">状态</string>
     <string name="book_details_finished_on">%1$s 读完</string>
     <string name="book_details_archived_on">%1$s 归档</string>
     <string name="book_details_annotations">高亮和笔记</string>
+    <string name="book_details_read">阅读</string>
+    <string name="book_details_read_again">再读一遍</string>
+    <string name="book_details_retry_download">重新下载</string>
+    <string name="book_details_file_info">文件信息</string>
+    <string name="book_details_read_more">展开全文</string>
+    <string name="book_details_show_less">收起</string>
 </resources>
