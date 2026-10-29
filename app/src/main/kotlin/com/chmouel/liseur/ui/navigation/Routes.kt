@@ -32,6 +32,7 @@ sealed interface Route {
     data object About : Route
     data object Stats : Route
     data class BookStats(val bookUrl: String, val title: String) : Route
+    data class BookDetails(val bookUrl: String) : Route
 }
 
 /** Where a widget or shortcut launch puts the reader. */
@@ -58,6 +59,7 @@ private val Route.tag: String
         Route.About -> "About"
         Route.Stats -> "Stats"
         is Route.BookStats -> "BookStats"
+        is Route.BookDetails -> "BookDetails"
     }
 
 private val objectRoutes: Map<String, Route> = listOf(
@@ -69,11 +71,12 @@ private val objectRoutes: Map<String, Route> = listOf(
 
 /**
  * A key unique to this route, used to tell entries apart: the tag, plus the
- * book for book statistics.
+ * book for book statistics and details.
  */
 val Route.contentKey: String
     get() = when (this) {
         is Route.BookStats -> "$tag:$bookUrl"
+        is Route.BookDetails -> "$tag:$bookUrl"
         else -> tag
     }
 
@@ -81,6 +84,7 @@ val Route.contentKey: String
 fun encodeRoutes(stack: List<Route>): List<String> = stack.flatMap { route ->
     when (route) {
         is Route.BookStats -> listOf(route.tag, route.bookUrl, route.title)
+        is Route.BookDetails -> listOf(route.tag, route.bookUrl)
         else -> listOf(route.tag)
     }
 }
@@ -88,8 +92,8 @@ fun encodeRoutes(stack: List<Route>): List<String> = stack.flatMap { route ->
 /**
  * The stack back from [encodeRoutes].
  *
- * Anything it cannot read in full — an unknown tag, book statistics cut
- * short, a stack that does not start at the library — restores as the
+ * Anything it cannot read in full — an unknown tag, book statistics or
+ * details cut short, a stack that does not start at the library — restores as the
  * library alone. Arguments are only ever read in the places after their
  * own tag, so a book called "Settings" stays a title.
  */
@@ -98,11 +102,16 @@ fun decodeRoutes(saved: List<String>): List<Route> {
     var index = 0
     while (index < saved.size) {
         val tag = saved[index++]
-        val route = if (tag == "BookStats") {
-            if (index + 2 > saved.size) return listOf(Route.Library)
-            Route.BookStats(bookUrl = saved[index], title = saved[index + 1]).also { index += 2 }
-        } else {
-            objectRoutes[tag] ?: return listOf(Route.Library)
+        val route = when (tag) {
+            "BookStats" -> {
+                if (index + 2 > saved.size) return listOf(Route.Library)
+                Route.BookStats(bookUrl = saved[index], title = saved[index + 1]).also { index += 2 }
+            }
+            "BookDetails" -> {
+                if (index + 1 > saved.size) return listOf(Route.Library)
+                Route.BookDetails(bookUrl = saved[index]).also { index += 1 }
+            }
+            else -> objectRoutes[tag] ?: return listOf(Route.Library)
         }
         routes += route
     }

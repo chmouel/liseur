@@ -70,6 +70,9 @@ interface BookAnnotationDao {
     @Query("SELECT COUNT(*) FROM annotations WHERE book_id = :bookId")
     suspend fun count(bookId: String): Int
 
+    @Query("SELECT COUNT(*) FROM annotations WHERE book_id = :bookId")
+    fun observeCount(bookId: String): Flow<Int>
+
     /** Everything marked anywhere, for a backup. */
     @Query("SELECT * FROM annotations ORDER BY book_id, created_at")
     suspend fun all(): List<BookAnnotation>

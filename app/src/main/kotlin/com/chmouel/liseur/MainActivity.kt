@@ -60,6 +60,9 @@ import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
+import com.chmouel.liseur.ui.library.BookDetailsScreen
+import com.chmouel.liseur.ui.library.BookDetailsUiState
+import com.chmouel.liseur.ui.library.BookDetailsViewModel
 import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.ui.library.BrowseLibrariesRoute
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
@@ -405,6 +408,7 @@ private fun LiseurApp(
                             onOpenBookStats = { book ->
                                 backStack.push(Route.BookStats(book.url, book.displayTitle))
                             },
+                            onOpenBookDetails = { book -> backStack.push(Route.BookDetails(book.url)) },
                             onConnectServer = { backStack.push(Route.ServerAccount) },
                             onBrowseLibraries = { backStack.push(Route.BrowseLibraries) },
                             onStartWithFreeBooks = {
@@ -472,6 +476,27 @@ private fun LiseurApp(
                                 onRetry = model::refreshServerInsights,
                             )
                         }
+                    }
+
+                    is Route.BookDetails -> {
+                        val target = route
+                        val model: BookDetailsViewModel = viewModel(factory = BookDetailsViewModel.factory())
+                        val stats: ReadingStatsViewModel = viewModel(factory = ReadingStatsViewModel.factory())
+                        val detailsState by remember(model, target.bookUrl) { model.details(target.bookUrl) }
+                            .collectAsStateWithLifecycle()
+                        val serverInsights by remember(stats, target.bookUrl) {
+                            stats.serverEstimateFor(target.bookUrl)
+                        }.collectAsStateWithLifecycle()
+                        BookDetailsScreen(
+                            state = detailsState,
+                            etaSeconds = serverInsights?.etaSeconds,
+                            onBack = back,
+                            onOpenStats = {
+                                (detailsState as? BookDetailsUiState.Ready)?.details?.book?.let { book ->
+                                    backStack.push(Route.BookStats(book.url, book.displayTitle))
+                                }
+                            },
+                        )
                     }
 
                     Route.Settings -> {
@@ -788,6 +813,7 @@ private fun LibraryRoute(
     onOpenTranslation: () -> Unit,
     onSyncNow: suspend () -> com.chmouel.liseur.data.remote.SyncOutcome,
     onOpenBookStats: (com.chmouel.liseur.data.db.Book) -> Unit,
+    onOpenBookDetails: (com.chmouel.liseur.data.db.Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onStartWithFreeBooks: () -> Unit,
@@ -1019,6 +1045,7 @@ private fun LibraryRoute(
                 onSetFinished = { viewModel.setFinished(book, it); seriesSheetBook = null },
                 onSetArchived = { viewModel.setArchived(book, it); seriesSheetBook = null },
                 onOpenStats = { onOpenBookStats(book); seriesSheetBook = null },
+                onOpenDetails = { onOpenBookDetails(book); seriesSheetBook = null },
                 onOpenTranslation = { seriesTranslationBook = book; seriesSheetBook = null },
                 // Refiling from inside a series is chiefly how a volume
                 // that landed on the wrong shelf gets off it, so it is
@@ -1147,6 +1174,7 @@ private fun LibraryRoute(
         onOpenSettings = onOpenSettings,
         onOpenStats = onOpenStats,
         onOpenBookStats = onOpenBookStats,
+        onOpenBookDetails = onOpenBookDetails,
         onConnectServer = onConnectServer,
         onBrowseLibraries = onBrowseLibraries,
         onStartWithFreeBooks = onStartWithFreeBooks,

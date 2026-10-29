@@ -1762,4 +1762,58 @@
     <string name="selection_icon_brave" translatable="false">Brave</string>
     <string name="selection_duck_ai" translatable="false">Duck.ai</string>
     <string name="selection_icon_duckduckgo" translatable="false">DuckDuckGo</string>
+    <string name="book_details_format_epub" translatable="false">EPUB</string>
+    <string name="book_details_from_grimmory" translatable="false">Grimmory</string>
+    <string name="book_details_sha256" translatable="false">SHA-256</string>
+    <string name="book_details">Book details</string>
+    <string name="book_details_about">About</string>
+    <string name="book_details_publication">Publication</string>
+    <string name="book_details_this_copy">This copy</string>
+    <string name="book_details_reading">Reading</string>
+    <string name="book_details_series">Series</string>
+    <string name="book_details_subjects">Subjects</string>
+    <string name="book_details_role_author">Author</string>
+    <string name="book_details_role_translator">Translation</string>
+    <string name="book_details_role_editor">Editor</string>
+    <string name="book_details_role_illustrator">Illustrations</string>
+    <string name="book_details_role_narrator">Narration</string>
+    <string name="book_details_role_contributor">Contributors</string>
+    <string name="book_details_publisher">Publisher</string>
+    <string name="book_details_imprint">Imprint</string>
+    <string name="book_details_published">Published</string>
+    <string name="book_details_language">Language</string>
+    <string name="book_details_identifier">Identifier</string>
+    <string name="book_details_pages">Pages</string>
+    <string name="book_details_accessibility">Accessibility</string>
+    <string name="book_details_a11y_conforms">Conforms to</string>
+    <string name="book_details_a11y_wcag">WCAG %1$s, level %2$s</string>
+    <string name="book_details_a11y_features">Features</string>
+    <string name="book_details_a11y_hazards">Hazards</string>
+    <string name="book_details_a11y_no_hazards">None declared</string>
+    <string name="book_details_a11y_summary">Summary</string>
+    <string name="book_details_a11y_certified_by">Certified by</string>
+    <string name="book_details_a11y_feature_alt_text">Image descriptions</string>
+    <string name="book_details_a11y_feature_toc">Table of contents</string>
+    <string name="book_details_a11y_feature_structure">Structured navigation</string>
+    <string name="book_details_a11y_feature_page_numbers">Print page numbers</string>
+    <string name="book_details_a11y_feature_display">Adjustable text display</string>
+    <string name="book_details_a11y_feature_audio">Synchronized audio</string>
+    <string name="book_details_a11y_hazard_flashing">Flashing</string>
+    <string name="book_details_a11y_hazard_motion">Motion simulation</string>
+    <string name="book_details_a11y_hazard_sound">Sound</string>
+    <string name="book_details_format">Format</string>
+    <string name="book_details_size">Size</string>
+    <string name="book_details_from">From</string>
+    <string name="book_details_from_file">A file you opened</string>
+    <string name="book_details_from_folder">A watched folder</string>
+    <string name="book_details_from_opds">An OPDS catalog</string>
+    <string name="book_details_added">Added</string>
+    <string name="book_details_downloaded">Downloaded</string>
+    <string name="book_details_file_modified">File modified</string>
+    <string name="book_details_partial_md5">Partial MD5</string>
+    <string name="book_details_progress">Progress</string>
+    <string name="book_details_status">Status</string>
+    <string name="book_details_finished_on">Finished on %1$s</string>
+    <string name="book_details_archived_on">Archived on %1$s</string>
+    <string name="book_details_annotations">Highlights and notes</string>
 </resources>

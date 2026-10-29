@@ -296,6 +296,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?
 
+    @Query("SELECT * FROM books WHERE url = :url")
+    fun observeByUrl(url: String): Flow<Book?>
+
     @Query("SELECT * FROM books WHERE url IN (:urls)")
     suspend fun getByUrls(urls: List<String>): List<Book>
 

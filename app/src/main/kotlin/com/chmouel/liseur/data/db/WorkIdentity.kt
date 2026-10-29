@@ -149,6 +149,9 @@ interface WorkIdentityDao {
     @Query("SELECT * FROM book_fingerprint WHERE book_url = :bookUrl")
     suspend fun fingerprint(bookUrl: String): BookFingerprintRow?
 
+    @Query("SELECT * FROM book_fingerprint WHERE book_url = :bookUrl")
+    fun observeFingerprint(bookUrl: String): Flow<BookFingerprintRow?>
+
     @Upsert
     suspend fun upsert(row: BookFingerprintRow)
 
