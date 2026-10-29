@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.opds
 
+import com.chmouel.liseur.data.library.descriptionText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.fail
@@ -622,6 +623,17 @@ class OpdsParserTest {
             """<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">SERIES: Dune</div></summary>""",
         )
         assertEquals("SERIES: Dune", xhtml.metadata?.description)
+
+        // Text an xhtml summary escaped is shown as written, not parsed again.
+        val literal = entry(
+            """<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">Use &lt;b&gt; for AT&amp;amp;T</div></summary>""",
+        )
+        assertEquals("Use <b> for AT&amp;T", literal.metadata?.description)
+        assertEquals(false, literal.descriptionHtml)
+        assertEquals(
+            "Use <b> for AT&amp;T",
+            descriptionText(literal.metadata?.description, literal.descriptionHtml),
+        )
     }
 
     @Test
