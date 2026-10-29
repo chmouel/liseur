@@ -972,30 +972,34 @@ class LocalLibraryRepository(
                     epubAuthorIdentityMatches(publication, previousIdentityForMetadata))
             val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
-            // Cleanup first, then the new description. Torn the other
-            // way round, a death between the two leaves the new workId
-            // over the old reading, and the next look finds a matching
-            // work and never cleans; this way round the next look still
-            // sees the old work and finishes the job.
+            val coverPath = saveCover(publication, bookUrl)
+            val write: suspend () -> Unit = {
+                bookDao.refreshIndexedFile(
+                    url = bookUrl,
+                    title = title,
+                    author = author,
+                    coverPath = coverPath,
+                    fileModifiedAt = modifiedAt,
+                    workId = workId,
+                    identityAuthor = if (preservePreviousIdentity) {
+                        previousIdentityForMetadata.orEmpty()
+                    } else {
+                        publication.identityAuthor().orEmpty()
+                    },
+                    seriesName = series.name,
+                    seriesIndex = series.index,
+                )
+            }
+            // Cleanup first, then the new description, in one
+            // transaction: the old work's state goes and the new file's
+            // fields are written over what is left, so nothing cleared
+            // for the old book can take the new one with it.
             if (!isSameWork(previousWorkId, workId)) {
                 Log.i(TAG, "A different book took over a path; starting it fresh")
-                bookRemoval.contentReplaced(bookUrl)
+                bookRemoval.contentReplaced(bookUrl, then = write)
+            } else {
+                write()
             }
-            bookDao.refreshIndexedFile(
-                url = bookUrl,
-                title = title,
-                author = author,
-                coverPath = saveCover(publication, bookUrl),
-                fileModifiedAt = modifiedAt,
-                workId = workId,
-                identityAuthor = if (preservePreviousIdentity) {
-                    previousIdentityForMetadata.orEmpty()
-                } else {
-                    publication.identityAuthor().orEmpty()
-                },
-                seriesName = series.name,
-                seriesIndex = series.index,
-            )
             return true
         } finally {
             publication.close()

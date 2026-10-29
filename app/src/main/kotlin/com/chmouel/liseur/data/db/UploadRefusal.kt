@@ -144,6 +144,10 @@ interface UploadRefusalDao {
     @Query("DELETE FROM upload_refusal WHERE book_url = :bookUrl AND account_key = :accountKey")
     suspend fun clear(bookUrl: String, accountKey: String)
 
+    /** Every refusal of the bytes that used to be at [bookUrl], whichever account refused them. */
+    @Query("DELETE FROM upload_refusal WHERE book_url = :bookUrl")
+    suspend fun forgetBook(bookUrl: String)
+
     @Query("DELETE FROM upload_refusal WHERE account_key = :accountKey")
     suspend fun clearAccount(accountKey: String)
 

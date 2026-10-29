@@ -20,6 +20,9 @@ interface BookAiPreferencesDao {
     @Query("SELECT * FROM book_ai_preferences WHERE book_url = :bookUrl")
     suspend fun get(bookUrl: String): BookAiPreferences?
 
+    @Query("DELETE FROM book_ai_preferences WHERE book_url = :bookUrl")
+    suspend fun forget(bookUrl: String)
+
     @Upsert
     suspend fun put(preferences: BookAiPreferences)
 
