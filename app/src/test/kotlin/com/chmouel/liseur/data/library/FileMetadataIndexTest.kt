@@ -197,6 +197,12 @@ class FileMetadataIndexTest {
 
         removal.fileMetadataRead(url, read, downloadedAt = 2)
         assertTrue(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
+
+        // A newer copy landing over this one makes its details unread
+        // again, so a failed index of the new copy leaves the backfill to it.
+        removal.downloadArrived(url, "file:///x.epub", downloadedAt = 3, fileModifiedAt = null)
+        assertFalse(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
+        assertTrue(db.bookMetadataDao().forBook(url).isEmpty())
     }
 
     @Test
