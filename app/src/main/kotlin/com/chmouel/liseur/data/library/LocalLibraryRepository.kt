@@ -11,10 +11,12 @@ import android.provider.DocumentsContract
 import androidx.annotation.RequiresApi
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LibraryFolderDao
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.SeriesMetadata
 import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
@@ -518,6 +520,7 @@ class LocalLibraryRepository(
             val series = seriesOf(publication)
             bookDao.fillSeriesFromFile(identity, series.name, series.index)
             saveCover(publication, identity)?.let { bookDao.setCoverPath(identity, it) }
+            bookRemoval.fileMetadataRead(identity, fileMetadataRow(identity, publication, fileUrl, null))
         } finally {
             publication.close()
         }
@@ -747,6 +750,7 @@ class LocalLibraryRepository(
                             previousWorkId = existing.workId,
                             previousAuthor = existing.author,
                             previousIdentityAuthor = existing.identityAuthor,
+                            sizeBytes = file.sizeBytes,
                         )
                     }
                 }
@@ -788,10 +792,11 @@ class LocalLibraryRepository(
                             previousWorkId = alias.workId,
                             previousAuthor = alias.author,
                             previousIdentityAuthor = alias.identityAuthor,
+                            sizeBytes = file.sizeBytes,
                         )
                     }
                 }
-                else -> indexBook(url, source = treeUri.toString(), file.modifiedAt)
+                else -> indexBook(url, source = treeUri.toString(), file.modifiedAt, file.sizeBytes)
             }
         }
 
@@ -826,7 +831,7 @@ class LocalLibraryRepository(
         }
     }
 
-    private class ScannedEpub(val uri: Uri, val modifiedAt: Long?)
+    private class ScannedEpub(val uri: Uri, val modifiedAt: Long?, val sizeBytes: Long?)
 
     /**
      * A folder's EPUBs, and whether the walk reached all of it.
@@ -865,6 +870,7 @@ class LocalLibraryRepository(
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
             DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_SIZE,
         )
         val found = mutableListOf<ScannedEpub>()
         var complete = true
@@ -908,6 +914,7 @@ class LocalLibraryRepository(
                             found += ScannedEpub(
                                 DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
                                 modifiedAt,
+                                if (it.isNull(4)) null else it.getLong(4),
                             )
                         }
                     }
@@ -942,6 +949,7 @@ class LocalLibraryRepository(
         previousWorkId: String?,
         previousAuthor: String?,
         previousIdentityAuthor: String?,
+        sizeBytes: Long? = null,
     ): Boolean {
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
@@ -973,6 +981,7 @@ class LocalLibraryRepository(
             val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
             val coverPath = saveCover(publication, bookUrl)
+            val metadataRow = fileMetadataRow(bookUrl, publication, openableUrl, sizeBytes)
             val write: suspend () -> Unit = {
                 bookDao.refreshIndexedFile(
                     url = bookUrl,
@@ -989,6 +998,7 @@ class LocalLibraryRepository(
                     seriesName = series.name,
                     seriesIndex = series.index,
                 )
+                bookRemoval.fileMetadataRead(bookUrl, metadataRow)
             }
             // Cleanup first, then the new description, in one
             // transaction: the old work's state goes and the new file's
@@ -1010,6 +1020,7 @@ class LocalLibraryRepository(
         url: AbsoluteUrl,
         source: String?,
         modifiedAt: Long? = null,
+        sizeBytes: Long? = null,
     ): Book? {
         val asset = assetRetriever.retrieve(url).getOrElse { return null }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
@@ -1042,7 +1053,8 @@ class LocalLibraryRepository(
                 seriesChecked = true,
             )
             val id = bookDao.upsert(book)
-            book.copy(id = id)
+            bookRemoval.fileMetadataRead(book.url, fileMetadataRow(book.url, publication, url, sizeBytes))
+            book.copy(id = id, fileMetadataChecked = true)
         } finally {
             publication.close()
         }
@@ -1174,6 +1186,89 @@ class LocalLibraryRepository(
             }
             delay(BACKFILL_PAUSE_MS)
         }
+    }
+
+    /**
+     * Reads each downloaded book's own metadata once, for the details
+     * screen, on books indexed before it existed.
+     *
+     * Runs after the author and series passes rather than beside them,
+     * so the three never open the same files at once. Takes the import
+     * lock per book and checks the row again under it, because a scan
+     * or an import may have read the file, or replaced it, while this
+     * pass was waiting. A file that will not open stays unchecked and
+     * is tried again on the next launch.
+     */
+    suspend fun backfillMetadata(batchSize: Int = BACKFILL_BATCH) = withContext(Dispatchers.IO) {
+        val unreadable = mutableSetOf<String>()
+        while (true) {
+            val batch = bookDao.needingMetadataCheck(batchSize + unreadable.size)
+                .asSequence()
+                .filter { it.url !in unreadable }
+                .take(batchSize)
+                .toList()
+            if (batch.isEmpty()) return@withContext
+            for (book in batch) {
+                currentCoroutineContext().ensureActive()
+                val read = importLock.withLock {
+                    val current = bookDao.getByUrl(book.url)
+                        ?.takeUnless { it.fileMetadataChecked }
+                        ?: return@withLock true
+                    val fileUrl = current.openableUri()?.let { AbsoluteUrl(it) } ?: return@withLock false
+                    readFileMetadata(current.url, fileUrl)
+                }
+                if (!read) unreadable += book.url
+            }
+            delay(BACKFILL_PAUSE_MS)
+        }
+    }
+
+    private suspend fun readFileMetadata(bookUrl: String, fileUrl: AbsoluteUrl): Boolean {
+        val asset = assetRetriever.retrieve(fileUrl).getOrElse { return false }
+        val publication = publicationOpener.open(asset, allowUserInteraction = false)
+            .getOrElse {
+                asset.close()
+                return false
+            }
+        return try {
+            bookRemoval.fileMetadataRead(bookUrl, fileMetadataRow(bookUrl, publication, fileUrl, null))
+            true
+        } finally {
+            publication.close()
+        }
+    }
+
+    /** The `file` row for [publication], or null when it declares nothing worth a row. */
+    private suspend fun fileMetadataRow(
+        bookUrl: String,
+        publication: Publication,
+        fileUrl: AbsoluteUrl,
+        scannedSize: Long?,
+    ): BookMetadata? {
+        val snapshot = publication.fileMetadata(scannedSize ?: measuredSize(fileUrl))
+        return BookMetadata.of(bookUrl, MetadataSource.FILE, snapshot)
+            .takeUnless { it == BookMetadata(bookUrl, MetadataSource.FILE.key) }
+    }
+
+    /**
+     * The file's size as this device sees it, or null when the provider
+     * will not say. A provider query blocks, so it runs on IO here.
+     */
+    private suspend fun measuredSize(url: AbsoluteUrl): Long? = withContext(Dispatchers.IO) {
+        val uri = Uri.parse(url.toString())
+        runCatching {
+            when (uri.scheme) {
+                "file" -> uri.path?.let(::File)?.takeIf { it.isFile }?.length()
+                "content" -> context.contentResolver.query(
+                    uri,
+                    arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                    null,
+                    null,
+                    null,
+                )?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+                else -> null
+            }
+        }.getOrNull()
     }
 
     /**

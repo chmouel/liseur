@@ -176,6 +176,7 @@ class AppContainer(context: Context) {
         remoteStatsDao = database.remoteStatsDao(),
         uploadRefusalDao = database.uploadRefusalDao(),
         aiPreferencesDao = database.bookAiPreferencesDao(),
+        metadataDao = database.bookMetadataDao(),
         glossaryDao = database.glossaryDao(),
     )
 

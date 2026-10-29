@@ -898,14 +898,16 @@ class LibraryViewModel(
                 }
             }
         }
-        // Books indexed before the library knew what a series was will
-        // never be looked at again on their own. This fills them in
+        // Books shelved before the library read authors, series or the
+        // details screen's metadata out of their files are read once,
         // behind the shelf, which is already drawn and does not wait.
-        viewModelScope.launch { library.backfillSeries() }
-        // Libraries upgraded from before EPUB display authors were
-        // separated need the files read once; failures remain eligible
-        // for the next launch.
-        viewModelScope.launch { library.backfillAuthors() }
+        // One pass after another, so they never open the same files at
+        // the same time; failures remain eligible for the next launch.
+        viewModelScope.launch {
+            library.backfillAuthors()
+            library.backfillSeries()
+            library.backfillMetadata()
+        }
         // Under Always, a book that arrives on the device goes up
         // without being asked about. The work is unique per book URL, so
         // this seeing the same book again while it is still queued keeps
