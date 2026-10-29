@@ -328,6 +328,27 @@ class RemoteCatalogRepositoryTest {
     }
 
     @Test
+    fun `a book linked to another copy while its page was in flight keeps that link and no old details`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+
+        // Replaced, then uploaded and linked to a new server copy, all
+        // while the page for the old copy was on its way.
+        repository(
+            FakeCatalog { onPage ->
+                db.bookDao().unlinkFromRemote(listOf(url))
+                db.bookMetadataDao().deleteSource(listOf(url), MetadataSource.CATALOG.key)
+                db.bookDao().upsert(db.bookDao().getByUrl(url)!!.copy(remoteUuid = "uploaded"))
+                onPage(listOf(described("b1", "Stale").copy(title = "Renamed on the server")))
+            },
+        ).refresh()
+
+        assertEquals("uploaded", db.bookDao().getByUrl(url)?.remoteUuid)
+        assertNull(catalogRow(url))
+    }
+
+    @Test
     fun `a book cut loose from the catalog keeps its own details and loses the catalog's`() = runTest {
         connect()
         repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()

@@ -516,12 +516,24 @@ class LocalLibraryRepository(
                 asset.close()
                 return
         }
+        // The cover is drawn beside the final file and moved into place
+        // only if this download is still the book's, so a read that lost
+        // a race with a newer download cannot paint over its cover.
+        val staged = File(coverFile(identity).path + ".$downloadedAt.tmp")
         try {
             val series = seriesOf(publication)
-            bookDao.fillSeriesFromFile(identity, series.name, series.index)
-            saveCover(publication, identity)?.let { bookDao.setCoverPath(identity, it) }
-            bookRemoval.fileMetadataRead(identity, fileMetadataRow(identity, publication, fileUrl, null), downloadedAt)
+            val cover = saveCover(publication, identity, staged)
+            bookRemoval.fileMetadataRead(
+                identity,
+                fileMetadataRow(identity, publication, fileUrl, null),
+                downloadedAt,
+            ) {
+                bookDao.fillSeriesFromFile(identity, series.name, series.index)
+                val target = coverFile(identity)
+                if (cover != null && staged.renameTo(target)) bookDao.setCoverPath(identity, target.absolutePath)
+            }
         } finally {
+            staged.delete()
             publication.close()
         }
     }
@@ -1302,7 +1314,11 @@ class LocalLibraryRepository(
         }
     }
 
-    private suspend fun saveCover(publication: Publication, identity: String): String? {
+    private suspend fun saveCover(
+        publication: Publication,
+        identity: String,
+        file: File = coverFile(identity),
+    ): String? {
         // The whole thing, not just the write. `publication.cover()`
         // reads an entry out of the archive and decodes it, and this is
         // reached from `importBook`, which the library view model
@@ -1313,14 +1329,15 @@ class LocalLibraryRepository(
                 ?: declaredSvgCover(publication)
                 ?: coverNamedCover(publication)
                 ?: return@withContext null
-            val dir = File(context.filesDir, "covers").apply { mkdirs() }
-            val file = File(dir, "${sha1Hex(identity)}.jpg")
+            file.parentFile?.mkdirs()
             runCatching {
                 file.outputStream().use { cover.compress(Bitmap.CompressFormat.JPEG, 85, it) }
                 file.absolutePath
             }.getOrNull()
         }
     }
+
+    private fun coverFile(identity: String) = File(File(context.filesDir, "covers"), "${sha1Hex(identity)}.jpg")
 
     /**
      * The cover a book declared, when that cover is a vector.
