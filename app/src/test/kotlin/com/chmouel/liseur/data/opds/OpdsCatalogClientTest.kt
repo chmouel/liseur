@@ -266,6 +266,25 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a walked book keeps its description and publication facts`() {
+        pages["/opds"] = feed(
+            """
+            <entry><id>1</id><title>Book 1</title>
+            <summary type="html">&lt;p&gt;A blurb.&lt;/p&gt;</summary>
+            <dc:publisher xmlns:dc="http://purl.org/dc/terms/">Tor</dc:publisher>
+            <link rel="http://opds-spec.org/acquisition" href="/get/1.epub"
+                  type="application/epub+zip"/></entry>
+            """.trimIndent(),
+        )
+
+        val book = walk().second.single()
+
+        assertEquals(true, book.descriptionHtml)
+        assertEquals("<p>A blurb.</p>", book.metadata?.description)
+        assertEquals(listOf("Tor"), book.metadata?.publishers)
+    }
+
+    @Test
     fun `a book is named for the catalog it came from`() {
         pages["/opds"] = feed(book("1"))
         val expected = OpdsScope.of(root())!!.remoteId("1")
