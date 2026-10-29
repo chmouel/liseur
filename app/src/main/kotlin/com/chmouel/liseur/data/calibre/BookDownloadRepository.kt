@@ -496,9 +496,12 @@ class BookDownloadRepository(
     }
 
     /** Files a finished download under its book. */
-    suspend fun markDownloaded(bookUrl: String, fileKey: String) {
+    /** Records the download and returns its stamp, which identifies this copy of the file. */
+    suspend fun markDownloaded(bookUrl: String, fileKey: String): Long {
         val file = fileFor(fileKey)
-        bookRemoval.downloadArrived(bookUrl, localUriFor(fileKey), System.currentTimeMillis(), file.lastModified())
+        val downloadedAt = System.currentTimeMillis()
+        bookRemoval.downloadArrived(bookUrl, localUriFor(fileKey), downloadedAt, file.lastModified())
+        return downloadedAt
     }
 
     /**

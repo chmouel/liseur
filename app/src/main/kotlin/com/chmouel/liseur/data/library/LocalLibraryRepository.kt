@@ -509,7 +509,7 @@ class LocalLibraryRepository(
     }
 
     /** Indexes the metadata that only becomes available once a download is on the device. */
-    suspend fun indexDownloadedFile(fileUrl: AbsoluteUrl, identity: String) {
+    suspend fun indexDownloadedFile(fileUrl: AbsoluteUrl, identity: String, downloadedAt: Long) {
         val asset = assetRetriever.retrieve(fileUrl).getOrElse { return }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -520,7 +520,7 @@ class LocalLibraryRepository(
             val series = seriesOf(publication)
             bookDao.fillSeriesFromFile(identity, series.name, series.index)
             saveCover(publication, identity)?.let { bookDao.setCoverPath(identity, it) }
-            bookRemoval.fileMetadataRead(identity, fileMetadataRow(identity, publication, fileUrl, null))
+            bookRemoval.fileMetadataRead(identity, fileMetadataRow(identity, publication, fileUrl, null), downloadedAt)
         } finally {
             publication.close()
         }
@@ -956,6 +956,7 @@ class LocalLibraryRepository(
         previousIdentityAuthor: String?,
         sizeBytes: Long? = null,
     ): Boolean {
+        val downloadedAt = bookDao.getByUrl(bookUrl)?.downloadedAt
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -1003,7 +1004,7 @@ class LocalLibraryRepository(
                     seriesName = series.name,
                     seriesIndex = series.index,
                 )
-                bookRemoval.fileMetadataRead(bookUrl, metadataRow)
+                bookRemoval.fileMetadataRead(bookUrl, metadataRow, downloadedAt)
             }
             // Cleanup first, then the new description, in one
             // transaction: the old work's state goes and the new file's
@@ -1061,7 +1062,7 @@ class LocalLibraryRepository(
                 seriesChecked = true,
             )
             val id = bookDao.upsert(book)
-            bookRemoval.fileMetadataRead(book.url, fileMetadataRow(book.url, publication, url, sizeBytes))
+            bookRemoval.fileMetadataRead(book.url, fileMetadataRow(book.url, publication, url, sizeBytes), book.downloadedAt)
             book.copy(id = id, fileMetadataChecked = true)
         } finally {
             publication.close()
@@ -1232,6 +1233,7 @@ class LocalLibraryRepository(
     }
 
     private suspend fun readFileMetadata(bookUrl: String, fileUrl: AbsoluteUrl, sizeBytes: Long? = null): Boolean {
+        val downloadedAt = bookDao.getByUrl(bookUrl)?.downloadedAt
         val asset = assetRetriever.retrieve(fileUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -1239,7 +1241,7 @@ class LocalLibraryRepository(
                 return false
             }
         return try {
-            bookRemoval.fileMetadataRead(bookUrl, fileMetadataRow(bookUrl, publication, fileUrl, sizeBytes))
+            bookRemoval.fileMetadataRead(bookUrl, fileMetadataRow(bookUrl, publication, fileUrl, sizeBytes), downloadedAt)
             true
         } finally {
             publication.close()

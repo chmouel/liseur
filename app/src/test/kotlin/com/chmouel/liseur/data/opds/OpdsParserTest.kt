@@ -450,6 +450,12 @@ class OpdsParserTest {
             "The blurb.",
             entryWithContent("RATING: 4<br/>TAGS: fantasy<br/><p>The blurb.</p>").metadata?.description,
         )
+        // A rating line does not make the rest of the block calibre's.
+        assertEquals(
+            "A blurb written beside its rating.\n\nMore of it.",
+            entryWithContent("RATING: 4<br/>A blurb written beside its rating.<div>More of it.</div>")
+                .metadata?.description,
+        )
     }
 
     @Test

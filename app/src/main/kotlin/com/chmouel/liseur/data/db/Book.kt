@@ -960,7 +960,9 @@ interface BookDao {
                     AND user_series_updated_at IS :expectedUserSeriesUpdatedAt THEN :seriesId
                 ELSE series_id
             END
-        WHERE url = :url AND browse_server_id IS :expectedBrowseServerId
+        WHERE url = :url
+            AND browse_server_id IS :expectedBrowseServerId
+            AND remote_uuid IS :expectedRemoteUuid
         """,
     )
     suspend fun updateCatalogFields(
@@ -986,6 +988,7 @@ interface BookDao {
         seriesId: String?,
         personalSeriesUpdatedAt: Long? = null,
         sizeBytes: Long? = null,
+        expectedRemoteUuid: String?,
         expectedBrowseServerId: Long? = null,
         promoteBrowse: Boolean = false,
     )

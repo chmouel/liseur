@@ -105,6 +105,7 @@ class SeriesMetadataDaoTest {
             // The refresh saw an older row; 30 is what is stored now.
             expectedUserSeriesUpdatedAt = 20,
             seriesId = "stale-series-id",
+            expectedRemoteUuid = "remote-id",
         )
 
         val book = db.bookDao().getByUrl(BOOK_URL)
@@ -469,6 +470,7 @@ class SeriesMetadataDaoTest {
             userSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             expectedUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             seriesId = null,
+            expectedRemoteUuid = existing?.remoteUuid,
         )
     }
 

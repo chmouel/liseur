@@ -133,7 +133,7 @@ class FileMetadataIndexTest {
         db.bookDao().upsert(book(downloaded).copy(downloadState = DownloadState.DOWNLOADED, localUri = "file:///x.epub"))
         db.bookDao().upsert(book(viaFolder).copy(source = folderUrl, downloadState = DownloadState.DOWNLOADED))
         for (url in listOf(downloaded, viaFolder)) {
-            removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "S")))
+            removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "S")), null)
             db.bookMetadataDao().upsert(BookMetadata.of(url, MetadataSource.CATALOG, MetadataSnapshot(subtitle = "C")))
         }
 
@@ -149,20 +149,31 @@ class FileMetadataIndexTest {
     @Test
     fun `a file read that finishes after its download was removed stores nothing`() = runTest {
         val url = "calibre:1"
-        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = "file:///x.epub"))
+        db.bookDao().upsert(book(url))
+        removal.downloadArrived(url, "file:///x.epub", downloadedAt = 1, fileModifiedAt = null)
+        val read = BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "S"))
         removal.downloadRemoved(url)
 
-        removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "S")))
-
+        removal.fileMetadataRead(url, read, downloadedAt = 1)
         assertFalse(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
         assertTrue(db.bookMetadataDao().forBook(url).isEmpty())
+
+        // Downloaded again at the same path before the old read landed:
+        // that read describes the copy that was removed, not this one.
+        removal.downloadArrived(url, "file:///x.epub", downloadedAt = 2, fileModifiedAt = null)
+        removal.fileMetadataRead(url, read, downloadedAt = 1)
+        assertFalse(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
+        assertTrue(db.bookMetadataDao().forBook(url).isEmpty())
+
+        removal.fileMetadataRead(url, read, downloadedAt = 2)
+        assertTrue(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
     }
 
     @Test
     fun `a different book at the same path drops both sources of the old one`() = runTest {
         val url = "file:///shelf/a.epub"
         db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED))
-        removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "Old")))
+        removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "Old")), null)
         db.bookMetadataDao().upsert(BookMetadata.of(url, MetadataSource.CATALOG, MetadataSnapshot(subtitle = "Old")))
 
         removal.contentReplaced(url)

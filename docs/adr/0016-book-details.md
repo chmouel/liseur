@@ -275,7 +275,10 @@ catalog-only rows are not unchecked work forever. `LibraryViewModel.init`
 runs it after the author and series passes, in that order rather than
 beside them, and it reads each file under the existing import lock and
 checks the book is still the same row before it commits, so a scan or a
-removal that ran meanwhile wins. Removing a book's file resets
+removal that ran meanwhile wins. Every file read, here or at download or
+import, commits only while the book still has a file and the same
+`downloaded_at` as when the read began, so a download removed and
+fetched again meanwhile is not described by the old copy's read. Removing a book's file resets
 `file_metadata_checked`, so the next pass looks again. A folder added
 back with an unchanged file reads that file's snapshot during the scan
 that re-adopts it, rather than waiting for the next launch.
@@ -294,6 +297,9 @@ and it goes into the snapshot with them.
 The refresh reads which books it knows before the network walk, so the
 write checks again, in its own transaction, that each book is still
 linked (`remote_uuid` set) and skips any that was cut loose meanwhile.
+The book row's catalog update likewise applies only while `remote_uuid`
+is still what the walk read, so a book whose content was replaced
+mid-walk is not linked back to the server copy it was cut loose from.
 
 The catalog row exists only while the book is linked to a server. Every
 path that unlinks a book and keeps it (a catalog prune of a downloaded
@@ -383,10 +389,11 @@ generated labels, `SERIES:`, ratings, and tags, with the actual blurb, and
 `OpdsParser.directText()` skips nested paragraphs deliberately for that
 reason. Flattening the element wholesale would put catalog boilerplate
 on screen as the book's description, so the description is taken from
-the nested prose the existing parser already distinguishes. That rule
-applies only to a block carrying calibre-web's `RATING:`, `TAGS:` or
-`SERIES:` lines; any other feed's xhtml block is read whole, since Atom
-puts plain text straight into the wrapper `<div>`. For generic
+the nested prose the existing parser already distinguishes. Only the
+`RATING:`, `TAGS:` and `SERIES:` lines themselves are dropped from text
+written straight into the block; every other line is kept, so another
+feed's blurb, which Atom puts straight into the wrapper `<div>`, is read
+whole even when it carries such a line. For generic
 OPDS, `<summary>` and `<content>` are both accepted, with `type` of
 `text`, `html` or `xhtml`; anything else is ignored rather than guessed
 at.
