@@ -633,7 +633,9 @@ object OpdsParser {
      * other line is kept, nested or not, so another feed's blurb is read
      * whole even when it happens to carry such a line.
      * calibre-web escapes the blurb's own HTML into that paragraph, so
-     * xhtml text is left to be checked for markup.
+     * xhtml text in a `<content>` block is left to be checked for markup.
+     * A `<summary>` is not calibre-web's, so its text, already decoded
+     * once by the XML parser, is kept as written.
      */
     private fun parseDescription(entry: Element): OpdsDescription? =
         entry.children("summary").firstNotNullOfOrNull { typedText(it, calibreLines = false) }
@@ -643,7 +645,7 @@ object OpdsParser {
         val description = when (element.getAttribute("type").trim().lowercase().ifEmpty { "text" }) {
             "text" -> OpdsDescription(element.textContent, html = false)
             "html" -> OpdsDescription(element.textContent, html = true)
-            "xhtml" -> OpdsDescription(blockText(element, calibreLines), html = null)
+            "xhtml" -> OpdsDescription(blockText(element, calibreLines), html = if (calibreLines) null else false)
             else -> null
         }
         return description?.takeIf { it.text.isNotBlank() }
