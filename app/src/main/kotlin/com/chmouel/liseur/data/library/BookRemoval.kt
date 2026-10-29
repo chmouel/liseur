@@ -178,13 +178,15 @@ class BookRemoval(
     }
 
     /**
-     * Records a download that has just landed. Whatever was hashed before
-     * described another set of bytes, so it is forgotten in the same write.
+     * Records a download that has just landed. Whatever was hashed or
+     * read before described another set of bytes, so it is forgotten in
+     * the same write, and the backfill reads this copy if its own index
+     * never finishes.
      */
     suspend fun downloadArrived(bookUrl: String, localUri: String, downloadedAt: Long, fileModifiedAt: Long?) {
         inTransaction {
             bookDao.markDownloaded(bookUrl, localUri, downloadedAt, fileModifiedAt?.takeIf { it > 0 })
-            identityDao.forgetFingerprints(listOf(bookUrl))
+            forgetFile(bookUrl)
         }
     }
 
