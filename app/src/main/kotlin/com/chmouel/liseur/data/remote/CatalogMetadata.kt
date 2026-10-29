@@ -25,11 +25,17 @@ internal fun catalogMetadataRow(bookUrl: String, book: RemoteBook): BookMetadata
  * Replaces the catalog rows of [books], keyed by the library URL each
  * is filed under. A field the catalog stopped sending is cleared with
  * the rest of the row, so a description deleted on the server goes here
- * too. Rows that did not change are not written.
+ * too. Rows that did not change are not written, and neither is any
+ * book no longer linked to the server id its entry was read for.
  */
 internal suspend fun BookMetadataDao.storeCatalog(books: Map<String, RemoteBook>) {
     books.keys.chunked(CATALOG_CHUNK).forEach { urls ->
-        replaceCatalog(urls.associateWith { catalogMetadataRow(it, books.getValue(it)) })
+        replaceCatalog(
+            urls.associateWith { url ->
+                val book = books.getValue(url)
+                book.remoteId to catalogMetadataRow(url, book)
+            },
+        )
     }
 }
 

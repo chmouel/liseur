@@ -142,20 +142,28 @@ class BookRemoval(
      * was, while its file was being read: the row would describe a file
      * the book no longer has. [downloadedAt] is the book's download stamp
      * from before the read, so a download removed and fetched again in
-     * the meantime is told apart from the one that was read.
+     * the meantime is told apart from the one that was read. [alongside]
+     * writes whatever else the read found, under the same check. Returns
+     * whether anything was written.
      */
     suspend fun fileMetadataRead(
         bookUrl: String,
         row: com.chmouel.liseur.data.db.BookMetadata?,
         downloadedAt: Long?,
-    ) {
-        val dao = metadataDao ?: return
+        alongside: suspend () -> Unit = {},
+    ): Boolean {
+        var stored = false
         inTransaction {
             val book = bookDao.getByUrl(bookUrl) ?: return@inTransaction
             if (book.openableUrl == null || book.downloadedAt != downloadedAt) return@inTransaction
-            if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
-            bookDao.setFileMetadataChecked(bookUrl, true)
+            alongside()
+            metadataDao?.let { dao ->
+                if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
+                bookDao.setFileMetadataChecked(bookUrl, true)
+            }
+            stored = true
         }
+        return stored
     }
 
     /** Runs [block] in one transaction, for a reindex that has nothing to clear first. */

@@ -30,6 +30,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
+import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
@@ -170,6 +171,28 @@ class FileMetadataIndexTest {
     }
 
     @Test
+    fun `a download read that lost to a newer download writes none of what it found`() = runTest {
+        val url = "calibre:1"
+        val epub = folder.newFile("old.epub").also { writeEpub(it, RICH_METADATA + SERIES) }
+        val fileUrl = AbsoluteUrl(Uri.fromFile(epub).toString())!!
+        db.bookDao().upsert(book(url))
+        removal.downloadArrived(url, fileUrl.toString(), downloadedAt = 2, fileModifiedAt = null)
+
+        library.indexDownloadedFile(fileUrl, url, downloadedAt = 1)
+
+        val untouched = db.bookDao().getByUrl(url)!!
+        assertNull(untouched.seriesName)
+        assertFalse(untouched.fileMetadataChecked)
+        assertNull(fileRow(url))
+
+        library.indexDownloadedFile(fileUrl, url, downloadedAt = 2)
+
+        val indexed = db.bookDao().getByUrl(url)!!
+        assertEquals("Earthsea", indexed.seriesName)
+        assertTrue(indexed.fileMetadataChecked)
+    }
+
+    @Test
     fun `a different book at the same path drops both sources of the old one`() = runTest {
         val url = "file:///shelf/a.epub"
         db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED))
@@ -213,6 +236,12 @@ class FileMetadataIndexTest {
         <meta property="schema:accessibilityFeature">tableOfContents</meta>
         <meta property="schema:accessibilityFeature">madeUpFeature</meta>
         <meta property="schema:accessibilitySummary">Readable.</meta>
+    """.trimIndent()
+
+    private val SERIES = """
+        <meta property="belongs-to-collection" id="c">Earthsea</meta>
+        <meta refines="#c" property="collection-type">series</meta>
+        <meta refines="#c" property="group-position">2</meta>
     """.trimIndent()
 
     private fun writeEpub(target: File, metadata: String) {

@@ -616,6 +616,12 @@ class OpdsParserTest {
         assertEquals(true, html.descriptionHtml)
 
         assertNull(entry("""<content type="application/pdf">JVBERi0=</content>""").metadata?.description)
+
+        // calibre-web's labelled lines live in <content>; a summary is read whole.
+        val xhtml = entry(
+            """<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">SERIES: Dune</div></summary>""",
+        )
+        assertEquals("SERIES: Dune", xhtml.metadata?.description)
     }
 
     @Test
