@@ -2,47 +2,73 @@ package com.chmouel.liseur.ui.library
 
 import android.text.format.DateFormat
 import android.text.format.Formatter
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Insights
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.calibre.DownloadProgress
+import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.BookDetailsBounds
@@ -51,11 +77,9 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.validSeriesPosition
 import com.chmouel.liseur.ui.BusyIndicator
-import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.settings.labelRes
-import com.chmouel.liseur.ui.stats.StatsCoverThumbnail
 import com.chmouel.liseur.ui.stats.readingDuration
-import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
 import java.time.Instant
 import java.time.LocalDate
@@ -67,16 +91,25 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * Everything the app knows about one book, read-only, in five bands.
- * A field with nothing behind it is not drawn, and neither is a band
- * left empty by that.
+ * Everything the app knows about one book. The book itself and what to do
+ * with it come first; what the publisher said follows; the file behind it
+ * waits folded at the bottom. A field with nothing behind it is not drawn,
+ * and neither is a section left empty by that.
+ *
+ * The body is a lazy list keyed by section so that metadata arriving while
+ * the screen is open (a download finishing) grows sections without moving
+ * the one the reader is looking at.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BookDetailsScreen(
     state: BookDetailsUiState,
     etaSeconds: Double?,
+    canDownload: Boolean,
+    download: DownloadProgress?,
     onBack: () -> Unit,
+    onRead: () -> Unit,
+    onDownload: () -> Unit,
     onOpenStats: () -> Unit,
 ) {
     if (state is BookDetailsUiState.Gone) {
@@ -105,7 +138,7 @@ fun BookDetailsScreen(
             )
         },
     ) { padding ->
-        Box(
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
                 .padding(padding.withoutBottom())
@@ -114,102 +147,388 @@ fun BookDetailsScreen(
         ) {
             if (details == null) {
                 BusyIndicator()
-                return@Box
+                return@BoxWithConstraints
             }
-            Column(
-                Modifier
-                    .widthIn(max = contentWidthCap(windowWidth()))
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp + padding.calculateBottomPadding()),
+            val wide = maxWidth >= WIDE_LAYOUT
+            val actions = @Composable {
+                BookActions(details, canDownload, download, onRead, onDownload, onOpenStats)
+            }
+            val status = readingStatus(details, etaSeconds)
+            val section = Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxWidth()
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                state = rememberLazyListState(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = 8.dp,
+                    bottom = 32.dp + padding.calculateBottomPadding(),
+                ),
             ) {
-                BookBand(details)
-                AboutBand(details)
-                PublicationBand(details)
-                CopyBand(details)
-                ReadingBand(details, etaSeconds, onOpenStats)
+                item(key = "header") {
+                    Header(details, wide, section) {
+                        if (wide) {
+                            Column(Modifier.padding(top = 20.dp).widthIn(max = WIDE_ACTIONS_WIDTH)) {
+                                actions()
+                                if (status.isNotEmpty()) ReadingStatusCard(status, Modifier.padding(top = 16.dp))
+                            }
+                        }
+                    }
+                }
+                if (!wide) {
+                    item(key = "actions") { Column(section.padding(top = 20.dp)) { actions() } }
+                    if (status.isNotEmpty()) {
+                        item(key = "status") { ReadingStatusCard(status, section.padding(top = 16.dp)) }
+                    }
+                }
+                details.metadata.description?.let { description ->
+                    item(key = "about") { Description(details.book.url, description, section.padding(top = 24.dp)) }
+                }
+                if (details.metadata.subjects.isNotEmpty()) {
+                    item(key = "subjects") {
+                        SubjectTags(details.metadata.subjects, section.padding(top = 20.dp))
+                    }
+                }
+                if (hasPublication(details)) {
+                    item(key = "publication") { Publication(details, section) }
+                }
+                item(key = "fileinfo") { FileInfo(details, section) }
             }
         }
     }
 }
 
 @Composable
-private fun BookBand(details: BookDetails) {
+private fun Header(
+    details: BookDetails,
+    wide: Boolean,
+    modifier: Modifier,
+    trailing: @Composable () -> Unit,
+) {
     val book = details.book
     val meta = details.metadata
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        StatsCoverThumbnail(
-            title = book.displayTitle,
-            coverPath = book.coverPath,
-            coverUrl = book.coverUrl,
-            browseServerId = book.browseServerId,
-            modifier = Modifier.width(80.dp).height(120.dp),
-        )
-        Spacer(Modifier.width(16.dp))
+    val locale = currentLocale()
+    Row(modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(if (wide) 24.dp else 18.dp)) {
+        BookCover(book, Modifier.width(if (wide) 140.dp else 116.dp).aspectRatio(2f / 3f))
         Column(Modifier.weight(1f)) {
+            book.seriesName?.takeIf { it.isNotBlank() }?.let { series ->
+                val index = seriesIndexLabel(validSeriesPosition(book.seriesIndex))
+                Text(
+                    if (index == null) series else stringResource(R.string.series_position, series, index),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
             Text(
                 book.displayTitle,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.semantics { heading() },
             )
             meta.subtitle?.let {
-                Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            val byRole = meta.contributors.groupBy({ it.role }, { it.name })
+            val authors = byRole[ContributorRoles.AUTHOR] ?: listOfNotNull(book.author?.takeIf { it.isNotBlank() })
+            if (authors.isNotEmpty()) {
+                Text(
+                    authors.joinToString(", "),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+            CREDIT_LABELS.forEach { (role, label) ->
+                byRole[role]?.let { names ->
+                    Column(Modifier.padding(top = 6.dp).semantics(mergeDescendants = true) {}) {
+                        Text(
+                            stringResource(label),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(names.joinToString(", "), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            val facts = listOfNotNull(
+                meta.languages.takeIf { it.isNotEmpty() }?.joinToString(", ") { languageName(it, locale) },
+                meta.published?.take(4),
+            )
+            if (facts.isNotEmpty()) {
+                Text(
+                    facts.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            trailing()
+        }
+    }
+}
+
+/**
+ * Two rows that never change in number or order as a download moves
+ * along, so the screen does not jump: what to do with the book, then its
+ * reading stats.
+ */
+@Composable
+private fun BookActions(
+    details: BookDetails,
+    canDownload: Boolean,
+    download: DownloadProgress?,
+    onRead: () -> Unit,
+    onDownload: () -> Unit,
+    onOpenStats: () -> Unit,
+) {
+    val book = details.book
+    val tall = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+    val state = book.downloadState
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when {
+            book.openableUrl != null -> Button(onClick = onRead, modifier = tall) {
+                ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
+                Text(
+                    stringResource(
+                        when {
+                            book.finished -> R.string.book_details_read_again
+                            (details.progression ?: 0.0) > 0.0 -> R.string.continue_reading
+                            else -> R.string.book_details_read
+                        },
+                    ),
+                )
+            }
+            download != null || state == DownloadState.QUEUED || state == DownloadState.DOWNLOADING ->
+                FilledTonalButton(onClick = {}, enabled = false, modifier = tall) {
+                    BusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        stringResource(
+                            if (download?.queued ?: (state == DownloadState.QUEUED)) {
+                                R.string.state_download_queued
+                            } else {
+                                R.string.download_in_progress
+                            },
+                        ),
+                    )
+                }
+            canDownload && book.downloadHref != null -> Button(onClick = onDownload, modifier = tall) {
+                ButtonIcon(Icons.Outlined.CloudDownload)
+                Text(
+                    stringResource(
+                        if (state == DownloadState.FAILED) R.string.book_details_retry_download else R.string.download_book,
+                    ),
+                )
+            }
+            !canDownload -> {
+                OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
+                    Text(stringResource(R.string.download_book))
+                }
+                Text(
+                    stringResource(R.string.downloads_not_allowed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
+                Text(stringResource(R.string.endpaper_unavailable))
+            }
+        }
+        OutlinedButton(onClick = onOpenStats, modifier = tall) {
+            ButtonIcon(Icons.Outlined.Insights)
+            Text(stringResource(R.string.reading_stats))
+        }
+    }
+}
+
+@Composable
+private fun ButtonIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+    Spacer(Modifier.width(8.dp))
+}
+
+/** One line of the reading card; the card is drawn only when one exists. */
+private sealed interface StatusLine {
+    data class Progress(val fraction: Double) : StatusLine
+    data class TimeLeft(val seconds: Double) : StatusLine
+    data class Finished(val at: Long?) : StatusLine
+    data class Archived(val at: Long) : StatusLine
+    data class Annotations(val count: Int) : StatusLine
+}
+
+private fun readingStatus(details: BookDetails, etaSeconds: Double?): List<StatusLine> {
+    val book = details.book
+    return listOfNotNull(
+        details.progression?.takeIf { !book.finished && it > 0 }?.let { StatusLine.Progress(it) },
+        etaSeconds?.takeIf { !book.finished }?.let { StatusLine.TimeLeft(it) },
+        if (book.finished || book.finishedAt != null) StatusLine.Finished(book.finishedAt) else null,
+        book.archivedAt?.let { StatusLine.Archived(it) },
+        details.annotations.takeIf { it > 0 }?.let { StatusLine.Annotations(it) },
+    )
+}
+
+@Composable
+private fun ReadingStatusCard(lines: List<StatusLine>, modifier: Modifier) {
+    val eInk = LocalEInk.current
+    val locale = currentLocale()
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            lines.forEach { line ->
+                when (line) {
+                    is StatusLine.Progress -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            stringResource(R.string.reading_stats_progress, (line.fraction * 100).toInt()),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        LinearProgressIndicator(
+                            progress = { line.fraction.toFloat() },
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            trackColor = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHighest,
+                            gapSize = 0.dp,
+                            drawStopIndicator = {},
+                        )
+                    }
+                    is StatusLine.TimeLeft -> Field(
+                        stringResource(R.string.reading_stats_time_left_label),
+                        stringResource(
+                            R.string.reading_stats_time_left_value,
+                            readingDuration(TimeUnit.SECONDS.toMillis(line.seconds.toLong())),
+                        ),
+                        padded = false,
+                    )
+                    is StatusLine.Finished -> Text(
+                        line.at?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) }
+                            ?: stringResource(R.string.state_finished),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    is StatusLine.Archived -> Text(
+                        stringResource(R.string.book_details_archived_on, day(line.at, locale)),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    is StatusLine.Annotations -> Field(
+                        stringResource(R.string.book_details_annotations),
+                        String.format(locale, "%d", line.count),
+                        padded = false,
+                    )
+                }
             }
         }
     }
-    Spacer(Modifier.height(12.dp))
-    val byRole = meta.contributors.groupBy({ it.role }, { it.name })
-    val authors = byRole[ContributorRoles.AUTHOR] ?: listOfNotNull(book.author?.takeIf { it.isNotBlank() })
-    if (authors.isNotEmpty()) Field(stringResource(R.string.book_details_role_author), authors.joinToString(", "))
-    ROLE_LABELS.forEach { (role, label) ->
-        byRole[role]?.let { Field(stringResource(label), it.joinToString(", ")) }
-    }
-    book.seriesName?.takeIf { it.isNotBlank() }?.let { series ->
-        val index = seriesIndexLabel(validSeriesPosition(book.seriesIndex))
-        Field(
-            stringResource(R.string.book_details_series),
-            if (index == null) series else stringResource(R.string.series_position, series, index),
+}
+
+/** The blurb, folded to a few lines when long; it speaks for itself without a heading. */
+@Composable
+private fun Description(bookUrl: String, text: String, modifier: Modifier) {
+    var expanded by rememberSaveable(bookUrl) { mutableStateOf(false) }
+    var overflows by remember(text) { mutableStateOf(false) }
+    // Folded, a blank line between paragraphs could be the last line shown,
+    // leaving an ellipsis alone on it.
+    val folded = remember(text) { text.replace(BLANK_LINES, "\n") }
+    Column(modifier) {
+        Text(
+            if (expanded) text else folded,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = if (expanded) Int.MAX_VALUE else DESCRIPTION_LINES,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
         )
+        if (overflows || expanded) {
+            TextButton(
+                onClick = { expanded = !expanded },
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+                Text(stringResource(if (expanded) R.string.book_details_show_less else R.string.book_details_read_more))
+            }
+        }
     }
 }
 
 @Composable
-private fun AboutBand(details: BookDetails) {
+private fun SubjectTags(subjects: List<String>, modifier: Modifier) {
+    val eInk = LocalEInk.current
+    Column(modifier) {
+        Text(
+            stringResource(R.string.book_details_subjects),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp).semantics { heading() },
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            subjects.forEach { subject ->
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        1.dp,
+                        if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+                    ),
+                ) {
+                    Text(
+                        subjectLabel(subject),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (eInk) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A Library of Congress heading reads as a tag: "Vampires -- Fiction" becomes "Vampires · Fiction". */
+internal fun subjectLabel(subject: String): String =
+    subject.split("--").map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { subject }
+
+private fun hasPublication(details: BookDetails): Boolean {
     val meta = details.metadata
-    if (meta.description == null && meta.subjects.isEmpty()) return
-    Band(stringResource(R.string.book_details_about)) {
-        meta.description?.let {
-            Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(vertical = 6.dp))
-        }
-        if (meta.subjects.isNotEmpty()) {
-            Field(stringResource(R.string.book_details_subjects), meta.subjects.joinToString(", "))
-        }
-    }
+    return meta.publishers.isNotEmpty() || meta.imprints.isNotEmpty() || meta.published != null ||
+        meta.languages.isNotEmpty() || meta.identifiers.isNotEmpty() || meta.pageCount != null ||
+        meta.contributors.any { it.role == ContributorRoles.CONTRIBUTOR }
 }
 
 @Composable
-private fun PublicationBand(details: BookDetails) {
+private fun Publication(details: BookDetails, modifier: Modifier) {
     val meta = details.metadata
     val locale = currentLocale()
-    val a11y = meta.accessibility?.let(::accessibilityView)?.takeUnless { it.isEmpty }
-    if (meta.publishers.isEmpty() && meta.imprints.isEmpty() && meta.published == null && meta.languages.isEmpty() &&
-        meta.identifiers.isEmpty() && meta.pageCount == null && a11y == null
-    ) {
-        return
-    }
-    Band(stringResource(R.string.book_details_publication)) {
-        if (meta.publishers.isNotEmpty()) {
-            Field(stringResource(R.string.book_details_publisher), meta.publishers.joinToString(", "))
-        }
-        if (meta.imprints.isNotEmpty()) {
-            Field(stringResource(R.string.book_details_imprint), meta.imprints.joinToString(", "))
-        }
-        meta.published?.let { Field(stringResource(R.string.book_details_published), publishedDate(it, locale)) }
-        if (meta.languages.isNotEmpty()) {
-            Field(
-                stringResource(R.string.book_details_language),
-                meta.languages.joinToString(", ") { languageName(it, locale) },
-            )
+    Column(modifier) {
+        SectionDivider()
+        Text(
+            stringResource(R.string.book_details_publication),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(bottom = 8.dp).semantics { heading() },
+        )
+        FieldGrid(
+            listOfNotNull(
+                meta.publishers.takeIf { it.isNotEmpty() }
+                    ?.let { stringResource(R.string.book_details_publisher) to it.joinToString(", ") },
+                meta.imprints.takeIf { it.isNotEmpty() }
+                    ?.let { stringResource(R.string.book_details_imprint) to it.joinToString(", ") },
+                meta.published?.let { stringResource(R.string.book_details_published) to publishedDate(it, locale) },
+                meta.languages.takeIf { it.isNotEmpty() }?.let {
+                    stringResource(R.string.book_details_language) to it.joinToString(", ") { tag -> languageName(tag, locale) }
+                },
+                meta.pageCount?.let { stringResource(R.string.book_details_pages) to String.format(locale, "%d", it) },
+            ),
+        )
+        meta.contributors.filter { it.role == ContributorRoles.CONTRIBUTOR }.takeIf { it.isNotEmpty() }?.let {
+            Field(stringResource(R.string.book_details_role_contributor), it.joinToString(", ") { c -> c.name })
         }
         meta.identifiers.forEach { id ->
             val named = id.scheme in NAMED_SCHEMES
@@ -219,10 +538,121 @@ private fun PublicationBand(details: BookDetails) {
                 code = true,
             )
         }
-        meta.pageCount?.let {
-            Field(stringResource(R.string.book_details_pages), String.format(locale, "%d", it))
+    }
+}
+
+/**
+ * Where this copy came from and what the file is, folded away by default:
+ * a reader rarely needs a hash, but the one who does finds it here.
+ */
+@Composable
+private fun FileInfo(details: BookDetails, modifier: Modifier) {
+    val book = details.book
+    val context = LocalContext.current
+    val locale = currentLocale()
+    var open by rememberSaveable(book.url) { mutableStateOf(false) }
+    val measured = details.metadata.fileSizeBytes
+    val claimed = book.sizeBytes?.takeIf { it in 0..BookDetailsBounds.MAX_BYTES }
+    val from = provenanceLabel(details)
+    val format = stringResource(R.string.book_details_format_epub)
+    val title = stringResource(R.string.book_details_file_info)
+    val stateText = stringResource(if (open) R.string.settings_section_expanded else R.string.settings_section_collapsed)
+    Column(modifier) {
+        SectionDivider()
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .clickable(role = Role.Button) { open = !open }
+                .semantics(mergeDescendants = true) {
+                    heading()
+                    stateDescription = stateText
+                }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                if (!open) {
+                    val size = (measured ?: claimed)?.let { Formatter.formatShortFileSize(context, it) }
+                    Text(
+                        listOfNotNull(from, format, size).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Icon(
+                if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        a11y?.let { AccessibilityFields(it) }
+        if (!open) return@Column
+        val eInk = LocalEInk.current
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
+            border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+        ) {
+            Column(Modifier.padding(16.dp)) {
+                val onDevice = book.openableUrl != null
+                FieldGrid(
+                    listOfNotNull(
+                        stringResource(R.string.book_details_from) to from,
+                        stringResource(R.string.book_details_format) to format,
+                        measured?.let { stringResource(R.string.book_details_size) to Formatter.formatShortFileSize(context, it) },
+                        // What the server claims is labelled as its claim, and only drawn
+                        // when it adds something to what was measured here.
+                        claimed?.takeIf { it != measured }?.let {
+                            stringResource(R.string.book_details_server_size) to Formatter.formatShortFileSize(context, it)
+                        },
+                        stringResource(R.string.book_details_added) to day(book.addedAt, locale),
+                        book.downloadedAt?.takeIf { onDevice }?.let {
+                            stringResource(R.string.book_details_downloaded) to day(it, locale)
+                        },
+                        book.fileModifiedAt?.takeIf { onDevice && it > 0 }?.let {
+                            stringResource(R.string.book_details_file_modified) to day(it, locale)
+                        },
+                    ),
+                )
+                details.fingerprint?.let {
+                    Field(stringResource(R.string.book_details_sha256), it.sha256, code = true)
+                    Field(stringResource(R.string.book_details_partial_md5), it.partialMd5, code = true)
+                }
+                details.metadata.accessibility?.let(::accessibilityView)?.takeUnless { it.isEmpty }?.let {
+                    HorizontalDivider(Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    AccessibilityFields(it)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    HorizontalDivider(Modifier.padding(top = 24.dp, bottom = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/** Short facts side by side when there is room for two, one under the other when not. */
+@Composable
+private fun FieldGrid(fields: List<Pair<String, String>>) {
+    if (fields.isEmpty()) return
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth >= TWO_COLUMN_GRID) 2 else 1
+        Column {
+            fields.chunked(columns).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    row.forEach { (label, value) ->
+                        Field(label, value, modifier = Modifier.weight(1f))
+                    }
+                    if (row.size < columns) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
@@ -314,99 +744,23 @@ private fun AccessibilityFields(view: AccessibilityView) {
     view.certifierReport?.let { Field(stringResource(R.string.book_details_a11y_certifier_report), it, code = true) }
 }
 
-@Composable
-private fun CopyBand(details: BookDetails) {
-    val book = details.book
-    val context = LocalContext.current
-    val locale = currentLocale()
-    val onDevice = book.openableUrl != null
-    Band(stringResource(R.string.book_details_this_copy)) {
-        Field(stringResource(R.string.book_details_format), stringResource(R.string.book_details_format_epub))
-        val measured = details.metadata.fileSizeBytes
-        val claimed = book.sizeBytes?.takeIf { it in 0..BookDetailsBounds.MAX_BYTES }
-        measured?.let {
-            Field(stringResource(R.string.book_details_size), Formatter.formatShortFileSize(context, it))
-        }
-        // What the server claims is labelled as its claim, and only drawn
-        // when it adds something to what was measured here.
-        claimed?.takeIf { it != measured }?.let {
-            Field(stringResource(R.string.book_details_server_size), Formatter.formatShortFileSize(context, it))
-        }
-        Field(stringResource(R.string.book_details_from), provenanceLabel(details))
-        Field(stringResource(R.string.book_details_added), day(book.addedAt, locale))
-        if (onDevice) {
-            book.downloadedAt?.let { Field(stringResource(R.string.book_details_downloaded), day(it, locale)) }
-            book.fileModifiedAt?.takeIf { it > 0 }?.let {
-                Field(stringResource(R.string.book_details_file_modified), day(it, locale))
-            }
-        }
-        details.fingerprint?.let {
-            Field(stringResource(R.string.book_details_sha256), it.sha256, code = true)
-            Field(stringResource(R.string.book_details_partial_md5), it.partialMd5, code = true)
-        }
-    }
-}
-
-@Composable
-private fun ReadingBand(details: BookDetails, etaSeconds: Double?, onOpenStats: () -> Unit) {
-    val book = details.book
-    val locale = currentLocale()
-    Band(stringResource(R.string.book_details_reading)) {
-        details.progression?.takeIf { !book.finished && it > 0 }?.let {
-            Field(
-                stringResource(R.string.book_details_progress),
-                stringResource(R.string.reading_stats_progress, (it * 100).toInt()),
-            )
-        }
-        etaSeconds?.takeIf { !book.finished }?.let { seconds ->
-            Field(
-                stringResource(R.string.reading_stats_time_left_label),
-                stringResource(
-                    R.string.reading_stats_time_left_value,
-                    readingDuration(TimeUnit.SECONDS.toMillis(seconds.toLong())),
-                ),
-            )
-        }
-        val status = listOfNotNull(
-            book.finishedAt?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) },
-            book.archivedAt?.let { stringResource(R.string.book_details_archived_on, day(it, locale)) },
-        )
-        if (status.isNotEmpty()) Field(stringResource(R.string.book_details_status), status.joinToString("\n"))
-        if (details.annotations > 0) {
-            Field(stringResource(R.string.book_details_annotations), String.format(locale, "%d", details.annotations))
-        }
-        OutlinedButton(
-            onClick = onOpenStats,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(top = 8.dp),
-        ) {
-            Text(stringResource(R.string.reading_stats))
-        }
-    }
-}
-
-@Composable
-private fun Band(title: String, content: @Composable ColumnScope.() -> Unit) {
-    HorizontalDivider(Modifier.padding(top = 16.dp, bottom = 12.dp))
-    Text(
-        title,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(bottom = 4.dp).semantics { heading() },
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(0.dp), content = content)
-}
-
 /**
  * One label and its value, read out as one node. A [code] value (an id,
  * a hash) is selectable and kept left to right whatever the language
  * around it.
  */
 @Composable
-private fun Field(label: String, value: String, code: Boolean = false) {
+private fun Field(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    code: Boolean = false,
+    padded: Boolean = true,
+) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(vertical = if (padded) 6.dp else 0.dp)
             .semantics(mergeDescendants = true) {},
     ) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -418,7 +772,7 @@ private fun Field(label: String, value: String, code: Boolean = false) {
                 )
             }
         } else {
-            Text(value, style = MaterialTheme.typography.bodyLarge)
+            Text(value, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -474,13 +828,20 @@ private val WCAG = Regex("""wcag-(?:(\d\.\d)-)?(a{1,3})""")
 
 private val NAMED_SCHEMES = setOf("isbn", "issn", "doi", "asin", "uuid")
 
-private val ROLE_LABELS = listOf(
+/** Credits named under the author; plain contributors go with the publication. */
+private val CREDIT_LABELS = listOf(
     ContributorRoles.TRANSLATOR to R.string.book_details_role_translator,
     ContributorRoles.EDITOR to R.string.book_details_role_editor,
     ContributorRoles.ILLUSTRATOR to R.string.book_details_role_illustrator,
     ContributorRoles.NARRATOR to R.string.book_details_role_narrator,
-    ContributorRoles.CONTRIBUTOR to R.string.book_details_role_contributor,
 )
+
+private val WIDE_LAYOUT = 600.dp
+private val WIDE_ACTIONS_WIDTH = 420.dp
+private val MAX_CONTENT_WIDTH = 840.dp
+private val TWO_COLUMN_GRID = 300.dp
+private const val DESCRIPTION_LINES = 6
+private val BLANK_LINES = Regex("""\n\s*\n""")
 
 private val FEATURE_LABELS = linkedMapOf(
     "alternativeText" to R.string.book_details_a11y_feature_alt_text,

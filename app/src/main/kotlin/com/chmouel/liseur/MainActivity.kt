@@ -63,6 +63,7 @@ import com.chmouel.liseur.ui.library.BookActionsSheet
 import com.chmouel.liseur.ui.library.BookDetailsScreen
 import com.chmouel.liseur.ui.library.BookDetailsUiState
 import com.chmouel.liseur.ui.library.BookDetailsViewModel
+import com.chmouel.liseur.ui.library.canDownload
 import com.chmouel.liseur.translate.WholeBookTranslationScreen
 import com.chmouel.liseur.ui.library.BrowseLibrariesRoute
 import com.chmouel.liseur.ui.library.ConfirmLocalDeleteDialog
@@ -488,10 +489,22 @@ private fun LiseurApp(
                         val serverInsights by remember(stats, target.bookUrl) {
                             stats.serverEstimateFor(target.bookUrl)
                         }.collectAsStateWithLifecycle()
+                        val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+                        val libraryState by library.state.collectAsStateWithLifecycle()
+                        val detailsBook = (detailsState as? BookDetailsUiState.Ready)?.details?.book
+                        val context = LocalContext.current
                         BookDetailsScreen(
                             state = detailsState,
                             etaSeconds = serverInsights?.etaSeconds,
+                            canDownload = detailsBook?.let { libraryState.canDownload(it) } ?: false,
+                            download = libraryState.downloads[target.bookUrl],
                             onBack = back,
+                            onRead = {
+                                detailsBook?.openableUri()?.let {
+                                    context.startActivity(ReaderActivity.intent(context, it, detailsBook.url))
+                                }
+                            },
+                            onDownload = { detailsBook?.let(library::download) },
                             onOpenStats = {
                                 (detailsState as? BookDetailsUiState.Ready)?.details?.book?.let { book ->
                                     backStack.push(Route.BookStats(book.url, book.displayTitle))

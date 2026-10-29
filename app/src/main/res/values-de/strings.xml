@@ -1709,13 +1709,8 @@
     <string name="selection_name_required">Gib einen Namen ein.</string>
     <string name="selection_delete_action">Aktion löschen</string>
     <string name="book_details">Buchdetails</string>
-    <string name="book_details_about">Über das Buch</string>
     <string name="book_details_publication">Veröffentlichung</string>
-    <string name="book_details_this_copy">Dieses Exemplar</string>
-    <string name="book_details_reading">Lesen</string>
-    <string name="book_details_series">Reihe</string>
     <string name="book_details_subjects">Themen</string>
-    <string name="book_details_role_author">Autor</string>
     <string name="book_details_role_translator">Übersetzung</string>
     <string name="book_details_role_editor">Herausgabe</string>
     <string name="book_details_role_illustrator">Illustrationen</string>
@@ -1766,9 +1761,13 @@
     <string name="book_details_downloaded">Heruntergeladen</string>
     <string name="book_details_file_modified">Datei geändert</string>
     <string name="book_details_partial_md5">Partieller MD5</string>
-    <string name="book_details_progress">Fortschritt</string>
-    <string name="book_details_status">Status</string>
     <string name="book_details_finished_on">Beendet am %1$s</string>
     <string name="book_details_archived_on">Archiviert am %1$s</string>
     <string name="book_details_annotations">Markierungen und Notizen</string>
+    <string name="book_details_read">Lesen</string>
+    <string name="book_details_read_again">Erneut lesen</string>
+    <string name="book_details_retry_download">Download wiederholen</string>
+    <string name="book_details_file_info">Dateiinfo</string>
+    <string name="book_details_read_more">Mehr anzeigen</string>
+    <string name="book_details_show_less">Weniger anzeigen</string>
 </resources>

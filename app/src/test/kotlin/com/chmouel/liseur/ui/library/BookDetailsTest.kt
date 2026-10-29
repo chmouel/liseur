@@ -77,4 +77,12 @@ class BookDetailsTest {
         // A feature the screen has no words for draws nothing.
         assertTrue(accessibilityView(BookAccessibility(features = listOf("ruby"))).isEmpty)
     }
+
+    @Test
+    fun aLibraryOfCongressSubjectReadsAsATag() {
+        assertEquals("Vampires · Fiction", subjectLabel("Vampires -- Fiction"))
+        assertEquals("Dracula, Count · Fiction", subjectLabel("Dracula, Count--Fiction"))
+        assertEquals("Horror tales", subjectLabel("Horror tales"))
+        assertEquals("--", subjectLabel("--"))
+    }
 }
