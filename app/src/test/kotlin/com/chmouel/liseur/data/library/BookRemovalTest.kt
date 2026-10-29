@@ -848,6 +848,48 @@ class BookRemovalTest {
         ackedFingerprint = "settled",
     )
 
+    @Test
+    fun `removing a download forgets its fingerprint and keeps the book`() = runTest {
+        db.bookDao().upsert(book("calibre:one", remoteUuid = "one").copy(downloadState = DownloadState.DOWNLOADED, localUri = "file:///books/one.epub"))
+        db.bookDao().upsert(book("kept"))
+        db.workIdentityDao().upsert(fingerprintRow("calibre:one"))
+        db.workIdentityDao().upsert(fingerprintRow("kept"))
+
+        removal.downloadRemoved("calibre:one")
+
+        val row = db.bookDao().getByUrl("calibre:one")!!
+        assertEquals(DownloadState.REMOTE, row.downloadState)
+        assertNull(row.localUri)
+        assertNull(db.workIdentityDao().fingerprint("calibre:one"))
+        assertNotNull(db.workIdentityDao().fingerprint("kept"))
+    }
+
+    @Test
+    fun `a new download records its file time and drops the old hash`() = runTest {
+        db.bookDao().upsert(book("calibre:one", remoteUuid = "one"))
+        db.workIdentityDao().upsert(fingerprintRow("calibre:one"))
+
+        removal.downloadArrived("calibre:one", "file:///books/one.epub", downloadedAt = 5, fileModifiedAt = 42)
+
+        val row = db.bookDao().getByUrl("calibre:one")!!
+        assertEquals(DownloadState.DOWNLOADED, row.downloadState)
+        assertEquals(42L, row.fileModifiedAt)
+        assertNull(db.workIdentityDao().fingerprint("calibre:one"))
+
+        // A file system that reports no time is not a time.
+        removal.downloadArrived("calibre:one", "file:///books/one.epub", downloadedAt = 6, fileModifiedAt = 0)
+        assertNull(db.bookDao().getByUrl("calibre:one")!!.fileModifiedAt)
+    }
+
+    private fun fingerprintRow(bookUrl: String) = com.chmouel.liseur.data.db.BookFingerprintRow(
+        bookUrl = bookUrl,
+        sha256 = "sha-$bookUrl",
+        partialMd5 = "md5",
+        fileSize = 10,
+        fileModifiedAt = null,
+        computedAt = 1,
+    )
+
     private fun book(url: String, remoteUuid: String? = null) = Book(
         url = url,
         title = url,

@@ -492,7 +492,13 @@ class BookDownloadRepository(
         File(booksDir(), "$key.epub.part").delete()
         File(booksDir(), "$key.epub.etag").delete()
         deleteOwnedCopy(book)
-        bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+        bookRemoval.downloadRemoved(book.url)
+    }
+
+    /** Files a finished download under its book. */
+    suspend fun markDownloaded(bookUrl: String, fileKey: String) {
+        val file = fileFor(fileKey)
+        bookRemoval.downloadArrived(bookUrl, localUriFor(fileKey), System.currentTimeMillis(), file.lastModified())
     }
 
     /**
