@@ -970,7 +970,9 @@ class LocalLibraryRepository(
         sizeBytes: Long? = null,
         adopt: AbsoluteUrl? = null,
     ): Boolean {
-        val downloadedAt = bookDao.getByUrl(bookUrl)?.downloadedAt
+        val before = bookDao.getByUrl(bookUrl)
+        val fileBefore = before?.openableUrl
+        val downloadedAt = before?.downloadedAt
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -1020,24 +1022,33 @@ class LocalLibraryRepository(
                 )
                 // A restored file is adopted in the same write as its
                 // details, so the read is not refused for a book that
-                // has no file yet. One that gained a file meanwhile
-                // keeps it and is checked against its old stamp.
-                val adopted = adopt != null && bookDao.getByUrl(bookUrl)?.openableUrl == null
+                // has no file yet.
+                val adopted = adopt != null && fileBefore == null
                 if (adopted) bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
                 bookRemoval.fileMetadataRead(bookUrl, metadataRow, if (adopted) null else downloadedAt)
             }
-            // Cleanup first, then the new description, in one
-            // transaction: the old work's state goes and the new file's
-            // fields are written over what is left, so nothing cleared
-            // for the old book can take the new one with it.
-            if (!isSameWork(previousWorkId, workId)) {
-                Log.i(TAG, "A different book took over a path; starting it fresh")
-                bookRemoval.contentReplaced(bookUrl, then = write)
-            } else {
-                // Together, or a crash between the two leaves the new
-                // modification time beside the old file's details, and
-                // nothing would read the file again.
-                bookRemoval.together(write)
+            // Together, or a crash between the two leaves the new
+            // modification time beside the old file's details, and
+            // nothing would read the file again.
+            bookRemoval.together {
+                // A book removed, or whose file was removed or replaced,
+                // while this one was being read is left alone: what was
+                // read no longer describes it, and its reading state
+                // must not be cleared on the strength of a stale file.
+                val now = bookDao.getByUrl(bookUrl)
+                if (now == null || now.openableUrl != fileBefore || now.downloadedAt != downloadedAt) {
+                    return@together
+                }
+                // Cleanup first, then the new description: the old
+                // work's state goes and the new file's fields are
+                // written over what is left, so nothing cleared for the
+                // old book can take the new one with it.
+                if (!isSameWork(previousWorkId, workId)) {
+                    Log.i(TAG, "A different book took over a path; starting it fresh")
+                    bookRemoval.contentReplaced(bookUrl, then = write)
+                } else {
+                    write()
+                }
             }
             return true
         } finally {

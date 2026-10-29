@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.LiseurDatabase
+import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.Contributor
 import com.chmouel.liseur.domain.Identifier
@@ -51,6 +52,9 @@ class FileMetadataIndexTest {
     private lateinit var removal: BookRemoval
     private lateinit var library: LocalLibraryRepository
 
+    /** Runs once, just before the next write transaction: whatever the user did while a file was read. */
+    private var meanwhile: (suspend () -> Unit)? = null
+
     @Before
     fun open() {
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -64,7 +68,10 @@ class FileMetadataIndexTest {
             progressDao = db.readingProgressDao(),
             annotationDao = db.annotationDao(),
             annotationSyncDao = db.annotationSyncDao(),
-            inTransaction = { work -> db.withTransaction { work() } },
+            inTransaction = { work ->
+                meanwhile?.also { meanwhile = null }?.invoke()
+                db.withTransaction { work() }
+            },
             metadataDao = db.bookMetadataDao(),
         )
         val httpClient = DefaultHttpClient()
@@ -212,6 +219,27 @@ class FileMetadataIndexTest {
         val indexed = db.bookDao().getByUrl(url)!!
         assertEquals("Earthsea", indexed.seriesName)
         assertTrue(indexed.fileMetadataChecked)
+    }
+
+    @Test
+    fun `a reread that finishes after its file was removed keeps the reading state`() = runTest {
+        val epub = folder.newFile("other.epub").also { writeEpub(it, RICH_METADATA) }
+        val url = Uri.fromFile(epub).toString()
+        // The stored work differs from the file's, so a write would
+        // start the book fresh and forget where it was read to.
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, workId = "another work"))
+        db.readingProgressDao().upsert(
+            ReadingProgress(bookUrl = url, locatorJson = "{}", totalProgression = 0.4, updatedAt = 1, readAt = 1),
+        )
+        meanwhile = { removal.downloadRemoved(url) }
+
+        library.backfillAuthors()
+
+        assertEquals(0.4, db.readingProgressDao().get(url)!!.totalProgression!!, 1e-9)
+        val book = db.bookDao().getByUrl(url)!!
+        assertEquals("Book", book.title)
+        assertEquals("another work", book.workId)
+        assertNull(fileRow(url))
     }
 
     @Test
