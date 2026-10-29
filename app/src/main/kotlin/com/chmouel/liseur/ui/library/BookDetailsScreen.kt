@@ -767,7 +767,7 @@ private fun Field(
         if (code) {
             SelectionContainer {
                 Text(
-                    "\u2066$value\u2069",
+                    value,
                     style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Ltr),
                 )
             }

@@ -979,6 +979,9 @@ class LocalLibraryRepository(
                 asset.close()
                 return false
             }
+        // Staged like a download's cover, and moved into place only by
+        // a write that still finds the file it was read from.
+        val staged = File(coverFile(bookUrl).path + ".${System.nanoTime()}.tmp")
         try {
             val title = publication.metadata.title
                 ?: openableUrl.filename?.removeSuffix(".epub")
@@ -1002,14 +1005,15 @@ class LocalLibraryRepository(
                     epubAuthorIdentityMatches(publication, previousIdentityForMetadata))
             val workId = if (preservePreviousIdentity) previousWorkId else indexedWorkId
             val series = seriesOf(publication)
-            val coverPath = saveCover(publication, bookUrl)
+            val cover = saveCover(publication, bookUrl, staged)
             val metadataRow = fileMetadataRow(bookUrl, publication, openableUrl, sizeBytes)
             val write: suspend () -> Unit = {
+                val target = coverFile(bookUrl)
                 bookDao.refreshIndexedFile(
                     url = bookUrl,
                     title = title,
                     author = author,
-                    coverPath = coverPath,
+                    coverPath = target.absolutePath.takeIf { cover != null && staged.renameTo(target) },
                     fileModifiedAt = modifiedAt,
                     workId = workId,
                     identityAuthor = if (preservePreviousIdentity) {
@@ -1052,6 +1056,7 @@ class LocalLibraryRepository(
             }
             return true
         } finally {
+            staged.delete()
             publication.close()
         }
     }
@@ -1183,7 +1188,14 @@ class LocalLibraryRepository(
                     unreadable += book.url
                     continue
                 }
-                bookDao.fillSeriesFromFile(book.url, series.name, series.index)
+                // A download removed or replaced during the read is not
+                // the file that was read; the next run reads what is there.
+                bookRemoval.together {
+                    val now = bookDao.getByUrl(book.url)
+                    if (now?.openableUrl == book.openableUrl && now?.downloadedAt == book.downloadedAt) {
+                        bookDao.fillSeriesFromFile(book.url, series.name, series.index)
+                    }
+                }
             }
             delay(BACKFILL_PAUSE_MS)
         }
