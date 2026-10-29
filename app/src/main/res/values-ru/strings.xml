@@ -1842,6 +1842,7 @@
     <string name="book_details_a11y_hazard_sound">Звук</string>
     <string name="book_details_format">Формат</string>
     <string name="book_details_size">Размер</string>
+    <string name="book_details_server_size">Размер на сервере</string>
     <string name="book_details_from">Источник</string>
     <string name="book_details_from_file">Файл, который вы открыли</string>
     <string name="book_details_from_folder">Отслеживаемая папка</string>

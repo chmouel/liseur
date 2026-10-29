@@ -1681,6 +1681,7 @@
     <string name="book_details_a11y_hazard_sound">声音</string>
     <string name="book_details_format">格式</string>
     <string name="book_details_size">大小</string>
+    <string name="book_details_server_size">服务器上的大小</string>
     <string name="book_details_from">来源</string>
     <string name="book_details_from_file">你打开的文件</string>
     <string name="book_details_from_folder">监视的文件夹</string>

@@ -1734,6 +1734,7 @@
     <string name="book_details_a11y_hazard_sound">Suono</string>
     <string name="book_details_format">Formato</string>
     <string name="book_details_size">Dimensione</string>
+    <string name="book_details_server_size">Dimensione sul server</string>
     <string name="book_details_from">Provenienza</string>
     <string name="book_details_from_file">Un file che hai aperto</string>
     <string name="book_details_from_folder">Una cartella monitorata</string>
