@@ -71,6 +71,9 @@ class BookRemovalTest {
             bookOrbitBindings = db.bookOrbitBindingDao(),
             remoteStatsDao = db.remoteStatsDao(),
             onReadingHistoryRemoved = { historyRefreshRequests++ },
+            uploadRefusalDao = db.uploadRefusalDao(),
+            aiPreferencesDao = db.bookAiPreferencesDao(),
+            glossaryDao = db.glossaryDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -608,6 +611,54 @@ class BookRemovalTest {
         // contained them.
         assertNull(db.workIdentityDao().alias("gone", "peer"))
         assertNull(db.workIdentityDao().fingerprint("gone"))
+    }
+
+    @Test
+    fun `replaced content forgets the old work's server identity and per-book settings`() = runTest {
+        for (url in listOf("swapped", "other")) {
+            db.bookDao().upsert(
+                book(url).copy(
+                    remoteUuid = "uuid-$url",
+                    remoteBookId = url.length,
+                    downloadHref = "/get/$url",
+                    sizeBytes = 1_000,
+                    catalogSeriesName = "Server Shelf",
+                    catalogSeriesIndex = 2.0,
+                    seriesName = "Server Shelf",
+                    seriesIndex = 2.0,
+                    fileSeriesName = "File Shelf",
+                    fileSeriesIndex = 5.0,
+                ),
+            )
+            db.uploadRefusalDao().upsert(
+                com.chmouel.liseur.data.db.UploadRefusal(url, "acct", 1, "server_refused", null, "sha"),
+            )
+            db.bookAiPreferencesDao().setTranslation(url, "fr")
+            db.glossaryDao().upsert(com.chmouel.liseur.data.db.GlossaryEntry(bookUrl = url, term = "Ged", updatedAt = 1))
+        }
+
+        removal.contentReplaced("swapped")
+
+        val swapped = db.bookDao().getByUrl("swapped")!!
+        assertNull(swapped.remoteUuid)
+        assertNull(swapped.remoteBookId)
+        assertNull(swapped.downloadHref)
+        assertNull(swapped.sizeBytes)
+        assertNull(swapped.catalogSeriesName)
+        // Filed by what the file says, not under the old work's series.
+        assertEquals("File Shelf", swapped.seriesName)
+        assertEquals(5.0, swapped.seriesIndex)
+        assertNull(db.uploadRefusalDao().get("swapped", "acct"))
+        assertNull(db.bookAiPreferencesDao().get("swapped"))
+        assertTrue(db.glossaryDao().all("swapped").isEmpty())
+
+        val other = db.bookDao().getByUrl("other")!!
+        assertEquals("uuid-other", other.remoteUuid)
+        assertEquals(1_000L, other.sizeBytes)
+        assertEquals("Server Shelf", other.seriesName)
+        assertNotNull(db.uploadRefusalDao().get("other", "acct"))
+        assertNotNull(db.bookAiPreferencesDao().get("other"))
+        assertEquals(1, db.glossaryDao().all("other").size)
     }
 
     @Test

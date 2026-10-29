@@ -729,6 +729,10 @@ interface BookDao {
     )
     suspend fun clearSeriesForReplacedWork(url: String)
 
+    /** The size a catalog claimed for the file that used to be at this path. */
+    @Query("UPDATE books SET size_bytes = NULL WHERE url = :url")
+    suspend fun clearCatalogSize(url: String)
+
     /**
      * Forgets that this book was ever opened, for when the file at a path
      * turns out to hold a different book entirely.

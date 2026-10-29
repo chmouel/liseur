@@ -174,6 +174,9 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
         bookOrbitBindings = database.bookOrbitBindingDao(),
         remoteStatsDao = database.remoteStatsDao(),
+        uploadRefusalDao = database.uploadRefusalDao(),
+        aiPreferencesDao = database.bookAiPreferencesDao(),
+        glossaryDao = database.glossaryDao(),
     )
 
     private val savedTranslationsFile = context.getDatabasePath(TranslationCacheDatabase.NAME)

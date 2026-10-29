@@ -33,6 +33,9 @@ class BookRemoval(
     private val bookOrbitBindings: com.chmouel.liseur.data.db.BookOrbitBindingDao? = null,
     private val remoteStatsDao: RemoteStatsDao? = null,
     private val onReadingHistoryRemoved: suspend () -> Unit = {},
+    private val uploadRefusalDao: com.chmouel.liseur.data.db.UploadRefusalDao? = null,
+    private val aiPreferencesDao: com.chmouel.liseur.data.db.BookAiPreferencesDao? = null,
+    private val glossaryDao: com.chmouel.liseur.data.db.GlossaryDao? = null,
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
@@ -162,8 +165,11 @@ class BookRemoval(
      * go together: an agreement left behind with nothing to agree about
      * is indistinguishable from a reader having deleted a highlight, and
      * the next sync would delete it everywhere.
+     *
+     * [then] runs inside the same transaction once everything is cleared,
+     * so the new contents are written over a clean row or not at all.
      */
-    suspend fun contentReplaced(bookUrl: String) {
+    suspend fun contentReplaced(bookUrl: String, then: suspend () -> Unit = {}) {
         var removedSessions = false
         inTransaction {
             progressDao.forget(bookUrl)
@@ -186,10 +192,18 @@ class BookRemoval(
             // sync and catalog lookups would address the server's copy of
             // the book that used to be here as if it were the new one.
             bookDao.unlinkFromRemote(listOf(bookUrl))
+            bookDao.clearCatalogSize(bookUrl)
             bookOrbitBindings?.clearBook(bookUrl)
             bookDao.forgetReadingHistory(bookUrl)
             bookDao.clearSeriesForReplacedWork(bookUrl)
+            // A server refused the old bytes, and the reader set up
+            // translation and narration for the old text and named its
+            // characters. None of it is about the book there now.
+            uploadRefusalDao?.forgetBook(bookUrl)
+            aiPreferencesDao?.forget(bookUrl)
+            glossaryDao?.deleteBook(bookUrl)
             if (removedSessions) remoteStatsDao?.clearAll()
+            then()
         }
         if (removedSessions) onReadingHistoryRemoved()
     }
