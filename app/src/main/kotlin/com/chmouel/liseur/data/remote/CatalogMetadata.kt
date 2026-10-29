@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.remote
 
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.BookMetadataDao
+import com.chmouel.liseur.data.db.CatalogWrite
 import com.chmouel.liseur.data.library.descriptionText
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
@@ -21,19 +22,22 @@ internal fun catalogMetadataRow(bookUrl: String, book: RemoteBook): BookMetadata
         .takeUnless { it == BookMetadata(bookUrl, MetadataSource.CATALOG.key) }
 }
 
+/** A catalog entry and the [com.chmouel.liseur.data.db.Book.linkGeneration] its book had when the fetch began. */
+internal data class CatalogRead(val remote: RemoteBook, val linkGeneration: Long)
+
 /**
  * Replaces the catalog rows of [books], keyed by the library URL each
  * is filed under. A field the catalog stopped sending is cleared with
  * the rest of the row, so a description deleted on the server goes here
  * too. Rows that did not change are not written, and neither is any
- * book no longer linked to the server id its entry was read for.
+ * book whose link moved since its entry was read.
  */
-internal suspend fun BookMetadataDao.storeCatalog(books: Map<String, RemoteBook>) {
+internal suspend fun BookMetadataDao.storeCatalog(books: Map<String, CatalogRead>) {
     books.keys.chunked(CATALOG_CHUNK).forEach { urls ->
         replaceCatalog(
             urls.associateWith { url ->
-                val book = books.getValue(url)
-                book.remoteId to catalogMetadataRow(url, book)
+                val read = books.getValue(url)
+                CatalogWrite(read.remote.remoteId, read.linkGeneration, catalogMetadataRow(url, read.remote))
             },
         )
     }

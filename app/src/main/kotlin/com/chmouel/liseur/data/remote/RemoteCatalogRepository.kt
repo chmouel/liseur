@@ -432,7 +432,7 @@ class RemoteCatalogRepository(
         // the same unique URL and being refused.
         val inserts = LinkedHashMap<String, Book>()
         val updates = mutableListOf<CatalogUpdate>()
-        val described = LinkedHashMap<String, RemoteBook>()
+        val described = LinkedHashMap<String, CatalogRead>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
             if (
@@ -472,7 +472,7 @@ class RemoteCatalogRepository(
             known.remember(merged)
             // Before the equality check: a catalog that changed only a
             // description changes nothing on the book row.
-            described[rowUrl] = remote
+            described[rowUrl] = CatalogRead(remote, existing?.linkGeneration ?: 0)
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
             if (merged == existing) return@forEach
@@ -484,6 +484,7 @@ class RemoteCatalogRepository(
                     remote = remote,
                     snapshotUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
                     snapshotRemoteUuid = existing?.remoteUuid,
+                    snapshotLinkGeneration = existing?.linkGeneration ?: 0,
                     expectedBrowseServerId = browseServerId,
                 )
             }
@@ -523,6 +524,7 @@ class RemoteCatalogRepository(
                 // in flight was cut loose from this server copy, and
                 // must not be linked back to it.
                 expectedRemoteUuid = update.snapshotRemoteUuid,
+                expectedLinkGeneration = update.snapshotLinkGeneration,
                 expectedBrowseServerId = update.expectedBrowseServerId,
                 promoteBrowse = update.expectedBrowseServerId != null,
             )
@@ -734,6 +736,7 @@ private data class CatalogUpdate(
     val remote: RemoteBook,
     val snapshotUserSeriesUpdatedAt: Long?,
     val snapshotRemoteUuid: String?,
+    val snapshotLinkGeneration: Long,
     val expectedBrowseServerId: Long?,
 )
 

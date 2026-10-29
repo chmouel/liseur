@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.database.MatrixCursor
 import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import androidx.room.Room
 import androidx.room.withTransaction
@@ -101,6 +102,7 @@ class BookRemovalTest {
         FakeDocs.children = emptyMap()
         FakeDocs.loading = emptySet()
         FakeDocs.answersIsChild = false
+        FakeDocs.files = emptyMap()
         db.close()
     }
 
@@ -995,6 +997,10 @@ class BookRemovalTest {
 
         override fun getType(uri: Uri): String? = null
 
+        override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? =
+            files[DocumentsContract.getDocumentId(uri)]
+                ?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
+
         override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
             // What the default DocumentsProvider does: containment is not
             // implemented, and saying so is indistinguishable from saying
@@ -1019,6 +1025,9 @@ class BookRemovalTest {
 
             /** Whether the provider replies "not a child" to every question. */
             var answersIsChild: Boolean = false
+
+            /** File contents by document id, for scans that open what they find. */
+            var files: Map<String, java.io.File> = emptyMap()
 
             private val COLUMNS = arrayOf(
                 DocumentsContract.Document.COLUMN_DOCUMENT_ID,

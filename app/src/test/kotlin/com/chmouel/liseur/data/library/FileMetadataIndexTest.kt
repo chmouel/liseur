@@ -35,6 +35,7 @@ import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.http.DefaultHttpClient
 import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -53,6 +54,7 @@ class FileMetadataIndexTest {
     @Before
     fun open() {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        Robolectric.buildContentProvider(BookRemovalTest.FakeDocs::class.java).create(DOCS_AUTHORITY)
         db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).allowMainThreadQueries().build()
         removal = BookRemoval(
             bookDao = db.bookDao(),
@@ -82,6 +84,8 @@ class FileMetadataIndexTest {
 
     @After
     fun close() {
+        BookRemovalTest.FakeDocs.children = emptyMap()
+        BookRemovalTest.FakeDocs.files = emptyMap()
         db.close()
     }
 
@@ -145,6 +149,24 @@ class FileMetadataIndexTest {
             assertFalse(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
             assertEquals(listOf("catalog"), db.bookMetadataDao().forBook(url).map { it.source })
         }
+    }
+
+    @Test
+    fun `re-adding a folder reads the file again for a book it reaches under another spelling`() = runTest {
+        // The parent folder was removed, which dropped the file source;
+        // its child comes back with the same unchanged file.
+        val documentId = "primary:Books/SF/book.epub"
+        BookRemovalTest.FakeDocs.children = mapOf(
+            "primary:Books/SF" to listOf(listOf<Any?>(documentId, "book.epub", "application/epub+zip", 1_700L)),
+        )
+        BookRemovalTest.FakeDocs.files = mapOf(documentId to folder.newFile("book.epub").also { writeEpub(it, RICH_METADATA) })
+        val aliasUrl = "content://$DOCS_AUTHORITY/tree/primary%3ABooks/document/primary%3ABooks%2FSF%2Fbook.epub"
+        db.bookDao().upsert(book(aliasUrl).copy(downloadState = DownloadState.DOWNLOADED, fileModifiedAt = 1_700L))
+
+        library.addFolder(Uri.parse("content://$DOCS_AUTHORITY/tree/primary%3ABooks%2FSF"))
+
+        assertTrue(db.bookDao().getByUrl(aliasUrl)!!.fileMetadataChecked)
+        assertEquals("The subtitle", fileRow(aliasUrl)?.subtitle)
     }
 
     @Test
@@ -300,3 +322,5 @@ class FileMetadataIndexTest {
         }
     }
 }
+
+private const val DOCS_AUTHORITY = "com.chmouel.liseur.test.metadata.documents"

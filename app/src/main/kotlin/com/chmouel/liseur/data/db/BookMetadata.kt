@@ -165,26 +165,26 @@ interface BookMetadataDao {
     @Query("DELETE FROM book_metadata WHERE book_url = :bookUrl")
     suspend fun forget(bookUrl: String)
 
-    @Query("SELECT url, remote_uuid FROM books WHERE url IN (:bookUrls) AND remote_uuid IS NOT NULL")
+    @Query("SELECT url, remote_uuid, link_generation FROM books WHERE url IN (:bookUrls) AND remote_uuid IS NOT NULL")
     suspend fun catalogLinks(bookUrls: List<String>): List<CatalogLink>
 
     /**
-     * Replaces the catalog rows of [rows], each keyed by book URL and
-     * paired with the server id it was read for, a null row meaning the
-     * catalog said nothing worth keeping. A book no longer linked to
-     * that id is skipped: the refresh read the link before the network
-     * wait, and a book cut loose since, or linked to another copy,
-     * must not be described by what was fetched for the old one.
+     * Replaces the catalog rows of [rows], keyed by book URL, a null
+     * [CatalogWrite.row] meaning the catalog said nothing worth keeping.
+     * A book no longer holding the link its entry was read for is
+     * skipped: the refresh read the link before the network wait, and a
+     * book cut loose since, linked to another copy, or unlinked and
+     * linked back, must not be described by what was fetched before.
      */
     @Transaction
-    suspend fun replaceCatalog(rows: Map<String, Pair<String, BookMetadata?>>) {
+    suspend fun replaceCatalog(rows: Map<String, CatalogWrite>) {
         val linked = catalogLinks(rows.keys.toList())
-            .filter { rows[it.url]?.first == it.remoteUuid }
+            .filter { it.matches(rows.getValue(it.url)) }
             .map { it.url }
         val stored = ofSource(linked, MetadataSource.CATALOG.key).associateBy { it.bookUrl }
         val gone = mutableListOf<String>()
         linked.forEach { url ->
-            val row = rows.getValue(url).second
+            val row = rows.getValue(url).row
             val old = stored[url]
             when {
                 row == null -> if (old != null) gone += url
@@ -199,4 +199,11 @@ interface BookMetadataDao {
 data class CatalogLink(
     val url: String,
     @ColumnInfo(name = "remote_uuid") val remoteUuid: String,
-)
+    @ColumnInfo(name = "link_generation") val linkGeneration: Long,
+) {
+    fun matches(write: CatalogWrite): Boolean =
+        remoteUuid == write.remoteUuid && linkGeneration == write.linkGeneration
+}
+
+/** A catalog row and the link, read before the fetch, it was fetched for. */
+data class CatalogWrite(val remoteUuid: String, val linkGeneration: Long, val row: BookMetadata?)

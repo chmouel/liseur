@@ -98,6 +98,9 @@ abstract class LiseurDatabase : RoomDatabase() {
                 connection.execSQL(
                     "ALTER TABLE `books` ADD COLUMN `file_metadata_checked` INTEGER NOT NULL DEFAULT 0",
                 )
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `link_generation` INTEGER NOT NULL DEFAULT 0",
+                )
             }
         }
 

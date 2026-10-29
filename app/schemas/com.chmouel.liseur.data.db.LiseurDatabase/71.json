@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 71,
-    "identityHash": "e3c8ad91a91c849c6b37444982268fea",
+    "identityHash": "ddff642d5b8b366faf60f281dfeffe03",
     "entities": [
       {
         "tableName": "reading_progress",
@@ -327,7 +327,7 @@
       },
       {
         "tableName": "books",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `url` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, `cover_path` TEXT, `source` TEXT, `added_at` INTEGER NOT NULL, `last_opened_at` INTEGER, `local_uri` TEXT, `remote_uuid` TEXT, `browse_server_id` INTEGER, `remote_book_id` INTEGER, `cover_url` TEXT, `download_href` TEXT, `download_state` TEXT NOT NULL, `remote_updated_at` INTEGER, `downloaded_at` INTEGER, `file_modified_at` INTEGER, `work_id` TEXT, `identity_author` TEXT, `finished_at` INTEGER, `archived_at` INTEGER, `remote_page_count` INTEGER, `size_bytes` INTEGER, `series_name` TEXT, `series_index` REAL, `file_series_name` TEXT, `file_series_index` REAL, `series_id` TEXT, `series_checked` INTEGER NOT NULL, `file_metadata_checked` INTEGER NOT NULL, `catalog_series_name` TEXT, `catalog_series_index` REAL, `catalog_folder_id` TEXT, `catalog_series_source` TEXT, `user_series_name` TEXT, `user_series_index` REAL, `series_override` INTEGER NOT NULL, `user_series_updated_at` INTEGER, `series_claim_pending` INTEGER NOT NULL, `series_claim_reset` INTEGER NOT NULL, `personal_series_updated_at` INTEGER, `series_index_override` INTEGER NOT NULL, `catalog_missing_since` INTEGER, `hidden_at` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `url` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, `cover_path` TEXT, `source` TEXT, `added_at` INTEGER NOT NULL, `last_opened_at` INTEGER, `local_uri` TEXT, `remote_uuid` TEXT, `link_generation` INTEGER NOT NULL, `browse_server_id` INTEGER, `remote_book_id` INTEGER, `cover_url` TEXT, `download_href` TEXT, `download_state` TEXT NOT NULL, `remote_updated_at` INTEGER, `downloaded_at` INTEGER, `file_modified_at` INTEGER, `work_id` TEXT, `identity_author` TEXT, `finished_at` INTEGER, `archived_at` INTEGER, `remote_page_count` INTEGER, `size_bytes` INTEGER, `series_name` TEXT, `series_index` REAL, `file_series_name` TEXT, `file_series_index` REAL, `series_id` TEXT, `series_checked` INTEGER NOT NULL, `file_metadata_checked` INTEGER NOT NULL, `catalog_series_name` TEXT, `catalog_series_index` REAL, `catalog_folder_id` TEXT, `catalog_series_source` TEXT, `user_series_name` TEXT, `user_series_index` REAL, `series_override` INTEGER NOT NULL, `user_series_updated_at` INTEGER, `series_claim_pending` INTEGER NOT NULL, `series_claim_reset` INTEGER NOT NULL, `personal_series_updated_at` INTEGER, `series_index_override` INTEGER NOT NULL, `catalog_missing_since` INTEGER, `hidden_at` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -382,6 +382,12 @@
             "fieldPath": "remoteUuid",
             "columnName": "remote_uuid",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "linkGeneration",
+            "columnName": "link_generation",
+            "affinity": "INTEGER",
+            "notNull": true
           },
           {
             "fieldPath": "browseServerId",
@@ -2752,7 +2758,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'e3c8ad91a91c849c6b37444982268fea')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ddff642d5b8b366faf60f281dfeffe03')"
     ]
   }
 }
