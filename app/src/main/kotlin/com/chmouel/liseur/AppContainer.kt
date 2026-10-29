@@ -970,6 +970,7 @@ class AppContainer(context: Context) {
         inTransaction = { work -> database.withTransaction { work() } },
         networkAvailability = networkAvailability,
         localNetwork = localNetwork,
+        metadataDao = database.bookMetadataDao(),
     )
 
     private val browseOrbitSessions = mutableMapOf<Long, com.chmouel.liseur.data.bookorbit.BookOrbitSession>()
@@ -1013,6 +1014,7 @@ class AppContainer(context: Context) {
             }
         },
         inTransaction = { work -> database.withTransaction { work() } },
+        metadata = database.bookMetadataDao(),
     )
 
     val seriesExtras = SeriesExtrasRepository(

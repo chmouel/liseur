@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.remote
 
+import com.chmouel.liseur.domain.MetadataSnapshot
+
 /**
  * A book as a server's catalog describes it.
  *
@@ -66,6 +68,14 @@ data class RemoteBook(
      * it again, and it is never an address of anything on the server.
      */
     val sha256: String? = null,
+    /**
+     * What the catalog says about the book beyond what a shelf needs,
+     * for the details screen (ADR-0016). The description is as the
+     * server sent it, markup and all; [catalogMetadataRow] makes it text.
+     */
+    val metadata: MetadataSnapshot? = null,
+    /** Whether that description is HTML, or null to look and decide. */
+    val descriptionHtml: Boolean? = null,
 )
 
 data class RemoteSeriesMembership(

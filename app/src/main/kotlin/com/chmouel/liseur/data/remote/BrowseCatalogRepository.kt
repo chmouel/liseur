@@ -6,6 +6,7 @@ import com.chmouel.liseur.data.calibre.CalibreUrl
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookMetadataDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.BookOrbitBindingDao
 import com.chmouel.liseur.data.db.RemoteServer
@@ -142,6 +143,7 @@ class BrowseCatalogRepository(
     private val orbitCatalog: (Long) -> BookOrbitCatalogClient,
     private val closeOrbit: suspend (RemoteServer) -> Unit = {},
     private val inTransaction: suspend (suspend () -> Unit) -> Unit,
+    private val metadata: BookMetadataDao? = null,
 ) {
     private val changing = Mutex()
     private val walks = BrowseWalkCache()
@@ -379,9 +381,11 @@ class BrowseCatalogRepository(
             val current = servers.get(serverId)
             if (current?.addedAt != server.addedAt || current.accountKey != server.accountKey) return@inTransaction
             val held = heldRemoteIds(server, candidates.map(RemoteBook::remoteId))
+            val described = LinkedHashMap<String, RemoteBook>()
             candidates.filter { it.remoteId !in held }.forEach { remote ->
                 val url = bookUrl(serverId, server.kind, remote.remoteId)
                 val existing = books.getByUrl(url)
+                described[url] = remote
                 if (existing == null) {
                     val merged = mergeCatalogEntry(
                         remote, null, url, address, System.currentTimeMillis(), server.kind,
@@ -394,6 +398,7 @@ class BrowseCatalogRepository(
                     added += book
                 }
             }
+            metadata?.storeCatalog(described)
         }
         added.forEach { downloads.enqueue(it, guardSpace = added.size > 1) }
         added.size

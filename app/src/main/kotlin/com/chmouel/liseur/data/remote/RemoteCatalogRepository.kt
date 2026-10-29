@@ -4,6 +4,7 @@ import android.util.Log
 import com.chmouel.liseur.data.NetworkAvailability
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookMetadataDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
@@ -97,6 +98,7 @@ class RemoteCatalogRepository(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val networkAvailability: NetworkAvailability = NetworkAvailability { true },
     private val localNetwork: LocalNetworkAccess = LocalNetworkAccess.Unrestricted,
+    private val metadataDao: BookMetadataDao? = null,
 ) {
     private val _status = MutableStateFlow<CatalogStatus>(CatalogStatus.Idle)
     val status: StateFlow<CatalogStatus> = _status.asStateFlow()
@@ -430,6 +432,7 @@ class RemoteCatalogRepository(
         // the same unique URL and being refused.
         val inserts = LinkedHashMap<String, Book>()
         val updates = mutableListOf<CatalogUpdate>()
+        val described = LinkedHashMap<String, RemoteBook>()
         books.forEach { remote ->
             val url = kind.remoteUrl(remote.remoteId)
             if (
@@ -467,6 +470,9 @@ class RemoteCatalogRepository(
                 catalogEntry
             }
             known.remember(merged)
+            // Before the equality check: a catalog that changed only a
+            // description changes nothing on the book row.
+            described[rowUrl] = remote
             // Nothing the catalog owns has moved, so writing the row back
             // would only tell the library to sort itself again.
             if (merged == existing) return@forEach
@@ -517,6 +523,7 @@ class RemoteCatalogRepository(
             )
         }
         if (inserts.isNotEmpty()) bookDao.upsertAll(inserts.values.toList())
+        metadataDao?.storeCatalog(described)
     }
 
     /**

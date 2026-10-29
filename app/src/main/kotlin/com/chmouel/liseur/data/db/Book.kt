@@ -6,6 +6,7 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -324,7 +325,25 @@ interface BookDao {
     suspend fun undownloadedFromBrowseServer(serverId: Long): List<Book>
 
     @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, cover_url = NULL WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
-    suspend fun unlinkDownloadedFromBrowseServer(serverId: Long)
+    suspend fun unlinkDownloadedFromBrowseServerRows(serverId: Long)
+
+    @Transaction
+    suspend fun unlinkDownloadedFromBrowseServer(serverId: Long) {
+        unlinkDownloadedFromBrowseServerRows(serverId)
+        forgetUnlinkedCatalogMetadata()
+    }
+
+    /**
+     * Drops what a catalog said about books no catalog is linked to any
+     * more (ADR-0016). Run by every unlink, so a book that stays on the
+     * device stops showing the description of a server entry it has
+     * been cut loose from.
+     */
+    @Query(
+        "DELETE FROM book_metadata WHERE source = 'catalog' " +
+            "AND book_url IN (SELECT url FROM books WHERE remote_uuid IS NULL)",
+    )
+    suspend fun forgetUnlinkedCatalogMetadata()
 
     /** Hands one saved-catalog book to another connection to the same account, keeping its URL. */
     @Query("UPDATE books SET browse_server_id = :serverId, cover_url = :coverUrl WHERE url = :url")
@@ -386,7 +405,13 @@ interface BookDao {
             "series_id = NULL " +
             "WHERE remote_uuid IS NOT NULL AND browse_server_id IS NULL",
     )
-    suspend fun unlinkDownloadedFromRemote()
+    suspend fun unlinkDownloadedFromRemoteRows()
+
+    @Transaction
+    suspend fun unlinkDownloadedFromRemote() {
+        unlinkDownloadedFromRemoteRows()
+        forgetUnlinkedCatalogMetadata()
+    }
 
     /**
      * The same, for named books: one that has gone from the catalog but
@@ -411,7 +436,13 @@ interface BookDao {
             "series_id = NULL " +
             "WHERE url IN (:urls)",
     )
-    suspend fun unlinkFromRemote(urls: List<String>)
+    suspend fun unlinkFromRemoteRows(urls: List<String>)
+
+    @Transaction
+    suspend fun unlinkFromRemote(urls: List<String>) {
+        unlinkFromRemoteRows(urls)
+        forgetUnlinkedCatalogMetadata()
+    }
 
     /**
      * Notes that a finished walk did not find these books.

@@ -242,6 +242,7 @@ class BookOrbitCatalogClient(
             seriesName = card.seriesName,
             seriesIndex = card.seriesIndex,
             seriesId = card.seriesId,
+            metadata = card.details(),
         )
         return CardResult(
             book = book,
