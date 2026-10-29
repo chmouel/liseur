@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
+import com.chmouel.liseur.domain.MetadataSource
 
 /**
  * Removes library books and their reading statistics as one database change.
@@ -36,6 +37,7 @@ class BookRemoval(
     private val uploadRefusalDao: com.chmouel.liseur.data.db.UploadRefusalDao? = null,
     private val aiPreferencesDao: com.chmouel.liseur.data.db.BookAiPreferencesDao? = null,
     private val glossaryDao: com.chmouel.liseur.data.db.GlossaryDao? = null,
+    private val metadataDao: com.chmouel.liseur.data.db.BookMetadataDao? = null,
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
@@ -81,6 +83,9 @@ class BookRemoval(
                     // *through* the folder loses its file along with it.
                     if (book.remoteUuid != null && book.localUri == null) {
                         bookDao.setDownloadState(book.url, DownloadState.REMOTE, null)
+                        // What was read from that file, and its hash,
+                        // left with it.
+                        forgetFile(book.url)
                     }
                 }
             folderDao.delete(folderUrl)
@@ -123,8 +128,28 @@ class BookRemoval(
     suspend fun downloadRemoved(bookUrl: String) {
         inTransaction {
             bookDao.setDownloadState(bookUrl, DownloadState.REMOTE, null)
-            identityDao.forgetFingerprints(listOf(bookUrl))
+            forgetFile(bookUrl)
         }
+    }
+
+    /**
+     * Stores what a file said about itself and marks the book as read
+     * for it, together, so a crash between the two cannot leave a book
+     * marked as read with nothing stored. A null [row] is a file that
+     * opened and declared nothing.
+     */
+    suspend fun fileMetadataRead(bookUrl: String, row: com.chmouel.liseur.data.db.BookMetadata?) {
+        val dao = metadataDao ?: return
+        inTransaction {
+            if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
+            bookDao.setFileMetadataChecked(bookUrl, true)
+        }
+    }
+
+    private suspend fun forgetFile(bookUrl: String) {
+        identityDao.forgetFingerprints(listOf(bookUrl))
+        metadataDao?.delete(bookUrl, MetadataSource.FILE.key)
+        bookDao.setFileMetadataChecked(bookUrl, false)
     }
 
     /**
@@ -202,6 +227,10 @@ class BookRemoval(
             uploadRefusalDao?.forgetBook(bookUrl)
             aiPreferencesDao?.forget(bookUrl)
             glossaryDao?.deleteBook(bookUrl)
+            // Both sources described the old book. The file row is
+            // written again by [then] from the new contents.
+            metadataDao?.forget(bookUrl)
+            bookDao.setFileMetadataChecked(bookUrl, false)
             if (removedSessions) remoteStatsDao?.clearAll()
             then()
         }

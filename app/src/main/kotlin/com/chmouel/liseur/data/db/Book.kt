@@ -542,6 +542,21 @@ interface BookDao {
     )
     suspend fun needingSeriesCheck(limit: Int): List<Book>
 
+    /** Books with a file on this device whose own metadata has not been read yet. */
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE file_metadata_checked = 0
+          AND (local_uri IS NOT NULL OR download_state = 'DOWNLOADED')
+        ORDER BY last_opened_at DESC, added_at DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun needingMetadataCheck(limit: Int): List<Book>
+
+    @Query("UPDATE books SET file_metadata_checked = :checked WHERE url = :url")
+    suspend fun setFileMetadataChecked(url: String, checked: Boolean)
+
     /**
      * Records what a file said about its series, or that it said
      * nothing.

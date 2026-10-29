@@ -986,7 +986,7 @@ class BookRemovalTest {
             val rows = children[parent] ?: return null
             val columns = projection ?: COLUMNS
             return MatrixCursor(columns).apply {
-                rows.forEach { row -> addRow(columns.map { row[COLUMNS.indexOf(it)] }) }
+                rows.forEach { row -> addRow(columns.map { row.getOrNull(COLUMNS.indexOf(it)) }) }
                 if (parent in loading) {
                     extras = Bundle().apply { putBoolean(DocumentsContract.EXTRA_LOADING, true) }
                 }

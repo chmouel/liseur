@@ -272,10 +272,54 @@ internal fun <T> mergeCapped(first: List<T>, second: List<T>, cap: Int, key: (T)
     return a.take(firstShare) + b.take(cap - firstShare)
 }
 
+/**
+ * The accessibility values Readium enumerates. Anything else is a claim
+ * the screen cannot explain, so it is dropped rather than shown.
+ */
+object AccessibilityValues {
+    val PROFILES = setOf(
+        "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-a",
+        "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aa",
+        "http://www.idpf.org/epub/a11y/accessibility-20170105.html#wcag-aaa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.0-a",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.0-aa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.0-aaa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.1-a",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.1-aa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.1-aaa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.2-a",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.2-aa",
+        "https://www.w3.org/TR/epub-a11y-11#wcag-2.2-aaa",
+    )
+    val ACCESS_MODES = setOf(
+        "auditory", "chartOnVisual", "chemOnVisual", "colorDependent", "diagramOnVisual",
+        "mathOnVisual", "musicOnVisual", "tactile", "textOnVisual", "textual", "visual",
+    )
+    val PRIMARY_ACCESS_MODES = setOf("auditory", "tactile", "textual", "visual")
+    val FEATURES = setOf(
+        "none", "annotations", "ARIA", "bookmark", "index", "pageBreakMarkers", "pageNavigation",
+        "printPageNumbers", "readingOrder", "structuralNavigation", "tableOfContents", "taggedPDF",
+        "alternativeText", "audioDescription", "captions", "closedCaptions", "describedMath",
+        "longDescription", "openCaptions", "signLanguage", "transcript", "displayTransformability",
+        "synchronizedAudioText", "timingControl", "unlocked", "ChemML", "latex", "latex-chemistry",
+        "MathML", "MathML-chemistry", "ttsMarkup", "highContrastAudio", "highContrastDisplay",
+        "largePrint", "braille", "tactileGraphic", "tactileObject", "fullRubyAnnotations",
+        "horizontalWriting", "rubyAnnotations", "verticalWriting", "withAdditionalWordSegmentation",
+        "withoutAdditionalWordSegmentation",
+    )
+    val HAZARDS = setOf(
+        "flashing", "noFlashingHazard", "unknownFlashingHazard", "motionSimulation",
+        "noMotionSimulationHazard", "unknownMotionSimulationHazard", "sound", "noSoundHazard",
+        "unknownSoundHazard", "unknown", "none",
+    )
+    val EXEMPTIONS = setOf("eaa-disproportionate-burden", "eaa-fundamental-alteration", "eaa-microenterprise")
+}
+
 private fun boundedAccessibility(a: BookAccessibility): BookAccessibility? {
     val b = BookDetailsBounds
-    fun list(values: List<String>) = values.map(String::trim)
-        .filter { it.isNotEmpty() && it.length <= b.A11Y_ENTRY }
+    val known = AccessibilityValues
+    fun list(values: List<String>, allowed: (String) -> Boolean) = values.map(String::trim)
+        .filter { it.isNotEmpty() && it.length <= b.A11Y_ENTRY && allowed(it) }
         .distinct()
         .take(b.A11Y_LIST)
 
@@ -283,12 +327,15 @@ private fun boundedAccessibility(a: BookAccessibility): BookAccessibility? {
         value?.let(::collapse)?.takeIf { it.isNotEmpty() }?.let { capCodePoints(it, limit) }
 
     return BookAccessibility(
-        conformsTo = list(a.conformsTo),
-        accessModes = list(a.accessModes),
-        accessModesSufficient = list(a.accessModesSufficient),
-        features = list(a.features),
-        hazards = list(a.hazards),
-        exemptions = list(a.exemptions),
+        // A profile is a URL, longer than the entry bound; the set is the bound.
+        conformsTo = a.conformsTo.map(String::trim).filter { it in known.PROFILES }.distinct(),
+        accessModes = list(a.accessModes) { it in known.ACCESS_MODES },
+        accessModesSufficient = list(a.accessModesSufficient) { set ->
+            set.split(',').all { it in known.PRIMARY_ACCESS_MODES }
+        },
+        features = list(a.features) { it in known.FEATURES },
+        hazards = list(a.hazards) { it in known.HAZARDS },
+        exemptions = list(a.exemptions) { it in known.EXEMPTIONS },
         summary = text(a.summary, b.A11Y_TEXT),
         certifiedBy = text(a.certifiedBy, b.NAME),
         certifierReport = text(a.certifierReport, b.A11Y_TEXT),
