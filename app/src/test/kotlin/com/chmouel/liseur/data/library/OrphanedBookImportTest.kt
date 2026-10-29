@@ -61,8 +61,12 @@ class OrphanedBookImportTest {
 
     private lateinit var db: LiseurDatabase
     private lateinit var library: LocalLibraryRepository
+    private lateinit var removal: BookRemoval
     private lateinit var retriever: AssetRetriever
     private lateinit var opener: PublicationOpener
+
+    /** Runs once, just before the next write transaction. */
+    private var meanwhile: (suspend () -> Unit)? = null
 
     @Before
     fun open() {
@@ -70,7 +74,7 @@ class OrphanedBookImportTest {
             ApplicationProvider.getApplicationContext(),
             LiseurDatabase::class.java,
         ).allowMainThreadQueries().build()
-        val removal = BookRemoval(
+        removal = BookRemoval(
             bookDao = db.bookDao(),
             sessionDao = db.readingSessionDao(),
             peerStateDao = db.syncPeerStateDao(),
@@ -78,7 +82,10 @@ class OrphanedBookImportTest {
             progressDao = db.readingProgressDao(),
             annotationDao = db.annotationDao(),
             annotationSyncDao = db.annotationSyncDao(),
-            inTransaction = { work -> db.withTransaction { work() } },
+            inTransaction = { work ->
+                meanwhile?.also { meanwhile = null }?.invoke()
+                db.withTransaction { work() }
+            },
             metadataDao = db.bookMetadataDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -159,6 +166,25 @@ class OrphanedBookImportTest {
         assertEquals(fileUrl, fresh?.localUri)
         assertNull(fresh?.remoteUuid)
         assertNull(db.readingProgressDao().get(fileUrl))
+    }
+
+    @Test
+    fun `a download that lands while an orphan's file is read keeps the book as it is`() = runTest {
+        val epub = folder.newFile("late.epub").also { writeEpub(it) }
+        val fileUrl = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(orphan(fileUrl).copy(workId = "the-old-work"))
+        db.readingProgressDao().upsert(progress(fileUrl))
+        meanwhile = { removal.downloadArrived(fileUrl, "file:///downloaded.epub", downloadedAt = 5, fileModifiedAt = null) }
+
+        val result = library.importBook(Uri.fromFile(epub))
+
+        // The download got there first: the picked file was not adopted.
+        assertTrue(result is ImportResult.AlreadyShelved)
+        val kept = db.bookDao().getByUrl(fileUrl)!!
+        assertEquals("file:///downloaded.epub", kept.localUri)
+        assertEquals("remote", kept.remoteUuid)
+        assertEquals("the-old-work", kept.workId)
+        assertNotNull(db.readingProgressDao().get(fileUrl))
     }
 
     @Test
