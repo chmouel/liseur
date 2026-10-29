@@ -283,7 +283,8 @@ download's series and cover are written under the same check, the
 cover drawn to a staging file and moved into place only then. Removing a book's file resets
 `file_metadata_checked`, so the next pass looks again. A folder added
 back with an unchanged file reads that file's snapshot during the scan
-that re-adopts it, rather than waiting for the next launch.
+that re-adopts it, whether it finds the row under the same URL or
+another spelling of it, rather than waiting for the next launch.
 
 The catalog snapshot is written by `RemoteCatalogRepository`, in the
 same transaction as the book row it came with, and replaced whole. An
@@ -300,9 +301,12 @@ The refresh reads which books it knows before the network walk, so the
 write checks again, in its own transaction, that each book is still
 linked to the server id its entry was read for (`remote_uuid`) and
 skips any that was cut loose or linked to another copy meanwhile. The
-book row's catalog update likewise applies only while `remote_uuid` is
-still what the walk read, so a book whose content was replaced
-mid-walk is not linked back to the server copy it was cut loose from.
+same id can come back after an unlink, so every unlink also bumps
+`books.link_generation`, and the write requires that unchanged as well.
+The book row's catalog update likewise applies only while `remote_uuid`
+and `link_generation` are still what the walk read, so a book whose
+content was replaced mid-walk is not linked back to the server copy it
+was cut loose from.
 
 The catalog row exists only while the book is linked to a server. Every
 path that unlinks a book and keeps it (a catalog prune of a downloaded

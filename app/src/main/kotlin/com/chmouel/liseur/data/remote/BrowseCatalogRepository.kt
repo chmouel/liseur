@@ -381,11 +381,11 @@ class BrowseCatalogRepository(
             val current = servers.get(serverId)
             if (current?.addedAt != server.addedAt || current.accountKey != server.accountKey) return@inTransaction
             val held = heldRemoteIds(server, candidates.map(RemoteBook::remoteId))
-            val described = LinkedHashMap<String, RemoteBook>()
+            val described = LinkedHashMap<String, CatalogRead>()
             candidates.filter { it.remoteId !in held }.forEach { remote ->
                 val url = bookUrl(serverId, server.kind, remote.remoteId)
                 val existing = books.getByUrl(url)
-                described[url] = remote
+                described[url] = CatalogRead(remote, existing?.linkGeneration ?: 0)
                 if (existing == null) {
                     val merged = mergeCatalogEntry(
                         remote, null, url, address, System.currentTimeMillis(), server.kind,

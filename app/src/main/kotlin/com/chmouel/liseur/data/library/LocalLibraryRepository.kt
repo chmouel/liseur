@@ -811,6 +811,8 @@ class LocalLibraryRepository(
                             previousIdentityAuthor = alias.identityAuthor,
                             sizeBytes = file.sizeBytes,
                         )
+                    } else if (alias.source == null && !alias.fileMetadataChecked) {
+                        readFileMetadata(alias.url, url, file.sizeBytes)
                     }
                 }
                 else -> indexBook(url, source = treeUri.toString(), file.modifiedAt, file.sizeBytes)

@@ -59,6 +59,13 @@ data class Book(
      */
     @ColumnInfo(name = "local_uri") val localUri: String? = null,
     @ColumnInfo(name = "remote_uuid") val remoteUuid: String? = null,
+    /**
+     * Counts the times [remoteUuid] was cleared. A catalog refresh reads
+     * it before the network wait and writes only if it has not moved, so
+     * a book unlinked and then linked back to the same id meanwhile is
+     * not handed the older response.
+     */
+    @ColumnInfo(name = "link_generation") val linkGeneration: Long = 0,
     /** Saved browse connection that supplied this book; null for the main server and local files. */
     @ColumnInfo(name = "browse_server_id") val browseServerId: Long? = null,
     @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,
@@ -327,7 +334,9 @@ interface BookDao {
     @Query("SELECT * FROM books WHERE browse_server_id = :serverId AND local_uri IS NULL")
     suspend fun undownloadedFromBrowseServer(serverId: Long): List<Book>
 
-    @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, cover_url = NULL WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
+    @Query("UPDATE books SET remote_uuid = NULL, download_href = NULL, cover_url = NULL, " +
+            "link_generation = link_generation + 1 " +
+            "WHERE browse_server_id = :serverId AND local_uri IS NOT NULL")
     suspend fun unlinkDownloadedFromBrowseServerRows(serverId: Long)
 
     @Transaction
@@ -392,6 +401,7 @@ interface BookDao {
      */
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
+            "link_generation = link_generation + 1, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
@@ -423,6 +433,7 @@ interface BookDao {
      */
     @Query(
         "UPDATE books SET remote_uuid = NULL, remote_book_id = NULL, cover_url = NULL, " +
+            "link_generation = link_generation + 1, " +
             "download_href = NULL, remote_updated_at = NULL, remote_page_count = NULL, " +
             "catalog_series_name = NULL, catalog_series_index = NULL, " +
             "catalog_folder_id = NULL, catalog_series_source = NULL, " +
@@ -963,6 +974,7 @@ interface BookDao {
         WHERE url = :url
             AND browse_server_id IS :expectedBrowseServerId
             AND remote_uuid IS :expectedRemoteUuid
+            AND link_generation = :expectedLinkGeneration
         """,
     )
     suspend fun updateCatalogFields(
@@ -989,6 +1001,7 @@ interface BookDao {
         personalSeriesUpdatedAt: Long? = null,
         sizeBytes: Long? = null,
         expectedRemoteUuid: String?,
+        expectedLinkGeneration: Long,
         expectedBrowseServerId: Long? = null,
         promoteBrowse: Boolean = false,
     )

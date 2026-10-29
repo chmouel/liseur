@@ -301,10 +301,31 @@ class RemoteCatalogRepositoryTest {
         val url = db.bookDao().allOnce().single().url
         db.bookDao().unlinkFromRemote(listOf(url))
 
-        db.bookMetadataDao().storeCatalog(mapOf(url to described("b1", "Stale")))
+        db.bookMetadataDao().storeCatalog(mapOf(url to CatalogRead(described("b1", "Stale"), 0)))
 
         assertNull(catalogRow(url))
     }
+
+    @Test
+    fun `a catalog page read before the book was unlinked and linked back does not overwrite the new details`() =
+        runTest {
+            connect()
+            repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()
+            val url = db.bookDao().allOnce().single().url
+
+            // Cut loose and linked back to the same server copy, whose
+            // newer details land, all while the old page was on its way.
+            repository(
+                FakeCatalog { onPage ->
+                    db.bookDao().unlinkFromRemote(listOf(url))
+                    repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Fresh"))) }).refresh()
+                    onPage(listOf(described("b1", "Stale").copy(title = "Renamed long ago")))
+                },
+            ).refresh()
+
+            assertEquals("Fresh", catalogRow(url)?.description)
+            assertEquals("b1", db.bookDao().getByUrl(url)?.title)
+        }
 
     @Test
     fun `a book replaced while its page was in flight is not linked back to the server copy`() = runTest {

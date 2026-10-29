@@ -106,6 +106,7 @@ class SeriesMetadataDaoTest {
             expectedUserSeriesUpdatedAt = 20,
             seriesId = "stale-series-id",
             expectedRemoteUuid = "remote-id",
+            expectedLinkGeneration = 0,
         )
 
         val book = db.bookDao().getByUrl(BOOK_URL)
@@ -471,6 +472,7 @@ class SeriesMetadataDaoTest {
             expectedUserSeriesUpdatedAt = existing?.userSeriesUpdatedAt,
             seriesId = null,
             expectedRemoteUuid = existing?.remoteUuid,
+            expectedLinkGeneration = existing?.linkGeneration ?: 0,
         )
     }
 
