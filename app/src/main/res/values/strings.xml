@@ -1801,6 +1801,17 @@
     <string name="book_details_a11y_hazard_flashing">Flashing</string>
     <string name="book_details_a11y_hazard_motion">Motion simulation</string>
     <string name="book_details_a11y_hazard_sound">Sound</string>
+    <string name="book_details_a11y_modes">Content</string>
+    <string name="book_details_a11y_sufficient">Readable with</string>
+    <string name="book_details_a11y_mode_textual">Text</string>
+    <string name="book_details_a11y_mode_visual">Images</string>
+    <string name="book_details_a11y_mode_auditory">Audio</string>
+    <string name="book_details_a11y_mode_tactile">Braille or touch</string>
+    <string name="book_details_a11y_exemption">Exemption claimed</string>
+    <string name="book_details_a11y_exemption_burden">Disproportionate burden</string>
+    <string name="book_details_a11y_exemption_alteration">Fundamental alteration</string>
+    <string name="book_details_a11y_exemption_micro">Microenterprise</string>
+    <string name="book_details_a11y_certifier_report">Certifier report</string>
     <string name="book_details_format">Format</string>
     <string name="book_details_size">Size</string>
     <string name="book_details_server_size">Size on the server</string>

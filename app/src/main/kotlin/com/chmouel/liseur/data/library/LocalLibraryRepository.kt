@@ -752,6 +752,11 @@ class LocalLibraryRepository(
                             previousIdentityAuthor = existing.identityAuthor,
                             sizeBytes = file.sizeBytes,
                         )
+                    } else if (existing.source == null && !existing.fileMetadataChecked) {
+                        // Removing the folder dropped what the file said
+                        // about itself. The same file is back, so read it
+                        // now rather than on the next launch.
+                        readFileMetadata(urlText, url, file.sizeBytes)
                     }
                 }
                 // The file is on the shelf already, under the name the
@@ -1008,7 +1013,10 @@ class LocalLibraryRepository(
                 Log.i(TAG, "A different book took over a path; starting it fresh")
                 bookRemoval.contentReplaced(bookUrl, then = write)
             } else {
-                write()
+                // Together, or a crash between the two leaves the new
+                // modification time beside the old file's details, and
+                // nothing would read the file again.
+                bookRemoval.together(write)
             }
             return true
         } finally {
@@ -1223,7 +1231,7 @@ class LocalLibraryRepository(
         }
     }
 
-    private suspend fun readFileMetadata(bookUrl: String, fileUrl: AbsoluteUrl): Boolean {
+    private suspend fun readFileMetadata(bookUrl: String, fileUrl: AbsoluteUrl, sizeBytes: Long? = null): Boolean {
         val asset = assetRetriever.retrieve(fileUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
             .getOrElse {
@@ -1231,7 +1239,7 @@ class LocalLibraryRepository(
                 return false
             }
         return try {
-            bookRemoval.fileMetadataRead(bookUrl, fileMetadataRow(bookUrl, publication, fileUrl, null))
+            bookRemoval.fileMetadataRead(bookUrl, fileMetadataRow(bookUrl, publication, fileUrl, sizeBytes))
             true
         } finally {
             publication.close()

@@ -1732,6 +1732,17 @@
     <string name="book_details_a11y_hazard_flashing">Clignotements</string>
     <string name="book_details_a11y_hazard_motion">Simulation de mouvement</string>
     <string name="book_details_a11y_hazard_sound">Son</string>
+    <string name="book_details_a11y_modes">Contenu</string>
+    <string name="book_details_a11y_sufficient">Lisible avec</string>
+    <string name="book_details_a11y_mode_textual">Texte</string>
+    <string name="book_details_a11y_mode_visual">Images</string>
+    <string name="book_details_a11y_mode_auditory">Audio</string>
+    <string name="book_details_a11y_mode_tactile">Braille ou toucher</string>
+    <string name="book_details_a11y_exemption">Exemption invoquée</string>
+    <string name="book_details_a11y_exemption_burden">Charge disproportionnée</string>
+    <string name="book_details_a11y_exemption_alteration">Modification fondamentale</string>
+    <string name="book_details_a11y_exemption_micro">Microentreprise</string>
+    <string name="book_details_a11y_certifier_report">Rapport de certification</string>
     <string name="book_details_format">Format</string>
     <string name="book_details_size">Taille</string>
     <string name="book_details_server_size">Taille sur le serveur</string>

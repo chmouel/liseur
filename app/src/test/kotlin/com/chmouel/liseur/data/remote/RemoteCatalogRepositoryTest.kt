@@ -288,6 +288,25 @@ class RemoteCatalogRepositoryTest {
     }
 
     @Test
+    fun `a page count reported beside the details is kept with them`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1").copy(pageCount = 320))) }).refresh()
+        assertEquals(320, catalogRow(db.bookDao().allOnce().single().url)?.pageCount)
+    }
+
+    @Test
+    fun `a catalog page read before the book was unlinked does not put its details back`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+        db.bookDao().unlinkFromRemote(listOf(url))
+
+        db.bookMetadataDao().storeCatalog(mapOf(url to described("b1", "Stale")))
+
+        assertNull(catalogRow(url))
+    }
+
+    @Test
     fun `a book cut loose from the catalog keeps its own details and loses the catalog's`() = runTest {
         connect()
         repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()

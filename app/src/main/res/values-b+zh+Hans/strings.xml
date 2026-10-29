@@ -1679,6 +1679,17 @@
     <string name="book_details_a11y_hazard_flashing">闪烁</string>
     <string name="book_details_a11y_hazard_motion">运动模拟</string>
     <string name="book_details_a11y_hazard_sound">声音</string>
+    <string name="book_details_a11y_modes">内容</string>
+    <string name="book_details_a11y_sufficient">可通过以下方式阅读</string>
+    <string name="book_details_a11y_mode_textual">文本</string>
+    <string name="book_details_a11y_mode_visual">图像</string>
+    <string name="book_details_a11y_mode_auditory">音频</string>
+    <string name="book_details_a11y_mode_tactile">盲文或触觉</string>
+    <string name="book_details_a11y_exemption">已声明豁免</string>
+    <string name="book_details_a11y_exemption_burden">不成比例的负担</string>
+    <string name="book_details_a11y_exemption_alteration">根本性改变</string>
+    <string name="book_details_a11y_exemption_micro">微型企业</string>
+    <string name="book_details_a11y_certifier_report">认证报告</string>
     <string name="book_details_format">格式</string>
     <string name="book_details_size">大小</string>
     <string name="book_details_server_size">服务器上的大小</string>
