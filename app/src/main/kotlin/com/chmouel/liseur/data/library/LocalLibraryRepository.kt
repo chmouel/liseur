@@ -958,7 +958,8 @@ class LocalLibraryRepository(
      * describes anything that is still there, so it goes.
      *
      * Returns whether the file could be read at all; nothing is written
-     * when it could not.
+     * when it could not. A restore through [adopt] also returns false
+     * when the book gained a file before it could be adopted.
      */
     private suspend fun reindexBook(
         openableUrl: AbsoluteUrl,
@@ -971,7 +972,9 @@ class LocalLibraryRepository(
         adopt: AbsoluteUrl? = null,
     ): Boolean {
         val before = bookDao.getByUrl(bookUrl)
-        val fileBefore = before?.openableUrl
+        // Adopting is for the book with no file its caller found. A
+        // download that lands any time before the write keeps the book.
+        val fileBefore = if (adopt != null) null else before?.openableUrl
         val downloadedAt = before?.downloadedAt
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
         val publication = publicationOpener.open(asset, allowUserInteraction = false)
@@ -1027,13 +1030,13 @@ class LocalLibraryRepository(
                 // A restored file is adopted in the same write as its
                 // details, so the read is not refused for a book that
                 // has no file yet.
-                val adopted = adopt != null && fileBefore == null
-                if (adopted) bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
-                bookRemoval.fileMetadataRead(bookUrl, metadataRow, if (adopted) null else downloadedAt)
+                if (adopt != null) bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
+                bookRemoval.fileMetadataRead(bookUrl, metadataRow, if (adopt != null) null else downloadedAt)
             }
             // Together, or a crash between the two leaves the new
             // modification time beside the old file's details, and
             // nothing would read the file again.
+            var written = false
             bookRemoval.together {
                 // A book removed, or whose file was removed or replaced,
                 // while this one was being read is left alone: what was
@@ -1043,6 +1046,7 @@ class LocalLibraryRepository(
                 if (now == null || now.openableUrl != fileBefore || now.downloadedAt != downloadedAt) {
                     return@together
                 }
+                written = true
                 // Cleanup first, then the new description: the old
                 // work's state goes and the new file's fields are
                 // written over what is left, so nothing cleared for the
@@ -1054,7 +1058,8 @@ class LocalLibraryRepository(
                     write()
                 }
             }
-            return true
+            // A restore that wrote nothing adopted nothing either.
+            return written || adopt == null
         } finally {
             staged.delete()
             publication.close()
