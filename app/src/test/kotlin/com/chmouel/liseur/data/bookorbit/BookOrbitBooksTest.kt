@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.bookorbit
 
+import com.chmouel.liseur.domain.Contributor
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -42,6 +43,7 @@ class BookOrbitBooksTest {
         assertEquals("reading", parsed.readStatus!!.status)
         assertEquals("fr", parsed.language)
         assertTrue(parsed.hasCover)
+        assertEquals(listOf(Contributor("author", "Damasio,Alain")), parsed.details().contributors)
     }
 
     @Test

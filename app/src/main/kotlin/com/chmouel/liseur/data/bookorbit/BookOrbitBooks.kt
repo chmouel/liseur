@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.bookorbit
 
 import org.json.JSONObject
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.identifierOf
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
@@ -69,9 +71,11 @@ data class BookOrbitCard(
     val publisher: String?,
     val isbn13: String?,
     val hasCover: Boolean,
+    val authors: List<String> = emptyList(),
 ) {
     /** The descriptive fields the card carries, for the details screen. */
     fun details(): MetadataSnapshot = MetadataSnapshot(
+        contributors = authors.map { Contributor(ContributorRoles.AUTHOR, it) },
         publishers = listOfNotNull(publisher),
         languages = listOfNotNull(language),
         identifiers = listOfNotNull(identifierOf(isbn13, "isbn")),
@@ -137,6 +141,7 @@ object BookOrbitBooks {
             publisher = json.stringOrNull("publisher"),
             isbn13 = json.stringOrNull("isbn13"),
             hasCover = json.booleanOrNull("hasCover") ?: false,
+            authors = authors,
         )
     }
 
