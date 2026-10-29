@@ -295,10 +295,12 @@ private fun BookActions(
                 ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
                 Text(
                     stringResource(
-                        when {
-                            book.finished -> R.string.book_details_read_again
-                            (details.progression ?: 0.0) > 0.0 -> R.string.continue_reading
-                            else -> R.string.book_details_read
+                        // A finished book opens where it was left, so it
+                        // is not offered as a fresh start.
+                        if (!book.finished && (details.progression ?: 0.0) > 0.0) {
+                            R.string.continue_reading
+                        } else {
+                            R.string.book_details_read
                         },
                     ),
                 )

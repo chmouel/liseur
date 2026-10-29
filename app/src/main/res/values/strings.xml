@@ -1822,7 +1822,6 @@
     <string name="book_details_archived_on">Archived on %1$s</string>
     <string name="book_details_annotations">Highlights and notes</string>
     <string name="book_details_read">Read</string>
-    <string name="book_details_read_again">Read again</string>
     <string name="book_details_retry_download">Retry download</string>
     <string name="book_details_file_info">File info</string>
     <string name="book_details_read_more">Read more</string>

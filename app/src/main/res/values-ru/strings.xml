@@ -1861,7 +1861,6 @@
     <string name="book_details_archived_on">В архиве с %1$s</string>
     <string name="book_details_annotations">Выделения и заметки</string>
     <string name="book_details_read">Читать</string>
-    <string name="book_details_read_again">Читать снова</string>
     <string name="book_details_retry_download">Повторить загрузку</string>
     <string name="book_details_file_info">О файле</string>
     <string name="book_details_read_more">Читать дальше</string>
