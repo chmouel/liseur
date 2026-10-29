@@ -296,6 +296,8 @@ class OpdsCatalogClient(
             updatedAt = updatedAt,
             seriesName = seriesName,
             seriesIndex = seriesIndex,
+            metadata = metadata,
+            descriptionHtml = descriptionHtml,
         )
     }
 
