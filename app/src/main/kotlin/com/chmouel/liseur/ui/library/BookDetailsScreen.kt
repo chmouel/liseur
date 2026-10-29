@@ -49,6 +49,7 @@ import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
+import com.chmouel.liseur.domain.validSeriesPosition
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.settings.labelRes
@@ -164,7 +165,7 @@ private fun BookBand(details: BookDetails) {
         byRole[role]?.let { Field(stringResource(label), it.joinToString(", ")) }
     }
     book.seriesName?.takeIf { it.isNotBlank() }?.let { series ->
-        val index = seriesIndexLabel(book.seriesIndex)
+        val index = seriesIndexLabel(validSeriesPosition(book.seriesIndex))
         Field(
             stringResource(R.string.book_details_series),
             if (index == null) series else stringResource(R.string.series_position, series, index),
@@ -190,7 +191,7 @@ private fun AboutBand(details: BookDetails) {
 private fun PublicationBand(details: BookDetails) {
     val meta = details.metadata
     val locale = currentLocale()
-    val a11y = meta.accessibility
+    val a11y = meta.accessibility?.let(::accessibilityView)?.takeUnless { it.isEmpty }
     if (meta.publishers.isEmpty() && meta.imprints.isEmpty() && meta.published == null && meta.languages.isEmpty() &&
         meta.identifiers.isEmpty() && meta.pageCount == null && a11y == null
     ) {
@@ -225,45 +226,92 @@ private fun PublicationBand(details: BookDetails) {
     }
 }
 
+/**
+ * What the screen draws of an accessibility record, worked out once so
+ * the band is shown exactly when one of these lines is.
+ */
+internal data class AccessibilityView(
+    val conformance: List<Pair<String, String>> = emptyList(),
+    val features: List<Int> = emptyList(),
+    val hazards: List<Int> = emptyList(),
+    val noHazards: Boolean = false,
+    val modes: List<Int> = emptyList(),
+    val sufficient: List<List<Int>> = emptyList(),
+    val exemptions: List<Int> = emptyList(),
+    val summary: String? = null,
+    val certifiedBy: String? = null,
+    val certifierReport: String? = null,
+) {
+    val isEmpty: Boolean
+        get() = this == AccessibilityView()
+}
+
+internal fun accessibilityView(a11y: BookAccessibility): AccessibilityView {
+    val hazards = HAZARD_LABELS.filterKeys { it in a11y.hazards }.values.toList()
+    return AccessibilityView(
+        conformance = a11y.conformsTo.mapNotNull(::wcagConformance).distinct(),
+        features = FEATURE_LABELS.filterKeys { it in a11y.features }.values.distinct(),
+        hazards = hazards,
+        noHazards = hazards.isEmpty() &&
+            ("none" in a11y.hazards ||
+                a11y.hazards.containsAll(listOf("noFlashingHazard", "noMotionSimulationHazard", "noSoundHazard"))),
+        modes = MODE_LABELS.filterKeys { it in a11y.accessModes }.values.toList(),
+        sufficient = a11y.accessModesSufficient
+            .map { set -> set.split(',').mapNotNull { MODE_LABELS[it] } }
+            .filter { it.isNotEmpty() }
+            .distinct(),
+        exemptions = EXEMPTION_LABELS.filterKeys { it in a11y.exemptions }.values.toList(),
+        summary = a11y.summary,
+        certifiedBy = a11y.certifiedBy,
+        certifierReport = a11y.certifierReport,
+    )
+}
+
 @Composable
-private fun AccessibilityFields(a11y: BookAccessibility) {
-    val conformance = a11y.conformsTo.mapNotNull(::wcagConformance).distinct()
-    val features = FEATURE_LABELS.filterKeys { it in a11y.features }.values.distinct()
-    val hazards = HAZARD_LABELS.filterKeys { it in a11y.hazards }.values
-    val noHazards = hazards.isEmpty() &&
-        ("none" in a11y.hazards || a11y.hazards.containsAll(listOf("noFlashingHazard", "noMotionSimulationHazard", "noSoundHazard")))
-    if (conformance.isEmpty() && features.isEmpty() && hazards.isEmpty() && !noHazards &&
-        a11y.summary == null && a11y.certifiedBy == null
-    ) {
-        return
-    }
+private fun AccessibilityFields(view: AccessibilityView) {
     Text(
         stringResource(R.string.book_details_accessibility),
         style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.padding(top = 12.dp, bottom = 2.dp).semantics { heading() },
     )
-    if (conformance.isNotEmpty()) {
+    if (view.conformance.isNotEmpty()) {
         Field(
             stringResource(R.string.book_details_a11y_conforms),
-            conformance.map { (version, level) -> stringResource(R.string.book_details_a11y_wcag, version, level) }
+            view.conformance.map { (version, level) -> stringResource(R.string.book_details_a11y_wcag, version, level) }
                 .joinToString("\n"),
         )
     }
-    if (features.isNotEmpty()) {
-        Field(stringResource(R.string.book_details_a11y_features), features.map { stringResource(it) }.joinToString(", "))
+    if (view.modes.isNotEmpty()) {
+        Field(stringResource(R.string.book_details_a11y_modes), view.modes.map { stringResource(it) }.joinToString(", "))
     }
-    if (hazards.isNotEmpty() || noHazards) {
+    if (view.sufficient.isNotEmpty()) {
+        Field(
+            stringResource(R.string.book_details_a11y_sufficient),
+            view.sufficient.map { set -> set.map { stringResource(it) }.joinToString(" + ") }.joinToString("\n"),
+        )
+    }
+    if (view.features.isNotEmpty()) {
+        Field(stringResource(R.string.book_details_a11y_features), view.features.map { stringResource(it) }.joinToString(", "))
+    }
+    if (view.hazards.isNotEmpty() || view.noHazards) {
         Field(
             stringResource(R.string.book_details_a11y_hazards),
-            if (noHazards) {
+            if (view.noHazards) {
                 stringResource(R.string.book_details_a11y_no_hazards)
             } else {
-                hazards.map { stringResource(it) }.joinToString(", ")
+                view.hazards.map { stringResource(it) }.joinToString(", ")
             },
         )
     }
-    a11y.summary?.let { Field(stringResource(R.string.book_details_a11y_summary), it) }
-    a11y.certifiedBy?.let { Field(stringResource(R.string.book_details_a11y_certified_by), it) }
+    if (view.exemptions.isNotEmpty()) {
+        Field(
+            stringResource(R.string.book_details_a11y_exemption),
+            view.exemptions.map { stringResource(it) }.joinToString(", "),
+        )
+    }
+    view.summary?.let { Field(stringResource(R.string.book_details_a11y_summary), it) }
+    view.certifiedBy?.let { Field(stringResource(R.string.book_details_a11y_certified_by), it) }
+    view.certifierReport?.let { Field(stringResource(R.string.book_details_a11y_certifier_report), it, code = true) }
 }
 
 @Composable
@@ -442,6 +490,19 @@ private val FEATURE_LABELS = linkedMapOf(
     "pageNavigation" to R.string.book_details_a11y_feature_page_numbers,
     "displayTransformability" to R.string.book_details_a11y_feature_display,
     "synchronizedAudioText" to R.string.book_details_a11y_feature_audio,
+)
+
+private val MODE_LABELS = linkedMapOf(
+    "textual" to R.string.book_details_a11y_mode_textual,
+    "visual" to R.string.book_details_a11y_mode_visual,
+    "auditory" to R.string.book_details_a11y_mode_auditory,
+    "tactile" to R.string.book_details_a11y_mode_tactile,
+)
+
+private val EXEMPTION_LABELS = linkedMapOf(
+    "eaa-disproportionate-burden" to R.string.book_details_a11y_exemption_burden,
+    "eaa-fundamental-alteration" to R.string.book_details_a11y_exemption_alteration,
+    "eaa-microenterprise" to R.string.book_details_a11y_exemption_micro,
 )
 
 private val HAZARD_LABELS = linkedMapOf(

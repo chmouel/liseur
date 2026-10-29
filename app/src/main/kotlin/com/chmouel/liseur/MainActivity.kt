@@ -482,6 +482,7 @@ private fun LiseurApp(
                         val target = route
                         val model: BookDetailsViewModel = viewModel(factory = BookDetailsViewModel.factory())
                         val stats: ReadingStatsViewModel = viewModel(factory = ReadingStatsViewModel.factory())
+                        LiveStatsEffect(stats)
                         val detailsState by remember(model, target.bookUrl) { model.details(target.bookUrl) }
                             .collectAsStateWithLifecycle()
                         val serverInsights by remember(stats, target.bookUrl) {

@@ -147,6 +147,18 @@ class FileMetadataIndexTest {
     }
 
     @Test
+    fun `a file read that finishes after its download was removed stores nothing`() = runTest {
+        val url = "calibre:1"
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = "file:///x.epub"))
+        removal.downloadRemoved(url)
+
+        removal.fileMetadataRead(url, BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(subtitle = "S")))
+
+        assertFalse(db.bookDao().getByUrl(url)!!.fileMetadataChecked)
+        assertTrue(db.bookMetadataDao().forBook(url).isEmpty())
+    }
+
+    @Test
     fun `a different book at the same path drops both sources of the old one`() = runTest {
         val url = "file:///shelf/a.epub"
         db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED))

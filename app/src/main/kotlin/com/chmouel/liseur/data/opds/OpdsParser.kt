@@ -626,15 +626,19 @@ object OpdsParser {
      * `<content>` block.
      *
      * Atom types the text as `text`, `html` or `xhtml`, and anything else
-     * is not guessed at. In an xhtml `<content>` only what is nested in
-     * an element counts: calibre-web writes its rating, tags and series
-     * as bare lines in the same block, and the blurb in a paragraph after
-     * them (see [directText]). calibre-web escapes the blurb's own HTML
-     * into that paragraph, so xhtml text is left to be checked for markup.
+     * is not guessed at. calibre-web writes its rating, tags and series
+     * as bare lines in an xhtml `<content>`, and the blurb in a paragraph
+     * after them (see [directText]), so in a block carrying those lines
+     * only what is nested in an element counts. Any other feed's block is
+     * read whole, text written straight into its `<div>` included.
+     * calibre-web escapes the blurb's own HTML into that paragraph, so
+     * xhtml text is left to be checked for markup.
      */
     private fun parseDescription(entry: Element): OpdsDescription? =
         entry.children("summary").firstNotNullOfOrNull { typedText(it, nestedOnly = false) }
-            ?: entry.children("content").firstNotNullOfOrNull { typedText(it, nestedOnly = true) }
+            ?: entry.children("content").firstNotNullOfOrNull { content ->
+                typedText(content, nestedOnly = directText(content).lineSequence().any { CALIBRE_LINE.matches(it.trim()) })
+            }
 
     private fun typedText(element: Element, nestedOnly: Boolean): OpdsDescription? {
         val description = when (element.getAttribute("type").trim().lowercase().ifEmpty { "text" }) {
@@ -680,6 +684,9 @@ object OpdsParser {
         walk(element, top = true)
         return out.toString().replace(BLANK_RUN, "\n\n").trim()
     }
+
+    /** The labelled lines calibre-web's feed template writes before the blurb. */
+    private val CALIBRE_LINE = Regex("""(RATING|TAGS|SERIES)\s*:.*""")
 
     private val WHITESPACE = Regex("""\s+""")
     private val BLANK_RUN = Regex("""\s*\n\s*\n\s*""")

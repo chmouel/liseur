@@ -1840,6 +1840,17 @@
     <string name="book_details_a11y_hazard_flashing">Мигание</string>
     <string name="book_details_a11y_hazard_motion">Имитация движения</string>
     <string name="book_details_a11y_hazard_sound">Звук</string>
+    <string name="book_details_a11y_modes">Содержимое</string>
+    <string name="book_details_a11y_sufficient">Можно читать через</string>
+    <string name="book_details_a11y_mode_textual">Текст</string>
+    <string name="book_details_a11y_mode_visual">Изображения</string>
+    <string name="book_details_a11y_mode_auditory">Аудио</string>
+    <string name="book_details_a11y_mode_tactile">Брайль или осязание</string>
+    <string name="book_details_a11y_exemption">Заявлено исключение</string>
+    <string name="book_details_a11y_exemption_burden">Несоразмерная нагрузка</string>
+    <string name="book_details_a11y_exemption_alteration">Существенное изменение</string>
+    <string name="book_details_a11y_exemption_micro">Микропредприятие</string>
+    <string name="book_details_a11y_certifier_report">Отчёт о сертификации</string>
     <string name="book_details_format">Формат</string>
     <string name="book_details_size">Размер</string>
     <string name="book_details_server_size">Размер на сервере</string>

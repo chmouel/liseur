@@ -79,7 +79,7 @@ class BookDetailsViewModel(
         }
         val reading = combine(
             progressDao.observeTotalProgression(bookUrl),
-            annotationDao.observeCount(bookUrl),
+            annotationDao.observeMarkCount(bookUrl),
             identityDao.observeFingerprint(bookUrl),
             ::Triple,
         )

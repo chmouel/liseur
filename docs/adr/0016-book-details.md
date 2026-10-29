@@ -77,7 +77,9 @@ Five bands, and a field with nothing behind it is not drawn.
 - *About*: description, subjects.
 - *Publication*: publishers, imprints, publication date, languages,
   identifiers, page count, and the accessibility record when the file
-  declares one.
+  declares one: conformance, content and sufficient access modes,
+  features, hazards, exemptions, the summary and the certification. A
+  record holding nothing the screen can name draws no heading.
 - *This copy*: format, size, where it came from, added, downloaded and
   file-modified dates, and the two hashes when they have already been
   computed. Nothing here computes a hash: reading a whole book off a
@@ -86,7 +88,7 @@ Five bands, and a field with nothing behind it is not drawn.
   sync needs it. A book with no file on this device shows no hash, even
   if a row survives from a copy that used to be here.
 - *Reading*: progress, time left, finished and archived dates, one
-  total of the book's highlights and notes, and a way into
+  total of the book's highlights and notes (bookmarks are not counted), and a way into
   `BookReadingStatsScreen`. Time left is the estimate the server's
   reading insights already give (`WorkInsights.etaSeconds`) and is left
   out when there is none; it is not approximated from a page count,
@@ -254,7 +256,13 @@ and user-series state goes, then the newly parsed book fields and the
 new file snapshot are written, and only then is the effective series
 resolved from the file columns that now hold the new book's. A reindex
 of the same work is the ordinary case and replaces the file snapshot
-alone.
+alone, in one transaction with the book fields: the new modification
+time stops the next scan from reading the file again, so it must not
+land without the snapshot it stands for.
+
+A file snapshot is committed only while the book still has a file on
+this device. A download removed, or a book deleted, while its file was
+being read leaves nothing behind.
 
 `backfillMetadata()` is for the books indexed before this existed. It is
 `backfillSeries()` again, with its rules unchanged: a file that was read
@@ -267,8 +275,10 @@ catalog-only rows are not unchecked work forever. `LibraryViewModel.init`
 runs it after the author and series passes, in that order rather than
 beside them, and it reads each file under the existing import lock and
 checks the book is still the same row before it commits, so a scan or a
-removal that ran meanwhile wins. Removing a book's file and re-adopting
-one both reset `file_metadata_checked`, so the next pass looks again.
+removal that ran meanwhile wins. Removing a book's file resets
+`file_metadata_checked`, so the next pass looks again. A folder added
+back with an unchanged file reads that file's snapshot during the scan
+that re-adopts it, rather than waiting for the next launch.
 
 The catalog snapshot is written by `RemoteCatalogRepository`, in the
 same transaction as the book row it came with, and replaced whole. An
@@ -278,6 +288,12 @@ never reaches the phone. The refresh skips a `Book` row that has not
 changed, and the snapshot is written regardless of that skip: a server
 that only edited a blurb changes nothing in `books`. Adding a book from
 browse (`BrowseCatalogRepository`) writes its snapshot the same way.
+Komga and BookOrbit report a page count beside the descriptive fields,
+and it goes into the snapshot with them.
+
+The refresh reads which books it knows before the network walk, so the
+write checks again, in its own transaction, that each book is still
+linked (`remote_uuid` set) and skips any that was cut loose meanwhile.
 
 The catalog row exists only while the book is linked to a server. Every
 path that unlinks a book and keeps it (a catalog prune of a downloaded
@@ -367,7 +383,10 @@ generated labels, `SERIES:`, ratings, and tags, with the actual blurb, and
 `OpdsParser.directText()` skips nested paragraphs deliberately for that
 reason. Flattening the element wholesale would put catalog boilerplate
 on screen as the book's description, so the description is taken from
-the nested prose the existing parser already distinguishes. For generic
+the nested prose the existing parser already distinguishes. That rule
+applies only to a block carrying calibre-web's `RATING:`, `TAGS:` or
+`SERIES:` lines; any other feed's xhtml block is read whole, since Atom
+puts plain text straight into the wrapper `<div>`. For generic
 OPDS, `<summary>` and `<content>` are both accepted, with `type` of
 `text`, `html` or `xhtml`; anything else is ignored rather than guessed
 at.

@@ -444,6 +444,15 @@ class OpdsParserTest {
     ).books.single()
 
     @Test
+    fun `a feed other than calibre-web keeps a blurb written straight into its div`() {
+        assertEquals("A plain blurb.", entryWithContent("A plain blurb.").metadata?.description)
+        assertEquals(
+            "The blurb.",
+            entryWithContent("RATING: 4<br/>TAGS: fantasy<br/><p>The blurb.</p>").metadata?.description,
+        )
+    }
+
+    @Test
     fun `the series line names the series and places the book in it`() {
         val book = entryWithContent(
             """RATING: 4<br/>SERIES: Wheel of Time [2.00]<br/>TAGS: fantasy<br/>""",

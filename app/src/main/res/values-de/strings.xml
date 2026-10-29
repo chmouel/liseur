@@ -1744,6 +1744,17 @@
     <string name="book_details_a11y_hazard_flashing">Blinken</string>
     <string name="book_details_a11y_hazard_motion">Bewegungssimulation</string>
     <string name="book_details_a11y_hazard_sound">Ton</string>
+    <string name="book_details_a11y_modes">Inhalt</string>
+    <string name="book_details_a11y_sufficient">Lesbar mit</string>
+    <string name="book_details_a11y_mode_textual">Text</string>
+    <string name="book_details_a11y_mode_visual">Bilder</string>
+    <string name="book_details_a11y_mode_auditory">Audio</string>
+    <string name="book_details_a11y_mode_tactile">Braille oder Tastsinn</string>
+    <string name="book_details_a11y_exemption">Ausnahme beansprucht</string>
+    <string name="book_details_a11y_exemption_burden">Unverhältnismäßige Belastung</string>
+    <string name="book_details_a11y_exemption_alteration">Grundlegende Veränderung</string>
+    <string name="book_details_a11y_exemption_micro">Kleinstunternehmen</string>
+    <string name="book_details_a11y_certifier_report">Zertifizierungsbericht</string>
     <string name="book_details_format">Format</string>
     <string name="book_details_size">Größe</string>
     <string name="book_details_server_size">Größe auf dem Server</string>

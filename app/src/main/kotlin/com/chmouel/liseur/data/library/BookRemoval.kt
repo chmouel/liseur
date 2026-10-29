@@ -137,13 +137,23 @@ class BookRemoval(
      * for it, together, so a crash between the two cannot leave a book
      * marked as read with nothing stored. A null [row] is a file that
      * opened and declared nothing.
+     *
+     * Nothing is written for a book that was removed, or whose download
+     * was, while its file was being read: the row would describe a file
+     * the book no longer has.
      */
     suspend fun fileMetadataRead(bookUrl: String, row: com.chmouel.liseur.data.db.BookMetadata?) {
         val dao = metadataDao ?: return
         inTransaction {
+            if (bookDao.getByUrl(bookUrl)?.openableUrl == null) return@inTransaction
             if (row == null) dao.delete(bookUrl, MetadataSource.FILE.key) else dao.upsert(row)
             bookDao.setFileMetadataChecked(bookUrl, true)
         }
+    }
+
+    /** Runs [block] in one transaction, for a reindex that has nothing to clear first. */
+    suspend fun together(block: suspend () -> Unit) {
+        inTransaction(block)
     }
 
     private suspend fun forgetFile(bookUrl: String) {

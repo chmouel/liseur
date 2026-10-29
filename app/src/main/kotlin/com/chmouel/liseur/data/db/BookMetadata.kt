@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.Contributor
@@ -163,4 +164,30 @@ interface BookMetadataDao {
 
     @Query("DELETE FROM book_metadata WHERE book_url = :bookUrl")
     suspend fun forget(bookUrl: String)
+
+    @Query("SELECT url FROM books WHERE url IN (:bookUrls) AND remote_uuid IS NOT NULL")
+    suspend fun linkedToCatalog(bookUrls: List<String>): List<String>
+
+    /**
+     * Replaces the catalog rows of [rows], a null meaning the catalog
+     * said nothing worth keeping. A book unlinked since its catalog page
+     * was read is skipped: the refresh read the link before the network
+     * wait, and what it fetched belongs to the server copy the book has
+     * just been cut loose from.
+     */
+    @Transaction
+    suspend fun replaceCatalog(rows: Map<String, BookMetadata?>) {
+        val linked = linkedToCatalog(rows.keys.toList()).toSet()
+        val stored = ofSource(linked.toList(), MetadataSource.CATALOG.key).associateBy { it.bookUrl }
+        val gone = mutableListOf<String>()
+        linked.forEach { url ->
+            val row = rows[url]
+            val old = stored[url]
+            when {
+                row == null -> if (old != null) gone += url
+                row != old -> upsert(row)
+            }
+        }
+        if (gone.isNotEmpty()) deleteSource(gone, MetadataSource.CATALOG.key)
+    }
 }

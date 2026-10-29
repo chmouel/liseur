@@ -3,6 +3,7 @@ package com.chmouel.liseur.data.remote
 import com.chmouel.liseur.data.db.BookMetadata
 import com.chmouel.liseur.data.db.BookMetadataDao
 import com.chmouel.liseur.data.library.descriptionText
+import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
 
 /**
@@ -10,8 +11,12 @@ import com.chmouel.liseur.domain.MetadataSource
  * catalog said nothing worth a row.
  */
 internal fun catalogMetadataRow(bookUrl: String, book: RemoteBook): BookMetadata? {
-    val snapshot = book.metadata ?: return null
-    val text = snapshot.copy(description = descriptionText(snapshot.description, book.descriptionHtml))
+    val snapshot = book.metadata ?: MetadataSnapshot()
+    // Komga and BookOrbit report pages beside the snapshot, not in it.
+    val text = snapshot.copy(
+        description = descriptionText(snapshot.description, book.descriptionHtml),
+        pageCount = snapshot.pageCount ?: book.pageCount,
+    )
     return BookMetadata.of(bookUrl, MetadataSource.CATALOG, text)
         .takeUnless { it == BookMetadata(bookUrl, MetadataSource.CATALOG.key) }
 }
@@ -24,19 +29,9 @@ internal fun catalogMetadataRow(bookUrl: String, book: RemoteBook): BookMetadata
  */
 internal suspend fun BookMetadataDao.storeCatalog(books: Map<String, RemoteBook>) {
     books.keys.chunked(CATALOG_CHUNK).forEach { urls ->
-        val stored = ofSource(urls, MetadataSource.CATALOG.key).associateBy { it.bookUrl }
-        val gone = mutableListOf<String>()
-        urls.forEach { url ->
-            val row = catalogMetadataRow(url, books.getValue(url))
-            val old = stored[url]
-            when {
-                row == null -> if (old != null) gone += url
-                row != old -> upsert(row)
-            }
-        }
-        if (gone.isNotEmpty()) deleteSource(gone, MetadataSource.CATALOG.key)
+        replaceCatalog(urls.associateWith { catalogMetadataRow(it, books.getValue(it)) })
     }
 }
 
-/** Under SQLite's 999 bound variables, with room for the source. */
+/** Under SQLite's 999 bound variables. */
 private const val CATALOG_CHUNK = 500

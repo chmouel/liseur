@@ -1,13 +1,16 @@
 package com.chmouel.liseur.ui.library
 
+import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.domain.BookAccessibility
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BookDetailsTest {
@@ -64,5 +67,14 @@ class BookDetailsTest {
         assertEquals("Anglais (Canada)", languageName("en-CA", Locale.FRENCH))
         assertEquals("qq", languageName("qq", Locale.ENGLISH))
         assertEquals("not a tag", languageName("not a tag", Locale.ENGLISH))
+    }
+
+    @Test
+    fun accessibilityIsShownExactlyWhenALineWouldBeDrawn() {
+        val modesOnly = accessibilityView(BookAccessibility(accessModesSufficient = listOf("textual")))
+        assertEquals(listOf(listOf(R.string.book_details_a11y_mode_textual)), modesOnly.sufficient)
+        assertTrue(!modesOnly.isEmpty)
+        // A feature the screen has no words for draws nothing.
+        assertTrue(accessibilityView(BookAccessibility(features = listOf("ruby"))).isEmpty)
     }
 }
