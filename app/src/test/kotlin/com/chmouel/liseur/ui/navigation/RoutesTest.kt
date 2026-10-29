@@ -12,6 +12,7 @@ class RoutesTest {
     private val deep = listOf(
         Route.Library,
         Route.Stats,
+        Route.BookDetails("content://books/1"),
         Route.BookStats("content://books/1", "Le Rouge et le Noir — tome 1"),
     )
 
@@ -37,6 +38,7 @@ class RoutesTest {
         val stack = listOf(
             Route.Library,
             Route.BookStats(bookUrl = "Settings", title = "BookStats"),
+            Route.BookDetails(bookUrl = "BookStats"),
         )
         assertEquals(stack, decodeRoutes(encodeRoutes(stack)))
     }
@@ -47,6 +49,7 @@ class RoutesTest {
         assertEquals(library, decodeRoutes(emptyList()))
         assertEquals(library, decodeRoutes(listOf("Library", "Nowhere")))
         assertEquals(library, decodeRoutes(listOf("Library", "BookStats", "content://books/1")))
+        assertEquals(library, decodeRoutes(listOf("Library", "BookDetails")))
         assertEquals(library, decodeRoutes(listOf("Settings")))
     }
 
@@ -86,6 +89,7 @@ class RoutesTest {
         val a = Route.BookStats("content://books/1", "A")
         val b = Route.BookStats("content://books/2", "A")
         assertNotEquals(a.contentKey, b.contentKey)
+        assertNotEquals(a.contentKey, Route.BookDetails("content://books/1").contentKey)
         assertEquals("Settings", Route.Settings.contentKey)
     }
 

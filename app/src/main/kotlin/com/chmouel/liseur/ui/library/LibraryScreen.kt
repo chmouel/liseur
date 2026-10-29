@@ -190,6 +190,7 @@ fun LibraryScreen(
     onSetUpTranslation: (() -> Unit)? = null,
     onOpenTranslationSettings: () -> Unit,
     onOpenBookStats: (Book) -> Unit,
+    onOpenBookDetails: (Book) -> Unit,
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onDownload: (Book) -> Unit,
@@ -1011,6 +1012,7 @@ fun LibraryScreen(
             onSetFinished = { onSetFinished(book, it); sheetBook = null },
             onSetArchived = { onSetArchived(book, it); sheetBook = null },
             onOpenStats = { onOpenBookStats(book); sheetBook = null },
+            onOpenDetails = { onOpenBookDetails(book); sheetBook = null },
             onOpenTranslation = { translationBook = book; sheetBook = null },
             onEditSeries = { editSeriesOf = book; sheetBook = null },
             onDeleteLocal = { confirmLocalDelete = book; sheetBook = null },
@@ -1326,6 +1328,7 @@ internal fun BookActionsSheet(
     onSetFinished: (Boolean) -> Unit,
     onSetArchived: (Boolean) -> Unit,
     onOpenStats: () -> Unit,
+    onOpenDetails: () -> Unit,
     onOpenTranslation: () -> Unit,
     onEditSeries: () -> Unit,
     onDeleteLocal: () -> Unit,
@@ -1417,6 +1420,9 @@ internal fun BookActionsSheet(
                         if (book.archived) R.string.unarchive_book else R.string.archive_book,
                     ),
                 )
+            }
+            TextButton(onClick = onOpenDetails, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.book_details))
             }
             TextButton(onClick = onOpenStats, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.reading_stats))
