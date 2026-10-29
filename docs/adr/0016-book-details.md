@@ -50,15 +50,17 @@ first chapter.
 A screen, not a bigger sheet. The actions sheet is a column of
 conditional rows that has grown once per verb the app learned, and
 details are not a verb: they are somewhere to stay, scroll, and come
-back to. So a full screen, routed from `MainActivity` beside
-`Screen.BOOK_STATS`, with the same `returnsTo` treatment, reachable from
-the actions sheet wherever that sheet already opens: the library and
-the series screen. The sheet gains one row and loses the pressure to
+back to. So a full screen, `Route.BookDetails(bookUrl)` in
+`MainActivity`'s back stack beside `Route.BookStats`, saved and restored
+with the rest of the stack, reachable from the actions sheet wherever
+that sheet already opens: the library and the series screen. Reading
+stats open from it as an ordinary push, so Back from them returns to
+the details. The sheet gains one row and loses the pressure to
 become a details view itself.
 
 The reader does not open it. `ReaderActivity` is a separate activity
-that does not host the actions sheet and does not route through
-`MainActivity.Screen`, so an entry point there is an activity contract,
+that does not host the actions sheet and is not on `MainActivity`'s
+back stack, so an entry point there is an activity contract,
 not a row: a separate decision, and not this one.
 
 Read-only. Correcting what a book says about itself is a different
@@ -83,8 +85,13 @@ Five bands, and a field with nothing behind it is not drawn.
   wrong trade, and `BookFingerprintStore` will fill it in the first time
   sync needs it. A book with no file on this device shows no hash, even
   if a row survives from a copy that used to be here.
-- *Reading*: progress, time left, finished and archived state,
-  annotation counts, and a way into `BookReadingStatsScreen`.
+- *Reading*: progress, time left, finished and archived dates, one
+  total of the book's highlights and notes, and a way into
+  `BookReadingStatsScreen`. Time left is the estimate the server's
+  reading insights already give (`WorkInsights.etaSeconds`) and is left
+  out when there is none; it is not approximated from a page count,
+  which is in the server's units or the publisher's and says nothing
+  about how this reader reads.
 
 A screen of em dashes says less than a short screen, so an absent field
 is absent, and a band whose fields are all absent is not drawn either. A
@@ -116,9 +123,9 @@ make that an update per field where a row makes it one write. A
 `book_metadata` table keyed by `(book_url, source)` holds exactly that:
 one row per source, replaced atomically, resolved by one pure function.
 
-Derived state dies with the book. `book_metadata` is the one table
-in this schema that should cascade, and it gets this schema's first
-foreign key: `book_url` references `books.url` `ON DELETE CASCADE`.
+Derived state dies with the book. `book_metadata` should cascade, so
+`book_url` references `books.url` `ON DELETE CASCADE`, as the upload
+refusals and kept translations already do.
 `reading_progress`, `annotations` and `annotation_sync` have no foreign
 key, and for their own reasons rather than one shared one: a reading
 position and a highlight are the reader's and irreplaceable, and the
@@ -165,7 +172,7 @@ not `books.size_bytes`, which is the catalog's claim and is treated as
 untrusted wherever it is added up. The screen labels the two differently
 (what the file weighs here, and what the server says it weighs)
 because when they disagree that is worth knowing rather than worth
-hiding.
+hiding. The claim is drawn only when it differs from the measurement.
 
 One function answers it, for every path that indexes a book. A folder
 scan already has the number: `findEpubs()` runs a projection per
@@ -254,15 +261,31 @@ alone.
 is marked checked whatever the answer was, so a shelf of bare OPFs is
 walked once; a file that could not be read is left unchecked and skipped
 for the rest of the run, because an unmounted card is a reason to ask
-again later. It selects only locally openable books, so catalog-only
-rows are not unchecked work forever. `LibraryViewModel.init` launches it
-where it launches the series pass.
+again later. Only a file that was opened and whose snapshot was
+extracted counts as read. It selects only locally openable books, so
+catalog-only rows are not unchecked work forever. `LibraryViewModel.init`
+runs it after the author and series passes, in that order rather than
+beside them, and it reads each file under the existing import lock and
+checks the book is still the same row before it commits, so a scan or a
+removal that ran meanwhile wins. Removing a book's file and re-adopting
+one both reset `file_metadata_checked`, so the next pass looks again.
 
 The catalog snapshot is written by `RemoteCatalogRepository`, in the
 same transaction as the book row it came with, and replaced whole. An
 omitted field clears the previous value: for descriptive metadata that
 is the point, because otherwise a description deleted on the server
-never reaches the phone.
+never reaches the phone. The refresh skips a `Book` row that has not
+changed, and the snapshot is written regardless of that skip: a server
+that only edited a blurb changes nothing in `books`. Adding a book from
+browse (`BrowseCatalogRepository`) writes its snapshot the same way.
+
+The catalog row exists only while the book is linked to a server. Every
+path that unlinks a book and keeps it (a catalog prune of a downloaded
+book, disconnecting the account, removing a saved browse catalog)
+deletes it in the same write, so a local file never shows a description from a server it is no
+longer attached to. A watched folder that is removed demotes its books
+the same way on the file side: the `file` row, `file_metadata_checked`
+and the fingerprint go.
 
 `BookDownloadRepository.removeDownload()` deletes the `file` row and
 clears `file_metadata_checked`. It keeps the book and removes the file,
@@ -271,12 +294,15 @@ off a copy that is no longer here.
 
 It drops the book's `book_fingerprint` row in the same breath, which is
 a hole this ADR inherits rather than opens. `BookFingerprintStore`
-caches on `file_modified_at`, and a downloaded book has none
-(`indexDownloadedFile()` never sets one), so a retained row's null
-matches the null of whatever is downloaded next. A server that replaced
+caches on `file_modified_at`, and a downloaded book had none
+(`indexDownloadedFile()` never set one), so a retained row's null
+matched the null of whatever was downloaded next. A server that replaced
 the file behind the same UUID would then be told the old hash, and the
 reading state would be filed against the wrong bytes. Removing the file
-is the moment the cache stops describing anything.
+is the moment the cache stops describing anything. A download now
+records the file's own modification time when it is positive, and the
+fingerprint is dropped whenever downloaded content is replaced, not
+only when it is removed.
 
 `BookRemoval.contentReplaced()` clears both metadata rows in its
 existing transaction, and unlinks the whole remote and catalog
@@ -284,7 +310,10 @@ association with them: `remote_uuid`, `remote_book_id`, `download_href`,
 `cover_url`, `remote_updated_at`, `remote_page_count`, `size_bytes`,
 `catalog_series_name`, `catalog_series_index`, `catalog_folder_id`,
 `catalog_series_source` and `catalog_missing_since`, after which the
-effective series is resolved again from the file's own columns.
+effective series is resolved again from the file's own columns. The
+per-book state that describes the old work goes too: a refused upload,
+the book's AI preferences and its translation glossary. Reading state of
+every other book is untouched.
 
 Clearing the catalog snapshot alone is treating the symptom, and
 clearing only the `remote_*` fields is treating half of it.
@@ -304,7 +333,11 @@ to be true of every column that says otherwise, in one transaction.
 
 `RemoteBook` gains subtitle, description, publishers, imprints,
 published date, languages, subjects, identifiers and
-contributors-with-roles. The rule
+contributors-with-roles. Each parser maps only what its server's
+payload actually carries: BookOrbit's existing language, publisher and
+ISBN-13 fields, Komga's summary, release date, tags, ISBN and author
+roles, and the liseur-sync catalog JSON, which gained subjects,
+languages and identifiers for this. The rule
 is not that two servers must supply a field: `calibreBookId`,
 `pageCount`, `seriesId` and `sha256` are each one server's and each on
 the contract already. It is that provider-neutral catalog data with a
@@ -342,9 +375,11 @@ at.
 Bounds, because untrusted input has no length in its contract and a row
 nobody can read is still a row every query carries:
 
-- description: the raw value truncated before conversion at 64 KiB, and
-  the converted text again at 4,000 characters, cut on a code point
-  boundary with an ellipsis;
+- description: the raw value truncated before conversion at 65,536
+  UTF-16 code units, never between the halves of a surrogate pair; the
+  converted text has object replacement characters (U+FFFC, what an
+  image becomes) removed, is trimmed with runs of blank lines collapsed,
+  and is cut again at 4,000 code points with an ellipsis;
 - subtitle: 256 characters;
 - publishers and imprints: at most 8 each, 256 characters per name;
 - subjects: at most 32, each at most 128 characters;
@@ -440,7 +475,9 @@ percent-encoded document id no reader should be shown) when the
 provider is gone or the permission was revoked. For a book that arrived
 from a catalog it is the provider kind, recovered from `books.url`
 through `ServerKind.urlPrefix`, which is already how the app tells a
-catalog book from a local one. That is the only provenance this schema
+catalog book from a local one. `BookProvenance` in `data/remote/` does
+that reading, including the `browse:<server>:<kind>:<id>` form and the
+legacy `grimmory:` URLs, so the screen never branches on `ServerKind`. That is the only provenance this schema
 persists per book. Not the server's name or address: those live on
 `remote_server`, one row for one connection, so a book fetched from a
 server the reader has since left would be labelled with whoever is
@@ -453,19 +490,21 @@ The route carries `book.url` and nothing else. The screen observes the
 `Book` and its metadata rows through a view model, the way every other
 screen here does, rather than being handed a `Book` that was current
 when the sheet opened; a catalog refresh during a long read of the
-description would otherwise show yesterday's row. Progress, time left
-and annotation counts come from that same model, not from DAO calls in
-a composable. If the book disappears while the screen is open, because
+description would otherwise show yesterday's row. Progress and the
+annotation total come from that same model, not from DAO calls in a
+composable; time left comes from the reading stats view model that
+already holds the server's insights. If the book disappears while the screen is open, because
 a catalog prune or a deletion took it, the screen goes back rather than
 sitting on a row that no longer exists.
 
 ### Migration
 
-Room goes to 43 -> 44: a hand-written `MIGRATION_43_44` creating the
+Room goes from 70 to 71: a hand-written `MIGRATION_70_71` creating the
 table and adding `file_metadata_checked`, registered in `MIGRATIONS`,
-with `app/schemas/…/44.json` exported and `MigrationTest` replaying it.
-There is nothing to backfill in SQL; the pass fills the rows from the
-files.
+with `app/schemas/…/71.json` exported and `MigrationTest` replaying it
+and checking the cascade. Writes use Room's `@Upsert`, not hand-written
+`ON CONFLICT` SQL. There is nothing to backfill in SQL; the pass fills
+the rows from the files.
 
 Tests that have to exist: the migration replay; the cascade; the scalar
 and collection precedence rules, including two contributors who share a
@@ -479,7 +518,11 @@ boundaries: an oversized description, a subject list past its cap, a
 negative size, a page count of zero, an unparseable date, an `xhtml`
 summary, and a calibre
 `<content>` block whose `SERIES:` label must not become the
-description.
+description. Beside those: a catalog refresh that changes only the
+snapshot, a book added from browse, an unlinked book and a demoted
+folder losing their rows, a backfill that retries an unreadable file,
+replacement leaving other books' reading state alone, and the route
+surviving a saved and restored back stack.
 
 ## Consequences
 
@@ -491,10 +534,6 @@ shelf is drawn and usable throughout.
 A catalog-only book shows what the server said and no more, and that
 looks thin beside a downloaded one. It is thin. Nothing has read the
 file, because there is no file.
-
-This schema now has a foreign key. It is one table and the right table,
-but it is a precedent, and the next one should have to argue for itself
-the same way.
 
 Two things outside this feature get fixed on the way past, because this
 work touches both paths and leaving them would be knowingly building on
@@ -512,7 +551,11 @@ them is what would make it possible without opening every file again.
 
 *Where:* `ui/library/BookDetailsScreen.kt` and its view model (new),
 `ui/library/LibraryScreen.kt`, `ui/library/LibraryViewModel.kt`,
-`MainActivity.kt`, `AppContainer.kt`,
+`ui/navigation/Routes.kt`, `MainActivity.kt`, `AppContainer.kt`,
+`domain/BookDetails.kt`, `data/remote/BookProvenance.kt`,
+`data/remote/CatalogMetadata.kt`, `data/remote/BrowseCatalogRepository.kt`,
+`data/library/FileMetadata.kt`, `data/library/DescriptionText.kt`,
+`data/library/FolderNames.kt`, `data/bookorbit/BookOrbitBooks.kt`,
 `data/db/BookMetadata.kt` (new), `data/db/Book.kt`,
 `data/db/LiseurDatabase.kt`, `data/library/LocalLibraryRepository.kt`,
 `data/library/BookRemoval.kt`, `data/calibre/BookDownloadRepository.kt`,
@@ -520,6 +563,6 @@ them is what would make it possible without opening every file again.
 `data/opds/OpdsParser.kt`, `data/komga/KomgaBooks.kt`,
 `data/liseursync/LiseurSyncCatalogClient.kt`, `data/db/WorkIdentity.kt`,
 `res/values/strings.xml`,
-`app/schemas/com.chmouel.liseur.data.db.LiseurDatabase/44.json`,
+`app/schemas/com.chmouel.liseur.data.db.LiseurDatabase/71.json`,
 `app/src/test/kotlin/com/chmouel/liseur/data/db/MigrationTest.kt`,
 `docs/SERVER_CAPABILITIES.md`.

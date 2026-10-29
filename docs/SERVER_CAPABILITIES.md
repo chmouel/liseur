@@ -16,6 +16,22 @@ side.
 | Book delete    | Not possible       | Implemented       | Not implemented    | Implemented        | Not possible             |
 | Series claims  | N/A                | N/A               | N/A                | Implemented        | N/A                      |
 | Settings backup | Not possible       | Not possible      | Not implemented    | Implemented        | Not possible             |
+| Book details   | Partial            | Partial           | Partial            | Most               | Feed-dependent           |
+
+Book details is what a catalog adds to the book details screen
+([`adr/0016-book-details.md`](adr/0016-book-details.md)). A downloaded
+book also shows what its own file says, so the server matters most for
+books not on the device yet:
+
+- Komga: description, release date, tags, ISBN, and contributors with
+  their roles.
+- calibre-web: description, publisher, date, language, tags, and the
+  book's id.
+- BookOrbit: language, publisher, and ISBN-13.
+- liseur-sync: subtitle, description, publisher, date, contributors
+  with roles, subjects, languages, and identifiers.
+- Custom (OPDS): the summary or content, and the publisher, date,
+  language, categories and identifiers when the feed has them.
 
 For how each kind's position sync measures up against Kindle
 Whispersync, behaviour by behaviour, see

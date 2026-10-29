@@ -927,6 +927,12 @@ changing reader behavior.
 - Ids not globally unique are namespaced: BookOrbit and Custom OPDS prefix
   a digest of address and account, since `books.url` survives a server
   change.
+- `book_metadata` keeps one snapshot per source. Write the catalog row on
+  every refresh even when the `Book` row is unchanged, and delete it on
+  every path that unlinks a book from its server but keeps it. When
+  another file takes a book's place, `contentReplaced()` unlinks it from
+  the server and drops its file snapshot and fingerprint
+  ([ADR 0016](docs/adr/0016-book-details.md)).
 - `updated_at` is when this device wrote the row (derived sync ids,
   outgoing timestamps). `read_at` is when reading happened and orders
   Recent and Continue Reading via `COALESCE(read_at, updated_at)`. A row
