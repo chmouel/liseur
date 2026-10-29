@@ -44,6 +44,31 @@ class MigrationTest {
     }
 
     @Test
+    fun `book details upgrade leaves every book to be read again and cascades its metadata`() {
+        helper.createDatabase(TEST_DB, 70).use { db ->
+            db.execSQL(
+                "INSERT INTO books (url, title, added_at, download_state, series_checked, " +
+                    "series_override, series_claim_pending, series_claim_reset, series_index_override) " +
+                    "VALUES ('file:one', 'One', 1, 'DOWNLOADED', 1, 0, 0, 0, 0)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT file_metadata_checked FROM books WHERE url = 'file:one'").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+            db.execSQL("PRAGMA foreign_keys = ON")
+            db.execSQL("INSERT INTO book_metadata (book_url, source, subtitle) VALUES ('file:one', 'file', 'Sub')")
+            db.execSQL("INSERT INTO book_metadata (book_url, source, subtitle) VALUES ('file:one', 'catalog', 'Cat')")
+            db.execSQL("DELETE FROM books WHERE url = 'file:one'")
+            db.query("SELECT COUNT(*) FROM book_metadata").use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0, it.getInt(0))
+            }
+        }
+    }
+
+    @Test
     fun `pending sequence upgrade retains existing pending reading`() {
         helper.createDatabase(TEST_DB, 69).use { db ->
             db.execSQL("""
@@ -115,7 +140,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -192,7 +217,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
             .allowMainThreadQueries()
             .build()
         try {
@@ -227,7 +252,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1769,6 +1794,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 70
+        const val LATEST = 71
     }
 }

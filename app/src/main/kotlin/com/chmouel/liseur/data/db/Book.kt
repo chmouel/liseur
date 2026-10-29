@@ -130,6 +130,12 @@ data class Book(
      * every launch by the backfill.
      */
     @ColumnInfo(name = "series_checked") val seriesChecked: Boolean = false,
+    /**
+     * Whether the file's own metadata has been read into a `file` row of
+     * [BookMetadata]. Set only after a successful read, so a file that
+     * could not be opened is tried again by the backfill.
+     */
+    @ColumnInfo(name = "file_metadata_checked") val fileMetadataChecked: Boolean = false,
     /** The catalog's series name, kept beside the file's for the same reason. */
     @ColumnInfo(name = "catalog_series_name") val catalogSeriesName: String? = null,
     /** The catalog's series index. */
