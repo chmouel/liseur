@@ -1734,6 +1734,7 @@
     <string name="book_details_a11y_hazard_sound">Sonido</string>
     <string name="book_details_format">Formato</string>
     <string name="book_details_size">Tamaño</string>
+    <string name="book_details_server_size">Tamaño en el servidor</string>
     <string name="book_details_from">Procedencia</string>
     <string name="book_details_from_file">Un archivo que abriste</string>
     <string name="book_details_from_folder">Una carpeta vigilada</string>

@@ -1803,6 +1803,7 @@
     <string name="book_details_a11y_hazard_sound">Sound</string>
     <string name="book_details_format">Format</string>
     <string name="book_details_size">Size</string>
+    <string name="book_details_server_size">Size on the server</string>
     <string name="book_details_from">From</string>
     <string name="book_details_from_file">A file you opened</string>
     <string name="book_details_from_folder">A watched folder</string>

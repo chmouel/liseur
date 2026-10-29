@@ -1746,6 +1746,7 @@
     <string name="book_details_a11y_hazard_sound">Ton</string>
     <string name="book_details_format">Format</string>
     <string name="book_details_size">Größe</string>
+    <string name="book_details_server_size">Größe auf dem Server</string>
     <string name="book_details_from">Herkunft</string>
     <string name="book_details_from_file">Eine Datei, die du geöffnet hast</string>
     <string name="book_details_from_folder">Ein überwachter Ordner</string>

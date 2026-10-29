@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.BookAccessibility
+import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
@@ -273,8 +274,15 @@ private fun CopyBand(details: BookDetails) {
     val onDevice = book.openableUrl != null
     Band(stringResource(R.string.book_details_this_copy)) {
         Field(stringResource(R.string.book_details_format), stringResource(R.string.book_details_format_epub))
-        (details.metadata.fileSizeBytes ?: book.sizeBytes)?.let {
+        val measured = details.metadata.fileSizeBytes
+        val claimed = book.sizeBytes?.takeIf { it in 0..BookDetailsBounds.MAX_BYTES }
+        measured?.let {
             Field(stringResource(R.string.book_details_size), Formatter.formatShortFileSize(context, it))
+        }
+        // What the server claims is labelled as its claim, and only drawn
+        // when it adds something to what was measured here.
+        claimed?.takeIf { it != measured }?.let {
+            Field(stringResource(R.string.book_details_server_size), Formatter.formatShortFileSize(context, it))
         }
         Field(stringResource(R.string.book_details_from), provenanceLabel(details))
         Field(stringResource(R.string.book_details_added), day(book.addedAt, locale))
