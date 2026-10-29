@@ -42,8 +42,9 @@ import androidx.sqlite.execSQL
         RemoteStatsWindow::class,
         GlossaryEntry::class,
         BookAiPreferences::class,
+        BookMetadata::class,
     ],
-    version = 70,
+    version = 71,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -81,8 +82,25 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun remoteStatsDao(): RemoteStatsDao
     abstract fun bookAiPreferencesDao(): BookAiPreferencesDao
     abstract fun glossaryDao(): GlossaryDao
+    abstract fun bookMetadataDao(): BookMetadataDao
 
     companion object {
+        val MIGRATION_70_71 = object : Migration(70, 71) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `book_metadata` (`book_url` TEXT NOT NULL, `source` TEXT NOT NULL, " +
+                        "`subtitle` TEXT, `description` TEXT, `publishers` TEXT, `imprints` TEXT, `published` TEXT, " +
+                        "`languages` TEXT, `subjects` TEXT, `contributors` TEXT, `identifiers` TEXT, " +
+                        "`page_count` INTEGER, `file_size_bytes` INTEGER, `accessibility` TEXT, " +
+                        "PRIMARY KEY(`book_url`, `source`), FOREIGN KEY(`book_url`) REFERENCES `books`(`url`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `books` ADD COLUMN `file_metadata_checked` INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         val MIGRATION_69_70 = object : Migration(69, 70) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE sync_peer_state ADD COLUMN pending_seq INTEGER")
@@ -1981,6 +1999,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_67_68,
             MIGRATION_68_69,
             MIGRATION_69_70,
+            MIGRATION_70_71,
         )
     }
 }
