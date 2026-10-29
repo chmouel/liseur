@@ -10,12 +10,17 @@ import org.readium.r2.shared.publication.Publication
 
 /**
  * What an EPUB's own package says about it, as one `file` snapshot
- * (ADR-0016). [sizeBytes] is what this device measured for the file.
+ * (ADR-0016). [sizeBytes] is what this device measured for the file;
+ * [authors] are the names the library shows, which for an EPUB with
+ * alternate-script names are the primary ones rather than Readium's.
  *
  * The publication date arrives from Readium as an instant, so a book
  * that said only `1962` is stored at whatever day Readium made of it.
  */
-internal fun Publication.fileMetadata(sizeBytes: Long?): MetadataSnapshot {
+internal fun Publication.fileMetadata(
+    sizeBytes: Long?,
+    authors: List<String> = metadata.authors.map { it.name },
+): MetadataSnapshot {
     val m = metadata
     fun people(list: List<org.readium.r2.shared.publication.Contributor>, role: String) =
         list.map { Contributor(role, it.name) }
@@ -27,7 +32,7 @@ internal fun Publication.fileMetadata(sizeBytes: Long?): MetadataSnapshot {
         published = m.published?.toString(),
         languages = m.languages,
         subjects = m.subjects.map { it.name },
-        contributors = people(m.authors, ContributorRoles.AUTHOR) +
+        contributors = authors.map { Contributor(ContributorRoles.AUTHOR, it) } +
             people(m.translators, ContributorRoles.TRANSLATOR) +
             people(m.editors, ContributorRoles.EDITOR) +
             people(m.illustrators + m.artists + m.pencilers + m.inkers + m.colorists + m.letterers, ContributorRoles.ILLUSTRATOR) +

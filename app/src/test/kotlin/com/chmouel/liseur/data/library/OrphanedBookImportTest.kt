@@ -79,6 +79,7 @@ class OrphanedBookImportTest {
             annotationDao = db.annotationDao(),
             annotationSyncDao = db.annotationSyncDao(),
             inTransaction = { work -> db.withTransaction { work() } },
+            metadataDao = db.bookMetadataDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -121,6 +122,9 @@ class OrphanedBookImportTest {
         assertEquals("remote", restored?.remoteUuid)
         assertNotNull(db.readingProgressDao().get(fileUrl))
         assertEquals(listOf(fileUrl), db.bookDao().allOnce().map { it.url })
+        // Its details are read in the same restore, not left for a backfill.
+        assertTrue(restored!!.fileMetadataChecked)
+        assertEquals(listOf("file"), db.bookMetadataDao().forBook(fileUrl).map { it.source })
     }
 
     @Test
@@ -165,6 +169,8 @@ class OrphanedBookImportTest {
         val result = library.importBook(Uri.fromFile(epub)) as ImportResult.Added
         assertEquals("Original author", result.book.author)
         assertEquals("a test book — الكاتب", result.book.workId)
+        val file = db.bookMetadataDao().forBook(result.book.url).single().toSnapshot()
+        assertEquals(listOf("Original author"), file.contributors.filter { it.role == "author" }.map { it.name })
         assertFallbackIsNotSent(result.book.url)
         val asset = retriever.retrieve(Uri.fromFile(epub).toAbsoluteUrl()!!).getOrNull()!!
         val publication = opener.open(asset, allowUserInteraction = false).getOrNull()!!

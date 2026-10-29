@@ -190,23 +190,29 @@ private fun book(json: JSONObject): RemoteBook? {
  * checked.
  */
 private fun details(json: JSONObject): MetadataSnapshot = MetadataSnapshot(
-    subtitle = json.optString("subtitle").takeIf { it.isNotEmpty() },
-    description = json.optString("description").takeIf { it.isNotEmpty() },
-    publishers = listOfNotNull(json.optString("publisher").takeIf { it.isNotEmpty() }),
-    published = json.optString("published_date").takeIf { it.isNotEmpty() },
+    subtitle = json.stringOrNull("subtitle"),
+    description = json.stringOrNull("description"),
+    publishers = listOfNotNull(json.stringOrNull("publisher")),
+    published = json.stringOrNull("published_date"),
     languages = strings(json.optJSONArray("languages")),
     subjects = strings(json.optJSONArray("subjects")),
     contributors = objects(json.optJSONArray("contributors")).mapNotNull { contributor ->
-        contributor.optString("name").takeIf { it.isNotEmpty() }
-            ?.let { Contributor(ContributorRoles.of(contributor.optString("role")), it) }
+        contributor.stringOrNull("name")
+            ?.let { Contributor(ContributorRoles.of(contributor.stringOrNull("role").orEmpty()), it) }
     },
     identifiers = objects(json.optJSONArray("identifiers")).mapNotNull { id ->
-        identifierOf(id.optString("value"), id.optString("scheme"))
+        identifierOf(id.stringOrNull("value"), id.stringOrNull("scheme"))
     },
 )
 
+/** Android's `optString` turns a JSON null into the text "null"; this does not. */
+private fun JSONObject.stringOrNull(name: String): String? =
+    if (isNull(name)) null else optString(name).takeIf { it.isNotEmpty() }
+
 private fun strings(array: JSONArray?): List<String> =
-    (0 until (array?.length() ?: 0)).mapNotNull { index -> array?.optString(index)?.takeIf { it.isNotEmpty() } }
+    (0 until (array?.length() ?: 0)).mapNotNull { index ->
+        array?.takeUnless { it.isNull(index) }?.optString(index)?.takeIf { it.isNotEmpty() }
+    }
 
 private fun objects(array: JSONArray?): List<JSONObject> =
     (0 until (array?.length() ?: 0)).mapNotNull { index -> array?.optJSONObject(index) }

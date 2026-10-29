@@ -246,6 +246,7 @@ class LocalLibraryRepository(
                         previousWorkId = book.workId,
                         previousAuthor = book.author,
                         previousIdentityAuthor = book.identityAuthor,
+                        adopt = durable,
                     )
                 ) {
                     // A copy made just for this restore is not referenced
@@ -256,7 +257,6 @@ class LocalLibraryRepository(
                     return@withLock shelveAgainOrReport(book)
                 }
                 if (book.hidden) unhide(book.url)
-                bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
                 return@withLock ImportResult.Added(bookDao.getByUrl(book.url) ?: book)
             }
             return@withLock shelveAgainOrReport(book)
@@ -381,17 +381,16 @@ class LocalLibraryRepository(
                 // taken over the path starts fresh, and one that will
                 // not open restores nothing.
                 if (durable != null) {
-                    if (reindexBook(
+                    if (!reindexBook(
                             durable,
                             book.url,
                             modifiedAt = null,
                             previousWorkId = book.workId,
                             previousAuthor = book.author,
                             previousIdentityAuthor = book.identityAuthor,
-                        )
+                            adopt = durable,
+                        ) && !keepsWorking
                     ) {
-                        bookDao.setDownloadState(book.url, DownloadState.DOWNLOADED, durable.toString())
-                    } else if (!keepsWorking) {
                         // A copy made just for this restore is not
                         // referenced by anything once the restore is
                         // refused, so it goes rather than lingering
@@ -969,6 +968,7 @@ class LocalLibraryRepository(
         previousAuthor: String?,
         previousIdentityAuthor: String?,
         sizeBytes: Long? = null,
+        adopt: AbsoluteUrl? = null,
     ): Boolean {
         val downloadedAt = bookDao.getByUrl(bookUrl)?.downloadedAt
         val asset = assetRetriever.retrieve(openableUrl).getOrElse { return false }
@@ -1018,7 +1018,13 @@ class LocalLibraryRepository(
                     seriesName = series.name,
                     seriesIndex = series.index,
                 )
-                bookRemoval.fileMetadataRead(bookUrl, metadataRow, downloadedAt)
+                // A restored file is adopted in the same write as its
+                // details, so the read is not refused for a book that
+                // has no file yet. One that gained a file meanwhile
+                // keeps it and is checked against its old stamp.
+                val adopted = adopt != null && bookDao.getByUrl(bookUrl)?.openableUrl == null
+                if (adopted) bookDao.setDownloadState(bookUrl, DownloadState.DOWNLOADED, adopt.toString())
+                bookRemoval.fileMetadataRead(bookUrl, metadataRow, if (adopted) null else downloadedAt)
             }
             // Cleanup first, then the new description, in one
             // transaction: the old work's state goes and the new file's
@@ -1269,7 +1275,10 @@ class LocalLibraryRepository(
         fileUrl: AbsoluteUrl,
         scannedSize: Long?,
     ): BookMetadata? {
-        val snapshot = publication.fileMetadata(scannedSize ?: measuredSize(fileUrl))
+        val snapshot = publication.fileMetadata(
+            scannedSize ?: measuredSize(fileUrl),
+            primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name },
+        )
         return BookMetadata.of(bookUrl, MetadataSource.FILE, snapshot)
             .takeUnless { it == BookMetadata(bookUrl, MetadataSource.FILE.key) }
     }
