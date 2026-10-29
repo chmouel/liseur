@@ -438,6 +438,22 @@ interface BookDao {
         downloadedAt: Long? = null,
     )
 
+    /**
+     * Records a finished download, with the time the file on disk says it
+     * was written. That time is what a cached fingerprint is checked
+     * against, so a download without one could never tell its bytes from
+     * the next download's.
+     */
+    @Query(
+        """
+        UPDATE books
+        SET download_state = 'DOWNLOADED', local_uri = :localUri, downloaded_at = :downloadedAt,
+            file_modified_at = :fileModifiedAt
+        WHERE url = :url
+        """,
+    )
+    suspend fun markDownloaded(url: String, localUri: String, downloadedAt: Long, fileModifiedAt: Long?)
+
     @Query(
         """
         UPDATE books SET identity_author = COALESCE(identity_author, author, ''), author = :author

@@ -139,12 +139,7 @@ class BookDownloadWorker(
         return when (outcome) {
             is DownloadOutcome.Done -> {
                 val localUri = downloads.localUriFor(fileKey)
-                bookDao.setDownloadState(
-                    bookUrl,
-                    DownloadState.DOWNLOADED,
-                    localUri,
-                    System.currentTimeMillis(),
-                )
+                downloads.markDownloaded(bookUrl, fileKey)
                 AbsoluteUrl(localUri)?.let { fileUrl ->
                     container.libraryRepository.indexDownloadedFile(fileUrl, bookUrl)
                 }

@@ -110,6 +110,32 @@ class BookRemoval(
     }
 
     /**
+     * Takes a downloaded file away and keeps the book.
+     *
+     * The fingerprint goes with the file. A downloaded book's cache is
+     * only as good as the modification time beside it, and a server that
+     * replaced the file behind the same id would otherwise be told the
+     * old hash for whatever is downloaded next.
+     */
+    suspend fun downloadRemoved(bookUrl: String) {
+        inTransaction {
+            bookDao.setDownloadState(bookUrl, DownloadState.REMOTE, null)
+            identityDao.forgetFingerprints(listOf(bookUrl))
+        }
+    }
+
+    /**
+     * Records a download that has just landed. Whatever was hashed before
+     * described another set of bytes, so it is forgotten in the same write.
+     */
+    suspend fun downloadArrived(bookUrl: String, localUri: String, downloadedAt: Long, fileModifiedAt: Long?) {
+        inTransaction {
+            bookDao.markDownloaded(bookUrl, localUri, downloadedAt, fileModifiedAt?.takeIf { it > 0 })
+            identityDao.forgetFingerprints(listOf(bookUrl))
+        }
+    }
+
+    /**
      * Cuts uploaded books loose from a server that no longer has them.
      * The entries and their reading stay; the link goes, and so does the
      * BookOrbit binding, whose recorded digest would otherwise tie the
