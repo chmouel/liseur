@@ -1700,7 +1700,6 @@
     <string name="book_details_archived_on">%1$s 归档</string>
     <string name="book_details_annotations">高亮和笔记</string>
     <string name="book_details_read">阅读</string>
-    <string name="book_details_read_again">再读一遍</string>
     <string name="book_details_retry_download">重新下载</string>
     <string name="book_details_file_info">文件信息</string>
     <string name="book_details_read_more">展开全文</string>

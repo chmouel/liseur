@@ -1753,7 +1753,6 @@
     <string name="book_details_archived_on">Archiviato il %1$s</string>
     <string name="book_details_annotations">Evidenziazioni e note</string>
     <string name="book_details_read">Leggi</string>
-    <string name="book_details_read_again">Rileggi</string>
     <string name="book_details_retry_download">Riprova a scaricare</string>
     <string name="book_details_file_info">Informazioni sul file</string>
     <string name="book_details_read_more">Mostra altro</string>

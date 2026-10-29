@@ -1765,7 +1765,6 @@
     <string name="book_details_archived_on">Archiviert am %1$s</string>
     <string name="book_details_annotations">Markierungen und Notizen</string>
     <string name="book_details_read">Lesen</string>
-    <string name="book_details_read_again">Erneut lesen</string>
     <string name="book_details_retry_download">Download wiederholen</string>
     <string name="book_details_file_info">Dateiinfo</string>
     <string name="book_details_read_more">Mehr anzeigen</string>
