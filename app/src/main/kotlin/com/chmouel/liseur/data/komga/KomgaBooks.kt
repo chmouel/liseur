@@ -1,6 +1,10 @@
 package com.chmouel.liseur.data.komga
 
 import com.chmouel.liseur.data.remote.RemoteBook
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.identifierOf
 import org.json.JSONObject
 
 /**
@@ -88,6 +92,9 @@ object KomgaBooks {
                     ?.takeIf { !json.optBoolean("oneshot", false) },
                 seriesId = json.stringOrNull("seriesId")
                     ?.takeIf { !json.optBoolean("oneshot", false) },
+                metadata = metadata?.details(),
+                // Komga's summary is plain text, typed in its own editor.
+                descriptionHtml = false,
             ),
             progress = json.optJSONObject("readProgress")?.let(::parseProgress),
         )
@@ -98,6 +105,19 @@ object KomgaBooks {
         completed = json.optBoolean("completed"),
         readDate = KomgaTime.parse(json.stringOrNull("readDate")),
         deviceId = json.stringOrNull("deviceId"),
+    )
+
+    /** What the book's metadata says beyond the shelf, for the details screen. */
+    private fun JSONObject.details(): MetadataSnapshot = MetadataSnapshot(
+        description = stringOrNull("summary"),
+        published = stringOrNull("releaseDate"),
+        subjects = optJSONArray("tags")?.let { tags ->
+            (0 until tags.length()).mapNotNull { tags.optString(it).takeIf(String::isNotBlank) }
+        }.orEmpty(),
+        contributors = objects("authors").mapNotNull { author ->
+            author.stringOrNull("name")?.let { Contributor(ContributorRoles.of(author.optString("role")), it) }
+        },
+        identifiers = listOfNotNull(identifierOf(stringOrNull("isbn"), "isbn")),
     )
 
     /**

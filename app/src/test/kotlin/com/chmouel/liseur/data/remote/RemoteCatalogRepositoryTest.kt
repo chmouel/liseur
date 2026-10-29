@@ -2,11 +2,20 @@ package com.chmouel.liseur.data.remote
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.Configuration
+import androidx.work.WorkManager
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookOrbitBinding
 import com.chmouel.liseur.data.db.BookOrbitBindingState
 import com.chmouel.liseur.data.db.BookDao
+import com.chmouel.liseur.data.db.BookMetadata
+import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.MetadataSource
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.ReadingProgress
@@ -197,6 +206,7 @@ class RemoteCatalogRepositoryTest {
             bookOrbitBindings = db.bookOrbitBindingDao(),
         ),
         localNetwork = localNetwork,
+        metadataDao = db.bookMetadataDao(),
     )
 
     /** A book DAO that keeps count of what a refresh asked it to do. */
@@ -254,6 +264,90 @@ class RemoteCatalogRepositoryTest {
         updatedAt = null,
         pageCount = null,
     )
+
+    private fun described(id: String, description: String?) = book(id).copy(
+        metadata = MetadataSnapshot(description = description, subjects = listOf("Whales")),
+    )
+
+    private suspend fun catalogRow(url: String) =
+        db.bookMetadataDao().forBook(url).singleOrNull { it.source == MetadataSource.CATALOG.key }
+
+    @Test
+    fun `a description changed on the server reaches the book when nothing else did`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "<p>Old <b>blurb</b></p>"))) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+        assertEquals("Old blurb", catalogRow(url)?.description)
+
+        // The book row is identical; only the details moved.
+        repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "New blurb"))) }).refresh()
+        assertEquals("New blurb", catalogRow(url)?.description)
+
+        repository(FakeCatalog { onPage -> onPage(listOf(book("b1"))) }).refresh()
+        assertNull(catalogRow(url))
+    }
+
+    @Test
+    fun `a book cut loose from the catalog keeps its own details and loses the catalog's`() = runTest {
+        connect()
+        repository(FakeCatalog { onPage -> onPage(listOf(described("b1", "Blurb"))) }).refresh()
+        val url = db.bookDao().allOnce().single().url
+        db.bookDao().setDownloadState(url, DownloadState.DOWNLOADED, "content://downloads/b1.epub")
+        db.bookMetadataDao().upsert(
+            BookMetadata.of(url, MetadataSource.FILE, MetadataSnapshot(description = "From the file")),
+        )
+
+        // Absence has to be seen twice before the link goes.
+        val emptied = repository(FakeCatalog { })
+        emptied.refresh()
+        emptied.refresh()
+
+        assertNull(db.bookDao().getByUrl(url)?.remoteUuid)
+        assertNull(catalogRow(url))
+        assertEquals("From the file", db.bookMetadataDao().forBook(url).single().description)
+    }
+
+    @Test
+    fun `a book saved from a browsed catalog arrives with the catalog's details`() = runTest {
+        connect()
+        db.remoteServerDao().upsert(db.remoteServerDao().get()!!.copy(id = 2))
+        val removal = BookRemoval(
+            db.bookDao(),
+            db.readingSessionDao(),
+            db.syncPeerStateDao(),
+            db.workIdentityDao(),
+            db.readingProgressDao(),
+            db.annotationDao(),
+            db.annotationSyncDao(),
+        )
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        if (!WorkManager.isInitialized()) {
+            WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
+        }
+        val browse = BrowseCatalogRepository(
+            servers = db.remoteServerDao(),
+            books = db.bookDao(),
+            orbitBindings = db.bookOrbitBindingDao(),
+            removal = removal,
+            downloads = BookDownloadRepository(context, db.bookDao(), removal, CoroutineScope(Dispatchers.Unconfined)),
+            router = RemoteRouter(
+                serverDao = db.remoteServerDao(),
+                catalogs = emptyMap(),
+                files = emptyMap(),
+                positions = emptyMap(),
+            ),
+            setups = emptyMap(),
+            orbitCatalog = { error("not a BookOrbit catalog") },
+            inTransaction = { it() },
+            metadata = db.bookMetadataDao(),
+        )
+
+        assertEquals(1, browse.add(2, listOf(described("b1", "Blurb"))))
+
+        val row = catalogRow(BrowseCatalogRepository.bookUrl(2, ServerKind.KOMGA, "b1"))
+        assertEquals("Blurb", row?.description)
+        assertEquals(listOf("Whales"), row?.toSnapshot()?.subjects)
+    }
 
     @Test
     fun `main refresh leaves a selected browse book with the same remote id alone`() = runTest {

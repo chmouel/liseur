@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.komga
 
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.Identifier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -100,6 +102,32 @@ class KomgaBooksTest {
             """{"content":[{"id":"b1","name":"file.epub",$fields}],"last":true}""",
         ),
     ).books.single().book
+
+    @Test
+    fun `the details a book's metadata holds are kept for the details screen`() {
+        val remote = KomgaBooks.parseBook(
+            JSONObject(
+                """
+                {"id":"b1","name":"file.epub","metadata":{"title":"Ulysses",
+                   "summary":"A day in Dublin.","releaseDate":"1922-02-02",
+                   "isbn":"9780199535675","tags":["modernism",""],
+                   "authors":[{"name":"James Joyce","role":"writer"},
+                              {"name":"A Translator","role":"translator"}]}}
+                """.trimIndent(),
+            ),
+        )!!.book
+
+        val details = remote.metadata!!
+        assertEquals(false, remote.descriptionHtml)
+        assertEquals("A day in Dublin.", details.description)
+        assertEquals("1922-02-02", details.published)
+        assertEquals(listOf("modernism"), details.subjects)
+        assertEquals(listOf(Identifier("isbn", "9780199535675")), details.identifiers)
+        assertEquals(
+            listOf(Contributor("author", "James Joyce"), Contributor("translator", "A Translator")),
+            details.contributors,
+        )
+    }
 
     @Test
     fun `a book nobody has opened has no progress`() {

@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.liseursync
 
 import com.chmouel.liseur.data.remote.RemoteCredentials
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.Identifier
 import java.net.InetAddress
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.MockResponse
@@ -157,6 +159,35 @@ class LiseurSyncCatalogClientTest {
         assertEquals(
             SyncOps.parseTime("2026-08-15T08:30:34.105Z"),
             book.updatedAt,
+        )
+    }
+
+    @Test
+    fun `what the server knows about a book is kept for the details screen`() {
+        val remote = books(
+            org.json.JSONArray(
+                """[{"book_id":"b-1","title":"Iron Gold","status":"active",
+                    "subtitle":"Book four","description":"<p>War.</p>",
+                    "publisher":"Del Rey","published_date":"2018-01-16",
+                    "languages":["en"],"subjects":["Science fiction"],
+                    "identifiers":[{"scheme":"isbn","value":"9780425285930"}],
+                    "contributors":[{"name":"Pierce Brown","role":"aut"},
+                                    {"name":"Tim Gerard Reynolds","role":"nrt"}]}]""",
+            ),
+        ).single()
+
+        val details = remote.metadata!!
+        assertNull(remote.descriptionHtml)
+        assertEquals("Book four", details.subtitle)
+        assertEquals("<p>War.</p>", details.description)
+        assertEquals(listOf("Del Rey"), details.publishers)
+        assertEquals("2018-01-16", details.published)
+        assertEquals(listOf("en"), details.languages)
+        assertEquals(listOf("Science fiction"), details.subjects)
+        assertEquals(listOf(Identifier("isbn", "9780425285930")), details.identifiers)
+        assertEquals(
+            listOf(Contributor("author", "Pierce Brown"), Contributor("narrator", "Tim Gerard Reynolds")),
+            details.contributors,
         )
     }
 

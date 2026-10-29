@@ -149,6 +149,9 @@ interface BookMetadataDao {
     @Query("SELECT * FROM book_metadata WHERE book_url = :bookUrl")
     suspend fun forBook(bookUrl: String): List<BookMetadata>
 
+    @Query("SELECT * FROM book_metadata WHERE book_url IN (:bookUrls) AND source = :source")
+    suspend fun ofSource(bookUrls: List<String>, source: String): List<BookMetadata>
+
     @Upsert
     suspend fun upsert(row: BookMetadata)
 

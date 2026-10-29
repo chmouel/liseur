@@ -545,6 +545,65 @@ class OpdsParserTest {
         <entry><id>1</id><title>x</title><author><name>García</name></author></entry></feed>"""
 
     @Test
+    fun `a calibre-web entry gives its details without the lines around the comments`() {
+        val book = OpdsParser.parse(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom" xmlns:dcterms="http://purl.org/dc/terms/">
+              <entry>
+                <title>The Great Hunt</title>
+                <id>urn:uuid:aaaabbbb-0000-1111-2222-333344445555</id>
+                <publisher><name>Tor</name></publisher>
+                <published>1990-11-15T00:00:00+00:00</published>
+                <dcterms:language>en</dcterms:language>
+                <category term="Fantasy" label="Fantasy"/>
+                <link rel="http://opds-spec.org/acquisition" href="/opds/download/74/epub/"
+                      length="1" type="application/epub+zip"/>
+                <content type="xhtml">
+                  <div xmlns="http://www.w3.org/1999/xhtml">RATING: 4<br/>SERIES: Wheel of Time [2.00]<br/>TAGS: Fantasy<br/><p>&lt;p&gt;The horn is &lt;b&gt;stolen&lt;/b&gt;.&lt;/p&gt;</p></div>
+                </content>
+              </entry>
+            </feed>
+            """.trimIndent(),
+        ).books.single()
+
+        val details = book.metadata!!
+        assertNull(book.descriptionHtml)
+        assertEquals("<p>The horn is <b>stolen</b>.</p>", details.description)
+        assertEquals(listOf("Tor"), details.publishers)
+        assertEquals("1990-11-15T00:00:00+00:00", details.published)
+        assertEquals(listOf("en"), details.languages)
+        assertEquals(listOf("Fantasy"), details.subjects)
+        assertEquals("uuid", details.identifiers.single().scheme)
+    }
+
+    @Test
+    fun `a plain-text summary is preferred to the content, and an unknown type is ignored`() {
+        fun entry(body: String) = OpdsParser.parse(
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>A</title><id>a</id>
+                BODY
+                <link rel="http://opds-spec.org/acquisition" href="/a.epub" type="application/epub+zip"/>
+              </entry>
+            </feed>
+            """.trimIndent().replace("BODY", body),
+        ).books.single()
+
+        val summary = entry("""<summary type="text">Short &lt;b&gt;one</summary><content type="html">&lt;p&gt;Long&lt;/p&gt;</content>""")
+        assertEquals("Short <b>one", summary.metadata?.description)
+        assertEquals(false, summary.descriptionHtml)
+
+        val html = entry("""<content type="html">&lt;p&gt;Long&lt;/p&gt;</content>""")
+        assertEquals("<p>Long</p>", html.metadata?.description)
+        assertEquals(true, html.descriptionHtml)
+
+        assertNull(entry("""<content type="application/pdf">JVBERi0=</content>""").metadata?.description)
+    }
+
+    @Test
     fun `text already decoded is not decoded again by its declaration`() {
         val page = OpdsParser.parse(latinFeed("ISO-8859-1"))
 

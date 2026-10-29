@@ -1,6 +1,8 @@
 package com.chmouel.liseur.data.bookorbit
 
 import org.json.JSONObject
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.identifierOf
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.SyncFailure
 
@@ -67,7 +69,14 @@ data class BookOrbitCard(
     val publisher: String?,
     val isbn13: String?,
     val hasCover: Boolean,
-)
+) {
+    /** The descriptive fields the card carries, for the details screen. */
+    fun details(): MetadataSnapshot = MetadataSnapshot(
+        publishers = listOfNotNull(publisher),
+        languages = listOfNotNull(language),
+        identifiers = listOfNotNull(identifierOf(isbn13, "isbn")),
+    )
+}
 
 /** One page of `POST /books/query`. */
 data class BookOrbitPage(

@@ -7,6 +7,10 @@ import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteCredentials
 import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.RemoteSeriesMembership
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.identifierOf
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
@@ -176,8 +180,36 @@ private fun book(json: JSONObject): RemoteBook? {
         seriesClaimUpdatedAt = SyncOps.parseTime(json.optString("series_claim_updated_at")),
         folderId = json.optString("folder_id").takeIf { it.isNotEmpty() },
         sha256 = json.optString("sha256").takeIf { it.isNotEmpty() },
+        metadata = details(json),
     )
 }
+
+/**
+ * The descriptive fields, for the details screen. The description is
+ * whatever the book's OPF held, so it may be HTML and is left to be
+ * checked.
+ */
+private fun details(json: JSONObject): MetadataSnapshot = MetadataSnapshot(
+    subtitle = json.optString("subtitle").takeIf { it.isNotEmpty() },
+    description = json.optString("description").takeIf { it.isNotEmpty() },
+    publishers = listOfNotNull(json.optString("publisher").takeIf { it.isNotEmpty() }),
+    published = json.optString("published_date").takeIf { it.isNotEmpty() },
+    languages = strings(json.optJSONArray("languages")),
+    subjects = strings(json.optJSONArray("subjects")),
+    contributors = objects(json.optJSONArray("contributors")).mapNotNull { contributor ->
+        contributor.optString("name").takeIf { it.isNotEmpty() }
+            ?.let { Contributor(ContributorRoles.of(contributor.optString("role")), it) }
+    },
+    identifiers = objects(json.optJSONArray("identifiers")).mapNotNull { id ->
+        identifierOf(id.optString("value"), id.optString("scheme"))
+    },
+)
+
+private fun strings(array: JSONArray?): List<String> =
+    (0 until (array?.length() ?: 0)).mapNotNull { index -> array?.optString(index)?.takeIf { it.isNotEmpty() } }
+
+private fun objects(array: JSONArray?): List<JSONObject> =
+    (0 until (array?.length() ?: 0)).mapNotNull { index -> array?.optJSONObject(index) }
 
 internal fun series(array: JSONArray?): List<RemoteSeriesMembership> =
     (0 until (array?.length() ?: 0)).mapNotNull { index ->

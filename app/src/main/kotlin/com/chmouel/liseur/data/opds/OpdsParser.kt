@@ -1,6 +1,10 @@
 package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.remote.RemoteBook
+import com.chmouel.liseur.domain.Contributor
+import com.chmouel.liseur.domain.ContributorRoles
+import com.chmouel.liseur.domain.MetadataSnapshot
+import com.chmouel.liseur.domain.identifierOf
 import java.io.StringReader
 import java.nio.charset.Charset
 import javax.xml.parsers.DocumentBuilderFactory
@@ -45,6 +49,10 @@ data class OpdsBook(
      * string with no idea of that.
      */
     val xmlBase: String? = null,
+    /** What the entry says about the book, description still as sent. */
+    val metadata: MetadataSnapshot? = null,
+    /** Whether that description is HTML, or null to look and decide. */
+    val descriptionHtml: Boolean? = null,
 )
 
 /**
@@ -72,6 +80,8 @@ fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
     calibreBookId = bookId,
     seriesName = seriesName,
     seriesIndex = seriesIndex,
+    metadata = metadata,
+    descriptionHtml = descriptionHtml,
 )
 
 /** One page of a catalog feed: what is in it, and where to go next. */
@@ -570,15 +580,15 @@ object OpdsParser {
 
         val href = download?.href()
         val series = parseSeries(entry)
+        val authors = entry.children("author")
+            .mapNotNull { it.childText("name")?.trim()?.takeIf(String::isNotEmpty) }
+        val description = parseDescription(entry)
 
         return OpdsBook(
             entryId = entryId,
             bookId = href?.let(::bookIdFromHref) ?: cover?.getAttribute("href")?.let(::bookIdFromHref),
             title = title.trim(),
-            author = entry.children("author")
-                .mapNotNull { it.childText("name")?.trim()?.takeIf(String::isNotEmpty) }
-                .joinToString(", ")
-                .ifBlank { null },
+            author = authors.joinToString(", ").ifBlank { null },
             coverHref = cover?.href(),
             downloadHref = href,
             sizeBytes = download?.getAttribute("length")?.toLongOrNull(),
@@ -586,8 +596,97 @@ object OpdsParser {
             seriesName = series?.name,
             seriesIndex = series?.index,
             xmlBase = entry.xmlBase(),
+            metadata = MetadataSnapshot(
+                description = description?.text,
+                // calibre-web nests the name as Atom does for people;
+                // Dublin Core says it outright.
+                publishers = entry.children("publisher").mapNotNull { publisher ->
+                    (publisher.childText("name") ?: publisher.textContent)?.trim()?.takeIf(String::isNotEmpty)
+                },
+                // dc:issued is the book's date. Atom's own <published> is
+                // the entry's, but calibre-web writes the book's there.
+                published = entry.childText("issued") ?: entry.childText("published"),
+                languages = entry.children("language").mapNotNull { it.textContent?.trim()?.takeIf(String::isNotEmpty) },
+                subjects = entry.children("category").mapNotNull { category ->
+                    category.getAttribute("label").ifBlank { category.getAttribute("term") }.trim()
+                        .takeIf(String::isNotEmpty)
+                },
+                contributors = authors.map { Contributor(ContributorRoles.AUTHOR, it) },
+                identifiers = entry.children("identifier").mapNotNull { identifierOf(it.textContent) } +
+                    listOfNotNull(id.trim().takeIf { it.startsWith("urn:", ignoreCase = true) }?.let(::identifierOf)),
+            ),
+            descriptionHtml = description?.html,
         )
     }
+
+    private class OpdsDescription(val text: String, val html: Boolean?)
+
+    /**
+     * The book's description: `<summary>` when there is one, else the
+     * `<content>` block.
+     *
+     * Atom types the text as `text`, `html` or `xhtml`, and anything else
+     * is not guessed at. In an xhtml `<content>` only what is nested in
+     * an element counts: calibre-web writes its rating, tags and series
+     * as bare lines in the same block, and the blurb in a paragraph after
+     * them (see [directText]). calibre-web escapes the blurb's own HTML
+     * into that paragraph, so xhtml text is left to be checked for markup.
+     */
+    private fun parseDescription(entry: Element): OpdsDescription? =
+        entry.children("summary").firstNotNullOfOrNull { typedText(it, nestedOnly = false) }
+            ?: entry.children("content").firstNotNullOfOrNull { typedText(it, nestedOnly = true) }
+
+    private fun typedText(element: Element, nestedOnly: Boolean): OpdsDescription? {
+        val description = when (element.getAttribute("type").trim().lowercase().ifEmpty { "text" }) {
+            "text" -> OpdsDescription(element.textContent, html = false)
+            "html" -> OpdsDescription(element.textContent, html = true)
+            "xhtml" -> OpdsDescription(blockText(element, nestedOnly), html = null)
+            else -> null
+        }
+        return description?.takeIf { it.text.isNotBlank() }
+    }
+
+    /**
+     * The text of an xhtml block with its paragraphs kept apart. With
+     * [nestedOnly], text written straight into the block or its wrapper
+     * `<div>`s is skipped, as [directText] reads exactly that.
+     */
+    private fun blockText(element: Element, nestedOnly: Boolean): String {
+        val out = StringBuilder()
+        fun walk(node: Node, top: Boolean) {
+            val children = node.childNodes
+            for (index in 0 until children.length) {
+                val child = children.item(index)
+                val skipped = nestedOnly && top
+                when (child.nodeType) {
+                    Node.TEXT_NODE, Node.CDATA_SECTION_NODE ->
+                        if (!skipped) out.append(child.textContent.replace(WHITESPACE, " "))
+                    Node.ELEMENT_NODE -> {
+                        val name = child.localName?.lowercase()
+                        when {
+                            name == "br" -> if (!skipped) out.append('\n')
+                            skipped && name == "div" -> walk(child, top = true)
+                            else -> {
+                                val block = name in BLOCKS
+                                if (block) out.append("\n\n")
+                                walk(child, top = false)
+                                if (block) out.append("\n\n")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        walk(element, top = true)
+        return out.toString().replace(BLANK_RUN, "\n\n").trim()
+    }
+
+    private val WHITESPACE = Regex("""\s+""")
+    private val BLANK_RUN = Regex("""\s*\n\s*\n\s*""")
+
+    private val BLOCKS = setOf(
+        "p", "div", "li", "ul", "ol", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "tr",
+    )
 
     /**
      * Which of an entry's acquisition links to offer, if any.
