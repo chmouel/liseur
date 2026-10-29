@@ -94,6 +94,17 @@ class BookDetailsTest {
         )!!
         assertEquals(31, few.subjects.count { it.startsWith("c") })
         assertEquals("f", few.subjects.last())
+
+        // Subjects the file shares with the end of a long catalog list
+        // are kept in the file's half instead of dropping out of both.
+        val shared = resolveMetadata(
+            mapOf(
+                MetadataSource.CATALOG to catalog,
+                MetadataSource.FILE to MetadataSnapshot(subjects = listOf("c39", "c40", "f")),
+            ),
+        )!!
+        assertEquals(BookDetailsBounds.SUBJECTS, shared.subjects.size)
+        assertEquals(listOf("c39", "c40", "f"), shared.subjects.takeLast(3))
     }
 
     @Test
