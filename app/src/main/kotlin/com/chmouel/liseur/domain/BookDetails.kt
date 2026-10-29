@@ -261,15 +261,23 @@ private fun merged(first: MetadataSnapshot?, second: MetadataSnapshot?): Metadat
 /**
  * [first] then whatever [second] adds, each deduplicated by [key]. Over
  * [cap], [second] keeps at least half the room, so the first list cannot
- * spend the whole budget.
+ * spend the whole budget. An entry both lists share counts toward
+ * [second]'s room when [first] is cut before it.
  */
 internal fun <T> mergeCapped(first: List<T>, second: List<T>, cap: Int, key: (T) -> String): List<T> {
-    val seen = HashSet<String>()
-    val a = first.filter { seen.add(key(it)) }
-    val b = second.filter { seen.add(key(it)) }
-    if (a.size + b.size <= cap) return a + b
+    val a = first.distinctBy(key)
+    val b = second.distinctBy(key)
+    val inFirst = a.mapTo(HashSet(), key)
+    val added = b.filter { key(it) !in inFirst }
+    if (a.size + added.size <= cap) return a + added
     val firstShare = maxOf(cap - b.size, cap / 2).coerceAtMost(a.size)
-    return a.take(firstShare) + b.take(cap - firstShare)
+    val kept = a.take(firstShare)
+    val inKept = kept.mapTo(HashSet(), key)
+    val rest = b.filter { key(it) !in inKept }.take(cap - firstShare)
+    // What the second list could not fill goes back to the first.
+    val inRest = rest.mapTo(HashSet(), key)
+    val more = a.drop(firstShare).filter { key(it) !in inRest }.take(cap - firstShare - rest.size)
+    return kept + more + rest
 }
 
 /**
