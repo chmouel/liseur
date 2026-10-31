@@ -19,6 +19,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -127,6 +129,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.bookorbit.BookOrbitLocalCandidate
 import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.reader.progress.BookOrbitViewportCfi
+import android.content.Context
 import android.os.SystemClock
 import android.webkit.WebView
 import android.widget.Toast
@@ -206,6 +209,7 @@ import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
+import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.SelectionToolbarSheet
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
@@ -246,6 +250,8 @@ import com.chmouel.liseur.reader.chrome.ContentsScreen
 import com.chmouel.liseur.reader.chrome.Endpaper
 import com.chmouel.liseur.reader.chrome.FixedLayoutPinchHud
 import com.chmouel.liseur.reader.chrome.FontSizeHud
+import com.chmouel.liseur.reader.chrome.BrightnessHud
+import com.chmouel.liseur.reader.chrome.BrightnessSwipe
 import com.chmouel.liseur.reader.chrome.FootnoteCard
 import com.chmouel.liseur.reader.chrome.GestureClaim
 import com.chmouel.liseur.reader.chrome.ImageViewer
@@ -514,6 +520,8 @@ internal fun ReaderScreen(
     onScrollingChanged: (Boolean) -> Unit = {},
     tapZonesFlow: StateFlow<TapZones>,
     pinchToResizeFlow: StateFlow<Boolean>,
+    edgeBrightnessFlow: StateFlow<EdgeBrightness>,
+    onEdgeBrightnessChanged: (EdgeBrightness) -> Unit,
     selectionActionLayoutFlow: StateFlow<SelectionActionLayout>,
     onSelectionActionLayoutChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
     highlightPaletteFlow: StateFlow<HighlightPalette>,
@@ -584,6 +592,7 @@ internal fun ReaderScreen(
     val lockFooterOn by lockFooterOnFlow.collectAsStateWithLifecycle()
     val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
+    val edgeBrightness by edgeBrightnessFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
     val selectionActionLayout by selectionActionLayoutFlow.collectAsStateWithLifecycle()
     // Readium reads vertical text off the book rather than off the
@@ -755,6 +764,15 @@ internal fun ReaderScreen(
     val fontSizeNow by rememberUpdatedState(prefs.fontSize)
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     val touch = remember { TouchProbe() }
+    // The brightness an edge swipe is showing, ahead of the saved one.
+    // Kept after the finger lifts until the save comes back, so the
+    // screen does not drop to the old value for a frame (ADR 64).
+    var brightnessPreview by remember { mutableStateOf<Float?>(null) }
+    var brightnessSwiping by remember { mutableStateOf(false) }
+    val edgeBrightnessNow by rememberUpdatedState(edgeBrightness)
+    val brightnessNow by rememberUpdatedState(prefs.brightness)
+    val setBrightnessNow by rememberUpdatedState(onPrefsAction.setBrightness)
+    val systemGestures = WindowInsets.systemGestures
     var viewedImage by remember { mutableStateOf<ViewedImage?>(null) }
     // True from the moment a picture is claimed to the moment it is on
     // screen. The bytes take a read of an archive entry to arrive, and
@@ -1363,22 +1381,23 @@ internal fun ReaderScreen(
         pinchStart.value != null || pinchHeld ||
             SystemClock.uptimeMillis() - pinchSettledAt.longValue < PinchResize.GUARD_MS
     }
+    // Whether a one-finger drag on the page may be taken for a page
+    // turn or a brightness swipe. A scrolled book has no page to turn
+    // and a fixed-layout one is dragged to look around, not to turn. A
+    // picture over the page takes the book out of reach, as it does for
+    // every other way of turning it. Chrome up means the scrubber is on
+    // the page, and a drag across it is a seek, not a turn.
+    val pageGesturesFree = {
+        !chromeDrawn() && !effectiveScrollingNow && reflowableTextNow &&
+            !isPinching() && !selectionActive && selection == null &&
+            tappedSelection == null &&
+            viewedImageNow == null && !openingImageNow
+    }
     val pageCurl = remember { PageCurlState(effectScope) }
     val pageTurnDrag = remember {
         PageTurnDrag(
             style = turnStyle,
-            canTurn = {
-                // A scrolled book has no page to turn and a
-                // fixed-layout one is dragged to look around, not to
-                // turn. A picture over the page takes the book out of
-                // reach, as it does for every other way of turning it.
-                // Chrome up means the scrubber is on the page, and a
-                // drag across it is a seek, not a turn.
-                !chromeDrawn() && !effectiveScrollingNow && reflowableTextNow &&
-                    !isPinching() && !selectionActive && selection == null &&
-                    tappedSelection == null &&
-                    viewedImageNow == null && !openingImageNow
-            },
+            canTurn = pageGesturesFree,
             interactive = { !eInkNow && pageCurlSupportedOnDevice },
             isRtl = {
                 navigatorNow?.overflow?.value?.readingProgression == ReadingProgression.RTL
@@ -3259,6 +3278,10 @@ internal fun ReaderScreen(
                 // navigator's report of it would be taken for following.
                 object : InputListener {
                     override fun onDrag(event: DragEvent): Boolean {
+                        // Readium reports a drag a few pixels in, before
+                        // the slop decides whether a finger on the edge
+                        // is a brightness swipe, which moves no page.
+                        if (touch.edgeCandidate || touch.edgeSwipe != null) return false
                         if (!isPinching()) companion?.onUserTurn?.invoke()
                         if (listeningPlayingNow && !isPinching()) {
                             lastDragAt = SystemClock.elapsedRealtime()
@@ -3311,7 +3334,10 @@ internal fun ReaderScreen(
     }
     // Back, while a source is shown, goes back to where the reader asked.
     BackHandler(enabled = companionPeek != null) { returnToAsking() }
-    ScreenBrightness(brightness = prefs.brightness)
+    ScreenBrightness(brightness = brightnessPreview ?: prefs.brightness)
+    LaunchedEffect(prefs.brightness) {
+        if (!brightnessSwiping) brightnessPreview = null
+    }
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
     // decides everything else, and this adds nothing once the page stops.
@@ -3564,7 +3590,7 @@ internal fun ReaderScreen(
             // is still young: changing a gesture's meaning under fingers
             // that have been moving for half a second is worse than
             // getting it wrong.
-            if (hit != null && touch.pointers >= 2 && imageMayWin()) {
+            if (hit != null && touch.pointers >= 2 && touch.edgeSwipe == null && imageMayWin()) {
                 pinchStart.value = null
                 pinchTarget = null
                 pinchRefused = false
@@ -3584,7 +3610,7 @@ internal fun ReaderScreen(
                 delay(ANSWER_POLL_MS)
                 waited += ANSWER_POLL_MS
             }
-            if (touch.serial != serial || touch.moved || touch.pointers != 1) return@launch
+            if (touch.serial != serial || touch.moved || touch.pointers != 1 || touch.edgeSwipe != null) return@launch
             // A resize that took this touch keeps it. Without this, a
             // quick pinch held by a still first finger ends with that
             // finger alone and unmoved, which is exactly what a long
@@ -3632,6 +3658,32 @@ internal fun ReaderScreen(
                         val was = touch.pointers
                         touch.pointers = down.size
 
+                        // A swipe up or down the brightness edge, claimed
+                        // below on the same event the page turn decides on,
+                        // ahead of it. It keeps the touch until every
+                        // finger has left: a second finger is not a pinch,
+                        // and the lift is not a tap, since the web view saw
+                        // the touch cancelled (ADR 64). Checked before the
+                        // early outs so the lift always ends it.
+                        touch.edgeSwipe?.let { swipe ->
+                            event.changes.forEach { it.consume() }
+                            event.changes.firstOrNull { it.id == swipe.pointer && it.pressed }?.let {
+                                brightnessPreview = BrightnessSwipe.valueFor(
+                                    swipe.value,
+                                    it.position.y - swipe.y,
+                                    boxSize.height.toFloat(),
+                                )
+                            }
+                            if (down.isEmpty()) {
+                                touch.edgeSwipe = null
+                                brightnessSwiping = false
+                                brightnessPreview?.let {
+                                    if (it == brightnessNow) brightnessPreview = null else setBrightnessNow(it)
+                                }
+                            }
+                            continue
+                        }
+
                         // A touch that opened the viewer belongs to the
                         // viewer until it is lifted. Consuming the rest of
                         // it is what keeps the long press that opened the
@@ -3669,6 +3721,23 @@ internal fun ReaderScreen(
                                 touch.downAt = down[0].position
                                 touch.startedAt = SystemClock.uptimeMillis()
                                 touch.claim.begin(touch.startedAt)
+                                touch.edgeSwipe = null
+                                touch.edgeCandidate = edgeBrightnessNow != EdgeBrightness.OFF &&
+                                    pageGesturesFree() &&
+                                    BrightnessSwipe.inStrip(
+                                        edge = edgeBrightnessNow,
+                                        x = touch.downAt.x,
+                                        y = touch.downAt.y,
+                                        width = boxSize.width.toFloat(),
+                                        height = boxSize.height.toFloat(),
+                                        density = density,
+                                        topExcluded = (systemGestures.getTop(this) - boxInWindow.y)
+                                            .coerceAtLeast(0f),
+                                        bottomExcluded = (
+                                            boxInWindow.y + boxSize.height -
+                                                (view.rootView.height - systemGestures.getBottom(this))
+                                            ).coerceAtLeast(0f),
+                                    )
                                 pinchHeld = false
                                 pageTurnDrag.reset()
                                 velocity.resetTracking()
@@ -3677,6 +3746,26 @@ internal fun ReaderScreen(
 
                             (down[0].position - touch.downAt).getDistance() > slop ->
                                 touch.moved = true
+                        }
+                        if (touch.edgeCandidate && (down.size != 1 || touch.moved)) {
+                            touch.edgeCandidate = false
+                            val finger = down.singleOrNull()
+                            val travelled = finger?.let { it.position - touch.downAt }
+                            if (finger != null && travelled != null && pageGesturesFree() &&
+                                BrightnessSwipe.claims(
+                                    dx = travelled.x,
+                                    dy = travelled.y,
+                                    elapsedMs = SystemClock.uptimeMillis() - touch.startedAt,
+                                    longPressMs = longPressMs,
+                                )
+                            ) {
+                                val start = brightnessPreview ?: brightnessNow ?: systemBrightness(view.context)
+                                touch.edgeSwipe = EdgeSwipe(finger.id, finger.position.y, start)
+                                brightnessPreview = start
+                                brightnessSwiping = true
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
                         }
                         /*
                          * A sideways drag under Lift or None curls the
@@ -4687,6 +4776,9 @@ internal fun ReaderScreen(
                 pinchRefused -> FixedLayoutPinchHud(theme = readingTheme)
                 else -> pinchTarget?.let { FontSizeHud(size = it, theme = readingTheme) }
             }
+            brightnessPreview?.takeIf { brightnessSwiping }?.let {
+                BrightnessHud(brightness = it, theme = readingTheme)
+            }
         }
 
         // Last of all: a picture asked for full screen is the thing the
@@ -5398,6 +5490,8 @@ internal fun ReaderScreen(
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
+            edgeBrightness = edgeBrightness,
+            onEdgeBrightnessChanged = onEdgeBrightnessChanged,
             onClearTranslations = onClearTranslations?.let { { clearingTranslations = true } },
             recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value,
             onRecapsHereChanged = { companion?.setRecapsHere?.invoke(it) },
@@ -5863,17 +5957,23 @@ private fun ImmersiveMode(hideSystemBars: Boolean) {
     }
 }
 
-/** Applies the brightness override to the reader window; null follows the system. */
+/**
+ * Applies the brightness override to the reader window; null follows the
+ * system. Written only when it changes, and handed back to the system
+ * only when the reader leaves: an edge swipe changes it every frame, and
+ * going through the system's own value in between would flicker.
+ */
 @Composable
 private fun ScreenBrightness(brightness: Float?) {
     val view = LocalView.current
-    DisposableEffect(brightness) {
-        val window = (view.context as? Activity)?.window
-        if (window != null) {
-            window.attributes = window.attributes.apply {
-                screenBrightness = brightness ?: -1f
-            }
+    val window = (view.context as? Activity)?.window
+    SideEffect {
+        val target = brightness ?: -1f
+        if (window != null && window.attributes.screenBrightness != target) {
+            window.attributes = window.attributes.apply { screenBrightness = target }
         }
+    }
+    DisposableEffect(window) {
         onDispose {
             if (window != null) {
                 window.attributes = window.attributes.apply { screenBrightness = -1f }
@@ -5881,6 +5981,19 @@ private fun ScreenBrightness(brightness: Float?) {
         }
     }
 }
+
+/**
+ * The system's brightness, as a start for an edge swipe on a reader that
+ * follows it. Approximate: the setting is 0-255 on most phones but not
+ * all, and Android maps it to the panel on a curve. Middle when unknown.
+ */
+private fun systemBrightness(context: Context): Float =
+    runCatching {
+        android.provider.Settings.System.getInt(
+            context.contentResolver,
+            android.provider.Settings.System.SCREEN_BRIGHTNESS,
+        ) / 255f
+    }.getOrNull()?.coerceIn(0f, 1f) ?: 0.5f
 
 /**
  * Keeps the reader window awake while [enabled].
@@ -6110,4 +6223,13 @@ private class TouchProbe {
      * the wrong thing to read.
      */
     val claim = GestureClaim(DECIDE_BUDGET_MS)
+
+    /** Landed in the brightness strip, and not yet decided either way. */
+    var edgeCandidate = false
+
+    /** Set while this touch is a brightness swipe; see [BrightnessSwipe]. */
+    var edgeSwipe: EdgeSwipe? = null
 }
+
+/** A brightness swipe: the finger, where it was taken, and the brightness then. */
+private class EdgeSwipe(val pointer: PointerId, val y: Float, val value: Float)

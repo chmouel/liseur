@@ -78,6 +78,7 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.TapZones
+import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
@@ -1271,6 +1272,13 @@ class ReaderViewModel(
     val pinchToResize: StateFlow<Boolean> = appSettings.settings
         .map { it.pinchToResize }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Which edge of a paginated page a swipe changes the brightness on, app-wide. */
+    val edgeBrightness: StateFlow<EdgeBrightness> = appSettings.settings
+        .map { it.edgeBrightness }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, EdgeBrightness.Default)
+
+    fun setEdgeBrightness(edge: EdgeBrightness) = viewModelScope.launch { appSettings.setEdgeBrightness(edge) }
 
     /**
      * The colours a passage may be marked in, app-wide.

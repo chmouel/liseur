@@ -615,6 +615,11 @@
     <string name="reader_brightness_decrease">Bajar el brillo</string>
     <string name="reader_brightness_increase">Subir el brillo</string>
     <string name="reader_brightness_system">Seguir el brillo del sistema</string>
+    <string name="reader_brightness_level">Brillo %1$d %%</string>
+    <string name="reader_brightness_edge">Desliza hacia arriba o abajo por este borde de la página para ajustar el brillo.</string>
+    <string name="brightness_edge_off">Desactivado</string>
+    <string name="brightness_edge_left">Izquierda</string>
+    <string name="brightness_edge_right">Derecha</string>
     <string name="reader_progress">Progreso</string>
     <string name="reader_line_spacing">Interlineado</string>
     <string name="reader_spacing_compact">Compacto</string>
@@ -768,6 +773,8 @@
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
     <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
     <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que redibujan demasiado despacio la vista previa del tamaño. Usa en su lugar el control deslizante de Tamaño. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si esta no es una pantalla de tinta electrónica.</string>
+    <string name="settings_brightness_edge">Deslizar para el brillo</string>
+    <string name="settings_brightness_edge_detail">Desliza hacia arriba o abajo por este borde de la página para cambiar el brillo sin abrir el menú. Los toques y los pases de página que empiezan en el borde funcionan igual. Solo al pasar páginas, no al desplazarse.</string>
     <string name="settings_resume">Abrir en el libro que estabas leyendo</string>
     <string name="settings_resume_detail">Sáltate la biblioteca cuando dejaste un libro a medias.</string>
     <string name="settings_keep_screen_on">Mantener la pantalla encendida</string>

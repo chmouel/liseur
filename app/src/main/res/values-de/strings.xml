@@ -623,6 +623,11 @@
     <string name="reader_brightness_decrease">Helligkeit verringern</string>
     <string name="reader_brightness_increase">Helligkeit erhöhen</string>
     <string name="reader_brightness_system">Systemhelligkeit folgen</string>
+    <string name="reader_brightness_level">Helligkeit %1$d %%</string>
+    <string name="reader_brightness_edge">An diesem Seitenrand nach oben oder unten wischen, um die Helligkeit anzupassen.</string>
+    <string name="brightness_edge_off">Aus</string>
+    <string name="brightness_edge_left">Links</string>
+    <string name="brightness_edge_right">Rechts</string>
     <string name="reader_progress">Fortschritt</string>
     <string name="reader_line_spacing">Zeilenabstand</string>
     <string name="reader_spacing_compact">Kompakt</string>
@@ -779,6 +784,8 @@
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
     <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
     <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen aus, da sie die Live-Vorschau der Größe zu langsam neu zeichnen. Nutze stattdessen den Größenregler. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das kein E-Ink-Bildschirm ist.</string>
+    <string name="settings_brightness_edge">Helligkeit per Wischen</string>
+    <string name="settings_brightness_edge_detail">Wische an diesem Seitenrand nach oben oder unten, um die Helligkeit zu ändern, ohne das Menü zu öffnen. Tippen und seitliches Umblättern vom Rand aus funktionieren wie bisher. Nur beim Umblättern, nicht beim Scrollen.</string>
     <string name="settings_resume">Beim Buch öffnen, das du gelesen hast</string>
     <string name="settings_resume_detail">Die Bibliothek überspringen, wenn du mitten im Buch aufgehört hast.</string>
     <string name="settings_keep_screen_on">Bildschirm anlassen</string>

@@ -615,6 +615,11 @@
     <string name="reader_brightness_decrease">Riduci luminosità</string>
     <string name="reader_brightness_increase">Aumenta luminosità</string>
     <string name="reader_brightness_system">Segui la luminosità di sistema</string>
+    <string name="reader_brightness_level">Luminosità %1$d%%</string>
+    <string name="reader_brightness_edge">Scorri in su o in giù lungo questo bordo della pagina per regolare la luminosità.</string>
+    <string name="brightness_edge_off">Disattivato</string>
+    <string name="brightness_edge_left">Sinistra</string>
+    <string name="brightness_edge_right">Destra</string>
     <string name="reader_progress">Avanzamento</string>
     <string name="reader_line_spacing">Interlinea</string>
     <string name="reader_spacing_compact">Compatta</string>
@@ -768,6 +773,8 @@
     <string name="settings_pinch_to_resize">Pizzica per ridimensionare il testo</string>
     <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Disattivalo se il modo in cui impugni il telefono lo attiva per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
     <string name="settings_pinch_to_resize_eink">Spento sugli schermi e-ink, che ridisegnano troppo lentamente l\'anteprima della dimensione. Usa invece il cursore Dimensione. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se questo non è uno schermo e-ink.</string>
+    <string name="settings_brightness_edge">Luminosità con scorrimento</string>
+    <string name="settings_brightness_edge_detail">Scorri in su o in giù lungo questo bordo della pagina per cambiare la luminosità senza aprire il menu. I tocchi e i cambi pagina che partono dal bordo funzionano come prima. Solo quando si girano le pagine, non durante lo scorrimento.</string>
     <string name="settings_resume">Apri sul libro che stavi leggendo</string>
     <string name="settings_resume_detail">Salta la libreria quando hai lasciato a metà un libro.</string>
     <string name="settings_keep_screen_on">Tieni lo schermo acceso</string>

@@ -620,6 +620,7 @@ private fun LiseurApp(
                             onVolumeKeyMode = { scope.launch { repository.setVolumeKeyMode(it) } },
                             onTapZones = { scope.launch { repository.setTapZones(it) } },
                             onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
+                            onEdgeBrightness = { scope.launch { repository.setEdgeBrightness(it) } },
                             onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
                             onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                             onScrollMode = { scope.launch { repository.setScrollMode(it) } },

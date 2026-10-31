@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.AutoScrollPreference
 import com.chmouel.liseur.data.settings.ColumnMode
+import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.data.settings.FooterMode
 import com.chmouel.liseur.data.settings.FooterField
 import com.chmouel.liseur.data.settings.FooterSlot
@@ -43,6 +44,7 @@ import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.FixedLayoutNotice
 import com.chmouel.liseur.ui.reading.ReadingFineTypographyControls
+import com.chmouel.liseur.ui.reading.ReadingBrightnessEdgeControl
 import com.chmouel.liseur.ui.reading.ReadingFooterControls
 import com.chmouel.liseur.ui.reading.ReadingLayoutControls
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
@@ -105,6 +107,8 @@ fun AdvancedSheet(
     keepScreenOn: Boolean,
     onKeepScreenOnChanged: (Boolean) -> Unit,
     onTypographyIsOwnChanged: (Boolean) -> Unit,
+    edgeBrightness: EdgeBrightness,
+    onEdgeBrightnessChanged: (EdgeBrightness) -> Unit,
     // Forgets this book's saved translations, here and on the account.
     // Null where there is nothing saved to forget, or no account to
     // forget it from.
@@ -162,6 +166,11 @@ fun AdvancedSheet(
                 ReadingPageTurnStyleControl(
                     selected = prefs.pageTurnStyle,
                     onSelected = onPageTurnStyleChanged,
+                )
+                // The swipe only exists on turned pages (ADR 64).
+                ReadingBrightnessEdgeControl(
+                    selected = edgeBrightness,
+                    onSelected = onEdgeBrightnessChanged,
                 )
             }
             // The switch itself sits beside the scrolling one in the

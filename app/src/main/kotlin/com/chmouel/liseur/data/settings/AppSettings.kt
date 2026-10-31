@@ -152,6 +152,24 @@ enum class TapZones(val id: String) {
     }
 }
 
+/**
+ * Which screen edge, if any, takes a vertical swipe as a brightness
+ * change. The physical edge, whatever the book's reading direction. See
+ * `docs/adr/0064-brightness-on-the-edge.md`.
+ */
+enum class EdgeBrightness(val id: String) {
+    OFF("off"),
+    LEFT("left"),
+    RIGHT("right"),
+    ;
+
+    companion object {
+        val Default = LEFT
+
+        fun fromId(id: String?): EdgeBrightness = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 /** Where the Define action sends selected text. */
 enum class DefinitionTarget(val id: String) {
     BUILT_IN("built_in"),
@@ -181,6 +199,8 @@ enum class DefinitionTarget(val id: String) {
  *   two-finger touches, since a stray resize changes how every page looks
  *   from then on. Pinching an image to enlarge it is not covered: that one
  *   is one visible thing, dismissed with a tap.
+ * @param edgeBrightness Which edge of a paginated page changes the screen
+ *   brightness when swiped up or down.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param keepScreenOn The screen stays awake while a book is open. On by
  *   default for new installs, and can be turned off per reader or per
@@ -264,6 +284,7 @@ data class AppSettings(
     val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.Default,
     val tapZones: TapZones = TapZones.Default,
     val pinchToResize: Boolean = true,
+    val edgeBrightness: EdgeBrightness = EdgeBrightness.Default,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
@@ -433,6 +454,7 @@ class AppSettingsRepository(
         val VOLUME_KEY_MODE = stringPreferencesKey("volume_keys_mode")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
         val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
+        val EDGE_BRIGHTNESS = stringPreferencesKey("edge_brightness")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
@@ -526,6 +548,7 @@ class AppSettingsRepository(
             volumeKeyMode = p.volumeKeyMode(),
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
+            edgeBrightness = EdgeBrightness.fromId(p[Keys.EDGE_BRIGHTNESS]),
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
@@ -668,6 +691,10 @@ class AppSettingsRepository(
 
     suspend fun setPinchToResize(enabled: Boolean) {
         store.edit { it[Keys.PINCH_TO_RESIZE] = enabled }
+    }
+
+    suspend fun setEdgeBrightness(edge: EdgeBrightness) {
+        store.edit { it[Keys.EDGE_BRIGHTNESS] = edge.id }
     }
 
     suspend fun setResumeLastBook(enabled: Boolean) {
@@ -1224,7 +1251,8 @@ internal val APP_BACKUP_TYPES = mapOf(
     "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
     "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "volume_keys_mode" to BackupValueType.STRING,
     "tap_zones" to BackupValueType.STRING,
-    "pinch_to_resize" to BackupValueType.BOOLEAN, "resume_last_book" to BackupValueType.BOOLEAN,
+    "pinch_to_resize" to BackupValueType.BOOLEAN, "edge_brightness" to BackupValueType.STRING,
+    "resume_last_book" to BackupValueType.BOOLEAN,
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,
     "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,
     "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,

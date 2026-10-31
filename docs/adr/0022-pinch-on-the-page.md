@@ -553,7 +553,9 @@ costs the round trip that is the complaint. The slider stays either way;
 the gesture is an addition, not a replacement.
 
 **A vertical edge drag for size.** Collides with `ScrollEdgeTurner` and
-with scroll mode, and is not the gesture readers reach for.
+with scroll mode, and is not the gesture readers reach for. The edge was
+later given to brightness, in paginated reading only
+([ADR 64](0064-brightness-on-the-edge.md)).
 
 **Double-tap cycling through preset sizes.** Double-tap is wanted
 elsewhere, and cycling suits a three-way choice, not nineteen steps.
