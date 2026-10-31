@@ -769,6 +769,10 @@ internal fun ReaderScreen(
     // screen does not drop to the old value for a frame (ADR 64).
     var brightnessPreview by remember { mutableStateOf<Float?>(null) }
     var brightnessSwiping by remember { mutableStateOf(false) }
+    // The value a swipe last handed to the store. The saved setting lags
+    // a write behind, so a lift is compared against this rather than
+    // against the setting (ADR 64).
+    var brightnessSaved by remember { mutableStateOf<Float?>(null) }
     val edgeBrightnessNow by rememberUpdatedState(edgeBrightness)
     val brightnessNow by rememberUpdatedState(prefs.brightness)
     val setBrightnessNow by rememberUpdatedState(onPrefsAction.setBrightness)
@@ -3335,8 +3339,10 @@ internal fun ReaderScreen(
     // Back, while a source is shown, goes back to where the reader asked.
     BackHandler(enabled = companionPeek != null) { returnToAsking() }
     ScreenBrightness(brightness = brightnessPreview ?: prefs.brightness)
+    // The preview goes only once the store reports the value it is
+    // showing. An older write landing first must not clear a newer one.
     LaunchedEffect(prefs.brightness) {
-        if (!brightnessSwiping) brightnessPreview = null
+        if (!brightnessSwiping && brightnessPreview == prefs.brightness) brightnessPreview = null
     }
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
@@ -3677,8 +3683,16 @@ internal fun ReaderScreen(
                             if (down.isEmpty()) {
                                 touch.edgeSwipe = null
                                 brightnessSwiping = false
-                                brightnessPreview?.let {
-                                    if (it == brightnessNow) brightnessPreview = null else setBrightnessNow(it)
+                                brightnessPreview?.let { target ->
+                                    // Compared with what was already sent, so
+                                    // a quick second swipe back to the value
+                                    // before the first one is still saved.
+                                    if (target == (brightnessSaved ?: brightnessNow)) {
+                                        brightnessPreview = null
+                                    } else {
+                                        setBrightnessNow(target)
+                                    }
+                                    brightnessSaved = target
                                 }
                             }
                             continue
