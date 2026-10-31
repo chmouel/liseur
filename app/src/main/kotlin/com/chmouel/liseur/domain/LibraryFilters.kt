@@ -132,7 +132,11 @@ data class LibraryFilters(
      * With nothing ticked this is every book on the shelf *except* the
      * finished ones — see [hidesFinished].
      */
-    fun accepts(book: Book, progression: Double? = null): Boolean {
+    fun accepts(
+        book: Book,
+        progression: Double? = null,
+        unreadOverride: Boolean = false,
+    ): Boolean {
         // A book taken off the shelf is off it, whatever else is ticked
         // — including the archived box, which is a different wish.
         // Settings -> Hidden books is the one place it appears, and that
@@ -155,7 +159,7 @@ data class LibraryFilters(
             if (wanted !in availability) return false
         }
 
-        val started = (progression ?: 0.0) >= startedAfter(book.remotePageCount)
+        val started = !unreadOverride && (progression ?: 0.0) >= startedAfter(book.remotePageCount)
         val state = when {
             book.finished -> LibraryFilterOption.FINISHED
             started -> LibraryFilterOption.IN_PROGRESS

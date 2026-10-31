@@ -1046,6 +1046,7 @@ private fun LibraryRoute(
         seriesSheetBook?.let { book ->
             BookActionsSheet(
                 book = book,
+                canMarkUnread = book.finished || book.url in state.inProgressBooks,
                 downloading = book.url in state.downloads,
                 canDownload = state.canDownload,
                 canDeleteFromServer = state.canDeleteFromServer,

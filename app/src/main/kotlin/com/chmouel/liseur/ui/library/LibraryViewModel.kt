@@ -83,8 +83,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import com.chmouel.liseur.domain.FilterGroup
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.startedAfter
 import java.io.IOException
 import kotlinx.coroutines.launch
 
@@ -319,7 +321,16 @@ data class LibraryUiState(
      * and the whole grouping is in hand here.
      */
     val shownSeries: Set<String> = emptySet(),
+    val inProgressBooks: Set<String> = emptySet(),
 )
+
+/** Whether [book] can be marked unread: either it is finished or it is currently in progress. */
+fun canMarkBookUnread(
+    book: Book,
+    progression: Double?,
+    unreadOverride: Boolean = false,
+): Boolean = book.finished ||
+    (!unreadOverride && (progression ?: 0.0) >= startedAfter(book.remotePageCount))
 
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean =
@@ -662,6 +673,20 @@ class LibraryViewModel(
             val progressions = progressionList
                 .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                 .toMap()
+            val unreadOverrides = progressionList
+                .mapNotNullTo(mutableSetOf()) { row ->
+                    row.bookUrl.takeIf { row.override == FinishedOverride.UNREAD }
+                }
+            val inProgressBooks = books
+                .mapNotNullTo(mutableSetOf()) { book ->
+                    book.url.takeIf {
+                        !book.finished && canMarkBookUnread(
+                            book = book,
+                            progression = progressions[book.url],
+                            unreadOverride = book.url in unreadOverrides,
+                        )
+                    }
+                }
             @Suppress("UNCHECKED_CAST")
             val uploading = baseValues[9] as Set<String>
             @Suppress("UNCHECKED_CAST")
@@ -718,7 +743,7 @@ class LibraryViewModel(
             )
 
             val filteredBooks = sortedBooks
-                .filter { filters.accepts(it, progressions[it.url]) }
+                .filter { filters.accepts(it, progressions[it.url], it.url in unreadOverrides) }
 
             // A search is its own list rather than a narrowing of the
             // shelf: it looks past the filters and the series piles, so
@@ -743,7 +768,13 @@ class LibraryViewModel(
             // shelf rather than hide the volume that has not been
             // started.
             val narrowedSeries = arrangedSeries.filter { shelf ->
-                shelf.volumes.any { filters.accepts(it.book, progressions[it.book.url]) }
+                shelf.volumes.any {
+                    filters.accepts(
+                        it.book,
+                        progressions[it.book.url],
+                        it.book.url in unreadOverrides,
+                    )
+                }
             }
 
             LibraryUiState(
@@ -828,6 +859,7 @@ class LibraryViewModel(
                 hasSeries = shelves.isNotEmpty(),
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
+                inProgressBooks = inProgressBooks,
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())

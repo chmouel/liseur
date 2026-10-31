@@ -998,6 +998,7 @@ fun LibraryScreen(
     sheetBook?.let { book ->
         BookActionsSheet(
             book = book,
+            canMarkUnread = book.finished || book.url in state.inProgressBooks,
             downloading = book.url in state.downloads,
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload(book),
@@ -1314,6 +1315,7 @@ internal fun UploadOfferDialog(
 @Composable
 internal fun BookActionsSheet(
     book: Book,
+    canMarkUnread: Boolean = book.finished,
     downloading: Boolean,
     canDownload: Boolean,
     canDeleteFromServer: Boolean,
@@ -1401,15 +1403,21 @@ internal fun BookActionsSheet(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            TextButton(
-                onClick = { onSetFinished(!book.finished) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(
-                        if (book.finished) R.string.mark_unread else R.string.mark_read,
-                    ),
-                )
+            if (!book.finished) {
+                TextButton(
+                    onClick = { onSetFinished(true) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.mark_read))
+                }
+            }
+            if (canMarkUnread) {
+                TextButton(
+                    onClick = { onSetFinished(false) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.mark_unread))
+                }
             }
             TextButton(
                 onClick = { onSetArchived(!book.archived) },
