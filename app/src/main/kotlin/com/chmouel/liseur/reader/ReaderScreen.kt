@@ -769,9 +769,10 @@ internal fun ReaderScreen(
     // screen does not drop to the old value for a frame (ADR 64).
     var brightnessPreview by remember { mutableStateOf<Float?>(null) }
     var brightnessSwiping by remember { mutableStateOf(false) }
-    // The value a swipe last handed to the store. The saved setting lags
-    // a write behind, so a lift is compared against this rather than
-    // against the setting (ADR 64).
+    // The brightness to compare a lift against: the value a swipe last
+    // sent, or whatever the store holds once nothing is outstanding.
+    // The saved setting lags a write behind, so a lift uses this and not
+    // the setting itself (ADR 64).
     var brightnessSaved by remember { mutableStateOf<Float?>(null) }
     val edgeBrightnessNow by rememberUpdatedState(edgeBrightness)
     val brightnessNow by rememberUpdatedState(prefs.brightness)
@@ -3339,10 +3340,17 @@ internal fun ReaderScreen(
     // Back, while a source is shown, goes back to where the reader asked.
     BackHandler(enabled = companionPeek != null) { returnToAsking() }
     ScreenBrightness(brightness = brightnessPreview ?: prefs.brightness)
-    // The preview goes only once the store reports the value it is
-    // showing. An older write landing first must not clear a newer one.
+    // The preview goes only once it has nothing left to show: the store
+    // reporting the value on screen, or a change that came from
+    // somewhere else with nothing outstanding. An older write landing
+    // first must not clear a newer preview, and a change made in the Aa
+    // sheet must still move the value a lift is compared against.
     LaunchedEffect(prefs.brightness) {
-        if (!brightnessSwiping && brightnessPreview == prefs.brightness) brightnessPreview = null
+        if (brightnessSwiping) return@LaunchedEffect
+        if (brightnessPreview == prefs.brightness || brightnessPreview == null) {
+            brightnessPreview = null
+            brightnessSaved = prefs.brightness
+        }
     }
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
