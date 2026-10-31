@@ -110,6 +110,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -2948,8 +2949,14 @@ class ReaderViewModel(
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 
-    /** Saves a brightness an edge swipe reached, and returns once it is stored. */
-    suspend fun commitBrightness(value: Float) = prefsRepo.setBrightness(value)
+    /**
+     * Saves a brightness an edge swipe reached, and returns once it is
+     * stored. The write belongs to the view model's scope, so the screen
+     * going away in the middle of it does not take the value with it.
+     */
+    suspend fun commitBrightness(value: Float) {
+        viewModelScope.async { prefsRepo.setBrightness(value) }.await()
+    }
 
     fun setPageTurnStyle(style: PageTurnStyle) =
         viewModelScope.launch { prefsRepo.setPageTurnStyle(style) }
