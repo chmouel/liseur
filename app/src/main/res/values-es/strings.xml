@@ -771,6 +771,10 @@
     <string name="tap_zones_standard">Estándar</string>
     <string name="tap_zones_swapped">Intercambiados</string>
     <string name="tap_zones_off">Desactivados</string>
+    <string name="settings_tap_side_width">Zona de paso de página</string>
+    <string name="settings_tap_side_width_detail">Qué parte de cada borde pasa la página al tocarla. Con bordes estrechos el centro de la página queda para el menú, así que llegar a la lectura en voz alta u otros controles no pasa la página. Ancha es la disposición original.</string>
+    <string name="tap_side_width_wide">Ancha</string>
+    <string name="tap_side_width_percent">%1$d %%</string>
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
     <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
     <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que redibujan demasiado despacio la vista previa del tamaño. Usa en su lugar el control deslizante de Tamaño. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si esta no es una pantalla de tinta electrónica.</string>

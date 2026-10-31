@@ -40,4 +40,12 @@ class TapZonesTest {
         assertEquals(true, TapZones.SWAPPED.turnsPages)
         assertEquals(false, TapZones.OFF.turnsPages)
     }
+
+    @Test
+    fun `a stored side width that is not a stop reads as the original layout`() {
+        assertEquals(TapSideWidth.WIDE, TapSideWidth.sanitize(null))
+        assertEquals(TapSideWidth.WIDE, TapSideWidth.sanitize(17))
+        assertEquals(TapSideWidth.WIDE, TapSideWidth.sanitize(-5))
+        assertEquals(15, TapSideWidth.sanitize(15))
+    }
 }

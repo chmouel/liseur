@@ -102,6 +102,7 @@ fun Endpaper(
     seriesCompletion: SeriesCompletion?,
     rtl: Boolean,
     swapped: Boolean,
+    sideWidth: Int,
     onTurnBack: () -> Unit,
     onLibrary: () -> Unit,
     onOpenNext: () -> Unit,
@@ -142,7 +143,7 @@ fun Endpaper(
             .background(theme.background)
             .semantics { contentDescription = description }
             .onSizeChanged { size = it }
-            .pointerInput(size, rtl, swapped, density) {
+            .pointerInput(size, rtl, swapped, sideWidth, density) {
                 if (size.width <= 0 || size.height <= 0) return@pointerInput
                 detectTapGestures { offset ->
                     val zone = ReaderTapZones.zoneAt(
@@ -151,6 +152,7 @@ fun Endpaper(
                         width = size.width.toFloat(),
                         height = size.height.toFloat(),
                         density = density,
+                        sideWidth = sideWidth,
                     )
                     val forward = ReaderTapZones.forward(zone, rtl, swapped)
                         ?: return@detectTapGestures

@@ -806,6 +806,10 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Swapped</string>
     <string name="tap_zones_off">Off</string>
+    <string name="settings_tap_side_width">Page-turn area</string>
+    <string name="settings_tap_side_width_detail">How much of each edge turns the page when tapped. Narrow edges leave the middle of the page to the menu, so reaching for read aloud or other controls does not turn the page. Wide is the original layout.</string>
+    <string name="tap_side_width_wide">Wide</string>
+    <string name="tap_side_width_percent">%1$d%%</string>
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
     <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
     <string name="settings_pinch_to_resize_eink">Off on e-ink screens, which redraw the live size preview too slowly. Use the Size slider instead. Pinching an image to enlarge it still works. Turn E-ink screen off above if this is not an e-ink screen.</string>

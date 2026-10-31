@@ -1,5 +1,6 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.OverflowableNavigator
 import org.readium.r2.navigator.input.InputListener
@@ -44,6 +45,9 @@ import kotlin.math.abs
  * side does nothing. The chrome zones keep working, which is the point
  * of turning the sides off rather than making them another chrome tap.
  *
+ * [sideWidth] narrows the sides to equal edges of the page, leaving the
+ * middle band to the chrome; see [zoneAt].
+ *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side
  * taps there would scroll by a screenful with no page-turn to make
@@ -64,6 +68,7 @@ class ReaderTapZones(
     private val isScrolling: () -> Boolean = { false },
     private val isSwapped: () -> Boolean = { false },
     private val turnsPages: () -> Boolean = { true },
+    private val sideWidth: () -> Int = { TapSideWidth.WIDE },
     private val isPinching: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
@@ -80,7 +85,6 @@ class ReaderTapZones(
             onHideChrome()
             return true
         }
-        if (!turnsPages()) return true
 
         val view = navigator.publicationView
         val width = view.width.toFloat()
@@ -90,16 +94,27 @@ class ReaderTapZones(
         val dp = view.resources.displayMetrics.density
         val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
 
-        val zone = zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling())
-        when (val forward = forward(zone, rtl, isSwapped())) {
-            null -> onShowChrome()
-            else -> onTurnPage(forward)
+        val zone = zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling(), sideWidth())
+        when (val action = action(zone, rtl, isSwapped(), turnsPages())) {
+            Action.Chrome -> onShowChrome()
+            Action.Inert -> Unit
+            is Action.Turn -> onTurnPage(action.forward)
         }
         return true
     }
 
     /** What a tap on the page means, before reading direction is applied. */
     enum class Zone { CHROME, BACK, FORWARD }
+
+    /** What a tap on the page does once direction and the preset are applied. */
+    sealed interface Action {
+        data object Chrome : Action
+
+        /** A side tap with the sides switched off. */
+        data object Inert : Action
+
+        data class Turn(val forward: Boolean) : Action
+    }
 
     companion object {
         /** Top strip of the screen that reveals the chrome. */
@@ -136,6 +151,11 @@ class ReaderTapZones(
          *
          * [scrolling] answers the whole page at once: there is nothing to
          * turn, so every tap is a tap on the chrome.
+         *
+         * [sideWidth] is [TapSideWidth.WIDE] for the layout described
+         * above, or a percentage: each side is then that much of the page
+         * edge, the same on both sides, and the whole band between them is
+         * the chrome. The top strip still opens the chrome either way.
          */
         fun zoneAt(
             x: Float,
@@ -144,6 +164,7 @@ class ReaderTapZones(
             height: Float,
             density: Float,
             scrolling: Boolean = false,
+            sideWidth: Int = TapSideWidth.WIDE,
         ): Zone {
             if (scrolling) return Zone.CHROME
             val fx = x / width
@@ -153,6 +174,15 @@ class ReaderTapZones(
                 minOf(CHROME_ZONE, MAX_CHROME_STRIP_DP * density / height)
             } else {
                 CHROME_ZONE
+            }
+            if (sideWidth != TapSideWidth.WIDE) {
+                val side = sideWidth / 100f
+                return when {
+                    fy < strip -> Zone.CHROME
+                    fx < side -> Zone.BACK
+                    fx > 1f - side -> Zone.FORWARD
+                    else -> Zone.CHROME
+                }
             }
             val halfX = if (capped) {
                 minOf(CHROME_HALF_SPAN, MAX_CHROME_BOX_WIDTH_DP * density / width / 2f)
@@ -191,6 +221,17 @@ class ReaderTapZones(
             Zone.CHROME -> null
             Zone.BACK -> rtl != swapped
             Zone.FORWARD -> rtl == swapped
+        }
+
+        /**
+         * What a tapped [zone] does on the reading page. With the sides
+         * switched off ([turnsPages] false) a side tap does nothing, but
+         * the chrome zones still open the menu: that is what the Off
+         * preset promises, and the way back to the controls.
+         */
+        fun action(zone: Zone, rtl: Boolean, swapped: Boolean, turnsPages: Boolean): Action {
+            val forward = forward(zone, rtl, swapped) ?: return Action.Chrome
+            return if (turnsPages) Action.Turn(forward) else Action.Inert
         }
     }
 }

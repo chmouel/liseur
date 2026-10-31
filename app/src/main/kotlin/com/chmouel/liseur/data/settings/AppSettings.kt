@@ -162,6 +162,34 @@ enum class TapZones(val id: String) {
 }
 
 /**
+ * How much of the page width each side turns, in percent.
+ *
+ * [WIDE] is the layout the app always had: the back third of the page and
+ * everything forward of the centre box. The other stops make both sides
+ * the same narrow edge and leave the whole middle band to the chrome, for
+ * a reader who keeps turning the page when reaching for the menu (#403).
+ * See `docs/adr/0009-tap-zone-customization.md`.
+ */
+object TapSideWidth {
+    const val WIDE = 0
+
+    /** The slider's stops, narrowest first, ending on [WIDE]. */
+    val STOPS = listOf(10, 15, 20, 25, 30, 35, WIDE)
+
+    /** A stored value that is not a stop reads as [WIDE]. */
+    fun sanitize(value: Int?): Int = value?.takeIf { it in STOPS } ?: WIDE
+}
+
+/**
+ * The tap preset and side width, carried to the reader together so the
+ * reader screen holds one value for both.
+ */
+data class TapLayout(
+    val zones: TapZones = TapZones.Default,
+    val sideWidth: Int = TapSideWidth.WIDE,
+)
+
+/**
  * Which screen edge, if any, takes a vertical swipe as a brightness
  * change. The physical edge, whatever the book's reading direction. See
  * `docs/adr/0064-brightness-on-the-edge.md`.
@@ -203,6 +231,8 @@ enum class DefinitionTarget(val id: String) {
  * @param volumeKeyMode Whether volume keys move through the book, and in
  *   which direction.
  * @param tapZones Which side of a paginated page turns forward.
+ * @param tapSideWidth How much of the page width each side turns; one of
+ *   [TapSideWidth.STOPS].
  * @param pinchToResize A two-finger pinch on the page changes the reading
  *   font size. On by default; it is here for a grip that produces stray
  *   two-finger touches, since a stray resize changes how every page looks
@@ -292,6 +322,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.Default,
     val tapZones: TapZones = TapZones.Default,
+    val tapSideWidth: Int = TapSideWidth.WIDE,
     val pinchToResize: Boolean = true,
     val edgeBrightness: EdgeBrightness = EdgeBrightness.Default,
     val resumeLastBook: Boolean = true,
@@ -462,6 +493,7 @@ class AppSettingsRepository(
         val LEGACY_VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val VOLUME_KEY_MODE = stringPreferencesKey("volume_keys_mode")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
+        val TAP_SIDE_WIDTH = intPreferencesKey("tap_side_width")
         val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
         val EDGE_BRIGHTNESS = stringPreferencesKey("edge_brightness")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
@@ -556,6 +588,7 @@ class AppSettingsRepository(
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeyMode = p.volumeKeyMode(),
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
+            tapSideWidth = TapSideWidth.sanitize(p[Keys.TAP_SIDE_WIDTH]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             edgeBrightness = EdgeBrightness.fromId(p[Keys.EDGE_BRIGHTNESS]),
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
@@ -696,6 +729,10 @@ class AppSettingsRepository(
 
     suspend fun setTapZones(zones: TapZones) {
         store.edit { it[Keys.TAP_ZONES] = zones.id }
+    }
+
+    suspend fun setTapSideWidth(percent: Int) {
+        store.edit { it[Keys.TAP_SIDE_WIDTH] = TapSideWidth.sanitize(percent) }
     }
 
     suspend fun setPinchToResize(enabled: Boolean) {
@@ -1259,7 +1296,7 @@ class AppSettingsRepository(
 internal val APP_BACKUP_TYPES = mapOf(
     "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
     "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "volume_keys_mode" to BackupValueType.STRING,
-    "tap_zones" to BackupValueType.STRING,
+    "tap_zones" to BackupValueType.STRING, "tap_side_width" to BackupValueType.INT,
     "pinch_to_resize" to BackupValueType.BOOLEAN, "edge_brightness" to BackupValueType.STRING,
     "resume_last_book" to BackupValueType.BOOLEAN,
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,

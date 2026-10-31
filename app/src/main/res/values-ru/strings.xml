@@ -823,6 +823,10 @@
     <string name="tap_zones_standard">Обычные</string>
     <string name="tap_zones_swapped">Поменять</string>
     <string name="tap_zones_off">Выключено</string>
+    <string name="settings_tap_side_width">Зона перелистывания</string>
+    <string name="settings_tap_side_width_detail">Какая часть каждого края листает страницу при нажатии. При узких краях середина страницы остаётся за меню, и нажатие, чтобы открыть чтение вслух или другие элементы управления, не перелистывает страницу. «Широкая» — исходная раскладка.</string>
+    <string name="tap_side_width_wide">Широкая</string>
+    <string name="tap_side_width_percent">%1$d%%</string>
     <string name="settings_pinch_to_resize">Масштаб текста щипком</string>
     <string name="settings_pinch_to_resize_detail">Двумя пальцами на странице можно увеличить или уменьшить текст, не открывая меню. Отключите, если при вашем хвате жест срабатывает случайно. Увеличение изображения щипком работает в любом случае.</string>
     <string name="settings_pinch_to_resize_eink">Выключено на экранах электронных чернил: они слишком медленно перерисовывают превью размера. Используйте ползунок «Размер». Увеличение изображения щипком всё равно работает. Выключите «Экран электронных чернил» выше, если у вас не такой экран.</string>

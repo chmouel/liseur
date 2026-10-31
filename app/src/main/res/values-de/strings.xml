@@ -782,6 +782,10 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Vertauscht</string>
     <string name="tap_zones_off">Aus</string>
+    <string name="settings_tap_side_width">Umblätterbereich</string>
+    <string name="settings_tap_side_width_detail">Wie viel von jedem Rand beim Tippen umblättert. Schmale Ränder lassen die Seitenmitte dem Menü, sodass der Griff zum Vorlesen oder zu anderen Bedienelementen nicht umblättert. Breit ist die ursprüngliche Aufteilung.</string>
+    <string name="tap_side_width_wide">Breit</string>
+    <string name="tap_side_width_percent">%1$d %%</string>
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
     <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
     <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen aus, da sie die Live-Vorschau der Größe zu langsam neu zeichnen. Nutze stattdessen den Größenregler. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das kein E-Ink-Bildschirm ist.</string>
