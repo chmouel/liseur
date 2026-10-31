@@ -167,6 +167,39 @@ class LibraryFiltersTest {
     }
 
     @Test
+    fun `an in progress book marked unread is accepted as unread regardless of progression`() {
+        val started = book()
+        assertTrue(
+            filters(LibraryFilterOption.UNREAD).accepts(
+                started,
+                progression = 0.4,
+                unreadOverride = true,
+            ),
+        )
+        assertFalse(
+            filters(LibraryFilterOption.IN_PROGRESS).accepts(
+                started,
+                progression = 0.4,
+                unreadOverride = true,
+            ),
+        )
+        assertFalse(
+            filters(LibraryFilterOption.FINISHED).accepts(
+                started,
+                progression = 0.4,
+                unreadOverride = true,
+            ),
+        )
+        assertTrue(
+            LibraryFilters.None.accepts(
+                started,
+                progression = 0.4,
+                unreadOverride = true,
+            ),
+        )
+    }
+
+    @Test
     fun `two options on one axis mean either`() {
         val both = filters(LibraryFilterOption.DOWNLOADED, LibraryFilterOption.NOT_DOWNLOADED)
         assertTrue(both.accepts(book(downloaded = true)))

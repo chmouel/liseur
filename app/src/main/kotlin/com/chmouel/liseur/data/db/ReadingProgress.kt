@@ -139,7 +139,11 @@ data class BookReadAt(
 data class BookProgression(
     @ColumnInfo(name = "book_url") val bookUrl: String,
     @ColumnInfo(name = "total_progression") val totalProgression: Double?,
-)
+    @ColumnInfo(name = "finished_override") val finishedOverride: Int = 0,
+) {
+    val override: com.chmouel.liseur.domain.FinishedOverride
+        get() = com.chmouel.liseur.domain.FinishedOverride.fromStored(finishedOverride)
+}
 
 @Dao
 abstract class ReadingProgressDao {
@@ -278,7 +282,7 @@ abstract class ReadingProgressDao {
      * [ReadingProgress] row per book would carry every sync column with
      * it and make the dashboard rebuild whenever a token moved.
      */
-    @Query("SELECT book_url, total_progression FROM reading_progress")
+    @Query("SELECT book_url, total_progression, finished_override FROM reading_progress")
     abstract fun observeProgressions(): kotlinx.coroutines.flow.Flow<List<BookProgression>>
 
     @Upsert
