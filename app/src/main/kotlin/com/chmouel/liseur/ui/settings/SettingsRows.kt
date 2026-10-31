@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -304,7 +305,9 @@ internal fun <T> ChipRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Row(
+        // Wraps rather than squeezing the last chips when the labels are
+        // long or the text is large.
+        FlowRow(
             modifier = Modifier
                 .padding(top = 8.dp)
                 .selectableGroup(),

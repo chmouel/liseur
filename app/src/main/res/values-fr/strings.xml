@@ -787,6 +787,9 @@
     <string name="page_taps_preview_left">Le haut à gauche recule, le bas à gauche avance, le reste de la page ouvre le menu.</string>
     <string name="page_taps_preview_right">Le haut à droite recule, le bas à droite avance, le reste de la page ouvre le menu.</string>
     <string name="page_taps_preview_off">Toucher un côté ne fait rien. Le milieu et le haut ouvrent le menu.</string>
+    <string name="page_taps_preview_both_wide">Le tiers gauche recule et le reste de la page avance, sauf le haut et un cadre au milieu, qui ouvrent le menu.</string>
+    <string name="page_taps_preview_left_wide">La moitié gauche recule en haut et avance en bas. La moitié droite, le haut et un cadre au milieu ouvrent le menu.</string>
+    <string name="page_taps_preview_right_wide">La moitié droite recule en haut et avance en bas. La moitié gauche, le haut et un cadre au milieu ouvrent le menu.</string>
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
     <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
     <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>

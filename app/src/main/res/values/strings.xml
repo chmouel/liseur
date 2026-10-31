@@ -822,6 +822,9 @@
     <string name="page_taps_preview_left">The upper left goes back, the lower left goes forward, and the rest of the page opens the menu.</string>
     <string name="page_taps_preview_right">The upper right goes back, the lower right goes forward, and the rest of the page opens the menu.</string>
     <string name="page_taps_preview_off">Tapping a side does nothing. The middle and the top open the menu.</string>
+    <string name="page_taps_preview_both_wide">The left third goes back and the rest of the page goes forward, except the top and a box in the middle, which open the menu.</string>
+    <string name="page_taps_preview_left_wide">The upper half of the left side goes back and the lower half goes forward. The right half, the top and a box in the middle open the menu.</string>
+    <string name="page_taps_preview_right_wide">The upper half of the right side goes back and the lower half goes forward. The left half, the top and a box in the middle open the menu.</string>
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
     <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
     <string name="settings_pinch_to_resize_eink">Off on e-ink screens, which redraw the live size preview too slowly. Use the Size slider instead. Pinching an image to enlarge it still works. Turn E-ink screen off above if this is not an e-ink screen.</string>

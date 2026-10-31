@@ -787,6 +787,9 @@
     <string name="page_taps_preview_left">La parte superior izquierda retrocede, la inferior izquierda avanza, y el resto de la página abre el menú.</string>
     <string name="page_taps_preview_right">La parte superior derecha retrocede, la inferior derecha avanza, y el resto de la página abre el menú.</string>
     <string name="page_taps_preview_off">Tocar un lado no hace nada. El centro y la parte superior abren el menú.</string>
+    <string name="page_taps_preview_both_wide">El tercio izquierdo retrocede y el resto de la página avanza, salvo la parte superior y un recuadro en el centro, que abren el menú.</string>
+    <string name="page_taps_preview_left_wide">La mitad izquierda retrocede arriba y avanza abajo. La mitad derecha, la parte superior y un recuadro en el centro abren el menú.</string>
+    <string name="page_taps_preview_right_wide">La mitad derecha retrocede arriba y avanza abajo. La mitad izquierda, la parte superior y un recuadro en el centro abren el menú.</string>
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
     <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
     <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que redibujan demasiado despacio la vista previa del tamaño. Usa en su lugar el control deslizante de Tamaño. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si esta no es una pantalla de tinta electrónica.</string>
