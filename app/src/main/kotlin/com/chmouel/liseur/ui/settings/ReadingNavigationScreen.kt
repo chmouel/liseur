@@ -49,6 +49,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
@@ -87,6 +89,7 @@ fun ReadingNavigationScreen(
     onVolumeKeyMode: (VolumeKeyMode) -> Unit,
     onTapZones: (TapZones) -> Unit,
     onPinchToResize: (Boolean) -> Unit,
+    onEdgeBrightness: (EdgeBrightness) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onScrollMode: (Boolean) -> Unit,
@@ -266,6 +269,15 @@ fun ReadingNavigationScreen(
                         checked = settings.pinchToResize && !pinchOffForEInk,
                         onCheckedChange = onPinchToResize,
                         enabled = !pinchOffForEInk,
+                    )
+                    RowDivider()
+                    ChipRow(
+                        title = stringResource(R.string.settings_brightness_edge),
+                        subtitle = stringResource(R.string.settings_brightness_edge_detail),
+                        options = EdgeBrightness.entries,
+                        selected = settings.edgeBrightness,
+                        label = { stringResource(it.label) },
+                        onSelected = onEdgeBrightness,
                     )
                     RowDivider()
                     SwitchRow(

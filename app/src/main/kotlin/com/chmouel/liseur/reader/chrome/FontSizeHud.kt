@@ -2,10 +2,16 @@ package com.chmouel.liseur.reader.chrome
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BrightnessMedium
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -80,6 +86,30 @@ fun FixedLayoutPinchHud(theme: ReaderTheme) {
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
+    }
+}
+
+/**
+ * What an edge swipe has set the brightness to, while it is setting it.
+ * The screen itself is the preview; the pill puts a number on it. See
+ * `docs/adr/0064-brightness-on-the-edge.md`.
+ */
+@Composable
+fun BrightnessHud(brightness: Float, theme: ReaderTheme) {
+    HudPill(theme) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.BrightnessMedium,
+                contentDescription = null,
+                tint = theme.foreground,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = stringResource(R.string.reader_brightness_level, (brightness * 100).roundToInt()),
+                color = theme.foreground,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
     }
 }
 

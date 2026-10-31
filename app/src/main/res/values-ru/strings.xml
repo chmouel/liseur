@@ -667,6 +667,11 @@
     <string name="reader_brightness_decrease">Уменьшить яркость</string>
     <string name="reader_brightness_increase">Увеличить яркость</string>
     <string name="reader_brightness_system">Как в системе</string>
+    <string name="reader_brightness_level">Яркость %1$d%%</string>
+    <string name="reader_brightness_edge">Проведите вверх или вниз вдоль этого края страницы, чтобы изменить яркость.</string>
+    <string name="brightness_edge_off">Выкл.</string>
+    <string name="brightness_edge_left">Слева</string>
+    <string name="brightness_edge_right">Справа</string>
     <string name="reader_progress">Прогресс</string>
     <string name="reader_line_spacing">Межстрочный интервал</string>
     <string name="reader_spacing_compact">Плотный</string>
@@ -820,6 +825,8 @@
     <string name="settings_pinch_to_resize">Масштаб текста щипком</string>
     <string name="settings_pinch_to_resize_detail">Двумя пальцами на странице можно увеличить или уменьшить текст, не открывая меню. Отключите, если при вашем хвате жест срабатывает случайно. Увеличение изображения щипком работает в любом случае.</string>
     <string name="settings_pinch_to_resize_eink">Выключено на экранах электронных чернил: они слишком медленно перерисовывают превью размера. Используйте ползунок «Размер». Увеличение изображения щипком всё равно работает. Выключите «Экран электронных чернил» выше, если у вас не такой экран.</string>
+    <string name="settings_brightness_edge">Яркость жестом у края</string>
+    <string name="settings_brightness_edge_detail">Проведите вверх или вниз вдоль этого края страницы, чтобы изменить яркость, не открывая меню. Нажатия и перелистывание, начатые у края, работают как прежде. Только при перелистывании, не при прокрутке.</string>
     <string name="settings_resume">Открывать книгу, которую читали</string>
     <string name="settings_resume_detail">Пропускать библиотеку, если вы остановились на середине книги.</string>
     <string name="settings_keep_screen_on">Не гасить экран</string>

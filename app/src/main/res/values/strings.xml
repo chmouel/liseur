@@ -640,6 +640,11 @@
     <string name="reader_brightness_decrease">Decrease brightness</string>
     <string name="reader_brightness_increase">Increase brightness</string>
     <string name="reader_brightness_system">Follow system brightness</string>
+    <string name="reader_brightness_level">Brightness %1$d%%</string>
+    <string name="reader_brightness_edge">Swipe up or down along this edge of the page to change the brightness.</string>
+    <string name="brightness_edge_off">Off</string>
+    <string name="brightness_edge_left">Left</string>
+    <string name="brightness_edge_right">Right</string>
     <string name="reader_progress">Progress</string>
     <string name="reader_line_spacing">Line spacing</string>
     <string name="reader_spacing_compact">Compact</string>
@@ -803,6 +808,8 @@
     <string name="settings_pinch_to_resize">Pinch to resize text</string>
     <string name="settings_pinch_to_resize_detail">A two-finger pinch on the page makes the text bigger or smaller, without opening the menu. Turn it off if the way you hold the phone sets it off by accident. Pinching an image to enlarge it still works either way.</string>
     <string name="settings_pinch_to_resize_eink">Off on e-ink screens, which redraw the live size preview too slowly. Use the Size slider instead. Pinching an image to enlarge it still works. Turn E-ink screen off above if this is not an e-ink screen.</string>
+    <string name="settings_brightness_edge">Brightness swipe</string>
+    <string name="settings_brightness_edge_detail">Swipe up or down along this edge of the page to change the brightness without opening the menu. Taps and sideways page turns that start at the edge work as before. Only while turning pages, not when scrolling.</string>
     <string name="settings_resume">Open on the book you were reading</string>
     <string name="settings_resume_detail">Skip the library when you left off mid-book.</string>
     <string name="settings_keep_screen_on">Keep the screen on</string>

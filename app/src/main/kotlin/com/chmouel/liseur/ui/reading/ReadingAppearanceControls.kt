@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.EdgeBrightness
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
@@ -536,6 +537,14 @@ fun ReadingFontSizeSlider(value: Double, enabled: Boolean, onChanged: (Double) -
     }
 }
 
+/** The short name of an edge, for the brightness row and the settings. */
+val EdgeBrightness.label: Int
+    get() = when (this) {
+        EdgeBrightness.OFF -> R.string.brightness_edge_off
+        EdgeBrightness.LEFT -> R.string.brightness_edge_left
+        EdgeBrightness.RIGHT -> R.string.brightness_edge_right
+    }
+
 private const val BRIGHTNESS_STEP = 0.1f
 private const val BRIGHTNESS_BOUNDARY_EPSILON = 0.0001f
 
@@ -706,6 +715,32 @@ fun ReadingPageTurnStyleControl(
         }
         Text(
             text = stringResource(selected.detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Which edge of the page a vertical swipe changes the brightness from (#393). */
+@Composable
+fun ReadingBrightnessEdgeControl(
+    selected: EdgeBrightness,
+    onSelected: (EdgeBrightness) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ReadingSectionLabel(stringResource(R.string.settings_brightness_edge))
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            val options = EdgeBrightness.entries
+            options.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = selected == option,
+                    onClick = { onSelected(option) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                ) { Text(stringResource(option.label)) }
+            }
+        }
+        Text(
+            text = stringResource(R.string.reader_brightness_edge),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -1126,6 +1126,13 @@ changing reader behavior.
   only in `pageTurnStyleOnScreen`. A dragged lift turn photographs the
   publication view, restores the exact locator, and abandons on lifecycle
   changes.
+- The brightness edge swipe (`BrightnessSwipe`,
+  [ADR 0064](docs/adr/0064-brightness-on-the-edge.md)) decides once, on
+  the slop event, ahead of `PageTurnDrag`, and shares its
+  `pageGesturesFree` gate. A claimed touch is consumed to the last lift;
+  `touch.edgeCandidate`/`edgeSwipe` keep it from counting as a user turn.
+  Brightness commits once on lift; `ScreenBrightness` writes only on
+  change and resets to the system only on dispose.
 - Chrome reaches the screen edge: navigation-bar insets stay inside
   `ReadingScrubber` (its spacer when the panel is absent); no edge fades on
   e-ink.

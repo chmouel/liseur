@@ -615,6 +615,11 @@
     <string name="reader_brightness_decrease">Diminuer la luminosité</string>
     <string name="reader_brightness_increase">Augmenter la luminosité</string>
     <string name="reader_brightness_system">Suivre la luminosité système</string>
+    <string name="reader_brightness_level">Luminosité %1$d %%</string>
+    <string name="reader_brightness_edge">Glissez vers le haut ou le bas le long de ce bord de la page pour régler la luminosité.</string>
+    <string name="brightness_edge_off">Désactivé</string>
+    <string name="brightness_edge_left">Gauche</string>
+    <string name="brightness_edge_right">Droite</string>
     <string name="reader_progress">Progression</string>
     <string name="reader_line_spacing">Interligne</string>
     <string name="reader_spacing_compact">Compact</string>
@@ -768,6 +773,8 @@
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
     <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
     <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>
+    <string name="settings_brightness_edge">Luminosité par glissement</string>
+    <string name="settings_brightness_edge_detail">Glissez vers le haut ou le bas le long de ce bord de la page pour changer la luminosité sans ouvrir le menu. Les appuis et les pages tournées depuis le bord fonctionnent comme avant. Uniquement en mode page, pas en défilement.</string>
     <string name="settings_resume">Ouvrir sur le livre que vous lisiez</string>
     <string name="settings_resume_detail">Passer la bibliothèque quand vous aviez quitté un livre en cours.</string>
     <string name="settings_keep_screen_on">Garder l\'écran allumé</string>

@@ -641,6 +641,11 @@
     <string name="reader_brightness_decrease">降低亮度</string>
     <string name="reader_brightness_increase">提高亮度</string>
     <string name="reader_brightness_system">跟随系统亮度</string>
+    <string name="reader_brightness_level">亮度 %1$d%%</string>
+    <string name="reader_brightness_edge">沿页面的这一侧边缘上下滑动即可调节亮度。</string>
+    <string name="brightness_edge_off">关闭</string>
+    <string name="brightness_edge_left">左侧</string>
+    <string name="brightness_edge_right">右侧</string>
     <string name="reader_progress">进度</string>
     <string name="reader_line_spacing">行距</string>
     <string name="reader_spacing_compact">紧凑</string>
@@ -794,6 +799,8 @@
     <string name="settings_pinch_to_resize">双指捏合调整文字</string>
     <string name="settings_pinch_to_resize_detail">在页面上双指捏合可放大或缩小文字，且不会打开菜单。如果握持手机的方式导致误触，可将其关闭。捏合放大的图片仍可正常使用。</string>
     <string name="settings_pinch_to_resize_eink">在墨水屏上不可用，因为此类屏幕重绘实时尺寸预览太慢。请改用字号滑块。捏合放大的图片仍可正常使用。如果这不是墨水屏，请在上方关闭“墨水屏”。</string>
+    <string name="settings_brightness_edge">边缘滑动调节亮度</string>
+    <string name="settings_brightness_edge_detail">沿页面这一侧边缘上下滑动，无需打开菜单即可调节亮度。从边缘开始的点按和左右翻页照常可用。仅在翻页时有效，滚动阅读时无效。</string>
     <string name="settings_resume">打开上次阅读的书</string>
     <string name="settings_resume_detail">中途放下书时跳过书库直接打开。</string>
     <string name="settings_keep_screen_on">保持屏幕常亮</string>
