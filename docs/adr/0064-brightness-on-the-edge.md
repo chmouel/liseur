@@ -31,7 +31,8 @@ the backup, not synced (see `SyncableSettings`).
 
 Only in paginated reflowable reading, under the same conditions as the
 page-curl drag (`pageGesturesFree`): no chrome, no selection, no picture,
-no pinch, not scrolled, not fixed layout. A scrolled book needs vertical
+no pinch, not scrolled, not fixed layout, and not the endpaper, which
+scrolls on its own. A scrolled book needs vertical
 drags for scrolling, and a fixed-layout page is dragged to look around.
 
 The strip is 10% of the page's width, kept between 32 and 56 dp, and

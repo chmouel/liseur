@@ -3736,7 +3736,11 @@ internal fun ReaderScreen(
                                 touch.startedAt = SystemClock.uptimeMillis()
                                 touch.claim.begin(touch.startedAt)
                                 touch.edgeSwipe = null
+                                // The endpaper is chrome-free but scrolls on
+                                // its own; a vertical drag there is the
+                                // reader moving it, not the brightness.
                                 touch.edgeCandidate = edgeBrightnessNow != EdgeBrightness.OFF &&
+                                    !showingEndNow &&
                                     pageGesturesFree() &&
                                     BrightnessSwipe.inStrip(
                                         edge = edgeBrightnessNow,
