@@ -64,7 +64,7 @@ Still to do:
 - Emulator pass: the tab with and without a service, consent and
   autofill, Recap, Recap missing chapters, Stop, a cached summary on
   reopen, Go to chapter with Return and Show, three tabs on a narrow
-  phone. Screenshots go to `~/tmp/liseur/sshot`.
+  phone. Screenshots go to `~/tmp/sharei/liseur/shots`.
 - Open the pull request using the repository template. Link #355, #356
   and ADR-0057, and run deslop on the text first.
 
