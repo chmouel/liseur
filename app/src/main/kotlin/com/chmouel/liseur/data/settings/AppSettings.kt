@@ -108,54 +108,45 @@ enum class VolumeKeyMode(val id: String) {
 }
 
 /**
- * Which side of a paginated page turns forward.
+ * Which sides of a paginated page turn it when tapped.
  *
- * [STANDARD] is the layout the app has always had: the side the book
- * came from goes back, the rest goes forward — the left of the page on
- * a left-to-right book, the right of it on a right-to-left one.
- * [SWAPPED] puts the forward turn under the other thumb, for a reader
- * holding the phone in the other hand — every page turn otherwise
- * reaches across the screen.
+ * [BOTH] is the layout the app has always had: the side the book came
+ * from goes back, the other goes forward, so the left of the page goes
+ * back on a left-to-right book and the right of it on a right-to-left
+ * one.
  *
- * "The other thumb" and not "the left side": a book that reads right to
- * left already turns forward on the left, so [SWAPPED] puts forward back
- * on the right there. The preset says which hand is holding the phone,
- * and leaves the book to say where its next page is.
+ * [LEFT] and [RIGHT] put every page turn under one thumb, for reading
+ * with the phone in one hand: the upper part of that side goes back,
+ * the lower part goes forward, and the other side opens the menu like
+ * the middle does. Up and down do not depend on reading direction, so
+ * neither does a single side.
  *
  * [OFF] stops the sides turning pages at all. It is the answer for a
  * reader whose grip keeps landing on the edge of the page: the centre
  * and the top strip still reveal the chrome, and the volume keys and
  * swipes still turn pages.
  *
- * A zone editor is a settings hobby, and a fourth preset has to earn
- * its place by describing a way of reading that actually occurs. See
- * `docs/adr/0009-tap-zone-customization.md`.
+ * [LEFT] keeps the id of the old "Swapped" preset, which put the forward
+ * turn under the left thumb on most books. A reader who had it keeps
+ * turning forward with the left thumb, and an older build reading the
+ * value back gets Swapped, the nearest thing it knows.
  *
- * The centre and the top strip still reveal the chrome under all three,
- * the default volume-key mode still goes forward on down, and a book read
- * by scrolling has no page sides to tap in the first place.
+ * A zone editor is a settings hobby; see
+ * `docs/adr/0009-tap-zone-customization.md`. A book read by scrolling
+ * has no page sides to tap in the first place.
  */
 enum class TapZones(val id: String) {
-    STANDARD("standard"),
-    SWAPPED("swapped"),
+    BOTH("standard"),
+    LEFT("swapped"),
+    RIGHT("right"),
     OFF("off"),
     ;
-
-    /**
-     * Whether the sides are the other way round.
-     *
-     * Read against reading direction rather than instead of it: an RTL
-     * book already turns forward on the left, and swapping it puts
-     * forward back on the right. The composition is in
-     * [com.chmouel.liseur.reader.chrome.ReaderTapZones.forward].
-     */
-    val swapped: Boolean get() = this == SWAPPED
 
     /** Whether tapping a side of the page turns it. */
     val turnsPages: Boolean get() = this != OFF
 
     companion object {
-        val Default = STANDARD
+        val Default = BOTH
 
         fun fromId(id: String?): TapZones = entries.firstOrNull { it.id == id } ?: Default
     }
@@ -164,10 +155,12 @@ enum class TapZones(val id: String) {
 /**
  * How much of the page width each side turns, in percent.
  *
- * [WIDE] is the layout the app always had: the back third of the page and
- * everything forward of the centre box. The other stops make both sides
- * the same narrow edge and leave the whole middle band to the chrome, for
- * a reader who keeps turning the page when reaching for the menu (#403).
+ * [WIDE] is the layout the app always had: with both sides, the back
+ * third of the page and everything forward of the centre box; with one
+ * side, that whole half of the page outside the centre box. The other
+ * stops make each side a narrow edge and leave the rest to the chrome,
+ * for a reader who keeps turning the page when reaching for the menu
+ * (#403).
  * See `docs/adr/0009-tap-zone-customization.md`.
  */
 object TapSideWidth {
@@ -230,7 +223,7 @@ enum class DefinitionTarget(val id: String) {
  *   what you get back by turning it off, and what older phones always get.
  * @param volumeKeyMode Whether volume keys move through the book, and in
  *   which direction.
- * @param tapZones Which side of a paginated page turns forward.
+ * @param tapZones Which sides of a paginated page turn it when tapped.
  * @param tapSideWidth How much of the page width each side turns; one of
  *   [TapSideWidth.STOPS].
  * @param pinchToResize A two-finger pinch on the page changes the reading

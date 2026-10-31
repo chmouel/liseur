@@ -42,6 +42,7 @@ import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
@@ -635,6 +636,25 @@ class SettingsBackupRepositoryTest {
     }
 
     @Test
+    fun `old swapped tap zones restore as the left side and the right side restores`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("tap-zones-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("tap-zones-reader.preferences_pb"))
+        for ((id, expected) in listOf("swapped" to TapZones.LEFT, "right" to TapZones.RIGHT)) {
+            val backup = archive(
+                "tap-zones-$id.zip",
+                JSONObject().put("app", JSONObject().put("tap_zones", id)).put("reader", JSONObject()),
+            )
+            assertEquals(
+                SettingsBackupRestoreResult.Restored(0, 0, 0),
+                restore(repository(app, reader, fonts), Uri.fromFile(backup)),
+            )
+            assertEquals(expected, app.settings.first().tapZones)
+        }
+    }
+
+    @Test
     fun `remembered voices are backed up and restored`() = runTest {
         val fonts = UserFontRepository(context, this, loadCheck = { true })
         fonts.awaitReady()
@@ -1004,6 +1024,7 @@ class SettingsBackupRepositoryTest {
             ),
             JSONObject().put("highlight_tint_default", "MAGENTA"),
             JSONObject().put("tap_side_width", 17),
+            JSONObject().put("tap_zones", "both_forward"),
         )
 
         invalidAppSettings.forEachIndexed { index, invalidSettings ->

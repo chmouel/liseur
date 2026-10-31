@@ -24,13 +24,18 @@ class RoutesTest {
     }
 
     @Test
-    fun selectionToolbarReturnsToReadingAppearanceAndSurvivesRestore() {
-        assertTrue(Route.SelectionToolbar.isSettingsPage)
-        val stack = mutableListOf<Route>(Route.Library, Route.Settings, Route.ReadingAppearance)
-        stack.push(Route.SelectionToolbar)
-        assertEquals(stack, decodeRoutes(encodeRoutes(stack)))
-        stack.pop()
-        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingAppearance), stack)
+    fun nestedSettingsPagesReturnToTheirParentAndSurviveRestore() {
+        listOf(
+            Route.ReadingAppearance to Route.SelectionToolbar,
+            Route.ReadingNavigation to Route.PageTaps,
+        ).forEach { (parent, page) ->
+            assertTrue(page.isSettingsPage)
+            val stack = mutableListOf(Route.Library, Route.Settings, parent)
+            stack.push(page)
+            assertEquals(stack, decodeRoutes(encodeRoutes(stack)))
+            stack.pop()
+            assertEquals(listOf(Route.Library, Route.Settings, parent), stack)
+        }
     }
 
     @Test

@@ -3253,9 +3253,7 @@ internal fun ReaderScreen(
                 navigator = it,
                 isChromeVisible = { chromeVisibleNow },
                 isScrolling = { effectiveScrollingNow },
-                isSwapped = { tapLayoutNow.zones.swapped },
-                turnsPages = { tapLayoutNow.zones.turnsPages },
-                sideWidth = { tapLayoutNow.sideWidth },
+                layout = { tapLayoutNow },
                 isPinching = isPinching,
                 onTurnPage = pageTurner::turn,
                 onShowChrome = { chromeVisible = true },
@@ -4029,8 +4027,7 @@ internal fun ReaderScreen(
                     noNextInLibrary = continuation?.noNextInLibrary == true,
                     seriesCompletion = continuation?.seriesCompletion,
                     rtl = endpaperRtl,
-                    swapped = tapLayout.zones.swapped,
-                    sideWidth = tapLayout.sideWidth,
+                    tapLayout = tapLayout,
                     onTurnBack = {
                         showingEnd = false
                         onLeftEndpaper()
