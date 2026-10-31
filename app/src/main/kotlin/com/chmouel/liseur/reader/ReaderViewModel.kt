@@ -2948,6 +2948,9 @@ class ReaderViewModel(
 
     fun setBrightness(value: Float?) = viewModelScope.launch { prefsRepo.setBrightness(value) }
 
+    /** Saves a brightness an edge swipe reached, and returns once it is stored. */
+    suspend fun commitBrightness(value: Float) = prefsRepo.setBrightness(value)
+
     fun setPageTurnStyle(style: PageTurnStyle) =
         viewModelScope.launch { prefsRepo.setPageTurnStyle(style) }
 

@@ -390,6 +390,13 @@ private const val AUTO_SCROLL_SAVE_NANOS = 2_000_000_000L
  */
 private const val DECIDE_BUDGET_MS = 250L
 
+/**
+ * How long the brightness preview waits for the saved value to reach
+ * the screen after the store has taken it. A write that changes nothing
+ * is never seen again, so the wait is bounded.
+ */
+private const val BRIGHTNESS_SETTLE_MS = 250L
+
 /** How often the long press looks to see whether the answer has landed. */
 private const val ANSWER_POLL_MS = 20L
 
@@ -765,18 +772,23 @@ internal fun ReaderScreen(
     val setFontSizeNow by rememberUpdatedState(onPrefsAction.setFontSize)
     val touch = remember { TouchProbe() }
     // The brightness an edge swipe is showing, ahead of the saved one.
-    // Kept after the finger lifts until the save comes back, so the
-    // screen does not drop to the old value for a frame (ADR 64).
+    // Kept until the store holds the value and the screen has read it
+    // back, so the page does not drop to the old brightness for a frame
+    // (ADR 64).
     var brightnessPreview by remember { mutableStateOf<Float?>(null) }
     var brightnessSwiping by remember { mutableStateOf(false) }
-    // The brightness to compare a lift against: the value a swipe last
-    // sent, or whatever the store holds once nothing is outstanding.
-    // The saved setting lags a write behind, so a lift uses this and not
-    // the setting itself (ADR 64).
-    var brightnessSaved by remember { mutableStateOf<Float?>(null) }
     val edgeBrightnessNow by rememberUpdatedState(edgeBrightness)
     val brightnessNow by rememberUpdatedState(prefs.brightness)
-    val setBrightnessNow by rememberUpdatedState(onPrefsAction.setBrightness)
+    val commitBrightnessNow by rememberUpdatedState(onPrefsAction.commitBrightness)
+    // The pointer loop runs in a restricted suspension scope, so taking
+    // the brightness from the finger to the screen happens here.
+    suspend fun settleBrightness(target: Float) {
+        commitBrightnessNow(target)
+        withTimeoutOrNull(BRIGHTNESS_SETTLE_MS) {
+            snapshotFlow { brightnessNow }.first { it == target }
+        }
+        if (brightnessPreview == target) brightnessPreview = null
+    }
     val systemGestures = WindowInsets.systemGestures
     var viewedImage by remember { mutableStateOf<ViewedImage?>(null) }
     // True from the moment a picture is claimed to the moment it is on
@@ -3340,18 +3352,6 @@ internal fun ReaderScreen(
     // Back, while a source is shown, goes back to where the reader asked.
     BackHandler(enabled = companionPeek != null) { returnToAsking() }
     ScreenBrightness(brightness = brightnessPreview ?: prefs.brightness)
-    // The preview goes only once it has nothing left to show: the store
-    // reporting the value on screen, or a change that came from
-    // somewhere else with nothing outstanding. An older write landing
-    // first must not clear a newer preview, and a change made in the Aa
-    // sheet must still move the value a lift is compared against.
-    LaunchedEffect(prefs.brightness) {
-        if (brightnessSwiping) return@LaunchedEffect
-        if (brightnessPreview == prefs.brightness || brightnessPreview == null) {
-            brightnessPreview = null
-            brightnessSaved = prefs.brightness
-        }
-    }
     // Auto-scroll implies it: a page that carries itself past a screen
     // timeout is a page nobody is reading. The reader's own switch still
     // decides everything else, and this adds nothing once the page stops.
@@ -3692,15 +3692,10 @@ internal fun ReaderScreen(
                                 touch.edgeSwipe = null
                                 brightnessSwiping = false
                                 brightnessPreview?.let { target ->
-                                    // Compared with what was already sent, so
-                                    // a quick second swipe back to the value
-                                    // before the first one is still saved.
-                                    if (target == (brightnessSaved ?: brightnessNow)) {
-                                        brightnessPreview = null
-                                    } else {
-                                        setBrightnessNow(target)
-                                    }
-                                    brightnessSaved = target
+                                    // Saved once, on lift, and the preview
+                                    // stays until the screen reads the
+                                    // stored value back (ADR 64).
+                                    effectScope.launch { settleBrightness(target) }
                                 }
                             }
                             continue
@@ -5911,6 +5906,9 @@ class ReaderPrefsActions(
     val setLineHeight: (Double?) -> Unit,
     val setPageMargins: (Double?) -> Unit,
     val setBrightness: (Float?) -> Unit,
+    // Saves the value an edge swipe reached, and returns once the store
+    // has it, so the preview can stay up until then (ADR 64).
+    val commitBrightness: suspend (Float) -> Unit,
     val setPageTurnStyle: (PageTurnStyle) -> Unit,
     val setColumnMode: (ColumnMode) -> Unit,
     val setAutoScrollSpeed: (Float) -> Unit,
