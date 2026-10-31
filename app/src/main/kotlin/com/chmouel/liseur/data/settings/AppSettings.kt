@@ -108,49 +108,79 @@ enum class VolumeKeyMode(val id: String) {
 }
 
 /**
- * Which side of a paginated page turns forward.
+ * Which sides of a paginated page turn it when tapped.
  *
- * [STANDARD] is the layout the app has always had: the side the book
- * came from goes back, the rest goes forward — the left of the page on
- * a left-to-right book, the right of it on a right-to-left one.
- * [SWAPPED] puts the forward turn under the other thumb, for a reader
- * holding the phone in the other hand — every page turn otherwise
- * reaches across the screen.
+ * [BOTH] is the layout the app has always had: the side the book came
+ * from goes back, the other goes forward, so the left of the page goes
+ * back on a left-to-right book and the right of it on a right-to-left
+ * one.
  *
- * "The other thumb" and not "the left side": a book that reads right to
- * left already turns forward on the left, so [SWAPPED] puts forward back
- * on the right there. The preset says which hand is holding the phone,
- * and leaves the book to say where its next page is.
+ * [LEFT] and [RIGHT] put every page turn under one thumb, for reading
+ * with the phone in one hand: the upper part of that side goes back,
+ * the lower part goes forward, and the other side opens the menu like
+ * the middle does. Up and down do not depend on reading direction, so
+ * neither does a single side.
  *
- * Only two, and deliberately: a zone editor is a settings hobby, and a
- * third preset has to earn its place by describing a hand position that
- * actually occurs. See `docs/adr/0009-tap-zone-customization.md`.
+ * [OFF] stops the sides turning pages at all. It is the answer for a
+ * reader whose grip keeps landing on the edge of the page: the centre
+ * and the top strip still reveal the chrome, and the volume keys and
+ * swipes still turn pages.
  *
- * The centre and the top strip still reveal the chrome under both, the
- * default volume-key mode still goes forward on down, and a book read by
- * scrolling has no page sides to tap in the first place.
+ * [LEFT] keeps the id of the old "Swapped" preset, which put the forward
+ * turn under the left thumb on most books. A reader who had it keeps
+ * turning forward with the left thumb, and an older build reading the
+ * value back gets Swapped, the nearest thing it knows.
+ *
+ * A zone editor is a settings hobby; see
+ * `docs/adr/0009-tap-zone-customization.md`. A book read by scrolling
+ * has no page sides to tap in the first place.
  */
 enum class TapZones(val id: String) {
-    STANDARD("standard"),
-    SWAPPED("swapped"),
+    BOTH("standard"),
+    LEFT("swapped"),
+    RIGHT("right"),
+    OFF("off"),
     ;
 
-    /**
-     * Whether the sides are the other way round.
-     *
-     * Read against reading direction rather than instead of it: an RTL
-     * book already turns forward on the left, and swapping it puts
-     * forward back on the right. The composition is in
-     * [com.chmouel.liseur.reader.chrome.ReaderTapZones.forward].
-     */
-    val swapped: Boolean get() = this == SWAPPED
+    /** Whether tapping a side of the page turns it. */
+    val turnsPages: Boolean get() = this != OFF
 
     companion object {
-        val Default = STANDARD
+        val Default = BOTH
 
         fun fromId(id: String?): TapZones = entries.firstOrNull { it.id == id } ?: Default
     }
 }
+
+/**
+ * How much of the page width each side turns, in percent.
+ *
+ * [WIDE] is the layout the app always had: with both sides, the back
+ * third of the page and everything forward of the centre box; with one
+ * side, that whole half of the page outside the centre box. The other
+ * stops make each side a narrow edge and leave the rest to the chrome,
+ * for a reader who keeps turning the page when reaching for the menu
+ * (#403).
+ * See `docs/adr/0009-tap-zone-customization.md`.
+ */
+object TapSideWidth {
+    const val WIDE = 0
+
+    /** The slider's stops, narrowest first, ending on [WIDE]. */
+    val STOPS = listOf(10, 15, 20, 25, 30, 35, WIDE)
+
+    /** A stored value that is not a stop reads as [WIDE]. */
+    fun sanitize(value: Int?): Int = value?.takeIf { it in STOPS } ?: WIDE
+}
+
+/**
+ * The tap preset and side width, carried to the reader together so the
+ * reader screen holds one value for both.
+ */
+data class TapLayout(
+    val zones: TapZones = TapZones.Default,
+    val sideWidth: Int = TapSideWidth.WIDE,
+)
 
 /**
  * Which screen edge, if any, takes a vertical swipe as a brightness
@@ -193,7 +223,9 @@ enum class DefinitionTarget(val id: String) {
  *   what you get back by turning it off, and what older phones always get.
  * @param volumeKeyMode Whether volume keys move through the book, and in
  *   which direction.
- * @param tapZones Which side of a paginated page turns forward.
+ * @param tapZones Which sides of a paginated page turn it when tapped.
+ * @param tapSideWidth How much of the page width each side turns; one of
+ *   [TapSideWidth.STOPS].
  * @param pinchToResize A two-finger pinch on the page changes the reading
  *   font size. On by default; it is here for a grip that produces stray
  *   two-finger touches, since a stray resize changes how every page looks
@@ -283,6 +315,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.Default,
     val tapZones: TapZones = TapZones.Default,
+    val tapSideWidth: Int = TapSideWidth.WIDE,
     val pinchToResize: Boolean = true,
     val edgeBrightness: EdgeBrightness = EdgeBrightness.Default,
     val resumeLastBook: Boolean = true,
@@ -453,6 +486,7 @@ class AppSettingsRepository(
         val LEGACY_VOLUME_KEYS = booleanPreferencesKey("volume_keys_turn_pages")
         val VOLUME_KEY_MODE = stringPreferencesKey("volume_keys_mode")
         val TAP_ZONES = stringPreferencesKey("tap_zones")
+        val TAP_SIDE_WIDTH = intPreferencesKey("tap_side_width")
         val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
         val EDGE_BRIGHTNESS = stringPreferencesKey("edge_brightness")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
@@ -547,6 +581,7 @@ class AppSettingsRepository(
             dynamicColor = p[Keys.DYNAMIC_COLOR] ?: true,
             volumeKeyMode = p.volumeKeyMode(),
             tapZones = TapZones.fromId(p[Keys.TAP_ZONES]),
+            tapSideWidth = TapSideWidth.sanitize(p[Keys.TAP_SIDE_WIDTH]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             edgeBrightness = EdgeBrightness.fromId(p[Keys.EDGE_BRIGHTNESS]),
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
@@ -687,6 +722,10 @@ class AppSettingsRepository(
 
     suspend fun setTapZones(zones: TapZones) {
         store.edit { it[Keys.TAP_ZONES] = zones.id }
+    }
+
+    suspend fun setTapSideWidth(percent: Int) {
+        store.edit { it[Keys.TAP_SIDE_WIDTH] = TapSideWidth.sanitize(percent) }
     }
 
     suspend fun setPinchToResize(enabled: Boolean) {
@@ -1250,7 +1289,7 @@ class AppSettingsRepository(
 internal val APP_BACKUP_TYPES = mapOf(
     "theme_mode" to BackupValueType.STRING, "dynamic_color" to BackupValueType.BOOLEAN,
     "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "volume_keys_mode" to BackupValueType.STRING,
-    "tap_zones" to BackupValueType.STRING,
+    "tap_zones" to BackupValueType.STRING, "tap_side_width" to BackupValueType.INT,
     "pinch_to_resize" to BackupValueType.BOOLEAN, "edge_brightness" to BackupValueType.STRING,
     "resume_last_book" to BackupValueType.BOOLEAN,
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,

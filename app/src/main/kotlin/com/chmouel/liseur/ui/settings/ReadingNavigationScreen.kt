@@ -3,6 +3,7 @@ package com.chmouel.liseur.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -35,8 +38,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +50,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -55,6 +63,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
+import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -68,6 +77,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.windowWidth
+import kotlin.math.roundToInt
 
 /**
  * How a book is turned, held and looked up — everything about reading
@@ -87,7 +97,7 @@ fun ReadingNavigationScreen(
     pageTurnStyle: PageTurnStyle,
     vendorName: String?,
     onVolumeKeyMode: (VolumeKeyMode) -> Unit,
-    onTapZones: (TapZones) -> Unit,
+    onOpenPageTaps: () -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onEdgeBrightness: (EdgeBrightness) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
@@ -241,13 +251,10 @@ fun ReadingNavigationScreen(
                         onSelected = onVolumeKeyMode,
                     )
                     RowDivider()
-                    ChipRow(
-                        title = stringResource(R.string.settings_tap_zones),
-                        subtitle = stringResource(R.string.settings_tap_zones_detail),
-                        options = TapZones.entries,
-                        selected = settings.tapZones,
-                        label = { stringResource(it.label) },
-                        onSelected = onTapZones,
+                    PageTapsRow(
+                        tapZones = settings.tapZones,
+                        tapSideWidth = settings.tapSideWidth,
+                        onClick = onOpenPageTaps,
                     )
                     RowDivider()
                     // The switch stays visible rather than disappearing
@@ -297,6 +304,29 @@ fun ReadingNavigationScreen(
             }
         }
     }
+}
+
+/** Opens the page taps screen, saying what the page does now. */
+@Composable
+private fun PageTapsRow(tapZones: TapZones, tapSideWidth: Int, onClick: () -> Unit) {
+    val sides = stringResource(tapZones.label)
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_page_taps)) },
+        supportingContent = {
+            Text(
+                if (tapZones.turnsPages) {
+                    stringResource(R.string.page_taps_summary, sides, tapSideWidthText(tapSideWidth))
+                } else {
+                    sides
+                },
+            )
+        },
+        trailingContent = {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
+    )
 }
 
 /**
@@ -587,13 +617,6 @@ private val VolumeKeyMode.label: Int
         VolumeKeyMode.ON -> R.string.settings_volume_keys_on
         VolumeKeyMode.OFF -> R.string.settings_volume_keys_off
         VolumeKeyMode.REVERSED -> R.string.settings_volume_keys_reversed
-    }
-
-/** Internal: the Settings row summarises the current side in its subtitle. */
-internal val TapZones.label: Int
-    get() = when (this) {
-        TapZones.STANDARD -> R.string.tap_zones_standard
-        TapZones.SWAPPED -> R.string.tap_zones_swapped
     }
 
 private val DefinitionTarget.label: Int

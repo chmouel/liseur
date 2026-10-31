@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.settings.ReaderTheme
+import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
@@ -79,9 +80,11 @@ import kotlinx.coroutines.delay
  * The page past the last page: a quiet colophon instead of the empty
  * columns Readium would keep turning through.
  *
- * It is a page, so the same tap zones apply — the back side returns to
- * the last page of the book, the forward side stays put, and [swapped]
- * moves which side is which exactly as it does while reading. The
+ * It is a page, so the same tap zones apply — a tap that would go back
+ * returns to the last page of the book and a forward one stays put,
+ * under the reader's [tapLayout] as while reading. With the sides
+ * switched off the endpaper still turns back as if both were on: it is
+ * the app's page, not the book's, and the way back into the book. The
  * actions stay at the foot of the page so a short window or a large font
  * cannot push them off the screen; the colophon above them scrolls if it
  * must. The next volume is a small card of its own: cover, name, and one
@@ -101,7 +104,7 @@ fun Endpaper(
     noNextInLibrary: Boolean = false,
     seriesCompletion: SeriesCompletion?,
     rtl: Boolean,
-    swapped: Boolean,
+    tapLayout: TapLayout,
     onTurnBack: () -> Unit,
     onLibrary: () -> Unit,
     onOpenNext: () -> Unit,
@@ -142,19 +145,21 @@ fun Endpaper(
             .background(theme.background)
             .semantics { contentDescription = description }
             .onSizeChanged { size = it }
-            .pointerInput(size, rtl, swapped, density) {
+            .pointerInput(size, rtl, tapLayout, density) {
                 if (size.width <= 0 || size.height <= 0) return@pointerInput
+                val layout = ReaderTapZones.endpaperLayout(tapLayout)
                 detectTapGestures { offset ->
-                    val zone = ReaderTapZones.zoneAt(
+                    val action = ReaderTapZones.actionAt(
                         x = offset.x,
                         y = offset.y,
                         width = size.width.toFloat(),
                         height = size.height.toFloat(),
                         density = density,
+                        scrolling = false,
+                        layout = layout,
+                        rtl = rtl,
                     )
-                    val forward = ReaderTapZones.forward(zone, rtl, swapped)
-                        ?: return@detectTapGestures
-                    if (!forward) onTurnBack()
+                    if (action == ReaderTapZones.Action.Turn(forward = false)) onTurnBack()
                 }
             },
     ) {

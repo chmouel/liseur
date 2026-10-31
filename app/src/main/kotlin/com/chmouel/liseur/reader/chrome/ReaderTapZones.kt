@@ -1,5 +1,8 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.TapLayout
+import com.chmouel.liseur.data.settings.TapSideWidth
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.ui.WidthClass
 import org.readium.r2.navigator.OverflowableNavigator
 import org.readium.r2.navigator.input.InputListener
@@ -21,7 +24,7 @@ import kotlin.math.abs
  * └─────────┴────────┴────────┘
  * ```
  *
- * drawn for a left-to-right book on the standard preset.
+ * drawn for a left-to-right book with both sides turning, the default.
  *
  * Tapping the top strip or the center of the page gently reveals the
  * chrome (menu), as fullscreen reading apps do; the side the book came
@@ -31,14 +34,12 @@ import kotlin.math.abs
  * dismisses it. Page turns are delegated to [onTurnPage] so they can
  * run the page-turn effect.
  *
- * Which side is which is the reader's to choose: [isSwapped] is the
- * Settings → Reading preset, and puts the forward turn under the other
- * thumb for a reader holding the phone in the other hand. It composes
- * with reading direction rather than replacing it: swapping a
- * left-to-right book moves the forward zone from the right of the page
- * to the left, and swapping a right-to-left one, which by default turns
- * forward on the left, moves it back to the right. The chrome zones do
- * not move — only the two sides trade places.
+ * Which sides turn pages is the reader's to choose, through [layout]:
+ * both (the drawing above), only the left or only the right side, where
+ * the upper part goes back and the lower part forward, or neither. The
+ * same layout says how wide the sides are. [actionAt] holds the whole
+ * shape, so the reading page, the endpaper and the settings preview
+ * cannot come to different answers about the same tap.
  *
  * A book read by scrolling has no page to turn, so the whole page
  * becomes the chrome zone and the text is moved by dragging it. Side
@@ -58,7 +59,7 @@ class ReaderTapZones(
     private val navigator: OverflowableNavigator,
     private val isChromeVisible: () -> Boolean,
     private val isScrolling: () -> Boolean = { false },
-    private val isSwapped: () -> Boolean = { false },
+    private val layout: () -> TapLayout = { TapLayout() },
     private val isPinching: () -> Boolean = { false },
     private val onTurnPage: (forward: Boolean) -> Unit,
     private val onShowChrome: () -> Unit,
@@ -84,16 +85,27 @@ class ReaderTapZones(
         val dp = view.resources.displayMetrics.density
         val rtl = navigator.overflow.value.readingProgression == ReadingProgression.RTL
 
-        val zone = zoneAt(event.point.x, event.point.y, width, height, dp, isScrolling())
-        when (val forward = forward(zone, rtl, isSwapped())) {
-            null -> onShowChrome()
-            else -> onTurnPage(forward)
+        val action = actionAt(event.point.x, event.point.y, width, height, dp, isScrolling(), layout(), rtl)
+        when (action) {
+            Action.Chrome -> onShowChrome()
+            Action.Inert -> Unit
+            is Action.Turn -> onTurnPage(action.forward)
         }
         return true
     }
 
-    /** What a tap on the page means, before reading direction is applied. */
+    /** Which part of the page a tap lands on, with both sides turning, before reading direction. */
     enum class Zone { CHROME, BACK, FORWARD }
+
+    /** What a tap on the page does once the layout and reading direction are applied. */
+    sealed interface Action {
+        data object Chrome : Action
+
+        /** A side tap with the sides switched off. */
+        data object Inert : Action
+
+        data class Turn(val forward: Boolean) : Action
+    }
 
     companion object {
         /** Top strip of the screen that reveals the chrome. */
@@ -123,13 +135,19 @@ class ReaderTapZones(
         const val MAX_CHROME_BOX_HEIGHT_DP = 360f
 
         /**
-         * Which zone a point falls in, in pixels, at [density] pixels per dp.
+         * Which zone a point falls in, in pixels, at [density] pixels per dp,
+         * with both sides turning.
          *
          * Split out from the tap handling so the shape of the page can be
          * checked at any screen size without a navigator to tap on.
          *
          * [scrolling] answers the whole page at once: there is nothing to
          * turn, so every tap is a tap on the chrome.
+         *
+         * [sideWidth] is [TapSideWidth.WIDE] for the layout described
+         * above, or a percentage: each side is then that much of the page
+         * edge, the same on both sides, and the whole band between them is
+         * the chrome. The top strip still opens the chrome either way.
          */
         fun zoneAt(
             x: Float,
@@ -138,16 +156,92 @@ class ReaderTapZones(
             height: Float,
             density: Float,
             scrolling: Boolean = false,
+            sideWidth: Int = TapSideWidth.WIDE,
         ): Zone {
             if (scrolling) return Zone.CHROME
             val fx = x / width
             val fy = y / height
-            val capped = width / density >= WidthClass.MEDIUM_MIN_DP
-            val strip = if (capped) {
+            if (fy < strip(width, height, density)) return Zone.CHROME
+            if (sideWidth != TapSideWidth.WIDE) {
+                val side = sideWidth / 100f
+                return when {
+                    fx < side -> Zone.BACK
+                    fx > 1f - side -> Zone.FORWARD
+                    else -> Zone.CHROME
+                }
+            }
+            return when {
+                inCentreBox(fx, fy, width, height, density) -> Zone.CHROME
+                fx < BACK_ZONE -> Zone.BACK
+                else -> Zone.FORWARD
+            }
+        }
+
+        /**
+         * What a tap at a point does under [layout], in pixels at [density]
+         * pixels per dp. The one answer the reading page, the endpaper and
+         * the settings preview all use.
+         *
+         * Both sides is [zoneAt] with reading direction applied ([forward]).
+         * One side is its own shape: the chosen half of the page outside the
+         * centre box, or the chosen edge at a narrower width, split across
+         * the middle of the height below the top strip, back above and
+         * forward below. Everything else, the other side included, is the
+         * chrome. With the sides off, a tap where a side would be does
+         * nothing and the chrome zones still open the menu.
+         */
+        fun actionAt(
+            x: Float,
+            y: Float,
+            width: Float,
+            height: Float,
+            density: Float,
+            scrolling: Boolean,
+            layout: TapLayout,
+            rtl: Boolean,
+        ): Action {
+            if (scrolling) return Action.Chrome
+            val zones = layout.zones
+            if (zones == TapZones.BOTH || zones == TapZones.OFF) {
+                val zone = zoneAt(x, y, width, height, density, sideWidth = layout.sideWidth)
+                val forward = forward(zone, rtl) ?: return Action.Chrome
+                return if (zones.turnsPages) Action.Turn(forward) else Action.Inert
+            }
+            val fx = x / width
+            val fy = y / height
+            val strip = strip(width, height, density)
+            if (fy < strip) return Action.Chrome
+            val onLeft = zones == TapZones.LEFT
+            val inSide = if (layout.sideWidth == TapSideWidth.WIDE) {
+                !inCentreBox(fx, fy, width, height, density) && (if (onLeft) fx < 0.5f else fx >= 0.5f)
+            } else {
+                val side = layout.sideWidth / 100f
+                if (onLeft) fx < side else fx > 1f - side
+            }
+            if (!inSide) return Action.Chrome
+            return Action.Turn(forward = fy >= (strip + 1f) / 2f)
+        }
+
+        /**
+         * The layout the endpaper turns by: the reader's, except that sides
+         * switched off still turn there. The endpaper is the app's own page
+         * and its back side is the way into the book again, so it stays
+         * live, as it does in scroll mode (ADR 0009).
+         */
+        fun endpaperLayout(layout: TapLayout): TapLayout =
+            if (layout.zones.turnsPages) layout else layout.copy(zones = TapZones.BOTH)
+
+        /** The top strip's height as a fraction, capped on wide windows. */
+        private fun strip(width: Float, height: Float, density: Float): Float =
+            if (capped(width, density)) {
                 minOf(CHROME_ZONE, MAX_CHROME_STRIP_DP * density / height)
             } else {
                 CHROME_ZONE
             }
+
+        /** Whether a point is in the centre box that opens the chrome. */
+        private fun inCentreBox(fx: Float, fy: Float, width: Float, height: Float, density: Float): Boolean {
+            val capped = capped(width, density)
             val halfX = if (capped) {
                 minOf(CHROME_HALF_SPAN, MAX_CHROME_BOX_WIDTH_DP * density / width / 2f)
             } else {
@@ -158,33 +252,22 @@ class ReaderTapZones(
             } else {
                 CHROME_HALF_SPAN
             }
-            val inBox = abs(fx - 0.5f) < halfX && abs(fy - 0.5f) < halfY
-            return when {
-                fy < strip || inBox -> Zone.CHROME
-                fx < BACK_ZONE -> Zone.BACK
-                else -> Zone.FORWARD
-            }
+            return abs(fx - 0.5f) < halfX && abs(fy - 0.5f) < halfY
         }
 
+        private fun capped(width: Float, density: Float): Boolean =
+            width / density >= WidthClass.MEDIUM_MIN_DP
+
         /**
-         * Which way a tapped [zone] turns the page, or null for the chrome.
-         *
-         * [zoneAt] answers in sides of the screen; this is the one place
-         * that turns a side into a direction, so the reading page and the
-         * endpaper cannot come to different answers about the same tap.
-         *
-         * The two things that reorder the sides compose rather than
-         * overrule each other. [rtl] is the book's: a right-to-left book
+         * Which way a tapped [zone] turns the page with both sides turning,
+         * or null for the chrome. [rtl] is the book's: a right-to-left book
          * turns forward on the left, because that is where the next page
-         * is. [swapped] is the reader's, and means "the other thumb"
-         * whatever the book does — so on an RTL book it puts forward back
-         * on the right. Both at once is the standard layout again, which
-         * is why this is an equality and not a pair of branches.
+         * is.
          */
-        fun forward(zone: Zone, rtl: Boolean, swapped: Boolean): Boolean? = when (zone) {
+        fun forward(zone: Zone, rtl: Boolean): Boolean? = when (zone) {
             Zone.CHROME -> null
-            Zone.BACK -> rtl != swapped
-            Zone.FORWARD -> rtl == swapped
+            Zone.BACK -> rtl
+            Zone.FORWARD -> !rtl
         }
     }
 }

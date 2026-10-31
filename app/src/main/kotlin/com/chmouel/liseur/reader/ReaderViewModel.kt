@@ -77,8 +77,8 @@ import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.ReaderTextAlign
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
-import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.SeriesExtras
@@ -1264,10 +1264,10 @@ class ReaderViewModel(
         _scrolling.value = scrolling
     }
 
-    /** Which side of the page turns forward, app-wide. */
-    val tapZones: StateFlow<TapZones> = appSettings.settings
-        .map { it.tapZones }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, TapZones.Default)
+    /** Which side of the page turns forward and how wide each side is, app-wide. */
+    val tapLayout: StateFlow<TapLayout> = appSettings.settings
+        .map { TapLayout(it.tapZones, it.tapSideWidth) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, TapLayout())
 
     /** Whether a two-finger pinch on the page resizes the text, app-wide. */
     val pinchToResize: StateFlow<Boolean> = appSettings.settings

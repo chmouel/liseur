@@ -42,6 +42,7 @@ import com.chmouel.liseur.data.settings.VoicePreference
 import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.UserFontRepository
 import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
@@ -557,6 +558,7 @@ class SettingsBackupRepositoryTest {
             .withIcon(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, com.chmouel.liseur.reader.annotations.SelectionActionIcon.STAR)
             .withWebsite("custom_6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "Référence : 中文, 100%", "https://example.org/?q={text}&source=book", null)
         sourceApp.setSelectionActionLayout(arrangement)
+        sourceApp.setTapSideWidth(15)
         sourceReader.setFontSize(1.75)
         sourceReader.setHyphens(true)
 
@@ -566,7 +568,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(SettingsBackupExportResult.Exported(0), source.exportTo(uri))
         val inspected = source.inspect(uri) as SettingsBackupInspection.Ready
-        assertEquals(SettingsBackupPreview(settingCount = 4, fontCount = 0), inspected.preview)
+        assertEquals(SettingsBackupPreview(settingCount = 5, fontCount = 0), inspected.preview)
         source.discardInspection(inspected.archiveId)
 
         val settings = ZipFile(backup).use { zip ->
@@ -583,6 +585,7 @@ class SettingsBackupRepositoryTest {
         assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(restored, uri))
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(arrangement, restoredApp.settings.first().selectionActionLayout)
+        assertEquals(15, restoredApp.settings.first().tapSideWidth)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
     }
@@ -630,6 +633,25 @@ class SettingsBackupRepositoryTest {
             restore(targetRepository, Uri.fromFile(legacy)),
         )
         assertEquals(VolumeKeyMode.OFF, targetApp.settings.first().volumeKeyMode)
+    }
+
+    @Test
+    fun `old swapped tap zones restore as the left side and the right side restores`() = runTest {
+        val fonts = UserFontRepository(context, this, loadCheck = { true })
+        fonts.awaitReady()
+        val app = AppSettingsRepository(store("tap-zones-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("tap-zones-reader.preferences_pb"))
+        for ((id, expected) in listOf("swapped" to TapZones.LEFT, "right" to TapZones.RIGHT)) {
+            val backup = archive(
+                "tap-zones-$id.zip",
+                JSONObject().put("app", JSONObject().put("tap_zones", id)).put("reader", JSONObject()),
+            )
+            assertEquals(
+                SettingsBackupRestoreResult.Restored(0, 0, 0),
+                restore(repository(app, reader, fonts), Uri.fromFile(backup)),
+            )
+            assertEquals(expected, app.settings.first().tapZones)
+        }
     }
 
     @Test
@@ -1001,6 +1023,8 @@ class SettingsBackupRepositoryTest {
                 org.json.JSONArray().put("MAGENTA"),
             ),
             JSONObject().put("highlight_tint_default", "MAGENTA"),
+            JSONObject().put("tap_side_width", 17),
+            JSONObject().put("tap_zones", "both_forward"),
         )
 
         invalidAppSettings.forEachIndexed { index, invalidSettings ->
