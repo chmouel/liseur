@@ -13,6 +13,7 @@ import com.chmouel.liseur.data.settings.ImportResult as FontImportResult
 import com.chmouel.liseur.data.settings.READER_BACKUP_TYPES
 import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
 import com.chmouel.liseur.data.settings.ServerSettings
+import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.TypographyRange
 import com.chmouel.liseur.data.settings.UserFontImport
@@ -1028,6 +1029,9 @@ class SettingsBackupRepository(
             "stats_range" to com.chmouel.liseur.domain.StatsRange.entries.map { it.id }.toSet(),
             "highlight_tint_default" to HighlightTint.entries.map { it.name }.toSet(),
         ))
+        if (app.has("tap_side_width") && app.getInt("tap_side_width") !in TapSideWidth.STOPS) {
+            throw IllegalArgumentException("Unsupported setting value: tap_side_width")
+        }
         if (app.has("highlight_tints_offered")) {
             val allowedTints = HighlightTint.entries.map { it.name }.toSet()
             val offered = app.getJSONArray("highlight_tints_offered")

@@ -771,6 +771,10 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Invertito</string>
     <string name="tap_zones_off">Disattivo</string>
+    <string name="settings_tap_side_width">Area di svolta pagina</string>
+    <string name="settings_tap_side_width_detail">Quanta parte di ogni bordo gira la pagina al tocco. Con bordi stretti il centro della pagina resta al menu, così raggiungere la lettura ad alta voce o altri comandi non gira la pagina. Ampia è la disposizione originale.</string>
+    <string name="tap_side_width_wide">Ampia</string>
+    <string name="tap_side_width_percent">%1$d%%</string>
     <string name="settings_pinch_to_resize">Pizzica per ridimensionare il testo</string>
     <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Disattivalo se il modo in cui impugni il telefono lo attiva per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
     <string name="settings_pinch_to_resize_eink">Spento sugli schermi e-ink, che ridisegnano troppo lentamente l\'anteprima della dimensione. Usa invece il cursore Dimensione. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se questo non è uno schermo e-ink.</string>

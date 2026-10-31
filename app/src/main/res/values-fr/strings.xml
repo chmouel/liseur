@@ -771,6 +771,10 @@
     <string name="tap_zones_standard">Standard</string>
     <string name="tap_zones_swapped">Inversé</string>
     <string name="tap_zones_off">Désactivé</string>
+    <string name="settings_tap_side_width">Zone pour tourner la page</string>
+    <string name="settings_tap_side_width_detail">Quelle part de chaque bord tourne la page au toucher. Des bords étroits laissent le milieu de la page au menu, pour atteindre la lecture à voix haute ou d\'autres commandes sans tourner la page. Large est la disposition d\'origine.</string>
+    <string name="tap_side_width_wide">Large</string>
+    <string name="tap_side_width_percent">%1$d %%</string>
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
     <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
     <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>

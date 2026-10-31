@@ -208,8 +208,8 @@ import com.chmouel.liseur.data.settings.readingCssFor
 import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
-import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.SelectionToolbarSheet
 import com.chmouel.liseur.reader.chrome.AdvancedSheet
@@ -525,7 +525,7 @@ internal fun ReaderScreen(
     scrollModeFlow: StateFlow<Boolean>,
     onScrollModeChanged: (Boolean) -> Unit,
     onScrollingChanged: (Boolean) -> Unit = {},
-    tapZonesFlow: StateFlow<TapZones>,
+    tapLayoutFlow: StateFlow<TapLayout>,
     pinchToResizeFlow: StateFlow<Boolean>,
     edgeBrightnessFlow: StateFlow<EdgeBrightness>,
     onEdgeBrightnessChanged: (EdgeBrightness) -> Unit,
@@ -595,10 +595,9 @@ internal fun ReaderScreen(
     val prefs by prefsFlow.collectAsStateWithLifecycle()
     val keepScreenOn by keepScreenOnFlow.collectAsStateWithLifecycle()
     val scrollMode by scrollModeFlow.collectAsStateWithLifecycle()
-    val tapZones by tapZonesFlow.collectAsStateWithLifecycle()
+    val tapLayout by tapLayoutFlow.collectAsStateWithLifecycle()
     val lockFooterOn by lockFooterOnFlow.collectAsStateWithLifecycle()
-    val swappedZonesNow by rememberUpdatedState(tapZones.swapped)
-    val tapZonesTurnPagesNow by rememberUpdatedState(tapZones.turnsPages)
+    val tapLayoutNow by rememberUpdatedState(tapLayout)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
     val edgeBrightness by edgeBrightnessFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
@@ -3254,8 +3253,9 @@ internal fun ReaderScreen(
                 navigator = it,
                 isChromeVisible = { chromeVisibleNow },
                 isScrolling = { effectiveScrollingNow },
-                isSwapped = { swappedZonesNow },
-                turnsPages = { tapZonesTurnPagesNow },
+                isSwapped = { tapLayoutNow.zones.swapped },
+                turnsPages = { tapLayoutNow.zones.turnsPages },
+                sideWidth = { tapLayoutNow.sideWidth },
                 isPinching = isPinching,
                 onTurnPage = pageTurner::turn,
                 onShowChrome = { chromeVisible = true },
@@ -4029,7 +4029,8 @@ internal fun ReaderScreen(
                     noNextInLibrary = continuation?.noNextInLibrary == true,
                     seriesCompletion = continuation?.seriesCompletion,
                     rtl = endpaperRtl,
-                    swapped = tapZones.swapped,
+                    swapped = tapLayout.zones.swapped,
+                    sideWidth = tapLayout.sideWidth,
                     onTurnBack = {
                         showingEnd = false
                         onLeftEndpaper()

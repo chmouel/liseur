@@ -619,6 +619,7 @@ private fun LiseurApp(
                             vendorName = context.container.eInkDisplay.vendor,
                             onVolumeKeyMode = { scope.launch { repository.setVolumeKeyMode(it) } },
                             onTapZones = { scope.launch { repository.setTapZones(it) } },
+                            onTapSideWidth = { scope.launch { repository.setTapSideWidth(it) } },
                             onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
                             onEdgeBrightness = { scope.launch { repository.setEdgeBrightness(it) } },
                             onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },

@@ -108,3 +108,32 @@ top strip still reveal the chrome; the volume keys, swipes and the
 endpaper keep behaving as before. The endpaper stays live whatever the
 preset because it is the app's own page, not the book's, and its chrome
 zone does nothing — the same reason it ignores scroll mode.
+
+The first version of Off returned before working out which zone was
+tapped, so the centre and top strip went dead along with the sides and
+the menu could only be reached by other means. The preset and the zone
+are now resolved separately (`ReaderTapZones.action`): Off drops side
+taps and keeps chrome taps, as described above.
+
+## Update: side width
+
+Issue [#403](https://github.com/chmouel/liseur/issues/403): on the
+standard layout the forward side covers roughly half the page, so a
+reader reaching for the menu (to get to read aloud) kept turning the
+page instead. Off fixes that by taking side taps away entirely, which
+is too much for someone who still wants to tap to turn.
+
+A **Page-turn area** slider sits under the preset row. Its stops are
+10, 15, 20, 25, 30 and 35 percent per side, and a last stop, **Wide**,
+which is the original layout and the default. A percentage stop makes
+both sides the same narrow edge and gives the whole band between them,
+top to bottom, to the chrome; the top strip still opens the chrome.
+The percentage is not capped in dp on wide screens the way the centre
+box is, because the reader picked it as a share of the page.
+
+This is still not the zone editor this ADR rejected: one number, no
+per-zone actions, and it composes with Standard, Swapped and reading
+direction unchanged through `forward()`. The slider is greyed out under
+Off. Like the preset, the width is in the settings archive but not in
+liseur-sync settings backup, since it depends on how this device is
+held.

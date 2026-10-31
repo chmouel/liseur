@@ -1,5 +1,8 @@
 package com.chmouel.liseur.reader.chrome
 
+import com.chmouel.liseur.data.settings.TapSideWidth
+import com.chmouel.liseur.reader.chrome.ReaderTapZones.Action
+import com.chmouel.liseur.reader.chrome.ReaderTapZones.Companion.action
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Companion.forward
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Companion.zoneAt
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Zone
@@ -135,6 +138,54 @@ class ReaderTapZonesTest {
         for (rtl in listOf(false, true)) {
             for (swapped in listOf(false, true)) {
                 assertNull(forward(Zone.CHROME, rtl, swapped))
+            }
+        }
+    }
+
+    @Test
+    fun `the off preset still opens the chrome from the middle`() {
+        // Off takes the sides away, not the menu: a reader who switched
+        // the sides off still needs a tap that brings the controls back.
+        assertEquals(Action.Chrome, action(Zone.CHROME, rtl = false, swapped = false, turnsPages = false))
+        assertEquals(Action.Inert, action(Zone.BACK, rtl = false, swapped = false, turnsPages = false))
+        assertEquals(Action.Inert, action(Zone.FORWARD, rtl = true, swapped = true, turnsPages = false))
+        assertEquals(Action.Turn(true), action(Zone.FORWARD, rtl = false, swapped = false, turnsPages = true))
+    }
+
+    private fun Screen.narrowAt(fx: Float, fy: Float, percent: Int) =
+        zoneAt(w * fx, h * fy, w, h, density, sideWidth = percent)
+
+    @Test
+    fun `narrow sides leave the whole middle band to the chrome`() {
+        assertEquals(Zone.BACK, phone.narrowAt(0.1f, 0.8f, 15))
+        assertEquals(Zone.CHROME, phone.narrowAt(0.2f, 0.8f, 15))
+        // Below the old centre box, which used to turn forward.
+        assertEquals(Zone.CHROME, phone.narrowAt(0.8f, 0.8f, 15))
+        assertEquals(Zone.FORWARD, phone.narrowAt(0.9f, 0.8f, 15))
+        // The top strip wins over a side.
+        assertEquals(Zone.CHROME, phone.narrowAt(0.05f, 0.05f, 15))
+    }
+
+    @Test
+    fun `narrow sides are the same share of a tablet as of a phone`() {
+        for (screen in listOf(phone, eink, tablet)) {
+            assertEquals(Zone.BACK, screen.narrowAt(0.09f, 0.5f, 10))
+            assertEquals(Zone.CHROME, screen.narrowAt(0.11f, 0.5f, 10))
+            assertEquals(Zone.CHROME, screen.narrowAt(0.89f, 0.5f, 10))
+            assertEquals(Zone.FORWARD, screen.narrowAt(0.91f, 0.5f, 10))
+        }
+    }
+
+    @Test
+    fun `the wide stop is the layout the app always had`() {
+        for (screen in listOf(phone, eink, tablet, wideCompact)) {
+            for (fx in listOf(0.05f, 0.25f, 0.5f, 0.65f, 0.95f)) {
+                for (fy in listOf(0.05f, 0.25f, 0.5f, 0.75f, 0.95f)) {
+                    assertEquals(
+                        screen.at(fx, fy),
+                        screen.narrowAt(fx, fy, TapSideWidth.WIDE),
+                    )
+                }
             }
         }
     }

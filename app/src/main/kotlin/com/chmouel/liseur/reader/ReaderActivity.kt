@@ -557,7 +557,7 @@ class ReaderActivity : FragmentActivity() {
                                     scrollModeFlow = viewModel.scrollMode,
                                     onScrollModeChanged = viewModel::setScrollMode,
                                     onScrollingChanged = viewModel::onScrollingChanged,
-                                    tapZonesFlow = viewModel.tapZones,
+                                    tapLayoutFlow = viewModel.tapLayout,
                                     pinchToResizeFlow = viewModel.pinchToResize,
                                     edgeBrightnessFlow = viewModel.edgeBrightness,
                                     onEdgeBrightnessChanged = { viewModel.setEdgeBrightness(it) },

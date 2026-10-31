@@ -557,6 +557,7 @@ class SettingsBackupRepositoryTest {
             .withIcon(com.chmouel.liseur.reader.annotations.SelectionAction.COPY.id, com.chmouel.liseur.reader.annotations.SelectionActionIcon.STAR)
             .withWebsite("custom_6ed9c95b-9a2f-4f26-a573-d7356b0cd68e", "Référence : 中文, 100%", "https://example.org/?q={text}&source=book", null)
         sourceApp.setSelectionActionLayout(arrangement)
+        sourceApp.setTapSideWidth(15)
         sourceReader.setFontSize(1.75)
         sourceReader.setHyphens(true)
 
@@ -566,7 +567,7 @@ class SettingsBackupRepositoryTest {
 
         assertEquals(SettingsBackupExportResult.Exported(0), source.exportTo(uri))
         val inspected = source.inspect(uri) as SettingsBackupInspection.Ready
-        assertEquals(SettingsBackupPreview(settingCount = 4, fontCount = 0), inspected.preview)
+        assertEquals(SettingsBackupPreview(settingCount = 5, fontCount = 0), inspected.preview)
         source.discardInspection(inspected.archiveId)
 
         val settings = ZipFile(backup).use { zip ->
@@ -583,6 +584,7 @@ class SettingsBackupRepositoryTest {
         assertEquals(SettingsBackupRestoreResult.Restored(0, 0, 0), restore(restored, uri))
         assertEquals(ThemeMode.DARK, restoredApp.settings.first().themeMode)
         assertEquals(arrangement, restoredApp.settings.first().selectionActionLayout)
+        assertEquals(15, restoredApp.settings.first().tapSideWidth)
         assertEquals(1.75, restoredReader.prefs.first().fontSize, 0.0)
         assertEquals(true, restoredReader.prefs.first().hyphens)
     }
@@ -1001,6 +1003,7 @@ class SettingsBackupRepositoryTest {
                 org.json.JSONArray().put("MAGENTA"),
             ),
             JSONObject().put("highlight_tint_default", "MAGENTA"),
+            JSONObject().put("tap_side_width", 17),
         )
 
         invalidAppSettings.forEachIndexed { index, invalidSettings ->

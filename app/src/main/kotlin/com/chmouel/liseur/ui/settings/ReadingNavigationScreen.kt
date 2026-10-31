@@ -3,6 +3,7 @@ package com.chmouel.liseur.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -35,8 +37,10 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +49,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -55,6 +62,7 @@ import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
+import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -68,6 +76,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
 import com.chmouel.liseur.ui.windowWidth
+import kotlin.math.roundToInt
 
 /**
  * How a book is turned, held and looked up — everything about reading
@@ -88,6 +97,7 @@ fun ReadingNavigationScreen(
     vendorName: String?,
     onVolumeKeyMode: (VolumeKeyMode) -> Unit,
     onTapZones: (TapZones) -> Unit,
+    onTapSideWidth: (Int) -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onEdgeBrightness: (EdgeBrightness) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
@@ -250,6 +260,12 @@ fun ReadingNavigationScreen(
                         onSelected = onTapZones,
                     )
                     RowDivider()
+                    TapSideWidthRow(
+                        selected = settings.tapSideWidth,
+                        enabled = settings.tapZones.turnsPages,
+                        onSelected = onTapSideWidth,
+                    )
+                    RowDivider()
                     // The switch stays visible rather than disappearing
                     // on e-paper: a row that is simply gone reads as a
                     // setting the app never had, and this one is off for
@@ -296,6 +312,62 @@ fun ReadingNavigationScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * How much of the page width each side turns, as a slider over
+ * [TapSideWidth.STOPS] ending on Wide. The thumb moves freely while
+ * dragging and the choice is stored when it is let go, so a drag is one
+ * write and not one per stop. Greyed out, not hidden, under the Off
+ * preset: there are no sides to size, but the row says what it would do.
+ */
+@Composable
+private fun TapSideWidthRow(selected: Int, enabled: Boolean, onSelected: (Int) -> Unit) {
+    val stops = TapSideWidth.STOPS
+    // The slider keeps its first callbacks, so they must only touch stable state.
+    val save by rememberUpdatedState(onSelected)
+    fun indexOf(width: Int) = stops.indexOf(TapSideWidth.sanitize(width)).toFloat()
+    var position by remember { mutableFloatStateOf(indexOf(selected)) }
+    LaunchedEffect(selected) { position = indexOf(selected) }
+    fun stopAt(p: Float) = stops[p.roundToInt().coerceIn(stops.indices)]
+    val current = stopAt(position)
+    val title = stringResource(R.string.settings_tap_side_width)
+    val valueText = if (current == TapSideWidth.WIDE) {
+        stringResource(R.string.tap_side_width_wide)
+    } else {
+        stringResource(R.string.tap_side_width_percent, current)
+    }
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                valueText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            text = stringResource(R.string.settings_tap_side_width_detail),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Slider(
+            value = position,
+            enabled = enabled,
+            onValueChange = { position = it },
+            onValueChangeFinished = { save(stopAt(position)) },
+            valueRange = 0f..stops.lastIndex.toFloat(),
+            steps = stops.size - 2,
+            modifier = Modifier.semantics {
+                contentDescription = title
+                stateDescription = valueText
+            },
+        )
     }
 }
 
