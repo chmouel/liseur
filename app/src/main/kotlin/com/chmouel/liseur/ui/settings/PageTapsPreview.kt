@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -25,6 +27,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -33,9 +36,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.TapLayout
+import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
+import com.chmouel.liseur.reader.chrome.FooterMetrics
 import com.chmouel.liseur.reader.chrome.ReaderTapZones
 import com.chmouel.liseur.reader.chrome.ReaderTapZones.Action
 
@@ -141,12 +147,15 @@ private fun TapArea.onColor(): Color = when (this) {
     TapArea.MENU, TapArea.NOTHING -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-private val TapZones.previewDescription: Int
-    get() = when (this) {
-        TapZones.BOTH -> R.string.page_taps_preview_both
-        TapZones.LEFT -> R.string.page_taps_preview_left
-        TapZones.RIGHT -> R.string.page_taps_preview_right
-        TapZones.OFF -> R.string.page_taps_preview_off
+private val TapLayout.previewDescription: Int
+    get() {
+        val wide = sideWidth == TapSideWidth.WIDE
+        return when (zones) {
+            TapZones.BOTH -> if (wide) R.string.page_taps_preview_both_wide else R.string.page_taps_preview_both
+            TapZones.LEFT -> if (wide) R.string.page_taps_preview_left_wide else R.string.page_taps_preview_left
+            TapZones.RIGHT -> if (wide) R.string.page_taps_preview_right_wide else R.string.page_taps_preview_right
+            TapZones.OFF -> R.string.page_taps_preview_off
+        }
     }
 
 /**
@@ -161,9 +170,27 @@ private val TapZones.previewDescription: Int
 @Composable
 internal fun PageTapsPreview(layout: TapLayout, modifier: Modifier = Modifier) {
     val window = LocalWindowInfo.current.containerSize
-    val density = LocalDensity.current.density
-    val width = window.width.coerceAtLeast(1).toFloat()
-    val height = window.height.coerceAtLeast(1).toFloat()
+    val densityScope = LocalDensity.current
+    val density = densityScope.density
+    // The reader measures taps on its page, which is the window less the
+    // camera cutout, the 12dp top margin and the footer band (as a paged
+    // book with a footer lays it out, see ReaderScreen), so the drawing
+    // samples that same rectangle.
+    val cutout = WindowInsets.displayCutout
+    val direction = LocalLayoutDirection.current
+    val footerLine = MaterialTheme.typography.labelSmall.lineHeight
+    val footerReserveDp = FooterMetrics.reservedHeightDp(
+        with(densityScope) {
+            if (footerLine.isSp) footerLine.toDp().value else FooterMetrics.FALLBACK_LINE_HEIGHT_SP.sp.toDp().value
+        },
+    )
+    val width = (
+        window.width - cutout.getLeft(densityScope, direction) - cutout.getRight(densityScope, direction)
+        ).coerceAtLeast(1).toFloat()
+    val height = (
+        window.height - cutout.getTop(densityScope) - cutout.getBottom(densityScope) -
+            (12f + footerReserveDp) * density
+        ).coerceAtLeast(1f)
     val rects = remember(layout, width, height, density) {
         pageTapRects(width, height, density, layout)
     }
@@ -174,7 +201,7 @@ internal fun PageTapsPreview(layout: TapLayout, modifier: Modifier = Modifier) {
     val outline = MaterialTheme.colorScheme.outline
     val labelStyle = MaterialTheme.typography.labelMedium
     val measurer = rememberTextMeasurer()
-    val description = stringResource(layout.zones.previewDescription)
+    val description = stringResource(layout.previewDescription)
 
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val shape = RoundedCornerShape(16.dp)

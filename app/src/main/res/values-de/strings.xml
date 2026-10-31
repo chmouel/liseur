@@ -798,6 +798,9 @@
     <string name="page_taps_preview_left">Oben links blättert zurück, unten links vorwärts, der Rest der Seite öffnet das Menü.</string>
     <string name="page_taps_preview_right">Oben rechts blättert zurück, unten rechts vorwärts, der Rest der Seite öffnet das Menü.</string>
     <string name="page_taps_preview_off">Ein Tipp auf einen Rand bewirkt nichts. Die Mitte und oben öffnen das Menü.</string>
+    <string name="page_taps_preview_both_wide">Das linke Drittel blättert zurück, der Rest der Seite vorwärts, außer oben und einem Feld in der Mitte, die das Menü öffnen.</string>
+    <string name="page_taps_preview_left_wide">Die linke Hälfte blättert oben zurück und unten vorwärts. Die rechte Hälfte, oben und ein Feld in der Mitte öffnen das Menü.</string>
+    <string name="page_taps_preview_right_wide">Die rechte Hälfte blättert oben zurück und unten vorwärts. Die linke Hälfte, oben und ein Feld in der Mitte öffnen das Menü.</string>
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
     <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
     <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen aus, da sie die Live-Vorschau der Größe zu langsam neu zeichnen. Nutze stattdessen den Größenregler. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das kein E-Ink-Bildschirm ist.</string>

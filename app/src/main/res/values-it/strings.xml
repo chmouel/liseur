@@ -787,6 +787,9 @@
     <string name="page_taps_preview_left">In alto a sinistra torna indietro, in basso a sinistra va avanti, il resto della pagina apre il menu.</string>
     <string name="page_taps_preview_right">In alto a destra torna indietro, in basso a destra va avanti, il resto della pagina apre il menu.</string>
     <string name="page_taps_preview_off">Toccare un lato non fa nulla. Il centro e la parte alta aprono il menu.</string>
+    <string name="page_taps_preview_both_wide">Il terzo sinistro torna indietro e il resto della pagina va avanti, tranne la parte alta e un riquadro al centro, che aprono il menu.</string>
+    <string name="page_taps_preview_left_wide">La metà sinistra torna indietro in alto e va avanti in basso. La metà destra, la parte alta e un riquadro al centro aprono il menu.</string>
+    <string name="page_taps_preview_right_wide">La metà destra torna indietro in alto e va avanti in basso. La metà sinistra, la parte alta e un riquadro al centro aprono il menu.</string>
     <string name="settings_pinch_to_resize">Pizzica per ridimensionare il testo</string>
     <string name="settings_pinch_to_resize_detail">Un pizzico a due dita sulla pagina ingrandisce o riduce il testo, senza aprire il menu. Disattivalo se il modo in cui impugni il telefono lo attiva per sbaglio. Pizzicare un\'immagine per ingrandirla funziona comunque.</string>
     <string name="settings_pinch_to_resize_eink">Spento sugli schermi e-ink, che ridisegnano troppo lentamente l\'anteprima della dimensione. Usa invece il cursore Dimensione. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se questo non è uno schermo e-ink.</string>
