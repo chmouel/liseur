@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,8 +97,7 @@ fun ReadingNavigationScreen(
     pageTurnStyle: PageTurnStyle,
     vendorName: String?,
     onVolumeKeyMode: (VolumeKeyMode) -> Unit,
-    onTapZones: (TapZones) -> Unit,
-    onTapSideWidth: (Int) -> Unit,
+    onOpenPageTaps: () -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onEdgeBrightness: (EdgeBrightness) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
@@ -251,19 +251,10 @@ fun ReadingNavigationScreen(
                         onSelected = onVolumeKeyMode,
                     )
                     RowDivider()
-                    ChipRow(
-                        title = stringResource(R.string.settings_tap_zones),
-                        subtitle = stringResource(R.string.settings_tap_zones_detail),
-                        options = TapZones.entries,
-                        selected = settings.tapZones,
-                        label = { stringResource(it.label) },
-                        onSelected = onTapZones,
-                    )
-                    RowDivider()
-                    TapSideWidthRow(
-                        selected = settings.tapSideWidth,
-                        enabled = settings.tapZones.turnsPages,
-                        onSelected = onTapSideWidth,
+                    PageTapsRow(
+                        tapZones = settings.tapZones,
+                        tapSideWidth = settings.tapSideWidth,
+                        onClick = onOpenPageTaps,
                     )
                     RowDivider()
                     // The switch stays visible rather than disappearing
@@ -315,60 +306,27 @@ fun ReadingNavigationScreen(
     }
 }
 
-/**
- * How much of the page width each side turns, as a slider over
- * [TapSideWidth.STOPS] ending on Wide. The thumb moves freely while
- * dragging and the choice is stored when it is let go, so a drag is one
- * write and not one per stop. Greyed out, not hidden, under the Off
- * preset: there are no sides to size, but the row says what it would do.
- */
+/** Opens the page taps screen, saying what the page does now. */
 @Composable
-private fun TapSideWidthRow(selected: Int, enabled: Boolean, onSelected: (Int) -> Unit) {
-    val stops = TapSideWidth.STOPS
-    // The slider keeps its first callbacks, so they must only touch stable state.
-    val save by rememberUpdatedState(onSelected)
-    fun indexOf(width: Int) = stops.indexOf(TapSideWidth.sanitize(width)).toFloat()
-    var position by remember { mutableFloatStateOf(indexOf(selected)) }
-    LaunchedEffect(selected) { position = indexOf(selected) }
-    fun stopAt(p: Float) = stops[p.roundToInt().coerceIn(stops.indices)]
-    val current = stopAt(position)
-    val title = stringResource(R.string.settings_tap_side_width)
-    val valueText = if (current == TapSideWidth.WIDE) {
-        stringResource(R.string.tap_side_width_wide)
-    } else {
-        stringResource(R.string.tap_side_width_percent, current)
-    }
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+private fun PageTapsRow(tapZones: TapZones, tapSideWidth: Int, onClick: () -> Unit) {
+    val sides = stringResource(tapZones.label)
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.settings_page_taps)) },
+        supportingContent = {
             Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.weight(1f),
+                if (tapZones.turnsPages) {
+                    stringResource(R.string.page_taps_summary, sides, tapSideWidthText(tapSideWidth))
+                } else {
+                    sides
+                },
             )
-            Text(
-                valueText,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        Text(
-            text = stringResource(R.string.settings_tap_side_width_detail),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Slider(
-            value = position,
-            enabled = enabled,
-            onValueChange = { position = it },
-            onValueChangeFinished = { save(stopAt(position)) },
-            valueRange = 0f..stops.lastIndex.toFloat(),
-            steps = stops.size - 2,
-            modifier = Modifier.semantics {
-                contentDescription = title
-                stateDescription = valueText
-            },
-        )
-    }
+        },
+        trailingContent = {
+            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
+    )
 }
 
 /**
@@ -659,14 +617,6 @@ private val VolumeKeyMode.label: Int
         VolumeKeyMode.ON -> R.string.settings_volume_keys_on
         VolumeKeyMode.OFF -> R.string.settings_volume_keys_off
         VolumeKeyMode.REVERSED -> R.string.settings_volume_keys_reversed
-    }
-
-/** Internal: the Settings row summarises the current side in its subtitle. */
-internal val TapZones.label: Int
-    get() = when (this) {
-        TapZones.STANDARD -> R.string.tap_zones_standard
-        TapZones.SWAPPED -> R.string.tap_zones_swapped
-        TapZones.OFF -> R.string.tap_zones_off
     }
 
 private val DefinitionTarget.label: Int

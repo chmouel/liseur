@@ -84,6 +84,7 @@ import com.chmouel.liseur.ui.settings.SettingsScreen
 import com.chmouel.liseur.ui.settings.SettingsBackupScreen
 import com.chmouel.liseur.ui.settings.SelectionToolbarScreen
 import com.chmouel.liseur.ui.settings.NestedPage
+import com.chmouel.liseur.ui.settings.PageTapsScreen
 import com.chmouel.liseur.ui.settings.ReadingAppearanceScreen
 import com.chmouel.liseur.ui.settings.HiddenBooksScreen
 import com.chmouel.liseur.ui.settings.ReadingNavigationScreen
@@ -618,8 +619,7 @@ private fun LiseurApp(
                             pageTurnStyle = readerPrefs.pageTurnStyle,
                             vendorName = context.container.eInkDisplay.vendor,
                             onVolumeKeyMode = { scope.launch { repository.setVolumeKeyMode(it) } },
-                            onTapZones = { scope.launch { repository.setTapZones(it) } },
-                            onTapSideWidth = { scope.launch { repository.setTapSideWidth(it) } },
+                            onOpenPageTaps = { backStack.push(Route.PageTaps) },
                             onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
                             onEdgeBrightness = { scope.launch { repository.setEdgeBrightness(it) } },
                             onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
@@ -681,6 +681,18 @@ private fun LiseurApp(
                             ),
                             onBack = back,
                         )
+                    }
+
+                    Route.PageTaps -> {
+                        NestedPage {
+                            PageTapsScreen(
+                                tapZones = settings.tapZones,
+                                tapSideWidth = settings.tapSideWidth,
+                                onTapZones = { scope.launch { repository.setTapZones(it) } },
+                                onTapSideWidth = { scope.launch { repository.setTapSideWidth(it) } },
+                                onBack = back,
+                            )
+                        }
                     }
 
                     Route.SelectionToolbar -> {
