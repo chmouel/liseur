@@ -585,6 +585,7 @@ class ReaderActivity : FragmentActivity() {
                                             setLineHeight = viewModel::setLineHeight,
                                             setPageMargins = viewModel::setPageMargins,
                                             setBrightness = viewModel::setBrightness,
+                                            commitBrightness = viewModel::commitBrightness,
                                             setPageTurnStyle = viewModel::setPageTurnStyle,
                                             setColumnMode = viewModel::setColumnMode,
                                             setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
