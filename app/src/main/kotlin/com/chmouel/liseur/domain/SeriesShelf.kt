@@ -23,9 +23,10 @@ data class SeriesVolume(
      * over a book the shelf calls not started.
      */
     val keptPlace: Double?
-        get() = progression?.takeIf {
-            it > 0.0 && shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
-        }
+        get() =
+            progression?.takeIf {
+                it > 0.0 && shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
+            }
 
     val onDevice: Boolean
         get() = book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
@@ -98,8 +99,7 @@ data class SeriesShelf(
  * the shelf like any other and counts towards the two. One book of
  * twelve is a series; the missing volumes are the point of showing it.
  */
-fun List<SeriesShelf>.worthShowing(): List<SeriesShelf> =
-    filter { it.volumes.size >= MIN_SERIES_VOLUMES }
+fun List<SeriesShelf>.worthShowing(): List<SeriesShelf> = filter { it.volumes.size >= MIN_SERIES_VOLUMES }
 
 /** How many books it takes to make a series. */
 const val MIN_SERIES_VOLUMES = 2
@@ -135,26 +135,26 @@ fun List<Book>.groupedIntoSeries(
         .filterKeys { it.isNotEmpty() }
         .map { (key, books) ->
             val orderedBooks = books.sortedBy { it.url }
-            val volumes = orderedBooks
-                .map {
-                    SeriesVolume(
-                        it,
-                        progressions[it.url],
-                        overrides[it.url] ?: FinishedOverride.NONE,
-                    )
-                }
-                .sortedWith(byVolume)
+            val volumes =
+                orderedBooks
+                    .map {
+                        SeriesVolume(
+                            it,
+                            progressions[it.url],
+                            overrides[it.url] ?: FinishedOverride.NONE,
+                        )
+                    }.sortedWith(byVolume)
             SeriesShelf(
                 key = key,
                 name = commonest(orderedBooks.mapNotNull { it.seriesName }) ?: key,
                 author = commonest(orderedBooks.mapNotNull { it.displayAuthor }),
                 volumes = volumes,
-                nextUp = volumes.firstOrNull { it.inProgress }
-                    ?: volumes.firstOrNull { !it.finished },
+                nextUp =
+                    volumes.firstOrNull { it.inProgress }
+                        ?: volumes.firstOrNull { !it.finished },
                 gaps = gapsBetween(volumes),
             )
-        }
-        .sortedWith(compareBy({ sortKey(it.name) }, { it.key }))
+        }.sortedWith(compareBy({ sortKey(it.name) }, { it.key }))
 
 /**
  * The spelling most of the volumes agree on.
@@ -164,7 +164,10 @@ fun List<Book>.groupedIntoSeries(
  * whichever came first, which keeps the answer settled between launches.
  */
 private fun commonest(values: List<String>): String? =
-    values.groupingBy { it }.eachCount().entries
+    values
+        .groupingBy { it }
+        .eachCount()
+        .entries
         .maxWithOrNull(compareBy({ it.value }, { -values.indexOf(it.key) }))
         ?.key
 
@@ -177,10 +180,12 @@ private fun commonest(values: List<String>): String? =
  * something has been skipped.
  */
 private fun gapsBetween(volumes: List<SeriesVolume>): List<Double> {
-    val whole = volumes.mapNotNull { it.index }
-        .filter { it == Math.floor(it) && it >= 0 }
-        .map { it.toLong() }
-        .toSet()
+    val whole =
+        volumes
+            .mapNotNull { it.index }
+            .filter { it == Math.floor(it) && it >= 0 }
+            .map { it.toLong() }
+            .toSet()
     if (whole.size < 2) return emptyList()
     val first = whole.min()
     val last = whole.max()
@@ -226,23 +231,31 @@ fun seriesContinuation(
     if (key.isEmpty()) return SeriesContinuation()
     val index = finished.seriesIndex ?: return SeriesContinuation()
 
-    val later = library
-        .asSequence()
-        .filter { it.url != finished.url }
-        .filter { seriesKey(it.seriesName) == key }
-        .mapNotNull { book -> book.seriesIndex?.let { it to book } }
-        .filter { (candidate, _) -> candidate > index }
-        .sortedBy { (candidate, _) -> candidate }
-        .toList()
+    val later =
+        library
+            .asSequence()
+            .filter { it.url != finished.url }
+            .filter { seriesKey(it.seriesName) == key }
+            .mapNotNull { book -> book.seriesIndex?.let { it to book } }
+            .filter { (candidate, _) -> candidate > index }
+            .sortedBy { (candidate, _) -> candidate }
+            .toList()
 
     val expected = Math.floor(index) + 1.0
     val nextPresent = later.firstOrNull()?.first
-    val missing = when {
-        nextPresent != null -> expected.takeIf { nextPresent > expected }
-        else -> extras?.totalBookCount
-            ?.toDouble()
-            ?.let { total -> expected.takeIf { it <= total } }
-    }
+    val missing =
+        when {
+            nextPresent != null -> {
+                expected.takeIf { nextPresent > expected }
+            }
+
+            else -> {
+                extras
+                    ?.totalBookCount
+                    ?.toDouble()
+                    ?.let { total -> expected.takeIf { it <= total } }
+            }
+        }
     val next = later.firstOrNull { (_, book) -> !book.archived && !book.finished }?.second
     return SeriesContinuation(missingIndex = missing, next = next)
 }
@@ -254,10 +267,14 @@ fun seriesContinuation(
  * shelf still might: another volume that came from the server carries
  * it, and that is the one the series screen uses.
  */
-fun seriesIdForExtras(book: Book, library: List<Book>): String? {
+fun seriesIdForExtras(
+    book: Book,
+    library: List<Book>,
+): String? {
     val key = seriesKey(book.seriesName)
     if (key.isEmpty()) return null
-    return library.groupedIntoSeries()
+    return library
+        .groupedIntoSeries()
         .firstOrNull { it.key == key }
         ?.volumes
         ?.firstNotNullOfOrNull { it.book.shelfSeriesId }
@@ -278,31 +295,35 @@ fun List<SeriesShelf>.arrangedBy(
 ): List<SeriesShelf> {
     val byName = compareBy<SeriesShelf>({ sortKey(it.name) }, { it.key })
 
-    val comparator = when (sort) {
-        LibrarySort.RECENT -> {
-            val recent = compareBy<SeriesShelf> { shelf -> shelf.recentRank(readAt) }
-                .thenByDescending { shelf -> shelf.recentAt(readAt) }
-            (if (reversed) recent.reversed() else recent).then(byName)
-        }
-
-        LibrarySort.ADDED -> {
-            val added = compareByDescending<SeriesShelf> { shelf ->
-                shelf.volumes.maxOfOrNull { it.book.addedAt } ?: 0L
+    val comparator =
+        when (sort) {
+            LibrarySort.RECENT -> {
+                val recent =
+                    compareBy<SeriesShelf> { shelf -> shelf.recentRank(readAt) }
+                        .thenByDescending { shelf -> shelf.recentAt(readAt) }
+                (if (reversed) recent.reversed() else recent).then(byName)
             }
-            (if (reversed) added.reversed() else added).then(byName)
-        }
 
-        LibrarySort.AUTHOR -> {
-            val named = compareBy<SeriesShelf> { sortKey(it.author) }
-            val ordered = if (reversed) named.reversed() else named
-            compareBy<SeriesShelf> { if (it.author.isNullOrBlank()) 1 else 0 }
-                .then(ordered)
-                .then(byName)
-        }
+            LibrarySort.ADDED -> {
+                val added =
+                    compareByDescending<SeriesShelf> { shelf ->
+                        shelf.volumes.maxOfOrNull { it.book.addedAt } ?: 0L
+                    }
+                (if (reversed) added.reversed() else added).then(byName)
+            }
 
-        LibrarySort.TITLE, LibrarySort.SERIES ->
-            if (reversed) byName.reversed() else byName
-    }
+            LibrarySort.AUTHOR -> {
+                val named = compareBy<SeriesShelf> { sortKey(it.author) }
+                val ordered = if (reversed) named.reversed() else named
+                compareBy<SeriesShelf> { if (it.author.isNullOrBlank()) 1 else 0 }
+                    .then(ordered)
+                    .then(byName)
+            }
+
+            LibrarySort.TITLE, LibrarySort.SERIES -> {
+                if (reversed) byName.reversed() else byName
+            }
+        }
 
     return sortedWith(comparator)
 }
@@ -314,7 +335,8 @@ internal fun SeriesShelf.recentRank(readAt: Map<String, Long>): Int =
 /** Most recent timestamp among the volumes in the shelf's best rank. */
 internal fun SeriesShelf.recentAt(readAt: Map<String, Long>): Long {
     val rank = recentRank(readAt)
-    return volumes.asSequence()
+    return volumes
+        .asSequence()
         .filter { volume -> volume.book.recentRank(readAt[volume.book.url]) == rank }
         .maxOfOrNull { volume -> volume.book.recentAt(readAt[volume.book.url]) }
         ?: 0L

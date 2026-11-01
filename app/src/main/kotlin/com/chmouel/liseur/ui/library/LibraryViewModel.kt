@@ -10,87 +10,90 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
-import com.chmouel.liseur.data.remote.BookUploadRepository
-import com.chmouel.liseur.data.remote.UploadPrompts
-import com.chmouel.liseur.data.remote.RemoteCatalogRepository
 import com.chmouel.liseur.data.calibre.DownloadProgress
-import com.chmouel.liseur.data.remote.ServerDeleteResult
-import com.chmouel.liseur.data.remote.CatalogStatus
-import com.chmouel.liseur.data.remote.RemoteAccountRepository
-import com.chmouel.liseur.data.remote.RemoteRouter
-import com.chmouel.liseur.data.remote.RemoteUrl
-import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookDao
-import com.chmouel.liseur.data.db.SeriesOrderDao
 import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RefusedBytes
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.SeriesOrderDao
 import com.chmouel.liseur.data.db.UploadRefusal
 import com.chmouel.liseur.data.db.UploadRefusalDao
 import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.ImportResult
 import com.chmouel.liseur.data.library.LocalLibraryRepository
-import com.chmouel.liseur.data.settings.AppSettings
-import com.chmouel.liseur.data.settings.UploadPolicy
-import com.chmouel.liseur.data.settings.AppSettingsRepository
-import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.data.library.openableUri
+import com.chmouel.liseur.data.remote.BookUploadRepository
+import com.chmouel.liseur.data.remote.CatalogStatus
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.RemoteCatalogRepository
+import com.chmouel.liseur.data.remote.RemoteRouter
+import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.SeriesNameTaken
-import com.chmouel.liseur.domain.SeriesExtras
-import com.chmouel.liseur.domain.SeriesPickOption
-import com.chmouel.liseur.domain.SeriesShelf
-import com.chmouel.liseur.domain.asPickOption
-import com.chmouel.liseur.domain.groupedIntoSeries
-import com.chmouel.liseur.domain.ShelfEntry
-import com.chmouel.liseur.domain.mixedShelf
-import com.chmouel.liseur.domain.searchLibrary
-import com.chmouel.liseur.domain.movedItem
-import com.chmouel.liseur.domain.renumbered
-import com.chmouel.liseur.domain.seriesKey
-import com.chmouel.liseur.domain.worthShowing
-import com.chmouel.liseur.domain.arrangedBy
-import com.chmouel.liseur.sync.PositionSyncCoordinator
-import com.chmouel.liseur.sync.SyncScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.CancellationException
-import com.chmouel.liseur.data.db.RemoteServer
-import com.chmouel.liseur.data.library.openableUri
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
+import com.chmouel.liseur.data.remote.ServerDeleteResult
+import com.chmouel.liseur.data.remote.ServerKind
+import com.chmouel.liseur.data.remote.UploadPrompts
+import com.chmouel.liseur.data.settings.AppSettings
+import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.SeriesExtras
+import com.chmouel.liseur.domain.SeriesPickOption
+import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.ShelfEntry
+import com.chmouel.liseur.domain.arrangedBy
+import com.chmouel.liseur.domain.asPickOption
+import com.chmouel.liseur.domain.groupedIntoSeries
+import com.chmouel.liseur.domain.mixedShelf
+import com.chmouel.liseur.domain.movedItem
+import com.chmouel.liseur.domain.renumbered
+import com.chmouel.liseur.domain.searchLibrary
+import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.domain.shelfStateFor
-import java.io.IOException
+import com.chmouel.liseur.domain.worthShowing
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.SyncScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 
-data class ContinueReading(val book: Book, val progression: Double?)
+data class ContinueReading(
+    val book: Book,
+    val progression: Double?,
+)
 
 /**
  * A shelf mid-rearrangement.
@@ -126,7 +129,10 @@ enum class NoticeKind {
  * and a `StateFlow` set to a value equal to the one it holds emits
  * nothing at all.
  */
-data class Notice(val kind: NoticeKind, val id: Long)
+data class Notice(
+    val kind: NoticeKind,
+    val id: Long,
+)
 
 /**
  * The one message waiting to be shown, held above the screens.
@@ -352,8 +358,7 @@ internal fun continueReadingFor(
 }
 
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
-fun LibraryUiState.canDownload(book: Book): Boolean =
-    book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
+fun LibraryUiState.canDownload(book: Book): Boolean = book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
 
 /**
  * A deletion the user asked for that did not happen, and where it was
@@ -383,14 +388,15 @@ internal suspend fun removeAfterAccountClear(
         return AccountClearRemovalResult.NotRequested
     }
 
-    val recorded = try {
-        recordClear()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        onClearFailure(e)
-        return AccountClearRemovalResult.Failed
-    }
+    val recorded =
+        try {
+            recordClear()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onClearFailure(e)
+            return AccountClearRemovalResult.Failed
+        }
     if (!recorded) {
         onClearFailure(null)
         return AccountClearRemovalResult.Failed
@@ -405,7 +411,10 @@ internal suspend fun removeAfterAccountClear(
  * what the library calls it. The two differ for a book copied into the
  * app's own storage, and the reading position follows the second.
  */
-data class ImportedOpen(val url: String, val bookUrl: String?)
+data class ImportedOpen(
+    val url: String,
+    val bookUrl: String?,
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
@@ -429,7 +438,6 @@ class LibraryViewModel(
     /** Records the account's clear of a book's translations; whether there was one to record. */
     private val requestAccountTranslationClear: suspend (String) -> Boolean = { false },
 ) : ViewModel() {
-
     /** Where the remove and delete dialogs offer to clear the account's translations too. */
     val accountTranslationBooks: StateFlow<Set<String>> =
         accountTranslationBookUrls.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
@@ -440,19 +448,20 @@ class LibraryViewModel(
         clearSelected: Boolean,
         remove: suspend () -> Unit,
     ): Boolean? {
-        val result = removeAfterAccountClear(
-            clearSelected = clearSelected,
-            recordClear = { requestAccountTranslationClear(book.url) },
-            onClearFailure = { failure ->
-                if (failure == null) {
-                    Log.w(TAG, "Could not record the account's translation clear: work identity unavailable")
-                } else {
-                    Log.w(TAG, "Could not record the account's translation clear: ${failure.javaClass.simpleName}", failure)
-                }
-                _deleteFailures.emit(DeleteFailure(book, onServer = false, accountClearFailed = true))
-            },
-            remove = remove,
-        )
+        val result =
+            removeAfterAccountClear(
+                clearSelected = clearSelected,
+                recordClear = { requestAccountTranslationClear(book.url) },
+                onClearFailure = { failure ->
+                    if (failure == null) {
+                        Log.w(TAG, "Could not record the account's translation clear: work identity unavailable")
+                    } else {
+                        Log.w(TAG, "Could not record the account's translation clear: ${failure.javaClass.simpleName}", failure)
+                    }
+                    _deleteFailures.emit(DeleteFailure(book, onServer = false, accountClearFailed = true))
+                },
+                remove = remove,
+            )
         return when (result) {
             AccountClearRemovalResult.NotRequested -> false
             AccountClearRemovalResult.Recorded -> true
@@ -496,28 +505,30 @@ class LibraryViewModel(
     private val uploadPromptDismissed = MutableStateFlow(false)
 
     /** Books that have finished downloading and were asked for by name. */
-    val openRequests: Flow<Book> = awaitingOpen.flatMapLatest { url ->
-        if (url == null) {
-            emptyFlow()
-        } else {
-            library.books
-                .mapNotNull { books -> books.firstOrNull { it.url == url } }
-                .filter { it.openableUrl != null }
-                .take(1)
+    val openRequests: Flow<Book> =
+        awaitingOpen.flatMapLatest { url ->
+            if (url == null) {
+                emptyFlow()
+            } else {
+                library.books
+                    .mapNotNull { books -> books.firstOrNull { it.url == url } }
+                    .filter { it.openableUrl != null }
+                    .take(1)
+            }
         }
-    }
 
     /** Downloads that were meant to be read right away and could not be. */
-    val failedOpens: Flow<Book> = awaitingOpen.flatMapLatest { url ->
-        if (url == null) {
-            emptyFlow()
-        } else {
-            library.books
-                .mapNotNull { books -> books.firstOrNull { it.url == url } }
-                .filter { it.downloadState == DownloadState.FAILED }
-                .take(1)
+    val failedOpens: Flow<Book> =
+        awaitingOpen.flatMapLatest { url ->
+            if (url == null) {
+                emptyFlow()
+            } else {
+                library.books
+                    .mapNotNull { books -> books.firstOrNull { it.url == url } }
+                    .filter { it.downloadState == DownloadState.FAILED }
+                    .take(1)
+            }
         }
-    }
 
     // Drops rather than waits. The one collector shows a snackbar, and
     // showSnackbar() does not return until that snackbar is dismissed,
@@ -532,6 +543,7 @@ class LibraryViewModel(
     val sentUp: Flow<Book> = _sentUp
 
     private val _deleteFailures = MutableSharedFlow<DeleteFailure>(extraBufferCapacity = 1)
+
     /** Deletions that did not happen, so the library can say so. */
     val deleteFailures: Flow<DeleteFailure> = _deleteFailures
 
@@ -553,6 +565,7 @@ class LibraryViewModel(
     }
 
     private val _alreadyShelved = MutableStateFlow<Book?>(null)
+
     /** A picked file the library already had, for the reader to decide about. */
     val alreadyShelved: StateFlow<Book?> = _alreadyShelved.asStateFlow()
 
@@ -561,6 +574,7 @@ class LibraryViewModel(
     }
 
     private val _hiddenBook = MutableSharedFlow<Book>(extraBufferCapacity = 1)
+
     /** A book just taken off the shelf, so the removal can be undone. */
     val hiddenBooks: Flow<Book> = _hiddenBook
 
@@ -579,17 +593,17 @@ class LibraryViewModel(
      * be the same fact, or the reader is told one thing and shown
      * another.
      */
-    private val refusedByServer: Flow<Map<String, RefusedBytes>> = account.server
-        .flatMapLatest { server ->
-            if (server == null) {
-                flowOf(emptyMap())
-            } else {
-                refusals.observeFor(server.accountKey).map { rows ->
-                    rows.associateBy { it.bookUrl }
+    private val refusedByServer: Flow<Map<String, RefusedBytes>> =
+        account.server
+            .flatMapLatest { server ->
+                if (server == null) {
+                    flowOf(emptyMap())
+                } else {
+                    refusals.observeFor(server.accountKey).map { rows ->
+                        rows.associateBy { it.bookUrl }
+                    }
                 }
-            }
-        }
-        .distinctUntilChanged()
+            }.distinctUntilChanged()
 
     /**
      * A refusal the reader has not been told about.
@@ -601,16 +615,16 @@ class LibraryViewModel(
      * been dismissed rather than when it goes up, so a notice missed
      * because the process died comes back once more.
      */
-    val uploadRefusals: Flow<UploadRefusal> = account.server
-        .flatMapLatest { server ->
-            if (server == null) {
-                flowOf(emptyList())
-            } else {
-                refusals.observeUnseen(server.accountKey)
-            }
-        }
-        .mapNotNull { it.firstOrNull() }
-        .distinctUntilChanged()
+    val uploadRefusals: Flow<UploadRefusal> =
+        account.server
+            .flatMapLatest { server ->
+                if (server == null) {
+                    flowOf(emptyList())
+                } else {
+                    refusals.observeUnseen(server.accountKey)
+                }
+            }.mapNotNull { it.firstOrNull() }
+            .distinctUntilChanged()
 
     /** Records that a refusal has been shown, and only that one. */
     fun refusalSeen(refusal: UploadRefusal) {
@@ -628,29 +642,32 @@ class LibraryViewModel(
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchActive = MutableStateFlow(false)
 
-    private val refresher = LibraryRefresh(
-        scope = viewModelScope,
-        scanFolders = { library.rescanAll() },
-        refreshCatalog = { catalog.refresh() },
-        syncPositions = { requestedAt, snapshot ->
-            positionSync.request(SyncScope.Full, requestedAt, snapshot)
-        },
-    )
+    private val refresher =
+        LibraryRefresh(
+            scope = viewModelScope,
+            scanFolders = { library.rescanAll() },
+            refreshCatalog = { catalog.refresh() },
+            syncPositions = { requestedAt, snapshot ->
+                positionSync.request(SyncScope.Full, requestedAt, snapshot)
+            },
+        )
 
-    private val continueReading = library.mostRecent.flatMapLatest { book ->
-        if (book == null) {
-            flowOf(null)
-        } else {
-            progressDao.observe(book.url)
-                .map { row ->
-                    continueReadingFor(
-                        book = book,
-                        progression = row?.totalProgression,
-                        override = row?.override,
-                    )
-                }
+    private val continueReading =
+        library.mostRecent.flatMapLatest { book ->
+            if (book == null) {
+                flowOf(null)
+            } else {
+                progressDao
+                    .observe(book.url)
+                    .map { row ->
+                        continueReadingFor(
+                            book = book,
+                            progression = row?.totalProgression,
+                            override = row?.override,
+                        )
+                    }
+            }
         }
-    }
 
     val state: StateFlow<LibraryUiState> =
         combine(
@@ -674,43 +691,52 @@ class LibraryViewModel(
             uploadPromptDismissed,
             prompts.answered,
         ) { baseValues, query, searchActive, promptDismissed, answered ->
-            @Suppress("UNCHECKED_CAST")
             // Taken out here rather than at each view, so that a book
             // off the shelf is off every part of it: not counted, not
             // filtered into anything, and not left inside a series pile
             // whose other volumes are still showing.
             // The grid keys by id, and a repeated one would crash it.
+            @Suppress("UNCHECKED_CAST")
             val books = (baseValues[0] as List<Book>).filterNot { it.hidden }.distinctBy { it.id }
             val recent = baseValues[1] as ContinueReading?
             val catalogStatus = baseValues[2] as CatalogStatus
+
             @Suppress("UNCHECKED_CAST")
             val running = baseValues[3] as Map<String, DownloadProgress>
             val server = baseValues[4] as RemoteServer?
+
             @Suppress("UNCHECKED_CAST")
             val browseServers = baseValues[12] as List<RemoteServer>
             val refreshing = baseValues[5] as Boolean
             val settings = baseValues[6] as AppSettings
+
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
             val readAt = readAtList.associate { it.bookUrl to it.readAt }
+
             @Suppress("UNCHECKED_CAST")
             val progressionList = baseValues[8] as List<BookProgression>
-            val progressions = progressionList
-                .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
-                .toMap()
+            val progressions =
+                progressionList
+                    .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
+                    .toMap()
             val overrides = progressionList.associate { row -> row.bookUrl to row.override }
-            val inProgressBooks = books
-                .mapNotNullTo(mutableSetOf()) { book ->
-                    book.url.takeIf {
-                        !book.finished && canMarkBookUnread(
-                            book = book,
-                            progression = progressions[book.url],
-                            override = overrides[book.url] ?: FinishedOverride.NONE,
-                        )
+            val inProgressBooks =
+                books
+                    .mapNotNullTo(mutableSetOf()) { book ->
+                        book.url.takeIf {
+                            !book.finished &&
+                                canMarkBookUnread(
+                                    book = book,
+                                    progression = progressions[book.url],
+                                    override = overrides[book.url] ?: FinishedOverride.NONE,
+                                )
+                        }
                     }
-                }
+
             @Suppress("UNCHECKED_CAST")
             val uploading = baseValues[9] as Set<String>
+
             @Suppress("UNCHECKED_CAST")
             val refusedRows = baseValues[10] as Map<String, RefusedBytes>
             val partialDismissedFor = baseValues[11] as String?
@@ -737,90 +763,101 @@ class LibraryViewModel(
             // written down, and reconnecting a server hands it back
             // rather than making them ask for it twice.
             val stored = settings.libraryFilters
-            val filters = LibraryFilters(
-                options = stored.options.filterTo(mutableSetOf()) { option ->
-                    when (option) {
-                        LibraryFilterOption.DOWNLOADED,
-                        LibraryFilterOption.NOT_DOWNLOADED,
-                        -> server != null
-                        // Restoring the last archived book empties the
-                        // view you are standing in, and takes the way
-                        // back to it away with it.
-                        LibraryFilterOption.ARCHIVED -> books.any { it.archived }
-                        else -> true
+            val filters =
+                LibraryFilters(
+                    options =
+                        stored.options.filterTo(mutableSetOf()) { option ->
+                            when (option) {
+                                LibraryFilterOption.DOWNLOADED,
+                                LibraryFilterOption.NOT_DOWNLOADED,
+                                -> server != null
+
+                                // Restoring the last archived book empties the
+                                // view you are standing in, and takes the way
+                                // back to it away with it.
+                                LibraryFilterOption.ARCHIVED -> books.any { it.archived }
+
+                                else -> true
+                            }
+                        },
+                    // The grouping is built from the shelf, so there are no
+                    // series in the archive to group: an archived book is out
+                    // of its series card as much as it is out of the shelf.
+                    groupBySeries =
+                        stored.groupBySeries &&
+                            shelves.isNotEmpty() &&
+                            LibraryFilterOption.ARCHIVED !in stored.options,
+                )
+
+            val sortedBooks =
+                books.arrangedBy(
+                    settings.librarySort,
+                    settings.librarySortReversed,
+                    readAt,
+                )
+
+            val filteredBooks =
+                sortedBooks
+                    .filter {
+                        filters.accepts(
+                            it,
+                            progressions[it.url],
+                            overrides[it.url] ?: FinishedOverride.NONE,
+                        )
                     }
-                },
-                // The grouping is built from the shelf, so there are no
-                // series in the archive to group: an archived book is out
-                // of its series card as much as it is out of the shelf.
-                groupBySeries = stored.groupBySeries &&
-                    shelves.isNotEmpty() &&
-                    LibraryFilterOption.ARCHIVED !in stored.options,
-            )
-
-            val sortedBooks = books.arrangedBy(
-                settings.librarySort,
-                settings.librarySortReversed,
-                readAt,
-            )
-
-            val filteredBooks = sortedBooks
-                .filter {
-                    filters.accepts(
-                        it,
-                        progressions[it.url],
-                        overrides[it.url] ?: FinishedOverride.NONE,
-                    )
-                }
 
             // A search is its own list rather than a narrowing of the
             // shelf: it looks past the filters and the series piles, so
             // the shelf underneath is left exactly as it was for when
             // the bar closes. A query nobody can see, or one with
             // nothing in it, is not a search.
-            val searchResults = if (searchActive && query.isNotBlank()) {
-                searchLibrary(query, books)
-            } else {
-                null
-            }
+            val searchResults =
+                if (searchActive && query.isNotBlank()) {
+                    searchLibrary(query, books)
+                } else {
+                    null
+                }
 
-            val arrangedSeries = shelves.arrangedBy(
-                settings.librarySort,
-                settings.librarySortReversed,
-                readAt,
-            )
+            val arrangedSeries =
+                shelves.arrangedBy(
+                    settings.librarySort,
+                    settings.librarySortReversed,
+                    readAt,
+                )
 
             // A series stands for its volumes, so it survives a
             // narrowing as long as one of them does: asking for
             // unread books should leave a part-read series on the
             // shelf rather than hide the volume that has not been
             // started.
-            val narrowedSeries = arrangedSeries.filter { shelf ->
-                shelf.volumes.any {
-                    filters.accepts(
-                        it.book,
-                        progressions[it.book.url],
-                        overrides[it.book.url] ?: FinishedOverride.NONE,
-                    )
+            val narrowedSeries =
+                arrangedSeries.filter { shelf ->
+                    shelf.volumes.any {
+                        filters.accepts(
+                            it.book,
+                            progressions[it.book.url],
+                            overrides[it.book.url] ?: FinishedOverride.NONE,
+                        )
+                    }
                 }
-            }
 
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
                 series = arrangedSeries,
                 shelfSeries = narrowedSeries,
-                shelfEntries = if (filters.groupBySeries) {
-                    mixedShelf(
-                        books = filteredBooks,
-                        shelves = narrowedSeries,
-                        sort = settings.librarySort,
-                        reversed = settings.librarySortReversed,
-                        readAt = readAt,
-                    )
-                } else {
-                    emptyList()
-                },
+                shelfEntries =
+                    if (filters.groupBySeries) {
+                        mixedShelf(
+                            books = filteredBooks,
+                            shelves = narrowedSeries,
+                            sort = settings.librarySort,
+                            reversed = settings.librarySortReversed,
+                            readAt = readAt,
+                        )
+                    } else {
+                        emptyList()
+                    },
                 continueReading = recent,
                 catalogStatus = catalogStatus,
                 downloads = running,
@@ -828,8 +865,9 @@ class LibraryViewModel(
                 downloadableBrowse = browseServers.filter { it.canDownload }.mapTo(mutableSetOf()) { it.id },
                 canDeleteFromServer = canDeleteFrom(server, router),
                 serverDeleteNeedsReconnect = deleteNeedsReconnect(server, router),
-                canForgetServerReading = canDeleteFrom(server, router) &&
-                    server?.kind == ServerKind.LISEUR_SYNC,
+                canForgetServerReading =
+                    canDeleteFrom(server, router) &&
+                        server?.kind == ServerKind.LISEUR_SYNC,
                 serverDeletesWholeBook = server?.kind == ServerKind.BOOKORBIT,
                 canUploadToServer = canUploadTo(server, router),
                 uploading = uploading,
@@ -843,17 +881,20 @@ class LibraryViewModel(
                 // answered in the reader are gone from here too, or
                 // pressing back would ask a second time about a book
                 // that was just declined.
-                pendingUploads = if (
-                    promptDismissed || settings.uploadPolicy != UploadPolicy.ASK
-                ) {
-                    emptyList()
-                } else {
-                    books.awaitingUpload(canUploadTo(server, router), refused)
-                        .filterNot { it.url in uploading || it.url in answered }
-                },
+                pendingUploads =
+                    if (
+                        promptDismissed || settings.uploadPolicy != UploadPolicy.ASK
+                    ) {
+                        emptyList()
+                    } else {
+                        books
+                            .awaitingUpload(canUploadTo(server, router), refused)
+                            .filterNot { it.url in uploading || it.url in answered }
+                    },
                 canResetSharedSeries = server?.kind == ServerKind.LISEUR_SYNC && server.canAdmin,
-                canRenameSeries = server?.kind == ServerKind.LISEUR_SYNC &&
-                    server.canManageLibrary,
+                canRenameSeries =
+                    server?.kind == ServerKind.LISEUR_SYNC &&
+                        server.canManageLibrary,
                 refreshing = refreshing || catalogStatus is CatalogStatus.Refreshing,
                 sort = settings.librarySort,
                 sortReversed = settings.librarySortReversed,
@@ -878,11 +919,12 @@ class LibraryViewModel(
                 // was set for, and a Custom connection that carries
                 // nothing but a sync address has no catalog for it to
                 // be about.
-                showCatalogPartial = catalogStatus is CatalogStatus.Partial &&
-                    server?.catalogUrl != null &&
-                    !(
-                        partialDismissedFor != null &&
-                            RemoteUrl.sameAddress(server.catalogUrl, partialDismissedFor)
+                showCatalogPartial =
+                    catalogStatus is CatalogStatus.Partial &&
+                        server?.catalogUrl != null &&
+                        !(
+                            partialDismissedFor != null &&
+                                RemoteUrl.sameAddress(server.catalogUrl, partialDismissedFor)
                         ),
                 hasSeries = shelves.isNotEmpty(),
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
@@ -924,9 +966,10 @@ class LibraryViewModel(
         // mode from the filter menu, not a narrowing to be cleared.
         editFilters { stored ->
             LibraryFilters(
-                options = stored.options.filterTo(mutableSetOf()) {
-                    it.group == FilterGroup.PLACE
-                },
+                options =
+                    stored.options.filterTo(mutableSetOf()) {
+                        it.group == FilterGroup.PLACE
+                    },
                 groupBySeries = stored.groupBySeries,
             )
         }
@@ -979,12 +1022,13 @@ class LibraryViewModel(
                 account.server,
                 refusedByServer,
             ) { books, settings, server, refused ->
-                server to booksToSendUp(
-                    books,
-                    settings.uploadPolicy,
-                    canUploadTo(server, router),
-                    refused.filterValues { it.stillApplies }.keys,
-                )
+                server to
+                    booksToSendUp(
+                        books,
+                        settings.uploadPolicy,
+                        canUploadTo(server, router),
+                        refused.filterValues { it.stillApplies }.keys,
+                    )
             }.collect { (server, pending) ->
                 pending.forEach {
                     uploads.enqueue(it, accountKey = server?.accountKey)
@@ -1061,23 +1105,31 @@ class LibraryViewModel(
         viewModelScope.launch { downloads.cancel(book) }
     }
 
-    fun removeDownload(book: Book, clearAccountTranslations: Boolean = false) {
+    fun removeDownload(
+        book: Book,
+        clearAccountTranslations: Boolean = false,
+    ) {
         viewModelScope.launch {
-            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
-                downloads.removeDownload(book)
-            } ?: return@launch
+            val owed =
+                removeBookAfterAccountClear(book, clearAccountTranslations) {
+                    downloads.removeDownload(book)
+                } ?: return@launch
             sendAccountClear(owed)
         }
     }
 
     /** Deletes a local book's file and drops it from the library. */
-    fun deleteLocalBook(book: Book, clearAccountTranslations: Boolean = false) {
+    fun deleteLocalBook(
+        book: Book,
+        clearAccountTranslations: Boolean = false,
+    ) {
         viewModelScope.launch {
-            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
-                if (!downloads.deleteLocalBook(book)) {
-                    _deleteFailures.emit(DeleteFailure(book, onServer = false))
-                }
-            } ?: return@launch
+            val owed =
+                removeBookAfterAccountClear(book, clearAccountTranslations) {
+                    if (!downloads.deleteLocalBook(book)) {
+                        _deleteFailures.emit(DeleteFailure(book, onServer = false))
+                    }
+                } ?: return@launch
             sendAccountClear(owed)
         }
     }
@@ -1093,23 +1145,30 @@ class LibraryViewModel(
      * *server's* copy of their reading. The one on this device goes
      * either way, because the book does.
      */
-    fun deleteFromServer(book: Book, forgetReading: Boolean = false) {
+    fun deleteFromServer(
+        book: Book,
+        forgetReading: Boolean = false,
+    ) {
         viewModelScope.launch {
             val server = account.current()
             val deleter = server?.let { router.deleterFor(it.kind) }
             // A saved-catalog book's id belongs to another server.
-            val result = if (server == null || deleter == null || book.browseServerId != null) {
-                ServerDeleteResult.Failed(null)
-            } else {
-                downloads.deleteFromServer(book, deleter, server, forgetReading)
-            }
+            val result =
+                if (server == null || deleter == null || book.browseServerId != null) {
+                    ServerDeleteResult.Failed(null)
+                } else {
+                    downloads.deleteFromServer(book, deleter, server, forgetReading)
+                }
             if (result !is ServerDeleteResult.Deleted) {
                 _deleteFailures.emit(DeleteFailure(book, onServer = true))
             }
         }
     }
 
-    fun setFinished(book: Book, finished: Boolean) {
+    fun setFinished(
+        book: Book,
+        finished: Boolean,
+    ) {
         viewModelScope.launch {
             finishedState.setFinished(book.url, finished)
             positionSync.request(SyncScope.Book(book.url), System.currentTimeMillis())
@@ -1120,7 +1179,10 @@ class LibraryViewModel(
      * Puts a book away, or brings it back. Nothing is deleted and nothing
      * stops syncing: the book is simply not on the shelf.
      */
-    fun setArchived(book: Book, archived: Boolean) {
+    fun setArchived(
+        book: Book,
+        archived: Boolean,
+    ) {
         viewModelScope.launch {
             bookDao.setArchived(book.url, if (archived) System.currentTimeMillis() else null)
         }
@@ -1142,16 +1204,18 @@ class LibraryViewModel(
         openSeriesId = null
         val seriesId = shelf.volumes.firstNotNullOfOrNull { it.book.shelfSeriesId } ?: return
         openSeriesId = seriesId
-        seriesExtrasJob = viewModelScope.launch {
-            val extras = try {
-                seriesExtras.extras(seriesId)
-            } catch (error: CancellationException) {
-                throw error
-            } catch (_: Exception) {
-                null
+        seriesExtrasJob =
+            viewModelScope.launch {
+                val extras =
+                    try {
+                        seriesExtras.extras(seriesId)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        null
+                    }
+                if (openSeriesId == seriesId) _openSeriesExtras.value = extras
             }
-            if (openSeriesId == seriesId) _openSeriesExtras.value = extras
-        }
     }
 
     private var seriesExtrasJob: Job? = null
@@ -1165,7 +1229,10 @@ class LibraryViewModel(
     }
 
     /** Marks the whole series read, for a series read before Liseur held it. */
-    fun setSeriesFinished(shelf: SeriesShelf, finished: Boolean) {
+    fun setSeriesFinished(
+        shelf: SeriesShelf,
+        finished: Boolean,
+    ) {
         viewModelScope.launch {
             val changed = shelf.volumes.filter { it.finished != finished }
             changed
@@ -1177,10 +1244,14 @@ class LibraryViewModel(
     }
 
     /** Puts every volume away at once; nothing is deleted, as ever. */
-    fun setSeriesArchived(shelf: SeriesShelf, archived: Boolean) {
+    fun setSeriesArchived(
+        shelf: SeriesShelf,
+        archived: Boolean,
+    ) {
         viewModelScope.launch {
             val at = if (archived) System.currentTimeMillis() else null
-            shelf.volumes.filter { it.book.archived != archived }
+            shelf.volumes
+                .filter { it.book.archived != archived }
                 .forEach { bookDao.setArchived(it.book.url, at) }
         }
     }
@@ -1193,12 +1264,19 @@ class LibraryViewModel(
      * taken off a shelf must not be put back on it by the next catalog
      * refresh, which is exactly what a cleared field would let happen.
      */
-    fun setBookSeries(book: Book, name: String?, index: Double?) {
+    fun setBookSeries(
+        book: Book,
+        name: String?,
+        index: Double?,
+    ) {
         viewModelScope.launch {
             val clean = name?.trim()?.takeIf { it.isNotEmpty() }
             bookDao.setSeriesOverride(book.url, clean, index)
-            if (book.browseServerId != null) bookDao.settleBrowseSeriesEdit(book.url)
-            else catalog.retryPendingSeriesClaims()
+            if (book.browseServerId != null) {
+                bookDao.settleBrowseSeriesEdit(book.url)
+            } else {
+                catalog.retryPendingSeriesClaims()
+            }
         }
     }
 
@@ -1206,8 +1284,11 @@ class LibraryViewModel(
     fun resetBookSeries(book: Book) {
         viewModelScope.launch {
             bookDao.clearSeriesOverride(book.url)
-            if (book.browseServerId != null) bookDao.settleBrowseSeriesEdit(book.url)
-            else catalog.retryPendingSeriesClaims()
+            if (book.browseServerId != null) {
+                bookDao.settleBrowseSeriesEdit(book.url)
+            } else {
+                catalog.retryPendingSeriesClaims()
+            }
             // Restoring catalog metadata always removes this reader's personal layer. A shared
             // delete needs an explicit admin route; silently using one here is unsafe.
         }
@@ -1227,9 +1308,10 @@ class LibraryViewModel(
     fun resetBookSharedSeries(book: Book) {
         viewModelScope.launch {
             if (book.browseServerId != null) return@launch
-            val server = account.current()?.takeIf {
-                it.kind == ServerKind.LISEUR_SYNC && it.canAdmin
-            } ?: return@launch
+            val server =
+                account.current()?.takeIf {
+                    it.kind == ServerKind.LISEUR_SYNC && it.canAdmin
+                } ?: return@launch
             val credentials = server.credentials ?: return@launch
             val claims = router.seriesClaimsFor(server.kind) ?: return@launch
             try {
@@ -1255,11 +1337,12 @@ class LibraryViewModel(
     val notice: StateFlow<Notice?> = notices.current
 
     fun startReorder(shelf: SeriesShelf) {
-        _reorder.value = SeriesReorder(
-            key = shelf.key,
-            order = shelf.volumes.map { it.book.url },
-            original = shelf.volumes.map { it.book.url },
-        )
+        _reorder.value =
+            SeriesReorder(
+                key = shelf.key,
+                order = shelf.volumes.map { it.book.url },
+                original = shelf.volumes.map { it.book.url },
+            )
     }
 
     fun cancelReorder() {
@@ -1279,7 +1362,10 @@ class LibraryViewModel(
         notices.raise(NoticeKind.SeriesChangedWhileReordering)
     }
 
-    fun moveVolume(from: Int, to: Int) {
+    fun moveVolume(
+        from: Int,
+        to: Int,
+    ) {
         _reorder.update { it?.copy(order = it.order.movedItem(from, to)) }
     }
 
@@ -1349,7 +1435,10 @@ class LibraryViewModel(
     val renamedSeries: SharedFlow<String> = _renamedSeries
 
     /** Calls a series something else, for this reader alone (ADR-0020). */
-    fun renameSeries(shelf: SeriesShelf, name: String) {
+    fun renameSeries(
+        shelf: SeriesShelf,
+        name: String,
+    ) {
         val wanted = name.trim()
         if (wanted.isEmpty() || wanted == shelf.name) return
         pushSeriesName(shelf, wanted)
@@ -1368,19 +1457,27 @@ class LibraryViewModel(
      * follows is what brings the new name back. Offline, the rename is
      * simply refused and said so — there is no outbox to queue it in.
      */
-    private fun pushSeriesName(shelf: SeriesShelf, name: String?) {
+    private fun pushSeriesName(
+        shelf: SeriesShelf,
+        name: String?,
+    ) {
         if (_renamingSeries.value) return
         viewModelScope.launch {
-            val server = account.current()?.takeIf {
-                it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
-            }
+            val server =
+                account.current()?.takeIf {
+                    it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+                }
             val credentials = server?.credentials
             val claims = server?.let { router.seriesClaimsFor(it.kind) }
             // The same guard the reorder push uses: a series id names a
             // shelf across the whole library, so renaming from a shelf
             // whose books disagree about which series they are in could
             // rename one this reader is not even looking at.
-            val seriesId = shelf.volumes.firstOrNull()?.book?.seriesId
+            val seriesId =
+                shelf.volumes
+                    .firstOrNull()
+                    ?.book
+                    ?.seriesId
             if (credentials == null || claims == null || seriesId == null ||
                 shelf.volumes.any { it.book.seriesId != seriesId }
             ) {
@@ -1389,11 +1486,12 @@ class LibraryViewModel(
             }
             _renamingSeries.value = true
             try {
-                val renamed = if (name == null) {
-                    claims.resetSeriesName(server.baseUrl, credentials, seriesId)
-                } else {
-                    claims.renameSeries(server.baseUrl, credentials, seriesId, name)
-                }
+                val renamed =
+                    if (name == null) {
+                        claims.resetSeriesName(server.baseUrl, credentials, seriesId)
+                    } else {
+                        claims.renameSeries(server.baseUrl, credentials, seriesId, name)
+                    }
                 catalog.refresh()
                 renamed?.let { _renamedSeries.emit(seriesKey(it.name)) }
             } catch (e: SeriesNameTaken) {
@@ -1409,9 +1507,10 @@ class LibraryViewModel(
     }
 
     private suspend fun pushSeriesOrder(urlsInOrder: List<String>) {
-        val server = account.current()?.takeIf {
-            it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
-        } ?: return
+        val server =
+            account.current()?.takeIf {
+                it.kind == ServerKind.LISEUR_SYNC && it.canManageLibrary
+            } ?: return
         val credentials = server.credentials ?: return
         val claims = router.seriesClaimsFor(server.kind) ?: return
         val byUrl = bookDao.getByUrls(urlsInOrder).associateBy { it.url }
@@ -1445,29 +1544,41 @@ class LibraryViewModel(
     fun importBook(uri: Uri) {
         viewModelScope.launch {
             when (val result = library.importBook(uri)) {
-                is ImportResult.Added -> result.book.openableUri()?.let {
-                    // Named by its library row, not by the file: the
-                    // reading position is keyed to the row, and opening
-                    // under any other name records it where the shelf
-                    // will never look.
-                    _openImported.value = ImportedOpen(it, result.book.url)
+                is ImportResult.Added -> {
+                    result.book.openableUri()?.let {
+                        // Named by its library row, not by the file: the
+                        // reading position is keyed to the row, and opening
+                        // under any other name records it where the shelf
+                        // will never look.
+                        _openImported.value = ImportedOpen(it, result.book.url)
+                    }
                 }
-                is ImportResult.AlreadyShelved -> _alreadyShelved.value = result.book
+
+                is ImportResult.AlreadyShelved -> {
+                    _alreadyShelved.value = result.book
+                }
+
                 // Nothing readable came back, so the reader is left with
                 // the file they picked: opening it is still worth a try,
                 // and failing to shelve a book is no reason to refuse to
                 // show it.
-                ImportResult.Failed -> _openImported.value = ImportedOpen(uri.toString(), null)
+                ImportResult.Failed -> {
+                    _openImported.value = ImportedOpen(uri.toString(), null)
+                }
             }
         }
     }
 
     /** Takes a book off the shelf without touching its file. */
-    fun removeFromLibrary(book: Book, clearAccountTranslations: Boolean = false) {
+    fun removeFromLibrary(
+        book: Book,
+        clearAccountTranslations: Boolean = false,
+    ) {
         viewModelScope.launch {
-            val owed = removeBookAfterAccountClear(book, clearAccountTranslations) {
-                library.removeFromLibrary(book)
-            } ?: return@launch
+            val owed =
+                removeBookAfterAccountClear(book, clearAccountTranslations) {
+                    library.removeFromLibrary(book)
+                } ?: return@launch
             sendAccountClear(owed)
             _hiddenBook.emit(book)
         }
@@ -1562,30 +1673,31 @@ class LibraryViewModel(
     companion object {
         private const val TAG = "LibraryViewModel"
 
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val container = checkNotNull(this[APPLICATION_KEY]).container
-                LibraryViewModel(
-                    library = container.libraryRepository,
-                    finishedState = container.finishedState,
-                    catalog = container.remoteCatalog,
-                    positionSync = container.positionSync,
-                    downloads = container.bookDownloads,
-                    uploads = container.bookUploads,
-                    prompts = container.uploadPrompts,
-                    account = container.remoteAccount,
-                    router = container.remoteRouter,
-                    appSettings = container.appSettings,
-                    progressDao = container.database.readingProgressDao(),
-                    bookDao = container.database.bookDao(),
-                    seriesOrderDao = container.database.seriesOrderDao(),
-                    seriesExtras = container.seriesExtras,
-                    refusals = container.database.uploadRefusalDao(),
-                    accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
-                    requestAccountTranslationClear = container::requestAccountTranslationClear,
-                )
+        val Factory: ViewModelProvider.Factory =
+            viewModelFactory {
+                initializer {
+                    val container = checkNotNull(this[APPLICATION_KEY]).container
+                    LibraryViewModel(
+                        library = container.libraryRepository,
+                        finishedState = container.finishedState,
+                        catalog = container.remoteCatalog,
+                        positionSync = container.positionSync,
+                        downloads = container.bookDownloads,
+                        uploads = container.bookUploads,
+                        prompts = container.uploadPrompts,
+                        account = container.remoteAccount,
+                        router = container.remoteRouter,
+                        appSettings = container.appSettings,
+                        progressDao = container.database.readingProgressDao(),
+                        bookDao = container.database.bookDao(),
+                        seriesOrderDao = container.database.seriesOrderDao(),
+                        seriesExtras = container.seriesExtras,
+                        refusals = container.database.uploadRefusalDao(),
+                        accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
+                        requestAccountTranslationClear = container::requestAccountTranslationClear,
+                    )
+                }
             }
-        }
     }
 }
 
@@ -1596,8 +1708,10 @@ class LibraryViewModel(
  * The offer and the per-book action both ask this, so they can never
  * disagree about whether uploading is a thing that can happen.
  */
-internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
-    server != null && server.canUpload && router.uploaderFor(server.kind) != null
+internal fun canUploadTo(
+    server: RemoteServer?,
+    router: RemoteRouter,
+): Boolean = server != null && server.canUpload && router.uploaderFor(server.kind) != null
 
 /**
  * Whether a book on the server could be deleted from it.
@@ -1608,8 +1722,10 @@ internal fun canUploadTo(server: RemoteServer?, router: RemoteRouter): Boolean =
  * requiring one would silently switch the action off for every server
  * paired before that column existed.
  */
-internal fun canDeleteFrom(server: RemoteServer?, router: RemoteRouter): Boolean =
-    server != null && router.deleterFor(server.kind) != null && server.holdsDeletePermission()
+internal fun canDeleteFrom(
+    server: RemoteServer?,
+    router: RemoteRouter,
+): Boolean = server != null && router.deleterFor(server.kind) != null && server.holdsDeletePermission()
 
 /**
  * Whether the connection itself carries the right to delete, as opposed
@@ -1624,8 +1740,7 @@ internal fun canDeleteFrom(server: RemoteServer?, router: RemoteRouter): Boolean
  * `library_delete_books` permission at sign-in, and that answer is the
  * stored flag.
  */
-internal fun RemoteServer.holdsDeletePermission(): Boolean =
-    (kind != ServerKind.LISEUR_SYNC && kind != ServerKind.BOOKORBIT) || canDelete
+internal fun RemoteServer.holdsDeletePermission(): Boolean = (kind != ServerKind.LISEUR_SYNC && kind != ServerKind.BOOKORBIT) || canDelete
 
 /**
  * Whether deleting is off only because this connection is older than
@@ -1636,7 +1751,10 @@ internal fun RemoteServer.holdsDeletePermission(): Boolean =
  * whole fix, which is worth saying out loud where the action would
  * otherwise be.
  */
-internal fun deleteNeedsReconnect(server: RemoteServer?, router: RemoteRouter): Boolean =
+internal fun deleteNeedsReconnect(
+    server: RemoteServer?,
+    router: RemoteRouter,
+): Boolean =
     server != null &&
         // BookOrbit's permission is the administrator's to grant, and a
         // reader without it is the ordinary case, not an old token.
@@ -1656,8 +1774,7 @@ internal fun deleteNeedsReconnect(server: RemoteServer?, router: RemoteRouter): 
  * This is the single answer to "could this book be uploaded?" — the
  * offer and the per-book action must not each decide for themselves.
  */
-internal fun Book.livesOnlyOnThisDevice(): Boolean =
-    remoteUuid == null && !ServerKind.isRemoteUrl(url)
+internal fun Book.livesOnlyOnThisDevice(): Boolean = remoteUuid == null && !ServerKind.isRemoteUrl(url)
 
 /**
  * What to do about a book that has just been added, in one place.
@@ -1679,20 +1796,26 @@ internal fun uploadOnOpen(
     canUpload: Boolean,
     alreadyAnswered: Boolean,
     refused: Set<String> = emptySet(),
-): UploadDecision = when {
-    // Offering what the server will refuse is worse than offering
-    // nothing, and a book it already has is not a question.
-    !canUpload || !book.mayGoUp() -> UploadDecision.NOTHING
-    // Already offered to this account, already refused. Asking again
-    // every launch, forever, with nothing said about why, is the bug
-    // this whole thing exists for. The per-book action still reaches
-    // it, which is the way back.
-    book.url in refused -> UploadDecision.NOTHING
-    alreadyAnswered -> UploadDecision.NOTHING
-    policy == UploadPolicy.NEVER -> UploadDecision.NOTHING
-    policy == UploadPolicy.ALWAYS -> UploadDecision.SEND
-    else -> UploadDecision.ASK
-}
+): UploadDecision =
+    when {
+        // Offering what the server will refuse is worse than offering
+        // nothing, and a book it already has is not a question.
+        !canUpload || !book.mayGoUp() -> UploadDecision.NOTHING
+
+        // Already offered to this account, already refused. Asking again
+        // every launch, forever, with nothing said about why, is the bug
+        // this whole thing exists for. The per-book action still reaches
+        // it, which is the way back.
+        book.url in refused -> UploadDecision.NOTHING
+
+        alreadyAnswered -> UploadDecision.NOTHING
+
+        policy == UploadPolicy.NEVER -> UploadDecision.NOTHING
+
+        policy == UploadPolicy.ALWAYS -> UploadDecision.SEND
+
+        else -> UploadDecision.ASK
+    }
 
 /**
  * The books that should go up without anyone being asked.
@@ -1708,10 +1831,11 @@ internal fun booksToSendUp(
     policy: UploadPolicy,
     canUpload: Boolean,
     refused: Set<String> = emptySet(),
-): List<Book> = books.filter {
-    uploadOnOpen(it, policy, canUpload, alreadyAnswered = false, refused = refused) ==
-        UploadDecision.SEND
-}
+): List<Book> =
+    books.filter {
+        uploadOnOpen(it, policy, canUpload, alreadyAnswered = false, refused = refused) ==
+            UploadDecision.SEND
+    }
 
 /**
  * The books that are on this device and nowhere else.
@@ -1735,5 +1859,4 @@ internal fun List<Book>.awaitingUpload(
  * up. Sending it would put it on their other devices, which is the
  * opposite of what they asked for.
  */
-internal fun Book.mayGoUp(): Boolean =
-    livesOnlyOnThisDevice() && archivedAt == null && hiddenAt == null
+internal fun Book.mayGoUp(): Boolean = livesOnlyOnThisDevice() && archivedAt == null && hiddenAt == null
