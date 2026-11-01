@@ -17,6 +17,16 @@ data class SeriesVolume(
     val inProgress: Boolean
         get() = shelfStateFor(book, progression, override) == LibraryFilterOption.IN_PROGRESS
 
+    /**
+     * How far in the reader got, when the shelf files this volume as
+     * unread: the row says the place is kept rather than drawing a bar
+     * over a book the shelf calls not started.
+     */
+    val keptPlace: Double?
+        get() = progression?.takeIf {
+            it > 0.0 && shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
+        }
+
     val onDevice: Boolean
         get() = book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
 }

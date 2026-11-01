@@ -73,7 +73,6 @@ import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
-import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
@@ -417,11 +416,8 @@ internal fun readingStatus(
             ?.takeIf { shelf == LibraryFilterOption.IN_PROGRESS && it > 0 }
             ?.let { StatusLine.Progress(it) },
         details.progression
-            ?.takeIf {
-                shelf == LibraryFilterOption.UNREAD &&
-                    details.override == FinishedOverride.UNREAD &&
-                    it > 0
-            }?.let { StatusLine.UnreadWithPlace(it) },
+            ?.takeIf { shelf == LibraryFilterOption.UNREAD && it > 0 }
+            ?.let { StatusLine.UnreadWithPlace(it) },
         // No estimate unless the book is being read: the card says the
         // place is kept, and a time left would contradict it.
         etaSeconds

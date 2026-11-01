@@ -331,6 +331,19 @@ fun canMarkBookUnread(
     override: FinishedOverride = FinishedOverride.NONE,
 ): Boolean = shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD
 
+/**
+ * The card above the shelf, or nothing when the shelf calls the book
+ * unread: "Continue reading" over a bar would be the one place left that
+ * disagrees with the filters.
+ */
+internal fun continueReadingFor(
+    book: Book,
+    progression: Double?,
+    override: FinishedOverride,
+): ContinueReading? =
+    ContinueReading(book, progression)
+        .takeIf { shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD }
+
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean =
     book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
@@ -621,8 +634,14 @@ class LibraryViewModel(
         if (book == null) {
             flowOf(null)
         } else {
-            progressDao.observeTotalProgression(book.url)
-                .map { ContinueReading(book, it) }
+            progressDao.observe(book.url)
+                .map { row ->
+                    continueReadingFor(
+                        book = book,
+                        progression = row?.totalProgression,
+                        override = row?.override ?: FinishedOverride.NONE,
+                    )
+                }
         }
     }
 
