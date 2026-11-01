@@ -778,7 +778,7 @@
     <string name="settings_volume_keys_off">Aus</string>
     <string name="settings_volume_keys_reversed">Umgekehrt</string>
     <string name="settings_tap_zones">Umblätterseiten</string>
-    <string name="settings_tap_zones_detail">Welche Ränder der Seite beim Tippen umblättern. Mit beiden blättert ein Rand zurück und der andere vorwärts. Mit nur einem Rand blättert seine obere Hälfte zurück und die untere vorwärts, ein Daumen reicht also für beides, und der andere Rand öffnet das Menü. Die Mitte und der obere Streifen öffnen immer das Menü, die Lautstärketasten bleiben unverändert, und ein durch Scrollen gelesenes Buch hat keine Ränder zum Tippen. Mit Aus bewirkt ein Tipp auf einen Rand nichts.</string>
+    <string name="settings_tap_zones_detail">Welche Ränder der Seite beim Tippen umblättern. Mit nur einem Rand blättert seine obere Hälfte zurück und die untere vorwärts, ein Daumen reicht also für beides, und der andere Rand öffnet das Menü. Die Mitte und der obere Streifen öffnen immer das Menü; mit Aus bewirkt ein Tipp auf einen Rand nichts.</string>
     <string name="tap_zones_both">Beide</string>
     <string name="tap_zones_left">Nur links</string>
     <string name="tap_zones_right">Nur rechts</string>

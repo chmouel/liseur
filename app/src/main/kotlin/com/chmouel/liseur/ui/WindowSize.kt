@@ -46,6 +46,14 @@ fun windowWidth(): Dp {
     return with(LocalDensity.current) { width.toDp() }
 }
 
+/** Height of the window in dp. */
+@Composable
+@ReadOnlyComposable
+fun windowHeight(): Dp {
+    val height = LocalWindowInfo.current.containerSize.height
+    return with(LocalDensity.current) { height.toDp() }
+}
+
 /** [WidthClass] of the current window. */
 @Composable
 @ReadOnlyComposable

@@ -767,7 +767,7 @@
     <string name="settings_volume_keys_off">Desactivadas</string>
     <string name="settings_volume_keys_reversed">Invertidas</string>
     <string name="settings_tap_zones">Lados de paso de página</string>
-    <string name="settings_tap_zones_detail">Qué lados de la página la pasan al tocarlos. Con ambos, un lado retrocede y el otro avanza. Con un solo lado, su mitad superior retrocede y su mitad inferior avanza, así que un pulgar hace las dos cosas, y el otro lado abre el menú. El centro y la franja superior siempre abren el menú, las teclas de volumen no cambian, y un libro leído desplazando no tiene lados que tocar. Con Desactivados, tocar un lado no hace nada.</string>
+    <string name="settings_tap_zones_detail">Qué lados de la página la pasan al tocarlos. Con un solo lado, su mitad superior retrocede y su mitad inferior avanza, así que un pulgar hace las dos cosas, y el otro lado abre el menú. El centro y la franja superior siempre abren el menú; con Desactivados, tocar un lado no hace nada.</string>
     <string name="tap_zones_both">Ambos</string>
     <string name="tap_zones_left">Solo izquierda</string>
     <string name="tap_zones_right">Solo derecha</string>

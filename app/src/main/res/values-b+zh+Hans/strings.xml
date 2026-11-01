@@ -793,7 +793,7 @@
     <string name="settings_volume_keys_off">关闭</string>
     <string name="settings_volume_keys_reversed">反向</string>
     <string name="settings_tap_zones">翻页区域</string>
-    <string name="settings_tap_zones_detail">点按页面哪些侧边会翻页。选择两侧时，一侧向后翻，另一侧向前翻。只选一侧时，该侧上半部分向后翻、下半部分向前翻，一只拇指就能完成，另一侧打开菜单。中间区域和顶部条带始终打开菜单，音量键不受影响，滚动阅读的书没有可点按的侧边。选择“关闭”时，点按侧边没有反应。</string>
+    <string name="settings_tap_zones_detail">点按页面哪些侧边会翻页。只选一侧时，该侧上半部分向后翻、下半部分向前翻，一只拇指就能完成，另一侧打开菜单。中间区域和顶部条带始终打开菜单；选择“关闭”时，点按侧边没有反应。</string>
     <string name="tap_zones_both">两侧</string>
     <string name="tap_zones_left">仅左侧</string>
     <string name="tap_zones_right">仅右侧</string>

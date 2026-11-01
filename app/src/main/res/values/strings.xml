@@ -802,7 +802,7 @@
     <string name="settings_volume_keys_off">Off</string>
     <string name="settings_volume_keys_reversed">Reversed</string>
     <string name="settings_tap_zones">Page-turn sides</string>
-    <string name="settings_tap_zones_detail">Which sides of the page turn it when you tap. With both, one side goes back and the other goes forward. With one side, its upper half goes back and its lower half goes forward, so one thumb does both, and the other side opens the menu. The middle and the top strip always open the menu, the volume keys are unchanged, and a book read by scrolling has no sides to tap. With Off, tapping a side does nothing.</string>
+    <string name="settings_tap_zones_detail">Which sides of the page turn it when you tap. With one side, its upper half goes back and its lower half goes forward, so one thumb does both, and the other side opens the menu. The middle and the top strip always open the menu; with Off, tapping a side does nothing.</string>
     <string name="tap_zones_both">Both</string>
     <string name="tap_zones_left">Left only</string>
     <string name="tap_zones_right">Right only</string>

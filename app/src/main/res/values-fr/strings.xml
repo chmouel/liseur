@@ -767,7 +767,7 @@
     <string name="settings_volume_keys_off">Désactivé</string>
     <string name="settings_volume_keys_reversed">Inversé</string>
     <string name="settings_tap_zones">Côtés pour tourner la page</string>
-    <string name="settings_tap_zones_detail">Quels côtés de la page la tournent quand vous les touchez. Avec les deux, un côté recule et l\'autre avance. Avec un seul côté, sa moitié haute recule et sa moitié basse avance, un seul pouce suffit donc, et l\'autre côté ouvre le menu. Le milieu et la bande supérieure ouvrent toujours le menu, les touches de volume ne changent pas, et un livre lu par défilement n\'a pas de côtés à toucher. Avec Désactivé, toucher un côté ne fait rien.</string>
+    <string name="settings_tap_zones_detail">Quels côtés de la page la tournent quand vous les touchez. Avec un seul côté, sa moitié haute recule et sa moitié basse avance, un seul pouce suffit donc, et l\'autre côté ouvre le menu. Le milieu et la bande supérieure ouvrent toujours le menu ; avec Désactivé, toucher un côté ne fait rien.</string>
     <string name="tap_zones_both">Les deux</string>
     <string name="tap_zones_left">Gauche seule</string>
     <string name="tap_zones_right">Droite seule</string>

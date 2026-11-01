@@ -767,7 +767,7 @@
     <string name="settings_volume_keys_off">Disattivo</string>
     <string name="settings_volume_keys_reversed">Invertito</string>
     <string name="settings_tap_zones">Lati di svolta pagina</string>
-    <string name="settings_tap_zones_detail">Quali lati della pagina la girano quando li tocchi. Con entrambi, un lato torna indietro e l\'altro va avanti. Con un solo lato, la sua metà superiore torna indietro e quella inferiore va avanti, così basta un pollice, e l\'altro lato apre il menu. Il centro e la striscia superiore aprono sempre il menu, i tasti volume non cambiano, e un libro letto a scorrimento non ha lati da toccare. Con Disattivo, toccare un lato non fa nulla.</string>
+    <string name="settings_tap_zones_detail">Quali lati della pagina la girano quando li tocchi. Con un solo lato, la sua metà superiore torna indietro e quella inferiore va avanti, così basta un pollice, e l\'altro lato apre il menu. Il centro e la striscia superiore aprono sempre il menu; con Disattivo, toccare un lato non fa nulla.</string>
     <string name="tap_zones_both">Entrambi</string>
     <string name="tap_zones_left">Solo sinistra</string>
     <string name="tap_zones_right">Solo destra</string>
