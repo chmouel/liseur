@@ -7,14 +7,15 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.domain.BookAccessibility
-import java.util.Locale
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.MetadataSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.Locale
 
 class BookDetailsTest {
-
     @Test
     fun provenanceComesFromTheRowNotTheConnectedServer() {
         assertEquals(BookProvenance.Server(ServerKind.KOMGA), BookProvenance.of("komga:abc", null))
@@ -35,17 +36,18 @@ class BookDetailsTest {
     @Test
     fun aFingerprintIsShownOnlyForTheFileOnThisDevice() {
         val row = BookFingerprintRow("calibre:1", "aa", "bb", 10, fileModifiedAt = 500, computedAt = 1)
-        val book = Book(
-            url = "calibre:1",
-            title = "T",
-            author = null,
-            coverPath = null,
-            source = null,
-            addedAt = 0,
-            lastOpenedAt = null,
-            downloadState = DownloadState.DOWNLOADED,
-            fileModifiedAt = 500,
-        )
+        val book =
+            Book(
+                url = "calibre:1",
+                title = "T",
+                author = null,
+                coverPath = null,
+                source = null,
+                addedAt = 0,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                fileModifiedAt = 500,
+            )
         assertEquals(row, currentFingerprint(book, row))
         assertNull(currentFingerprint(book.copy(fileModifiedAt = 501), row))
         assertNull(currentFingerprint(book.copy(downloadState = DownloadState.REMOTE), row))
@@ -85,4 +87,55 @@ class BookDetailsTest {
         assertEquals("Horror tales", subjectLabel("Horror tales"))
         assertEquals("--", subjectLabel("--"))
     }
+
+    @Test
+    fun aBookMarkedUnreadShowsItsPlaceAndNoProgressBar() {
+        val lines = readingStatus(details(progression = 0.4, override = FinishedOverride.UNREAD), etaSeconds = 3600.0)
+
+        assertTrue(StatusLine.UnreadWithPlace(0.4) in lines)
+        assertTrue(lines.none { it is StatusLine.Progress })
+        // A time left would tell the reader they are still at it.
+        assertTrue(lines.none { it is StatusLine.TimeLeft })
+    }
+
+    @Test
+    fun aBookBelowTheStartedThresholdShowsNoProgressBar() {
+        val lines = readingStatus(details(progression = 0.001), etaSeconds = 3600.0)
+
+        assertTrue(lines.none { it is StatusLine.Progress })
+        assertTrue(lines.none { it is StatusLine.TimeLeft })
+    }
+
+    @Test
+    fun aStartedBookShowsItsProgressAndTimeLeft() {
+        val lines = readingStatus(details(progression = 0.4), etaSeconds = 3600.0)
+
+        assertTrue(StatusLine.Progress(0.4) in lines)
+        assertTrue(StatusLine.TimeLeft(3600.0) in lines)
+    }
+
+    private fun details(
+        progression: Double?,
+        override: FinishedOverride = FinishedOverride.NONE,
+    ) = BookDetails(
+        book =
+            Book(
+                url = "calibre:1",
+                title = "T",
+                author = null,
+                coverPath = null,
+                source = null,
+                addedAt = 0,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                fileModifiedAt = 0,
+            ),
+        metadata = MetadataSnapshot(),
+        provenance = BookProvenance.File,
+        folderName = null,
+        progression = progression,
+        override = override,
+        annotations = 0,
+        fingerprint = null,
+    )
 }

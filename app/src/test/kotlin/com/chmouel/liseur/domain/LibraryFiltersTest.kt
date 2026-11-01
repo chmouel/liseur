@@ -173,29 +173,53 @@ class LibraryFiltersTest {
             filters(LibraryFilterOption.UNREAD).accepts(
                 started,
                 progression = 0.4,
-                unreadOverride = true,
+                override = FinishedOverride.UNREAD,
             ),
         )
         assertFalse(
             filters(LibraryFilterOption.IN_PROGRESS).accepts(
                 started,
                 progression = 0.4,
-                unreadOverride = true,
+                override = FinishedOverride.UNREAD,
             ),
         )
         assertFalse(
             filters(LibraryFilterOption.FINISHED).accepts(
                 started,
                 progression = 0.4,
-                unreadOverride = true,
+                override = FinishedOverride.UNREAD,
             ),
         )
         assertTrue(
             LibraryFilters.None.accepts(
                 started,
                 progression = 0.4,
-                unreadOverride = true,
+                override = FinishedOverride.UNREAD,
             ),
+        )
+    }
+
+    @Test
+    fun `shelfStateFor classifies finished, unread overrides and the started threshold`() {
+        assertEquals(
+            LibraryFilterOption.UNREAD,
+            shelfStateFor(book(), progression = 0.42, override = FinishedOverride.UNREAD),
+        )
+        assertEquals(
+            LibraryFilterOption.UNREAD,
+            shelfStateFor(book(finished = false), progression = 1.0, override = FinishedOverride.UNREAD),
+        )
+        assertEquals(
+            LibraryFilterOption.FINISHED,
+            shelfStateFor(book(finished = true), progression = 0.42, override = FinishedOverride.UNREAD),
+        )
+        assertEquals(
+            LibraryFilterOption.UNREAD,
+            shelfStateFor(book(pageCount = 50), progression = 0.015, override = FinishedOverride.NONE),
+        )
+        assertEquals(
+            LibraryFilterOption.IN_PROGRESS,
+            shelfStateFor(book(pageCount = 400), progression = 0.015, override = FinishedOverride.NONE),
         )
     }
 

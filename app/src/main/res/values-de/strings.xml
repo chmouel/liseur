@@ -1790,6 +1790,7 @@
     <string name="book_details_partial_md5">Partieller MD5</string>
     <string name="book_details_finished_on">Beendet am %1$s</string>
     <string name="book_details_archived_on">Archiviert am %1$s</string>
+    <string name="book_details_unread_with_place">Als ungelesen markiert. Deine Stelle (%1$d%%) bleibt erhalten.</string>
     <string name="book_details_annotations">Markierungen und Notizen</string>
     <string name="book_details_read">Lesen</string>
     <string name="book_details_retry_download">Download wiederholen</string>

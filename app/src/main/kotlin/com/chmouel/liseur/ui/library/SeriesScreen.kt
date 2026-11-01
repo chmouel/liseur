@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesShelf
@@ -855,7 +856,7 @@ private fun SeriesVolumeRow(
                 overflow = TextOverflow.Ellipsis,
             )
             val progression = volume.progression
-            if (progression != null && progression > 0.0 && !volume.finished) {
+            if (volume.inProgress && progression != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(top = 6.dp),
@@ -872,6 +873,13 @@ private fun SeriesVolumeRow(
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
+            } else if (!volume.finished && volume.override == FinishedOverride.UNREAD && progression != null && progression > 0.0) {
+                Text(
+                    text = stringResource(R.string.book_details_unread_with_place, (progression * 100).toInt()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
             }
         }
         if (volume.finished) {

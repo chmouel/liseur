@@ -16,6 +16,7 @@ import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.folderDisplayName
 import com.chmouel.liseur.data.remote.BookProvenance
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
 import com.chmouel.liseur.domain.resolveMetadata
@@ -35,7 +36,9 @@ sealed interface BookDetailsUiState {
     /** The book left the library while the screen was open. */
     data object Gone : BookDetailsUiState
 
-    data class Ready(val details: BookDetails) : BookDetailsUiState
+    data class Ready(
+        val details: BookDetails,
+    ) : BookDetailsUiState
 }
 
 data class BookDetails(
@@ -45,6 +48,7 @@ data class BookDetails(
     /** The watched folder's name, once the provider has answered. */
     val folderName: String?,
     val progression: Double?,
+    val override: FinishedOverride = FinishedOverride.NONE,
     val annotations: Int,
     val fingerprint: BookFingerprintRow?,
 )
@@ -63,28 +67,32 @@ class BookDetailsViewModel(
     private val identityDao: WorkIdentityDao,
     private val folderName: suspend (String) -> String?,
 ) : ViewModel() {
-
     fun details(bookUrl: String): StateFlow<BookDetailsUiState> {
         val book = bookDao.observeByUrl(bookUrl)
-        val folder = book.map { it?.source }
-            .distinctUntilChanged()
-            .transformLatest { source ->
-                emit(null)
-                if (source != null) emit(folderName(source))
+        val folder =
+            book
+                .map { it?.source }
+                .distinctUntilChanged()
+                .transformLatest { source ->
+                    emit(null)
+                    if (source != null) emit(folderName(source))
+                }
+        val metadata =
+            metadataDao.observe(bookUrl).map { rows ->
+                rows
+                    .mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
+                    .toMap()
+                    .let(::resolveMetadata)
+                    ?: MetadataSnapshot()
             }
-        val metadata = metadataDao.observe(bookUrl).map { rows ->
-            rows.mapNotNull { row -> MetadataSource.of(row.source)?.let { it to row.toSnapshot() } }
-                .toMap()
-                .let(::resolveMetadata)
-                ?: MetadataSnapshot()
-        }
-        val reading = combine(
-            progressDao.observeTotalProgression(bookUrl),
-            annotationDao.observeMarkCount(bookUrl),
-            identityDao.observeFingerprint(bookUrl),
-            ::Triple,
-        )
-        return combine(book, metadata, folder, reading) { current, resolved, folderName, (progression, notes, print) ->
+        val reading =
+            combine(
+                progressDao.observe(bookUrl),
+                annotationDao.observeMarkCount(bookUrl),
+                identityDao.observeFingerprint(bookUrl),
+                ::Triple,
+            )
+        return combine(book, metadata, folder, reading) { current, resolved, folderName, (progress, notes, print) ->
             if (current == null) {
                 BookDetailsUiState.Gone
             } else {
@@ -93,12 +101,14 @@ class BookDetailsViewModel(
                         book = current,
                         // The count a server listed with the book, until
                         // a catalog refresh stores it with the rest.
-                        metadata = resolved.copy(
-                            pageCount = resolved.pageCount ?: validPageCount(current.remotePageCount),
-                        ),
+                        metadata =
+                            resolved.copy(
+                                pageCount = resolved.pageCount ?: validPageCount(current.remotePageCount),
+                            ),
                         provenance = BookProvenance.of(current.url, current.source),
                         folderName = folderName,
-                        progression = progression,
+                        progression = progress?.totalProgression,
+                        override = progress?.override ?: FinishedOverride.NONE,
                         annotations = notes,
                         fingerprint = currentFingerprint(current, print),
                     ),
@@ -114,20 +124,21 @@ class BookDetailsViewModel(
     companion object {
         private const val STOP_TIMEOUT_MS = 5_000L
 
-        fun factory(): ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val application = checkNotNull(this[APPLICATION_KEY])
-                val database = application.container.database
-                BookDetailsViewModel(
-                    bookDao = database.bookDao(),
-                    metadataDao = database.bookMetadataDao(),
-                    progressDao = database.readingProgressDao(),
-                    annotationDao = database.annotationDao(),
-                    identityDao = database.workIdentityDao(),
-                    folderName = { folderDisplayName(application, it) },
-                )
+        fun factory(): ViewModelProvider.Factory =
+            viewModelFactory {
+                initializer {
+                    val application = checkNotNull(this[APPLICATION_KEY])
+                    val database = application.container.database
+                    BookDetailsViewModel(
+                        bookDao = database.bookDao(),
+                        metadataDao = database.bookMetadataDao(),
+                        progressDao = database.readingProgressDao(),
+                        annotationDao = database.annotationDao(),
+                        identityDao = database.workIdentityDao(),
+                        folderName = { folderDisplayName(application, it) },
+                    )
+                }
             }
-        }
     }
 }
 
@@ -136,5 +147,7 @@ class BookDetailsViewModel(
  * when they were taken of the file as it is now. Nothing computes them
  * here; sync does, the first time it needs them.
  */
-internal fun currentFingerprint(book: Book, row: BookFingerprintRow?): BookFingerprintRow? =
-    row?.takeIf { book.openableUrl != null && it.fileModifiedAt == book.fileModifiedAt }
+internal fun currentFingerprint(
+    book: Book,
+    row: BookFingerprintRow?,
+): BookFingerprintRow? = row?.takeIf { book.openableUrl != null && it.fileModifiedAt == book.fileModifiedAt }

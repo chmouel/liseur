@@ -73,8 +73,11 @@ import com.chmouel.liseur.data.remote.BookProvenance
 import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
+import com.chmouel.liseur.domain.shelfStateFor
 import com.chmouel.liseur.domain.validSeriesPosition
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
@@ -159,12 +162,13 @@ fun BookDetailsScreen(
                 Modifier.fillMaxSize(),
                 state = rememberLazyListState(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                contentPadding = PaddingValues(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = 8.dp,
-                    bottom = 32.dp + padding.calculateBottomPadding(),
-                ),
+                contentPadding =
+                    PaddingValues(
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 8.dp,
+                        bottom = 32.dp + padding.calculateBottomPadding(),
+                    ),
             ) {
                 item(key = "header") {
                     Header(details, wide, section) {
@@ -255,10 +259,11 @@ private fun Header(
                     }
                 }
             }
-            val facts = listOfNotNull(
-                meta.languages.takeIf { it.isNotEmpty() }?.joinToString(", ") { languageName(it, locale) },
-                meta.published?.take(4),
-            )
+            val facts =
+                listOfNotNull(
+                    meta.languages.takeIf { it.isNotEmpty() }?.joinToString(", ") { languageName(it, locale) },
+                    meta.published?.take(4),
+                )
             if (facts.isNotEmpty()) {
                 Text(
                     facts.joinToString(" · "),
@@ -291,21 +296,28 @@ private fun BookActions(
     val state = book.downloadState
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when {
-            book.openableUrl != null -> Button(onClick = onRead, modifier = tall) {
-                ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
-                Text(
-                    stringResource(
-                        // A finished book opens where it was left, so it
-                        // is not offered as a fresh start.
-                        if (!book.finished && (details.progression ?: 0.0) > 0.0) {
-                            R.string.continue_reading
-                        } else {
-                            R.string.book_details_read
-                        },
-                    ),
-                )
+            book.openableUrl != null -> {
+                Button(onClick = onRead, modifier = tall) {
+                    ButtonIcon(Icons.AutoMirrored.Outlined.MenuBook)
+                    Text(
+                        stringResource(
+                            // A book the shelf calls started opens where it
+                            // was left, so it is not offered as a fresh
+                            // start. A finished one is, and so is one put
+                            // back on the pile by hand.
+                            if (shelfStateFor(book, details.progression, details.override) ==
+                                LibraryFilterOption.IN_PROGRESS
+                            ) {
+                                R.string.continue_reading
+                            } else {
+                                R.string.book_details_read
+                            },
+                        ),
+                    )
+                }
             }
-            download != null || state == DownloadState.QUEUED || state == DownloadState.DOWNLOADING ->
+
+            download != null || state == DownloadState.QUEUED || state == DownloadState.DOWNLOADING -> {
                 FilledTonalButton(onClick = {}, enabled = false, modifier = tall) {
                     BusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(8.dp))
@@ -319,14 +331,19 @@ private fun BookActions(
                         ),
                     )
                 }
-            canDownload && book.downloadHref != null -> Button(onClick = onDownload, modifier = tall) {
-                ButtonIcon(Icons.Outlined.CloudDownload)
-                Text(
-                    stringResource(
-                        if (state == DownloadState.FAILED) R.string.book_details_retry_download else R.string.download_book,
-                    ),
-                )
             }
+
+            canDownload && book.downloadHref != null -> {
+                Button(onClick = onDownload, modifier = tall) {
+                    ButtonIcon(Icons.Outlined.CloudDownload)
+                    Text(
+                        stringResource(
+                            if (state == DownloadState.FAILED) R.string.book_details_retry_download else R.string.download_book,
+                        ),
+                    )
+                }
+            }
+
             !canDownload -> {
                 OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
                     Text(stringResource(R.string.download_book))
@@ -337,8 +354,11 @@ private fun BookActions(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            else -> OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
-                Text(stringResource(R.string.endpaper_unavailable))
+
+            else -> {
+                OutlinedButton(onClick = {}, enabled = false, modifier = tall) {
+                    Text(stringResource(R.string.endpaper_unavailable))
+                }
             }
         }
         OutlinedButton(onClick = onOpenStats, modifier = tall) {
@@ -355,19 +375,58 @@ private fun ButtonIcon(icon: androidx.compose.ui.graphics.vector.ImageVector) {
 }
 
 /** One line of the reading card; the card is drawn only when one exists. */
-private sealed interface StatusLine {
-    data class Progress(val fraction: Double) : StatusLine
-    data class TimeLeft(val seconds: Double) : StatusLine
-    data class Finished(val at: Long?) : StatusLine
-    data class Archived(val at: Long) : StatusLine
-    data class Annotations(val count: Int) : StatusLine
+internal sealed interface StatusLine {
+    data class Progress(
+        val fraction: Double,
+    ) : StatusLine
+
+    data class UnreadWithPlace(
+        val fraction: Double,
+    ) : StatusLine
+
+    data class TimeLeft(
+        val seconds: Double,
+    ) : StatusLine
+
+    data class Finished(
+        val at: Long?,
+    ) : StatusLine
+
+    data class Archived(
+        val at: Long,
+    ) : StatusLine
+
+    data class Annotations(
+        val count: Int,
+    ) : StatusLine
 }
 
-private fun readingStatus(details: BookDetails, etaSeconds: Double?): List<StatusLine> {
+/**
+ * What the reading card says, from the same bucket the shelf files the
+ * book in, so the details page cannot call a book started that the
+ * series row calls unread.
+ */
+internal fun readingStatus(
+    details: BookDetails,
+    etaSeconds: Double?,
+): List<StatusLine> {
     val book = details.book
+    val shelf = shelfStateFor(book, details.progression, details.override)
     return listOfNotNull(
-        details.progression?.takeIf { !book.finished && it > 0 }?.let { StatusLine.Progress(it) },
-        etaSeconds?.takeIf { !book.finished }?.let { StatusLine.TimeLeft(it) },
+        details.progression
+            ?.takeIf { shelf == LibraryFilterOption.IN_PROGRESS && it > 0 }
+            ?.let { StatusLine.Progress(it) },
+        details.progression
+            ?.takeIf {
+                shelf == LibraryFilterOption.UNREAD &&
+                    details.override == FinishedOverride.UNREAD &&
+                    it > 0
+            }?.let { StatusLine.UnreadWithPlace(it) },
+        // No estimate unless the book is being read: the card says the
+        // place is kept, and a time left would contradict it.
+        etaSeconds
+            ?.takeIf { shelf == LibraryFilterOption.IN_PROGRESS }
+            ?.let { StatusLine.TimeLeft(it) },
         if (book.finished || book.finishedAt != null) StatusLine.Finished(book.finishedAt) else null,
         book.archivedAt?.let { StatusLine.Archived(it) },
         details.annotations.takeIf { it > 0 }?.let { StatusLine.Annotations(it) },
@@ -375,56 +434,81 @@ private fun readingStatus(details: BookDetails, etaSeconds: Double?): List<Statu
 }
 
 @Composable
-private fun ReadingStatusCard(lines: List<StatusLine>, modifier: Modifier) {
+private fun ReadingStatusCard(
+    lines: List<StatusLine>,
+    modifier: Modifier,
+) {
     val eInk = LocalEInk.current
     val locale = currentLocale()
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(
-            1.dp,
-            if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
-        ),
+        border =
+            BorderStroke(
+                1.dp,
+                if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+            ),
     ) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             lines.forEach { line ->
                 when (line) {
-                    is StatusLine.Progress -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    is StatusLine.Progress -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                stringResource(R.string.reading_stats_progress, (line.fraction * 100).toInt()),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            LinearProgressIndicator(
+                                progress = { line.fraction.toFloat() },
+                                modifier = Modifier.fillMaxWidth().height(6.dp),
+                                trackColor = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                gapSize = 0.dp,
+                                drawStopIndicator = {},
+                            )
+                        }
+                    }
+
+                    is StatusLine.UnreadWithPlace -> {
                         Text(
-                            stringResource(R.string.reading_stats_progress, (line.fraction * 100).toInt()),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        LinearProgressIndicator(
-                            progress = { line.fraction.toFloat() },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                            trackColor = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHighest,
-                            gapSize = 0.dp,
-                            drawStopIndicator = {},
+                            stringResource(R.string.book_details_unread_with_place, (line.fraction * 100).toInt()),
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    is StatusLine.TimeLeft -> Field(
-                        stringResource(R.string.reading_stats_time_left_label),
-                        stringResource(
-                            R.string.reading_stats_time_left_value,
-                            readingDuration(TimeUnit.SECONDS.toMillis(line.seconds.toLong())),
-                        ),
-                        padded = false,
-                    )
-                    is StatusLine.Finished -> Text(
-                        line.at?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) }
-                            ?: stringResource(R.string.state_finished),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    is StatusLine.Archived -> Text(
-                        stringResource(R.string.book_details_archived_on, day(line.at, locale)),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    is StatusLine.Annotations -> Field(
-                        stringResource(R.string.book_details_annotations),
-                        String.format(locale, "%d", line.count),
-                        padded = false,
-                    )
+
+                    is StatusLine.TimeLeft -> {
+                        Field(
+                            stringResource(R.string.reading_stats_time_left_label),
+                            stringResource(
+                                R.string.reading_stats_time_left_value,
+                                readingDuration(TimeUnit.SECONDS.toMillis(line.seconds.toLong())),
+                            ),
+                            padded = false,
+                        )
+                    }
+
+                    is StatusLine.Finished -> {
+                        Text(
+                            line.at?.let { stringResource(R.string.book_details_finished_on, day(it, locale)) }
+                                ?: stringResource(R.string.state_finished),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+
+                    is StatusLine.Archived -> {
+                        Text(
+                            stringResource(R.string.book_details_archived_on, day(line.at, locale)),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+
+                    is StatusLine.Annotations -> {
+                        Field(
+                            stringResource(R.string.book_details_annotations),
+                            String.format(locale, "%d", line.count),
+                            padded = false,
+                        )
+                    }
                 }
             }
         }
@@ -433,7 +517,11 @@ private fun ReadingStatusCard(lines: List<StatusLine>, modifier: Modifier) {
 
 /** The blurb, folded to a few lines when long; it speaks for itself without a heading. */
 @Composable
-private fun Description(bookUrl: String, text: String, modifier: Modifier) {
+private fun Description(
+    bookUrl: String,
+    text: String,
+    modifier: Modifier,
+) {
     var expanded by rememberSaveable(bookUrl) { mutableStateOf(false) }
     var overflows by remember(text) { mutableStateOf(false) }
     // Folded, a blank line between paragraphs could be the last line shown,
@@ -460,7 +548,10 @@ private fun Description(bookUrl: String, text: String, modifier: Modifier) {
 }
 
 @Composable
-private fun SubjectTags(subjects: List<String>, modifier: Modifier) {
+private fun SubjectTags(
+    subjects: List<String>,
+    modifier: Modifier,
+) {
     val eInk = LocalEInk.current
     Column(modifier) {
         Text(
@@ -477,10 +568,11 @@ private fun SubjectTags(subjects: List<String>, modifier: Modifier) {
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(
-                        1.dp,
-                        if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
-                    ),
+                    border =
+                        BorderStroke(
+                            1.dp,
+                            if (eInk) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+                        ),
                 ) {
                     Text(
                         subjectLabel(subject),
@@ -496,7 +588,12 @@ private fun SubjectTags(subjects: List<String>, modifier: Modifier) {
 
 /** A Library of Congress heading reads as a tag: "Vampires -- Fiction" becomes "Vampires · Fiction". */
 internal fun subjectLabel(subject: String): String =
-    subject.split("--").map { it.trim() }.filter { it.isNotEmpty() }.joinToString(" · ").ifEmpty { subject }
+    subject
+        .split("--")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .joinToString(" · ")
+        .ifEmpty { subject }
 
 private fun hasPublication(details: BookDetails): Boolean {
     val meta = details.metadata
@@ -506,7 +603,10 @@ private fun hasPublication(details: BookDetails): Boolean {
 }
 
 @Composable
-private fun Publication(details: BookDetails, modifier: Modifier) {
+private fun Publication(
+    details: BookDetails,
+    modifier: Modifier,
+) {
     val meta = details.metadata
     val locale = currentLocale()
     Column(modifier) {
@@ -518,9 +618,11 @@ private fun Publication(details: BookDetails, modifier: Modifier) {
         )
         FieldGrid(
             listOfNotNull(
-                meta.publishers.takeIf { it.isNotEmpty() }
+                meta.publishers
+                    .takeIf { it.isNotEmpty() }
                     ?.let { stringResource(R.string.book_details_publisher) to it.joinToString(", ") },
-                meta.imprints.takeIf { it.isNotEmpty() }
+                meta.imprints
+                    .takeIf { it.isNotEmpty() }
                     ?.let { stringResource(R.string.book_details_imprint) to it.joinToString(", ") },
                 meta.published?.let { stringResource(R.string.book_details_published) to publishedDate(it, locale) },
                 meta.languages.takeIf { it.isNotEmpty() }?.let {
@@ -548,7 +650,10 @@ private fun Publication(details: BookDetails, modifier: Modifier) {
  * a reader rarely needs a hash, but the one who does finds it here.
  */
 @Composable
-private fun FileInfo(details: BookDetails, modifier: Modifier) {
+private fun FileInfo(
+    details: BookDetails,
+    modifier: Modifier,
+) {
     val book = details.book
     val context = LocalContext.current
     val locale = currentLocale()
@@ -569,8 +674,7 @@ private fun FileInfo(details: BookDetails, modifier: Modifier) {
                 .semantics(mergeDescendants = true) {
                     heading()
                     stateDescription = stateText
-                }
-                .padding(vertical = 8.dp),
+                }.padding(vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -684,14 +788,18 @@ internal fun accessibilityView(a11y: BookAccessibility): AccessibilityView {
         conformance = a11y.conformsTo.mapNotNull(::wcagConformance).distinct(),
         features = FEATURE_LABELS.filterKeys { it in a11y.features }.values.distinct(),
         hazards = hazards,
-        noHazards = hazards.isEmpty() &&
-            ("none" in a11y.hazards ||
-                a11y.hazards.containsAll(listOf("noFlashingHazard", "noMotionSimulationHazard", "noSoundHazard"))),
+        noHazards =
+            hazards.isEmpty() &&
+                (
+                    "none" in a11y.hazards ||
+                        a11y.hazards.containsAll(listOf("noFlashingHazard", "noMotionSimulationHazard", "noSoundHazard"))
+                ),
         modes = MODE_LABELS.filterKeys { it in a11y.accessModes }.values.toList(),
-        sufficient = a11y.accessModesSufficient
-            .map { set -> set.split(',').mapNotNull { MODE_LABELS[it] } }
-            .filter { it.isNotEmpty() }
-            .distinct(),
+        sufficient =
+            a11y.accessModesSufficient
+                .map { set -> set.split(',').mapNotNull { MODE_LABELS[it] } }
+                .filter { it.isNotEmpty() }
+                .distinct(),
         exemptions = EXEMPTION_LABELS.filterKeys { it in a11y.exemptions }.values.toList(),
         summary = a11y.summary,
         certifiedBy = a11y.certifiedBy,
@@ -709,7 +817,8 @@ private fun AccessibilityFields(view: AccessibilityView) {
     if (view.conformance.isNotEmpty()) {
         Field(
             stringResource(R.string.book_details_a11y_conforms),
-            view.conformance.map { (version, level) -> stringResource(R.string.book_details_a11y_wcag, version, level) }
+            view.conformance
+                .map { (version, level) -> stringResource(R.string.book_details_a11y_wcag, version, level) }
                 .joinToString("\n"),
         )
     }
@@ -780,34 +889,56 @@ private fun Field(
 }
 
 @Composable
-private fun provenanceLabel(details: BookDetails): String = when (val origin = details.provenance) {
-    is BookProvenance.Server -> stringResource(origin.kind.labelRes())
-    BookProvenance.Opds -> stringResource(R.string.book_details_from_opds)
-    BookProvenance.Grimmory -> stringResource(R.string.book_details_from_grimmory)
-    is BookProvenance.Folder -> details.folderName ?: stringResource(R.string.book_details_from_folder)
-    BookProvenance.File -> stringResource(R.string.book_details_from_file)
-}
+private fun provenanceLabel(details: BookDetails): String =
+    when (val origin = details.provenance) {
+        is BookProvenance.Server -> stringResource(origin.kind.labelRes())
+        BookProvenance.Opds -> stringResource(R.string.book_details_from_opds)
+        BookProvenance.Grimmory -> stringResource(R.string.book_details_from_grimmory)
+        is BookProvenance.Folder -> details.folderName ?: stringResource(R.string.book_details_from_folder)
+        BookProvenance.File -> stringResource(R.string.book_details_from_file)
+    }
 
 @Composable
 private fun currentLocale(): Locale = LocalLocale.current.platformLocale
 
-private fun day(millis: Long, locale: Locale): String =
-    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+private fun day(
+    millis: Long,
+    locale: Locale,
+): String =
+    Instant
+        .ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
         .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale))
 
 /** A publication date at the precision it was given: a year, a month, or a day. */
-private fun publishedDate(iso: String, locale: Locale): String = when (iso.length) {
-    4 -> iso
-    7 -> YearMonth.parse(iso).format(
-        DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "yMMMM"), locale),
-    )
-    else -> runCatching {
-        LocalDate.parse(iso).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale))
-    }.getOrDefault(iso)
-}
+private fun publishedDate(
+    iso: String,
+    locale: Locale,
+): String =
+    when (iso.length) {
+        4 -> {
+            iso
+        }
+
+        7 -> {
+            YearMonth.parse(iso).format(
+                DateTimeFormatter.ofPattern(DateFormat.getBestDateTimePattern(locale, "yMMMM"), locale),
+            )
+        }
+
+        else -> {
+            runCatching {
+                LocalDate.parse(iso).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale))
+            }.getOrDefault(iso)
+        }
+    }
 
 /** A language tag by its name, script and region kept; a tag that names nothing is shown as written. */
-internal fun languageName(tag: String, locale: Locale): String {
+internal fun languageName(
+    tag: String,
+    locale: Locale,
+): String {
     val parsed = Locale.forLanguageTag(tag)
     val language = parsed.language
     if (language.isEmpty() || parsed.getDisplayLanguage(locale).equals(language, ignoreCase = true)) return tag
@@ -831,12 +962,13 @@ private val WCAG = Regex("""wcag-(?:(\d\.\d)-)?(a{1,3})""")
 private val NAMED_SCHEMES = setOf("isbn", "issn", "doi", "asin", "uuid")
 
 /** Credits named under the author; plain contributors go with the publication. */
-private val CREDIT_LABELS = listOf(
-    ContributorRoles.TRANSLATOR to R.string.book_details_role_translator,
-    ContributorRoles.EDITOR to R.string.book_details_role_editor,
-    ContributorRoles.ILLUSTRATOR to R.string.book_details_role_illustrator,
-    ContributorRoles.NARRATOR to R.string.book_details_role_narrator,
-)
+private val CREDIT_LABELS =
+    listOf(
+        ContributorRoles.TRANSLATOR to R.string.book_details_role_translator,
+        ContributorRoles.EDITOR to R.string.book_details_role_editor,
+        ContributorRoles.ILLUSTRATOR to R.string.book_details_role_illustrator,
+        ContributorRoles.NARRATOR to R.string.book_details_role_narrator,
+    )
 
 private val WIDE_LAYOUT = 600.dp
 private val WIDE_ACTIONS_WIDTH = 420.dp
@@ -845,31 +977,35 @@ private val TWO_COLUMN_GRID = 300.dp
 private const val DESCRIPTION_LINES = 6
 private val BLANK_LINES = Regex("""\n\s*\n""")
 
-private val FEATURE_LABELS = linkedMapOf(
-    "alternativeText" to R.string.book_details_a11y_feature_alt_text,
-    "tableOfContents" to R.string.book_details_a11y_feature_toc,
-    "structuralNavigation" to R.string.book_details_a11y_feature_structure,
-    "printPageNumbers" to R.string.book_details_a11y_feature_page_numbers,
-    "pageNavigation" to R.string.book_details_a11y_feature_page_numbers,
-    "displayTransformability" to R.string.book_details_a11y_feature_display,
-    "synchronizedAudioText" to R.string.book_details_a11y_feature_audio,
-)
+private val FEATURE_LABELS =
+    linkedMapOf(
+        "alternativeText" to R.string.book_details_a11y_feature_alt_text,
+        "tableOfContents" to R.string.book_details_a11y_feature_toc,
+        "structuralNavigation" to R.string.book_details_a11y_feature_structure,
+        "printPageNumbers" to R.string.book_details_a11y_feature_page_numbers,
+        "pageNavigation" to R.string.book_details_a11y_feature_page_numbers,
+        "displayTransformability" to R.string.book_details_a11y_feature_display,
+        "synchronizedAudioText" to R.string.book_details_a11y_feature_audio,
+    )
 
-private val MODE_LABELS = linkedMapOf(
-    "textual" to R.string.book_details_a11y_mode_textual,
-    "visual" to R.string.book_details_a11y_mode_visual,
-    "auditory" to R.string.book_details_a11y_mode_auditory,
-    "tactile" to R.string.book_details_a11y_mode_tactile,
-)
+private val MODE_LABELS =
+    linkedMapOf(
+        "textual" to R.string.book_details_a11y_mode_textual,
+        "visual" to R.string.book_details_a11y_mode_visual,
+        "auditory" to R.string.book_details_a11y_mode_auditory,
+        "tactile" to R.string.book_details_a11y_mode_tactile,
+    )
 
-private val EXEMPTION_LABELS = linkedMapOf(
-    "eaa-disproportionate-burden" to R.string.book_details_a11y_exemption_burden,
-    "eaa-fundamental-alteration" to R.string.book_details_a11y_exemption_alteration,
-    "eaa-microenterprise" to R.string.book_details_a11y_exemption_micro,
-)
+private val EXEMPTION_LABELS =
+    linkedMapOf(
+        "eaa-disproportionate-burden" to R.string.book_details_a11y_exemption_burden,
+        "eaa-fundamental-alteration" to R.string.book_details_a11y_exemption_alteration,
+        "eaa-microenterprise" to R.string.book_details_a11y_exemption_micro,
+    )
 
-private val HAZARD_LABELS = linkedMapOf(
-    "flashing" to R.string.book_details_a11y_hazard_flashing,
-    "motionSimulation" to R.string.book_details_a11y_hazard_motion,
-    "sound" to R.string.book_details_a11y_hazard_sound,
-)
+private val HAZARD_LABELS =
+    linkedMapOf(
+        "flashing" to R.string.book_details_a11y_hazard_flashing,
+        "motionSimulation" to R.string.book_details_a11y_hazard_motion,
+        "sound" to R.string.book_details_a11y_hazard_sound,
+    )

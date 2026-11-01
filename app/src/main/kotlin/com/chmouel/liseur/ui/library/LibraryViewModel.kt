@@ -86,7 +86,7 @@ import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
-import com.chmouel.liseur.domain.startedAfter
+import com.chmouel.liseur.domain.shelfStateFor
 import java.io.IOException
 import kotlinx.coroutines.launch
 
@@ -324,13 +324,12 @@ data class LibraryUiState(
     val inProgressBooks: Set<String> = emptySet(),
 )
 
-/** Whether [book] can be marked unread: either it is finished or it is currently in progress. */
+/** Whether [book] is in a shelf bucket that can be marked unread. */
 fun canMarkBookUnread(
     book: Book,
     progression: Double?,
-    unreadOverride: Boolean = false,
-): Boolean = book.finished ||
-    (!unreadOverride && (progression ?: 0.0) >= startedAfter(book.remotePageCount))
+    override: FinishedOverride = FinishedOverride.NONE,
+): Boolean = shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD
 
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean =
@@ -673,17 +672,14 @@ class LibraryViewModel(
             val progressions = progressionList
                 .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                 .toMap()
-            val unreadOverrides = progressionList
-                .mapNotNullTo(mutableSetOf()) { row ->
-                    row.bookUrl.takeIf { row.override == FinishedOverride.UNREAD }
-                }
+            val overrides = progressionList.associate { row -> row.bookUrl to row.override }
             val inProgressBooks = books
                 .mapNotNullTo(mutableSetOf()) { book ->
                     book.url.takeIf {
                         !book.finished && canMarkBookUnread(
                             book = book,
                             progression = progressions[book.url],
-                            unreadOverride = book.url in unreadOverrides,
+                            override = overrides[book.url] ?: FinishedOverride.NONE,
                         )
                     }
                 }
@@ -695,7 +691,7 @@ class LibraryViewModel(
             val refused = refusedRows.filterValues { it.stillApplies }.keys
 
             val onTheShelf = books.filter { !it.archived }
-            val allShelves = onTheShelf.groupedIntoSeries(progressions)
+            val allShelves = onTheShelf.groupedIntoSeries(progressions, overrides)
 
             // A shelf of one is not a series, it is one book wearing a
             // series card. Only the *showing* is narrowed, though: the
@@ -743,7 +739,13 @@ class LibraryViewModel(
             )
 
             val filteredBooks = sortedBooks
-                .filter { filters.accepts(it, progressions[it.url], it.url in unreadOverrides) }
+                .filter {
+                    filters.accepts(
+                        it,
+                        progressions[it.url],
+                        overrides[it.url] ?: FinishedOverride.NONE,
+                    )
+                }
 
             // A search is its own list rather than a narrowing of the
             // shelf: it looks past the filters and the series piles, so
@@ -772,7 +774,7 @@ class LibraryViewModel(
                     filters.accepts(
                         it.book,
                         progressions[it.book.url],
-                        it.book.url in unreadOverrides,
+                        overrides[it.book.url] ?: FinishedOverride.NONE,
                     )
                 }
             }

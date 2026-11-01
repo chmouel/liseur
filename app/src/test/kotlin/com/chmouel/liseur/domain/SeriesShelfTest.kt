@@ -131,6 +131,24 @@ class SeriesShelfTest {
     }
 
     @Test
+    fun `a volume marked unread is not in progress and loses in progress priority`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val two = book("Two", index = 2.0)
+        val three = book("Three", index = 3.0)
+        val shelf = listOf(one, two, three)
+            .groupedIntoSeries(
+                progressions = mapOf(three.url to 0.4),
+                overrides = mapOf(three.url to FinishedOverride.UNREAD),
+            )
+            .single()
+
+        val thirdVolume = shelf.volumes.first { it.book.url == three.url }
+        assertFalse(thirdVolume.inProgress)
+        assertEquals(0, shelf.inProgressCount)
+        assertEquals("Two", shelf.nextUp?.book?.title)
+    }
+
+    @Test
     fun `with nothing open the first unread is next`() {
         val shelf = listOf(
             book("One", index = 1.0, finishedAt = 1),

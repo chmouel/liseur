@@ -117,16 +117,19 @@ data class ReadingProgress(
 
     /** What someone has said about this book being read, if anything. */
     val override: com.chmouel.liseur.domain.FinishedOverride
-        get() = com.chmouel.liseur.domain.FinishedOverride.fromStored(finishedOverride)
+        get() =
+            com.chmouel.liseur.domain.FinishedOverride
+                .fromStored(finishedOverride)
 
     /** The versioned pace learned for this book, excluding legacy v1 data. */
     val readingPace: ReadingPace
-        get() = ReadingPace.of(
-            secondsPerPosition = readingSecondsPerPosition,
-            samples = readingPaceSamples,
-            elapsedMs = readingPaceElapsedMs,
-            evidence = readingPaceEvidence,
-        )
+        get() =
+            ReadingPace.of(
+                secondsPerPosition = readingSecondsPerPosition,
+                samples = readingPaceSamples,
+                elapsedMs = readingPaceElapsedMs,
+                evidence = readingPaceEvidence,
+            )
 }
 
 /** When a book was last read, on this device or another one. */
@@ -142,12 +145,13 @@ data class BookProgression(
     @ColumnInfo(name = "finished_override") val finishedOverride: Int = 0,
 ) {
     val override: com.chmouel.liseur.domain.FinishedOverride
-        get() = com.chmouel.liseur.domain.FinishedOverride.fromStored(finishedOverride)
+        get() =
+            com.chmouel.liseur.domain.FinishedOverride
+                .fromStored(finishedOverride)
 }
 
 @Dao
 abstract class ReadingProgressDao {
-
     /**
      * The books being read right now, shared with the reader.
      *
@@ -157,6 +161,7 @@ abstract class ReadingProgressDao {
      * decline while it is.
      */
     val openBooks = OpenBooks()
+
     /**
      * Throws away everything remembered about a book: where you were, the
      * baseline both sides agreed on, and anything the server reported.
@@ -185,7 +190,10 @@ abstract class ReadingProgressDao {
         WHERE book_url = :bookUrl
         """,
     )
-    abstract suspend fun resetPeak(bookUrl: String, edition: String?)
+    abstract suspend fun resetPeak(
+        bookUrl: String,
+        edition: String?,
+    )
 
     @Query(
         """
@@ -212,9 +220,7 @@ abstract class ReadingProgressDao {
     abstract fun observe(bookUrl: String): kotlinx.coroutines.flow.Flow<ReadingProgress?>
 
     @Query("SELECT total_progression FROM reading_progress WHERE book_url = :bookUrl")
-    abstract fun observeTotalProgression(
-        bookUrl: String,
-    ): kotlinx.coroutines.flow.Flow<Double?>
+    abstract fun observeTotalProgression(bookUrl: String): kotlinx.coroutines.flow.Flow<Double?>
 
     @Query("SELECT * FROM reading_progress")
     abstract suspend fun getAll(): List<ReadingProgress>
@@ -226,16 +232,26 @@ abstract class ReadingProgressDao {
     abstract suspend fun nextBackupPage(lastUrl: String): List<ReadingProgress>
 
     @Query("UPDATE reading_progress SET read_at = :readAt WHERE book_url = :bookUrl")
-    abstract suspend fun restoreBackupReadAt(bookUrl: String, readAt: Long)
+    abstract suspend fun restoreBackupReadAt(
+        bookUrl: String,
+        readAt: Long,
+    )
 
     @Transaction
     open suspend fun restoreBackupPosition(
-        bookUrl: String, locatorJson: String, progression: Double?, readAt: Long, now: Long,
+        bookUrl: String,
+        locatorJson: String,
+        progression: Double?,
+        readAt: Long,
+        now: Long,
     ) {
         val previous = get(bookUrl)
-        val status = com.chmouel.liseur.domain.readingStatusFor(
-            progression, previous?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE,
-        ).wireName
+        val status =
+            com.chmouel.liseur.domain
+                .readingStatusFor(
+                    progression,
+                    previous?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE,
+                ).wireName
         recordLocal(bookUrl, locatorJson, progression, null, null, null, null, status, now)
         restoreBackupReadAt(bookUrl, readAt.coerceAtMost(now))
     }
@@ -409,18 +425,19 @@ abstract class ReadingProgressDao {
         // When the reading happened, if not when it is written.
         readAt: Long = updatedAt,
     ) {
-        val updated = updateLocal(
-            bookUrl = bookUrl,
-            locatorJson = locatorJson,
-            progression = progression,
-            readingSecondsPerPosition = readingSecondsPerPosition,
-            readingPaceSamples = readingPaceSamples,
-            readingPaceElapsedMs = readingPaceElapsedMs,
-            readingPaceEvidence = readingPaceEvidence,
-            status = status,
-            updatedAt = updatedAt,
-            readAt = readAt,
-        )
+        val updated =
+            updateLocal(
+                bookUrl = bookUrl,
+                locatorJson = locatorJson,
+                progression = progression,
+                readingSecondsPerPosition = readingSecondsPerPosition,
+                readingPaceSamples = readingPaceSamples,
+                readingPaceElapsedMs = readingPaceElapsedMs,
+                readingPaceEvidence = readingPaceEvidence,
+                status = status,
+                updatedAt = updatedAt,
+                readAt = readAt,
+            )
         if (updated == 0) {
             insertLocal(
                 bookUrl = bookUrl,
@@ -496,14 +513,15 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
     ) {
-        val updated = updatePending(
-            bookUrl = bookUrl,
-            progression = progression,
-            status = status,
-            remoteUpdatedAt = remoteUpdatedAt,
-            account = account,
-            locatorJson = locatorJson,
-        )
+        val updated =
+            updatePending(
+                bookUrl = bookUrl,
+                progression = progression,
+                status = status,
+                remoteUpdatedAt = remoteUpdatedAt,
+                account = account,
+                locatorJson = locatorJson,
+            )
         if (updated == 0) {
             insertPending(
                 bookUrl = bookUrl,
@@ -568,17 +586,18 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
     ): Boolean {
-        val applied = applyPullIfUnchanged(
-            bookUrl = bookUrl,
-            expectedRevision = expectedRevision,
-            progression = progression,
-            status = status,
-            account = account,
-            remoteUpdatedAt = remoteUpdatedAt,
-            now = now,
-            readAt = readAtFor(remoteUpdatedAt, now),
-            locatorJson = locatorJson,
-        )
+        val applied =
+            applyPullIfUnchanged(
+                bookUrl = bookUrl,
+                expectedRevision = expectedRevision,
+                progression = progression,
+                status = status,
+                account = account,
+                remoteUpdatedAt = remoteUpdatedAt,
+                now = now,
+                readAt = readAtFor(remoteUpdatedAt, now),
+                locatorJson = locatorJson,
+            )
         if (applied > 0) clearPending(bookUrl)
         return applied > 0
     }
@@ -671,7 +690,10 @@ abstract class ReadingProgressDao {
         WHERE book_url = :bookUrl AND local_revision = :sentRevision
         """,
     )
-    protected abstract suspend fun ackRevision(bookUrl: String, sentRevision: Long)
+    protected abstract suspend fun ackRevision(
+        bookUrl: String,
+        sentRevision: Long,
+    )
 
     /**
      * Records that both sides already agree, without claiming a push or a
@@ -716,7 +738,10 @@ abstract class ReadingProgressDao {
         WHERE book_url = :bookUrl AND local_revision = :sentRevision
         """,
     )
-    abstract suspend fun renameRevision(bookUrl: String, sentRevision: Long): Int
+    abstract suspend fun renameRevision(
+        bookUrl: String,
+        sentRevision: Long,
+    ): Int
 
     /**
      * Takes a status the server reported on its own, leaving the position
@@ -785,18 +810,19 @@ abstract class ReadingProgressDao {
         remoteUpdatedAt: Long?,
         now: Long,
         locatorJson: String? = null,
-    ): Boolean = openBooks.unlessOpen(bookUrl) {
-        applyPull(
-            bookUrl = bookUrl,
-            expectedRevision = expectedRevision,
-            progression = progression,
-            status = status,
-            account = account,
-            remoteUpdatedAt = remoteUpdatedAt,
-            now = now,
-            locatorJson = locatorJson,
-        )
-    } ?: false
+    ): Boolean =
+        openBooks.unlessOpen(bookUrl) {
+            applyPull(
+                bookUrl = bookUrl,
+                expectedRevision = expectedRevision,
+                progression = progression,
+                status = status,
+                account = account,
+                remoteUpdatedAt = remoteUpdatedAt,
+                now = now,
+                locatorJson = locatorJson,
+            )
+        } ?: false
 
     /** [applyPeerPull] for a sync run with nobody waiting on it. */
     open suspend fun applyUnattendedPeerPull(
@@ -807,17 +833,18 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
         remoteUpdatedAt: Long? = null,
-    ): Boolean = openBooks.unlessOpen(bookUrl) {
-        applyPeerPull(
-            bookUrl = bookUrl,
-            expectedRevision = expectedRevision,
-            progression = progression,
-            status = status,
-            now = now,
-            locatorJson = locatorJson,
-            remoteUpdatedAt = remoteUpdatedAt,
-        )
-    } ?: false
+    ): Boolean =
+        openBooks.unlessOpen(bookUrl) {
+            applyPeerPull(
+                bookUrl = bookUrl,
+                expectedRevision = expectedRevision,
+                progression = progression,
+                status = status,
+                now = now,
+                locatorJson = locatorJson,
+                remoteUpdatedAt = remoteUpdatedAt,
+            )
+        } ?: false
 
     // -- Sync partners other than the catalog server ----------------------
 
@@ -876,7 +903,10 @@ abstract class ReadingProgressDao {
         VALUES (:bookUrl, '{}', NULL, :now, 0, 0)
         """,
     )
-    protected abstract suspend fun startIfMissing(bookUrl: String, now: Long)
+    protected abstract suspend fun startIfMissing(
+        bookUrl: String,
+        now: Long,
+    )
 
     @Query(
         """
@@ -912,7 +942,11 @@ abstract class ReadingProgressDao {
      * server is not.
      */
     @Transaction
-    open suspend fun adoptPeerStatus(bookUrl: String, status: String, now: Long): Boolean {
+    open suspend fun adoptPeerStatus(
+        bookUrl: String,
+        status: String,
+        now: Long,
+    ): Boolean {
         if ((overrideFor(bookUrl) ?: 0) != 0) return false
         return setPeerStatusOnly(bookUrl, status, now) > 0
     }
@@ -984,12 +1018,13 @@ abstract class ReadingProgressDao {
         progression: Double?,
         now: Long,
     ) {
-        val updated = updateFinishedOverride(
-            bookUrl = bookUrl,
-            override = override,
-            status = status,
-            now = now,
-        )
+        val updated =
+            updateFinishedOverride(
+                bookUrl = bookUrl,
+                override = override,
+                status = status,
+                now = now,
+            )
         if (updated == 0) {
             insertFinishedOverride(
                 bookUrl = bookUrl,
@@ -1015,12 +1050,21 @@ abstract class ReadingProgressDao {
         if (existing == null) {
             if (expectedStatusRevision != 0L) return false
             return insertRemoteFinishedOverride(
-                bookUrl, override, status, progression, now,
+                bookUrl,
+                override,
+                status,
+                progression,
+                now,
             ) != -1L
         }
         if (existing.statusRevision != expectedStatusRevision) return false
         return updateFinishedOverrideIfUnchanged(
-            bookUrl, expectedStatusRevision, account, override, status, now,
+            bookUrl,
+            expectedStatusRevision,
+            account,
+            override,
+            status,
+            now,
         ) > 0
     }
 
@@ -1110,7 +1154,10 @@ abstract class ReadingProgressDao {
         WHERE agreed_account = :from OR pending_account = :from OR owner_account = :from
         """,
     )
-    abstract suspend fun rekeyAccount(from: String, to: String)
+    abstract suspend fun rekeyAccount(
+        from: String,
+        to: String,
+    )
 
     /**
      * Marks the given books as having reading the server should be told
@@ -1123,7 +1170,10 @@ abstract class ReadingProgressDao {
         WHERE book_url IN (:bookUrls) AND local_revision > 0
         """,
     )
-    abstract suspend fun markDirtyFor(bookUrls: List<String>, account: String)
+    abstract suspend fun markDirtyFor(
+        bookUrls: List<String>,
+        account: String,
+    )
 
     /** Books carrying reading that was done under a different account. */
     @Query(
@@ -1150,5 +1200,7 @@ abstract class ReadingProgressDao {
  * One running fast would otherwise pin a book to the top of the shelf
  * until it caught up.
  */
-internal fun readAtFor(remoteUpdatedAt: Long?, now: Long): Long =
-    remoteUpdatedAt?.takeIf { it > 0 }?.coerceAtMost(now) ?: now
+internal fun readAtFor(
+    remoteUpdatedAt: Long?,
+    now: Long,
+): Long = remoteUpdatedAt?.takeIf { it > 0 }?.coerceAtMost(now) ?: now
