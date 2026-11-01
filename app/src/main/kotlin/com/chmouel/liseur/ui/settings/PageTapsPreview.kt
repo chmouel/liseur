@@ -207,7 +207,7 @@ internal fun PageTapsPreview(layout: TapLayout, modifier: Modifier = Modifier) {
         val shape = RoundedCornerShape(16.dp)
         Box(
             Modifier
-                .height(280.dp)
+                .height(216.dp)
                 .aspectRatio(width / height)
                 .clip(shape)
                 .border(2.dp, outline, shape)
@@ -248,7 +248,7 @@ internal fun PageTapsPreview(layout: TapLayout, modifier: Modifier = Modifier) {
             }
         }
         FlowRow(
-            modifier = Modifier.padding(top = 12.dp).semantics(mergeDescendants = true) {},
+            modifier = Modifier.padding(top = 8.dp).semantics(mergeDescendants = true) {},
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
         ) {
             areas.forEach { area ->

@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.settings
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,8 +39,11 @@ import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.windowHeight
 import com.chmouel.liseur.ui.windowWidth
 import kotlin.math.roundToInt
+
+private val PINNED_PREVIEW_MIN_HEIGHT = 600.dp
 
 /**
  * Which sides of the page turn it and how much of the page they take,
@@ -67,6 +71,9 @@ fun PageTapsScreen(
     var position by remember { mutableFloatStateOf(indexOf(tapSideWidth)) }
     LaunchedEffect(tapSideWidth) { position = indexOf(tapSideWidth) }
     val previewWidth = stopAt(position)
+    val width = windowWidth()
+    val height = windowHeight()
+    val pinPreview = height >= PINNED_PREVIEW_MIN_HEIGHT && height > width
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -84,40 +91,71 @@ fun PageTapsScreen(
         ) {
             Column(
                 Modifier
-                    .widthIn(max = contentWidthCap(windowWidth()))
+                    .widthIn(max = contentWidthCap(width))
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 16.dp, end = 16.dp, bottom = 32.dp),
+                    .padding(horizontal = 16.dp),
             ) {
-                PageTapsPreview(
-                    layout = TapLayout(tapZones, previewWidth),
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Text(
-                    stringResource(R.string.page_taps_rtl_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-                Card(Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                    ChipRow(
-                        title = stringResource(R.string.settings_tap_zones),
-                        subtitle = stringResource(R.string.settings_tap_zones_detail),
-                        options = TapZones.entries,
-                        selected = tapZones,
-                        label = { stringResource(it.label) },
-                        onSelected = onTapZones,
+                if (pinPreview) {
+                    PageTapsPreview(
+                        layout = TapLayout(tapZones, previewWidth),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
                     )
-                    RowDivider()
-                    TapSideWidthRow(
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(bottom = 32.dp),
+                ) {
+                    if (!pinPreview) {
+                        PageTapsPreview(
+                            layout = TapLayout(tapZones, previewWidth),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        )
+                    }
+                    PageTapsControls(
+                        tapZones = tapZones,
                         position = position,
-                        enabled = tapZones.turnsPages,
+                        onTapZones = onTapZones,
                         onPosition = { position = it },
                         onFinished = { onTapSideWidth(stopAt(position)) },
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ColumnScope.PageTapsControls(
+    tapZones: TapZones,
+    position: Float,
+    onTapZones: (TapZones) -> Unit,
+    onPosition: (Float) -> Unit,
+    onFinished: () -> Unit,
+) {
+    Text(
+        stringResource(R.string.page_taps_rtl_note),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    Card(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        ChipRow(
+            title = stringResource(R.string.settings_tap_zones),
+            subtitle = stringResource(R.string.settings_tap_zones_detail),
+            options = TapZones.entries,
+            selected = tapZones,
+            label = { stringResource(it.label) },
+            onSelected = onTapZones,
+        )
+        RowDivider()
+        TapSideWidthRow(
+            position = position,
+            enabled = tapZones.turnsPages,
+            onPosition = onPosition,
+            onFinished = onFinished,
+        )
     }
 }
 
@@ -152,7 +190,11 @@ private fun TapSideWidthRow(
             Text(
                 valueText,
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                },
             )
         }
         Text(
