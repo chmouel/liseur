@@ -1725,7 +1725,7 @@
     <string name="book_details_partial_md5">部分 MD5</string>
     <string name="book_details_finished_on">%1$s 读完</string>
     <string name="book_details_archived_on">%1$s 归档</string>
-    <string name="book_details_unread_with_place">已标记为未读。阅读位置（%1$d%%）已保留。</string>
+    <string name="book_details_unread_with_place">未读。阅读位置（%1$d%%）已保留。</string>
     <string name="book_details_annotations">高亮和笔记</string>
     <string name="book_details_read">阅读</string>
     <string name="book_details_retry_download">重新下载</string>

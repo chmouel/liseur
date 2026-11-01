@@ -1778,7 +1778,7 @@
     <string name="book_details_partial_md5">MD5 parziale</string>
     <string name="book_details_finished_on">Finito il %1$s</string>
     <string name="book_details_archived_on">Archiviato il %1$s</string>
-    <string name="book_details_unread_with_place">Segnato come non letto. La tua posizione (%1$d%%) è conservata.</string>
+    <string name="book_details_unread_with_place">Non letto. La tua posizione (%1$d%%) è conservata.</string>
     <string name="book_details_annotations">Evidenziazioni e note</string>
     <string name="book_details_read">Leggi</string>
     <string name="book_details_retry_download">Riprova a scaricare</string>
