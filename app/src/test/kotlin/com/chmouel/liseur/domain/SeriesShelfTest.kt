@@ -9,7 +9,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SeriesShelfTest {
-
     private fun book(
         title: String,
         url: String = "https://example.test/$title",
@@ -40,16 +39,18 @@ class SeriesShelfTest {
     // client change is needed for a merge, and none for a split either.
     @Test
     fun `a merged series arrives as one shelf`() {
-        val before = listOf(
-            book("Metro 2033", series = "Metro 2033", index = 1.0),
-            book("Metro 2034", series = "Metro", index = 2.0),
-        ).groupedIntoSeries()
+        val before =
+            listOf(
+                book("Metro 2033", series = "Metro 2033", index = 1.0),
+                book("Metro 2034", series = "Metro", index = 2.0),
+            ).groupedIntoSeries()
         assertEquals(2, before.size)
 
-        val after = listOf(
-            book("Metro 2033", series = "Metro", index = 1.0),
-            book("Metro 2034", series = "Metro", index = 2.0),
-        ).groupedIntoSeries()
+        val after =
+            listOf(
+                book("Metro 2033", series = "Metro", index = 1.0),
+                book("Metro 2034", series = "Metro", index = 2.0),
+            ).groupedIntoSeries()
         assertEquals(1, after.size)
         assertEquals("Metro", after.single().name)
         assertEquals(2, after.single().volumes.size)
@@ -60,17 +61,19 @@ class SeriesShelfTest {
 
     @Test
     fun `books without a series are not shelved`() {
-        val shelves = listOf(book("Dune", series = null), book("Emma", series = "  "))
-            .groupedIntoSeries()
+        val shelves =
+            listOf(book("Dune", series = null), book("Emma", series = "  "))
+                .groupedIntoSeries()
         assertTrue(shelves.isEmpty())
     }
 
     @Test
     fun `two spellings of one series make one shelf`() {
-        val shelves = listOf(
-            book("The Eye of the World", series = "The Wheel of Time", index = 1.0),
-            book("The Great Hunt", series = "Wheel of Time", index = 2.0),
-        ).groupedIntoSeries()
+        val shelves =
+            listOf(
+                book("The Eye of the World", series = "The Wheel of Time", index = 1.0),
+                book("The Great Hunt", series = "Wheel of Time", index = 2.0),
+            ).groupedIntoSeries()
 
         assertEquals(1, shelves.size)
         assertEquals(2, shelves.single().volumes.size)
@@ -78,12 +81,13 @@ class SeriesShelfTest {
 
     @Test
     fun `volumes file by number, and the unnumbered come last`() {
-        val shelves = listOf(
-            book("Companion"),
-            book("Two", index = 2.0),
-            book("One and a half", index = 1.5),
-            book("One", index = 1.0),
-        ).groupedIntoSeries()
+        val shelves =
+            listOf(
+                book("Companion"),
+                book("Two", index = 2.0),
+                book("One and a half", index = 1.5),
+                book("One", index = 1.0),
+            ).groupedIntoSeries()
 
         assertEquals(
             listOf("One", "One and a half", "Two", "Companion"),
@@ -93,20 +97,22 @@ class SeriesShelfTest {
 
     @Test
     fun `equal volume titles use permanent identity independently of input order`() {
-        val first = book(
-            "Same title",
-            url = "https://example.test/a",
-            index = 1.0,
-            series = "The Series",
-            author = "Alice",
-        )
-        val second = book(
-            "Same title",
-            url = "https://example.test/b",
-            index = 1.0,
-            series = "the series",
-            author = "Bob",
-        )
+        val first =
+            book(
+                "Same title",
+                url = "https://example.test/a",
+                index = 1.0,
+                series = "The Series",
+                author = "Alice",
+            )
+        val second =
+            book(
+                "Same title",
+                url = "https://example.test/b",
+                index = 1.0,
+                series = "the series",
+                author = "Bob",
+            )
         val shelf = listOf(second, first).groupedIntoSeries().single()
 
         assertEquals(
@@ -122,9 +128,10 @@ class SeriesShelfTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val two = book("Two", index = 2.0)
         val three = book("Three", index = 3.0)
-        val shelf = listOf(one, two, three)
-            .groupedIntoSeries(progressions = mapOf(three.url to 0.4))
-            .single()
+        val shelf =
+            listOf(one, two, three)
+                .groupedIntoSeries(progressions = mapOf(three.url to 0.4))
+                .single()
 
         assertEquals("Three", shelf.nextUp?.book?.title)
         assertTrue(shelf.nextUp!!.inProgress)
@@ -135,12 +142,12 @@ class SeriesShelfTest {
         val one = book("One", index = 1.0, finishedAt = 1)
         val two = book("Two", index = 2.0)
         val three = book("Three", index = 3.0)
-        val shelf = listOf(one, two, three)
-            .groupedIntoSeries(
-                progressions = mapOf(three.url to 0.4),
-                overrides = mapOf(three.url to FinishedOverride.UNREAD),
-            )
-            .single()
+        val shelf =
+            listOf(one, two, three)
+                .groupedIntoSeries(
+                    progressions = mapOf(three.url to 0.4),
+                    overrides = mapOf(three.url to FinishedOverride.UNREAD),
+                ).single()
 
         val thirdVolume = shelf.volumes.first { it.book.url == three.url }
         assertFalse(thirdVolume.inProgress)
@@ -153,9 +160,10 @@ class SeriesShelfTest {
     fun `a volume below the started threshold keeps its place and is not in progress`() {
         val one = book("One", index = 1.0, finishedAt = 1)
         val two = book("Two", index = 2.0)
-        val shelf = listOf(one, two)
-            .groupedIntoSeries(progressions = mapOf(two.url to 0.001))
-            .single()
+        val shelf =
+            listOf(one, two)
+                .groupedIntoSeries(progressions = mapOf(two.url to 0.001))
+                .single()
 
         val secondVolume = shelf.volumes.first { it.book.url == two.url }
         assertFalse(secondVolume.inProgress)
@@ -165,11 +173,12 @@ class SeriesShelfTest {
 
     @Test
     fun `with nothing open the first unread is next`() {
-        val shelf = listOf(
-            book("One", index = 1.0, finishedAt = 1),
-            book("Two", index = 2.0),
-            book("Three", index = 3.0),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", index = 1.0, finishedAt = 1),
+                book("Two", index = 2.0),
+                book("Three", index = 3.0),
+            ).groupedIntoSeries().single()
 
         assertEquals("Two", shelf.nextUp?.book?.title)
         assertFalse(shelf.complete)
@@ -177,10 +186,11 @@ class SeriesShelfTest {
 
     @Test
     fun `a series read to the end has nothing next and shows its first cover`() {
-        val shelf = listOf(
-            book("One", index = 1.0, finishedAt = 1),
-            book("Two", index = 2.0, finishedAt = 2),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", index = 1.0, finishedAt = 1),
+                book("Two", index = 2.0, finishedAt = 2),
+            ).groupedIntoSeries().single()
 
         assertNull(shelf.nextUp)
         assertTrue(shelf.complete)
@@ -190,21 +200,23 @@ class SeriesShelfTest {
 
     @Test
     fun `only the numbers missing between what you have count as gaps`() {
-        val shelf = listOf(
-            book("Two", index = 2.0),
-            book("Five", index = 5.0),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("Two", index = 2.0),
+                book("Five", index = 5.0),
+            ).groupedIntoSeries().single()
 
         assertEquals(listOf(3.0, 4.0), shelf.gaps)
     }
 
     @Test
     fun `a novella between two volumes is not a gap`() {
-        val shelf = listOf(
-            book("One", index = 1.0),
-            book("One and a half", index = 1.5),
-            book("Two", index = 2.0),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", index = 1.0),
+                book("One and a half", index = 1.5),
+                book("Two", index = 2.0),
+            ).groupedIntoSeries().single()
 
         assertTrue(shelf.gaps.isEmpty())
     }
@@ -217,31 +229,34 @@ class SeriesShelfTest {
 
     @Test
     fun `a mis-parsed number does not produce a thousand gaps`() {
-        val shelf = listOf(
-            book("One", index = 1.0),
-            book("Nineteen ninety-nine", index = 1999.0),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", index = 1.0),
+                book("Nineteen ninety-nine", index = 1999.0),
+            ).groupedIntoSeries().single()
 
         assertTrue(shelf.gaps.isEmpty())
     }
 
     @Test
     fun `books still on the server count as missing`() {
-        val shelf = listOf(
-            book("One", index = 1.0),
-            book("Two", index = 2.0, state = DownloadState.REMOTE),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", index = 1.0),
+                book("Two", index = 2.0, state = DownloadState.REMOTE),
+            ).groupedIntoSeries().single()
 
         assertEquals(listOf("Two"), shelf.missing.map { it.book.title })
     }
 
     @Test
     fun `the shelf takes the spelling most of its volumes use`() {
-        val shelf = listOf(
-            book("One", series = "Wheel of Time", index = 1.0),
-            book("Two", series = "Wheel of Time", index = 2.0),
-            book("Three", series = "The Wheel of Time", index = 3.0),
-        ).groupedIntoSeries().single()
+        val shelf =
+            listOf(
+                book("One", series = "Wheel of Time", index = 1.0),
+                book("Two", series = "Wheel of Time", index = 2.0),
+                book("Three", series = "The Wheel of Time", index = 3.0),
+            ).groupedIntoSeries().single()
 
         assertEquals("Wheel of Time", shelf.name)
         assertEquals("Robert Jordan", shelf.author)
@@ -249,20 +264,22 @@ class SeriesShelfTest {
 
     @Test
     fun `shelves come out in name order`() {
-        val shelves = listOf(
-            book("A", series = "The Expanse", index = 1.0),
-            book("B", series = "Dune", index = 1.0),
-        ).groupedIntoSeries()
+        val shelves =
+            listOf(
+                book("A", series = "The Expanse", index = 1.0),
+                book("B", series = "Dune", index = 1.0),
+            ).groupedIntoSeries()
 
         assertEquals(listOf("Dune", "The Expanse"), shelves.map { it.name })
     }
 
     @Test
     fun `a series of one book is not worth showing`() {
-        val shelves = listOf(
-            book("The Eye of the World"),
-            book("Dune", series = "Dune"),
-        ).groupedIntoSeries()
+        val shelves =
+            listOf(
+                book("The Eye of the World"),
+                book("Dune", series = "Dune"),
+            ).groupedIntoSeries()
 
         assertEquals(listOf("Dune", "Wheel of Time"), shelves.map { it.name })
         assertTrue(shelves.worthShowing().isEmpty())
@@ -270,20 +287,22 @@ class SeriesShelfTest {
 
     @Test
     fun `a second book makes the series worth showing`() {
-        val shelves = listOf(
-            book("The Eye of the World"),
-            book("The Great Hunt"),
-        ).groupedIntoSeries().worthShowing()
+        val shelves =
+            listOf(
+                book("The Eye of the World"),
+                book("The Great Hunt"),
+            ).groupedIntoSeries().worthShowing()
 
         assertEquals(listOf("Wheel of Time"), shelves.map { it.name })
     }
 
     @Test
     fun `a volume the server has but the device does not counts towards the two`() {
-        val shelves = listOf(
-            book("The Eye of the World"),
-            book("The Great Hunt", state = DownloadState.REMOTE),
-        ).groupedIntoSeries().worthShowing()
+        val shelves =
+            listOf(
+                book("The Eye of the World"),
+                book("The Great Hunt", state = DownloadState.REMOTE),
+            ).groupedIntoSeries().worthShowing()
 
         assertEquals(1, shelves.size)
         assertEquals(1, shelves.single().missing.size)
@@ -291,11 +310,12 @@ class SeriesShelfTest {
 
     @Test
     fun `showing narrows the shelves without touching the grouping`() {
-        val books = listOf(
-            book("The Eye of the World"),
-            book("The Great Hunt"),
-            book("Dune", series = "Dune"),
-        )
+        val books =
+            listOf(
+                book("The Eye of the World"),
+                book("The Great Hunt"),
+                book("Dune", series = "Dune"),
+            )
         val all = books.groupedIntoSeries()
 
         // The one-book shelf is still grouped, which is what keeps its
@@ -306,7 +326,6 @@ class SeriesShelfTest {
 }
 
 class SeriesContinuationTest {
-
     private fun book(
         title: String,
         series: String? = "Wheel of Time",
@@ -375,18 +394,19 @@ class SeriesContinuationTest {
     @Test
     fun `a remote volume is still the next volume`() {
         val one = book("One", index = 1.0, finishedAt = 1)
-        val two = Book(
-            url = "https://example.test/Two",
-            title = "Two",
-            author = null,
-            coverPath = null,
-            source = null,
-            addedAt = 0,
-            lastOpenedAt = null,
-            downloadState = DownloadState.REMOTE,
-            seriesName = "Wheel of Time",
-            seriesIndex = 2.0,
-        )
+        val two =
+            Book(
+                url = "https://example.test/Two",
+                title = "Two",
+                author = null,
+                coverPath = null,
+                source = null,
+                addedAt = 0,
+                lastOpenedAt = null,
+                downloadState = DownloadState.REMOTE,
+                seriesName = "Wheel of Time",
+                seriesIndex = 2.0,
+            )
         assertEquals("Two", seriesContinuation(one, listOf(one, two)).next?.title)
     }
 
@@ -520,11 +540,12 @@ class SeriesContinuationTest {
     @Test
     fun `an authoritative total proves the next volume is missing`() {
         val one = book("One", index = 1.0, finishedAt = 1)
-        val offer = seriesContinuation(
-            one,
-            listOf(one),
-            extras = SeriesExtras(status = "ENDED", totalBookCount = 5),
-        )
+        val offer =
+            seriesContinuation(
+                one,
+                listOf(one),
+                extras = SeriesExtras(status = "ENDED", totalBookCount = 5),
+            )
 
         assertEquals(2.0, offer.missingIndex)
         assertNull(offer.next)
@@ -533,11 +554,12 @@ class SeriesContinuationTest {
     @Test
     fun `a total that is already represented invents no missing volume`() {
         val one = book("One", index = 1.0, finishedAt = 1)
-        val offer = seriesContinuation(
-            one,
-            listOf(one),
-            extras = SeriesExtras(status = "ENDED", totalBookCount = 1),
-        )
+        val offer =
+            seriesContinuation(
+                one,
+                listOf(one),
+                extras = SeriesExtras(status = "ENDED", totalBookCount = 1),
+            )
 
         assertNull(offer.missingIndex)
         assertNull(offer.next)
@@ -554,7 +576,6 @@ class SeriesContinuationTest {
 }
 
 class SeriesShelfOrderTest {
-
     private fun shelf(
         series: String,
         titles: List<String>,
@@ -577,14 +598,16 @@ class SeriesShelfOrderTest {
         )
     }
 
-    private val library = shelf("Dune", listOf("Dune", "Dune Messiah"), addedAt = 100) +
-        shelf("The Expanse", listOf("Leviathan Wakes"), addedAt = 500, lastOpenedAt = 9_000)
+    private val library =
+        shelf("Dune", listOf("Dune", "Dune Messiah"), addedAt = 100) +
+            shelf("The Expanse", listOf("Leviathan Wakes"), addedAt = 500, lastOpenedAt = 9_000)
 
     @Test
     fun `by title the shelves file by name`() {
         assertEquals(
             listOf("Dune", "The Expanse"),
-            library.groupedIntoSeries()
+            library
+                .groupedIntoSeries()
                 .arrangedBy(LibrarySort.TITLE, reversed = false)
                 .map { it.name },
         )
@@ -594,7 +617,8 @@ class SeriesShelfOrderTest {
     fun `reversing turns the shelves around`() {
         assertEquals(
             listOf("The Expanse", "Dune"),
-            library.groupedIntoSeries()
+            library
+                .groupedIntoSeries()
                 .arrangedBy(LibrarySort.TITLE, reversed = true)
                 .map { it.name },
         )
@@ -604,7 +628,8 @@ class SeriesShelfOrderTest {
     fun `a series speaks with its newest volume when sorting by what is new`() {
         assertEquals(
             listOf("The Expanse", "Dune"),
-            library.groupedIntoSeries()
+            library
+                .groupedIntoSeries()
                 .arrangedBy(LibrarySort.ADDED)
                 .map { it.name },
         )
@@ -621,30 +646,34 @@ class SeriesShelfOrderTest {
         // exactly as it does on the plain shelf.
         assertEquals(
             listOf("Dune", "The Expanse"),
-            shelves.arrangedBy(
-                LibrarySort.RECENT,
-                readAt = mapOf("https://example.test/Dune Messiah" to 99_000L),
-            ).map { it.name },
+            shelves
+                .arrangedBy(
+                    LibrarySort.RECENT,
+                    readAt = mapOf("https://example.test/Dune Messiah" to 99_000L),
+                ).map { it.name },
         )
     }
 
     @Test
     fun `recent keeps reading ahead of downloaded and remote shelves`() {
-        val books = shelf(
-            "New on the server",
-            listOf("Remote"),
-            addedAt = 30_000,
-            state = DownloadState.REMOTE,
-        ) + shelf(
-            "On the device",
-            listOf("Downloaded"),
-            addedAt = 20_000,
-        ) + shelf(
-            "Being read",
-            listOf("Started"),
-            addedAt = 10,
-            lastOpenedAt = 100,
-        )
+        val books =
+            shelf(
+                "New on the server",
+                listOf("Remote"),
+                addedAt = 30_000,
+                state = DownloadState.REMOTE,
+            ) +
+                shelf(
+                    "On the device",
+                    listOf("Downloaded"),
+                    addedAt = 20_000,
+                ) +
+                shelf(
+                    "Being read",
+                    listOf("Started"),
+                    addedAt = 10,
+                    lastOpenedAt = 100,
+                )
 
         assertEquals(
             listOf("Being read", "On the device", "New on the server"),
@@ -654,9 +683,10 @@ class SeriesShelfOrderTest {
 
     @Test
     fun `author orders shelves by their authors and leaves unknown last`() {
-        val books = shelf("Zed", listOf("One"), author = "Alice") +
-            shelf("Able", listOf("Two"), author = "Zora") +
-            shelf("Middle", listOf("Three"), author = null)
+        val books =
+            shelf("Zed", listOf("One"), author = "Alice") +
+                shelf("Able", listOf("Two"), author = "Zora") +
+                shelf("Middle", listOf("Three"), author = null)
 
         assertEquals(
             listOf("Zed", "Able", "Middle"),
@@ -664,10 +694,10 @@ class SeriesShelfOrderTest {
         )
         assertEquals(
             listOf("Able", "Zed", "Middle"),
-            books.groupedIntoSeries()
+            books
+                .groupedIntoSeries()
                 .arrangedBy(LibrarySort.AUTHOR, reversed = true)
                 .map { it.name },
         )
     }
-
 }
