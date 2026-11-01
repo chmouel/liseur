@@ -335,14 +335,21 @@ fun canMarkBookUnread(
  * The card above the shelf, or nothing when the shelf calls the book
  * unread: "Continue reading" over a bar would be the one place left that
  * disagrees with the filters.
+ *
+ * [override] is null while no progress row has arrived yet. Nothing is
+ * known about the book then, and the card it had while the row loads is
+ * the card it keeps, rather than blinking out and back.
  */
 internal fun continueReadingFor(
     book: Book,
     progression: Double?,
-    override: FinishedOverride,
-): ContinueReading? =
-    ContinueReading(book, progression)
-        .takeIf { shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD }
+    override: FinishedOverride?,
+): ContinueReading? {
+    val unread =
+        override != null &&
+            shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
+    return ContinueReading(book, progression).takeIf { !unread }
+}
 
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean =
@@ -639,7 +646,7 @@ class LibraryViewModel(
                     continueReadingFor(
                         book = book,
                         progression = row?.totalProgression,
-                        override = row?.override ?: FinishedOverride.NONE,
+                        override = row?.override,
                     )
                 }
         }
