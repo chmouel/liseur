@@ -144,8 +144,23 @@ class SeriesShelfTest {
 
         val thirdVolume = shelf.volumes.first { it.book.url == three.url }
         assertFalse(thirdVolume.inProgress)
+        assertEquals(0.4, thirdVolume.keptPlace)
         assertEquals(0, shelf.inProgressCount)
         assertEquals("Two", shelf.nextUp?.book?.title)
+    }
+
+    @Test
+    fun `a volume below the started threshold keeps its place and is not in progress`() {
+        val one = book("One", index = 1.0, finishedAt = 1)
+        val two = book("Two", index = 2.0)
+        val shelf = listOf(one, two)
+            .groupedIntoSeries(progressions = mapOf(two.url to 0.001))
+            .single()
+
+        val secondVolume = shelf.volumes.first { it.book.url == two.url }
+        assertFalse(secondVolume.inProgress)
+        assertEquals(0.001, secondVolume.keptPlace)
+        assertEquals(0, shelf.inProgressCount)
     }
 
     @Test

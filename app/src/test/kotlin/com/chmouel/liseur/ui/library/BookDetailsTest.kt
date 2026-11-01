@@ -99,11 +99,22 @@ class BookDetailsTest {
     }
 
     @Test
-    fun aBookBelowTheStartedThresholdShowsNoProgressBar() {
+    fun aBookBelowTheStartedThresholdKeepsItsPlaceWithoutABar() {
         val lines = readingStatus(details(progression = 0.001), etaSeconds = 3600.0)
 
+        // The shelf files it as unread, so the page says the place is kept
+        // rather than drawing a bar over a book nobody has started.
+        assertTrue(StatusLine.UnreadWithPlace(0.001) in lines)
         assertTrue(lines.none { it is StatusLine.Progress })
         assertTrue(lines.none { it is StatusLine.TimeLeft })
+    }
+
+    @Test
+    fun aBookWithNoSavedPlaceSaysNothing() {
+        val lines = readingStatus(details(progression = null), etaSeconds = 3600.0)
+
+        assertTrue(lines.none { it is StatusLine.Progress })
+        assertTrue(lines.none { it is StatusLine.UnreadWithPlace })
     }
 
     @Test

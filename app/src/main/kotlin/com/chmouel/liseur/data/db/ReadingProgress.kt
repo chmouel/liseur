@@ -219,9 +219,6 @@ abstract class ReadingProgressDao {
     @Query("SELECT * FROM reading_progress WHERE book_url = :bookUrl")
     abstract fun observe(bookUrl: String): kotlinx.coroutines.flow.Flow<ReadingProgress?>
 
-    @Query("SELECT total_progression FROM reading_progress WHERE book_url = :bookUrl")
-    abstract fun observeTotalProgression(bookUrl: String): kotlinx.coroutines.flow.Flow<Double?>
-
     @Query("SELECT * FROM reading_progress")
     abstract suspend fun getAll(): List<ReadingProgress>
 

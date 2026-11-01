@@ -74,7 +74,6 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
-import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.SeriesCompletion
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesShelf
@@ -170,22 +169,24 @@ fun SeriesScreen(
     val renameFailed = stringResource(R.string.series_rename_failed)
     LaunchedEffect(notice) {
         val pending = notice ?: return@LaunchedEffect
-        val message = when (pending.kind) {
-            NoticeKind.SeriesChangedWhileReordering -> seriesChanged
-            NoticeKind.SeriesNameTaken -> nameTaken
-            NoticeKind.SeriesRenameFailed -> renameFailed
-        }
+        val message =
+            when (pending.kind) {
+                NoticeKind.SeriesChangedWhileReordering -> seriesChanged
+                NoticeKind.SeriesNameTaken -> nameTaken
+                NoticeKind.SeriesRenameFailed -> renameFailed
+            }
         snackbarHost.showSnackbar(message)
         onNoticeShown(pending.id)
     }
 
     LaunchedEffect(deleteFailures) {
         deleteFailures.collect { failure ->
-            val message = when {
-                failure.accountClearFailed -> accountClearBeforeRemovalFailed
-                failure.onServer -> serverDeleteFailed
-                else -> localDeleteFailed
-            }
+            val message =
+                when {
+                    failure.accountClearFailed -> accountClearBeforeRemovalFailed
+                    failure.onServer -> serverDeleteFailed
+                    else -> localDeleteFailed
+                }
             snackbarHost.showSnackbar(message.format(failure.book.title))
         }
     }
@@ -221,9 +222,10 @@ fun SeriesScreen(
                             } else {
                                 Icons.AutoMirrored.Outlined.ArrowBack
                             },
-                            contentDescription = stringResource(
-                                if (reordering) R.string.cancel else R.string.back,
-                            ),
+                            contentDescription =
+                                stringResource(
+                                    if (reordering) R.string.cancel else R.string.back,
+                                ),
                         )
                     }
                 },
@@ -327,10 +329,11 @@ fun SeriesScreen(
     ) { padding ->
         // Both lists take the bottom inset as content padding, so the rows
         // scroll on under the navigation bar instead of stopping at it.
-        val listModifier = Modifier
-            .fillMaxSize()
-            .padding(padding.withoutBottom())
-            .consumeWindowInsets(padding)
+        val listModifier =
+            Modifier
+                .fillMaxSize()
+                .padding(padding.withoutBottom())
+                .consumeWindowInsets(padding)
         val bottomInset = padding.calculateBottomPadding()
         if (reorder != null) {
             ReorderableVolumes(
@@ -438,14 +441,15 @@ private fun ReorderableVolumes(
     val byUrl = shelf.volumes.associateBy { it.book.url }
     val volumes = order.mapNotNull { byUrl[it] }
     val listState = rememberLazyListState()
-    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        // These are indices into the LazyColumn, not into the draft. The
-        // two only agree because every item in this list is a volume,
-        // which is why the explainer sits outside it: a single header
-        // would silently shift every drag by one and make the last row
-        // undraggable.
-        onMove(from.index, to.index)
-    }
+    val reorderState =
+        rememberReorderableLazyListState(listState) { from, to ->
+            // These are indices into the LazyColumn, not into the draft. The
+            // two only agree because every item in this list is a volume,
+            // which is why the explainer sits outside it: a single header
+            // would silently shift every drag by one and make the last row
+            // undraggable.
+            onMove(from.index, to.index)
+        }
     val eInk = LocalEInk.current
 
     Column(modifier = modifier) {
@@ -499,9 +503,10 @@ private fun ReorderableVolumeRow(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
         ) {
             Icon(
                 Icons.Outlined.DragHandle,
@@ -556,28 +561,31 @@ private fun SeriesHero(
         if (!eInk) {
             BookCover(
                 book = shelf.cover,
-                modifier = Modifier
-                    .matchParentSize()
-                    .blur(28.dp)
-                    .alpha(0.5f),
+                modifier =
+                    Modifier
+                        .matchParentSize()
+                        .blur(28.dp)
+                        .alpha(0.5f),
             )
         }
         Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.surface.copy(alpha = if (eInk) 1f else 0.75f),
-                            MaterialTheme.colorScheme.surface,
+            modifier =
+                Modifier
+                    .matchParentSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surface.copy(alpha = if (eInk) 1f else 0.75f),
+                                MaterialTheme.colorScheme.surface,
+                            ),
                         ),
                     ),
-                ),
         )
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
         ) {
             Row {
                 BookCover(
@@ -585,9 +593,10 @@ private fun SeriesHero(
                     modifier = Modifier.width(104.dp).aspectRatio(2f / 3f),
                 )
                 Column(
-                    modifier = Modifier
-                        .padding(start = 16.dp)
-                        .fillMaxWidth(),
+                    modifier =
+                        Modifier
+                            .padding(start = 16.dp)
+                            .fillMaxWidth(),
                 ) {
                     Text(
                         text = shelf.name,
@@ -615,11 +624,12 @@ private fun SeriesHero(
                         extras?.status?.let { StatusPill(it) }
                         extras?.totalBookCount?.let { total ->
                             Text(
-                                text = stringResource(
-                                    R.string.series_published_count,
-                                    shelf.volumes.size,
-                                    total,
-                                ),
+                                text =
+                                    stringResource(
+                                        R.string.series_published_count,
+                                        shelf.volumes.size,
+                                        total,
+                                    ),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -640,13 +650,14 @@ private fun SeriesHero(
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = stringResource(
-                            // Carrying on and starting out are different
-                            // errands, and a button that says the wrong
-                            // one of them is a button nobody trusts.
-                            if (next.inProgress) R.string.series_continue else R.string.series_start,
-                            next.book.displayTitle,
-                        ),
+                        text =
+                            stringResource(
+                                // Carrying on and starting out are different
+                                // errands, and a button that says the wrong
+                                // one of them is a button nobody trusts.
+                                if (next.inProgress) R.string.series_continue else R.string.series_start,
+                                next.book.displayTitle,
+                            ),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -679,13 +690,14 @@ private fun SeriesHero(
 /** Ongoing, ended, abandoned — what the server says of the series. */
 @Composable
 private fun StatusPill(status: String) {
-    val label = when (status.uppercase()) {
-        "ONGOING" -> R.string.series_status_ongoing
-        "ENDED" -> R.string.series_status_ended
-        "ABANDONED" -> R.string.series_status_abandoned
-        "HIATUS" -> R.string.series_status_hiatus
-        else -> return
-    }
+    val label =
+        when (status.uppercase()) {
+            "ONGOING" -> R.string.series_status_ongoing
+            "ENDED" -> R.string.series_status_ended
+            "ABANDONED" -> R.string.series_status_abandoned
+            "HIATUS" -> R.string.series_status_hiatus
+            else -> return
+        }
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.secondaryContainer,
@@ -715,46 +727,61 @@ private fun SeriesRail(
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
     ) {
         railChips(shelf, extras).forEach { chip ->
-            val (background, foreground) = when (chip) {
-                is RailChip.Absent ->
-                    Color.Transparent to MaterialTheme.colorScheme.onSurfaceVariant
-                is RailChip.Present -> when {
-                    chip.volume.finished ->
-                        MaterialTheme.colorScheme.primary to
-                            MaterialTheme.colorScheme.onPrimary
-                    chip.volume.inProgress ->
-                        MaterialTheme.colorScheme.primaryContainer to
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                    chip.volume.onDevice ->
-                        MaterialTheme.colorScheme.surfaceVariant to
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    else ->
+            val (background, foreground) =
+                when (chip) {
+                    is RailChip.Absent -> {
                         Color.Transparent to MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+
+                    is RailChip.Present -> {
+                        when {
+                            chip.volume.finished -> {
+                                MaterialTheme.colorScheme.primary to
+                                    MaterialTheme.colorScheme.onPrimary
+                            }
+
+                            chip.volume.inProgress -> {
+                                MaterialTheme.colorScheme.primaryContainer to
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                            }
+
+                            chip.volume.onDevice -> {
+                                MaterialTheme.colorScheme.surfaceVariant to
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+
+                            else -> {
+                                Color.Transparent to MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        }
+                    }
                 }
-            }
-            val label = when (chip) {
-                is RailChip.Absent -> seriesIndexLabel(chip.number).orEmpty()
-                is RailChip.Present -> seriesIndexLabel(chip.volume.index) ?: "\u00b7"
-            }
+            val label =
+                when (chip) {
+                    is RailChip.Absent -> seriesIndexLabel(chip.number).orEmpty()
+                    is RailChip.Present -> seriesIndexLabel(chip.volume.index) ?: "\u00b7"
+                }
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(background)
-                    .border(
-                        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        CircleShape,
-                    )
-                    // A number that is not here is drawn faintly, so the
-                    // run reads as a run with a hole in it.
-                    .alpha(if (chip is RailChip.Absent) 0.5f else 1f),
+                modifier =
+                    Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(background)
+                        .border(
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            CircleShape,
+                        )
+                        // A number that is not here is drawn faintly, so the
+                        // run reads as a run with a hole in it.
+                        .alpha(if (chip is RailChip.Absent) 0.5f else 1f),
             ) {
                 Text(
                     text = label,
@@ -768,8 +795,13 @@ private fun SeriesRail(
 
 /** One chip on the rail: a volume you have, or a number you do not. */
 private sealed interface RailChip {
-    data class Present(val volume: SeriesVolume) : RailChip
-    data class Absent(val number: Double) : RailChip
+    data class Present(
+        val volume: SeriesVolume,
+    ) : RailChip
+
+    data class Absent(
+        val number: Double,
+    ) : RailChip
 }
 
 /**
@@ -781,10 +813,14 @@ private sealed interface RailChip {
  * they follow the numbered run, and what a server says is still to come
  * follows them.
  */
-private fun railChips(shelf: SeriesShelf, extras: SeriesExtras?): List<RailChip> {
-    val placed = shelf.volumes.mapNotNull { volume ->
-        volume.index?.let { it to (RailChip.Present(volume) as RailChip) }
-    } + shelf.gaps.map { it to (RailChip.Absent(it) as RailChip) }
+private fun railChips(
+    shelf: SeriesShelf,
+    extras: SeriesExtras?,
+): List<RailChip> {
+    val placed =
+        shelf.volumes.mapNotNull { volume ->
+            volume.index?.let { it to (RailChip.Present(volume) as RailChip) }
+        } + shelf.gaps.map { it to (RailChip.Absent(it) as RailChip) }
 
     return placed.sortedBy { it.first }.map { it.second } +
         shelf.volumes.filter { it.index == null }.map { RailChip.Present(it) } +
@@ -802,15 +838,15 @@ private fun SeriesVolumeRow(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-                onClickLabel = stringResource(R.string.read_book),
-                onLongClickLabel = stringResource(R.string.book_actions),
-            )
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick,
+                    onClickLabel = stringResource(R.string.read_book),
+                    onLongClickLabel = stringResource(R.string.book_actions),
+                ).padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -820,20 +856,22 @@ private fun SeriesVolumeRow(
                 text = seriesIndexLabel(volume.index) ?: "·",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (volume.finished) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                color =
+                    if (volume.finished) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
             )
         }
         Box {
             BookCover(
                 book = volume.book,
-                modifier = Modifier
-                    .width(44.dp)
-                    .aspectRatio(2f / 3f)
-                    .alpha(if (volume.finished) 0.55f else 1f),
+                modifier =
+                    Modifier
+                        .width(44.dp)
+                        .aspectRatio(2f / 3f)
+                        .alpha(if (volume.finished) 0.55f else 1f),
             )
             if (!volume.onDevice && progress == null) {
                 Icon(
@@ -845,9 +883,10 @@ private fun SeriesVolumeRow(
             }
         }
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = 12.dp),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp),
         ) {
             Text(
                 text = volume.book.displayTitle,
@@ -856,6 +895,7 @@ private fun SeriesVolumeRow(
                 overflow = TextOverflow.Ellipsis,
             )
             val progression = volume.progression
+            val keptPlace = volume.keptPlace
             if (volume.inProgress && progression != null) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -873,9 +913,9 @@ private fun SeriesVolumeRow(
                         modifier = Modifier.padding(start = 8.dp),
                     )
                 }
-            } else if (!volume.finished && volume.override == FinishedOverride.UNREAD && progression != null && progression > 0.0) {
+            } else if (keptPlace != null) {
                 Text(
-                    text = stringResource(R.string.book_details_unread_with_place, (progression * 100).toInt()),
+                    text = stringResource(R.string.book_details_unread_with_place, (keptPlace * 100).toInt()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp),
@@ -895,28 +935,37 @@ private fun SeriesVolumeRow(
 
 /** A number the series has and the library does not. */
 @Composable
-private fun MissingVolumeRow(number: Double, published: Boolean) {
+private fun MissingVolumeRow(
+    number: Double,
+    published: Boolean,
+) {
     Text(
-        text = stringResource(
-            if (published) R.string.series_missing_volume else R.string.series_not_published_yet,
-            seriesIndexLabel(number).orEmpty(),
-        ),
+        text =
+            stringResource(
+                if (published) R.string.series_missing_volume else R.string.series_not_published_yet,
+                seriesIndexLabel(number).orEmpty(),
+            ),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 48.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
-            .alpha(0.75f),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 48.dp, end = 16.dp, top = 6.dp, bottom = 6.dp)
+                .alpha(0.75f),
     )
 }
 
 /** The numbers skipped immediately before [volume], if any. */
-private fun gapsBefore(shelf: SeriesShelf, volume: SeriesVolume): List<Double> {
+private fun gapsBefore(
+    shelf: SeriesShelf,
+    volume: SeriesVolume,
+): List<Double> {
     val index = volume.index ?: return emptyList()
-    val previous = shelf.volumes
-        .mapNotNull { it.index }
-        .filter { it < index }
-        .maxOrNull() ?: return emptyList()
+    val previous =
+        shelf.volumes
+            .mapNotNull { it.index }
+            .filter { it < index }
+            .maxOrNull() ?: return emptyList()
     return shelf.gaps.filter { it > previous && it < index }
 }
 
@@ -928,11 +977,17 @@ private fun gapsBefore(shelf: SeriesShelf, volume: SeriesVolume): List<Double> {
  * no way to tell a series you are four books into from a series that is
  * four books long, and guessing turns a shelf into a shopping list.
  */
-private fun unpublishedTail(shelf: SeriesShelf, extras: SeriesExtras?): List<Double> {
+private fun unpublishedTail(
+    shelf: SeriesShelf,
+    extras: SeriesExtras?,
+): List<Double> {
     val total = extras?.totalBookCount ?: return emptyList()
-    val last = shelf.volumes.mapNotNull { it.index }
-        .filter { it == Math.floor(it) }
-        .maxOrNull()?.toLong() ?: return emptyList()
+    val last =
+        shelf.volumes
+            .mapNotNull { it.index }
+            .filter { it == Math.floor(it) }
+            .maxOrNull()
+            ?.toLong() ?: return emptyList()
     if (total <= last) return emptyList()
     // A wildly wrong count from a server must not draw a thousand rows.
     val end = minOf(total.toLong(), last + 50)
@@ -1002,9 +1057,10 @@ private fun SeriesRenameDialog(
 }
 
 @Composable
-private fun seriesCompletionCopy(completion: SeriesCompletion): String? = when (completion) {
-    SeriesCompletion.COMPLETE -> stringResource(R.string.series_all_read)
-    SeriesCompletion.CAUGHT_UP -> stringResource(R.string.series_caught_up)
-    SeriesCompletion.ALL_KNOWN_READ -> stringResource(R.string.series_all_known_read)
-    SeriesCompletion.IN_PROGRESS -> null
-}
+private fun seriesCompletionCopy(completion: SeriesCompletion): String? =
+    when (completion) {
+        SeriesCompletion.COMPLETE -> stringResource(R.string.series_all_read)
+        SeriesCompletion.CAUGHT_UP -> stringResource(R.string.series_caught_up)
+        SeriesCompletion.ALL_KNOWN_READ -> stringResource(R.string.series_all_known_read)
+        SeriesCompletion.IN_PROGRESS -> null
+    }

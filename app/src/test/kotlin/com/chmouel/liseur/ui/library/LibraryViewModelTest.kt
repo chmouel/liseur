@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -29,6 +30,14 @@ class LibraryViewModelTest {
         assertFalse(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.UNREAD))
         assertFalse(canMarkBookUnread(book(), progression = null, override = FinishedOverride.NONE))
         assertFalse(canMarkBookUnread(book(), progression = 0.001, override = FinishedOverride.NONE))
+    }
+
+    @Test
+    fun `the continue reading card is gone once the book is marked unread`() {
+        val started = book()
+        assertEquals(0.4, continueReadingFor(started, 0.4, FinishedOverride.NONE)?.progression)
+        assertNull(continueReadingFor(started, 0.4, FinishedOverride.UNREAD))
+        assertNull(continueReadingFor(started, 0.001, FinishedOverride.NONE))
     }
 
     @Test
