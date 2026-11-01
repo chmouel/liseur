@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.DownloadState
 data class SeriesVolume(
     val book: Book,
     val progression: Double?,
+    val override: FinishedOverride = FinishedOverride.NONE,
 ) {
     val index: Double? get() = book.seriesIndex
 
@@ -14,7 +15,7 @@ data class SeriesVolume(
 
     /** Begun but not done: what "continue the series" is really asking after. */
     val inProgress: Boolean
-        get() = !finished && (progression ?: 0.0) > 0.0
+        get() = shelfStateFor(book, progression, override) == LibraryFilterOption.IN_PROGRESS
 
     val onDevice: Boolean
         get() = book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
@@ -117,6 +118,7 @@ private val byVolume: Comparator<SeriesVolume> =
  */
 fun List<Book>.groupedIntoSeries(
     progressions: Map<String, Double> = emptyMap(),
+    overrides: Map<String, FinishedOverride> = emptyMap(),
 ): List<SeriesShelf> =
     filter { !it.seriesName.isNullOrBlank() }
         .groupBy { seriesKey(it.seriesName) }
@@ -124,7 +126,13 @@ fun List<Book>.groupedIntoSeries(
         .map { (key, books) ->
             val orderedBooks = books.sortedBy { it.url }
             val volumes = orderedBooks
-                .map { SeriesVolume(it, progressions[it.url]) }
+                .map {
+                    SeriesVolume(
+                        it,
+                        progressions[it.url],
+                        overrides[it.url] ?: FinishedOverride.NONE,
+                    )
+                }
                 .sortedWith(byVolume)
             SeriesShelf(
                 key = key,

@@ -29,7 +29,10 @@ enum class FilterGroup {
 }
 
 /** One tickable way of narrowing the library. */
-enum class LibraryFilterOption(val id: String, val group: FilterGroup) {
+enum class LibraryFilterOption(
+    val id: String,
+    val group: FilterGroup,
+) {
     DOWNLOADED("downloaded", FilterGroup.AVAILABILITY),
     NOT_DOWNLOADED("not_downloaded", FilterGroup.AVAILABILITY),
 
@@ -82,10 +85,32 @@ private const val MAX_STARTED_PROGRESSION = 0.05
  * case where being wrong costs a card in the wrong list for one tap.
  */
 fun startedAfter(pageCount: Int?): Double {
-    val onePage = pageCount?.takeIf { it > 0 }?.let { 1.0 / it }
-        ?: return DEFAULT_STARTED_PROGRESSION
+    val onePage =
+        pageCount?.takeIf { it > 0 }?.let { 1.0 / it }
+            ?: return DEFAULT_STARTED_PROGRESSION
     return onePage.coerceIn(MIN_STARTED_PROGRESSION, MAX_STARTED_PROGRESSION)
 }
+
+/**
+ * Which shelf bucket a book is in, from the three things that decide it.
+ *
+ * The one rule the shelf filter, the series piles and the book's own
+ * page all ask, so a book marked unread cannot be Unread in one place
+ * and Started in another. [progression] is how far in the reader got,
+ * and [override] is what someone said by hand, which wins over it: a
+ * mark is an act, a percentage is a consequence.
+ */
+fun shelfStateFor(
+    book: Book,
+    progression: Double?,
+    override: FinishedOverride = FinishedOverride.NONE,
+): LibraryFilterOption =
+    when {
+        book.finished -> LibraryFilterOption.FINISHED
+        override == FinishedOverride.UNREAD -> LibraryFilterOption.UNREAD
+        (progression ?: 0.0) >= startedAfter(book.remotePageCount) -> LibraryFilterOption.IN_PROGRESS
+        else -> LibraryFilterOption.UNREAD
+    }
 
 /**
  * Everything narrowing the library at once.
@@ -115,12 +140,12 @@ data class LibraryFilters(
     val hidesFinished: Boolean
         get() = !archived && options.none { it.group == FilterGroup.READING }
 
-    fun toggle(option: LibraryFilterOption): LibraryFilters = copy(
-        options = if (option in options) options - option else options + option,
-    )
+    fun toggle(option: LibraryFilterOption): LibraryFilters =
+        copy(
+            options = if (option in options) options - option else options + option,
+        )
 
-    private fun group(group: FilterGroup): Set<LibraryFilterOption> =
-        options.filterTo(mutableSetOf()) { it.group == group }
+    private fun group(group: FilterGroup): Set<LibraryFilterOption> = options.filterTo(mutableSetOf()) { it.group == group }
 
     /**
      * Whether a book belongs in this view.
@@ -135,7 +160,7 @@ data class LibraryFilters(
     fun accepts(
         book: Book,
         progression: Double? = null,
-        unreadOverride: Boolean = false,
+        override: FinishedOverride = FinishedOverride.NONE,
     ): Boolean {
         // A book taken off the shelf is off it, whatever else is ticked
         // — including the archived box, which is a different wish.
@@ -149,22 +174,19 @@ data class LibraryFilters(
 
         val availability = group(FilterGroup.AVAILABILITY)
         if (availability.isNotEmpty()) {
-            val onDevice = book.openableUrl != null ||
-                book.downloadState == DownloadState.DOWNLOADED
-            val wanted = if (onDevice) {
-                LibraryFilterOption.DOWNLOADED
-            } else {
-                LibraryFilterOption.NOT_DOWNLOADED
-            }
+            val onDevice =
+                book.openableUrl != null ||
+                    book.downloadState == DownloadState.DOWNLOADED
+            val wanted =
+                if (onDevice) {
+                    LibraryFilterOption.DOWNLOADED
+                } else {
+                    LibraryFilterOption.NOT_DOWNLOADED
+                }
             if (wanted !in availability) return false
         }
 
-        val started = !unreadOverride && (progression ?: 0.0) >= startedAfter(book.remotePageCount)
-        val state = when {
-            book.finished -> LibraryFilterOption.FINISHED
-            started -> LibraryFilterOption.IN_PROGRESS
-            else -> LibraryFilterOption.UNREAD
-        }
+        val state = shelfStateFor(book, progression, override)
         val reading = group(FilterGroup.READING)
         if (reading.isNotEmpty()) {
             if (state !in reading) return false
@@ -193,9 +215,10 @@ data class LibraryFilters(
      * selection always writes the same string and a rewrite of an
      * unchanged filter does not wake every reader of the settings flow.
      */
-    fun serialise(): String = LibraryFilterOption.entries
-        .filter { it in options }
-        .joinToString(",") { it.id }
+    fun serialise(): String =
+        LibraryFilterOption.entries
+            .filter { it in options }
+            .joinToString(",") { it.id }
 
     companion object {
         val None = LibraryFilters()
@@ -206,7 +229,8 @@ data class LibraryFilters(
          * degrade into a wider shelf, never into a crash.
          */
         fun parse(stored: String?): Set<LibraryFilterOption> =
-            stored?.split(",")
+            stored
+                ?.split(",")
                 ?.mapNotNullTo(mutableSetOf()) { LibraryFilterOption.fromId(it.trim()) }
                 ?: emptySet()
     }

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.library
 
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.domain.FinishedOverride
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,10 +25,10 @@ class LibraryViewModelTest {
     @Test
     fun `mark unread is offered for finished or started books not already overridden unread`() {
         assertTrue(canMarkBookUnread(book(finished = true), progression = null))
-        assertTrue(canMarkBookUnread(book(), progression = 0.4, unreadOverride = false))
-        assertFalse(canMarkBookUnread(book(), progression = 0.4, unreadOverride = true))
-        assertFalse(canMarkBookUnread(book(), progression = null, unreadOverride = false))
-        assertFalse(canMarkBookUnread(book(), progression = 0.001, unreadOverride = false))
+        assertTrue(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.NONE))
+        assertFalse(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.UNREAD))
+        assertFalse(canMarkBookUnread(book(), progression = null, override = FinishedOverride.NONE))
+        assertFalse(canMarkBookUnread(book(), progression = 0.001, override = FinishedOverride.NONE))
     }
 
     @Test
