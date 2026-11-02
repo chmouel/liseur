@@ -242,6 +242,39 @@ class FinishedStateTest {
 
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
+    fun `reaching the last page reports the finish once`() =
+        runTest {
+            db.bookDao().upsert(
+                Book(url = BOOK, title = "Book", author = null, coverPath = null,
+                    source = null, addedAt = 0, lastOpenedAt = null),
+            )
+            val reported = mutableListOf<String>()
+            lateinit var publisher: ReadingPositionPublisher
+            val state =
+                FinishedState(
+                    db.bookDao(),
+                    db.readingProgressDao(),
+                    onFinished = { reported += it },
+                    inWriteOrder = { publisher.inOrder(it) },
+                )
+            publisher = publisherFor(backgroundScope, state) { update, status ->
+                BookOrbitLocalPositionWriter(db).save(update, status)
+            }
+
+            assertTrue(publisher.publish(PositionUpdate(BOOK, """{"href":"end.xhtml"}""", 0.99, null, null, null, null, 10)))
+            assertTrue(publisher.completeBook(BOOK))
+            assertTrue(publisher.flush(BOOK))
+            assertEquals(listOf(BOOK), reported)
+            assertEquals(FinishedOverride.FINISHED, db.readingProgressDao().get(BOOK)!!.override)
+
+            // The same visit again is not a second finish.
+            assertTrue(publisher.completeBook(BOOK))
+            assertTrue(publisher.flush(BOOK))
+            assertEquals(listOf(BOOK), reported)
+        }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun `a page turn accepted after the unread tap lands after the reset`() =
         runTest {
             db.bookDao().upsert(

@@ -48,10 +48,12 @@ class FinishedState(
     /**
      * The reader reached the end of the book, from inside the publisher's
      * own queue: writes straight away, because waiting for that queue
-     * from within it would wait for ever.
+     * from within it would wait for ever. The finish is reported here for
+     * the same reason it is reported by [setFinished].
      */
     suspend fun recordFinished(bookUrl: String) {
         writeStatus(bookUrl, FinishedOverride.FINISHED, null)
+        onFinished(bookUrl)
     }
 
     /**
