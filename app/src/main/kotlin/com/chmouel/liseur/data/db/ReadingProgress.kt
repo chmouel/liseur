@@ -8,6 +8,8 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
 import com.chmouel.liseur.data.remote.OpenBooks
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.reader.progress.ReadingPace
 
 /**
@@ -27,7 +29,8 @@ import com.chmouel.liseur.reader.progress.ReadingPace
  * - **Independent change counters.** [positionRevision] changes only
  *   when the passage changes; [statusRevision] changes only when someone
  *   changes reading status. Exact-position sync can therefore retain its
- *   verified CFI when a reader marks a book read or unread.
+ *   verified CFI when a reader marks a book read. Marking unread resets
+ *   the passage and changes both counters.
  * - **The baseline** ([agreedProgression], [agreedStatus]). The last
  *   state both sides agreed on. Without it, deliberately going back to
  *   reread is indistinguishable from the other device being further on.
@@ -114,6 +117,10 @@ data class ReadingProgress(
 
     /** True when a remote state is waiting to be settled. */
     val hasPending: Boolean get() = pendingAccount != null
+
+    fun hasPendingUnreadReset(ackedRevision: Long = this.ackedRevision): Boolean =
+        override == com.chmouel.liseur.domain.FinishedOverride.UNREAD &&
+            totalProgression == 0.0 && localRevision > ackedRevision
 
     /** What someone has said about this book being read, if anything. */
     val override: com.chmouel.liseur.domain.FinishedOverride
@@ -408,6 +415,14 @@ abstract class ReadingProgressDao {
         readAt: Long,
     )
 
+    @Query(
+        """
+        UPDATE reading_progress SET finished_override = 0, status_revision = status_revision + 1
+        WHERE book_url = :bookUrl AND finished_override = 2
+        """,
+    )
+    protected abstract suspend fun clearUnreadOverride(bookUrl: String)
+
     @Transaction
     open suspend fun recordLocal(
         bookUrl: String,
@@ -421,7 +436,12 @@ abstract class ReadingProgressDao {
         updatedAt: Long,
         // When the reading happened, if not when it is written.
         readAt: Long = updatedAt,
+        resumesReading: Boolean = false,
     ) {
+        val savedStatus = if (resumesReading) {
+            clearUnreadOverride(bookUrl)
+            readingStatusFor(progression, FinishedOverride.fromStored(overrideFor(bookUrl))).wireName
+        } else status
         val updated =
             updateLocal(
                 bookUrl = bookUrl,
@@ -431,7 +451,7 @@ abstract class ReadingProgressDao {
                 readingPaceSamples = readingPaceSamples,
                 readingPaceElapsedMs = readingPaceElapsedMs,
                 readingPaceEvidence = readingPaceEvidence,
-                status = status,
+                status = savedStatus,
                 updatedAt = updatedAt,
                 readAt = readAt,
             )
@@ -444,7 +464,7 @@ abstract class ReadingProgressDao {
                 readingPaceSamples = readingPaceSamples,
                 readingPaceElapsedMs = readingPaceElapsedMs,
                 readingPaceEvidence = readingPaceEvidence,
-                status = status,
+                status = savedStatus,
                 updatedAt = updatedAt,
                 readAt = readAt,
             )
@@ -978,6 +998,9 @@ abstract class ReadingProgressDao {
             status = :status,
             finished_override = :override,
             status_revision = status_revision + 1,
+            locator_json = CASE WHEN :resetPosition THEN '{}' ELSE locator_json END,
+            total_progression = CASE WHEN :resetPosition THEN 0.0 ELSE total_progression END,
+            position_revision = position_revision + CASE WHEN :resetPosition THEN 1 ELSE 0 END,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl
@@ -988,15 +1011,16 @@ abstract class ReadingProgressDao {
         override: Int,
         status: String,
         now: Long,
+        resetPosition: Boolean,
     ): Int
 
     @Query(
         """
         INSERT OR IGNORE INTO reading_progress (
             book_url, locator_json, total_progression, updated_at,
-            status, finished_override, status_revision, local_revision, acked_revision
+            status, finished_override, status_revision, local_revision, acked_revision, position_revision
         )
-        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0)
+        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0, :positionRevision)
         """,
     )
     abstract suspend fun insertFinishedOverride(
@@ -1005,6 +1029,7 @@ abstract class ReadingProgressDao {
         status: String,
         progression: Double?,
         now: Long,
+        positionRevision: Long = 0,
     )
 
     @Transaction
@@ -1015,12 +1040,14 @@ abstract class ReadingProgressDao {
         progression: Double?,
         now: Long,
     ) {
+        val resetPosition = override == com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal
         val updated =
             updateFinishedOverride(
                 bookUrl = bookUrl,
                 override = override,
                 status = status,
                 now = now,
+                resetPosition = resetPosition,
             )
         if (updated == 0) {
             insertFinishedOverride(
@@ -1029,6 +1056,7 @@ abstract class ReadingProgressDao {
                 status = status,
                 progression = progression,
                 now = now,
+                positionRevision = if (resetPosition) 1 else 0,
             )
         }
     }

@@ -21,6 +21,8 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.LiveTopic
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.SyncScope
 import java.io.File
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
@@ -536,6 +538,31 @@ class LiseurSyncPositionSyncTest {
             sync(online = false).syncAll(null),
         )
         assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun `offline opening preserves an unread reset until this peer acknowledges it`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        FinishedState(db.bookDao(), progress).setFinished(LOCAL, false)
+        val reset = progress.get(LOCAL)!!
+        progress.upsert(reset.copy(ackedRevision = reset.localRevision))
+        db.syncPeerStateDao().persistPending(LOCAL, peer(), 0.8, "Reading", NOW)
+        val provider = sync(online = false)
+        val coordinator = PositionSyncCoordinator(provider)
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), coordinator.request(SyncScope.Book(LOCAL)))
+        assertTrue(provider.preservedConflict(LOCAL)!!.localUnreadResetPending)
+        assertNull(coordinator.preservedConflict(LOCAL))
+        assertEquals(0.0, progress.get(LOCAL)!!.totalProgression!!, 0.0)
+        val pending = db.syncPeerStateDao().get(LOCAL, peer())!!
+        assertEquals(0.8, pending.pendingProgression!!, 0.0)
+
+        db.syncPeerStateDao().upsert(pending.copy(ackedRevision = reset.localRevision))
+        assertFalse(provider.preservedConflict(LOCAL)!!.localUnreadResetPending)
+        assertNotNull(coordinator.preservedConflict(LOCAL))
     }
 
     @Test

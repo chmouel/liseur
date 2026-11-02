@@ -359,10 +359,12 @@ class PositionSyncCoordinator(
         bookUrl: String,
         abandonedRun: Boolean = false,
     ): SyncPreview? {
-        if (!abandonedRun) return turn.withLock { sync.preservedConflict(bookUrl) }
+        if (!abandonedRun) return turn.withLock {
+            sync.preservedConflict(bookUrl)?.takeUnless { it.localUnreadResetPending }
+        }
         if (!turn.tryLock()) return null
         return try {
-            sync.preservedConflict(bookUrl)
+            sync.preservedConflict(bookUrl)?.takeUnless { it.localUnreadResetPending }
         } finally {
             turn.unlock()
         }

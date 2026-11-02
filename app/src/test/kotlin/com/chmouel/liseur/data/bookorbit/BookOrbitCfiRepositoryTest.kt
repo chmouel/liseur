@@ -863,6 +863,17 @@ class BookOrbitCfiRepositoryTest {
     }
 
     @Test
+    fun `a book marked unread does not reopen at the remote percentage`(): Unit = runBlocking {
+        val context = repository.capture(binding.bookUrl)
+        saveApproximate(context, 10, progression = 0.42)
+        com.chmouel.liseur.data.library.FinishedState(db.bookDao(), db.readingProgressDao())
+            .setFinished(binding.bookUrl, false)
+
+        assertNull(agreement().approximateOffer(context, progress(percentageOnly(67.624))))
+        assertFalse(agreement().canOfferPull(context, progress(saved("epubcfi(/6/4!/4/2:3)"))))
+    }
+
+    @Test
     fun `an agreed untouched place follows the server to a percentage-only place`(): Unit = runBlocking {
         val context = repository.capture(binding.bookUrl)
         val cfi = "epubcfi(/6/4!/4/2:3)"

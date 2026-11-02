@@ -18,6 +18,8 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.SyncSnapshot
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import mockwebserver3.Dispatcher
@@ -449,19 +451,18 @@ class KomgaSyncRepositoryTest {
             progressDao = db.readingProgressDao(),
         ).setFinished(bookUrl, false)
         server.enqueue(json(bookJson(page = 400, completed = true, readDate = "2024-01-01T00:00:00Z")))
-        repeat(3) { server.enqueue(MockResponse(code = 204)) }
+        repeat(2) { server.enqueue(MockResponse(code = 204)) }
 
         assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
 
-        // Komga has no way of being told "not finished": the only way to
-        // undo a completion is to forget the progress altogether, which
-        // has to happen before the place is sent again.
         val sent = requests()
         val cleared = sent.single { it.method == "DELETE" }
         assertTrue(cleared.target.endsWith("/api/v1/books/$bookId/read-progress"))
-        assertTrue(sent.indexOf(cleared) < sent.indexOfFirst { it.method == "PUT" })
-        // And it must settle, or the row would stay dirty for ever.
-        assertFalse(requireNotNull(db.readingProgressDao().get(bookUrl)).isDirty)
+        assertTrue(sent.none { it.method == "PUT" })
+        val row = requireNotNull(db.readingProgressDao().get(bookUrl))
+        assertFalse(row.isDirty)
+        assertEquals(0.0, row.totalProgression!!, 0.0)
+        assertEquals("ReadyToRead", row.status)
     }
 
     @Test
@@ -589,6 +590,23 @@ class KomgaSyncRepositoryTest {
         assertEquals(0.4, row.totalProgression!!, 1e-9)
         assertEquals(0.6, row.pendingProgression!!, 1e-9)
         assertEquals(0.6, sync.preservedConflict(bookUrl)!!.remote!!, 1e-9)
+    }
+
+    @Test
+    fun `opening offline keeps an unread reset instead of adopting a preserved conflict`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(bookUrl, locatorJson("OEBPS/ch2.xhtml", 0.5, 0.42), 0.42, null, "Reading", 1_000)
+        progress.persistPending(bookUrl, 0.8, "Reading", 2_000, account, 2_000)
+        FinishedState(db.bookDao(), progress).setFinished(bookUrl, false)
+        val coordinator = PositionSyncCoordinator(offlineSync())
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), coordinator.request(SyncScope.Book(bookUrl)))
+        assertTrue(sync.preservedConflict(bookUrl)!!.localUnreadResetPending)
+        assertNull(coordinator.preservedConflict(bookUrl))
+        assertNull(coordinator.preservedConflict(bookUrl, abandonedRun = true))
+        assertEquals(0.0, progress.get(bookUrl)!!.totalProgression!!, 0.0)
+        assertEquals(0.8, progress.get(bookUrl)!!.pendingProgression!!, 0.0)
     }
 
     @Test
