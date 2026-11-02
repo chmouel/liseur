@@ -1564,12 +1564,17 @@ private fun ReadingStatusRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Both take a share of the row: an unweighted secondary button is measured first and
+        // can leave the primary action no width at all in a narrow window with large text.
         SheetActionRow(
             label = actionLabel(primary, book),
             onClick = { onAction(primary) },
             modifier = Modifier.weight(1f),
         )
-        TextButton(onClick = { onAction(secondary) }) {
+        TextButton(
+            onClick = { onAction(secondary) },
+            modifier = Modifier.weight(1f),
+        ) {
             Text(actionLabel(secondary, book))
         }
     }
