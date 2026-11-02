@@ -201,6 +201,7 @@ class KomgaSyncRepository(
             remoteStatus = stored.pendingStatus,
             remoteLocatorJson = stored.pendingLocatorJson,
             localRevision = stored.localRevision,
+            localUnreadResetPending = stored.hasPendingUnreadReset(),
         ).takeIf { !it.agrees }
     }
 

@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.domain.EPSILON
 import com.chmouel.liseur.domain.ExactPositionDecision
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.reconcileExactPosition
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -259,6 +260,8 @@ class BookOrbitPositionAgreementRepository(
                 return@withTransaction null
             val local = database.readingProgressDao().get(context.bookUrl)
             if (local?.ownerAccount != null && local.ownerAccount != context.request.accountKey)
+                return@withTransaction null
+            if (local?.override == FinishedOverride.UNREAD && local.totalProgression == 0.0)
                 return@withTransaction null
             val noPlace = local?.locatorJson == null && local?.totalProgression == null
             val eligible = when {

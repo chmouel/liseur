@@ -1,125 +1,127 @@
 package com.chmouel.liseur
 
 import android.content.Context
+import android.util.Log
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.chmouel.liseur.companion.CompanionDatabase
 import com.chmouel.liseur.companion.CompanionStore
 import com.chmouel.liseur.data.AndroidNetworkAvailability
 import com.chmouel.liseur.data.calibre.BookDownloadRepository
+import com.chmouel.liseur.data.calibre.BulkDownloadStore
 import com.chmouel.liseur.data.calibre.CalibreCatalogClient
 import com.chmouel.liseur.data.calibre.CalibreFileSource
 import com.chmouel.liseur.data.calibre.KoboSyncRepository
-import com.chmouel.liseur.data.calibre.BulkDownloadStore
+import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.komga.KomgaCatalogClient
 import com.chmouel.liseur.data.komga.KomgaFileSource
 import com.chmouel.liseur.data.komga.KomgaSyncRepository
-import com.chmouel.liseur.data.db.LiseurDatabase
-import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.data.kosync.KosyncAccountRepository
+import com.chmouel.liseur.data.kosync.KosyncPositionSync
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
+import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.data.library.CompanionBackupRepository
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.library.LocalLibraryRepository
 import com.chmouel.liseur.data.library.ReadingPositionBackupRepository
+import com.chmouel.liseur.data.library.ReadingSessionManager
 import com.chmouel.liseur.data.library.SettingsBackupRepository
-import com.chmouel.liseur.data.library.CompanionBackupRepository
-import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.library.permissionSafeAssetRetriever
-import com.chmouel.liseur.data.library.ReadingSessionManager
-import com.chmouel.liseur.data.settings.AppSettingsRepository
-import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
-import com.chmouel.liseur.data.settings.ReadingPaceRepository
-import com.chmouel.liseur.data.settings.UserFontRepository
-import com.chmouel.liseur.data.remote.DeviceIdentityRepository
-import com.chmouel.liseur.data.remote.BookUploadRepository
-import com.chmouel.liseur.data.remote.UploadPrompts
-import com.chmouel.liseur.data.remote.CompositePositionSync
-import com.chmouel.liseur.data.remote.AndroidLocalNetworkAccess
-import com.chmouel.liseur.data.remote.LocalNetworkGuardedSync
 import com.chmouel.liseur.data.liseursync.LiseurSyncAnnotations
-import com.chmouel.liseur.data.liseursync.LiseurSyncSettings
 import com.chmouel.liseur.data.liseursync.LiseurSyncCatalogClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncDeleteClient
 import com.chmouel.liseur.data.liseursync.LiseurSyncFileSource
 import com.chmouel.liseur.data.liseursync.LiseurSyncInsights
-import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
-import com.chmouel.liseur.data.liseursync.RemoteStatsRefresh
 import com.chmouel.liseur.data.liseursync.LiseurSyncLive
 import com.chmouel.liseur.data.liseursync.LiseurSyncPositionSync
-import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
 import com.chmouel.liseur.data.liseursync.LiseurSyncSeriesClient
+import com.chmouel.liseur.data.liseursync.LiseurSyncServerSetup
+import com.chmouel.liseur.data.liseursync.LiseurSyncSettings
+import com.chmouel.liseur.data.liseursync.LiseurSyncSnapshots
 import com.chmouel.liseur.data.liseursync.LiseurSyncTranslations
 import com.chmouel.liseur.data.liseursync.LiseurSyncUploadClient
 import com.chmouel.liseur.data.liseursync.RemoteStatsCache
+import com.chmouel.liseur.data.liseursync.RemoteStatsRefresh
 import com.chmouel.liseur.data.liseursync.WorkResolver
-import com.chmouel.liseur.data.kosync.KosyncAccountRepository
-import com.chmouel.liseur.data.kosync.KosyncPositionSync
-import com.chmouel.liseur.data.remote.RemoteAccountRepository
+import com.chmouel.liseur.data.remote.AndroidLocalNetworkAccess
+import com.chmouel.liseur.data.remote.BookUploadRepository
+import com.chmouel.liseur.data.remote.BrowseCatalogRepository
+import com.chmouel.liseur.data.remote.CompositePositionSync
+import com.chmouel.liseur.data.remote.DeviceIdentityRepository
 import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.LiveRefresh
 import com.chmouel.liseur.data.remote.LiveTopic
+import com.chmouel.liseur.data.remote.LocalNetworkGuardedSync
+import com.chmouel.liseur.data.remote.RemoteAccountRepository
 import com.chmouel.liseur.data.remote.RemoteCatalogRepository
-import com.chmouel.liseur.data.remote.BrowseCatalogRepository
-import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.RemoteRouter
 import com.chmouel.liseur.data.remote.RoutedPositionSync
+import com.chmouel.liseur.data.remote.SeriesExtrasRepository
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncReporting
-import com.chmouel.liseur.readaloud.ListeningCheckpoints
-import com.chmouel.liseur.readaloud.ReadAloudFeature
+import com.chmouel.liseur.data.remote.UploadPrompts
+import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.ReaderPreferencesRepository
+import com.chmouel.liseur.data.settings.ReadingPaceRepository
+import com.chmouel.liseur.data.settings.SessionStateRepository
+import com.chmouel.liseur.data.settings.SettingsSyncRepository
+import com.chmouel.liseur.data.settings.UserFontRepository
+import com.chmouel.liseur.data.settings.syncableSettings
 import com.chmouel.liseur.providers.ServerConnections
 import com.chmouel.liseur.providers.ServiceAccounts
+import com.chmouel.liseur.readaloud.ListeningCheckpoints
+import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.readaloud.ReadAloudFeatureFactory
+import com.chmouel.liseur.reader.OpenBookHandles
+import com.chmouel.liseur.reader.ReaderPresence
+import com.chmouel.liseur.sync.LatestPositionSync
+import com.chmouel.liseur.sync.LiveSyncConnector
+import com.chmouel.liseur.sync.PositionSyncCoordinator
+import com.chmouel.liseur.sync.PositionSyncWorker
+import com.chmouel.liseur.sync.ReadingPositionPublisher
+import com.chmouel.liseur.sync.SyncScope
 import com.chmouel.liseur.translate.AccountTranslationClears
 import com.chmouel.liseur.translate.PageTranslationCache
-import com.chmouel.liseur.translate.SavedTranslations
 import com.chmouel.liseur.translate.PageTranslationModes
+import com.chmouel.liseur.translate.SavedTranslations
 import com.chmouel.liseur.translate.TranslateFeature
 import com.chmouel.liseur.translate.TranslateFeatureFactory
 import com.chmouel.liseur.translate.TranslationCacheDatabase
 import com.chmouel.liseur.tts.ServerKeys
-import com.chmouel.liseur.reader.OpenBookHandles
-import com.chmouel.liseur.reader.ReaderPresence
-import com.chmouel.liseur.data.settings.SettingsSyncRepository
-import com.chmouel.liseur.data.settings.syncableSettings
-import com.chmouel.liseur.data.settings.SessionStateRepository
-import com.chmouel.liseur.sync.PositionSyncCoordinator
-import com.chmouel.liseur.sync.LatestPositionSync
-import com.chmouel.liseur.sync.LiveSyncConnector
-import com.chmouel.liseur.sync.PositionSyncWorker
-import com.chmouel.liseur.sync.ReadingPositionPublisher
 import com.chmouel.liseur.ui.eink.EInkDisplay
 import com.chmouel.liseur.ui.eink.OnyxEInkDisplay
 import com.chmouel.liseur.ui.widget.WidgetUpdater
 import com.chmouel.liseur.ui.widget.widgetInputs
-import com.chmouel.liseur.sync.SyncScope
-import android.util.Log
-import org.readium.r2.shared.util.http.DefaultHttpClient
-import org.readium.r2.streamer.PublicationOpener
-import org.readium.r2.streamer.parser.DefaultPublicationParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import org.readium.r2.shared.util.http.DefaultHttpClient
+import org.readium.r2.streamer.PublicationOpener
+import org.readium.r2.streamer.parser.DefaultPublicationParser
 import java.io.File
 
 /**
  * Manual composition root: shared Readium services and app-wide
  * dependencies. Reachable from any Context via [container].
  */
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+) {
     val networkAvailability = AndroidNetworkAvailability(context.applicationContext)
 
     /**
@@ -135,22 +137,27 @@ class AppContainer(context: Context) {
 
     val assetRetriever = permissionSafeAssetRetriever(context.contentResolver, httpClient)
 
-    val publicationOpener = PublicationOpener(
-        publicationParser = DefaultPublicationParser(
-            context,
-            httpClient = httpClient,
-            assetRetriever = assetRetriever,
-            pdfFactory = null,
-        ),
-    )
+    val publicationOpener =
+        PublicationOpener(
+            publicationParser =
+                DefaultPublicationParser(
+                    context,
+                    httpClient = httpClient,
+                    assetRetriever = assetRetriever,
+                    pdfFactory = null,
+                ),
+        )
 
     internal val translationPublicationOpener by lazy {
-        com.chmouel.liseur.translate.TranslationPublicationOpener(context)
+        com.chmouel.liseur.translate
+            .TranslationPublicationOpener(context)
     }
 
-    val database = Room.databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
-        .addMigrations(*LiseurDatabase.MIGRATIONS)
-        .build()
+    val database =
+        Room
+            .databaseBuilder(context, LiseurDatabase::class.java, "liseur.db")
+            .addMigrations(*LiseurDatabase.MIGRATIONS)
+            .build()
 
     init {
         applicationScope.launch {
@@ -158,55 +165,61 @@ class AppContainer(context: Context) {
         }
     }
 
-    val readingSessions = ReadingSessionManager(
-        dao = database.readingSessionDao(),
-        scope = applicationScope,
-    )
+    val readingSessions =
+        ReadingSessionManager(
+            dao = database.readingSessionDao(),
+            scope = applicationScope,
+        )
 
-    val bookRemoval = BookRemoval(
-        bookDao = database.bookDao(),
-        sessionDao = database.readingSessionDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        identityDao = database.workIdentityDao(),
-        progressDao = database.readingProgressDao(),
-        annotationDao = database.annotationDao(),
-        annotationSyncDao = database.annotationSyncDao(),
-        inTransaction = { work -> database.withTransaction { work() } },
-        bookOrbitBindings = database.bookOrbitBindingDao(),
-        remoteStatsDao = database.remoteStatsDao(),
-        uploadRefusalDao = database.uploadRefusalDao(),
-        aiPreferencesDao = database.bookAiPreferencesDao(),
-        metadataDao = database.bookMetadataDao(),
-        glossaryDao = database.glossaryDao(),
-    )
+    val bookRemoval =
+        BookRemoval(
+            bookDao = database.bookDao(),
+            sessionDao = database.readingSessionDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            identityDao = database.workIdentityDao(),
+            progressDao = database.readingProgressDao(),
+            annotationDao = database.annotationDao(),
+            annotationSyncDao = database.annotationSyncDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+            bookOrbitBindings = database.bookOrbitBindingDao(),
+            remoteStatsDao = database.remoteStatsDao(),
+            uploadRefusalDao = database.uploadRefusalDao(),
+            aiPreferencesDao = database.bookAiPreferencesDao(),
+            metadataDao = database.bookMetadataDao(),
+            glossaryDao = database.glossaryDao(),
+        )
 
     private val savedTranslationsFile = context.getDatabasePath(TranslationCacheDatabase.NAME)
     private val savedTranslationsOpened = MutableStateFlow(false)
 
-    private val savedTranslationsOpening = lazy {
-        val name = TranslationCacheDatabase.NAME
-        val path = context.getDatabasePath(name)
-        SavedTranslations(
-            database = Room.databaseBuilder(context, TranslationCacheDatabase::class.java, name)
-                .addMigrations(*TranslationCacheDatabase.MIGRATIONS)
-                .build(),
-            present = { urls -> database.bookDao().presentUrls(urls) },
-            files = { listOf(path, File("$path-wal"), File("$path-shm")) },
-            scope = applicationScope,
-        ).also { saved ->
-            savedTranslationsOpened.value = true
-            applicationScope.launch { saved.tidy() }
+    private val savedTranslationsOpening =
+        lazy {
+            val name = TranslationCacheDatabase.NAME
+            val path = context.getDatabasePath(name)
+            SavedTranslations(
+                database =
+                    Room
+                        .databaseBuilder(context, TranslationCacheDatabase::class.java, name)
+                        .addMigrations(*TranslationCacheDatabase.MIGRATIONS)
+                        .build(),
+                present = { urls -> database.bookDao().presentUrls(urls) },
+                files = { listOf(path, File("$path-wal"), File("$path-shm")) },
+                scope = applicationScope,
+            ).also { saved ->
+                savedTranslationsOpened.value = true
+                applicationScope.launch { saved.tidy() }
+            }
         }
-    }
 
     /** Sentences page translation translated, kept apart from the library and its backups. */
     val savedTranslations: SavedTranslations by savedTranslationsOpening
 
     /** Which clears of the account's translations a reader's request comes to (ADR-0050). */
-    val accountTranslationClears = AccountTranslationClears(
-        serverDao = database.remoteServerDao(),
-        identityDao = database.workIdentityDao(),
-    )
+    val accountTranslationClears =
+        AccountTranslationClears(
+            serverDao = database.remoteServerDao(),
+            identityDao = database.workIdentityDao(),
+        )
 
     /**
      * Clears [bookUrl]'s saved translations here and, under the work
@@ -297,14 +310,17 @@ class AppContainer(context: Context) {
         }
     }
 
-    private val companionStoreOpening = lazy {
-        CompanionStore(
-            database = Room.databaseBuilder(context, CompanionDatabase::class.java, CompanionDatabase.NAME)
-                .addMigrations(*CompanionDatabase.MIGRATIONS)
-                .build(),
-            present = { urls -> database.bookDao().presentUrls(urls) },
-        ).also { store -> applicationScope.launch { store.tidy() } }
-    }
+    private val companionStoreOpening =
+        lazy {
+            CompanionStore(
+                database =
+                    Room
+                        .databaseBuilder(context, CompanionDatabase::class.java, CompanionDatabase.NAME)
+                        .addMigrations(*CompanionDatabase.MIGRATIONS)
+                        .build(),
+                present = { urls -> database.bookDao().presentUrls(urls) },
+            ).also { store -> applicationScope.launch { store.tidy() } }
+        }
 
     /** The reading companion's chapter recaps, kept apart from the library database. */
     val companionStore: CompanionStore by companionStoreOpening
@@ -323,19 +339,28 @@ class AppContainer(context: Context) {
         }
     }
 
-    internal val translationAdmissions = com.chmouel.liseur.translate.TranslationAdmissions()
+    internal val translationAdmissions =
+        com.chmouel.liseur.translate
+            .TranslationAdmissions()
 
     /** [bookUrl]'s saved page translations, the store opened only once a page is translated. */
-    fun pageTranslations(bookUrl: String): PageTranslationCache = object : PageTranslationCache {
-        private val book by lazy { savedTranslations.forBook(bookUrl) }
+    fun pageTranslations(bookUrl: String): PageTranslationCache =
+        object : PageTranslationCache {
+            private val book by lazy { savedTranslations.forBook(bookUrl) }
 
-        override suspend fun get(key: String) = book.get(key)
+            override suspend fun get(key: String) = book.get(key)
 
-        override suspend fun put(key: String, value: String, stamp: Long) = book.put(key, value, stamp)
+            override suspend fun put(
+                key: String,
+                value: String,
+                stamp: Long,
+            ) = book.put(key, value, stamp)
 
-        override suspend fun <T> request(identity: String, work: suspend () -> T): T =
-            translationAdmissions.reader(bookUrl, identity, work)
-    }
+            override suspend fun <T> request(
+                identity: String,
+                work: suspend () -> T,
+            ): T = translationAdmissions.reader(bookUrl, identity, work)
+        }
 
     /**
      * Whether [bookUrl] is left translated. A phone that never translated
@@ -367,38 +392,43 @@ class AppContainer(context: Context) {
      * memory card is slow enough to be felt, and nothing needs the
      * answer until a book is named to a server.
      */
-    val bookFingerprints = BookFingerprintStore(
-        context = context.applicationContext,
-        dao = database.workIdentityDao(),
-    )
+    val bookFingerprints =
+        BookFingerprintStore(
+            context = context.applicationContext,
+            dao = database.workIdentityDao(),
+        )
 
-    val libraryRepository = LocalLibraryRepository(
-        context = context.applicationContext,
-        assetRetriever = assetRetriever,
-        publicationOpener = publicationOpener,
-        bookDao = database.bookDao(),
-        folderDao = database.libraryFolderDao(),
-        bookRemoval = bookRemoval,
-        fingerprints = bookFingerprints,
-    )
+    val libraryRepository =
+        LocalLibraryRepository(
+            context = context.applicationContext,
+            assetRetriever = assetRetriever,
+            publicationOpener = publicationOpener,
+            bookDao = database.bookDao(),
+            folderDao = database.libraryFolderDao(),
+            bookRemoval = bookRemoval,
+            fingerprints = bookFingerprints,
+        )
 
     /** Highlights and notes written to a file, and read back on another device. */
-    val annotationBackup = AnnotationBackupRepository(
-        context = context.applicationContext,
-        annotationDao = database.annotationDao(),
-        bookDao = database.bookDao(),
-        requestBookSync = ::requestBookSync,
-    )
+    val annotationBackup =
+        AnnotationBackupRepository(
+            context = context.applicationContext,
+            annotationDao = database.annotationDao(),
+            bookDao = database.bookDao(),
+            requestBookSync = ::requestBookSync,
+        )
 
     /** The one answer to whether a book is read, shared by everything that asks. */
-    val finishedState = FinishedState(
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        inTransaction = { work -> database.withTransaction { work() } },
-        // Awaited, so the clear is recorded before finishing returns; the
-        // sync that sends it is only signalled.
-        onFinished = { clearTranslationsOnFinish(it) },
-    )
+    val finishedState: FinishedState =
+        FinishedState(
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+            // Awaited, so the clear is recorded before finishing returns; the
+            // sync that sends it is only signalled.
+            onFinished = { clearTranslationsOnFinish(it) },
+            beforeUnread = { readingPositions.flush(it) },
+        )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
 
@@ -409,27 +439,37 @@ class AppContainer(context: Context) {
 
     val appSettings = AppSettingsRepository(context.applicationContext)
 
-    val settingsBackup = SettingsBackupRepository(
-        context = context.applicationContext,
-        appSettings = appSettings,
-        readerPreferences = readerPreferences,
-        userFonts = userFonts,
-        annotations = annotationBackup,
-        positions = ReadingPositionBackupRepository(
-            database.readingProgressDao(), database.bookDao(), ::requestBookSync,
-            finishedState = finishedState,
-            inTransaction = { work -> database.withTransaction { work() } },
-        ),
-        companion = CompanionBackupRepository({ companionStore }, database.bookDao(), ::companionStoreExists),
-        translations = com.chmouel.liseur.data.library.TranslationBackupRepository({ savedTranslations }, database.bookDao()),
-        restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
-        exportConnections = { connectionBackup.export() },
-        prepareConnectionRestore = { payload, values -> connectionBackup.prepareRestore(payload, values) },
-    )
+    val settingsBackup =
+        SettingsBackupRepository(
+            context = context.applicationContext,
+            appSettings = appSettings,
+            readerPreferences = readerPreferences,
+            userFonts = userFonts,
+            annotations = annotationBackup,
+            positions =
+                ReadingPositionBackupRepository(
+                    database.readingProgressDao(),
+                    database.bookDao(),
+                    ::requestBookSync,
+                    finishedState = finishedState,
+                    inTransaction = { work -> database.withTransaction { work() } },
+                ),
+            companion = CompanionBackupRepository({ companionStore }, database.bookDao(), ::companionStoreExists),
+            translations =
+                com.chmouel.liseur.data.library
+                    .TranslationBackupRepository({ savedTranslations }, database.bookDao()),
+            restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
+            exportConnections = { connectionBackup.export() },
+            prepareConnectionRestore = { payload, values -> connectionBackup.prepareRestore(payload, values) },
+        )
 
     private val connectionBackup by lazy {
         com.chmouel.liseur.data.library.ConnectionBackupRepository(
-            remoteAccount, kosyncAccount, appSettings, serverConnections, serviceAccounts,
+            remoteAccount,
+            kosyncAccount,
+            appSettings,
+            serverConnections,
+            serviceAccounts,
             beforeReplace = { bookDownloads.cancelAll(com.chmouel.liseur.data.calibre.BulkStopReason.ACCOUNT_CHANGED) },
         )
     }
@@ -449,111 +489,143 @@ class AppContainer(context: Context) {
      * catalog, the download worker and the cover loader all reach the
      * same one, and a renewal done for any of them is seen by the rest.
      */
-    val bookOrbitSession = com.chmouel.liseur.data.bookorbit.BookOrbitSession(
-        serverDao = database.remoteServerDao(),
-    )
+    val bookOrbitSession =
+        com.chmouel.liseur.data.bookorbit.BookOrbitSession(
+            serverDao = database.remoteServerDao(),
+        )
 
-    private val bookOrbitHttp = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(bookOrbitSession)
-    private val bookOrbitSources = com.chmouel.liseur.data.bookorbit.BookOrbitAdoptedSource(
-        context.applicationContext,
-    )
-    val bookOrbitCfis = com.chmouel.liseur.data.bookorbit.BookOrbitCfiRepository(
-        database,
-        bookOrbitSources,
-        java.io.File(context.applicationContext.cacheDir, "bookorbit-opened"),
-    ).also { cfis -> applicationScope.launch(Dispatchers.IO) { cfis.sweepSpools() } }
-    val bookOrbitProgress = com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient(
-        bookOrbitHttp, bookOrbitCfis,
-    )
-    val bookOrbitAgreement = com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository(
-        database, bookOrbitProgress,
-        com.chmouel.liseur.data.bookorbit.BookOrbitProgressMutationTransport(bookOrbitHttp, bookOrbitCfis),
-        bookOrbitSources,
-    )
-    val bookOrbitExchange = com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange(
-        bookOrbitCfis, bookOrbitProgress, bookOrbitAgreement,
-    )
-    private val bookOrbitStatusSync = com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync(
-        database,
-        com.chmouel.liseur.data.bookorbit.BookOrbitStatusClient(bookOrbitHttp, bookOrbitCfis),
-        finishedState,
-        bookOrbitSources,
-    )
-    val bookOrbitEpubInfo = com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
-        bookOrbitHttp, bookOrbitCfis,
-    )
+    private val bookOrbitHttp =
+        com.chmouel.liseur.data.bookorbit
+            .BookOrbitHttp(bookOrbitSession)
+    private val bookOrbitSources =
+        com.chmouel.liseur.data.bookorbit.BookOrbitAdoptedSource(
+            context.applicationContext,
+        )
+    val bookOrbitCfis =
+        com.chmouel.liseur.data.bookorbit
+            .BookOrbitCfiRepository(
+                database,
+                bookOrbitSources,
+                java.io.File(context.applicationContext.cacheDir, "bookorbit-opened"),
+            ).also { cfis -> applicationScope.launch(Dispatchers.IO) { cfis.sweepSpools() } }
+    val bookOrbitProgress =
+        com.chmouel.liseur.data.bookorbit.BookOrbitProgressClient(
+            bookOrbitHttp,
+            bookOrbitCfis,
+        )
+    val bookOrbitAgreement =
+        com.chmouel.liseur.data.bookorbit.BookOrbitPositionAgreementRepository(
+            database,
+            bookOrbitProgress,
+            com.chmouel.liseur.data.bookorbit
+                .BookOrbitProgressMutationTransport(bookOrbitHttp, bookOrbitCfis),
+            bookOrbitSources,
+        )
+    val bookOrbitExchange =
+        com.chmouel.liseur.data.bookorbit.BookOrbitPositionExchange(
+            bookOrbitCfis,
+            bookOrbitProgress,
+            bookOrbitAgreement,
+        )
+    private val bookOrbitStatusSync =
+        com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync(
+            database,
+            com.chmouel.liseur.data.bookorbit
+                .BookOrbitStatusClient(bookOrbitHttp, bookOrbitCfis),
+            finishedState,
+            bookOrbitSources,
+        )
+    val bookOrbitEpubInfo =
+        com.chmouel.liseur.data.bookorbit.BookOrbitEpubInfoClient(
+            bookOrbitHttp,
+            bookOrbitCfis,
+        )
 
-    private val serverSetups = mapOf(
-        ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreSetupClient(),
-        ServerKind.KOMGA to com.chmouel.liseur.data.komga.KomgaSetupClient(),
-        ServerKind.LISEUR_SYNC to LiseurSyncServerSetup(
-            deviceName = { deviceIdentity.current().name },
-        ),
-        ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitSetupClient(
-            deviceLabel = { deviceIdentity.current().name },
-            session = bookOrbitSession,
-        ),
-        ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsSetupClient(),
-    )
+    private val serverSetups =
+        mapOf(
+            ServerKind.CALIBRE to
+                com.chmouel.liseur.data.calibre
+                    .CalibreSetupClient(),
+            ServerKind.KOMGA to
+                com.chmouel.liseur.data.komga
+                    .KomgaSetupClient(),
+            ServerKind.LISEUR_SYNC to
+                LiseurSyncServerSetup(
+                    deviceName = { deviceIdentity.current().name },
+                ),
+            ServerKind.BOOKORBIT to
+                com.chmouel.liseur.data.bookorbit.BookOrbitSetupClient(
+                    deviceLabel = { deviceIdentity.current().name },
+                    session = bookOrbitSession,
+                ),
+            ServerKind.CUSTOM to
+                com.chmouel.liseur.data.opds
+                    .OpdsSetupClient(),
+        )
 
-    val remoteAccount = RemoteAccountRepository(
-        furthestDao = database.furthestPositionDao(),
-        dao = database.remoteServerDao(),
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        bookRemoval = bookRemoval,
-        seriesExtraDao = database.seriesExtraDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        identityDao = database.workIdentityDao(),
-        sessionDao = database.readingSessionDao(),
-        annotationSyncDao = database.annotationSyncDao(),
-        uploadRefusalDao = database.uploadRefusalDao(),
-        sessionRefusalDao = database.sessionRefusalDao(),
-        sessionTransmissionDao = database.sessionTransmissionDao(),
-        remoteStatsDao = database.remoteStatsDao(),
-        starterProgressDao = database.starterCatalogProgressDao(),
-        settingsSyncState = settingsSyncState,
-        forgetTranslationPeer = { peerId ->
-            if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
-                savedTranslations.forgetPeer(peerId)
-            }
-        },
-        rekeyTranslationPeer = { from, to ->
-            if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
-                savedTranslations.rekeyPeer(from, to)
-            }
-        },
-        // Declared later in this file, so it is reached through the
-        // lambda rather than held: the pairing is only ever touched
-        // after a connection has landed, never while one is being built.
-        kosync = { kosyncAccount },
-        bookOrbit = bookOrbitSession,
-        bookOrbitBindingDao = database.bookOrbitBindingDao(),
-        uploadStillHeld = { url, sha256 ->
-            val source = database.bookDao().getByUrl(url)
-                ?.openableUri()
-                ?.let(android.net.Uri::parse)
-            source != null && bookOrbitSources.holds(url, source, sha256)
-        },
-        bookOrbitCfiDao = database.bookOrbitCfiDao(),
-        bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
-        bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
-        bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
-        bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
-        setups = serverSetups,
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val remoteAccount =
+        RemoteAccountRepository(
+            furthestDao = database.furthestPositionDao(),
+            dao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            bookRemoval = bookRemoval,
+            seriesExtraDao = database.seriesExtraDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            identityDao = database.workIdentityDao(),
+            sessionDao = database.readingSessionDao(),
+            annotationSyncDao = database.annotationSyncDao(),
+            uploadRefusalDao = database.uploadRefusalDao(),
+            sessionRefusalDao = database.sessionRefusalDao(),
+            sessionTransmissionDao = database.sessionTransmissionDao(),
+            remoteStatsDao = database.remoteStatsDao(),
+            starterProgressDao = database.starterCatalogProgressDao(),
+            settingsSyncState = settingsSyncState,
+            forgetTranslationPeer = { peerId ->
+                if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
+                    savedTranslations.forgetPeer(peerId)
+                }
+            },
+            rekeyTranslationPeer = { from, to ->
+                if (savedTranslationsOpening.isInitialized() || savedTranslationsFile.exists()) {
+                    savedTranslations.rekeyPeer(from, to)
+                }
+            },
+            // Declared later in this file, so it is reached through the
+            // lambda rather than held: the pairing is only ever touched
+            // after a connection has landed, never while one is being built.
+            kosync = { kosyncAccount },
+            bookOrbit = bookOrbitSession,
+            bookOrbitBindingDao = database.bookOrbitBindingDao(),
+            uploadStillHeld = { url, sha256 ->
+                val source =
+                    database
+                        .bookDao()
+                        .getByUrl(url)
+                        ?.openableUri()
+                        ?.let(android.net.Uri::parse)
+                source != null && bookOrbitSources.holds(url, source, sha256)
+            },
+            bookOrbitCfiDao = database.bookOrbitCfiDao(),
+            bookOrbitLocalCfiDao = database.bookOrbitLocalCfiDao(),
+            bookOrbitPositionAgreementDao = database.bookOrbitPositionAgreementDao(),
+            bookOrbitPositionTraversalDao = database.bookOrbitPositionTraversalDao(),
+            bookOrbitStatusAgreementDao = database.bookOrbitStatusAgreementDao(),
+            setups = serverSetups,
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
-    val bookDownloads = BookDownloadRepository(
-        context = context.applicationContext,
-        bookDao = database.bookDao(),
-        bookRemoval = bookRemoval,
-        scope = applicationScope,
-        bulkStore = bulkDownloads,
-        accountKey = { database.remoteServerDao().get()?.accountKey },
-        browseServer = { id -> database.remoteServerDao().get(id) },
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val bookDownloads =
+        BookDownloadRepository(
+            context = context.applicationContext,
+            bookDao = database.bookDao(),
+            bookRemoval = bookRemoval,
+            scope = applicationScope,
+            bulkStore = bulkDownloads,
+            accountKey = { database.remoteServerDao().get()?.accountKey },
+            browseServer = { id -> database.remoteServerDao().get(id) },
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
     val bookUploads = BookUploadRepository(context.applicationContext)
 
@@ -577,222 +649,264 @@ class AppContainer(context: Context) {
      */
     val localNetwork = AndroidLocalNetworkAccess(context)
 
-    val koboSync = KoboSyncRepository(
-        serverDao = database.remoteServerDao(),
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        finishedState = finishedState,
-        reporting = syncReporting,
-        networkAvailability = networkAvailability,
-        // What the server reported and the token that stops it being
-        // reported again have to land together or not at all.
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val koboSync =
+        KoboSyncRepository(
+            serverDao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            finishedState = finishedState,
+            reporting = syncReporting,
+            networkAvailability = networkAvailability,
+            // What the server reported and the token that stops it being
+            // reported again have to land together or not at all.
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
-    val komgaSync = KomgaSyncRepository(
-        serverDao = database.remoteServerDao(),
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        finishedState = finishedState,
-        device = deviceIdentity,
-        reporting = syncReporting,
-        networkAvailability = networkAvailability,
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val komgaSync =
+        KomgaSyncRepository(
+            serverDao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            finishedState = finishedState,
+            device = deviceIdentity,
+            reporting = syncReporting,
+            networkAvailability = networkAvailability,
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
     /** What a liseur-sync server calls each book, cached per account. */
-    val workResolver = WorkResolver(
-        dao = database.workIdentityDao(),
-        fingerprints = bookFingerprints,
-    )
+    val workResolver =
+        WorkResolver(
+            dao = database.workIdentityDao(),
+            fingerprints = bookFingerprints,
+        )
 
     /** The KOReader kosync partner paired alongside a Custom catalog. */
-    val kosyncAccount = KosyncAccountRepository(
-        dao = database.kosyncPeerDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        reporting = syncReporting,
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val kosyncAccount =
+        KosyncAccountRepository(
+            dao = database.kosyncPeerDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            reporting = syncReporting,
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
-    val kosyncSync = KosyncPositionSync(
-        kosyncDao = database.kosyncPeerDao(),
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        fingerprints = bookFingerprints,
-        device = { deviceIdentity.current() },
-        finishedState = finishedState,
-        connectedServer = { database.remoteServerDao().get() },
-        reporting = syncReporting,
-        networkAvailability = networkAvailability,
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val kosyncSync =
+        KosyncPositionSync(
+            kosyncDao = database.kosyncPeerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            fingerprints = bookFingerprints,
+            device = { deviceIdentity.current() },
+            finishedState = finishedState,
+            connectedServer = { database.remoteServerDao().get() },
+            reporting = syncReporting,
+            networkAvailability = networkAvailability,
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
     /**
      * liseur-sync's position sync: the append-only op log, bound to the
      * catalog account like the other kinds' syncs are.
      */
+
     /** Highlights, notes and bookmarks across devices (ADR-0028). */
-    private val liseurSyncAnnotations = LiseurSyncAnnotations(
-        serverDao = database.remoteServerDao(),
-        annotationDao = database.annotationDao(),
-        syncDao = database.annotationSyncDao(),
-        identityDao = database.workIdentityDao(),
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    private val liseurSyncAnnotations =
+        LiseurSyncAnnotations(
+            serverDao = database.remoteServerDao(),
+            annotationDao = database.annotationDao(),
+            syncDao = database.annotationSyncDao(),
+            identityDao = database.workIdentityDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
     private val syncableSettings = syncableSettings(appSettings, readerPreferences)
 
-    private val liseurSyncSettings = LiseurSyncSettings(
-        syncState = settingsSyncState,
-        settings = syncableSettings,
-    )
+    private val liseurSyncSettings =
+        LiseurSyncSettings(
+            syncState = settingsSyncState,
+            settings = syncableSettings,
+        )
 
     /** The sentence translation cache across devices (ADR-0052). */
-    private val liseurSyncTranslations = LiseurSyncTranslations(
-        serverDao = database.remoteServerDao(),
-        identityDao = database.workIdentityDao(),
-        // Reached lazily: the pass opens the store on its first run,
-        // which is the point on a phone that has translated nothing —
-        // the pull fills the cache before the reader asks a service.
-        saved = { savedTranslations },
-    )
+    private val liseurSyncTranslations =
+        LiseurSyncTranslations(
+            serverDao = database.remoteServerDao(),
+            identityDao = database.workIdentityDao(),
+            // Reached lazily: the pass opens the store on its first run,
+            // which is the point on a phone that has translated nothing —
+            // the pull fills the cache before the reader asks a service.
+            saved = { savedTranslations },
+        )
 
-    val liseurSync = LiseurSyncPositionSync(
-        furthestDao = database.furthestPositionDao(),
-        serverDao = database.remoteServerDao(),
-        bookDao = database.bookDao(),
-        progressDao = database.readingProgressDao(),
-        peerStateDao = database.syncPeerStateDao(),
-        identityDao = database.workIdentityDao(),
-        sessionDao = database.readingSessionDao(),
-        sessionRefusalDao = database.sessionRefusalDao(),
-        sessionTransmissionDao = database.sessionTransmissionDao(),
-        supportsMeasuredSessions = { syncSnapshots.supportsMeasuredSessions() },
-        works = workResolver,
-        deviceKey = { deviceIdentity.current().id },
-        finishedState = finishedState,
-        reporting = syncReporting,
-        networkAvailability = networkAvailability,
-        annotations = liseurSyncAnnotations,
-        translations = liseurSyncTranslations,
-        settingsSync = liseurSyncSettings,
-        readerIsOpen = { ReaderPresence.isOpen },
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val liseurSync =
+        LiseurSyncPositionSync(
+            furthestDao = database.furthestPositionDao(),
+            serverDao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            identityDao = database.workIdentityDao(),
+            sessionDao = database.readingSessionDao(),
+            sessionRefusalDao = database.sessionRefusalDao(),
+            sessionTransmissionDao = database.sessionTransmissionDao(),
+            supportsMeasuredSessions = { syncSnapshots.supportsMeasuredSessions() },
+            works = workResolver,
+            deviceKey = { deviceIdentity.current().id },
+            finishedState = finishedState,
+            reporting = syncReporting,
+            networkAvailability = networkAvailability,
+            annotations = liseurSyncAnnotations,
+            translations = liseurSyncTranslations,
+            settingsSync = liseurSyncSettings,
+            readerIsOpen = { ReaderPresence.isOpen },
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
     /**
      * Which implementation each request goes to, decided by the kind of
      * server that is connected. Everything above this line is written
      * once and works for all three.
      */
-    val remoteRouter = RemoteRouter(
-        serverDao = database.remoteServerDao(),
-        catalogs = mapOf(
-            ServerKind.CALIBRE to CalibreCatalogClient(),
-            ServerKind.KOMGA to KomgaCatalogClient(),
-            ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
-            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsCatalogClient(),
-            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
-                bindings = database.bookOrbitBindingDao(),
-                serverDao = database.remoteServerDao(),
-                http = bookOrbitHttp,
-                inTransaction = { work -> database.withTransaction { work() } },
-                localUrls = { ids ->
-                    // The saved catalogs the merge may promote, so a
-                    // promoted book is bound under the URL it keeps.
-                    val servers = database.remoteServerDao()
-                    val main = servers.get()
-                    val promotable = servers.browseServers()
-                        .filter { main != null && it.kind == main.kind && it.accountKey == main.accountKey }
-                        .map { it.id }
-                    com.chmouel.liseur.data.bookorbit.heldBookUrls(
-                        database.bookDao().byRemoteUuidsWithin(ids, promotable),
-                    )
-                },
-            ),
-        ),
-        files = mapOf(
-            ServerKind.CALIBRE to CalibreFileSource(),
-            ServerKind.KOMGA to KomgaFileSource(),
-            ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
-            ServerKind.CUSTOM to com.chmouel.liseur.data.opds.OpdsFileSource(),
-            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitFileSource(
-                session = bookOrbitSession,
-            ),
-        ),
-        // Custom has no entry because OPDS has no notion of a reading
-        // position. It keeps a place through the KOReader pairing
-        // instead, which is a peer of its own alongside the catalog.
-        positions = buildMap {
-            put(ServerKind.CALIBRE, koboSync)
-            put(ServerKind.KOMGA, komgaSync)
-            put(ServerKind.LISEUR_SYNC, liseurSync)
-            if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED) {
-                put(
-                    ServerKind.BOOKORBIT,
-                    com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync(
-                        database, bookOrbitExchange, accountSync = true, automaticPush = true,
-                        statusSync = if (
-                            com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED
-                        ) bookOrbitStatusSync else null,
-                    ),
-                )
-            }
-        },
-        seriesClaims = mapOf(
-            ServerKind.LISEUR_SYNC to LiseurSyncSeriesClient(),
-        ),
-        // Komga has no entry: deleting a file there is an
-        // administrator's job, and the action stays hidden rather than
-        // offered and failed. liseur-sync deletes only what it could
-        // have written — a book in a folder marked as accepting uploads
-        // (ADR-0025) — and says so per book, so the entry here is a
-        // promise the route exists, not that any given book will go.
-        // BookOrbit deletes the whole book, for an account holding
-        // `library_delete_books`.
-        deleters = mapOf(
-            ServerKind.CALIBRE to com.chmouel.liseur.data.calibre.CalibreBookDeleter(),
-            ServerKind.LISEUR_SYNC to LiseurSyncDeleteClient(),
-            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitDeleteClient(
-                http = bookOrbitHttp,
-                serverDao = database.remoteServerDao(),
-                bindings = database.bookOrbitBindingDao(),
-            ),
-        ),
-        // liseur-sync takes a book only into a folder an administrator
-        // marked (ADR-0023); BookOrbit into a library, for an account
-        // holding `library_upload`. Komga and calibre-web have upload
-        // routes of their own; they are not wired here because the app
-        // has nothing to say to them yet, and an entry in this map is a
-        // promise that the action works.
-        uploaders = mapOf(
-            ServerKind.LISEUR_SYNC to LiseurSyncUploadClient(),
-            ServerKind.BOOKORBIT to com.chmouel.liseur.data.bookorbit.BookOrbitUploadClient(
-                http = bookOrbitHttp,
-                serverDao = database.remoteServerDao(),
-                bindings = database.bookOrbitBindingDao(),
-            ),
-        ),
-        live = mapOf(
-            ServerKind.LISEUR_SYNC to LiseurSyncLive(
-                refreshTopics = { identity, topics ->
-                    val readingTopics = topics - LiveTopic.INSIGHTS
-                    val result = if (readingTopics.isEmpty()) {
-                        LiveRefresh()
-                    } else {
-                        liseurSync.refresh(identity, readingTopics)
+    val remoteRouter =
+        RemoteRouter(
+            serverDao = database.remoteServerDao(),
+            catalogs =
+                mapOf(
+                    ServerKind.CALIBRE to CalibreCatalogClient(),
+                    ServerKind.KOMGA to KomgaCatalogClient(),
+                    ServerKind.LISEUR_SYNC to LiseurSyncCatalogClient(),
+                    ServerKind.CUSTOM to
+                        com.chmouel.liseur.data.opds
+                            .OpdsCatalogClient(),
+                    ServerKind.BOOKORBIT to
+                        com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
+                            bindings = database.bookOrbitBindingDao(),
+                            serverDao = database.remoteServerDao(),
+                            http = bookOrbitHttp,
+                            inTransaction = { work -> database.withTransaction { work() } },
+                            localUrls = { ids ->
+                                // The saved catalogs the merge may promote, so a
+                                // promoted book is bound under the URL it keeps.
+                                val servers = database.remoteServerDao()
+                                val main = servers.get()
+                                val promotable =
+                                    servers
+                                        .browseServers()
+                                        .filter { main != null && it.kind == main.kind && it.accountKey == main.accountKey }
+                                        .map { it.id }
+                                com.chmouel.liseur.data.bookorbit.heldBookUrls(
+                                    database.bookDao().byRemoteUuidsWithin(ids, promotable),
+                                )
+                            },
+                        ),
+                ),
+            files =
+                mapOf(
+                    ServerKind.CALIBRE to CalibreFileSource(),
+                    ServerKind.KOMGA to KomgaFileSource(),
+                    ServerKind.LISEUR_SYNC to LiseurSyncFileSource(),
+                    ServerKind.CUSTOM to
+                        com.chmouel.liseur.data.opds
+                            .OpdsFileSource(),
+                    ServerKind.BOOKORBIT to
+                        com.chmouel.liseur.data.bookorbit.BookOrbitFileSource(
+                            session = bookOrbitSession,
+                        ),
+                ),
+            // Custom has no entry because OPDS has no notion of a reading
+            // position. It keeps a place through the KOReader pairing
+            // instead, which is a peer of its own alongside the catalog.
+            positions =
+                buildMap {
+                    put(ServerKind.CALIBRE, koboSync)
+                    put(ServerKind.KOMGA, komgaSync)
+                    put(ServerKind.LISEUR_SYNC, liseurSync)
+                    if (com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync.AUTOMATIC_SYNC_ENABLED) {
+                        put(
+                            ServerKind.BOOKORBIT,
+                            com.chmouel.liseur.data.bookorbit.BookOrbitPositionSync(
+                                database,
+                                bookOrbitExchange,
+                                accountSync = true,
+                                automaticPush = true,
+                                statusSync =
+                                    if (
+                                        com.chmouel.liseur.data.bookorbit.BookOrbitStatusSync.AUTOMATIC_SYNC_ENABLED
+                                    ) {
+                                        bookOrbitStatusSync
+                                    } else {
+                                        null
+                                    },
+                            ),
+                        )
                     }
-                    if (LiveTopic.INSIGHTS in topics &&
-                        database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
-                    ) {
-                        _insightInvalidations.value += 1
-                        result.copy(completed = result.completed + LiveTopic.INSIGHTS)
-                    } else result
                 },
-            ),
-        ),
-    )
+            seriesClaims =
+                mapOf(
+                    ServerKind.LISEUR_SYNC to LiseurSyncSeriesClient(),
+                ),
+            // Komga has no entry: deleting a file there is an
+            // administrator's job, and the action stays hidden rather than
+            // offered and failed. liseur-sync deletes only what it could
+            // have written — a book in a folder marked as accepting uploads
+            // (ADR-0025) — and says so per book, so the entry here is a
+            // promise the route exists, not that any given book will go.
+            // BookOrbit deletes the whole book, for an account holding
+            // `library_delete_books`.
+            deleters =
+                mapOf(
+                    ServerKind.CALIBRE to
+                        com.chmouel.liseur.data.calibre
+                            .CalibreBookDeleter(),
+                    ServerKind.LISEUR_SYNC to LiseurSyncDeleteClient(),
+                    ServerKind.BOOKORBIT to
+                        com.chmouel.liseur.data.bookorbit.BookOrbitDeleteClient(
+                            http = bookOrbitHttp,
+                            serverDao = database.remoteServerDao(),
+                            bindings = database.bookOrbitBindingDao(),
+                        ),
+                ),
+            // liseur-sync takes a book only into a folder an administrator
+            // marked (ADR-0023); BookOrbit into a library, for an account
+            // holding `library_upload`. Komga and calibre-web have upload
+            // routes of their own; they are not wired here because the app
+            // has nothing to say to them yet, and an entry in this map is a
+            // promise that the action works.
+            uploaders =
+                mapOf(
+                    ServerKind.LISEUR_SYNC to LiseurSyncUploadClient(),
+                    ServerKind.BOOKORBIT to
+                        com.chmouel.liseur.data.bookorbit.BookOrbitUploadClient(
+                            http = bookOrbitHttp,
+                            serverDao = database.remoteServerDao(),
+                            bindings = database.bookOrbitBindingDao(),
+                        ),
+                ),
+            live =
+                mapOf(
+                    ServerKind.LISEUR_SYNC to
+                        LiseurSyncLive(
+                            refreshTopics = { identity, topics ->
+                                val readingTopics = topics - LiveTopic.INSIGHTS
+                                val result =
+                                    if (readingTopics.isEmpty()) {
+                                        LiveRefresh()
+                                    } else {
+                                        liseurSync.refresh(identity, readingTopics)
+                                    }
+                                if (LiveTopic.INSIGHTS in topics &&
+                                    database.remoteServerDao().get()?.let(LiveIdentity::from) == identity
+                                ) {
+                                    _insightInvalidations.value += 1
+                                    result.copy(completed = result.completed + LiveTopic.INSIGHTS)
+                                } else {
+                                    result
+                                }
+                            },
+                        ),
+                ),
+        )
 
     /**
      * Every partner reading positions are kept in step with.
@@ -808,32 +922,35 @@ class AppContainer(context: Context) {
      * and one of them being out of reach is no reason to stop syncing
      * with the other.
      */
-    val positionSync = PositionSyncCoordinator(
-        CompositePositionSync(
-            listOf(
-                LocalNetworkGuardedSync(
-                    delegate = RoutedPositionSync(remoteRouter) { url ->
-                        database.bookDao().getByUrl(url)?.browseServerId != null
-                    },
-                    access = localNetwork,
-                    reporting = syncReporting,
-                ),
-                LocalNetworkGuardedSync(
-                    delegate = kosyncSync,
-                    access = localNetwork,
-                    reporting = syncReporting,
+    val positionSync =
+        PositionSyncCoordinator(
+            CompositePositionSync(
+                listOf(
+                    LocalNetworkGuardedSync(
+                        delegate =
+                            RoutedPositionSync(remoteRouter) { url ->
+                                database.bookDao().getByUrl(url)?.browseServerId != null
+                            },
+                        access = localNetwork,
+                        reporting = syncReporting,
+                    ),
+                    LocalNetworkGuardedSync(
+                        delegate = kosyncSync,
+                        access = localNetwork,
+                        reporting = syncReporting,
+                    ),
                 ),
             ),
-        ),
-        carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
-    )
+            carryOn = { PositionSyncWorker.continueBootstrap(context.applicationContext) },
+        )
 
-    private val latestPositionSync = LatestPositionSync(
-        scope = applicationScope,
-        request = { positionSync.request(SyncScope.Book(it)) },
-        scheduleRetry = { PositionSyncWorker.retryBook(context.applicationContext, it) },
-        onError = { message, error -> Log.e("position-sync", message, error) },
-    )
+    private val latestPositionSync =
+        LatestPositionSync(
+            scope = applicationScope,
+            request = { positionSync.request(SyncScope.Book(it)) },
+            scheduleRetry = { PositionSyncWorker.retryBook(context.applicationContext, it) },
+            onError = { message, error -> Log.e("position-sync", message, error) },
+        )
 
     fun requestBookSync(bookId: String) = latestPositionSync.signal(bookId)
 
@@ -848,53 +965,64 @@ class AppContainer(context: Context) {
     private val _insightInvalidations = MutableStateFlow(0L)
     val insightInvalidations = _insightInvalidations.asStateFlow()
 
-    val liveSync = LiveSyncConnector(
-        scope = applicationScope,
-        accounts = database.remoteServerDao().observe(),
-        sourceFor = { server ->
-            // A live connection is one more socket to the same machine
-            // the position sync dials, so it answers to the same block:
-            // opening it while the permission is refused buys a retry
-            // loop of timeouts and no events. It reports nothing —
-            // the guarded sync already says the account is blocked —
-            // and the next connection picks up a grant.
-            remoteRouter.liveFor(server.kind)
-                .takeIf { server.credentials != null }
-                ?.takeIf { !localNetwork.blocks(server.baseUrl) }
-        },
-        coordinator = positionSync,
-        reconnectOn = localNetwork.grants,
-        requestBook = ::requestBookSync,
-        reportFailure = { identity, reason ->
-            if (database.remoteServerDao().get()?.let(LiveIdentity::from) == identity) {
-                syncReporting.report(com.chmouel.liseur.data.remote.PositionSyncStatus.Failed(reason))
-            }
-        },
-    )
+    val liveSync =
+        LiveSyncConnector(
+            scope = applicationScope,
+            accounts = database.remoteServerDao().observe(),
+            sourceFor = { server ->
+                // A live connection is one more socket to the same machine
+                // the position sync dials, so it answers to the same block:
+                // opening it while the permission is refused buys a retry
+                // loop of timeouts and no events. It reports nothing —
+                // the guarded sync already says the account is blocked —
+                // and the next connection picks up a grant.
+                remoteRouter
+                    .liveFor(server.kind)
+                    .takeIf { server.credentials != null }
+                    ?.takeIf { !localNetwork.blocks(server.baseUrl) }
+            },
+            coordinator = positionSync,
+            reconnectOn = localNetwork.grants,
+            requestBook = ::requestBookSync,
+            reportFailure = { identity, reason ->
+                if (database.remoteServerDao().get()?.let(LiveIdentity::from) == identity) {
+                    syncReporting.report(
+                        com.chmouel.liseur.data.remote.PositionSyncStatus
+                            .Failed(reason),
+                    )
+                }
+            },
+        )
 
-    val readingPositions = ReadingPositionPublisher(
-        scope = applicationScope,
-        overrideFor = { database.readingProgressDao().get(it)?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE },
-        persist = com.chmouel.liseur.data.bookorbit.BookOrbitLocalPositionWriter(database)::save,
-        refreshFinished = finishedState::refreshFromProgress,
-        markFinished = { finishedState.setFinished(it, true) },
-        latestSync = latestPositionSync,
-        scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
-        onError = { message, error -> Log.e("reading-position", message, error) },
-    )
+    val readingPositions =
+        ReadingPositionPublisher(
+            scope = applicationScope,
+            overrideFor = { database.readingProgressDao().get(it)?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE },
+            persist = com.chmouel.liseur.data.bookorbit
+                .BookOrbitLocalPositionWriter(database)::save,
+            refreshFinished = finishedState::refreshFromProgress,
+            markFinished = { finishedState.setFinished(it, true) },
+            latestSync = latestPositionSync,
+            scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
+            onError = { message, error -> Log.e("reading-position", message, error) },
+        )
 
     val listeningCheckpoints = ListeningCheckpoints(readingPositions)
 
     /** The book left paused while read aloud, put back when it reopens after the app closed. */
-    val pausedListening = com.chmouel.liseur.readaloud.PausedListening(
-        store = com.chmouel.liseur.readaloud.DataStorePausedReadAloudStore(context.applicationContext),
-        queue = readingPositions::afterQueuedWrites,
-        saved = { book ->
-            database.readingProgressDao().get(book)?.let {
-                com.chmouel.liseur.readaloud.SavedPlace(it.positionRevision, it.locatorJson)
-            }
-        },
-    )
+    val pausedListening =
+        com.chmouel.liseur.readaloud.PausedListening(
+            store =
+                com.chmouel.liseur.readaloud
+                    .DataStorePausedReadAloudStore(context.applicationContext),
+            queue = readingPositions::afterQueuedWrites,
+            saved = { book ->
+                database.readingProgressDao().get(book)?.let {
+                    com.chmouel.liseur.readaloud
+                        .SavedPlace(it.positionRevision, it.locatorJson)
+                }
+            },
+        )
 
     /** The servers and keys on the Services page, shared by every feature that reaches one. */
     internal val serverConnections: ServerConnections by lazy {
@@ -904,7 +1032,8 @@ class AppContainer(context: Context) {
 
     /** The service and model the reading companion uses: a listed server, and in the Play build Gemini too. */
     internal val companionServer: com.chmouel.liseur.companion.CompanionServer by lazy {
-        com.chmouel.liseur.companion.CompanionFeatureFactory.create(context.applicationContext, this)
+        com.chmouel.liseur.companion.CompanionFeatureFactory
+            .create(context.applicationContext, this)
     }
 
     /** The build's own accounts on the Services page, such as the Play build's Gemini key. */
@@ -923,55 +1052,64 @@ class AppContainer(context: Context) {
     }
 
     internal val wholeBookTranslations by lazy {
-        com.chmouel.liseur.translate.WholeBookTranslations(context.applicationContext, this, applicationScope)
+        com.chmouel.liseur.translate
+            .WholeBookTranslations(context.applicationContext, this, applicationScope)
     }
 
     /** Whole-book jobs, empty without opening translation storage until there is some. */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    internal val wholeBookRecords: Flow<List<com.chmouel.liseur.translate.KeptTranslation>> = savedTranslationsOpened
-        .map { opened -> opened || savedTranslationsFile.exists() }
-        .distinctUntilChanged()
-        .flatMapLatest { stored -> if (stored) wholeBookTranslations.records else flowOf(emptyList()) }
-        .flowOn(Dispatchers.IO)
+    internal val wholeBookRecords: Flow<List<com.chmouel.liseur.translate.KeptTranslation>> =
+        savedTranslationsOpened
+            .map { opened -> opened || savedTranslationsFile.exists() }
+            .distinctUntilChanged()
+            .flatMapLatest { stored -> if (stored) wholeBookTranslations.records else flowOf(emptyList()) }
+            .flowOn(Dispatchers.IO)
 
     /** Reading added up across every device, when a server keeps it. */
-    val syncInsights = LiseurSyncInsights(
-        serverDao = database.remoteServerDao(),
-        identityDao = database.workIdentityDao(),
-    )
+    val syncInsights =
+        LiseurSyncInsights(
+            serverDao = database.remoteServerDao(),
+            identityDao = database.workIdentityDao(),
+        )
 
-    val syncSnapshots = LiseurSyncSnapshots(
-        database.remoteServerDao(), database.readingSessionDao(),
-        database.sessionTransmissionDao(), database.workIdentityDao(),
-        deviceKey = { deviceIdentity.current().id },
-    )
+    val syncSnapshots =
+        LiseurSyncSnapshots(
+            database.remoteServerDao(),
+            database.readingSessionDao(),
+            database.sessionTransmissionDao(),
+            database.workIdentityDao(),
+            deviceKey = { deviceIdentity.current().id },
+        )
 
     /** Other devices' reading from the last proven snapshot, for the widgets. */
-    val remoteStatsCache = RemoteStatsCache(
-        database.remoteStatsDao(),
-        database.remoteServerDao(),
-        inTransaction = { work -> database.withTransaction { work() } },
-    )
+    val remoteStatsCache =
+        RemoteStatsCache(
+            database.remoteStatsDao(),
+            database.remoteServerDao(),
+            inTransaction = { work -> database.withTransaction { work() } },
+        )
 
-    val remoteStatsRefresh = RemoteStatsRefresh(
-        source = syncSnapshots,
-        sessions = database.readingSessionDao(),
-        cache = remoteStatsCache,
-        canAccess = {
-            database.remoteServerDao().get()?.let { !localNetwork.blocks(it.baseUrl) } == true
-        },
-    )
+    val remoteStatsRefresh =
+        RemoteStatsRefresh(
+            source = syncSnapshots,
+            sessions = database.readingSessionDao(),
+            cache = remoteStatsCache,
+            canAccess = {
+                database.remoteServerDao().get()?.let { !localNetwork.blocks(it.baseUrl) } == true
+            },
+        )
 
-    val remoteCatalog = RemoteCatalogRepository(
-        router = remoteRouter,
-        serverDao = database.remoteServerDao(),
-        bookDao = database.bookDao(),
-        bookRemoval = bookRemoval,
-        inTransaction = { work -> database.withTransaction { work() } },
-        networkAvailability = networkAvailability,
-        localNetwork = localNetwork,
-        metadataDao = database.bookMetadataDao(),
-    )
+    val remoteCatalog =
+        RemoteCatalogRepository(
+            router = remoteRouter,
+            serverDao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            bookRemoval = bookRemoval,
+            inTransaction = { work -> database.withTransaction { work() } },
+            networkAvailability = networkAvailability,
+            localNetwork = localNetwork,
+            metadataDao = database.bookMetadataDao(),
+        )
 
     private val browseOrbitSessions = mutableMapOf<Long, com.chmouel.liseur.data.bookorbit.BookOrbitSession>()
 
@@ -979,49 +1117,55 @@ class AppContainer(context: Context) {
         synchronized(browseOrbitSessions) {
             browseOrbitSessions.getOrPut(serverId) {
                 com.chmouel.liseur.data.bookorbit.BookOrbitSession(
-                    database.remoteServerDao(), serverId = serverId,
+                    database.remoteServerDao(),
+                    serverId = serverId,
                 )
             }
         }
 
     fun browseOrbitFile(serverId: Long): com.chmouel.liseur.data.bookorbit.BookOrbitFileSource =
-        com.chmouel.liseur.data.bookorbit.BookOrbitFileSource(browseOrbitSession(serverId))
+        com.chmouel.liseur.data.bookorbit
+            .BookOrbitFileSource(browseOrbitSession(serverId))
 
-    val browseCatalog = BrowseCatalogRepository(
-        servers = database.remoteServerDao(),
-        books = database.bookDao(),
-        orbitBindings = database.bookOrbitBindingDao(),
-        removal = bookRemoval,
-        downloads = bookDownloads,
-        router = remoteRouter,
-        setups = serverSetups,
-        orbitCatalog = { id ->
-            com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
-                bindings = database.bookOrbitBindingDao(),
-                serverDao = database.remoteServerDao(),
-                http = com.chmouel.liseur.data.bookorbit.BookOrbitHttp(browseOrbitSession(id)),
-                inTransaction = { work -> database.withTransaction { work() } },
-                serverId = id,
-                bookUrlFor = { remoteId -> BrowseCatalogRepository.bookUrl(id, ServerKind.BOOKORBIT, remoteId) },
-                persistCatalogBindings = false,
-            )
-        },
-        closeOrbit = { server ->
-            try {
-                browseOrbitSession(server.id).close(server)
-            } finally {
-                synchronized(browseOrbitSessions) { browseOrbitSessions.remove(server.id) }
-            }
-        },
-        inTransaction = { work -> database.withTransaction { work() } },
-        metadata = database.bookMetadataDao(),
-    )
+    val browseCatalog =
+        BrowseCatalogRepository(
+            servers = database.remoteServerDao(),
+            books = database.bookDao(),
+            orbitBindings = database.bookOrbitBindingDao(),
+            removal = bookRemoval,
+            downloads = bookDownloads,
+            router = remoteRouter,
+            setups = serverSetups,
+            orbitCatalog = { id ->
+                com.chmouel.liseur.data.bookorbit.BookOrbitCatalogClient(
+                    bindings = database.bookOrbitBindingDao(),
+                    serverDao = database.remoteServerDao(),
+                    http =
+                        com.chmouel.liseur.data.bookorbit
+                            .BookOrbitHttp(browseOrbitSession(id)),
+                    inTransaction = { work -> database.withTransaction { work() } },
+                    serverId = id,
+                    bookUrlFor = { remoteId -> BrowseCatalogRepository.bookUrl(id, ServerKind.BOOKORBIT, remoteId) },
+                    persistCatalogBindings = false,
+                )
+            },
+            closeOrbit = { server ->
+                try {
+                    browseOrbitSession(server.id).close(server)
+                } finally {
+                    synchronized(browseOrbitSessions) { browseOrbitSessions.remove(server.id) }
+                }
+            },
+            inTransaction = { work -> database.withTransaction { work() } },
+            metadata = database.bookMetadataDao(),
+        )
 
-    val seriesExtras = SeriesExtrasRepository(
-        account = remoteAccount,
-        dao = database.seriesExtraDao(),
-        networkAvailability = networkAvailability,
-    )
+    val seriesExtras =
+        SeriesExtrasRepository(
+            account = remoteAccount,
+            dao = database.seriesExtraDao(),
+            networkAvailability = networkAvailability,
+        )
 }
 
 // Between sweeps of saved translations while the library keeps changing, as through a scan.

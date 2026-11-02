@@ -176,6 +176,7 @@ class KosyncPositionSync(
             accountKey = account.peerId,
             remoteStatus = state.pendingStatus,
             localRevision = stored?.localRevision,
+            localUnreadResetPending = stored?.hasPendingUnreadReset(state.ackedRevision) == true,
         ).takeIf { !it.agrees }
     }
 

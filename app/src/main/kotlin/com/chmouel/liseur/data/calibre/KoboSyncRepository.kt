@@ -184,6 +184,7 @@ class KoboSyncRepository(
             accountKey = server.accountKey,
             remoteStatus = stored.pendingStatus,
             localRevision = stored.localRevision,
+            localUnreadResetPending = stored.hasPendingUnreadReset(),
         ).takeIf { !it.agrees }
     }
 

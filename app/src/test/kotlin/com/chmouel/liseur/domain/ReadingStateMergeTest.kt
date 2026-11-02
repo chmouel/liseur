@@ -282,6 +282,32 @@ class ReadingStateMergeTest {
     }
 
     @Test
+    fun `an unread reset wins over a pending remote reading even without a baseline`() {
+        val local = state(0.0, ReadingStatus.READY_TO_READ)
+        assertEquals(
+            SyncDecision.Push(local),
+            reconcileReadingState(
+                local = local,
+                remote = state(0.42, ReadingStatus.READING),
+                baseline = null,
+                localDirty = true,
+                localUnreadOverride = true,
+                exactPositionAgreement = false,
+            ),
+        )
+        assertEquals(
+            SyncDecision.Pull(state(0.42, ReadingStatus.READING)),
+            reconcileReadingState(
+                local = local,
+                remote = state(0.42, ReadingStatus.READING),
+                baseline = baseline(0.0, ReadingStatus.READY_TO_READ),
+                localDirty = false,
+                localUnreadOverride = true,
+            ),
+        )
+    }
+
+    @Test
     fun `a status change on its own is a move`() {
         val decision = reconcileReadingState(
             local = state(0.99, ReadingStatus.READING),

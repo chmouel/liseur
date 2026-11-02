@@ -443,10 +443,11 @@ class LiseurSyncPositionSync(
         val state = peerStateDao.get(bookUrl, account.peerId) ?: return null
         if (!state.hasPending) return null
         val there = state.pendingProgression ?: return null
+        val stored = progressDao.get(bookUrl)
         val alias = identityDao.alias(bookUrl, account.peerId)
         val exact = state.exactLocatorFor(alias)
         return SyncPreview(
-            local = progressDao.get(bookUrl)?.totalProgression,
+            local = stored?.totalProgression,
             remote = there,
             remoteAt = state.remoteUpdatedAt?.takeIf { it > 0 },
             excerpt = ExactLocatorAnchor.excerpt(exact),
@@ -456,13 +457,14 @@ class LiseurSyncPositionSync(
                 ResumeConfidence.APPROXIMATE
             },
             exactPositionAgreement = ExactLocatorAnchor.agreement(
-                progressDao.get(bookUrl)?.locatorJson,
+                stored?.locatorJson,
                 exact,
             ),
             accountKey = account.peerId,
             remoteStatus = state.pendingStatus,
             remoteLocatorJson = state.restorableLocatorFor(alias),
-            localRevision = progressDao.get(bookUrl)?.localRevision,
+            localRevision = stored?.localRevision,
+            localUnreadResetPending = stored?.hasPendingUnreadReset(state.ackedRevision) == true,
         ).takeIf { !it.agrees }
     }
 

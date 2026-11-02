@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.ExactPositionDecision
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.sync.PositionUpdate
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.runBlocking
@@ -229,6 +230,44 @@ class BookOrbitStatusSyncTest {
         assertEquals(0, local.positionRevision)
         assertEquals("GET", web.takeRequest().method)
         assertEquals(1, web.requestCount)
+    }
+
+    @Test
+    fun `reading after an unread mark clears the server mark before or after its acknowledgement`() = runBlocking {
+        val finished = FinishedState(database.bookDao(), database.readingProgressDao())
+        for (acknowledgeUnread in listOf(false, true)) {
+            finished.setFinished(bookUrl, false)
+            if (acknowledgeUnread) {
+                web.enqueue(MockResponse(body = detail("unread", "manual")))
+                assertEquals(SyncOutcome.Success, runSync())
+                assertEquals("GET", web.takeRequest().method)
+            }
+            BookOrbitLocalPositionWriter(database).save(
+                PositionUpdate(
+                    bookUrl, """{"href":"chapter.xhtml"}""", 0.1, null, null, null, null, 20,
+                    resumesReading = true,
+                ),
+                ReadingStatus.READING.wireName,
+            )
+            web.enqueue(MockResponse(body = detail("unread", "manual")))
+            web.enqueue(MockResponse(code = 204))
+            web.enqueue(MockResponse(body = detail("reading", "manual")))
+
+            assertEquals(SyncOutcome.Success, runSync())
+            assertEquals("GET", web.takeRequest().method)
+            val patch = web.takeRequest()
+            assertEquals("PATCH", patch.method)
+            assertEquals("reading", JSONObject(patch.body!!.utf8()).getString("status"))
+            assertEquals("GET", web.takeRequest().method)
+            val local = database.readingProgressDao().get(bookUrl)!!
+            assertEquals(FinishedOverride.NONE, local.override)
+            assertEquals(0.1, local.totalProgression!!, 0.0)
+
+            web.enqueue(MockResponse(body = detail("reading", "manual")))
+            assertEquals(SyncOutcome.Success, runSync())
+            assertEquals("GET", web.takeRequest().method)
+            assertEquals(local.statusRevision, database.readingProgressDao().get(bookUrl)!!.statusRevision)
+        }
     }
 
     @Test

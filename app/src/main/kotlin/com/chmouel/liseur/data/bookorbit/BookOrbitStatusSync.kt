@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.ReadingStatus
 import kotlinx.coroutines.sync.withLock
 
 /** Reconciles a book-level status independently of its saved passage. */
@@ -64,7 +65,7 @@ class BookOrbitStatusSync(
             val localOverride = local?.finishedOverride ?: FinishedOverride.NONE.ordinal
             val localRevision = local?.statusRevision ?: 0L
             val localChanged = if (agreement == null) {
-                localOverride != FinishedOverride.NONE.ordinal
+                localOverride != FinishedOverride.NONE.ordinal || localRevision > 0
             } else {
                 localRevision != agreement.agreedLocalStatusRevision ||
                     localOverride != agreement.agreedLocalOverride
@@ -73,6 +74,9 @@ class BookOrbitStatusSync(
                 remote?.status != agreement.agreedRemoteStatus ||
                 remote?.source != agreement.agreedRemoteSource
             val target = BookOrbitStatusMapping.toRemote(FinishedOverride.fromStored(localOverride))
+                ?: if (localRevision > 0 && remote?.status == "unread" && remote.source == "manual") {
+                    if (local?.status == ReadingStatus.FINISHED.wireName) "read" else "reading"
+                } else null
 
             if (localChanged && target != null) {
                 if (isAcknowledged(remote, target)) {

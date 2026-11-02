@@ -38,6 +38,7 @@ data class PositionUpdate(
     val readAt: Long = updatedAt,
     /** False for a local-only save that should not ask for a sync of its own. */
     val signalSync: Boolean = true,
+    val resumesReading: Boolean = false,
 )
 
 /**

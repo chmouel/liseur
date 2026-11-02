@@ -28,51 +28,39 @@ ask that function. Where a bar would be drawn for a book the shelf calls
 unread, the screen says the place is kept instead, and the details page
 offers Read rather than Continue reading, for the same reason.
 
-This ADR covers the classification only. Nothing here changes how the
-mark is written, cleared or synced.
+Marking unread in Liseur resets the current locator and percentage to
+the beginning and advances both position and status revisions. Sync
+delivers the reset before accepting an old remote place. Reading history,
+annotations and the furthest-read position are kept. An imported
+status-only mark still keeps the saved passage.
+
+The unread write waits for earlier position and completion events in
+`ReadingPositionPublisher`, including their retries. Opening a book keeps
+a preserved remote conflict on disk while its peer still owes an
+acknowledgement of the reset. Explicit choices remain available.
+
+The next persisted reader movement or local jump clears the unread
+override in the same transaction as the new position and advances the
+status revision once. Opening, reflow, lifecycle replay, backup imports
+and read-aloud checkpoints do not clear it. An explicit finished mark
+remains set. If BookOrbit still has a manual unread status, the resumed
+reading replaces that status without replacing the saved passage.
 
 ## Consequences
 
-Every screen now gives the same answer, without touching the write path,
-the database or any sync. Two rows change hands for existing readers: a
-book marked read and then unread sits at 1.0 and now files as unread,
-where before it filed as in progress, and a volume marked unread stops
-counting towards a series' in-progress total.
-
-A mark that is never cleared still means a book being read stays unread.
-That is the next decision, not this one.
+Every screen gives the same answer. Existing or imported unread marks may
+still have a saved place, which the classification honours. A new local
+unread mark opens at the beginning. A volume marked unread stops counting
+towards a series' in-progress total.
 
 ## Not decided here
 
-These are the write-path questions, kept together so the next change
-lands against a written target rather than rediscovering them.
-
-What counts as reading. A page turn by the reader and a read-aloud
-listening checkpoint are the two candidates. The checkpoint is not proof
-that anything was heard: `ReadAloudSession.place` saves the anchor to
-resume from, which after a failed first sentence is a position nobody
-read. It needs playback evidence, not just a saved place.
-
-Ordering. `ReadingPositionPublisher` queues accepted movements and
-writes them later, while a status change writes directly. A movement
-accepted before a mark can therefore land after it, read the new mark
-and clear it. Room's single writer keeps the row coherent, not the
-intent: this needs an ordering rule or a generation stamp, and it is the
-reason the clearing write cannot be a transaction alone.
-
-Coherence of the write. Clearing the mark has to bump `status_revision`,
-and the `status` column has to be derived from the override the write
-actually retains, not from the one it read, or a fenced-out write leaves
-a book at 99% labelled still-reading.
+Read-aloud needs playback evidence before it can clear an unread mark.
+`ReadAloudSession.place` saves the anchor to resume from, which after a
+failed first sentence is a position nobody read.
 
 Undo. Marking a book read runs `clearTranslationsOnFinish` immediately,
 so an undo offered afterwards cannot restore what it deleted, and a
 snackbar can outlive a newer status change. Either the cleanup waits for
 the commit, or the undo does not claim to restore translations. Until
 then, marking unread has no undo at all.
-
-BookOrbit. The outgoing status now depends on the progression, so
-comparing `status_revision` and the override is no longer enough to
-notice a change, and adoption has to persist with its agreement in one
-transaction, or a crash between them leaves an imported state that looks
-like a local act.

@@ -153,6 +153,7 @@ data class SyncPreview(
      * furthest never swallows a page another device sent after it.
      */
     val furthestUptoSeq: Long = 0,
+    val localUnreadResetPending: Boolean = false,
 ) {
     /** True when there is nothing to choose between. */
     val agrees: Boolean

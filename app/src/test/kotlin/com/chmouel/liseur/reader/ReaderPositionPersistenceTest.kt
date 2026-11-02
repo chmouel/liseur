@@ -183,6 +183,27 @@ class ReaderPositionPersistenceTest {
             assertTrue(publisher.flush(url))
             assertEquals(0.9, stored().locations.progression!!, 0.000001)
             assertEquals(4, writes)
+
+            models.clear()
+            container.finishedState.setFinished(url, false)
+            val unread = model()
+            assertEquals(0.0, unread.ready().initialLocator!!.locations.totalProgression!!, 0.0)
+            val unreadRevision = dao.get(url)!!.statusRevision
+            unread.onLocatorChanged(place(0.0), NavigatorPositionEvent.OPENING_RESTORATION)
+            unread.onLocatorChanged(place(0.01), NavigatorPositionEvent.PREFERENCE_REFLOW)
+            unread.onReaderPaused()
+            assertTrue(publisher.flush(url))
+            assertEquals(FinishedOverride.UNREAD, dao.get(url)!!.override)
+            assertEquals(unreadRevision, dao.get(url)!!.statusRevision)
+            assertEquals(4, writes)
+
+            unread.onReaderResumed()
+            unread.onLocatorChanged(place(0.5), NavigatorPositionEvent.READER_MOVEMENT)
+            assertTrue(publisher.flush(url))
+            assertEquals(FinishedOverride.NONE, dao.get(url)!!.override)
+            assertEquals(unreadRevision + 1, dao.get(url)!!.statusRevision)
+            assertTrue(dao.get(url)!!.totalProgression!! > 0.0)
+            assertEquals(5, writes)
         } finally {
             models.clear()
             scope.cancel()

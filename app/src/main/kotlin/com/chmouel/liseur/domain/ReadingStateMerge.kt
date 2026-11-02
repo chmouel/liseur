@@ -167,8 +167,11 @@ fun reconcileReadingState(
 
     if (sameSpot(local, remote, exactPositionAgreement)) return SyncDecision.InSync
 
-    // A deliberate "not read after all" here beats a leftover flag there.
-    if (localUnreadOverride && remote.status == ReadingStatus.FINISHED) {
+    // A pending unread reset must reach the server before it can restore an old place
+    if (localUnreadOverride &&
+        (remote.status == ReadingStatus.FINISHED ||
+            localDirty && local.progression == 0.0 && local.status == ReadingStatus.READY_TO_READ)
+    ) {
         return SyncDecision.Push(local)
     }
 

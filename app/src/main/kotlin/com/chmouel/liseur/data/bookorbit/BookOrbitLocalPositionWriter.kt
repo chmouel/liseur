@@ -24,6 +24,7 @@ class BookOrbitLocalPositionWriter(private val database: LiseurDatabase) {
             status = status,
             updatedAt = update.updatedAt,
             readAt = update.readAt,
+            resumesReading = update.resumesReading,
         )
         // Agreed in the move's own transaction, so a restart cannot separate them.
         update.bookOrbitApproximate?.takeIf { it.context.bookUrl == update.bookUrl }

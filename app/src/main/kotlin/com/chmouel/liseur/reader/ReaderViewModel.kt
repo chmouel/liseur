@@ -1056,7 +1056,9 @@ class ReaderViewModel(
         val outcome = positionSync.resolve(
             bookId,
             takeRemote,
-            progressDao.currentRevision(bookId) ?: 0,
+            preview.localRevision ?: 0,
+            expecting = preview.fingerprint(),
+            peerId = preview.peerId,
         )
         // On failure the disagreement stays preserved and will be
         // settled on the next open; the book still opens now.
@@ -1889,6 +1891,7 @@ class ReaderViewModel(
                 bookOrbitPull = bookOrbitOpening.verifiedPull,
                 bookOrbitApproximateDeclined = declinedApproximate,
                 bookOrbitDeclined = declinedBookOrbit,
+                resumesReading = true,
             ),
         )
         val settling = settlingVerifiedOpening || settlingApproximateOpening || declinedApproximate != null
