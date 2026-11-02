@@ -67,7 +67,7 @@ the unread mark stands: a preserved conflict is not offered and the
 mark is pushed. Reading on clears the mark, and the only evidence left
 that the peer still owes an acknowledgement is the revision counters,
 which ordinary reading moves too. Until a sync has delivered the newer
-local position, a preserved place from before the reset can therefore
+local position (#413), a preserved place from before the reset can therefore
 be offered again on the next open. Telling the two apart needs the
 reset kept on the row with the revision it was written at.
 
