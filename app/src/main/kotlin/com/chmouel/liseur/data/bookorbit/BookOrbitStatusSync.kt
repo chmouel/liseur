@@ -74,9 +74,7 @@ class BookOrbitStatusSync(
                 remote?.status != agreement.agreedRemoteStatus ||
                 remote?.source != agreement.agreedRemoteSource
             val target = BookOrbitStatusMapping.toRemote(FinishedOverride.fromStored(localOverride))
-                ?: if (localRevision > 0 && remote?.status == "unread" && remote.source == "manual") {
-                    if (local?.status == ReadingStatus.FINISHED.wireName) "read" else "reading"
-                } else null
+                ?: resumedReadingTarget(local, remote)
 
             if (localChanged && target != null) {
                 if (isAcknowledged(remote, target)) {
@@ -280,6 +278,26 @@ class BookOrbitStatusSync(
 
     private fun isAcknowledged(remote: BookOrbitStatus?, target: String): Boolean =
         remote?.status == target && remote.source == MANUAL_SOURCE
+
+    /**
+     * A reading that carried on from a mark the server still holds.
+     *
+     * Resuming clears the local mark, which leaves Liseur with no
+     * override to send, yet the server may still say `unread` (the reset
+     * never reached it) or `read` (the finished mark that the reading
+     * carried on from). Settling that local revision without sending
+     * would lose the resume for good, so it is said out loud instead.
+     * Statuses Liseur cannot represent are left where they are.
+     */
+    private fun resumedReadingTarget(local: ReadingProgress?, remote: BookOrbitStatus?): String? {
+        if (remote?.source != MANUAL_SOURCE) return null
+        if (remote.status != "unread" && remote.status != "read") return null
+        return when (local?.status) {
+            ReadingStatus.FINISHED.wireName -> "read"
+            ReadingStatus.READING.wireName -> "reading"
+            else -> null
+        }
+    }
 
     companion object {
         private const val MANUAL_SOURCE = "manual"

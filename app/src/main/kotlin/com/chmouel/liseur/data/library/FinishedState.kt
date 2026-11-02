@@ -26,20 +26,32 @@ class FinishedState(
     private val now: () -> Long = System::currentTimeMillis,
     /** Told of every book someone said they finished, once it is written. */
     private val onFinished: suspend (String) -> Unit = {},
-    private val beforeUnread: suspend (String) -> Unit = {},
+    /** Runs a status choice in the same line as queued position writes. */
+    private val inWriteOrder: suspend (suspend () -> Unit) -> Unit = { it() },
 ) {
 
     /**
      * Someone said so outright, from the library or the reader.
      *
      * This counts as reading the server has not been told about, so it
-     * travels to the other devices like a page turn does.
+     * travels to the other devices like a page turn does, and it takes
+     * its place in that queue: a page turned before the tap is on disk
+     * first, and one accepted after it lands after it rather than under
+     * it.
      */
     suspend fun setFinished(bookUrl: String, finished: Boolean) {
-        if (!finished) beforeUnread(bookUrl)
         val override = if (finished) FinishedOverride.FINISHED else FinishedOverride.UNREAD
-        setStatus(bookUrl, override, null)
+        inWriteOrder { writeStatus(bookUrl, override, null) }
         if (finished) onFinished(bookUrl)
+    }
+
+    /**
+     * The reader reached the end of the book, from inside the publisher's
+     * own queue: writes straight away, because waiting for that queue
+     * from within it would wait for ever.
+     */
+    suspend fun recordFinished(bookUrl: String) {
+        writeStatus(bookUrl, FinishedOverride.FINISHED, null)
     }
 
     /**
@@ -71,7 +83,7 @@ class FinishedState(
         return applied
     }
 
-    private suspend fun setStatus(
+    private suspend fun writeStatus(
         bookUrl: String,
         override: FinishedOverride,
         requestedStatus: ReadingStatus?,

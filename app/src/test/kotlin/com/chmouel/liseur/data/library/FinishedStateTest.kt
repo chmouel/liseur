@@ -16,6 +16,7 @@ import com.chmouel.liseur.sync.LatestPositionSync
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -23,6 +24,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -151,7 +153,7 @@ class FinishedStateTest {
                 FinishedState(
                     db.bookDao(),
                     db.readingProgressDao(),
-                    beforeUnread = { publisher.flush(it) },
+                    inWriteOrder = { publisher.inOrder(it) },
                 )
             var attempts = 0
             publisher =
@@ -166,7 +168,7 @@ class FinishedStateTest {
                         BookOrbitLocalPositionWriter(db).save(update, status)
                     },
                     refreshFinished = state::refreshFromProgress,
-                    markFinished = { state.setFinished(it, true) },
+                    markFinished = { state.recordFinished(it) },
                     latestSync = LatestPositionSync(backgroundScope, { SyncOutcome.Success }, {}, { _, _ -> }),
                     scheduleClose = {},
                     onError = { _, _ -> },
@@ -237,6 +239,99 @@ class FinishedStateTest {
             assertEquals(before.positionRevision, after.positionRevision)
             assertEquals(ReadingStatus.FINISHED.wireName, after.status)
         }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a page turn accepted after the unread tap lands after the reset`() =
+        runTest {
+            db.bookDao().upsert(
+                Book(url = BOOK, title = "Book", author = null, coverPath = null,
+                    source = null, addedAt = 0, lastOpenedAt = null),
+            )
+            val release = CompletableDeferred<Unit>()
+            lateinit var publisher: ReadingPositionPublisher
+            val state =
+                FinishedState(
+                    db.bookDao(),
+                    db.readingProgressDao(),
+                    inWriteOrder = { publisher.inOrder(it) },
+                )
+            var held = false
+            publisher = publisherFor(backgroundScope, state) { update, status ->
+                if (!held) {
+                    held = true
+                    release.await()
+                }
+                BookOrbitLocalPositionWriter(db).save(update, status)
+            }
+
+            // A page turn is still being written when the reader taps unread.
+            assertTrue(publisher.publish(PositionUpdate(BOOK, """{"href":"a.xhtml"}""", 0.42, null, null, null, null, 10)))
+            runCurrent()
+            // The reset queues behind it, and the reading after the tap behind the reset.
+            val marked = async { state.setFinished(BOOK, false) }
+            runCurrent()
+            assertTrue(marked.isActive)
+            assertTrue(
+                publisher.publish(
+                    PositionUpdate(BOOK, """{"href":"b.xhtml"}""", 0.5, null, null, null, null, 20, resumesReading = true),
+                ),
+            )
+            release.complete(Unit)
+            marked.await()
+            assertTrue(publisher.flush(BOOK))
+
+            val after = db.readingProgressDao().get(BOOK)!!
+            assertEquals(0.5, after.totalProgression!!, 0.0)
+            assertEquals(FinishedOverride.NONE, after.override)
+            assertEquals(ReadingStatus.READING.wireName, after.status)
+        }
+
+    @Test
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun `a queued status write that fails leaves the publisher running`() =
+        runTest {
+            var attempts = 0
+            lateinit var publisher: ReadingPositionPublisher
+            val state =
+                FinishedState(
+                    db.bookDao(),
+                    db.readingProgressDao(),
+                    inTransaction = { work ->
+                        if (attempts++ == 0) error("disk full")
+                        work()
+                    },
+                    inWriteOrder = { publisher.inOrder(it) },
+                )
+            publisher = publisherFor(backgroundScope, state) { update, status ->
+                BookOrbitLocalPositionWriter(db).save(update, status)
+            }
+
+            val refused = runCatching { state.setFinished(BOOK, false) }
+            assertNotNull(refused.exceptionOrNull())
+
+            assertTrue(publisher.publish(PositionUpdate(BOOK, """{"href":"a.xhtml"}""", 0.42, null, null, null, null, 10)))
+            assertTrue(publisher.flush(BOOK))
+            assertEquals(0.42, db.readingProgressDao().get(BOOK)!!.totalProgression!!, 0.0)
+
+            state.setFinished(BOOK, false)
+            assertEquals(FinishedOverride.UNREAD, db.readingProgressDao().get(BOOK)!!.override)
+        }
+
+    private fun publisherFor(
+        scope: CoroutineScope,
+        state: FinishedState,
+        persist: suspend (PositionUpdate, String?) -> Unit,
+    ) = ReadingPositionPublisher(
+        scope = scope,
+        overrideFor = { db.readingProgressDao().get(it)?.override ?: FinishedOverride.NONE },
+        persist = persist,
+        refreshFinished = state::refreshFromProgress,
+        markFinished = { state.recordFinished(it) },
+        latestSync = LatestPositionSync(scope, { SyncOutcome.Success }, {}, { _, _ -> }),
+        scheduleClose = {},
+        onError = { _, _ -> },
+    )
 
     private companion object {
         const val BOOK = "book"

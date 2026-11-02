@@ -67,6 +67,10 @@ class ReadingPositionPublisher(
             val bookUrl: String,
             val answer: CompletableDeferred<Boolean>,
         ) : Event
+        data class Ordered(
+            val action: suspend () -> Unit,
+            val answer: CompletableDeferred<Result<Unit>>,
+        ) : Event
     }
 
     /** The two kinds of write that can fail, tracked apart; see [flush]. */
@@ -98,6 +102,7 @@ class ReadingPositionPublisher(
                         is Event.Flush -> event.answer.complete(
                             outstanding[event.bookUrl].isNullOrEmpty(),
                         )
+                        is Event.Ordered -> event.answer.complete(ran(event.action))
                     }
                 }
             } finally {
@@ -107,8 +112,13 @@ class ReadingPositionPublisher(
                 // waited on for ever.
                 events.close()
                 while (true) {
-                    val left = events.tryReceive().getOrNull() ?: break
-                    (left as? Event.Flush)?.answer?.complete(false)
+                    when (val left = events.tryReceive().getOrNull() ?: break) {
+                        is Event.Flush -> left.answer.complete(false)
+                        is Event.Ordered -> left.answer.complete(
+                            Result.failure(CancellationException("The publisher stopped")),
+                        )
+                        else -> Unit
+                    }
                 }
             }
         }
@@ -174,6 +184,36 @@ class ReadingPositionPublisher(
         if (events.trySend(Event.Flush(bookUrl, answer)).isFailure) return false
         return answer.await()
     }
+
+    /**
+     * Runs [action] in the queue, after every write accepted before this
+     * call, and returns once it has committed.
+     *
+     * This is how a status choice takes its place in the same line as the
+     * page turns: a movement accepted afterwards is ordered after it, and
+     * a movement accepted before it is already on disk. [action] runs in
+     * the consumer, so it writes the status directly and never queues
+     * again.
+     */
+    suspend fun inOrder(action: suspend () -> Unit) {
+        val answer = CompletableDeferred<Result<Unit>>()
+        if (events.trySend(Event.Ordered(action, answer)).isFailure) {
+            throw CancellationException("No reading position publisher is listening")
+        }
+        answer.await().getOrThrow()
+    }
+
+    /** Runs a queued action without letting its failure stop the consumer. */
+    private suspend fun ran(action: suspend () -> Unit): Result<Unit> =
+        try {
+            action()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            onError("Could not write a reading status", e)
+            Result.failure(e)
+        }
 
     private suspend fun store(update: PositionUpdate) {
         val stored = retry {
