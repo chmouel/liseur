@@ -427,7 +427,9 @@ class AppContainer(
             // Awaited, so the clear is recorded before finishing returns; the
             // sync that sends it is only signalled.
             onFinished = { clearTranslationsOnFinish(it) },
-            beforeUnread = { readingPositions.flush(it) },
+            // Written in the position queue, so a page turn accepted after the
+            // tap is ordered after the choice instead of under it.
+            inWriteOrder = { action -> readingPositions.inOrder(action) },
         )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)
@@ -1001,7 +1003,7 @@ class AppContainer(
             persist = com.chmouel.liseur.data.bookorbit
                 .BookOrbitLocalPositionWriter(database)::save,
             refreshFinished = finishedState::refreshFromProgress,
-            markFinished = { finishedState.setFinished(it, true) },
+            markFinished = { finishedState.recordFinished(it) },
             latestSync = latestPositionSync,
             scheduleClose = { PositionSyncWorker.pushBook(context.applicationContext, it) },
             onError = { message, error -> Log.e("reading-position", message, error) },

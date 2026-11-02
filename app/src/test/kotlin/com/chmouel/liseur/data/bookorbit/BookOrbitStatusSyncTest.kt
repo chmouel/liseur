@@ -271,6 +271,49 @@ class BookOrbitStatusSyncTest {
     }
 
     @Test
+    fun `reading after a finished mark answers the read the server still holds`() = runBlocking {
+        val locator = """{"href":"chapter.xhtml","locations":{"progression":0.73}}"""
+        database.readingProgressDao().upsert(
+            ReadingProgress(bookUrl, locator, 0.73, updatedAt = 11),
+        )
+        val finished = FinishedState(database.bookDao(), database.readingProgressDao())
+        finished.setFinished(bookUrl, true)
+        web.enqueue(MockResponse(body = detail("unread", "auto")))
+        web.enqueue(MockResponse(code = 200))
+        web.enqueue(MockResponse(body = detail("read", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        repeat(3) { web.takeRequest() }
+
+        // Unread here, resumed before either mark reached the server.
+        finished.setFinished(bookUrl, false)
+        BookOrbitLocalPositionWriter(database).save(
+            PositionUpdate(
+                bookUrl, """{"href":"chapter.xhtml"}""", 0.1, null, null, null, null, 20,
+                resumesReading = true,
+            ),
+            ReadingStatus.READING.wireName,
+        )
+        web.enqueue(MockResponse(body = detail("read", "manual")))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = detail("reading", "manual")))
+
+        assertEquals(SyncOutcome.Success, runSync())
+
+        assertEquals("GET", web.takeRequest().method)
+        val patch = web.takeRequest()
+        assertEquals("PATCH", patch.method)
+        assertEquals("reading", JSONObject(patch.body!!.utf8()).getString("status"))
+        assertEquals("GET", web.takeRequest().method)
+        val local = database.readingProgressDao().get(bookUrl)!!
+        assertEquals(FinishedOverride.NONE, local.override)
+        assertEquals(0.1, local.totalProgression!!, 0.0)
+        val agreement = database.bookOrbitStatusAgreementDao().get(account.accountKey, bookUrl)!!
+        assertEquals("reading", agreement.agreedRemoteStatus)
+        assertEquals(local.statusRevision, agreement.agreedLocalStatusRevision)
+        assertNull(agreement.outgoingBytes)
+    }
+
+    @Test
     fun `marking status leaves an agreed exact position settled`() = runBlocking {
         val locator = """{"href":"chapter.xhtml","locations":{"progression":0.42}}"""
         val cfi = "epubcfi(/6/4!/4/2:3)"
