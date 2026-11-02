@@ -637,6 +637,39 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a position the server derived from a CrossPoint XPath restores exactly`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "sha-a")
+        db.readingProgressDao().recordLocal(LOCAL, exactLocator("local passage", 0.05), 0.05, null, "reading", NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer(), 1, 0.05, "reading", NOW)
+        // The shape internal/api/derive.go answers for a kosync op.
+        val derived = JSONObject()
+            .put("href", "OEBPS/chapter1.xhtml")
+            .put("type", "application/xhtml+xml")
+            .put(
+                "locations",
+                JSONObject().put("progression", 0.4).put("totalProgression", 0.3)
+                    .put("cssSelector", "#p40").put("liseurAnchor", 1),
+            )
+            .put("text", JSONObject().put("before", "said ").put("highlight", "the X3").put("after", " and"))
+            .toString()
+        val op = JSONObject(op(9, 0.3, deviceId = "kosync:x3", locatorJson = derived, editionSha = "sha-a"))
+            .put("origin", "kosync")
+            .put("origin_alias", "partial-md5:0123456789abcdef0123456789abcdef")
+            .put("foreign_pos", "/body/DocFragment[2]/body/div[1]/p[40]/text().8")
+            .put("derived", JSONObject().put("from", "kosync-xpath"))
+        server.enqueue(json("""{"ops":[$op],"high_water":9}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        val stored = requireNotNull(db.readingProgressDao().get(LOCAL))
+        assertEquals(0.3, stored.totalProgression!!, 0.0)
+        assertEquals(derived, stored.locatorJson)
+        assertEquals(0, db.syncPeerStateDao().countPending(peer()))
+    }
+
+    @Test
     fun `preview does not call different exact passages in step`() = runTest {
         connect()
         db.bookDao().upsert(local())
