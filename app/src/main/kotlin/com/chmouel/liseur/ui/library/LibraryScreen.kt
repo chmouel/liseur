@@ -1466,31 +1466,33 @@ private fun InitialBookActionsContent(
             ),
         )
         section.actions.forEach { action ->
-            val secondary =
-                section.secondaryReadingAction.takeIf {
-                    action == BookAction.MarkRead || action == BookAction.MarkUnread
+            BookActionRow(
+                action = action,
+                book = book,
+                refusal = refusal,
+                canDownload = canDownload,
+                onClick = { onAction(action) },
+            )
+            if (action == BookAction.MarkRead || action == BookAction.MarkUnread) {
+                section.secondaryReadingAction?.let { secondary ->
+                    BookActionRow(
+                        action = secondary,
+                        book = book,
+                        refusal = refusal,
+                        canDownload = canDownload,
+                        onClick = { onAction(secondary) },
+                    )
                 }
-            if (secondary != null) {
-                ReadingStatusRow(
-                    primary = action,
-                    secondary = secondary,
-                    book = book,
-                    onAction = onAction,
-                )
-            } else {
-                BookActionRow(
-                    action = action,
-                    book = book,
-                    refusal = refusal,
-                    canDownload = canDownload,
-                    onClick = { onAction(action) },
-                )
             }
         }
     }
     if (layout.hasManageBook) {
         Spacer(Modifier.height(8.dp))
-        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 8.dp),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outline,
+        )
         ManageBookEntryRow(onClick = onOpenManage)
     }
 }
@@ -1551,33 +1553,6 @@ private fun SheetSectionHeader(title: String) {
             .padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
             .semantics { heading() },
     )
-}
-
-@Composable
-private fun ReadingStatusRow(
-    primary: BookAction,
-    secondary: BookAction,
-    book: Book,
-    onAction: (BookAction) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Both take a share of the row: an unweighted secondary button is measured first and
-        // can leave the primary action no width at all in a narrow window with large text.
-        SheetActionRow(
-            label = actionLabel(primary, book),
-            onClick = { onAction(primary) },
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(
-            onClick = { onAction(secondary) },
-            modifier = Modifier.weight(1f),
-        ) {
-            Text(actionLabel(secondary, book))
-        }
-    }
 }
 
 @Composable
