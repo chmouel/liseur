@@ -84,15 +84,15 @@ internal fun bookActionLayout(state: BookActionState): BookActionLayout {
     val bookActions =
         listOfNotNull(
             BookAction.Details,
-            BookAction.Translation.takeIf { state.inLibrary || state.hasTranslation },
             BookAction.Series,
-            BookAction.ToggleArchive,
             BookAction.UploadToServer.takeIf { state.canUpload },
         )
     val book = BookActionSection(id = BookActionSectionId.Book, actions = bookActions)
 
-    val deviceRemoval =
+    val deviceActions =
         listOfNotNull(
+            BookAction.ToggleArchive,
+            BookAction.Translation.takeIf { state.inLibrary || state.hasTranslation },
             // BookDownloadWorker marks the book downloaded before indexing finishes, so hide
             // remove-copy while downloading is still active
             BookAction.RemoveCopy.takeIf { state.downloadedCopy && !state.downloading },
@@ -110,13 +110,13 @@ internal fun bookActionLayout(state: BookActionState): BookActionLayout {
 
     val manageSections =
         listOf(
-            ManageBookSection(ManageBookSectionId.Device, deviceRemoval),
+            ManageBookSection(ManageBookSectionId.Device, deviceActions),
             ManageBookSection(ManageBookSectionId.Server, serverRemoval),
         ).filter { it.actions.isNotEmpty() }
 
     return BookActionLayout(
         primaryAction = primaryAction,
-        sections = listOf(reading, book).filter { it.actions.isNotEmpty() },
+        sections = listOf(book, reading).filter { it.actions.isNotEmpty() },
         manageSections = manageSections,
     )
 }

@@ -53,12 +53,13 @@ class BookActionLayoutTest {
     }
 
     @Test
-    fun `initial sheet has named Reading and Book sections`() {
+    fun `initial sheet starts with Book details before Reading section`() {
         val layout = bookActionLayout(localOnly)
         assertEquals(
-            listOf(BookActionSectionId.Reading, BookActionSectionId.Book),
+            listOf(BookActionSectionId.Book, BookActionSectionId.Reading),
             layout.sections.map { it.id },
         )
+        assertEquals(BookAction.Details, layout.sections.first().actions.first())
     }
 
     @Test
@@ -98,7 +99,8 @@ class BookActionLayoutTest {
         assertEquals(BookAction.Download, layout.primaryAction)
         assertFalse(BookAction.RemoveCopy in allManageActions(state))
         assertFalse(BookAction.DeleteFile in allManageActions(state))
-        assertFalse(layout.hasManageBook)
+        assertEquals(listOf(BookAction.ToggleArchive), allManageActions(state))
+        assertTrue(layout.hasManageBook)
     }
 
     @Test
@@ -107,7 +109,12 @@ class BookActionLayoutTest {
         assertEquals(1, localManage.size)
         assertEquals(ManageBookSectionId.Device, localManage.single().id)
         assertEquals(
-            listOf(BookAction.RemoveFromLibrary, BookAction.DeleteFile),
+            listOf(
+                BookAction.ToggleArchive,
+                BookAction.Translation,
+                BookAction.RemoveFromLibrary,
+                BookAction.DeleteFile,
+            ),
             localManage.single().actions,
         )
 
@@ -117,7 +124,12 @@ class BookActionLayoutTest {
             serverManage.map { it.id },
         )
         assertEquals(
-            listOf(BookAction.RemoveCopy, BookAction.RemoveFromLibrary),
+            listOf(
+                BookAction.ToggleArchive,
+                BookAction.Translation,
+                BookAction.RemoveCopy,
+                BookAction.RemoveFromLibrary,
+            ),
             serverManage.first { it.id == ManageBookSectionId.Device }.actions,
         )
         assertEquals(
@@ -167,13 +179,14 @@ class BookActionLayoutTest {
 
     @Test
     fun `translation shows for a file on this device or a translation already made`() {
-        assertFalse(BookAction.Translation in allInitialActions(BookActionState(onServer = true)))
-        assertTrue(BookAction.Translation in allInitialActions(BookActionState(hasTranslation = true)))
-        assertTrue(BookAction.Translation in allInitialActions(localOnly))
+        assertFalse(BookAction.Translation in allManageActions(BookActionState(onServer = true)))
+        assertTrue(BookAction.Translation in allManageActions(BookActionState(hasTranslation = true)))
+        assertTrue(BookAction.Translation in allManageActions(localOnly))
+        assertFalse(BookAction.Translation in allInitialActions(localOnly))
     }
 
     @Test
-    fun `destructive and removal actions live only in manage book`() {
+    fun `archive translation and removal actions live only in manage book`() {
         val initial = allInitialActions(downloadedFromServer)
         assertTrue(initial.none { it in manageOnlyActions })
         assertTrue(allManageActions(downloadedFromServer).all { it in manageOnlyActions })
@@ -182,6 +195,8 @@ class BookActionLayoutTest {
     private companion object {
         val manageOnlyActions =
             setOf(
+                BookAction.ToggleArchive,
+                BookAction.Translation,
                 BookAction.RemoveCopy,
                 BookAction.RemoveFromLibrary,
                 BookAction.DeleteFile,
