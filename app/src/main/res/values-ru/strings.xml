@@ -605,6 +605,9 @@
     <string name="account_translation_clear_before_removal_failed">Не удалось сохранить запрос на удаление переводов из аккаунта. «%1$s» не удалена; попробуйте ещё раз.</string>
     <string name="delete">Удалить</string>
     <string name="remove_from_library">Убрать из библиотеки</string>
+    <string name="book_actions_book_section">Книга</string>
+    <string name="book_actions_manage">Управление книгой</string>
+    <string name="book_actions_manage_server">Сервер</string>
     <string name="remove_from_library_warning">«%1$s» будет удалена из библиотеки. Файл останется на устройстве. Книгу можно вернуть в Настройки → Скрытые книги.</string>
     <string name="book_hidden">«%1$s» убрана из библиотеки.</string>
     <string name="undo">Отменить</string>

@@ -555,6 +555,9 @@
     <string name="account_translation_clear_before_removal_failed">Impossible d’enregistrer la demande d’effacement des traductions du compte. « %1$s » n’a pas été retiré ; réessayez.</string>
     <string name="delete">Supprimer</string>
     <string name="remove_from_library">Retirer de la bibliothèque</string>
+    <string name="book_actions_book_section">Livre</string>
+    <string name="book_actions_manage">Gérer le livre</string>
+    <string name="book_actions_manage_server">Serveur</string>
     <string name="remove_from_library_warning">« %1$s » sera retiré de votre bibliothèque. Le fichier reste sur cet appareil. Vous pouvez le rajouter depuis Paramètres → Livres masqués.</string>
     <string name="book_hidden">« %1$s » retiré de la bibliothèque.</string>
     <string name="undo">Annuler</string>

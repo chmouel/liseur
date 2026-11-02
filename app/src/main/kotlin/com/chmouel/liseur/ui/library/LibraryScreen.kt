@@ -5,6 +5,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -22,6 +23,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,9 +51,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
-import androidx.compose.material.icons.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
@@ -90,7 +92,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
@@ -100,6 +101,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -1310,7 +1312,6 @@ internal fun UploadOfferDialog(
     )
 }
 
-/** Long-press actions for a book: chiefly, freeing the space it takes. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BookActionsSheet(
@@ -1340,171 +1341,365 @@ internal fun BookActionsSheet(
 ) {
     val container = (LocalContext.current.applicationContext as LiseurApplication).container
     val translations by container.wholeBookRecords.collectAsStateWithLifecycle(initialValue = emptyList())
-    LiseurModalBottomSheet(onDismissRequest = onDismiss) {
+    val actionState = BookActionState(
+        downloading = downloading,
+        downloadedCopy = book.downloadState == DownloadState.DOWNLOADED && book.remoteUuid != null,
+        onServer = book.remoteUuid != null,
+        inLibrary = book.openableUrl != null,
+        finished = book.finished,
+        canMarkUnread = canMarkUnread,
+        hasTranslation = translations.any { it.bookUrl == book.url },
+        // Uploading a local book keeps its local URL and file, so it remains a local shelf entry (#147)
+        canUpload = book.livesOnlyOnThisDevice() && canUploadToServer && !uploading,
+        canDeleteFromServer = canDeleteFromServer,
+        serverDeleteNeedsReconnect = serverDeleteNeedsReconnect,
+        browsingServer = book.browseServerId != null,
+    )
+    val layout = bookActionLayout(actionState)
+    var managing by remember(book.url) { mutableStateOf(false) }
+    val showManage = managing && layout.hasManageBook
+    val onAction: (BookAction) -> Unit = { action ->
+        when (action) {
+            BookAction.CancelDownload -> onCancelDownload()
+            BookAction.Download -> onDownload()
+            BookAction.UploadToServer -> onUploadToServer()
+            BookAction.MarkRead -> onSetFinished(true)
+            BookAction.MarkUnread -> onSetFinished(false)
+            BookAction.ToggleArchive -> onSetArchived(!book.archived)
+            BookAction.Details -> onOpenDetails()
+            BookAction.Stats -> onOpenStats()
+            BookAction.Translation -> onOpenTranslation()
+            BookAction.Series -> onEditSeries()
+            BookAction.RemoveCopy -> onRemoveDownload()
+            BookAction.RemoveFromLibrary -> onRemoveFromLibrary()
+            BookAction.DeleteFile -> onDeleteLocal()
+            BookAction.DeleteFromServer -> onDeleteFromServer()
+            BookAction.ServerDeleteNeedsReconnect -> Unit
+        }
+    }
+    LiseurModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onBack = if (showManage) ({ managing = false }) else null,
+    ) {
         Column(
             Modifier
                 .align(Alignment.CenterHorizontally)
                 .widthIn(max = contentWidthCap(windowWidth()))
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
+                .verticalScroll(remember(showManage) { ScrollState(0) })
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp),
         ) {
-            Text(book.title, style = MaterialTheme.typography.titleMedium)
-            book.author?.let {
+            if (showManage) {
+                ManageBookSheetContent(
+                    book = book,
+                    sections = layout.manageSections,
+                    onBack = { managing = false },
+                    onAction = onAction,
+                )
+            } else {
+                InitialBookActionsContent(
+                    book = book,
+                    layout = layout,
+                    refusal = refusal,
+                    canDownload = canDownload,
+                    onAction = onAction,
+                    onOpenManage = { managing = true },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InitialBookActionsContent(
+    book: Book,
+    layout: BookActionLayout,
+    refusal: RefusedBytes?,
+    canDownload: Boolean,
+    onAction: (BookAction) -> Unit,
+    onOpenManage: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BookCover(
+            book = book,
+            modifier = Modifier
+                .width(44.dp)
+                .aspectRatio(2f / 3f),
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = book.displayTitle,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            book.displayAuthor?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
-            when {
-                downloading -> Button(
-                    onClick = onCancelDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.cancel_download))
-                }
-
-                book.downloadState == DownloadState.DOWNLOADED && book.remoteUuid != null ->
-                    OutlinedButton(
-                        onClick = onRemoveDownload,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.remove_copy_on_device))
-                    }
-
-                book.remoteUuid != null -> Button(
-                    onClick = onDownload,
-                    enabled = canDownload,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.download_book))
-                }
-
-                else -> Unit
-            }
-            // A book with a file of its own here, whether or not a
-            // server also knows about it. Uploading one keeps its local
-            // URL and its file, so it is still a shelf entry the reader
-            // may want gone without losing the file (issue #147).
-            if (book.openableUrl != null) {
-                Spacer(Modifier.height(8.dp))
-                // Above deleting, and deliberately: the gentler of the
-                // two is the one most people reaching here actually
-                // want, and it used not to exist at all.
-                OutlinedButton(onClick = onRemoveFromLibrary, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.remove_from_library))
-                }
-            }
-            if (book.remoteUuid == null) {
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onDeleteLocal, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.delete_file))
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (!book.finished) {
-                TextButton(
-                    onClick = { onSetFinished(true) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.mark_read))
-                }
-            }
-            if (canMarkUnread) {
-                TextButton(
-                    onClick = { onSetFinished(false) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.mark_unread))
-                }
-            }
-            TextButton(
-                onClick = { onSetArchived(!book.archived) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    stringResource(
-                        if (book.archived) R.string.unarchive_book else R.string.archive_book,
-                    ),
-                )
-            }
-            TextButton(onClick = onOpenDetails, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.book_details))
-            }
-            TextButton(onClick = onOpenStats, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.reading_stats))
-            }
-            if (book.openableUrl != null || translations.any { it.bookUrl == book.url }) {
-                TextButton(onClick = onOpenTranslation, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.translation_settings_title))
-                }
-            }
-            // Reads as one action rather than two, because a book with
-            // no series and a book in the wrong one want the same
-            // dialog; which of them it is only decides what it opens
-            // filled in with.
-            TextButton(onClick = onEditSeries, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(
-                        if (book.seriesName.isNullOrBlank()) R.string.series_add_to
-                        else R.string.series_change,
-                    ),
-                )
-            }
-            if (book.livesOnlyOnThisDevice() && canUploadToServer && !uploading) {
-                TextButton(onClick = onUploadToServer, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.upload_to_server))
-                }
-                // The durable half of the notice. A snackbar is missed
-                // by anyone who was not looking at the screen, and this
-                // is the one place a reader wondering why a book never
-                // reached the server will actually come looking. It sits
-                // under the action rather than replacing it, because
-                // asking again is exactly what to do once the server has
-                // been upgraded or the folder has come back.
-                refusal?.let {
-                    Text(
-                        text = when {
-                            it.kind == UploadRefusal.TOO_LARGE ->
-                                stringResource(R.string.upload_refused_here_too_large)
-                            it.kind == UploadRefusal.FILE_UNREADABLE ->
-                                stringResource(R.string.upload_refused_here_unreadable)
-                            it.kind == UploadRefusal.UNLINKED ->
-                                stringResource(R.string.upload_unlinked_here)
-                            it.reason != null ->
-                                stringResource(R.string.upload_refused_here_reason, it.reason)
-                            else -> stringResource(R.string.upload_refused_here)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                    )
-                }
-            }
-            if (book.remoteUuid != null && book.browseServerId == null && canDeleteFromServer) {
-                // Kept apart from the others on purpose: everything above
-                // touches this device only, this one reaches the server.
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                TextButton(onClick = onDeleteFromServer, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = stringResource(R.string.delete_from_server),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            } else if (book.remoteUuid != null && book.browseServerId == null && serverDeleteNeedsReconnect) {
-                // Say why rather than leave a gap. The action is missing
-                // for a reason the reader can act on, and one they would
-                // never guess from an absence.
-                HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                Text(
-                    text = stringResource(R.string.server_delete_needs_reconnect),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
+    }
+    layout.primaryAction?.let { primary ->
+        Spacer(Modifier.height(16.dp))
+        BookActionRow(
+            action = primary,
+            book = book,
+            refusal = refusal,
+            canDownload = canDownload,
+            onClick = { onAction(primary) },
+        )
+    }
+    layout.sections.forEach { section ->
+        SheetSectionHeader(
+            title = stringResource(
+                when (section.id) {
+                    BookActionSectionId.Reading -> R.string.filter_reading
+                    BookActionSectionId.Book -> R.string.book_actions_book_section
+                },
+            ),
+        )
+        section.actions.forEach { action ->
+            val secondary =
+                section.secondaryReadingAction.takeIf {
+                    action == BookAction.MarkRead || action == BookAction.MarkUnread
+                }
+            if (secondary != null) {
+                ReadingStatusRow(
+                    primary = action,
+                    secondary = secondary,
+                    book = book,
+                    onAction = onAction,
+                )
+            } else {
+                BookActionRow(
+                    action = action,
+                    book = book,
+                    refusal = refusal,
+                    canDownload = canDownload,
+                    onClick = { onAction(action) },
+                )
+            }
+        }
+    }
+    if (layout.hasManageBook) {
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(Modifier.padding(vertical = 4.dp))
+        ManageBookEntryRow(onClick = onOpenManage)
+    }
+}
+
+@Composable
+private fun ManageBookSheetContent(
+    book: Book,
+    sections: List<ManageBookSection>,
+    onBack: () -> Unit,
+    onAction: (BookAction) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp)) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                contentDescription = stringResource(R.string.back),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.book_actions_manage),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = book.displayTitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    sections.forEachIndexed { index, section ->
+        if (section.id == ManageBookSectionId.Server) {
+            if (index > 0) HorizontalDivider(Modifier.padding(top = 8.dp))
+            SheetSectionHeader(title = stringResource(R.string.book_actions_manage_server))
+        }
+        section.actions.forEach { action ->
+            BookActionRow(
+                action = action,
+                book = book,
+                refusal = null,
+                canDownload = false,
+                onClick = { onAction(action) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .padding(start = 16.dp, top = 16.dp, bottom = 4.dp)
+            .semantics { heading() },
+    )
+}
+
+@Composable
+private fun ReadingStatusRow(
+    primary: BookAction,
+    secondary: BookAction,
+    book: Book,
+    onAction: (BookAction) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SheetActionRow(
+            label = actionLabel(primary, book),
+            onClick = { onAction(primary) },
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = { onAction(secondary) }) {
+            Text(actionLabel(secondary, book))
+        }
+    }
+}
+
+@Composable
+private fun ManageBookEntryRow(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.book_actions_manage),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun actionLabel(action: BookAction, book: Book): String =
+    stringResource(
+        when (action) {
+            BookAction.CancelDownload -> R.string.cancel_download
+            BookAction.Download -> R.string.download_book
+            BookAction.UploadToServer -> R.string.upload_to_server
+            BookAction.MarkRead -> R.string.mark_read
+            BookAction.MarkUnread -> R.string.mark_unread
+            BookAction.ToggleArchive ->
+                if (book.archived) R.string.unarchive_book else R.string.archive_book
+            BookAction.Details -> R.string.book_details
+            BookAction.Stats -> R.string.reading_stats
+            BookAction.Translation -> R.string.translation_settings_title
+            BookAction.Series ->
+                if (book.seriesName.isNullOrBlank()) R.string.series_add_to else R.string.series_change
+            BookAction.RemoveCopy -> R.string.remove_copy_on_device
+            BookAction.RemoveFromLibrary -> R.string.remove_from_library
+            BookAction.DeleteFile -> R.string.delete_file
+            BookAction.DeleteFromServer -> R.string.delete_from_server
+            BookAction.ServerDeleteNeedsReconnect -> R.string.server_delete_needs_reconnect
+        },
+    )
+
+@Composable
+private fun BookActionRow(
+    action: BookAction,
+    book: Book,
+    refusal: RefusedBytes?,
+    canDownload: Boolean,
+    onClick: () -> Unit,
+) {
+    val label = actionLabel(action, book)
+    when (action) {
+        BookAction.CancelDownload, BookAction.Download -> Button(
+            onClick = onClick,
+            enabled = action != BookAction.Download || canDownload,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(label)
+        }
+
+        BookAction.UploadToServer -> Column {
+            SheetActionRow(label = label, onClick = onClick)
+            // Keep the last upload refusal visible beneath the retry row so the reader can see why
+            // the book stayed local even if the snackbar was missed
+            refusal?.let {
+                Text(
+                    text = when {
+                        it.kind == UploadRefusal.TOO_LARGE ->
+                            stringResource(R.string.upload_refused_here_too_large)
+                        it.kind == UploadRefusal.FILE_UNREADABLE ->
+                            stringResource(R.string.upload_refused_here_unreadable)
+                        it.kind == UploadRefusal.UNLINKED ->
+                            stringResource(R.string.upload_unlinked_here)
+                        it.reason != null ->
+                            stringResource(R.string.upload_refused_here_reason, it.reason)
+                        else -> stringResource(R.string.upload_refused_here)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                )
+            }
+        }
+
+        BookAction.ServerDeleteNeedsReconnect -> Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+
+        BookAction.DeleteFile, BookAction.DeleteFromServer -> SheetActionRow(
+            label = label,
+            onClick = onClick,
+            color = MaterialTheme.colorScheme.error,
+        )
+
+        else -> SheetActionRow(
+            label = label,
+            onClick = onClick,
+        )
+    }
+}
+
+@Composable
+private fun SheetActionRow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = color)
     }
 }
 

@@ -555,6 +555,9 @@
     <string name="account_translation_clear_before_removal_failed">No se pudo guardar la solicitud para borrar las traducciones de la cuenta. No se quitó «%1$s»; inténtalo de nuevo.</string>
     <string name="delete">Eliminar</string>
     <string name="remove_from_library">Quitar de la biblioteca</string>
+    <string name="book_actions_book_section">Libro</string>
+    <string name="book_actions_manage">Gestionar libro</string>
+    <string name="book_actions_manage_server">Servidor</string>
     <string name="remove_from_library_warning">“%1$s” se quitará de tu biblioteca. El archivo se queda en este dispositivo. Puedes volver a añadirlo desde Ajustes → Libros ocultos.</string>
     <string name="book_hidden">“%1$s” quitado de la biblioteca.</string>
     <string name="undo">Deshacer</string>

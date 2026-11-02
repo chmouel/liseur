@@ -585,6 +585,9 @@
     <string name="account_translation_clear_before_removal_failed">无法保存从账号中清除翻译的请求。“%1$s”未被移除；请重试。</string>
     <string name="delete">删除</string>
     <string name="remove_from_library">从书库移除</string>
+    <string name="book_actions_book_section">图书</string>
+    <string name="book_actions_manage">管理图书</string>
+    <string name="book_actions_manage_server">服务器</string>
     <string name="remove_from_library_warning">“%1$s”将从您的书库移除。文件仍保留在本设备上。您可以从“设置 → 隐藏的图书”中重新添加。</string>
     <string name="book_hidden">“%1$s”已从书库移除。</string>
     <string name="undo">撤销</string>

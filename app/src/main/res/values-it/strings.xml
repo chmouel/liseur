@@ -555,6 +555,9 @@
     <string name="account_translation_clear_before_removal_failed">Impossibile salvare la richiesta di cancellazione delle traduzioni dall’account. «%1$s» non è stata rimossa; riprova.</string>
     <string name="delete">Elimina</string>
     <string name="remove_from_library">Rimuovi dalla libreria</string>
+    <string name="book_actions_book_section">Libro</string>
+    <string name="book_actions_manage">Gestisci libro</string>
+    <string name="book_actions_manage_server">Server</string>
     <string name="remove_from_library_warning">“%1$s” verrà rimosso dalla libreria. Il file resta su questo dispositivo. Puoi aggiungerlo di nuovo da Impostazioni → Libri nascosti.</string>
     <string name="book_hidden">“%1$s” rimosso dalla libreria.</string>
     <string name="undo">Annulla</string>

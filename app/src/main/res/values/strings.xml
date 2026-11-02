@@ -575,6 +575,9 @@
     <string name="delete">Delete</string>
 
     <string name="remove_from_library">Remove from library</string>
+    <string name="book_actions_book_section">Book</string>
+    <string name="book_actions_manage">Manage book</string>
+    <string name="book_actions_manage_server">Server</string>
     <string name="remove_from_library_warning">“%1$s” will be removed from your library. The file stays on this device. You can add it back from Settings → Hidden books.</string>
     <string name="book_hidden">“%1$s” removed from the library.</string>
     <string name="undo">Undo</string>
