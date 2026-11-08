@@ -111,7 +111,7 @@
     <string name="empty_library_title">Your library is empty</string>
     <string name="empty_library_subtitle">Here is how to fill it.</string>
     <string name="starter_catalog">Start with free books</string>
-    <string name="starter_catalog_hint">Classics from Project Gutenberg, out of copyright and free to read. Browse by language or shelf and download the ones you want.</string>
+    <string name="starter_catalog_hint">Free books from public catalogs, starting with Project Gutenberg. Choose a catalog, browse it and download the ones you want.</string>
     <string name="starter_category_popular">Most popular</string>
     <string name="starter_category_best_ever">Best books ever</string>
     <string name="starter_category_science_fiction">Science fiction</string>
@@ -1122,12 +1122,18 @@
     <string name="browse_title">Remote libraries</string>
     <string name="browse_empty">No saved catalogs yet</string>
     <string name="browse_empty_detail">Save a calibre-web, Komga, BookOrbit, liseur-sync or OPDS catalog to look through it and choose books to download. Reading places are not synced with these catalogs.</string>
-    <string name="browse_gutenberg">Browse Project Gutenberg</string>
     <string name="browse_gutenberg_name" translatable="false">Gutenberg</string>
     <string name="browse_gutenberg_languages">Languages</string>
     <string name="browse_gutenberg_categories">Categories</string>
-    <string name="browse_gutenberg_detail">Free classics in the public domain, no account needed.</string>
-    <string name="browse_gutenberg_failed">Could not reach Project Gutenberg. Check your connection and try again.</string>
+    <string name="browse_gutenberg_detail">Free classics in the public domain.</string>
+    <string name="browse_free_books">Browse free books</string>
+    <string name="browse_free_books_detail">Free books from public catalogs. No account needed.</string>
+    <string name="browse_free_no_account">No account needed.</string>
+    <string name="browse_textos_name" translatable="false">textos.info</string>
+    <string name="browse_textos_detail">Spanish-language books, free to read.</string>
+    <string name="browse_manybooks_name" translatable="false">ManyBooks</string>
+    <string name="browse_manybooks_detail">Free ebooks in many genres, from independent authors.</string>
+    <string name="browse_free_catalog_failed">Could not reach %1$s. Check your connection and try again.</string>
     <string name="browse_form_intro">Books you add are downloaded to this device. Reading places are not synced with this catalog.</string>
     <string name="browse_catalog_options">Options for %1$s</string>
     <string name="browse_refresh">Refresh</string>

@@ -112,7 +112,7 @@
     <string name="empty_library_title">Библиотека пуста</string>
     <string name="empty_library_subtitle">Вот как её заполнить.</string>
     <string name="starter_catalog">Начать с бесплатных книг</string>
-    <string name="starter_catalog_hint">Классика с Project Gutenberg — без авторских прав и бесплатно. Просматривайте по языку или полке и скачивайте то, что нравится.</string>
+    <string name="starter_catalog_hint">Бесплатные книги из открытых каталогов, начиная с Project Gutenberg. Выберите каталог, просмотрите его и скачайте то, что понравится.</string>
     <string name="starter_category_popular">Самые популярные</string>
     <string name="starter_category_best_ever">Лучшие книги всех времён</string>
     <string name="starter_category_science_fiction">Научная фантастика</string>
@@ -1152,11 +1152,15 @@
     <string name="browse_title">Удалённые библиотеки</string>
     <string name="browse_empty">Сохранённых каталогов пока нет</string>
     <string name="browse_empty_detail">Сохраните каталог calibre-web, Komga, BookOrbit, liseur-sync или OPDS, чтобы просматривать его и выбирать книги для скачивания. Позиции чтения с этими каталогами не синхронизируются.</string>
-    <string name="browse_gutenberg">Открыть «Проект Гутенберг»</string>
     <string name="browse_gutenberg_languages">Языки</string>
     <string name="browse_gutenberg_categories">Категории</string>
-    <string name="browse_gutenberg_detail">Бесплатная классика в общественном достоянии, без учётной записи.</string>
-    <string name="browse_gutenberg_failed">Не удалось подключиться к «Проекту Гутенберг». Проверьте соединение и попробуйте ещё раз.</string>
+    <string name="browse_gutenberg_detail">Классика в общественном достоянии, бесплатно.</string>
+    <string name="browse_free_books">Бесплатные книги</string>
+    <string name="browse_free_books_detail">Бесплатные книги из открытых каталогов. Без учётной записи.</string>
+    <string name="browse_free_no_account">Без учётной записи.</string>
+    <string name="browse_textos_detail">Книги на испанском, бесплатные для чтения.</string>
+    <string name="browse_manybooks_detail">Бесплатные книги многих жанров от независимых авторов.</string>
+    <string name="browse_free_catalog_failed">Не удалось связаться с %1$s. Проверьте соединение и повторите попытку.</string>
     <string name="browse_form_intro">Добавленные книги скачиваются на это устройство. Позиции чтения с этим каталогом не синхронизируются.</string>
     <string name="browse_catalog_options">Параметры: %1$s</string>
     <string name="browse_refresh">Обновить</string>

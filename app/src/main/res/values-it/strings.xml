@@ -106,7 +106,7 @@
     <string name="empty_library_title">La libreria è vuota</string>
     <string name="empty_library_subtitle">Ecco come riempirla.</string>
     <string name="starter_catalog">Inizia con libri gratis</string>
-    <string name="starter_catalog_hint">Classici di Project Gutenberg, fuori copyright e gratis da leggere. Sfogliali per lingua o per scaffale e scarica quelli che vuoi.</string>
+    <string name="starter_catalog_hint">Libri gratis da cataloghi pubblici, a partire da Project Gutenberg. Scegli un catalogo, sfoglialo e scarica quelli che vuoi.</string>
     <string name="starter_category_popular">I più popolari</string>
     <string name="starter_category_best_ever">I migliori di sempre</string>
     <string name="starter_category_science_fiction">Fantascienza</string>
@@ -1076,11 +1076,15 @@
     <string name="browse_title">Biblioteche remote</string>
     <string name="browse_empty">Nessun catalogo salvato</string>
     <string name="browse_empty_detail">Salva un catalogo calibre-web, Komga, BookOrbit, liseur-sync o OPDS per sfogliarlo e scegliere i libri da scaricare. Le posizioni di lettura non vengono sincronizzate con questi cataloghi.</string>
-    <string name="browse_gutenberg">Sfoglia Project Gutenberg</string>
     <string name="browse_gutenberg_languages">Lingue</string>
     <string name="browse_gutenberg_categories">Categorie</string>
-    <string name="browse_gutenberg_detail">Classici gratuiti di pubblico dominio, senza account.</string>
-    <string name="browse_gutenberg_failed">Impossibile raggiungere Project Gutenberg. Controlla la connessione e riprova.</string>
+    <string name="browse_gutenberg_detail">Classici di pubblico dominio, gratis.</string>
+    <string name="browse_free_books">Sfoglia i libri gratis</string>
+    <string name="browse_free_books_detail">Libri gratis da cataloghi pubblici. Nessun account necessario.</string>
+    <string name="browse_free_no_account">Nessun account necessario.</string>
+    <string name="browse_textos_detail">Libri in spagnolo, gratis da leggere.</string>
+    <string name="browse_manybooks_detail">Ebook gratis in molti generi, di autori indipendenti.</string>
+    <string name="browse_free_catalog_failed">Impossibile raggiungere %1$s. Controlla la connessione e riprova.</string>
     <string name="browse_form_intro">I libri aggiunti vengono scaricati su questo dispositivo. Le posizioni di lettura non vengono sincronizzate con questo catalogo.</string>
     <string name="browse_catalog_options">Opzioni per %1$s</string>
     <string name="browse_refresh">Aggiorna</string>

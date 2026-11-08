@@ -106,7 +106,7 @@
     <string name="empty_library_title">Votre bibliothèque est vide</string>
     <string name="empty_library_subtitle">Voici comment la remplir.</string>
     <string name="starter_catalog">Commencer avec des livres gratuits</string>
-    <string name="starter_catalog_hint">Des classiques de Project Gutenberg, libres de droits et gratuits à lire. Parcourez-les par langue ou par étagère et téléchargez ceux qui vous plaisent.</string>
+    <string name="starter_catalog_hint">Des livres gratuits venus de catalogues publics, à commencer par Project Gutenberg. Choisissez un catalogue, parcourez-le et téléchargez ceux qui vous plaisent.</string>
     <string name="starter_category_popular">Les plus populaires</string>
     <string name="starter_category_best_ever">Les meilleurs livres</string>
     <string name="starter_category_science_fiction">Science-fiction</string>
@@ -1076,11 +1076,15 @@
     <string name="browse_title">Bibliothèques distantes</string>
     <string name="browse_empty">Aucun catalogue enregistré</string>
     <string name="browse_empty_detail">Enregistrez un catalogue calibre-web, Komga, BookOrbit, liseur-sync ou OPDS pour le parcourir et choisir des livres à télécharger. Les positions de lecture ne sont pas synchronisées avec ces catalogues.</string>
-    <string name="browse_gutenberg">Parcourir le projet Gutenberg</string>
     <string name="browse_gutenberg_languages">Langues</string>
     <string name="browse_gutenberg_categories">Catégories</string>
-    <string name="browse_gutenberg_detail">Des classiques libres de droits, sans compte.</string>
-    <string name="browse_gutenberg_failed">Impossible de joindre le projet Gutenberg. Vérifiez votre connexion et réessayez.</string>
+    <string name="browse_gutenberg_detail">Des classiques du domaine public, gratuits.</string>
+    <string name="browse_free_books">Parcourir les livres gratuits</string>
+    <string name="browse_free_books_detail">Des livres gratuits venus de catalogues publics. Aucun compte nécessaire.</string>
+    <string name="browse_free_no_account">Aucun compte nécessaire.</string>
+    <string name="browse_textos_detail">Des livres en espagnol, gratuits à lire.</string>
+    <string name="browse_manybooks_detail">Des ebooks gratuits dans de nombreux genres, d’auteurs indépendants.</string>
+    <string name="browse_free_catalog_failed">Impossible de joindre %1$s. Vérifiez votre connexion et réessayez.</string>
     <string name="browse_form_intro">Les livres ajoutés sont téléchargés sur cet appareil. Les positions de lecture ne sont pas synchronisées avec ce catalogue.</string>
     <string name="browse_catalog_options">Options pour %1$s</string>
     <string name="browse_refresh">Actualiser</string>

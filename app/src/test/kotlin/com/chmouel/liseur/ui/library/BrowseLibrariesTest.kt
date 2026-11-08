@@ -4,6 +4,7 @@ import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.opds.FreeCatalog
 import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.BrowseListing
@@ -283,20 +284,30 @@ class BrowseLibrariesTest {
     }
 
     @Test
-    fun `only the Gutenberg browse root hides the shortcut`() {
-        val root = server().copy(
+    fun `a saved free catalog is reopened rather than offered again`() {
+        val gutenberg = server().copy(
             kind = ServerKind.CUSTOM,
             baseUrl = StarterCatalog.BROWSE_URL,
             catalogUrl = StarterCatalog.BROWSE_URL,
         )
-        assertTrue(BrowseLibrariesState(saved = listOf(root)).gutenbergSaved)
-        assertFalse(BrowseLibrariesState(saved = listOf(root.copy(catalogUrl = StarterCatalog.Category.POPULAR.url))).gutenbergSaved)
-        assertFalse(BrowseLibrariesState(saved = listOf(server())).gutenbergSaved)
+        val manybooks = server().copy(
+            id = 3L,
+            kind = ServerKind.CUSTOM,
+            baseUrl = FreeCatalog.MANYBOOKS.address,
+            catalogUrl = FreeCatalog.MANYBOOKS.address,
+        )
+        val onlyGutenberg = BrowseLibrariesState(saved = listOf(gutenberg))
+
+        assertEquals(gutenberg.id, onlyGutenberg.savedCatalog(FreeCatalog.GUTENBERG)?.id)
+        assertNull(onlyGutenberg.savedCatalog(FreeCatalog.MANYBOOKS))
+        assertNull(BrowseLibrariesState(saved = listOf(server())).savedCatalog(FreeCatalog.GUTENBERG))
+        assertEquals(manybooks.id, BrowseLibrariesState(saved = listOf(manybooks)).savedCatalog(FreeCatalog.MANYBOOKS)?.id)
     }
 
     @Test
     fun backLeavesTheBrowserOnlyFromTheSavedCatalogs() {
         assertFalse(BrowseLibrariesState().canGoBack)
+        assertTrue(BrowseLibrariesState(chooserOpen = true).canGoBack)
         assertTrue(BrowseLibrariesState(formOpen = true).canGoBack)
         assertTrue(BrowseLibrariesState(serverId = 1L).canGoBack)
         assertTrue(BrowseLibrariesState(selecting = true).canGoBack)

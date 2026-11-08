@@ -50,12 +50,12 @@ class FreeCatalogTest {
     @Test
     fun `a saved catalog is matched whatever spelling answered the probe`() {
         listOf(
-            "https://www.gutenberg.org/ebooks.opds/",
-            "https://gutenberg.org/ebooks.opds/",
-            "http://WWW.Gutenberg.org/ebooks.opds",
+            "https://www.textos.info/catalogo.atom",
+            "https://textos.info/catalogo.atom/",
+            "http://TEXTOS.info/catalogo.atom",
         ).forEach { address ->
             assertEquals(
-                FreeCatalog.GUTENBERG,
+                FreeCatalog.TEXTOS_INFO,
                 FreeCatalog.of(server(address)),
             )
         }
@@ -63,14 +63,16 @@ class FreeCatalogTest {
 
     @Test
     fun `another path on the same host is another catalog`() {
-        assertNull(FreeCatalog.of(server(StarterCatalog.Category.POPULAR.url)))
+        val gutenbergShelf = StarterCatalog.Category.POPULAR.url
+        assertNull(FreeCatalog.of(server(gutenbergShelf)))
         assertEquals(FreeCatalog.GUTENBERG, FreeCatalog.of(server(StarterCatalog.BROWSE_URL)))
+        assertEquals(FreeCatalog.MANYBOOKS, FreeCatalog.of(server("https://manybooks.net/opds")))
     }
 
     @Test
     fun `only a custom OPDS connection can be a preset`() {
-        assertNull(FreeCatalog.of(server(StarterCatalog.BROWSE_URL, ServerKind.CALIBRE)))
+        assertNull(FreeCatalog.of(server(FreeCatalog.MANYBOOKS.address, ServerKind.CALIBRE)))
         assertNull(FreeCatalog.of(server(null)))
-        assertFalse(FreeCatalog.GUTENBERG.matches(server("https://example.org/opds")))
+        assertFalse(FreeCatalog.MANYBOOKS.matches(server("https://example.org/opds")))
     }
 }
