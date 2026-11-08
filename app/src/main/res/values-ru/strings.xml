@@ -1161,6 +1161,8 @@
     <string name="browse_textos_detail">Книги на испанском, бесплатные для чтения.</string>
     <string name="browse_manybooks_detail">Бесплатные книги многих жанров от независимых авторов.</string>
     <string name="browse_gallica_detail">Французские книги из Национальной библиотеки Франции.</string>
+    <string name="browse_free_catalog_saved">Сохранено</string>
+    <string name="browse_free_catalog_connecting">Подключение…</string>
     <string name="browse_free_catalog_failed">Не удалось связаться с %1$s. Проверьте соединение и повторите попытку.</string>
     <string name="browse_form_intro">Добавленные книги скачиваются на это устройство. Позиции чтения с этим каталогом не синхронизируются.</string>
     <string name="browse_catalog_options">Параметры: %1$s</string>
