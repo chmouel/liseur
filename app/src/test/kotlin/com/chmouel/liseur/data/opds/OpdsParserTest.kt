@@ -119,6 +119,24 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `a kobo file titled EPUB is still not the default`() {
+        val entry = """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Book</title>
+                <id>1</id>
+                <link rel="http://opds-spec.org/acquisition" href="/b/kepub"
+                      title="EPUB" type="application/kepub+zip"/>
+                <link rel="http://opds-spec.org/acquisition" href="/b/epub"
+                      title="Recommended compatible epub" type="application/epub+zip"/>
+              </entry>
+            </feed>
+        """.trimIndent()
+
+        assertEquals("/b/epub", OpdsParser.parse(entry).books.single().downloadHref)
+    }
+
+    @Test
     fun `follows the link to the next page`() {
         assertEquals("/opds/books/letter/00?offset=60", OpdsParser.parse(feed).nextHref)
     }
