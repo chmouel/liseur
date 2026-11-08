@@ -347,9 +347,7 @@ private fun SavedCatalogsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (!state.allFreeCatalogsSaved) {
-                    item(key = "free-catalogs") { FreeCatalogsShortcut(onClick = model::openFreeCatalogs) }
-                }
+                item(key = "free-catalogs") { FreeCatalogsShortcut(onClick = model::openFreeCatalogs) }
                 items(state.saved, key = { it.id }) { server ->
                     SavedCatalogCard(
                         server = server,
@@ -577,7 +575,7 @@ private fun BrowseConnectionScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!busy && !state.allFreeCatalogsSaved) {
+            if (!busy) {
                 FreeCatalogsShortcut(onClick = model::openFreeCatalogs)
             }
             Column {
