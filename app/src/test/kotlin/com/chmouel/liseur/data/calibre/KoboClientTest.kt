@@ -233,14 +233,14 @@ class KoboClientTest {
         val sent = org.json.JSONObject(server.takeRequest().body!!.utf8())
             .getJSONArray("ReadingStates")
             .getJSONObject(0)
-        assertEquals("2026-11-04T09:30:15Z", sent.getString("LastModified"))
+        assertEquals("2026-11-04T09:30:15.250Z", sent.getString("LastModified"))
     }
 
     @Test
     fun `a position with no recorded time is sent as written now, not 1970`() {
         for (updatedAt in listOf(0L, -1L)) {
             server.enqueue(json("{}"))
-            val before = System.currentTimeMillis() / 1000 * 1000
+            val before = System.currentTimeMillis()
             runBlocking {
                 client.pushState(
                     base(),
@@ -248,12 +248,12 @@ class KoboClientTest {
                     ReadingState(progression = 0.5, status = ReadingStatus.READING, updatedAt = updatedAt),
                 )
             }
-            val after = System.currentTimeMillis() / 1000 * 1000
+            val after = System.currentTimeMillis()
 
             val sent = org.json.JSONObject(server.takeRequest().body!!.utf8())
                 .getJSONArray("ReadingStates")
                 .getJSONObject(0)
-            val lastModified = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+            val lastModified = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
                 .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
                 .parse(sent.getString("LastModified"))!!
                 .time

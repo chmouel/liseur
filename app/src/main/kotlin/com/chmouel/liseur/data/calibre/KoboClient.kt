@@ -222,8 +222,12 @@ class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
         private const val MAX_PAGES = 50
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        /** calibre-web's own format for these stamps: UTC, whole seconds. */
-        private const val SENT_TIMESTAMP_PATTERN = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        /**
+         * UTC to the millisecond, as recent Kobo firmware sends it. Forks
+         * that keep this stamp accept only a newer one, so two changes in
+         * the same second must still differ.
+         */
+        private const val SENT_TIMESTAMP_PATTERN = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
         private val TIMESTAMP_PATTERNS = listOf(
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
             "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
