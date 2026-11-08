@@ -402,6 +402,8 @@
     <string name="download_in_progress">Wird heruntergeladen…</string>
     <string name="downloads_not_allowed">Dein Konto darf keine Bücher herunterladen. Bitte den Admin des Servers, Downloads für dich freizuschalten.</string>
     <string name="download_book">Herunterladen</string>
+    <string name="download_format">Format: %1$s</string>
+    <string name="download_format_hint">Wird für alle Bücher aus diesem Katalog übernommen.</string>
     <string name="cancel_download">Download abbrechen</string>
     <string name="server_credentials_lost">Melde dich erneut bei deinem Buchserver an.</string>
 

@@ -927,6 +927,11 @@ changing reader behavior.
 - Ids not globally unique are namespaced: BookOrbit and Custom OPDS prefix
   a digest of address and account, since `books.url` survives a server
   change.
+- An OPDS book keeps every readable format in `books.download_formats`;
+  `download_href` stays the catalog default (never a Kobo file). The
+  reader's pick is per catalog (`remote_server.preferred_format`) and
+  `BookDownloadWorker` applies it when the download starts
+  ([ADR 0066](docs/adr/0066-choosing-an-opds-download-format.md)).
 - `book_metadata` keeps one snapshot per source. Write the catalog row on
   every refresh even when the `Book` row is unchanged, and delete it on
   every path that unlinks a book from its server but keeps it. When

@@ -78,6 +78,11 @@ data class RemoteServer(
      */
     @ColumnInfo(name = "can_read_insights") val canReadInsights: Boolean = false,
     @ColumnInfo(name = "can_admin") val canAdmin: Boolean = false,
+    /**
+     * The [com.chmouel.liseur.data.remote.DownloadFormat.key] the reader
+     * last picked for this catalog, or null for the catalog's default.
+     */
+    @ColumnInfo(name = "preferred_format") val preferredFormat: String? = null,
     @ColumnInfo(name = "added_at") val addedAt: Long,
     @ColumnInfo(name = "catalog_synced_at") val catalogSyncedAt: Long?,
     @ColumnInfo(name = "position_synced_at") val positionSyncedAt: Long?,
@@ -330,6 +335,9 @@ interface RemoteServerDao {
 
     @Query("SELECT * FROM remote_server WHERE id = :id")
     suspend fun get(id: Long = RemoteServer.SINGLE_ID): RemoteServer?
+
+    @Query("UPDATE remote_server SET preferred_format = :key WHERE id = :id")
+    suspend fun setPreferredFormat(id: Long, key: String?)
 
     @Query("SELECT * FROM remote_server WHERE id != 1 ORDER BY id")
     fun observeBrowseServers(): Flow<List<RemoteServer>>

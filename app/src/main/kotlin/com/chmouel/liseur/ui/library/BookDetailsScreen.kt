@@ -67,6 +67,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.remote.DownloadFormat
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.remote.BookProvenance
@@ -113,6 +115,7 @@ fun BookDetailsScreen(
     onRead: () -> Unit,
     onDownload: () -> Unit,
     onOpenStats: () -> Unit,
+    onChooseFormat: (DownloadFormat) -> Unit = {},
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
@@ -153,7 +156,7 @@ fun BookDetailsScreen(
             }
             val wide = maxWidth >= WIDE_LAYOUT
             val actions = @Composable {
-                BookActions(details, canDownload, download, onRead, onDownload, onOpenStats)
+                BookActions(details, canDownload, download, onRead, onDownload, onOpenStats, onChooseFormat)
             }
             val status = readingStatus(details, etaSeconds)
             val section = Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxWidth()
@@ -289,6 +292,7 @@ private fun BookActions(
     onRead: () -> Unit,
     onDownload: () -> Unit,
     onOpenStats: () -> Unit,
+    onChooseFormat: (DownloadFormat) -> Unit,
 ) {
     val book = details.book
     val tall = Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -359,6 +363,16 @@ private fun BookActions(
                     Text(stringResource(R.string.endpaper_unavailable))
                 }
             }
+        }
+        // Kept on screen while the download runs, only greyed out, so the
+        // rows do not move under the reader's thumb.
+        if (book.openableUrl == null && canDownload) {
+            DownloadFormatPicker(
+                formats = details.formats,
+                chosen = details.chosenFormat,
+                enabled = download == null && state != DownloadState.QUEUED && state != DownloadState.DOWNLOADING,
+                onChoose = onChooseFormat,
+            )
         }
         OutlinedButton(onClick = onOpenStats, modifier = tall) {
             ButtonIcon(Icons.Outlined.Insights)
@@ -655,7 +669,8 @@ private fun FileInfo(
     val locale = currentLocale()
     var open by rememberSaveable(book.url) { mutableStateOf(false) }
     val measured = details.metadata.fileSizeBytes
-    val claimed = book.sizeBytes?.takeIf { it in 0..BookDetailsBounds.MAX_BYTES }
+    val claimed = DownloadFormats.sizeOf(details.chosenFormat, book.sizeBytes)
+        ?.takeIf { it in 0..BookDetailsBounds.MAX_BYTES }
     val from = provenanceLabel(details)
     val format = stringResource(R.string.book_details_format_epub)
     val title = stringResource(R.string.book_details_file_info)

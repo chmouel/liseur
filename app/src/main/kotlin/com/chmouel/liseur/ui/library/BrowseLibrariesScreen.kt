@@ -140,6 +140,7 @@ import java.util.Locale
 import com.chmouel.liseur.data.remote.BrowseOwned
 import com.chmouel.liseur.data.remote.BrowseOwnedState
 import com.chmouel.liseur.data.remote.browseCoverUrl
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.ServerKind
@@ -216,15 +217,15 @@ fun BrowseLibrariesRoute(
         state.serverId == null -> SavedCatalogsScreen(state, model, snackbar, onBack = back)
         else -> CatalogScreen(state, model, snackbar, onBack = back)
     }
-    state.pending?.let { pending -> ConfirmAddDialog(pending, model) }
+    state.pending?.let { pending -> ConfirmAddDialog(pending, state.server?.preferredFormat, model) }
     state.detail?.let { book -> BookDetailSheet(book, state, model) }
 }
 
 @Composable
-private fun ConfirmAddDialog(pending: List<RemoteBook>, model: BrowseLibrariesViewModel) {
+private fun ConfirmAddDialog(pending: List<RemoteBook>, preferredFormat: String?, model: BrowseLibrariesViewModel) {
     val context = LocalContext.current
     val count = pending.size
-    val knownSize = browseKnownSize(pending)
+    val knownSize = browseKnownSize(pending, preferredFormat)
     AlertDialog(
         onDismissRequest = model::dismissPending,
         icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
@@ -730,7 +731,12 @@ private fun CatalogScreen(
                 enter = expandVertically(),
                 exit = shrinkVertically(),
             ) {
-                SelectionAddBar(state.selected.values, enabled = !state.working, onAdd = model::prepareSelected)
+                SelectionAddBar(
+                    state.selected.values,
+                    state.server?.preferredFormat,
+                    enabled = !state.working,
+                    onAdd = model::prepareSelected,
+                )
             }
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -1283,10 +1289,15 @@ private fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SelectionAddBar(selected: Collection<RemoteBook>, enabled: Boolean, onAdd: () -> Unit) {
+private fun SelectionAddBar(
+    selected: Collection<RemoteBook>,
+    preferredFormat: String?,
+    enabled: Boolean,
+    onAdd: () -> Unit,
+) {
     val context = LocalContext.current
     val count = selected.size
-    val size = browseKnownSize(selected)
+    val size = browseKnownSize(selected, preferredFormat)
     Surface(tonalElevation = 3.dp, shadowElevation = 3.dp) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1316,6 +1327,7 @@ private fun BookDetailSheet(book: RemoteBook, state: BrowseLibrariesState, model
     val preview = remember(book, server) { previewBook(book, server) }
     val owned = state.owned[book.remoteId]
     val canAdd = state.canAdd(book)
+    val chosenFormat = DownloadFormats.pick(book.formats, server?.preferredFormat)
     LiseurModalBottomSheet(
         onDismissRequest = model::dismissDetail,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -1338,7 +1350,7 @@ private fun BookDetailSheet(book: RemoteBook, state: BrowseLibrariesState, model
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     SeriesLine(preview)
-                    book.sizeBytes?.let {
+                    DownloadFormats.sizeOf(chosenFormat, book.sizeBytes)?.let {
                         Text(
                             Formatter.formatShortFileSize(context, it),
                             style = MaterialTheme.typography.labelMedium,
@@ -1361,6 +1373,12 @@ private fun BookDetailSheet(book: RemoteBook, state: BrowseLibrariesState, model
                     OutlinedButton(onClick = { model.startSelection(book) }, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.browse_select))
                     }
+                    DownloadFormatPicker(
+                        formats = book.formats,
+                        chosen = chosenFormat,
+                        enabled = !state.working,
+                        onChoose = model::chooseFormat,
+                    )
                 }
             } else {
                 Notice(

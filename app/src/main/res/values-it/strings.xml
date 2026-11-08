@@ -399,6 +399,8 @@
     <string name="download_in_progress">Download in corso…</string>
     <string name="downloads_not_allowed">Il tuo account non può scaricare libri. Chiedi all\'amministratore del server di consentirti i download.</string>
     <string name="download_book">Scarica</string>
+    <string name="download_format">Formato: %1$s</string>
+    <string name="download_format_hint">Verrà usato per tutti i libri di questo catalogo.</string>
     <string name="cancel_download">Annulla download</string>
     <string name="server_credentials_lost">Accedi di nuovo al server dei libri.</string>
     <string name="download_all">Scarica tutti i libri</string>

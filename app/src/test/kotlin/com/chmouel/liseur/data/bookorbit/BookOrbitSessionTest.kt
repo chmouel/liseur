@@ -309,6 +309,7 @@ class BookOrbitSessionTest {
 
         override fun observe(id: Long): Flow<RemoteServer?> = flowOf(row)
         override suspend fun get(id: Long): RemoteServer? = row
+        override suspend fun setPreferredFormat(id: Long, key: String?) = Unit
         override fun observeBrowseServers(): Flow<List<RemoteServer>> = flowOf(emptyList())
         override suspend fun browseServers(): List<RemoteServer> = emptyList()
         override suspend fun nextBrowseId(): Long = 2

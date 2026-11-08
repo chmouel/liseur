@@ -44,7 +44,7 @@ import androidx.sqlite.execSQL
         BookAiPreferences::class,
         BookMetadata::class,
     ],
-    version = 72,
+    version = 73,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -85,6 +85,14 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookMetadataDao(): BookMetadataDao
 
     companion object {
+        /** Keeps every format a catalog offers, and which one the reader prefers per catalog. */
+        val MIGRATION_72_73 = object : Migration(72, 73) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `books` ADD COLUMN `download_formats` TEXT")
+                connection.execSQL("ALTER TABLE `remote_server` ADD COLUMN `preferred_format` TEXT")
+            }
+        }
+
         /** Reads contributors again, now that their declared names and every role are honoured. */
         val MIGRATION_71_72 = object : Migration(71, 72) {
             override fun migrate(connection: SQLiteConnection) {
@@ -2014,6 +2022,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_69_70,
             MIGRATION_70_71,
             MIGRATION_71_72,
+            MIGRATION_72_73,
         )
     }
 }

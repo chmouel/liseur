@@ -461,6 +461,8 @@
     <string name="download_in_progress">正在下载…</string>
     <string name="downloads_not_allowed">您的账户无法下载图书。请联系服务器管理员为您开通下载权限。</string>
     <string name="download_book">下载</string>
+    <string name="download_format">格式：%1$s</string>
+    <string name="download_format_hint">此目录中的所有图书都将使用此格式。</string>
     <string name="cancel_download">取消下载</string>
     <string name="server_credentials_lost">请重新登录您的图书服务器。</string>
     <string name="download_all">下载全部图书</string>

@@ -298,6 +298,9 @@ class OpdsCatalogClient(
             seriesIndex = seriesIndex,
             metadata = metadata,
             descriptionHtml = descriptionHtml,
+            formats = formats.mapNotNull { format ->
+                scope.fetchable(entryBase.resolve(format.href))?.let { format.copy(href = it) }
+            },
         )
     }
 

@@ -505,6 +505,7 @@ class RemoteCatalogRepository(
                 remoteBookId = book.remoteBookId,
                 coverUrl = book.coverUrl,
                 downloadHref = book.downloadHref,
+                downloadFormats = book.downloadFormats,
                 remoteUpdatedAt = book.remoteUpdatedAt,
                 remotePageCount = book.remotePageCount,
                 catalogSeriesName = remote.seriesName,
@@ -841,6 +842,7 @@ internal fun mergeCatalogEntry(
             if (kind.linksAreAbsolute) it else RemoteUrl.resolve(baseUrl, it)
         },
         downloadHref = remote.downloadHref,
+        downloadFormats = DownloadFormats.encode(remote.formats),
         remoteUpdatedAt = remote.updatedAt,
         remotePageCount = remote.pageCount,
         // A catalog page that leaves the size out should not erase a

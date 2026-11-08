@@ -7,6 +7,7 @@ import androidx.work.Data
 import androidx.work.WorkerParameters
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.remote.ServerKind
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -73,7 +74,10 @@ class BookDownloadWorker(
         } ?: return give_up("no file source")
         val fileKey = container.bookDownloads.fileKey(book) ?: return give_up("no file key")
 
-        val request = files.downloadRequest(server, credentials, book)
+        // The reader's format choice is per catalog and applies to every
+        // book from it, so it is settled here rather than in the row.
+        val chosen = DownloadFormats.pick(DownloadFormats.decode(book.downloadFormats), server.preferredFormat)
+        val request = files.downloadRequest(server, credentials, chosen?.let { book.copy(downloadHref = it.href) } ?: book)
             ?: run {
                 Log.w(TAG, "no download link for $bookUrl")
                 return fail(bookUrl)
