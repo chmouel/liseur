@@ -13,14 +13,23 @@ data class DownloadFormat(
     val type: String? = null,
     val title: String? = null,
     val sizeBytes: Long? = null,
+    /**
+     * How many earlier formats of the same book share this one's type
+     * and title, so two untitled EPUBs stay two choices.
+     */
+    val occurrence: Int = 0,
 ) {
     /**
      * What makes two books' formats "the same choice" in one catalog.
      *
      * The media type alone cannot tell Standard Ebooks' compatible and
-     * advanced EPUBs apart, so the link's title is part of it.
+     * advanced EPUBs apart, so the link's title is part of it, and
+     * when neither tells them apart their order in the entry does.
      */
     val key: String
+        get() = baseKey + if (occurrence > 0) "|$occurrence" else ""
+
+    internal val baseKey: String
         get() = type.orEmpty().substringBefore(';').trim().lowercase() + "|" + title.orEmpty().trim().lowercase()
 }
 
@@ -32,6 +41,16 @@ data class DownloadFormat(
  * that catalog, including ones listed before it was made.
  */
 object DownloadFormats {
+
+    /** One entry per file, with [DownloadFormat.occurrence] set so every key is distinct. */
+    fun distinct(formats: List<DownloadFormat>): List<DownloadFormat> {
+        val seen = mutableMapOf<String, Int>()
+        return formats.distinctBy { it.href }.map { format ->
+            val count = seen.getOrDefault(format.baseKey, 0)
+            seen[format.baseKey] = count + 1
+            format.copy(occurrence = count)
+        }
+    }
 
     /** The preferred format when the book offers it, otherwise the catalog's default (the first). */
     fun pick(formats: List<DownloadFormat>, preferred: String?): DownloadFormat? =
@@ -58,6 +77,7 @@ object DownloadFormats {
                     format.type?.let { put("type", it) }
                     format.title?.let { put("title", it) }
                     format.sizeBytes?.let { put("size", it) }
+                    if (format.occurrence > 0) put("occurrence", format.occurrence)
                 },
             )
         }
@@ -75,6 +95,7 @@ object DownloadFormats {
                 type = item.optString("type").takeIf { it.isNotEmpty() },
                 title = item.optString("title").takeIf { it.isNotEmpty() },
                 sizeBytes = if (item.has("size")) item.optLong("size") else null,
+                occurrence = item.optInt("occurrence", 0),
             )
         }
     }

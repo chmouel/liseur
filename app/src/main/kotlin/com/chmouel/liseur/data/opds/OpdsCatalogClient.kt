@@ -286,21 +286,26 @@ class OpdsCatalogClient(
 
     private fun OpdsBook.toRemote(scope: OpdsScope, base: HttpUrl): RemoteBook {
         val entryBase = base.resolveOrSelf(xmlBase)
+        val formats = formats.mapNotNull { format ->
+            scope.fetchable(entryBase.resolve(format.href))?.let { format.copy(href = it) }
+        }
+        val resolvedHref = downloadHref?.let { scope.fetchable(entryBase.resolve(it)) }
+        // The feed's default can be off limits while another format is
+        // not; that one becomes the default instead.
+        val fallback = if (resolvedHref == null) formats.firstOrNull() else null
         return RemoteBook(
             remoteId = scope.remoteId(entryId),
             title = title,
             author = author,
             coverHref = coverHref?.let { scope.fetchable(entryBase.resolve(it)) },
-            downloadHref = downloadHref?.let { scope.fetchable(entryBase.resolve(it)) },
-            sizeBytes = sizeBytes,
+            downloadHref = resolvedHref ?: fallback?.href,
+            sizeBytes = if (fallback != null) fallback.sizeBytes else sizeBytes,
             updatedAt = updatedAt,
             seriesName = seriesName,
             seriesIndex = seriesIndex,
             metadata = metadata,
             descriptionHtml = descriptionHtml,
-            formats = formats.mapNotNull { format ->
-                scope.fetchable(entryBase.resolve(format.href))?.let { format.copy(href = it) }
-            },
+            formats = formats,
         )
     }
 

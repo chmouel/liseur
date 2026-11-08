@@ -38,4 +38,17 @@ class DownloadFormatsTest {
         assertNull(DownloadFormats.encode(listOf(compatible)))
         assertEquals(emptyList<DownloadFormat>(), DownloadFormats.decode("not json"))
     }
+
+    @Test
+    fun `untitled files of one type stay separate choices that survive storage`() {
+        val first = DownloadFormat("/b/one", "application/epub+zip")
+        val second = DownloadFormat("/b/two", "application/epub+zip")
+
+        val distinct = DownloadFormats.distinct(listOf(first, second, first))
+
+        assertEquals(listOf("/b/one", "/b/two"), distinct.map { it.href })
+        assertEquals(2, distinct.map { it.key }.toSet().size)
+        val stored = DownloadFormats.decode(DownloadFormats.encode(distinct))
+        assertEquals(distinct[1], DownloadFormats.pick(stored, distinct[1].key))
+    }
 }

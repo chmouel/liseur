@@ -479,6 +479,24 @@ class OpdsCatalogClientTest {
     }
 
     @Test
+    fun `a refused default gives way to a format the catalog may fetch`() {
+        pages["/opds"] = feed(
+            """
+            <entry><id>1</id><title>Book 1</title>
+            <link rel="http://opds-spec.org/acquisition" href="http://192.168.1.1/1.epub"
+                  type="application/epub+zip" title="EPUB" length="10"/>
+            <link rel="http://opds-spec.org/acquisition" href="/get/1.kepub"
+                  type="application/kepub+zip" length="20"/></entry>
+            """.trimIndent(),
+        )
+
+        val book = walkAsPublic().second.single()
+
+        assertEquals("http://books.example:${server.port}/get/1.kepub", book.downloadHref)
+        assertEquals(20L, book.sizeBytes)
+    }
+
+    @Test
     fun `an entry with no readable format is still shown, without a download`() {
         pages["/opds"] = feed(
             """

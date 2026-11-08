@@ -68,7 +68,15 @@ class BookDownloader(
         val etagFile = File(target.parentFile, target.name + ".etag")
         target.parentFile?.mkdirs()
 
-        val resumeFrom = if (partial.exists() && etagFile.exists()) partial.length() else 0L
+        // The validator is kept with the address it came from: an ETag
+        // only names a version of one resource, so a partial file from
+        // another format of the book must not be continued with this one.
+        val source = sourceOf(request.build().url.toString())
+        val etag = etagFile.takeIf { partial.exists() && it.exists() }
+            ?.readLines()
+            ?.takeIf { it.size == 2 && it[0] == source }
+            ?.get(1)
+        val resumeFrom = if (etag != null) partial.length() else 0L
         if (resumeFrom == 0L) {
             partial.delete()
             etagFile.delete()
@@ -76,9 +84,9 @@ class BookDownloader(
 
         val call = request
             .apply {
-                if (resumeFrom > 0) {
+                if (resumeFrom > 0 && etag != null) {
                     header("Range", "bytes=$resumeFrom-")
-                    header("If-Range", etagFile.readText())
+                    header("If-Range", etag)
                 }
             }
             .build()
@@ -105,7 +113,7 @@ class BookDownloader(
                 val appending = response.code == 206
                 if (!appending) partial.delete()
 
-                response.header("ETag")?.let { etagFile.writeText(it) }
+                response.header("ETag")?.let { etagFile.writeText("$source\n$it") }
 
                 val body = response.body
                     ?: return@withContext DownloadOutcome.Failed(
@@ -191,6 +199,12 @@ class BookDownloader(
         const val CHECK_SPACE_EVERY = 4L * 1024 * 1024
     }
 }
+
+/** What a resumable download came from: a digest, since a URL can carry a key. */
+internal fun sourceOf(url: String): String =
+    java.security.MessageDigest.getInstance("SHA-256")
+        .digest(url.toByteArray())
+        .joinToString("") { "%02x".format(it) }
 
 /**
  * Whether the filesystem, rather than the network, is what stopped a

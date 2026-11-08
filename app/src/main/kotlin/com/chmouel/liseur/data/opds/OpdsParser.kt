@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.opds
 
 import com.chmouel.liseur.data.remote.DownloadFormat
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.domain.Contributor
 import com.chmouel.liseur.domain.ContributorRoles
@@ -634,7 +635,7 @@ object OpdsParser {
                         sizeBytes = link.getAttribute("length").toLongOrNull(),
                     )
                 }
-            }.distinctBy { it.key },
+            }.let(DownloadFormats::distinct),
         )
     }
 

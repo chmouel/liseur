@@ -6,9 +6,13 @@ import com.chmouel.liseur.data.remote.SyncFailure
 import java.io.IOException
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -66,5 +70,40 @@ class BookDownloaderTest {
             .download(request, folder.root.resolve("book.epub"))
 
         assertEquals(DownloadOutcome.Failed(DownloadFailure.Network("reset")), outcome)
+    }
+
+    @Test
+    fun `a partial file from another address is not continued`() = runTest {
+        val sent = mutableListOf<Request>()
+        val downloader = BookDownloader(
+            RemoteHttp(
+                OkHttpClient.Builder()
+                    .addInterceptor(
+                        Interceptor { chain ->
+                            sent += chain.request()
+                            Response.Builder()
+                                .request(chain.request())
+                                .protocol(Protocol.HTTP_1_1)
+                                .code(200)
+                                .message("OK")
+                                .header("ETag", "\"same\"")
+                                .body("whole".toResponseBody())
+                                .build()
+                        },
+                    )
+                    .build(),
+            ),
+        )
+        val target = folder.root.resolve("book.epub")
+        val other = Request.Builder().url("https://books.example/advanced.epub")
+        folder.root.resolve("book.epub.part").writeText("compat")
+        folder.root.resolve("book.epub.etag").writeText(
+            sourceOf("https://books.example/compatible.epub") + "\n\"same\"",
+        )
+
+        downloader.download(other, target)
+
+        assertNull(sent.single().header("Range"))
+        assertEquals("whole", target.readText())
     }
 }
