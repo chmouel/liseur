@@ -1306,6 +1306,7 @@ class LocalLibraryRepository(
         val snapshot = publication.fileMetadata(
             scannedSize ?: measuredSize(fileUrl),
             primaryEpubAuthors(publication) ?: publication.metadata.authors.map { it.name },
+            epubContributors(publication),
         )
         return BookMetadata.of(bookUrl, MetadataSource.FILE, snapshot)
             .takeUnless { it == BookMetadata(bookUrl, MetadataSource.FILE.key) }

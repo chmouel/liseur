@@ -296,7 +296,9 @@ class FileMetadataIndexTest {
         <dc:title id="sub">The subtitle</dc:title>
         <dc:creator>Ursula K. Le Guin</dc:creator>
         <dc:contributor id="trl">Someone Else</dc:contributor>
+        <meta refines="#trl" property="role" scheme="marc:relators">ann</meta>
         <meta refines="#trl" property="role" scheme="marc:relators">trl</meta>
+        <meta refines="#trl" property="role" scheme="marc:relators">win</meta>
         <dc:publisher>Ace Books</dc:publisher>
         <dc:date>1969-03-01</dc:date>
         <dc:subject>Science fiction</dc:subject>

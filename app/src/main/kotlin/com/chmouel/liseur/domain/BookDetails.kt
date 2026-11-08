@@ -107,6 +107,19 @@ object ContributorRoles {
         "nrt", "narrator", "reader" -> NARRATOR
         else -> CONTRIBUTOR
     }
+
+    /**
+     * The role to show for someone declared with all of [raw]: picks among
+     * the non-author roles the screen names, or null when there is none.
+     * A translator who also wrote the introduction is shown as the
+     * translator.
+     */
+    fun preferred(raw: Collection<String>): String? {
+        val named = raw.map(::of).toSet()
+        return PREFERENCE.firstOrNull { it in named }
+    }
+
+    private val PREFERENCE = listOf(TRANSLATOR, EDITOR, ILLUSTRATOR, NARRATOR)
 }
 
 /**

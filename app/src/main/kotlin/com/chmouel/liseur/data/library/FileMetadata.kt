@@ -16,14 +16,24 @@ import org.readium.r2.shared.publication.Publication
  *
  * The publication date arrives from Readium as an instant, so a book
  * that said only `1962` is stored at whatever day Readium made of it.
+ *
+ * [declared] is the package's own view of its contributors. It corrects
+ * the role Readium settled on for anyone given several.
  */
 internal fun Publication.fileMetadata(
     sizeBytes: Long?,
     authors: List<String> = metadata.authors.map { it.name },
+    declared: List<EpubContributor> = emptyList(),
 ): MetadataSnapshot {
     val m = metadata
+    fun person(c: org.readium.r2.shared.publication.Contributor, role: String): Contributor {
+        val names = c.localizedName.translations.values.map { it.string }
+        // A name declared more than once could be any of them; only one match corrects Readium.
+        val match = declared.filter { entry -> names.any(entry.aliases::contains) }.singleOrNull()
+        return Contributor(match?.let { ContributorRoles.preferred(it.roles) } ?: role, c.name)
+    }
     fun people(list: List<org.readium.r2.shared.publication.Contributor>, role: String) =
-        list.map { Contributor(role, it.name) }
+        list.map { person(it, role) }
     return MetadataSnapshot(
         subtitle = m.localizedSubtitle?.string,
         description = descriptionText(m.description),
@@ -37,7 +47,7 @@ internal fun Publication.fileMetadata(
             people(m.editors, ContributorRoles.EDITOR) +
             people(m.illustrators + m.artists + m.pencilers + m.inkers + m.colorists + m.letterers, ContributorRoles.ILLUSTRATOR) +
             people(m.narrators, ContributorRoles.NARRATOR) +
-            m.contributors.map { Contributor(ContributorRoles.of(it.roles.firstOrNull() ?: "contributor"), it.name) },
+            m.contributors.map { person(it, ContributorRoles.of(it.roles.firstOrNull() ?: "contributor")) },
         identifiers = listOfNotNull(identifierOf(m.identifier)),
         pageCount = m.numberOfPages,
         fileSizeBytes = sizeBytes,
