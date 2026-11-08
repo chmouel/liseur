@@ -750,8 +750,8 @@ object OpdsParser {
                 val title = link.getAttribute("title").trim().lowercase()
                 val type = link.getAttribute("type").lowercase()
                 when {
-                    title == "epub" -> 0
                     "kobo" in type || "kepub" in type || "kepub" in title || "kobo" in title -> 2
+                    title == "epub" -> 0
                     else -> 1
                 }
             }

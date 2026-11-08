@@ -84,13 +84,18 @@ internal fun DownloadFormatPicker(
     }
 }
 
-/** The link's own title when it has one; feeds that leave it out get the type's name. */
+/**
+ * The link's own title when it has one; feeds that leave it out get the
+ * type's name. Links sharing both are numbered so they can be told apart.
+ */
 @Composable
-private fun formatLabel(format: DownloadFormat): String =
-    format.title ?: stringResource(
+private fun formatLabel(format: DownloadFormat): String {
+    val name = format.title ?: stringResource(
         if (format.type.orEmpty().lowercase().let { "kobo" in it || "kepub" in it }) {
             R.string.download_format_kepub
         } else {
             R.string.download_format_epub
         },
     )
+    return if (format.occurrence > 0) "$name ${format.occurrence + 1}" else name
+}
