@@ -219,6 +219,49 @@ class KoboClientTest {
     }
 
     @Test
+    fun `writing a position says when it was recorded`() {
+        server.enqueue(json("{}"))
+        runBlocking {
+            client.pushState(
+                base(),
+                "uuid-1",
+                // 2026-11-04T09:30:15.250Z
+                ReadingState(progression = 0.5, status = ReadingStatus.READING, updatedAt = 1_793_784_615_250),
+            )
+        }
+
+        val sent = org.json.JSONObject(server.takeRequest().body!!.utf8())
+            .getJSONArray("ReadingStates")
+            .getJSONObject(0)
+        assertEquals("2026-11-04T09:30:15Z", sent.getString("LastModified"))
+    }
+
+    @Test
+    fun `a position with no recorded time is sent as written now, not 1970`() {
+        for (updatedAt in listOf(0L, -1L)) {
+            server.enqueue(json("{}"))
+            val before = System.currentTimeMillis() / 1000 * 1000
+            runBlocking {
+                client.pushState(
+                    base(),
+                    "uuid-1",
+                    ReadingState(progression = 0.5, status = ReadingStatus.READING, updatedAt = updatedAt),
+                )
+            }
+            val after = System.currentTimeMillis() / 1000 * 1000
+
+            val sent = org.json.JSONObject(server.takeRequest().body!!.utf8())
+                .getJSONArray("ReadingStates")
+                .getJSONObject(0)
+            val lastModified = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+                .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                .parse(sent.getString("LastModified"))!!
+                .time
+            assertTrue("updatedAt=$updatedAt sent $lastModified", lastModified in before..after)
+        }
+    }
+
+    @Test
     fun `a refused write says why`() {
         server.enqueue(json("", code = 403))
         val pushed = runBlocking {
