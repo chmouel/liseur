@@ -1133,6 +1133,8 @@
     <string name="browse_textos_detail">Spanish-language books, free to read.</string>
     <string name="browse_manybooks_name" translatable="false">ManyBooks</string>
     <string name="browse_manybooks_detail">Free ebooks in many genres, from independent authors.</string>
+    <string name="browse_gallica_name" translatable="false">Gallica</string>
+    <string name="browse_gallica_detail">French books from the Bibliothèque nationale de France.</string>
     <string name="browse_free_catalog_failed">Could not reach %1$s. Check your connection and try again.</string>
     <string name="browse_form_intro">Books you add are downloaded to this device. Reading places are not synced with this catalog.</string>
     <string name="browse_catalog_options">Options for %1$s</string>

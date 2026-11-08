@@ -80,7 +80,8 @@ Komga, BookOrbit, liseur-sync, or any OPDS catalog. Series are grouped into stac
 reading order, progress, and missing volumes. "Download all books" fills the
 shelf from a connected server in one go. An empty library also offers
 free books from public catalogs: [Project Gutenberg](https://www.gutenberg.org),
-[textos.info](https://www.textos.info) and [ManyBooks](https://manybooks.net). Pick one,
+[textos.info](https://www.textos.info), [ManyBooks](https://manybooks.net) and
+[Gallica](https://gallica.bnf.fr/opds). Pick one,
 browse it by language, shelf or section, and download the books you want
 before there is anything to connect to. No account is needed for any of them.
 
@@ -97,7 +98,7 @@ library covers. Tap a cover to read. Neither needs configuration.
 Liseur has no ads or account, and its own code has no trackers or analytics.
 It connects to services you choose for book sync, speech, translation and the
 reading companion. Browsing the free catalogs (Project Gutenberg,
-textos.info, ManyBooks) and using an online dictionary
+textos.info, ManyBooks, Gallica) and using an online dictionary
 also makes network requests. See the
 [privacy policy](https://chmouel.github.io/liseur/PRIVACY) for details.
 

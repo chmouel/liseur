@@ -20,6 +20,7 @@ enum class FreeCatalog(val address: String) {
     GUTENBERG(StarterCatalog.BROWSE_URL),
     TEXTOS_INFO("https://www.textos.info/catalogo.atom"),
     MANYBOOKS("https://manybooks.net/opds"),
+    GALLICA("https://gallica.bnf.fr/opds"),
     ;
 
     /** Whether [server] is this catalog, already saved. */

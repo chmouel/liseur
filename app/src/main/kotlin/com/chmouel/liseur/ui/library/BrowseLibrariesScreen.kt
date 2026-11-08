@@ -48,6 +48,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.AccountBalance
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.Check
@@ -779,6 +780,7 @@ private fun freeCatalogName(preset: FreeCatalog): String = stringResource(
         FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_name
         FreeCatalog.TEXTOS_INFO -> R.string.browse_textos_name
         FreeCatalog.MANYBOOKS -> R.string.browse_manybooks_name
+        FreeCatalog.GALLICA -> R.string.browse_gallica_name
     },
 )
 
@@ -788,6 +790,7 @@ private fun freeCatalogDetail(preset: FreeCatalog): String = stringResource(
         FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_detail
         FreeCatalog.TEXTOS_INFO -> R.string.browse_textos_detail
         FreeCatalog.MANYBOOKS -> R.string.browse_manybooks_detail
+        FreeCatalog.GALLICA -> R.string.browse_gallica_detail
     },
 )
 
@@ -795,6 +798,7 @@ private fun freeCatalogIcon(preset: FreeCatalog): ImageVector = when (preset) {
     FreeCatalog.GUTENBERG -> Icons.Outlined.AutoStories
     FreeCatalog.TEXTOS_INFO -> Icons.Outlined.MenuBook
     FreeCatalog.MANYBOOKS -> Icons.Outlined.LibraryBooks
+    FreeCatalog.GALLICA -> Icons.Outlined.AccountBalance
 }
 
 @Composable

@@ -110,8 +110,9 @@ cover what the server does with the data it receives.
 ### Free book catalogs
 
 An empty library offers to start from a free public catalog:
-[Project Gutenberg](https://www.gutenberg.org), [textos.info](https://www.textos.info) or
-[ManyBooks](https://manybooks.net). Nothing is contacted until you pick one
+[Project Gutenberg](https://www.gutenberg.org), [textos.info](https://www.textos.info),
+[ManyBooks](https://manybooks.net) or [Gallica](https://gallica.bnf.fr/opds). Nothing is
+contacted until you pick one
 in the chooser, and picking one only saves its OPDS address as an anonymous
 catalog connection, exactly as if you had typed it yourself. From then on,
 browsing it sends ordinary OPDS feed and cover requests to that site, and
@@ -119,7 +120,7 @@ downloading a book fetches the file from it. No account, identifier, book
 title or reading data is sent: these catalogs have no sign-in and cannot see
 your library. Each saved catalog can be removed from Remote libraries like
 any other, and all of these requests are made over HTTPS. The presets
-shipped in the app decide which sites are offered; the three above are what
+shipped in the app decide which sites are offered; the four above are what
 this version offers.
 
 ### A dictionary site, if you enable it
