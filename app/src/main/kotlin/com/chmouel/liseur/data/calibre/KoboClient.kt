@@ -105,6 +105,10 @@ class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
      * answers 400 if any is missing. `Location` stays null, which leaves
      * whatever kepub anchor the server holds untouched rather than
      * clearing it — Readium has no equivalent to write there.
+     *
+     * `LastModified` carries when the position was recorded, as a Kobo
+     * does. Upstream calibre-web ignores it, but forks that store it
+     * (Calibre-Web-NextGen) show the epoch when it is missing.
      */
     suspend fun pushState(
         koboBaseUrl: String,
@@ -121,6 +125,7 @@ class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
                 "ReadingStates",
                 JSONArray().put(
                     JSONObject()
+                        .put("LastModified", formatTimestamp(state.updatedAt.takeIf { it > 0 } ?: System.currentTimeMillis()))
                         .put("CurrentBookmark", bookmark)
                         .put("Statistics", JSONObject.NULL)
                         .put("StatusInfo", JSONObject().put("Status", state.status.wireName)),
@@ -187,6 +192,11 @@ class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
         )
     }
 
+    private fun formatTimestamp(millis: Long): String =
+        SimpleDateFormat(SENT_TIMESTAMP_PATTERN, Locale.US)
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }
+            .format(millis)
+
     /**
      * calibre-web stamps times as ISO-8601 UTC. An unreadable stamp
      * becomes 0 so the local position wins, which is the safe way round:
@@ -211,6 +221,9 @@ class KoboClient(private val http: RemoteHttp = RemoteHttp()) {
         private const val CONTINUE_HEADER = "x-kobo-sync"
         private const val MAX_PAGES = 50
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /** calibre-web's own format for these stamps: UTC, whole seconds. */
+        private const val SENT_TIMESTAMP_PATTERN = "yyyy-MM-dd'T'HH:mm:ss'Z'"
         private val TIMESTAMP_PATTERNS = listOf(
             "yyyy-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
             "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
