@@ -69,6 +69,31 @@ class MigrationTest {
     }
 
     @Test
+    fun `contributor upgrade reads again only books whose file named contributors`() {
+        helper.createDatabase(TEST_DB, 71).use { db ->
+            for (url in listOf("file:named", "file:bare", "file:none")) {
+                db.execSQL(
+                    "INSERT INTO books (url, title, added_at, download_state, series_checked, " +
+                        "series_override, series_claim_pending, series_claim_reset, series_index_override, " +
+                        "file_metadata_checked, link_generation) " +
+                        "VALUES ('$url', 'T', 1, 'DOWNLOADED', 1, 0, 0, 0, 0, 1, 0)",
+                )
+            }
+            db.execSQL(
+                "INSERT INTO book_metadata (book_url, source, contributors) " +
+                    "VALUES ('file:named', 'file', '[{\"role\":\"contributor\",\"name\":\"A\"}]')",
+            )
+            db.execSQL("INSERT INTO book_metadata (book_url, source, subtitle) VALUES ('file:bare', 'file', 'Sub')")
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, *LiseurDatabase.MIGRATIONS).use { db ->
+            db.query("SELECT url, file_metadata_checked FROM books ORDER BY url").use {
+                val checked = buildMap { while (it.moveToNext()) put(it.getString(0), it.getInt(1)) }
+                assertEquals(mapOf("file:bare" to 1, "file:named" to 0, "file:none" to 1), checked)
+            }
+        }
+    }
+
+    @Test
     fun `pending sequence upgrade retains existing pending reading`() {
         helper.createDatabase(TEST_DB, 69).use { db ->
             db.execSQL("""
@@ -140,7 +165,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -217,7 +242,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72)
             .allowMainThreadQueries()
             .build()
         try {
@@ -252,7 +277,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1794,6 +1819,6 @@ class MigrationTest {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 71
+        const val LATEST = 72
     }
 }

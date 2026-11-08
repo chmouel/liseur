@@ -44,7 +44,7 @@ import androidx.sqlite.execSQL
         BookAiPreferences::class,
         BookMetadata::class,
     ],
-    version = 71,
+    version = 72,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -85,6 +85,16 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookMetadataDao(): BookMetadataDao
 
     companion object {
+        /** Reads contributors again, now that their declared names and every role are honoured. */
+        val MIGRATION_71_72 = object : Migration(71, 72) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "UPDATE `books` SET `file_metadata_checked` = 0 WHERE `url` IN " +
+                        "(SELECT `book_url` FROM `book_metadata` WHERE `source` = 'file' AND `contributors` IS NOT NULL)",
+                )
+            }
+        }
+
         val MIGRATION_70_71 = object : Migration(70, 71) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL(
@@ -2003,6 +2013,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_68_69,
             MIGRATION_69_70,
             MIGRATION_70_71,
+            MIGRATION_71_72,
         )
     }
 }
