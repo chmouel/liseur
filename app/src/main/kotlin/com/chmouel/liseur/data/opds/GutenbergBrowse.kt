@@ -3,7 +3,6 @@ package com.chmouel.liseur.data.opds
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.BrowseListing
-import com.chmouel.liseur.data.remote.RemoteUrl
 import com.chmouel.liseur.data.remote.ServerKind
 
 /** Extra navigation for Gutenberg's OPDS root, which only links Popular, Latest and Random. */
@@ -13,9 +12,7 @@ internal object GutenbergBrowse {
     private const val LANGUAGE_PREFIX = "gutenberg:language:"
     private const val SHELF_PREFIX = "gutenberg:shelf:"
 
-    fun isRoot(server: RemoteServer): Boolean =
-        server.kind == ServerKind.CUSTOM &&
-            server.catalogUrl?.let { RemoteUrl.sameAddress(it, StarterCatalog.BROWSE_URL) } == true
+    fun isRoot(server: RemoteServer): Boolean = FreeCatalog.GUTENBERG.matches(server)
 
     /** A main connection made by the old "Start with free books" shelf, before it opened this catalog instead. */
     fun isStarterShelf(server: RemoteServer): Boolean =
