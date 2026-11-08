@@ -90,10 +90,25 @@ class FileMetadataTest {
         )
     }
 
+    @Test
+    fun `contributors keep their primary name over an alternate script`() {
+        // The name Readium reports when its locale fallback picks the alternate script.
+        val publication = publication(artists = listOf(ReadiumContributor("Виктор Васнецов")))
+        val declared = listOf(
+            EpubContributor("Viktor Vasnetsov", listOf("art"), setOf("Viktor Vasnetsov", "Виктор Васнецов")),
+        )
+
+        assertEquals(
+            listOf(Contributor(ContributorRoles.ILLUSTRATOR, "Viktor Vasnetsov")),
+            publication.fileMetadata(null, emptyList(), declared).contributors,
+        )
+    }
+
     private fun publication(
         translators: List<ReadiumContributor> = emptyList(),
         contributors: List<ReadiumContributor> = emptyList(),
         illustrators: List<ReadiumContributor> = emptyList(),
+        artists: List<ReadiumContributor> = emptyList(),
     ) = Publication(
         Manifest(
             metadata = Metadata(
@@ -101,6 +116,7 @@ class FileMetadataTest {
                 translators = translators,
                 contributors = contributors,
                 illustrators = illustrators,
+                artists = artists,
             ),
         ),
     )

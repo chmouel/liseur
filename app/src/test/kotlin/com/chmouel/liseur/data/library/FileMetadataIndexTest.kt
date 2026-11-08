@@ -111,7 +111,11 @@ class FileMetadataIndexTest {
         assertEquals("1969-03-01", file.published)
         assertEquals(listOf("Science fiction", "Anarchism"), file.subjects)
         assertEquals(
-            listOf(Contributor("author", "Ursula K. Le Guin"), Contributor("translator", "Someone Else")),
+            listOf(
+                Contributor("author", "Ursula K. Le Guin"),
+                Contributor("illustrator", "Viktor Vasnetsov"),
+                Contributor("translator", "Someone Else"),
+            ),
             file.contributors,
         )
         assertEquals(listOf(Identifier("isbn", "9780441478125")), file.identifiers)
@@ -299,6 +303,9 @@ class FileMetadataIndexTest {
         <meta refines="#trl" property="role" scheme="marc:relators">ann</meta>
         <meta refines="#trl" property="role" scheme="marc:relators">trl</meta>
         <meta refines="#trl" property="role" scheme="marc:relators">win</meta>
+        <dc:contributor id="art">Viktor Vasnetsov</dc:contributor>
+        <meta refines="#art" property="role" scheme="marc:relators">art</meta>
+        <meta refines="#art" property="alternate-script">Виктор Васнецов</meta>
         <dc:publisher>Ace Books</dc:publisher>
         <dc:date>1969-03-01</dc:date>
         <dc:subject>Science fiction</dc:subject>

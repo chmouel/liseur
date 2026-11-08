@@ -18,7 +18,8 @@ import org.readium.r2.shared.publication.Publication
  * that said only `1962` is stored at whatever day Readium made of it.
  *
  * [declared] is the package's own view of its contributors. It corrects
- * the role Readium settled on for anyone given several.
+ * the role Readium settled on for anyone given several, and the name:
+ * Readium may pick an alternate-script one, as it does for authors.
  */
 internal fun Publication.fileMetadata(
     sizeBytes: Long?,
@@ -30,7 +31,7 @@ internal fun Publication.fileMetadata(
         val names = c.localizedName.translations.values.map { it.string }
         // A name declared more than once could be any of them; only one match corrects Readium.
         val match = declared.filter { entry -> names.any(entry.aliases::contains) }.singleOrNull()
-        return Contributor(match?.let { ContributorRoles.preferred(it.roles) } ?: role, c.name)
+        return Contributor(match?.let { ContributorRoles.preferred(it.roles) } ?: role, match?.name ?: c.name)
     }
     fun people(list: List<org.readium.r2.shared.publication.Contributor>, role: String) =
         list.map { person(it, role) }
