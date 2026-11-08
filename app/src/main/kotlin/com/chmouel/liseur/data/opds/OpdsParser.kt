@@ -131,6 +131,24 @@ object OpdsParser {
     private const val THUMBNAIL_REL = "http://opds-spec.org/image/thumbnail"
 
     /**
+     * The relations OPDS 1.1 used for the same two images.
+     *
+     * `opds-spec.org/image` and `…/image/thumbnail` replaced `cover`
+     * and `thumbnail` in OPDS 1.2, and catalogs written against the
+     * first spec keep the old spelling. ManyBooks still does: without
+     * these its books arrive with no cover at all.
+     */
+    private const val LEGACY_COVER_REL = "http://opds-spec.org/cover"
+    private const val LEGACY_THUMBNAIL_REL = "http://opds-spec.org/thumbnail"
+
+    /**
+     * The cover links in the order that is worth showing, full image
+     * first. A feed that offers both a cover and its thumbnail is
+     * offering one picture twice, and the bigger one is the cover.
+     */
+    private val COVER_RELS = listOf(IMAGE_REL, LEGACY_COVER_REL, THUMBNAIL_REL, LEGACY_THUMBNAIL_REL)
+
+    /**
      * The acquisition relations that mean "this file, now".
      *
      * The family has more members than these — `buy`, `borrow`,
@@ -585,8 +603,9 @@ object OpdsParser {
         val downloads = links.filter { it.rels().any { rel -> rel in DOWNLOAD_RELS } }
             .let(::rankDownloads)
         val download = downloads.firstOrNull()
-        val cover = links.firstOrNull { it.rels().contains(IMAGE_REL) }
-            ?: links.firstOrNull { it.rels().contains(THUMBNAIL_REL) }
+        val cover = COVER_RELS.firstNotNullOfOrNull { rel ->
+            links.firstOrNull { it.rels().contains(rel) }
+        }
 
         val href = download?.href()
         val series = parseSeries(entry)
