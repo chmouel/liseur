@@ -77,7 +77,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -120,6 +119,9 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -732,7 +734,11 @@ private fun FreeCatalogSheet(state: BrowseLibrariesState, model: BrowseLibraries
                 )
             }
             if (failed != null) {
-                Box(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                Box(
+                    Modifier
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                ) {
                     InlineNotice(
                         text = stringResource(R.string.browse_free_catalog_failed, freeCatalogName(failed)),
                         action = stringResource(R.string.catalog_retry),
@@ -754,8 +760,17 @@ private fun FreeCatalogRow(
     enabled: Boolean,
     onPick: () -> Unit,
 ) {
+    val savedLabel = stringResource(R.string.browse_free_catalog_saved)
+    val connectingLabel = stringResource(R.string.browse_free_catalog_connecting)
     ListItem(
-        modifier = Modifier.clickable(enabled = enabled, onClick = onPick),
+        modifier = Modifier
+            .clickable(enabled = enabled, role = Role.Button, onClick = onPick)
+            .semantics(mergeDescendants = true) {
+                when {
+                    connecting -> stateDescription = connectingLabel
+                    saved -> stateDescription = savedLabel
+                }
+            },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         leadingContent = { Icon(freeCatalogIcon(preset), contentDescription = null) },
         headlineContent = { Text(freeCatalogName(preset), fontWeight = FontWeight.SemiBold) },
@@ -764,7 +779,7 @@ private fun FreeCatalogRow(
         // competes with the arrows that open a saved catalog below.
         trailingContent = when {
             connecting -> {
-                { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
+                { BusyIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
             }
             saved -> {
                 { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }

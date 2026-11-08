@@ -1085,6 +1085,8 @@
     <string name="browse_textos_detail">Des livres en espagnol, gratuits à lire.</string>
     <string name="browse_manybooks_detail">Des ebooks gratuits dans de nombreux genres, d’auteurs indépendants.</string>
     <string name="browse_gallica_detail">Des livres français de la Bibliothèque nationale de France.</string>
+    <string name="browse_free_catalog_saved">Enregistré</string>
+    <string name="browse_free_catalog_connecting">Connexion…</string>
     <string name="browse_free_catalog_failed">Impossible de joindre %1$s. Vérifiez votre connexion et réessayez.</string>
     <string name="browse_form_intro">Les livres ajoutés sont téléchargés sur cet appareil. Les positions de lecture ne sont pas synchronisées avec ce catalogue.</string>
     <string name="browse_catalog_options">Options pour %1$s</string>
