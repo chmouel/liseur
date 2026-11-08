@@ -107,7 +107,7 @@
     <string name="empty_library_title">Deine Bibliothek ist leer</string>
     <string name="empty_library_subtitle">So füllst du sie.</string>
     <string name="starter_catalog">Mit kostenlosen Büchern starten</string>
-    <string name="starter_catalog_hint">Klassiker von Project Gutenberg, gemeinfrei und kostenlos zu lesen. Stöbere nach Sprache oder Regal und lade herunter, was dir gefällt.</string>
+    <string name="starter_catalog_hint">Kostenlose Bücher aus öffentlichen Katalogen, beginnend mit Project Gutenberg. Wähle einen Katalog, stöbere darin und lade herunter, was dir gefällt.</string>
     <string name="starter_category_popular">Am beliebtesten</string>
     <string name="starter_category_best_ever">Beste Bücher aller Zeiten</string>
     <string name="starter_category_science_fiction">Science-Fiction</string>
@@ -1088,11 +1088,15 @@
     <string name="browse_title">Entfernte Bibliotheken</string>
     <string name="browse_empty">Noch keine gespeicherten Kataloge</string>
     <string name="browse_empty_detail">Speichere einen calibre-web-, Komga-, BookOrbit-, liseur-sync- oder OPDS-Katalog, um ihn zu durchsuchen und Bücher zum Herunterladen auszuwählen. Lesepositionen werden mit diesen Katalogen nicht synchronisiert.</string>
-    <string name="browse_gutenberg">Project Gutenberg durchsuchen</string>
     <string name="browse_gutenberg_languages">Sprachen</string>
     <string name="browse_gutenberg_categories">Kategorien</string>
-    <string name="browse_gutenberg_detail">Kostenlose, gemeinfreie Klassiker, ganz ohne Konto.</string>
-    <string name="browse_gutenberg_failed">Project Gutenberg ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="browse_gutenberg_detail">Gemeinfreie Klassiker, kostenlos.</string>
+    <string name="browse_free_books">Kostenlose Bücher durchsuchen</string>
+    <string name="browse_free_books_detail">Kostenlose Bücher aus öffentlichen Katalogen. Kein Konto nötig.</string>
+    <string name="browse_free_no_account">Kein Konto nötig.</string>
+    <string name="browse_textos_detail">Spanischsprachige Bücher, kostenlos zu lesen.</string>
+    <string name="browse_manybooks_detail">Kostenlose E-Books aus vielen Genres, von unabhängigen Autorinnen und Autoren.</string>
+    <string name="browse_free_catalog_failed">%1$s ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="browse_form_intro">Hinzugefügte Bücher werden auf dieses Gerät heruntergeladen. Lesepositionen werden mit diesem Katalog nicht synchronisiert.</string>
     <string name="browse_catalog_options">Optionen für %1$s</string>
     <string name="browse_refresh">Aktualisieren</string>

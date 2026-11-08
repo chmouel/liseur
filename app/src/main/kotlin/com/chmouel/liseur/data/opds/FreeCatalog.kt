@@ -5,18 +5,21 @@ import com.chmouel.liseur.data.remote.ServerKind
 import java.net.URI
 
 /**
- * A free catalog a reader may start from, with no account at all.
+ * The free catalogs a reader may start from, with no account at all.
  *
  * A preset is an address and how to recognise it again, nothing more.
- * What it is called belongs to the screen that draws it: the data layer
- * does not reach for resources.
+ * What each one is called and what its row says belong to the screen
+ * that draws them: the data layer does not reach for resources.
  *
- * It is saved as an anonymous Custom connection, so recognising it here
- * adds no provider, no column and no table.
+ * Every one of these is an OPDS catalog saved as an anonymous Custom
+ * connection, so nothing here adds a provider, a column or a table.
+ * Adding a preset is adding a URL and two lines of translated text.
  */
 enum class FreeCatalog(val address: String) {
     /** Project Gutenberg's root, whose language and topic folders `GutenbergBrowse` adds. */
     GUTENBERG(StarterCatalog.BROWSE_URL),
+    TEXTOS_INFO("https://www.textos.info/catalogo.atom"),
+    MANYBOOKS("https://manybooks.net/opds"),
     ;
 
     /** Whether [server] is this catalog, already saved. */

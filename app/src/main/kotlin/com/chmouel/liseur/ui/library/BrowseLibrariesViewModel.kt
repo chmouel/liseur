@@ -8,8 +8,8 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.opds.FreeCatalog
 import com.chmouel.liseur.data.opds.GutenbergBrowse
-import com.chmouel.liseur.data.opds.StarterCatalog
 import com.chmouel.liseur.data.remote.BrowseCatalogRepository
 import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.BrowseListing
@@ -22,6 +22,7 @@ import com.chmouel.liseur.data.remote.SetupFailure
 import java.net.URI
 import java.net.URLDecoder
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +45,12 @@ data class BrowseLibrariesState(
     val formOpen: Boolean = false,
     val connecting: Boolean = false,
     val connectionFailure: SetupFailure? = null,
+    /** The free-catalog chooser is open; nothing in it has been contacted yet. */
+    val chooserOpen: Boolean = false,
+    /** The free catalog being probed and saved, if any. */
+    val connectingPreset: FreeCatalog? = null,
+    /** The free catalog whose last attempt failed, kept so the chooser can retry it. */
+    val presetFailure: FreeCatalog? = null,
     /** A listing fetch is running; the previous listing stays on screen for a refresh. */
     val loading: Boolean = false,
     val loadFailed: Boolean = false,
@@ -59,11 +66,15 @@ data class BrowseLibrariesState(
 
     val addable: List<RemoteBook> get() = listing.books.filter(::canAdd)
 
-    val gutenbergSaved: Boolean get() = saved.any(GutenbergBrowse::isRoot)
+    /** The saved connection for [preset], if the reader already has it. */
+    fun savedCatalog(preset: FreeCatalog): RemoteServer? = saved.firstOrNull(preset::matches)
+
+    /** Nothing left for the chooser to offer once every free catalog is saved. */
+    val allFreeCatalogsSaved: Boolean get() = FreeCatalog.entries.all { savedCatalog(it) != null }
 
     /** Back has a step to undo inside the browser before it leaves it. */
     val canGoBack: Boolean
-        get() = pending != null || detail != null || selecting || formOpen ||
+        get() = pending != null || detail != null || selecting || chooserOpen || formOpen ||
             path.isNotEmpty() || serverId != null
 }
 
@@ -74,7 +85,6 @@ sealed interface BrowseEvent {
     data object RemoveFailed : BrowseEvent
     data object CategoryIncomplete : BrowseEvent
     data object NothingToAdd : BrowseEvent
-    data object ConnectFailed : BrowseEvent
 }
 
 internal fun canAddBrowseBook(book: RemoteBook, owned: Map<String, BrowseOwned>, canDownload: Boolean): Boolean =
@@ -143,6 +153,10 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     private var categoryGeneration = 0L
     private var connectJob: Job? = null
     private var connectionGeneration = 0L
+    private var presetJob: Job? = null
+    private var presetGeneration = 0L
+    /** Completed by the first emission of the saved list, so a preset is matched against it. */
+    private val savedReady = CompletableDeferred<Unit>()
 
     private fun abandonConnection() {
         connectionGeneration++
@@ -151,8 +165,14 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         _state.update { it.copy(connecting = false) }
     }
 
-    private fun abandonCategory() {
-        categoryGeneration++
+    private fun abandonPreset() {
+        presetGeneration++
+        presetJob?.cancel()
+        presetJob = null
+        _state.update { it.copy(connectingPreset = null) }
+    }
+
+    private fun abandonCategory() {        categoryGeneration++
         if (categoryJob?.isActive == true) {
             categoryJob?.cancel()
             _state.update { it.copy(working = false) }
@@ -162,7 +182,10 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
 
     init {
         viewModelScope.launch {
-            catalogs.saved.collect { saved -> _state.update { it.copy(saved = saved, savedLoaded = true) } }
+            catalogs.saved.collect { saved ->
+                _state.update { it.copy(saved = saved, savedLoaded = true) }
+                savedReady.complete(Unit)
+            }
         }
     }
 
@@ -210,32 +233,73 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         }
     }
 
-    /** Saves Project Gutenberg as an anonymous OPDS catalog and opens it. */
-    fun connectGutenberg() {
-        if (_state.value.connecting) return
-        _state.value.saved.firstOrNull(GutenbergBrowse::isRoot)?.let { existing ->
-            _state.update { it.copy(formOpen = false, connectionFailure = null) }
-            openServer(existing.id)
+    /** Opens the free-catalog chooser. Nothing is contacted until a preset is picked. */
+    fun openFreeCatalogs() {
+        if (_state.value.chooserOpen) return
+        abandonPreset()
+        _state.update { it.copy(chooserOpen = true, presetFailure = null) }
+    }
+
+    fun closeChooser() {
+        abandonPreset()
+        _state.update { it.copy(chooserOpen = false, presetFailure = null) }
+    }
+
+    /**
+     * Opens [preset]: the saved connection when there is one, otherwise
+     * a new anonymous Custom connection probed from its address.
+     */
+    fun connectPreset(preset: FreeCatalog) {
+        val current = _state.value
+        // A tap that lands as the sheet closes, or a second tap while
+        // the first probe runs, must not start a connection.
+        if (!current.chooserOpen || current.connectingPreset != null) return
+        current.savedCatalog(preset)?.let { existing ->
+            leaveChooserFor(existing.id)
             return
         }
-        val generation = connectionGeneration
-        _state.update { it.copy(connecting = true) }
-        connectJob = viewModelScope.launch {
+        val generation = presetGeneration
+        _state.update { it.copy(connectingPreset = preset, presetFailure = null) }
+        presetJob = viewModelScope.launch {
+            // The saved list comes from the database. Matching before it
+            // has landed would save a second copy of a catalog the
+            // reader already has.
+            savedReady.await()
+            if (generation != presetGeneration) return@launch
+            _state.value.savedCatalog(preset)?.let { existing ->
+                leaveChooserFor(existing.id)
+                return@launch
+            }
             val id = try {
-                catalogs.connect(ServerKind.CUSTOM, StarterCatalog.BROWSE_URL, "", "", "", "", false).id
+                catalogs.connect(ServerKind.CUSTOM, preset.address, "", "", "", "", false).id
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                Log.e(TAG, "Could not save Project Gutenberg", error)
+                Log.e(TAG, "Could not save a free catalog", error)
                 null
             }
-            if (generation != connectionGeneration) return@launch
-            _state.update {
-                if (id != null) it.copy(connecting = false, formOpen = false, connectionFailure = null)
-                else it.copy(connecting = false)
+            if (generation != presetGeneration) return@launch
+            if (id != null) {
+                leaveChooserFor(id)
+            } else {
+                _state.update { it.copy(connectingPreset = null, presetFailure = preset) }
             }
-            if (id != null) openServer(id) else _events.send(BrowseEvent.ConnectFailed)
         }
+    }
+
+    /**
+     * Opens a free catalog, closing whatever opened the chooser.
+     *
+     * A chooser opened from the connection form must not leave the form
+     * behind it: the screen draws the form first, and the reader would
+     * arrive at a catalog they could not see.
+     */
+    private fun leaveChooserFor(serverId: Long) {
+        abandonPreset()
+        _state.update {
+            it.copy(chooserOpen = false, presetFailure = null, formOpen = false, connectionFailure = null)
+        }
+        openServer(serverId)
     }
 
     fun openServer(id: Long) {
@@ -282,11 +346,15 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     }
 
     /** Leaving the browser: a catalog still being connected to is dropped. */
-    fun leave() = abandonConnection()
+    fun leave() {
+        abandonConnection()
+        abandonPreset()
+    }
 
     fun back(): Boolean {
         val current = _state.value
         when {
+            current.chooserOpen -> closeChooser()
             current.pending != null -> _state.update { it.copy(pending = null) }
             current.detail != null -> _state.update { it.copy(detail = null) }
             current.selecting -> clearSelection()

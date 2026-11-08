@@ -224,7 +224,7 @@
     <string name="empty_library_title">您的书库是空的</string>
     <string name="empty_library_subtitle">您可以这样把书加进来。</string>
     <string name="starter_catalog">从免费图书开始</string>
-    <string name="starter_catalog_hint">来自古腾堡计划的经典作品，已过版权期，可免费阅读。按语言或书架浏览，下载您想要的书。</string>
+    <string name="starter_catalog_hint">来自公共目录的免费图书，从古腾堡计划开始。选择一个目录，浏览并下载您想要的书。</string>
     <string name="starter_category_popular">最受欢迎</string>
     <string name="starter_category_best_ever">史上最佳图书</string>
     <string name="starter_category_science_fiction">科幻</string>
@@ -1056,11 +1056,15 @@
     <string name="browse_title">远程书库</string>
     <string name="browse_empty">尚未保存任何书库目录</string>
     <string name="browse_empty_detail">保存 calibre-web、Komga、BookOrbit、liseur-sync 或 OPDS 书库目录，即可浏览并选择要下载的图书。阅读位置不会与这些目录同步。</string>
-    <string name="browse_gutenberg">浏览古腾堡计划</string>
     <string name="browse_gutenberg_languages">语言</string>
     <string name="browse_gutenberg_categories">分类</string>
-    <string name="browse_gutenberg_detail">公共领域的免费经典作品，无需账户。</string>
-    <string name="browse_gutenberg_failed">无法连接古腾堡计划。请检查网络连接后重试。</string>
+    <string name="browse_gutenberg_detail">公共领域的经典作品，免费阅读。</string>
+    <string name="browse_free_books">浏览免费图书</string>
+    <string name="browse_free_books_detail">来自公共目录的免费图书，无需账户。</string>
+    <string name="browse_free_no_account">无需账户。</string>
+    <string name="browse_textos_detail">西班牙语图书，免费阅读。</string>
+    <string name="browse_manybooks_detail">多种类型的免费电子书，来自独立作者。</string>
+    <string name="browse_free_catalog_failed">无法连接到 %1$s。请检查网络连接后重试。</string>
     <string name="browse_form_intro">您添加的图书会下载到本设备。阅读位置不会与此书库目录同步。</string>
     <string name="browse_catalog_options">%1$s 的选项</string>
     <string name="browse_refresh">刷新</string>

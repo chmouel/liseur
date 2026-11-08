@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,8 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.LibraryAdd
+import androidx.compose.material.icons.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
@@ -167,16 +170,27 @@ import com.chmouel.liseur.ui.withoutBottom
 @Composable
 fun BrowseLibrariesRoute(
     onExit: () -> Unit,
-    openGutenberg: Boolean = false,
-    onGutenbergOpened: () -> Unit = {},
+    openFreeCatalogs: Boolean = false,
+    onFreeCatalogsOpened: () -> Unit = {},
     model: BrowseLibrariesViewModel = viewModel(factory = BrowseLibrariesViewModel.Factory),
 ) {
     val state by model.state.collectAsStateWithLifecycle()
-    // Wait for the saved list so an existing Gutenberg is reopened, not saved twice.
-    LaunchedEffect(openGutenberg, state.savedLoaded) {
-        if (openGutenberg && state.savedLoaded) {
-            model.connectGutenberg()
-            onGutenbergOpened()
+    // The empty library's card opens the chooser over this screen. If the
+    // reader dismisses it without picking anything there is nothing to
+    // come back to here, so it returns to the library instead of leaving
+    // them on an empty list they did not ask to see.
+    var chooserFromLibrary by remember { mutableStateOf(false) }
+    LaunchedEffect(openFreeCatalogs) {
+        if (openFreeCatalogs) {
+            chooserFromLibrary = true
+            model.openFreeCatalogs()
+            onFreeCatalogsOpened()
+        }
+    }
+    LaunchedEffect(state.chooserOpen) {
+        if (!state.chooserOpen && chooserFromLibrary) {
+            chooserFromLibrary = false
+            if (state.serverId == null) onExit()
         }
     }
     val back = { if (!model.back()) onExit() }
@@ -201,7 +215,6 @@ fun BrowseLibrariesRoute(
                 BrowseEvent.RemoveFailed -> resources.getString(R.string.browse_remove_failed)
                 BrowseEvent.CategoryIncomplete -> resources.getString(R.string.browse_incomplete)
                 BrowseEvent.NothingToAdd -> resources.getString(R.string.browse_nothing_to_add)
-                BrowseEvent.ConnectFailed -> resources.getString(R.string.browse_gutenberg_failed)
             }
             val action = if (event is BrowseEvent.Added) resources.getString(R.string.browse_open_library) else null
             val result = snackbar.showSnackbar(
@@ -218,6 +231,7 @@ fun BrowseLibrariesRoute(
         state.serverId == null -> SavedCatalogsScreen(state, model, snackbar, onBack = back)
         else -> CatalogScreen(state, model, snackbar, onBack = back)
     }
+    if (state.chooserOpen) FreeCatalogSheet(state, model)
     state.pending?.let { pending -> ConfirmAddDialog(pending, state.server?.preferredFormat, model) }
     state.detail?.let { book -> BookDetailSheet(book, state, model) }
 }
@@ -257,13 +271,6 @@ private fun ConfirmAddDialog(pending: List<RemoteBook>, preferredFormat: String?
 @Composable
 private fun browseConnectionName(server: RemoteServer): String =
     FreeCatalog.of(server)?.let { freeCatalogName(it) } ?: browseCatalogName(server.baseUrl)
-
-@Composable
-private fun freeCatalogName(preset: FreeCatalog): String = stringResource(
-    when (preset) {
-        FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_name
-    },
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -319,8 +326,7 @@ private fun SavedCatalogsScreen(
             !state.savedLoaded -> Unit
             state.saved.isEmpty() -> SavedCatalogsEmpty(
                 onAdd = model::openForm,
-                onGutenberg = model::connectGutenberg,
-                connecting = state.connecting,
+                onFreeCatalogs = model::openFreeCatalogs,
                 modifier = Modifier.padding(padding),
             )
             else -> LazyColumn(
@@ -338,6 +344,9 @@ private fun SavedCatalogsScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (!state.allFreeCatalogsSaved) {
+                    item(key = "free-catalogs") { FreeCatalogsShortcut(onClick = model::openFreeCatalogs) }
+                }
                 items(state.saved, key = { it.id }) { server ->
                     SavedCatalogCard(
                         server = server,
@@ -394,8 +403,7 @@ private fun SavedCatalogCard(server: RemoteServer, onOpen: () -> Unit, onRemove:
 @Composable
 private fun SavedCatalogsEmpty(
     onAdd: () -> Unit,
-    onGutenberg: () -> Unit,
-    connecting: Boolean,
+    onFreeCatalogs: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -426,24 +434,20 @@ private fun SavedCatalogsEmpty(
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(24.dp))
-        Button(onClick = onAdd, enabled = !connecting) {
+        Button(onClick = onAdd) {
             Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.browse_add_connection))
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onGutenberg, enabled = !connecting) {
-            if (connecting) {
-                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            } else {
-                Icon(Icons.Outlined.AutoStories, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+        OutlinedButton(onClick = onFreeCatalogs) {
+            Icon(Icons.Outlined.AutoStories, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.browse_gutenberg))
+            Text(stringResource(R.string.browse_free_books))
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            stringResource(R.string.browse_gutenberg_detail),
+            stringResource(R.string.browse_free_books_detail),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -570,8 +574,8 @@ private fun BrowseConnectionScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!state.gutenbergSaved) {
-                GutenbergShortcut(onClick = model::connectGutenberg, enabled = !busy)
+            if (!busy && !state.allFreeCatalogsSaved) {
+                FreeCatalogsShortcut(onClick = model::openFreeCatalogs)
             }
             Column {
                 ServerKindRow(kind = kind, enabled = !busy, onClick = { picking = true }, showSync = false)
@@ -669,15 +673,128 @@ private fun BrowseConnectionScreen(
 }
 
 @Composable
-private fun GutenbergShortcut(onClick: () -> Unit, enabled: Boolean) {
-    OutlinedCard(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+private fun FreeCatalogsShortcut(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    OutlinedCard(onClick = onClick, modifier = modifier.fillMaxWidth()) {
         ListItem(
             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             leadingContent = { Icon(Icons.Outlined.AutoStories, contentDescription = null) },
-            headlineContent = { Text(stringResource(R.string.browse_gutenberg), fontWeight = FontWeight.SemiBold) },
-            supportingContent = { Text(stringResource(R.string.browse_gutenberg_detail)) },
+            headlineContent = { Text(stringResource(R.string.browse_free_books), fontWeight = FontWeight.SemiBold) },
+            supportingContent = { Text(stringResource(R.string.browse_free_books_detail)) },
+            trailingContent = {
+                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+            },
         )
     }
+}
+
+// Free catalog chooser
+
+/**
+ * The three free catalogs, as one sheet.
+ *
+ * Nothing is contacted until a row is tapped: the sheet is a list of
+ * choices, not a page that loads three catalogs to show them. A failed
+ * attempt stays here rather than closing, because the next thing a
+ * reader wants is usually another catalog rather than the failure again.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FreeCatalogSheet(state: BrowseLibrariesState, model: BrowseLibrariesViewModel) {
+    val failed = state.presetFailure
+    LiseurModalBottomSheet(
+        onDismissRequest = model::closeChooser,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding(),
+        ) {
+            Text(
+                stringResource(R.string.browse_free_books),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp),
+            )
+            Text(
+                stringResource(R.string.browse_free_no_account),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 4.dp, bottom = 8.dp),
+            )
+            FreeCatalog.entries.forEach { preset ->
+                FreeCatalogRow(
+                    preset = preset,
+                    saved = state.savedCatalog(preset) != null,
+                    connecting = state.connectingPreset == preset,
+                    enabled = state.connectingPreset == null,
+                    onPick = { model.connectPreset(preset) },
+                )
+            }
+            if (failed != null) {
+                Box(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                    InlineNotice(
+                        text = stringResource(R.string.browse_free_catalog_failed, freeCatalogName(failed)),
+                        action = stringResource(R.string.catalog_retry),
+                        onAction = { model.connectPreset(failed) },
+                        problem = true,
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun FreeCatalogRow(
+    preset: FreeCatalog,
+    saved: Boolean,
+    connecting: Boolean,
+    enabled: Boolean,
+    onPick: () -> Unit,
+) {
+    ListItem(
+        modifier = Modifier.clickable(enabled = enabled, onClick = onPick),
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        leadingContent = { Icon(freeCatalogIcon(preset), contentDescription = null) },
+        headlineContent = { Text(freeCatalogName(preset), fontWeight = FontWeight.SemiBold) },
+        supportingContent = { Text(freeCatalogDetail(preset)) },
+        // A tick means "already saved" and nothing else, so it never
+        // competes with the arrows that open a saved catalog below.
+        trailingContent = when {
+            connecting -> {
+                { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
+            }
+            saved -> {
+                { Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+            }
+            else -> null
+        },
+    )
+}
+
+@Composable
+private fun freeCatalogName(preset: FreeCatalog): String = stringResource(
+    when (preset) {
+        FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_name
+        FreeCatalog.TEXTOS_INFO -> R.string.browse_textos_name
+        FreeCatalog.MANYBOOKS -> R.string.browse_manybooks_name
+    },
+)
+
+@Composable
+private fun freeCatalogDetail(preset: FreeCatalog): String = stringResource(
+    when (preset) {
+        FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_detail
+        FreeCatalog.TEXTOS_INFO -> R.string.browse_textos_detail
+        FreeCatalog.MANYBOOKS -> R.string.browse_manybooks_detail
+    },
+)
+
+private fun freeCatalogIcon(preset: FreeCatalog): ImageVector = when (preset) {
+    FreeCatalog.GUTENBERG -> Icons.Outlined.AutoStories
+    FreeCatalog.TEXTOS_INFO -> Icons.Outlined.MenuBook
+    FreeCatalog.MANYBOOKS -> Icons.Outlined.LibraryBooks
 }
 
 @Composable

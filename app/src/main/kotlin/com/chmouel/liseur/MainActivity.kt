@@ -288,7 +288,7 @@ private fun LiseurApp(
         mutableStateListOf<Route>(Route.Library)
     }
     var libraryLaunchId by rememberSaveable { mutableStateOf(0L) }
-    var openGutenberg by rememberSaveable { mutableStateOf(false) }
+    var openFreeCatalogs by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     LaunchedEffect(launch?.request?.id) {
         val resolved = launch ?: return@LaunchedEffect
@@ -303,7 +303,7 @@ private fun LiseurApp(
             backStack.addAll(stack)
         }
         libraryLaunchId++
-        openGutenberg = false
+        openFreeCatalogs = false
         if (resolved.error != null) {
             android.widget.Toast.makeText(context, resolved.error, android.widget.Toast.LENGTH_LONG).show()
         }
@@ -414,7 +414,7 @@ private fun LiseurApp(
                             onConnectServer = { backStack.push(Route.ServerAccount) },
                             onBrowseLibraries = { backStack.push(Route.BrowseLibraries) },
                             onStartWithFreeBooks = {
-                                openGutenberg = true
+                                openFreeCatalogs = true
                                 backStack.push(Route.BrowseLibraries)
                             },
                         )
@@ -422,8 +422,8 @@ private fun LiseurApp(
 
                     Route.BrowseLibraries -> BrowseLibrariesRoute(
                         onExit = back,
-                        openGutenberg = openGutenberg,
-                        onGutenbergOpened = { openGutenberg = false },
+                        openFreeCatalogs = openFreeCatalogs,
+                        onFreeCatalogsOpened = { openFreeCatalogs = false },
                     )
 
                     Route.Stats -> {

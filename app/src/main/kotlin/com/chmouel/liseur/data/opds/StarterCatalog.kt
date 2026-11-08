@@ -11,8 +11,9 @@ package com.chmouel.liseur.data.opds
  * account to make.
  *
  * It is saved as an anonymous Custom browse catalog, and the empty
- * library's "Start with free books" card opens it. This file holds the
- * addresses `GutenbergBrowse` lists as languages and shelves.
+ * library's "Start with free books" card offers it beside the other
+ * free catalogs in `FreeCatalog`. This file holds the addresses
+ * `GutenbergBrowse` lists as languages and shelves.
  *
  * Nothing here names a string to show. The data layer does not reach
  * for resources, so the labels live beside the card that draws them.
