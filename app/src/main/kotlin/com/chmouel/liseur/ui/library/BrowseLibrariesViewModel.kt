@@ -69,9 +69,6 @@ data class BrowseLibrariesState(
     /** The saved connection for [preset], if the reader already has it. */
     fun savedCatalog(preset: FreeCatalog): RemoteServer? = saved.firstOrNull(preset::matches)
 
-    /** Nothing left for the chooser to offer once every free catalog is saved. */
-    val allFreeCatalogsSaved: Boolean get() = FreeCatalog.entries.all { savedCatalog(it) != null }
-
     /** Back has a step to undo inside the browser before it leaves it. */
     val canGoBack: Boolean
         get() = pending != null || detail != null || selecting || chooserOpen || formOpen ||
