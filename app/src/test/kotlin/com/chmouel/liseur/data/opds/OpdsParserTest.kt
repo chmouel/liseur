@@ -45,6 +45,37 @@ class OpdsParserTest {
     }
 
     @Test
+    fun `reads the cover relations OPDS 1_1 catalogs still use`() {
+        val manybooks = feed
+            .replace("http://opds-spec.org/image\"", "http://opds-spec.org/cover\"")
+            .replace("http://opds-spec.org/image/thumbnail\"", "http://opds-spec.org/thumbnail\"")
+
+        assertEquals("/opds/cover/74", OpdsParser.parse(manybooks).books.single().coverHref)
+    }
+
+    @Test
+    fun `the canonical cover wins over the legacy one wherever it sits`() {
+        val both = feed.replace(
+            "<link rel=\"http://opds-spec.org/image/thumbnail\" href=\"/opds/cover/74\"/>",
+            "<link rel=\"http://opds-spec.org/cover\" href=\"/covers/74.jpg\"/>",
+        )
+
+        assertEquals("/opds/cover/74", OpdsParser.parse(both).books.single().coverHref)
+    }
+
+    @Test
+    fun `a legacy thumbnail is better than no cover`() {
+        val thumbnailOnly = feed
+            .replace(
+                "<link rel=\"http://opds-spec.org/image\" href=\"/opds/cover/74\"/>",
+                "<link rel=\"http://opds-spec.org/thumbnail\" href=\"/covers/74-small.jpg\"/>",
+            )
+            .replace("<link rel=\"http://opds-spec.org/image/thumbnail\" href=\"/opds/cover/74\"/>", "")
+
+        assertEquals("/covers/74-small.jpg", OpdsParser.parse(thumbnailOnly).books.single().coverHref)
+    }
+
+    @Test
     fun `keeps all named authors in feed order`() {
         val multipleAuthors = feed.replace(
             "<author><name>Ernest Hemingway</name></author>",
