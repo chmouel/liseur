@@ -1096,6 +1096,7 @@
     <string name="browse_free_no_account">Kein Konto nötig.</string>
     <string name="browse_textos_detail">Spanischsprachige Bücher, kostenlos zu lesen.</string>
     <string name="browse_manybooks_detail">Kostenlose E-Books aus vielen Genres, von unabhängigen Autorinnen und Autoren.</string>
+    <string name="browse_gallica_detail">Französische Bücher aus der Französischen Nationalbibliothek.</string>
     <string name="browse_free_catalog_failed">%1$s ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="browse_form_intro">Hinzugefügte Bücher werden auf dieses Gerät heruntergeladen. Lesepositionen werden mit diesem Katalog nicht synchronisiert.</string>
     <string name="browse_catalog_options">Optionen für %1$s</string>

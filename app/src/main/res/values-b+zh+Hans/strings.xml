@@ -1064,6 +1064,7 @@
     <string name="browse_free_no_account">无需账户。</string>
     <string name="browse_textos_detail">西班牙语图书，免费阅读。</string>
     <string name="browse_manybooks_detail">多种类型的免费电子书，来自独立作者。</string>
+    <string name="browse_gallica_detail">来自法国国家图书馆的法语图书。</string>
     <string name="browse_free_catalog_failed">无法连接到 %1$s。请检查网络连接后重试。</string>
     <string name="browse_form_intro">您添加的图书会下载到本设备。阅读位置不会与此书库目录同步。</string>
     <string name="browse_catalog_options">%1$s 的选项</string>
