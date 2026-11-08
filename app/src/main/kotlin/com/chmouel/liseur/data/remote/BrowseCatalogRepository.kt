@@ -371,6 +371,12 @@ class BrowseCatalogRepository(
         return BrowseListing(books = found.values.toList(), complete = complete)
     }
 
+    /** Remembers [key] as the format to download from [serverId], for every book added from it. */
+    suspend fun setPreferredFormat(serverId: Long, key: String) {
+        if (serverId == RemoteServer.SINGLE_ID) return
+        servers.setPreferredFormat(serverId, key)
+    }
+
     suspend fun add(serverId: Long, selected: List<RemoteBook>): Int = changing.withLock {
         val server = servers.get(serverId)?.takeIf { it.id != RemoteServer.SINGLE_ID && it.canDownload }
             ?: return@withLock 0

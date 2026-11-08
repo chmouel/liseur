@@ -14,6 +14,8 @@ import com.chmouel.liseur.data.remote.BrowseCatalogRepository
 import com.chmouel.liseur.data.remote.BrowseCategory
 import com.chmouel.liseur.data.remote.BrowseListing
 import com.chmouel.liseur.data.remote.BrowseOwned
+import com.chmouel.liseur.data.remote.DownloadFormat
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SetupFailure
@@ -78,9 +80,15 @@ sealed interface BrowseEvent {
 internal fun canAddBrowseBook(book: RemoteBook, owned: Map<String, BrowseOwned>, canDownload: Boolean): Boolean =
     canDownload && book.downloadHref != null && book.remoteId !in owned
 
-/** The size of [books] when every one of them says, otherwise null. */
-internal fun browseKnownSize(books: Collection<RemoteBook>): Long? =
-    books.takeIf { list -> list.isNotEmpty() && list.all { it.sizeBytes != null } }?.sumOf { it.sizeBytes ?: 0L }
+/**
+ * The size of [books] when every one of them says, otherwise null. Each
+ * book counts the format the catalog's [preferredFormat] will fetch, and
+ * says nothing when that format omits its length.
+ */
+internal fun browseKnownSize(books: Collection<RemoteBook>, preferredFormat: String? = null): Long? =
+    books.map { DownloadFormats.sizeOf(DownloadFormats.pick(it.formats, preferredFormat), it.sizeBytes) }
+        .takeIf { sizes -> sizes.isNotEmpty() && sizes.all { it != null } }
+        ?.sumOf { it ?: 0L }
 
 /**
  * A short name for a saved catalog: its host, plus its path and query
@@ -399,6 +407,11 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     fun showDetail(book: RemoteBook) = _state.update { it.copy(detail = book) }
 
     fun dismissDetail() = _state.update { it.copy(detail = null) }
+
+    fun chooseFormat(format: DownloadFormat) {
+        val serverId = _state.value.serverId ?: return
+        viewModelScope.launch { catalogs.setPreferredFormat(serverId, format.key) }
+    }
 
     fun startSelection(book: RemoteBook) = _state.update { current ->
         if (!current.canAdd(book)) return@update current

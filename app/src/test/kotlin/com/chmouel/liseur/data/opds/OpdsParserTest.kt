@@ -82,6 +82,40 @@ class OpdsParserTest {
 
         assertEquals("/opds/download/74/epub/", book.downloadHref)
         assertEquals(156172L, book.sizeBytes)
+        assertEquals(listOf("EPUB", "KEPUB"), book.formats.map { it.title })
+    }
+
+    @Test
+    fun `keeps every readable format, the default first and kobo last`() {
+        // Shaped like a Standard Ebooks entry: two EPUBs told apart only
+        // by their titles, a Kobo file under its own type, and formats
+        // Readium cannot open.
+        val entry = """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <title>Middlemarch</title>
+                <id>url:https://standardebooks.org/ebooks/george-eliot/middlemarch</id>
+                <link rel="http://opds-spec.org/acquisition/open-access" href="/m/kepub" length="3"
+                      title="Kobo Kepub epub" type="application/kepub+zip"/>
+                <link rel="http://opds-spec.org/acquisition/open-access" href="/m/compatible" length="1"
+                      title="Recommended compatible epub" type="application/epub+zip"/>
+                <link rel="http://opds-spec.org/acquisition/open-access" href="/m/advanced" length="2"
+                      title="Advanced epub" type="application/epub+zip"/>
+                <link rel="http://opds-spec.org/acquisition/open-access" href="/m/azw3"
+                      title="Amazon Kindle azw3" type="application/x-mobipocket-ebook"/>
+                <link rel="http://opds-spec.org/acquisition/open-access" href="/m/xhtml"
+                      title="XHTML" type="application/xhtml+xml"/>
+              </entry>
+            </feed>
+        """.trimIndent()
+
+        val book = OpdsParser.parse(entry).books.single()
+
+        assertEquals("/m/compatible", book.downloadHref)
+        assertEquals(listOf("/m/compatible", "/m/advanced", "/m/kepub"), book.formats.map { it.href })
+        assertEquals("Advanced epub", book.formats[1].title)
+        assertEquals(2L, book.formats[1].sizeBytes)
+        assertEquals(book.formats, book.toRemote().formats)
     }
 
     @Test

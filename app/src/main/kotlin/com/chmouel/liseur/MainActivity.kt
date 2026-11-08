@@ -511,6 +511,7 @@ private fun LiseurApp(
                                     backStack.push(Route.BookStats(book.url, book.displayTitle))
                                 }
                             },
+                            onChooseFormat = { format -> detailsBook?.let { model.chooseFormat(it, format) } },
                         )
                     }
 

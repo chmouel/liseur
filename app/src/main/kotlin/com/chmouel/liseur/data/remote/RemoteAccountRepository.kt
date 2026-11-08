@@ -784,6 +784,7 @@ class RemoteAccountRepository(
                 canDelete = capabilities.canDelete,
                 canReadInsights = capabilities.canReadInsights,
                 canAdmin = capabilities.canAdmin,
+                preferredFormat = existing?.preferredFormat,
                 // A new BookOrbit password login is a new published
                 // connection even when it is the same user. Keep the
                 // account's durable state, but give catalog walks and

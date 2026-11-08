@@ -625,6 +625,7 @@ class AppContainer(
             scope = applicationScope,
             bulkStore = bulkDownloads,
             accountKey = { database.remoteServerDao().get()?.accountKey },
+            mainServer = { database.remoteServerDao().get() },
             browseServer = { id -> database.remoteServerDao().get(id) },
             inTransaction = { work -> database.withTransaction { work() } },
         )

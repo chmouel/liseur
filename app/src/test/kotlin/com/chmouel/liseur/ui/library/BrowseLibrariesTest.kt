@@ -11,6 +11,7 @@ import com.chmouel.liseur.data.remote.BrowseOwned
 import com.chmouel.liseur.data.remote.BrowseOwnedState
 import com.chmouel.liseur.data.remote.BrowseWalk
 import com.chmouel.liseur.data.remote.BrowseWalkCache
+import com.chmouel.liseur.data.remote.DownloadFormat
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.browseOwned
@@ -107,6 +108,28 @@ class BrowseLibrariesTest {
         assertEquals(300L, browseKnownSize(listOf(remote("a"), remote("b", size = 200L))))
         assertNull(browseKnownSize(listOf(remote("a"), remote("b", size = null))))
         assertNull(browseKnownSize(emptyList()))
+    }
+
+    @Test
+    fun `size counts the format the catalog will fetch`() {
+        val formats = listOf(
+            DownloadFormat("/a.epub", "application/epub+zip", "Compatible", 100L),
+            DownloadFormat("/a-adv.epub", "application/epub+zip", "Advanced", 250L),
+        )
+        val books = listOf(remote("a").copy(formats = formats), remote("b", size = 40L))
+        assertEquals(140L, browseKnownSize(books))
+        assertEquals(290L, browseKnownSize(books, formats[1].key))
+    }
+
+    @Test
+    fun `a chosen format without a length leaves the total unknown`() {
+        val formats = listOf(
+            DownloadFormat("/a.epub", "application/epub+zip", "Compatible", 100L),
+            DownloadFormat("/a-adv.epub", "application/epub+zip", "Advanced"),
+        )
+        val books = listOf(remote("a", size = 40L).copy(formats = formats))
+        assertEquals(100L, browseKnownSize(books))
+        assertNull(browseKnownSize(books, formats[1].key))
     }
 
     @Test

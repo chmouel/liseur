@@ -21,6 +21,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.library.BookRemoval
 import com.chmouel.liseur.data.remote.BookDeleter
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.library.openableUri
 import com.chmouel.liseur.data.remote.ServerDeleteResult
@@ -163,6 +164,7 @@ class BookDownloadRepository(
      * forgot it would look exactly like one that had nothing to say.
      */
     private val accountKey: suspend () -> String? = { null },
+    private val mainServer: suspend () -> RemoteServer? = { null },
     private val browseServer: suspend (Long) -> RemoteServer? = { null },
     private val bulkTransferGate: BulkTransferGate = BulkTransferGate(),
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
@@ -260,7 +262,14 @@ class BookDownloadRepository(
      */
     suspend fun bulkEstimate(): BulkDownloadEstimate = withContext(Dispatchers.IO) {
         val candidates = booksToDownload(bookDao.allRemote())
-        estimateBulkDownload(candidates.map { it.sizeBytes }, freeBytes())
+        val preferred = mainServer()?.preferredFormat
+        val sizes = candidates.map { book ->
+            DownloadFormats.sizeOf(
+                DownloadFormats.pick(DownloadFormats.decode(book.downloadFormats), preferred),
+                book.sizeBytes,
+            )
+        }
+        estimateBulkDownload(sizes, freeBytes())
             .copy(urls = candidates.map { it.url })
     }
 

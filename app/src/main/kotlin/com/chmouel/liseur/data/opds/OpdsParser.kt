@@ -1,5 +1,6 @@
 package com.chmouel.liseur.data.opds
 
+import com.chmouel.liseur.data.remote.DownloadFormat
 import com.chmouel.liseur.data.remote.RemoteBook
 import com.chmouel.liseur.domain.Contributor
 import com.chmouel.liseur.domain.ContributorRoles
@@ -53,6 +54,11 @@ data class OpdsBook(
     val metadata: MetadataSnapshot? = null,
     /** Whether that description is HTML, or null to look and decide. */
     val descriptionHtml: Boolean? = null,
+    /**
+     * Every readable file the entry offers, the one in [downloadHref]
+     * first. Hrefs are as sent, like [downloadHref].
+     */
+    val formats: List<DownloadFormat> = emptyList(),
 )
 
 /**
@@ -82,6 +88,7 @@ fun OpdsBook.toRemote(): RemoteBook = RemoteBook(
     seriesIndex = seriesIndex,
     metadata = metadata,
     descriptionHtml = descriptionHtml,
+    formats = formats,
 )
 
 /** One page of a catalog feed: what is in it, and where to go next. */
@@ -151,9 +158,10 @@ object OpdsParser {
     private val EPUB_TYPES = setOf(
         "application/epub+zip",
         // Kobo's flavour of EPUB. calibre-web offers it beside the
-        // plain one when kepubify is set up; it is still a ZIP of XHTML
-        // and Readium reads it.
+        // plain one when kepubify is set up, Standard Ebooks under the
+        // second name; it is still a ZIP of XHTML and Readium reads it.
         "application/x-kobo-epub+zip",
+        "application/kepub+zip",
     )
 
     /**
@@ -573,8 +581,9 @@ object OpdsParser {
         val title = entry.childText("title") ?: return null
 
         val links = entry.children("link")
-        val download = links.filter { it.rels().any { rel -> rel in DOWNLOAD_RELS } }
-            .let(::pickDownload)
+        val downloads = links.filter { it.rels().any { rel -> rel in DOWNLOAD_RELS } }
+            .let(::rankDownloads)
+        val download = downloads.firstOrNull()
         val cover = links.firstOrNull { it.rels().contains(IMAGE_REL) }
             ?: links.firstOrNull { it.rels().contains(THUMBNAIL_REL) }
 
@@ -616,6 +625,16 @@ object OpdsParser {
                     listOfNotNull(id.trim().takeIf { it.startsWith("urn:", ignoreCase = true) }?.let(::identifierOf)),
             ),
             descriptionHtml = description?.html,
+            formats = downloads.mapNotNull { link ->
+                link.href()?.let { href ->
+                    DownloadFormat(
+                        href = href,
+                        type = link.getAttribute("type").trim().takeIf { it.isNotEmpty() },
+                        title = link.getAttribute("title").trim().takeIf { it.isNotEmpty() },
+                        sizeBytes = link.getAttribute("length").toLongOrNull(),
+                    )
+                }
+            }.distinctBy { it.key },
         )
     }
 
@@ -708,25 +727,33 @@ object OpdsParser {
     )
 
     /**
-     * Which of an entry's acquisition links to offer, if any.
+     * The entry's acquisition links worth offering, the default first.
      *
      * A link that says nothing about its type is taken at its word,
      * because plenty of servers say nothing and refusing them all would
      * empty those libraries. A link that says what it is has to say
      * EPUB: one that announces a PDF has been given its chance to be
      * useful and was not.
+     *
+     * Past that the feed's own order stands, except that a Kobo file is
+     * never the default: the plain EPUB is the smaller download and
+     * carries none of Kobo's markup.
      */
-    private fun pickDownload(acquisitions: List<Element>): Element? {
-        val usable = acquisitions.filter { link ->
-            val type = link.getAttribute("type").trim()
-            type.isEmpty() || isReadableEpub(type)
-        }
-        return usable
-            // Both an EPUB and a KEPUB are offered once calibre-web has
-            // kepubify set up; the plain EPUB is the smaller download.
-            .sortedBy { if (it.getAttribute("title").equals("EPUB", true)) 0 else 1 }
-            .firstOrNull { it.href() != null }
-    }
+    private fun rankDownloads(acquisitions: List<Element>): List<Element> =
+        acquisitions
+            .filter { link ->
+                val type = link.getAttribute("type").trim()
+                link.href() != null && (type.isEmpty() || isReadableEpub(type))
+            }
+            .sortedBy { link ->
+                val title = link.getAttribute("title").trim().lowercase()
+                val type = link.getAttribute("type").lowercase()
+                when {
+                    title == "epub" -> 0
+                    "kobo" in type || "kepub" in type || "kepub" in title || "kobo" in title -> 2
+                    else -> 1
+                }
+            }
 
     private fun isReadableEpub(type: String): Boolean {
         val media = type.substringBefore(';').trim().lowercase()

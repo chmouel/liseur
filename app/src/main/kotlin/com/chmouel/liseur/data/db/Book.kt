@@ -71,6 +71,11 @@ data class Book(
     @ColumnInfo(name = "remote_book_id") val remoteBookId: Int? = null,
     @ColumnInfo(name = "cover_url") val coverUrl: String? = null,
     @ColumnInfo(name = "download_href") val downloadHref: String? = null,
+    /**
+     * Every format the catalog offers, as [com.chmouel.liseur.data.remote.DownloadFormats]
+     * encodes them; null when there is only [downloadHref].
+     */
+    @ColumnInfo(name = "download_formats") val downloadFormats: String? = null,
     @ColumnInfo(name = "download_state") val downloadState: DownloadState = DownloadState.DOWNLOADED,
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "downloaded_at") val downloadedAt: Long? = null,
@@ -871,7 +876,8 @@ interface BookDao {
         SET title = :title, author = :author, remote_uuid = :remoteUuid,
             browse_server_id = CASE WHEN :promoteBrowse THEN NULL ELSE browse_server_id END,
             remote_book_id = :remoteBookId, cover_url = :coverUrl,
-            download_href = :downloadHref, remote_updated_at = :remoteUpdatedAt,
+            download_href = :downloadHref, download_formats = :downloadFormats,
+            remote_updated_at = :remoteUpdatedAt,
             remote_page_count = :remotePageCount,
             size_bytes = COALESCE(:sizeBytes, size_bytes),
             catalog_series_name = :catalogSeriesName,
@@ -987,6 +993,7 @@ interface BookDao {
         downloadHref: String?,
         remoteUpdatedAt: Long?,
         remotePageCount: Int?,
+        downloadFormats: String? = null,
         catalogSeriesName: String?,
         catalogSeriesIndex: Double?,
         catalogFolderId: String?,

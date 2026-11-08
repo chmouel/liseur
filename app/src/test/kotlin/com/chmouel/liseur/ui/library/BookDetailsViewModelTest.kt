@@ -67,6 +67,7 @@ class BookDetailsViewModelTest {
                 progressDao = db.readingProgressDao(),
                 annotationDao = db.annotationDao(),
                 identityDao = db.workIdentityDao(),
+                remoteServerDao = db.remoteServerDao(),
                 folderName = { null },
             )
             val state = model.details(url)

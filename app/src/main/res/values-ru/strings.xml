@@ -433,6 +433,8 @@
     <string name="download_in_progress">Загрузка…</string>
     <string name="downloads_not_allowed">Ваша учётная запись не может скачивать книги. Попросите администратора сервера разрешить вам загрузки.</string>
     <string name="download_book">Скачать</string>
+    <string name="download_format">Формат: %1$s</string>
+    <string name="download_format_hint">Будет использоваться для всех книг из этого каталога.</string>
     <string name="cancel_download">Отменить загрузку</string>
     <string name="server_credentials_lost">Войдите на сервер книг снова.</string>
     <string name="download_all">Скачать все книги</string>

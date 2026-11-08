@@ -13,9 +13,13 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.BookMetadataDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
 import com.chmouel.liseur.data.library.folderDisplayName
 import com.chmouel.liseur.data.remote.BookProvenance
+import com.chmouel.liseur.data.remote.DownloadFormat
+import com.chmouel.liseur.data.remote.DownloadFormats
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.MetadataSnapshot
 import com.chmouel.liseur.domain.MetadataSource
@@ -26,9 +30,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.launch
 
 sealed interface BookDetailsUiState {
     data object Loading : BookDetailsUiState
@@ -51,6 +58,10 @@ data class BookDetails(
     val override: FinishedOverride = FinishedOverride.NONE,
     val annotations: Int,
     val fingerprint: BookFingerprintRow?,
+    /** The formats the catalog offers, when it offers a choice. */
+    val formats: List<DownloadFormat> = emptyList(),
+    /** The one a download would fetch now. */
+    val chosenFormat: DownloadFormat? = null,
 )
 
 /**
@@ -65,6 +76,7 @@ class BookDetailsViewModel(
     private val progressDao: ReadingProgressDao,
     private val annotationDao: BookAnnotationDao,
     private val identityDao: WorkIdentityDao,
+    private val remoteServerDao: RemoteServerDao,
     private val folderName: suspend (String) -> String?,
 ) : ViewModel() {
     fun details(bookUrl: String): StateFlow<BookDetailsUiState> {
@@ -85,6 +97,20 @@ class BookDetailsViewModel(
                     .let(::resolveMetadata)
                     ?: MetadataSnapshot()
             }
+        val formats =
+            book
+                .map { it?.let { current -> (current.browseServerId ?: RemoteServer.SINGLE_ID) to current.downloadFormats } }
+                .distinctUntilChanged()
+                .flatMapLatest { owner ->
+                    val list = DownloadFormats.decode(owner?.second)
+                    if (owner == null || list.isEmpty()) {
+                        flowOf(list to null)
+                    } else {
+                        remoteServerDao.observe(owner.first).map { server ->
+                            list to DownloadFormats.pick(list, server?.preferredFormat)
+                        }
+                    }
+                }
         val reading =
             combine(
                 progressDao.observe(bookUrl),
@@ -92,7 +118,8 @@ class BookDetailsViewModel(
                 identityDao.observeFingerprint(bookUrl),
                 ::Triple,
             )
-        return combine(book, metadata, folder, reading) { current, resolved, folderName, (progress, notes, print) ->
+        val place = combine(folder, formats, ::Pair)
+        return combine(book, metadata, place, reading) { current, resolved, (folderName, offered), (progress, notes, print) ->
             if (current == null) {
                 BookDetailsUiState.Gone
             } else {
@@ -111,6 +138,8 @@ class BookDetailsViewModel(
                         override = progress?.override ?: FinishedOverride.NONE,
                         annotations = notes,
                         fingerprint = currentFingerprint(current, print),
+                        formats = offered.first,
+                        chosenFormat = offered.second,
                     ),
                 )
             }
@@ -119,6 +148,13 @@ class BookDetailsViewModel(
             SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS, replayExpirationMillis = 0),
             BookDetailsUiState.Loading,
         )
+    }
+
+    /** Remembers [format] for every book from [book]'s catalog. */
+    fun chooseFormat(book: Book, format: DownloadFormat) {
+        viewModelScope.launch {
+            remoteServerDao.setPreferredFormat(book.browseServerId ?: RemoteServer.SINGLE_ID, format.key)
+        }
     }
 
     companion object {
@@ -135,6 +171,7 @@ class BookDetailsViewModel(
                         progressDao = database.readingProgressDao(),
                         annotationDao = database.annotationDao(),
                         identityDao = database.workIdentityDao(),
+                        remoteServerDao = database.remoteServerDao(),
                         folderName = { folderDisplayName(application, it) },
                     )
                 }

@@ -191,11 +191,13 @@ class RemoteAccountRepositoryTest {
             first.accountKey, first.orbitEpoch, first.baseUrl, afterUrl = "book",
         )
         db.bookOrbitPositionTraversalDao().write(traversal)
+        db.remoteServerDao().setPreferredFormat(first.id, "application/epub+zip|advanced epub")
 
         repository.refreshCapabilities()
 
         val second = repository.current()!!
         assertEquals(first.addedAt, second.addedAt)
+        assertEquals("application/epub+zip|advanced epub", second.preferredFormat)
         assertEquals("7", second.accountId)
         assertEquals(first.orbitEpoch, second.orbitEpoch)
         // The session survives: a refresh that said nothing about tokens

@@ -76,6 +76,11 @@ data class RemoteBook(
     val metadata: MetadataSnapshot? = null,
     /** Whether that description is HTML, or null to look and decide. */
     val descriptionHtml: Boolean? = null,
+    /**
+     * Every file the catalog offers for the book, [downloadHref]'s
+     * first. Only OPDS lists more than one; see [DownloadFormats].
+     */
+    val formats: List<DownloadFormat> = emptyList(),
 )
 
 data class RemoteSeriesMembership(

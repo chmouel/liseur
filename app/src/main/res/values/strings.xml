@@ -417,6 +417,10 @@
     <string name="download_in_progress">Downloading…</string>
     <string name="downloads_not_allowed">Your account can\'t download books. Ask the server\'s admin to allow downloads for you.</string>
     <string name="download_book">Download</string>
+    <string name="download_format">Format: %1$s</string>
+    <string name="download_format_hint">Remembered for every book from this catalog.</string>
+    <string name="download_format_epub" translatable="false">EPUB</string>
+    <string name="download_format_kepub" translatable="false">Kobo EPUB</string>
     <string name="cancel_download">Cancel download</string>
     <string name="server_credentials_lost">Sign in to your book server again.</string>
 
