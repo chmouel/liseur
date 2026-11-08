@@ -67,6 +67,31 @@ class EpubAuthorsTest {
     }
 
     @Test
+    fun `contributors carry every role they are declared with`() {
+        assertEquals(
+            listOf(
+                EpubContributor("Translator", listOf("ann", "trl", "win"), setOf("Translator")),
+                EpubContributor("Legacy", listOf("edt", "ann"), setOf("Legacy")),
+                EpubContributor("Artist", listOf("art"), setOf("Artist", "Художник")),
+            ),
+            contributors("""
+                <dc:creator id="author">Author</dc:creator>
+                <dc:contributor id="translator">Translator</dc:contributor>
+                <meta property="role" refines="#translator" scheme="marc:relators">ann</meta>
+                <meta property="role" refines="#translator" scheme="marc:relators">trl</meta>
+                <meta property="role" refines="#translator" scheme="marc:relators">win</meta>
+                <dc:contributor id="legacy" opf:role="edt">Legacy</dc:contributor>
+                <meta property="role" refines="#legacy">ann</meta>
+                <meta property="role" refines="#legacy">edt</meta>
+                <dc:contributor id="artist">Artist</dc:contributor>
+                <meta property="alternate-script" refines="#artist" xml:lang="ru">Художник</meta>
+                <meta property="role" refines="#artist">art</meta>
+                <dc:contributor> </dc:contributor>
+            """),
+        )
+    }
+
+    @Test
     fun `missing metadata and author count mismatches fall back`() {
         assertNull(authors("<dc:creator>Author</dc:creator>", count = 2))
         val document = XmlParser().parse("<package xmlns=\"http://www.idpf.org/2007/opf\"/>".byteInputStream())
@@ -98,14 +123,17 @@ class EpubAuthorsTest {
         assertTrue(matchesJoinedAuthorIdentity("Doe, Jane", listOf(setOf("Doe, Jane"))))
     }
 
-    private fun authors(metadata: String, count: Int = 1, extraAttributes: String = ""): List<String>? {
-        val document = XmlParser().parse("""
+    private fun authors(metadata: String, count: Int = 1, extraAttributes: String = ""): List<String>? =
+        primaryEpubAuthors(document(metadata, extraAttributes), count)
+
+    private fun contributors(metadata: String): List<EpubContributor> = epubContributors(document(metadata))
+
+    private fun document(metadata: String, extraAttributes: String = "") =
+        XmlParser().parse("""
             <package xmlns="http://www.idpf.org/2007/opf" xml:lang="en-US"
               xmlns:dc="http://purl.org/dc/elements/1.1/"
               xmlns:opf="http://www.idpf.org/2007/opf" $extraAttributes>
                 <metadata>$metadata</metadata>
             </package>
         """.trimIndent().byteInputStream())
-        return primaryEpubAuthors(document, count)
-    }
 }

@@ -83,21 +83,52 @@ private fun epubAuthors(document: ElementNode, expectedCount: Int): ParsedEpubAu
     val authors = authorElements.map { it.second }
     // A mismatch means this OPF uses a contributor convention we did not recognize.
     if (authors.size != expectedCount) return null
-    val alternateScripts = metas.filter {
-        it.packageProperty(document) == META_VOCABULARY + "alternate-script"
-    }
-    val aliases = authorElements.map { (element, primary) ->
-        buildSet {
-            add(primary)
-            element.id?.let { id ->
-                alternateScripts.asSequence()
-                    .filter { it.getAttr("refines") == "#$id" }
-                    .mapNotNull { it.text?.trim()?.takeIf(String::isNotEmpty) }
-                    .forEach(::add)
-            }
-        }
-    }
+    val aliases = authorElements.map { (element, primary) -> setOf(primary) + alternateScripts(document, metas, element) }
     return ParsedEpubAuthors(authors, aliases)
+}
+
+/**
+ * One `dc:contributor` as the package declares it. Readium keeps only the
+ * first role refining an element, so a translator who is also the
+ * annotator reaches it as a plain contributor; [roles] has them all.
+ * [aliases] holds [name] and its alternate-script forms, which is what
+ * Readium's name for the same person can be.
+ */
+internal data class EpubContributor(
+    val name: String,
+    val roles: List<String>,
+    val aliases: Set<String>,
+)
+
+internal suspend fun epubContributors(publication: Publication): List<EpubContributor> = withContext(Dispatchers.IO) {
+    if (!publication.conformsTo(Publication.Profile.EPUB)) return@withContext emptyList()
+    publication.packageDocument()?.let(::epubContributors).orEmpty()
+}
+
+internal fun epubContributors(document: ElementNode): List<EpubContributor> {
+    if (document.name != "package" || document.namespace != OPF_NAMESPACE) return emptyList()
+    val metadata = document.getFirst("metadata", OPF_NAMESPACE) ?: return emptyList()
+    val metas = metadata.get("meta", OPF_NAMESPACE)
+    return metadata.get("contributor", DC_NAMESPACE).mapNotNull { element ->
+        val name = element.text?.trim()?.takeIf(String::isNotEmpty) ?: return@mapNotNull null
+        val refinements = element.id?.let { id ->
+            metas.filter {
+                it.getAttr("refines") == "#$id" && it.packageProperty(document) == META_VOCABULARY + "role"
+            }
+        }.orEmpty()
+        val roles = (listOfNotNull(element.getAttrNs("role", OPF_NAMESPACE)) + refinements.mapNotNull { it.text })
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .distinct()
+        EpubContributor(name, roles, setOf(name) + alternateScripts(document, metas, element))
+    }
+}
+
+private fun alternateScripts(document: ElementNode, metas: List<ElementNode>, element: ElementNode): List<String> {
+    val id = element.id ?: return emptyList()
+    return metas.filter {
+        it.getAttr("refines") == "#$id" && it.packageProperty(document) == META_VOCABULARY + "alternate-script"
+    }.mapNotNull { it.text?.trim()?.takeIf(String::isNotEmpty) }
 }
 
 internal fun matchesJoinedAuthorIdentity(identity: String, aliases: List<Set<String>>): Boolean {
