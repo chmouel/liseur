@@ -134,6 +134,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.RemoteServer
+import com.chmouel.liseur.data.opds.FreeCatalog
 import com.chmouel.liseur.data.opds.GutenbergBrowse
 import com.chmouel.liseur.data.remote.BrowseCategory
 import java.util.Locale
@@ -255,8 +256,14 @@ private fun ConfirmAddDialog(pending: List<RemoteBook>, preferredFormat: String?
 
 @Composable
 private fun browseConnectionName(server: RemoteServer): String =
-    if (GutenbergBrowse.isRoot(server)) stringResource(R.string.browse_gutenberg_name)
-    else browseCatalogName(server.baseUrl)
+    FreeCatalog.of(server)?.let { freeCatalogName(it) } ?: browseCatalogName(server.baseUrl)
+
+@Composable
+private fun freeCatalogName(preset: FreeCatalog): String = stringResource(
+    when (preset) {
+        FreeCatalog.GUTENBERG -> R.string.browse_gutenberg_name
+    },
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
