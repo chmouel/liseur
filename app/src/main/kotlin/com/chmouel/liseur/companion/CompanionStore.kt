@@ -14,6 +14,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.chmouel.liseur.data.settings.CompanionDetail
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -86,6 +87,8 @@ data class StorySummaryRow(
     val text: String,
     @ColumnInfo(name = "saved_at") val savedAt: Long,
     @ColumnInfo(name = "used_at") val usedAt: Long,
+    /** The [CompanionDetail] id it was written at; rows from before the choice are normal. */
+    @ColumnInfo(defaultValue = "normal") val detail: String = CompanionDetail.NORMAL.id,
 )
 
 /** The reader's own choice for one book, over the switch in settings. */
@@ -277,7 +280,7 @@ data class RecapLength(
 @Database(
     entities = [ChapterRecapRow::class, RecapPartRow::class, RecapQueueRow::class, RecapChoiceRow::class,
         CodexBookRow::class, CodexUnitRow::class, CodexPassageRow::class, StorySummaryRow::class],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class CompanionDatabase : RoomDatabase() {
@@ -315,7 +318,14 @@ abstract class CompanionDatabase : RoomDatabase() {
             }
         }
 
-        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /** Records the length each story so far was written at. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `story_summary` ADD COLUMN `detail` TEXT NOT NULL DEFAULT 'normal'")
+            }
+        }
+
+        val MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 }
 
@@ -685,7 +695,7 @@ class CompanionStore(
                 dao.putSummary(
                     StorySummaryRow(
                         bookUrl, summary.key, summary.level, summary.lo, summary.hi, contentSha, Recaps.FORMAT,
-                        StorySummaries.FORMAT, StorySummaries.encodeDeps(summary.deps), summary.text, at, at,
+                        StorySummaries.FORMAT, StorySummaries.encodeDeps(summary.deps), summary.text, at, at, summary.detail.id,
                     ),
                 )
                 trim()
@@ -698,7 +708,7 @@ class CompanionStore(
                 dao.forgetOtherSummaries(bookUrl, contentSha, Recaps.FORMAT, StorySummaries.FORMAT)
                 dao.summariesAt(bookUrl, StorySummaries.TOP).mapNotNull { row ->
                     StorySummaries.decodeDeps(row.deps)?.let { deps ->
-                        SavedSummary(row.key, row.level, row.lo, row.hi, deps, row.text, row.savedAt)
+                        SavedSummary(row.key, row.level, row.lo, row.hi, deps, row.text, row.savedAt, CompanionDetail.fromId(row.detail))
                     }
                 }
             }

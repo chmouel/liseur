@@ -211,6 +211,19 @@ class StorySummariesTest {
         assertEquals(deps, StorySummaries.decodeDeps(StorySummaries.encodeDeps(deps)))
     }
 
+    @Test
+    fun `until the chosen length is written, a story at that length is shown first`() {
+        val listed = (0..3).associateWith { "$it:key" }
+        fun saved(hi: Int, detail: CompanionDetail) = SavedSummary(
+            "k$hi${detail.id}", StorySummaries.TOP, 0, hi, (0..hi).map { SummaryDep(it, "$it:key", true) }, "${detail.id} $hi",
+            detail = detail,
+        )
+        val rows = listOf(saved(1, CompanionDetail.NORMAL), saved(2, CompanionDetail.DETAILED))
+        assertEquals("normal 1", StorySummaries.best(rows, listed, "missing", CompanionDetail.NORMAL)?.text)
+        assertEquals("detailed 2", StorySummaries.best(rows, listed, "missing", CompanionDetail.DETAILED)?.text)
+        assertEquals("detailed 2", StorySummaries.best(rows, listed, "missing", CompanionDetail.BRIEF)?.text)
+    }
+
     private class FakeSummaries : SummaryBook {
         val saved = mutableMapOf<String, SavedSummary>()
 

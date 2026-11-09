@@ -23,6 +23,7 @@ data class SavedSummary(
     val deps: List<SummaryDep>,
     val text: String,
     val savedAt: Long = 0,
+    val detail: CompanionDetail = CompanionDetail.NORMAL,
 )
 
 /** Where running summaries are kept for one book version. */
@@ -191,12 +192,20 @@ object StorySummaries {
      * chapters' unit keys by index: every chapter it was written from is
      * listed, unchanged, so nothing from further on or outside this scope
      * shows. The one written from the [current] inputs wins once saved;
-     * until then the one covering most summaries, then the furthest.
+     * until then the one covering most summaries, then the furthest,
+     * preferring those written at [detail].
      */
-    fun best(saved: List<SavedSummary>, listed: Map<Int, String>, current: String? = null): SavedSummary? {
+    fun best(
+        saved: List<SavedSummary>,
+        listed: Map<Int, String>,
+        current: String? = null,
+        detail: CompanionDetail = CompanionDetail.NORMAL,
+    ): SavedSummary? {
         val valid = saved.filter { s -> s.level == TOP && s.deps.isNotEmpty() && s.deps.all { listed[it.unit] == it.unitKey } }
         return valid.firstOrNull { it.key == current }
-            ?: valid.maxWithOrNull(compareBy<SavedSummary>({ s -> s.deps.count { it.summarized } }, { it.hi }, { it.savedAt }))
+            ?: valid.maxWithOrNull(
+                compareBy<SavedSummary>({ it.detail == detail }, { s -> s.deps.count { it.summarized } }, { it.hi }, { it.savedAt }),
+            )
     }
 
     /** Whether a story so far is worth asking for [step]: it reads at least [MIN_RECAPS] recaps. */
@@ -341,7 +350,7 @@ class SummaryWriter(
         // A short window is passed on as it is, with nothing sent.
         if (step.level != StorySummaries.TOP && joined.length <= StorySummaries.WINDOW_CHARACTERS) return joined
         val text = ask(step, texts, allowed)
-        val saved = SavedSummary(step.key, step.level, step.lo, step.hi, step.deps, text)
+        val saved = SavedSummary(step.key, step.level, step.lo, step.hi, step.deps, text, detail = step.detail)
         if (!book.saveSummary(saved, ticket)) throw Fenced()
         return text
     }

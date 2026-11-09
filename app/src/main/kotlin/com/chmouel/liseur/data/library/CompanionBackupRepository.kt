@@ -68,7 +68,7 @@ class CompanionBackupRepository(
                         .put("key", row.key).put("level", row.level).put("lo", row.lo).put("hi", row.hi)
                         .put("content_sha", row.contentSha).put("recap_format", row.recapFormat)
                         .put("summary_format", row.summaryFormat).put("deps", row.deps).put("text", row.text)
-                        .put("saved_at", row.savedAt).put("used_at", row.usedAt)
+                        .put("saved_at", row.savedAt).put("used_at", row.usedAt).put("detail", row.detail)
                     val bytes = (if (first) "" else ",").plus(entry.toString()).toByteArray()
                     if (written + bytes.size > maxBytes) return@exportSummaries false
                     output.write(bytes)

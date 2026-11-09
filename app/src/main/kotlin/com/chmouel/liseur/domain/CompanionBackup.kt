@@ -4,6 +4,7 @@ import com.chmouel.liseur.companion.ChapterRecap
 import com.chmouel.liseur.companion.ChapterRecapRow
 import com.chmouel.liseur.companion.StorySummaries
 import com.chmouel.liseur.companion.StorySummaryRow
+import com.chmouel.liseur.data.settings.CompanionDetail
 import org.json.JSONObject
 
 data class BackedUpCompanionRecap(val recap: ChapterRecapRow, val title: String?, val author: String?)
@@ -32,6 +33,11 @@ private class Entry(private val entry: JSONObject, private val what: String) {
 
     fun metadata(key: String): String? = if (entry.isNull(key)) null else {
         entry.opt(key) as? String ?: error("Invalid book metadata")
+    }
+
+    /** The summary's length; backups from before the choice are normal, unknown ones are refused. */
+    fun detail(): String = if (entry.isNull("detail")) CompanionDetail.NORMAL.id else {
+        text("detail").also { id -> require(CompanionDetail.entries.any { it.id == id }) }
     }
 
     fun sha(key: String): String = text(key).also { require(it.matches(SHA)) }
@@ -86,7 +92,7 @@ fun decodeCompanionBackup(text: String): CompanionBackupContents {
         require(summary.length <= StorySummaries.TOP_CHARACTERS)
         BackedUpStorySummary(
             StorySummaryRow(bookId, key, level, lo, hi, entry.sha("content_sha"), recapFormat, summaryFormat, deps,
-                summary, entry.number("saved_at"), entry.number("used_at")),
+                summary, entry.number("saved_at"), entry.number("used_at"), entry.detail()),
             entry.metadata("title"), entry.metadata("author"),
         )
     }

@@ -1750,7 +1750,10 @@ separate from translation's, moved and forgotten with server edits in
   `CompanionChoice` and `RecapSetup`, so changing it never fences or
   cancels requests in flight. Lookup and Where was I caches key on it; the
   story-so-far top summary key carries it (windows are shared), so each
-  level is saved apart and reused. Saved recaps keep their length and are
+  level is saved apart and reused. Saved summaries record their level
+  (`story_summary.detail`, old rows `normal`), and until the chosen level
+  is written the fallback prefers one at that level. Detailed prompts state
+  the parsers' claim limits. Saved recaps keep their length and are
   not rewritten (no `Recaps.FORMAT` bump).
 - Chapters come from the contents (`ChapterMap`), not files; parts that
   open several files contribute their entries as chapters, and deeper
