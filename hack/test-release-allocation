@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+source <(sed '/^rc_release=false/,$d' "$root/hack/release")
+
+git init --bare --quiet "$tmp/origin"
+git init --quiet "$tmp/one"
+cd "$tmp/one"
+git config user.name Test
+git config user.email test@example.com
+git config commit.gpgsign false
+git remote add origin "$tmp/origin"
+mkdir -p app
+printf 'versionCode = 56\nversionName = "1.0.0"\n' > app/build.gradle.kts
+git add app
+git commit --quiet -m initial
+git push --quiet origin HEAD:main
+git clone --quiet "$tmp/origin" "$tmp/two" --branch main
+git -C "$tmp/two" config user.name Test
+git -C "$tmp/two" config user.email test@example.com
+git -C "$tmp/two" config commit.gpgsign false
+
+printf 'versionCode = 57\nversionName = "1.0.1-nightly.20260101"\n' > app/build.gradle.kts
+git commit --quiet -am nightly
+git tag v1.0.1-nightly.20260101
+reserve_version_code 57 v1.0.1-nightly.20260101
+git push --quiet --atomic origin refs/tags/v1.0.1-nightly.20260101 refs/tags/code/57
+
+cd "$tmp/two"
+printf 'versionCode = 57\nversionName = "1.0.1-rc.1"\n' > app/build.gradle.kts
+git commit --quiet -am candidate
+git tag v1.0.1-rc.1
+reserve_version_code 57 v1.0.1-rc.1
+if git push --quiet --atomic origin refs/tags/v1.0.1-rc.1 refs/tags/code/57 2>/dev/null; then
+    printf 'Concurrent allocation unexpectedly succeeded\n' >&2
+    exit 1
+fi
+if git --git-dir="$tmp/origin" rev-parse -q --verify refs/tags/v1.0.1-rc.1 >/dev/null; then
+    printf 'Failed allocation pushed its release tag\n' >&2
+    exit 1
+fi
+
+cd "$tmp/one"
+git checkout --quiet HEAD^
+mkdir -p "$tmp/bin"
+cat > "$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+[[ ${GH_TEST_FAIL:-false} != true ]] || exit 1
+printf '%s' "${GH_TEST_RELEASES:-}"
+EOF
+chmod +x "$tmp/bin/gh"
+export PATH="$tmp/bin:$PATH"
+[[ $(create_nightly_release false) == v1.0.1-nightly.20260101 ]]
+[[ $(create_nightly_release true) == v1.0.1-nightly.20260101 ]]
+if (export GH_TEST_FAIL=true; create_nightly_release false) >/dev/null 2>&1; then
+    printf 'Failed release lookup did not stop nightly preparation\n' >&2
+    exit 1
+fi
+export GH_TEST_RELEASES=v1.0.1-nightly.20260101
+[[ -z $(create_nightly_release false) ]]
+printf 'Release allocation and nightly retry checks passed.\n'

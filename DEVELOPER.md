@@ -462,6 +462,42 @@ hack/release --no-play --rc   # skip Google Play testing tracks
   raise `WITHDRAWN_VERSION_CODE` in `hack/release` to its `versionCode`
   and restore the tag before creating another RC for that version.
 
+### Nightly builds
+
+`.github/workflows/nightly.yml` runs at 03:17 UTC. When its full Gradle
+checks pass on `main`'s head and something under `app/`, `gradle/`
+or the Gradle build files changed since the last nightly (or the last
+final release, if newer), it publishes a signed GitHub prerelease and
+puts the bundle on Play's internal track only. To cut one by hand, even
+without a change:
+
+```bash
+gh workflow run nightly.yml -f force=true
+```
+
+- `hack/release --nightly` does the deciding, bumping and tagging, then
+  the workflow calls `release.yml` with the tag (a tag pushed with the
+  workflow token starts no run of its own). It runs no Gradle checks;
+  the nightly workflow's checks and the release build cover that.
+- Tags are `vX.Y.Z-nightly.YYYYMMDD` (UTC date), where X.Y.Z is the
+  next patch or a newer version that already has RCs. One per day; a
+  second run that day fails on an existing published tag. An unpublished
+  nightly is retried when its shipping files match the checked source.
+- Like an RC, it takes the next `versionCode` from the highest across
+  `main` and every tag, signs with the release key, and lands nothing on
+  `main`. Each nightly therefore uses up a `versionCode`, and the next RC
+  or release goes above it so F-Droid and Play offer it over a nightly.
+  A `code/NUMBER` tag is pushed atomically with each release tag to reject
+  concurrent allocations of the same code. Keep these reservation tags.
+- The F-Droid tag filter must reject nightly tags: `--nightly` checks
+  the live filter before pushing, and final releases check a sample
+  nightly tag too.
+- Notes list the commits since the previous nightly. `hack/prune-prereleases`
+  keeps only the newest nightly page; tags stay.
+- Play: `fastlane android internal promote:false`, so closed `Testing`
+  testers keep getting RCs and releases only. Internal testers get
+  every nightly.
+
 ### Google Play
 
 Play is the third and least load-bearing channel. The release tag also

@@ -12,6 +12,14 @@ on:
         description: Existing release tag to build and publish
         required: true
         type: string
+  # The nightly workflow pushes its tag with the workflow token, which
+  # starts no push run, so it calls this one directly.
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing release tag to build and publish
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -61,10 +69,10 @@ jobs:
           grep -Fq "versionName = \"$version\"" app/build.gradle.kts
           version_code=$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)$/\1/p' \
             app/build.gradle.kts)
-          # RCs are built and signed like final releases, but skip F-Droid.
-          # The legacy test spelling remains recognizable so an old tag
-          # cannot accidentally be treated as final.
-          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|test)\.[0-9]+$ ]]; then
+          # RCs and nightlies are built and signed like final releases, but
+          # skip F-Droid. The legacy test spelling remains recognizable so
+          # an old tag cannot accidentally be treated as final.
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|test|nightly)\.[0-9]+$ ]]; then
             printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
             printf 'prerelease_kind=%s\n' "${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -147,15 +155,35 @@ jobs:
               "$RELEASE_TAG^" 2>/dev/null || true)
             range="$RELEASE_TAG"
             [[ -z "$previous" ]] || range="$previous..$RELEASE_TAG"
+            # A nightly lists what is new since the one before it, cut
+            # from main like this one is: its tag's parent commit.
+            if [[ "$PRERELEASE_KIND" == nightly ]]; then
+              earlier=$(git for-each-ref --sort=-creatordate \
+                --format='%(refname:short)' 'refs/tags/v*-nightly.*' |
+                grep -Fvx "$RELEASE_TAG" | head -n 1 || true)
+              if [[ -n "$earlier" ]] &&
+                git merge-base --is-ancestor "$earlier^" "$RELEASE_TAG^" &&
+                { [[ -z "$previous" ]] ||
+                  git merge-base --is-ancestor "$previous" "$earlier^"; }; then
+                range="$earlier^..$RELEASE_TAG"
+                previous=$earlier
+              fi
+            fi
             {
-              if [[ "$PRERELEASE_KIND" == rc ]]; then
+              if [[ "$PRERELEASE_KIND" == nightly ]]; then
+                printf 'A nightly build of main. It carries the release signature, so it\n'
+              elif [[ "$PRERELEASE_KIND" == rc ]]; then
                 printf 'A release candidate. It carries the release signature, so it\n'
               else
                 printf 'A legacy test build. It carries the release signature, so it\n'
               fi
               printf 'installs over a copy that came from F-Droid, and F-Droid\n'
               printf 'updates over it once the next real release reaches it.\n\n'
-              if [[ "$PLAY_REQUESTED" == true ]]; then
+              if [[ "$PLAY_REQUESTED" == true && "$PRERELEASE_KIND" == nightly ]]; then
+                printf 'The workflow will also try to put it on the Google Play\n'
+                printf 'internal testing track. It is not sent to F-Droid or any\n'
+                printf 'other Google Play track.\n\n'
+              elif [[ "$PLAY_REQUESTED" == true ]]; then
                 printf 'The workflow will also try to put it on Google Play testing\n'
                 printf 'tracks (Internal/Testing). It is not sent to F-Droid or\n'
                 printf 'Google Play production.\n\n'
@@ -167,6 +195,7 @@ jobs:
                 --invert-grep \
                 --grep='^chore: release candidate ' \
                 --grep='^chore: test release ' \
+                --grep='^chore: nightly build ' \
                 "$range"
             } > "$notes"
           else
@@ -271,14 +300,18 @@ jobs:
           (umask 077 && printf '%s' "$SERVICE_ACCOUNT" > "$key")
           changelog="fastlane/metadata/android/en-US/changelogs/$VERSION_CODE.txt"
           if [[ "$PRERELEASE" == true && ! -f "$changelog" ]]; then
-            if [[ "$PRERELEASE_KIND" == rc ]]; then
+            if [[ "$PRERELEASE_KIND" == nightly ]]; then
+              printf 'Nightly build %s\n' "$RELEASE_TAG" > "$changelog"
+            elif [[ "$PRERELEASE_KIND" == rc ]]; then
               printf 'Release candidate %s\n' "$RELEASE_TAG" > "$changelog"
             else
               printf 'Test release %s\n' "$RELEASE_TAG" > "$changelog"
             fi
           fi
           gem install fastlane -v 2.238.0 --no-document
-          SUPPLY_JSON_KEY="$key" fastlane android internal
+          promote=true
+          [[ "$PRERELEASE_KIND" != nightly ]] || promote=false
+          SUPPLY_JSON_KEY="$key" fastlane android internal promote:"$promote"
 
       - name: Publish the final release to the Play production track
         id: play_production

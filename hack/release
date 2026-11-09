@@ -40,6 +40,8 @@ readonly REQUIRED_SECRETS=(
     OPENAI_API_KEY
     LISEUR_PLAY_SERVICE_ACCOUNT_JSON
 )
+# What a nightly counts as a change: anything that ends up in the APK.
+readonly NIGHTLY_PATHS=(app gradle gradlew gradlew.bat '*.gradle.kts' gradle.properties)
 # Set by --no-play. The tag records the per-release decision so an existing
 # environment credential cannot accidentally override it.
 skip_play=false
@@ -50,6 +52,7 @@ Usage:
   hack/release [--no-fdroid] [--no-play]
   hack/release [-n] [--no-fdroid] [--no-play] VERSION RELEASE NOTES...
   hack/release [-n] [--no-play] --rc [VERSION]
+  hack/release [--no-play] [--force] --nightly
   hack/release --fdroid-only VERSION
   hack/release [--no-play] --sync-secrets
 
@@ -91,6 +94,16 @@ real releases. There is no changelog to write, but the JVM tests, Android
 lint and release build must pass against the candidate commit before its
 tag is pushed. Before pushing it, the live F-Droid tag filter is checked
 and the release stops if it would discover this non-final tag.
+
+--nightly is what the scheduled workflow runs. When something under app/,
+gradle/ or the Gradle build files changed since the last nightly (or the
+last final release, whichever is newer), it commits a version bump in a
+detached worktree, tags it vX.Y.Z-nightly.YYYYMMDD (UTC) and pushes the
+tag, then prints the tag on stdout. With no change it prints nothing.
+X.Y.Z is the next patch, or a newer version that already has release
+candidates. It takes a versionCode like an RC does, asks nothing, runs no
+local checks (the nightly workflow and the release workflow do) and
+does not wait for the release. --force cuts one without a change.
 
 The F-Droid step opens (or updates) a fdroiddata merge request carrying
 the new build entry plus the signature extracted from the released APK:
@@ -394,6 +407,18 @@ create_release_tag() {
             --message='release:no-play' "$tag" "${target[@]}"
     else
         git -c tag.gpgSign=false tag "$tag" "${target[@]}"
+    fi
+}
+
+# The reservation and release tag must reach origin together. A competing
+# release using the same code then fails its atomic push before publishing.
+reserve_version_code() {
+    local code=$1 tag=$2 reservation="code/$1"
+    if git rev-parse -q --verify "refs/tags/$reservation" >/dev/null; then
+        [[ $(git rev-parse "$reservation^{commit}") == $(git rev-parse "$tag^{commit}") ]] ||
+            die "versionCode $code is already reserved; fetch tags and prepare the release again"
+    else
+        git -c tag.gpgSign=false tag "$reservation" "$tag^{commit}"
     fi
 }
 
@@ -735,15 +760,19 @@ choose_release() {
 # The version bump a release candidate is built from, committed without
 # moving whatever branch you are on: a detached worktree makes the edit,
 # the tag ends up pointing at what comes out of it, and the tree you
-# were working in is never touched. Prints the commit.
+# were working in is never touched. Prints the commit. A nightly skips the
+# Gradle checks: main's Build workflow already ran them on its source.
 write_rc_commit() {
-    local version=$1 version_code=$2
-    local workdir worktree sha
+    local version=$1 version_code=$2 kind=${3:-rc}
+    local workdir worktree sha message
+
+    message="chore: release candidate v$version"
+    [[ "$kind" != nightly ]] || message="chore: nightly build v$version"
 
     workdir=$(mktemp -d)
     worktree="$workdir/tree"
     git worktree add --quiet --detach "$worktree" HEAD ||
-        die "could not create a worktree for the release candidate commit"
+        die "could not create a worktree for the $kind commit"
 
     if ! (
         cd "$worktree"
@@ -756,20 +785,126 @@ write_rc_commit() {
         [[ $(read_version_name) == "$version" ]] || exit 1
         [[ $(read_version_code) == "$version_code" ]] || exit 1
         git add "$BUILD_FILE"
-        git commit --quiet -m "chore: release candidate v$version"
-        ./gradlew testFossDebugUnitTest testPlayDebugUnitTest lintFossDebug lintPlayDebug assembleFossRelease --console=plain
+        git commit --quiet -m "$message"
+        [[ "$kind" == nightly ]] ||
+            ./gradlew testFossDebugUnitTest testPlayDebugUnitTest lintFossDebug lintPlayDebug assembleFossRelease --console=plain
     ) >&2; then
         git worktree remove --force "$worktree" >/dev/null 2>&1 || true
         rm -rf "$workdir"
-        die "the release candidate commit did not pass its checks"
+        die "the $kind commit did not pass its checks"
     fi
 
     sha=$(git -C "$worktree" rev-parse HEAD)
     git worktree remove --force "$worktree" >/dev/null 2>&1 || true
     rm -rf "$workdir"
 
-    [[ -n "$sha" ]] || die "could not read the release candidate commit"
+    [[ -n "$sha" ]] || die "could not read the $kind commit"
     printf '%s' "$sha"
+}
+
+# The main commit the newest nightly was cut from: its tag points at the
+# bump commit, whose parent is that commit.
+last_nightly_source() {
+    local tag
+    tag=$(git for-each-ref --sort=-creatordate --count=1 \
+        --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+    [[ -n "$tag" ]] || return 0
+    git rev-parse -q --verify "$tag^{commit}^" 2>/dev/null || true
+}
+
+# Changes are counted from the newer of the last final release and the
+# last nightly's source, as long as that source is still in HEAD's history.
+nightly_base() {
+    local final source base=""
+    final=$(last_final_tag)
+    [[ -z "$final" ]] || base=$(git rev-parse "$final^{commit}")
+    source=$(last_nightly_source)
+    if [[ -n "$source" ]] && git merge-base --is-ancestor "$source" HEAD; then
+        if [[ -z "$base" ]] || git merge-base --is-ancestor "$base" "$source"; then
+            base=$source
+        fi
+    fi
+    printf '%s' "$base"
+}
+
+# The next patch, unless candidates are already out for something newer:
+# a nightly should never look older than the RC it installs over.
+nightly_target_version() {
+    local current target base
+    current=$(read_version_name)
+    [[ -n "$current" ]] || die "could not read the current app version"
+    target=$(bump_version "$current" patch)
+    while IFS= read -r base; do
+        [[ -n "$base" ]] || continue
+        if git rev-parse -q --verify "refs/tags/v$base" >/dev/null; then
+            continue
+        fi
+        if [[ $(printf '%s\n%s\n' "$target" "$base" | sort -V | tail -n 1) == "$base" ]]; then
+            target=$base
+        fi
+    done < <(git tag --list 'v*-rc.*' |
+        sed -nE 's/^v([0-9]+\.[0-9]+\.[0-9]+)-rc\.[0-9]+$/\1/p' | sort -uV)
+    printf '%s' "$target"
+}
+
+# Everything here goes to stderr except the tag, so the workflow can read
+# what was cut from stdout.
+create_nightly_release() {
+    local force=$1
+    local base range target version tag version_code commit_sha latest releases
+
+    [[ -z $(git status --porcelain) ]] || die "the working tree is not clean"
+
+    latest=$(git for-each-ref --sort=-creatordate --count=1 \
+        --format='%(refname:short)' 'refs/tags/v*-nightly.*')
+    if [[ -n "$latest" ]] && git merge-base --is-ancestor "$latest^" HEAD &&
+        git diff --quiet "$latest^" HEAD -- "${NIGHTLY_PATHS[@]}"; then
+        releases=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.draft == false) | .tag_name') ||
+            die "could not check published nightly releases"
+        if ! grep -Fxq "$latest" <<<"$releases"; then
+            printf 'Retrying unpublished nightly %s.\n' "$latest" >&2
+            printf '%s\n' "$latest"
+            return 0
+        fi
+    fi
+
+    base=$(nightly_base)
+    range=HEAD
+    [[ -z "$base" ]] || range="$base..HEAD"
+    if [[ "$force" != true && -z $(git rev-list -n 1 "$range" -- "${NIGHTLY_PATHS[@]}") ]]; then
+        printf 'Nothing that ships has changed since %s; no nightly.\n' \
+            "$(git rev-parse --short "${base:-HEAD}")" >&2
+        return 0
+    fi
+
+    target=$(nightly_target_version)
+    version="$target-nightly.$(date -u +%Y%m%d)"
+    tag="v$version"
+    ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null ||
+        die "tag $tag already exists"
+    version_code=$(highest_version_code)
+    [[ "$version_code" =~ ^[0-9]+$ ]] ||
+        die "could not work out the versionCode to release under"
+    version_code=$((version_code + 1))
+
+    "./$FDROID_TAG_POLICY_SCRIPT" "v$target" "$tag" >&2
+
+    {
+        printf '\nIn this nightly%s:\n\n' "${base:+, since $(git rev-parse --short "$base")}"
+        show_changes_since "$range"
+        printf 'Nightly %s as versionCode %s, from %s.\n' \
+            "$version" "$version_code" "$(git rev-parse --short HEAD)"
+    } >&2
+
+    commit_sha=$(write_rc_commit "$version" "$version_code" nightly)
+    create_release_tag "$tag" "$commit_sha"
+    reserve_version_code "$version_code" "$tag"
+    if ! git push --atomic --quiet origin "refs/tags/$tag" "refs/tags/code/$version_code" >&2; then
+        git tag -d "$tag" "code/$version_code" >/dev/null
+        die "could not push $tag"
+    fi
+    printf '%s\n' "$tag"
 }
 
 # A release candidate is the real APK — same build, same release key — put
@@ -839,8 +974,9 @@ create_rc_release() {
     commit_sha=$(write_rc_commit "$version" "$version_code")
     sync_release_secrets
     create_release_tag "$tag" "$commit_sha"
-    if ! git push origin "refs/tags/$tag"; then
-        git tag -d "$tag" >/dev/null
+    reserve_version_code "$version_code" "$tag"
+    if ! git push --atomic origin "refs/tags/$tag" "refs/tags/code/$version_code"; then
+        git tag -d "$tag" "code/$version_code" >/dev/null
         die "could not push $tag"
     fi
 
@@ -1231,6 +1367,8 @@ fdroid_only=false
 skip_fdroid=false
 sync_secrets_only=false
 rc_release=false
+nightly_release=false
+force_nightly=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1240,6 +1378,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --rc)
             rc_release=true
+            shift
+            ;;
+        --nightly)
+            nightly_release=true
+            shift
+            ;;
+        --force)
+            force_nightly=true
             shift
             ;;
         --fdroid-only)
@@ -1288,6 +1434,28 @@ if [[ "$sync_secrets_only" == true ]]; then
     done
     sync_release_secrets true
     printf 'Release secrets are up to date on %s.\n' "$GH_REPO"
+    exit 0
+fi
+
+[[ "$force_nightly" == false || "$nightly_release" == true ]] ||
+    die "--force only applies to --nightly"
+
+# Nightlies run in CI with the workflow's token: no pass, no prompts, no
+# secrets to sync, and the release workflow is called by the caller.
+if [[ "$nightly_release" == true ]]; then
+    [[ "$rc_release" == false && "$fdroid_only" == false && "$skip_fdroid" == false ]] ||
+        die "--nightly cannot be combined with --rc, --fdroid-only or --no-fdroid"
+    [[ $# -eq 0 ]] || die "--nightly does not take a version"
+    for command in git gh sed curl python3; do
+        require_command "$command"
+    done
+
+    repo_root=$(git rev-parse --show-toplevel)
+    cd "$repo_root"
+    [[ -f "$BUILD_FILE" ]] || die "run this script from the Liseur repository"
+
+    git fetch --quiet origin --tags >&2
+    create_nightly_release "$force_nightly"
     exit 0
 fi
 
@@ -1382,7 +1550,7 @@ if [[ "$fdroid_only" == true ]]; then
     [[ "$tag_version" == "$version" && -n "$tag_version_code" ]] ||
         die "$tag does not contain app version $version"
 
-    "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1"
+    "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101"
     trap fdroid_resume_hint EXIT
     update_fdroid_submission "$version" "$tag_version_code" "$commit_sha"
     exit
@@ -1412,7 +1580,7 @@ fi
 
 # F-Droid scans public tags independently of the submission step. Check
 # both sides of the policy before changing secrets or pushing a release.
-"./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1"
+"./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101"
 
 sync_release_secrets
 ensure_local_release_signing
@@ -1531,7 +1699,15 @@ else
     confirm
 fi
 
-git push --atomic origin main "$tag"
+if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+    git push --atomic origin main "$tag"
+else
+    reserve_version_code "$current_version_code" "$tag"
+    if ! git push --atomic origin main "refs/tags/$tag" "refs/tags/code/$current_version_code"; then
+        git tag -d "code/$current_version_code" >/dev/null 2>&1 || true
+        die "could not push release and versionCode reservation; the release commit and tag remain local. Fetch origin tags, allocate a higher versionCode, then resume the release."
+    fi
+fi
 commit_sha=$(git rev-parse "$tag^{commit}")
 tag_build_file=$(git show "$tag:$BUILD_FILE")
 release_version=$(sed -nE 's/^[[:space:]]*versionName = "([^"]+)"$/\1/p' \

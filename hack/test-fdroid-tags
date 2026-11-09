@@ -23,8 +23,15 @@ cat > "$metadata" <<'EOF'
 UpdateCheckMode: Tags ^v[0-9.]+$
 EOF
 "$here/verify-fdroid-tags" --metadata "$metadata" \
-    v0.10.0 v0.10.0-test.1 v0.10.0-rc.1 >/dev/null
+    v0.10.0 v0.10.0-test.1 v0.10.0-rc.1 v0.10.1-nightly.20261110 >/dev/null
 "$here/verify-fdroid-tags" --metadata "$metadata" v0.10.0 >/dev/null
+
+cat > "$metadata" <<'EOF'
+UpdateCheckMode: Tags ^v[0-9.]+(-nightly\.[0-9]+)?$
+EOF
+expect_rejected --metadata "$metadata" \
+    v0.10.0 v0.10.1-nightly.20261110
+expect_rejected --metadata "$metadata" v0.10.0
 
 cat > "$metadata" <<'EOF'
 UpdateCheckMode: Tags ^v[0-9.]+(-test\.[0-9]+)?$

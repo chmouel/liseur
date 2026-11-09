@@ -65,8 +65,8 @@ def liseur_promote(version_code, target_track)
 end
 
 platform :android do
-  desc "Upload the release bundle to the Play internal track, then promote it to the closed track"
-  lane :internal do
+  desc "Upload the release bundle to the Play internal track, then promote it to the closed track (promote:false stops at internal)"
+  lane :internal do |options|
     # Anchored to this file rather than the working directory: fastlane
     # runs lanes from inside fastlane/, so a bare relative path would
     # look for the bundle one directory too deep and never find it.
@@ -90,6 +90,13 @@ platform :android do
       release_status: "completed",
       validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
     )
+
+    # Nightlies stay on internal: closed-track testers get candidates and
+    # releases only.
+    if options[:promote].to_s == "false"
+      UI.success("#{version_code} is on #{INTERNAL_TRACK}")
+      next
+    end
 
     liseur_promote(version_code, CLOSED_TRACK)
     UI.success("#{version_code} is on #{INTERNAL_TRACK} and #{CLOSED_TRACK}")

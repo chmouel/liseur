@@ -18,9 +18,10 @@ jobs:
       - name: Verify release tag policy
         run: |
           bash -n hack/release hack/verify-fdroid-tags hack/test-fdroid-tags \
-            hack/prune-prereleases hack/test-prune-prereleases
+            hack/prune-prereleases hack/test-prune-prereleases hack/test-release-allocation
           hack/test-fdroid-tags
           hack/test-prune-prereleases
+          hack/test-release-allocation
           hack/test-store-images
           hack/test-ai-stub
           hack/test-openai-voices
