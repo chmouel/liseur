@@ -1566,10 +1566,14 @@
     <string name="codex_empty">Aún no hay nombres coincidentes en capítulos anteriores.</string>
     <string name="codex_scripts">La detección de nombres depende de las mayúsculas, así que no funciona en idiomas que no las tienen.</string>
     <string name="codex_entry">%1$s · Menciones: %2$d</string>
+    <string name="codex_entry_mentions">Menciones: %1$d</string>
+    <string name="codex_filter_all">Todos</string>
+    <string name="codex_filter_connections">Conexiones</string>
+    <string name="codex_map_show">Mostrar mapa</string>
+    <string name="codex_map_hide">Ocultar mapa</string>
     <string name="codex_person">Persona</string>
     <string name="codex_place">Lugar</string>
     <string name="codex_faction">Facción</string>
-    <string name="codex_other">Otro</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Perfil</string>
     <string name="codex_pane_mentions">Menciones</string>
@@ -1580,7 +1584,6 @@
     <string name="codex_mentions_of">Menciones de %1$s</string>
     <string name="codex_mentions_all">Mostrar todas las menciones</string>
     <string name="codex_shared">Capítulos compartidos: %1$d</string>
-    <string name="codex_graph_hint">Selecciona dos nombres en el mapa o una conexión debajo.</string>
     <string name="codex_graph_empty">Sigue leyendo para encontrar nombres que compartan al menos dos capítulos.</string>
     <string name="codex_more">Cargar más pasajes</string>
     <string name="codex_no_passages">No se encontraron pasajes anteriores.</string>

@@ -1566,10 +1566,14 @@
     <string name="codex_empty">Aucun nom correspondant dans les chapitres précédents pour le moment.</string>
     <string name="codex_scripts">La détection des noms repose sur les majuscules, elle ne fonctionne donc pas pour les langues qui n\'en ont pas.</string>
     <string name="codex_entry">%1$s · Mentions : %2$d</string>
+    <string name="codex_entry_mentions">Mentions : %1$d</string>
+    <string name="codex_filter_all">Tous</string>
+    <string name="codex_filter_connections">Liens</string>
+    <string name="codex_map_show">Afficher la carte</string>
+    <string name="codex_map_hide">Masquer la carte</string>
     <string name="codex_person">Personne</string>
     <string name="codex_place">Lieu</string>
     <string name="codex_faction">Faction</string>
-    <string name="codex_other">Autre</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Profil</string>
     <string name="codex_pane_mentions">Mentions</string>
@@ -1580,7 +1584,6 @@
     <string name="codex_mentions_of">Mentions de %1$s</string>
     <string name="codex_mentions_all">Afficher toutes les mentions</string>
     <string name="codex_shared">Chapitres en commun : %1$d</string>
-    <string name="codex_graph_hint">Sélectionnez deux noms sur la carte, ou un lien ci-dessous.</string>
     <string name="codex_graph_empty">Poursuivez la lecture pour trouver des noms partageant au moins deux chapitres.</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>

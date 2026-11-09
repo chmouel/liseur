@@ -109,7 +109,7 @@ internal fun CharacterProfile(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (entry != null) {
                     Text(
-                        stringResource(R.string.codex_entry, kindLabel(entry.kind), entry.occurrences) +
+                        entryLine(entry.kind, entry.occurrences) +
                             " · " + chapterLabel(ChapterRange(entry.firstUnit, entry.lastUnit)),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

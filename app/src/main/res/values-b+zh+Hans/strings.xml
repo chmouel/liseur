@@ -1517,10 +1517,14 @@
     <string name="codex_empty">之前的章节中尚无匹配名称。</string>
     <string name="codex_scripts">名称识别依赖大写字母，因此不适用于没有大写字母的语言。</string>
     <string name="codex_entry">%1$s · 提及次数：%2$d</string>
+    <string name="codex_entry_mentions">提及次数：%1$d</string>
+    <string name="codex_filter_all">全部</string>
+    <string name="codex_filter_connections">联系</string>
+    <string name="codex_map_show">显示图</string>
+    <string name="codex_map_hide">隐藏图</string>
     <string name="codex_person">人物</string>
     <string name="codex_place">地点</string>
     <string name="codex_faction">组织</string>
-    <string name="codex_other">其他</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">简介</string>
     <string name="codex_pane_mentions">提及</string>
@@ -1531,7 +1535,6 @@
     <string name="codex_mentions_of">%1$s的提及</string>
     <string name="codex_mentions_all">显示全部提及</string>
     <string name="codex_shared">共同章节：%1$d</string>
-    <string name="codex_graph_hint">在图中选择两个名称，或选择下方的联系。</string>
     <string name="codex_graph_empty">继续阅读，以发现至少在两个章节中共同出现的名称。</string>
     <string name="codex_more">加载更多段落</string>
     <string name="codex_no_passages">未找到之前的段落。</string>

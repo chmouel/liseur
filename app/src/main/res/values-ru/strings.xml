@@ -1666,10 +1666,14 @@
     <string name="codex_empty">В предыдущих главах пока нет подходящих имён.</string>
     <string name="codex_scripts">Поиск имён основан на заглавных буквах, поэтому не работает для языков без них.</string>
     <string name="codex_entry">%1$s · Упоминаний: %2$d</string>
+    <string name="codex_entry_mentions">Упоминаний: %1$d</string>
+    <string name="codex_filter_all">Все</string>
+    <string name="codex_filter_connections">Связи</string>
+    <string name="codex_map_show">Показать карту</string>
+    <string name="codex_map_hide">Скрыть карту</string>
     <string name="codex_person">Персонаж</string>
     <string name="codex_place">Место</string>
     <string name="codex_faction">Группа</string>
-    <string name="codex_other">Другое</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Профиль</string>
     <string name="codex_pane_mentions">Упоминания</string>
@@ -1680,7 +1684,6 @@
     <string name="codex_mentions_of">Упоминания: %1$s</string>
     <string name="codex_mentions_all">Показать все упоминания</string>
     <string name="codex_shared">Общих глав: %1$d</string>
-    <string name="codex_graph_hint">Выберите два имени на карте или связь ниже.</string>
     <string name="codex_graph_empty">Читайте дальше, чтобы найти имена, встречающиеся вместе хотя бы в двух главах.</string>
     <string name="codex_more">Загрузить ещё отрывки</string>
     <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
