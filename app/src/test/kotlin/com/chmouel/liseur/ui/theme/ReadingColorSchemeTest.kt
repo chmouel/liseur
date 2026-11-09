@@ -2,6 +2,7 @@ package com.chmouel.liseur.ui.theme
 
 import androidx.compose.material3.ColorScheme
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import com.chmouel.liseur.data.settings.ReaderTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -250,6 +251,22 @@ class ReadingColorSchemeTest {
                     "$where onSurfaceVariant on $name",
                     s.onSurfaceVariant,
                     surface,
+                    TEXT,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `faded ink on a dim page stays readable`() {
+        // The reader's own screens soften the ink by hand; a dim page has
+        // no contrast to give away, whatever the fade asked for.
+        for (page in ReaderTheme.entries.filter { it.isDim }) {
+            for (alpha in listOf(0.45f, 0.6f, 0.82f)) {
+                assertContrast(
+                    "$page faded($alpha)",
+                    page.faded(alpha).compositeOver(page.background),
+                    page.background,
                     TEXT,
                 )
             }

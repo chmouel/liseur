@@ -96,7 +96,7 @@ fun FooterNote(
                 name
             },
             style = MaterialTheme.typography.labelSmall,
-            color = theme.foreground.copy(alpha = 0.7f),
+            color = theme.faded(0.7f),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .clip(RoundedCornerShape(FOOTER_NOTE_RADIUS))

@@ -80,7 +80,7 @@ fun BookmarkRibbon(
                 .scale(scaleX = 1f, scaleY = extended),
         ) {
             if (extended <= 0.01f) return@Canvas
-            drawRibbon(theme.foreground.copy(alpha = 0.85f))
+            drawRibbon(theme.faded(0.85f))
         }
     }
 }

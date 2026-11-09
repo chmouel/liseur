@@ -111,7 +111,7 @@ fun NoteEditor(
     val ink = theme.foreground
     val paper = theme.background
     // A wash under half ink dithers to grey on electronic paper.
-    val quiet = if (eInk) ink else ink.copy(alpha = 0.6f)
+    val quiet = if (eInk) ink else theme.faded(0.6f)
 
     var value by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(initialNote, TextRange(initialNote.length)))
