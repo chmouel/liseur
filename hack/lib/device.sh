@@ -315,8 +315,23 @@ show_chrome() {
     sleep 2
 }
 
+# A tap that lands on a highlight opens its popup instead of the chrome,
+# and the middle of the page is where seeded marks tend to sit. A tap
+# elsewhere in the centre box puts the popup away and raises the chrome
+# in one go; outside that box a tap turns the page. While the shelf is
+# still showing, the book is only opening, and tapping again there would
+# open another one.
 reader_chrome_up() {
-    on_screen "Contents" || show_chrome
+    local spot
+    on_screen "Contents" && return 0
+    show_chrome
+    for spot in 0.65 0.35; do
+        on_screen "Contents" && return 0
+        on_screen "Filter" exact && return 0
+        find_popup >/dev/null || return 0
+        tap 0.5 "$spot"
+        sleep 2
+    done
 }
 
 reader_chrome_down() {
@@ -350,8 +365,8 @@ choose_reading_theme() {
 }
 
 
-readonly POPUP_NOTE_DP=39
-readonly POPUP_DEFINE_DP=81
+readonly POPUP_NOTE_DP=55
+readonly POPUP_DEFINE_DP=103
 
 
 dp() { printf '%.0f' "$(awk "BEGIN { print $1 * $density / 160 }")"; }
@@ -487,7 +502,7 @@ tap_in_popup() {
         note) adb shell input tap "$((chip_x + $(dp $POPUP_NOTE_DP)))" "$chip_y" ;;
         define) adb shell input tap "$((chip_x + $(dp $POPUP_DEFINE_DP)))" "$chip_y" ;;
         read_aloud)
-            adb shell input tap "$((chip_x + $(dp "${2:-207}")))" "$chip_y"
+            adb shell input tap "$((chip_x + $(dp "${2:-247}")))" "$chip_y"
             ;;
     esac
     sleep 2
@@ -495,11 +510,11 @@ tap_in_popup() {
 
 
 start_visible_read_aloud() {
-    local across=${1:-0.45} speech_offset=207
+    local across=${1:-0.45} speech_offset=247
     reader_chrome_up
     tap_on More exact
     if on_screen "Translate into"; then
-        speech_offset=249
+        speech_offset=295
     fi
     back
     reader_chrome_down
