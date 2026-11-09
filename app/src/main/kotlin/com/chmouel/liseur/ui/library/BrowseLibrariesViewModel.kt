@@ -47,6 +47,10 @@ data class BrowseLibrariesState(
     val connectionFailure: SetupFailure? = null,
     /** The free-catalog chooser is open; nothing in it has been contacted yet. */
     val chooserOpen: Boolean = false,
+    /** The chooser was opened from the empty library rather than from this screen. */
+    val chooserFromLibrary: Boolean = false,
+    /** That chooser closed with nothing picked: the browser has no reason to stay open. */
+    val leaveForLibrary: Boolean = false,
     /** The free catalog being probed and saved, if any. */
     val connectingPreset: FreeCatalog? = null,
     /** The free catalog whose last attempt failed, kept so the chooser can retry it. */
@@ -231,16 +235,38 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         }
     }
 
-    /** Opens the free-catalog chooser. Nothing is contacted until a preset is picked. */
-    fun openFreeCatalogs() {
+    /**
+     * Opens the free-catalog chooser. Nothing is contacted until a preset is picked.
+     *
+     * [fromLibrary] records that an empty library opened it, because closing
+     * it without picking anything has no screen to come back to. The answer
+     * belongs here rather than in the screen: it survives a rotation, and
+     * the screen then reads it instead of guessing from a state it may have
+     * caught one frame too early.
+     */
+    fun openFreeCatalogs(fromLibrary: Boolean = false) {
         if (_state.value.chooserOpen) return
         abandonPreset()
-        _state.update { it.copy(chooserOpen = true, presetFailure = null) }
+        _state.update {
+            it.copy(chooserOpen = true, chooserFromLibrary = fromLibrary, presetFailure = null)
+        }
     }
 
     fun closeChooser() {
         abandonPreset()
-        _state.update { it.copy(chooserOpen = false, presetFailure = null) }
+        _state.update {
+            it.copy(
+                chooserOpen = false,
+                presetFailure = null,
+                leaveForLibrary = it.chooserFromLibrary && it.serverId == null,
+                chooserFromLibrary = false,
+            )
+        }
+    }
+
+    /** The screen has left the browser for the library; the request is spent. */
+    fun leaveForLibraryHandled() {
+        _state.update { it.copy(leaveForLibrary = false) }
     }
 
     /**
@@ -295,7 +321,13 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     private fun leaveChooserFor(serverId: Long) {
         abandonPreset()
         _state.update {
-            it.copy(chooserOpen = false, presetFailure = null, formOpen = false, connectionFailure = null)
+            it.copy(
+                chooserOpen = false,
+                chooserFromLibrary = false,
+                presetFailure = null,
+                formOpen = false,
+                connectionFailure = null,
+            )
         }
         openServer(serverId)
     }
@@ -347,6 +379,7 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
     fun leave() {
         abandonConnection()
         abandonPreset()
+        _state.update { it.copy(chooserOpen = false, chooserFromLibrary = false, leaveForLibrary = false) }
     }
 
     fun back(): Boolean {
