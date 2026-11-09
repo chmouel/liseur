@@ -2,6 +2,7 @@ package com.chmouel.liseur.companion
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.clickable
@@ -25,9 +26,15 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -170,10 +177,14 @@ internal fun CodexSheet(
                 .imePadding(),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.codex_title), style = MaterialTheme.typography.headlineMedium)
-                TextButton(onClick = controller::close) { Text(stringResource(R.string.close)) }
-            }
+            val ceiling = panel.ceiling.takeUnless { panel.placing }
+            CodexTopBar(
+                title = detail?.let { it.other?.let { other -> stringResource(R.string.codex_pair, it.name, other) } ?: it.name },
+                scope = ceiling,
+                // A character page with nothing behind it closes instead.
+                onBack = if (detail != null && tabs.isNotEmpty()) back else null,
+                onClose = controller::close,
+            )
             if (panel.placing || panel.ceiling == null) {
                 if (scanEnabled) CodexScanProgress(progress, controller)
                 if (panel.placing) BusyBar() else Text(stringResource(R.string.codex_unplaced))
@@ -181,31 +192,25 @@ internal fun CodexSheet(
                 val panes = views.panes.filter { it != CharacterPane.PROFILE || profiles != null }
                 val pane = detail.pane.takeIf { it in panes } ?: panes.firstOrNull()
                 LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
-                    item(key = "codex:back") { TextButton(onClick = back) { Text(stringResource(R.string.back)) } }
-                    item(key = "codex:name") {
-                        Text(detail.other?.let { stringResource(R.string.codex_pair, detail.name, it) } ?: detail.name,
-                            style = MaterialTheme.typography.titleLarge)
-                    }
                     if (panes.size > 1) item(key = "codex:panes") {
-                        PrimaryTabRow(selectedTabIndex = panes.indexOf(pane), modifier = Modifier.padding(bottom = 6.dp)) {
-                            panes.forEach { each ->
-                                Tab(
+                        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                            panes.forEachIndexed { index, each ->
+                                SegmentedButton(
                                     selected = pane == each,
                                     onClick = { controller.showPane(each) },
-                                    text = {
-                                        Text(
-                                            stringResource(
-                                                when (each) {
-                                                    CharacterPane.PROFILE -> R.string.codex_pane_profile
-                                                    CharacterPane.MENTIONS -> R.string.codex_pane_mentions
-                                                },
-                                            ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    },
-                                )
+                                    shape = SegmentedButtonDefaults.itemShape(index, panes.size),
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            when (each) {
+                                                CharacterPane.PROFILE -> R.string.codex_pane_profile
+                                                CharacterPane.MENTIONS -> R.string.codex_pane_mentions
+                                            },
+                                        ),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                     }
@@ -236,7 +241,7 @@ internal fun CodexSheet(
                 }
             } else if (tab == CodexTab.STORY && storyActions != null) {
                 LazyColumn(Modifier.weight(1f), state = storyList) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
+                    codexHeader(progress, controller, scanEnabled)
                     codexTabs(tab, tabs, controller)
                     storyTab(story, storyActions, onChapter, onChooseModel, onCharacter = { controller.detail(it) })
                 }
@@ -246,7 +251,7 @@ internal fun CodexSheet(
                     panel.entries.filter { PassageText.fold(it.name).contains(needle) }
                 }
                 LazyColumn(Modifier.weight(1f), state = namesList) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled, profiles)
+                    codexHeader(progress, controller, scanEnabled, profiles)
                     codexTabs(tab, tabs, controller)
                     item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
@@ -274,7 +279,7 @@ internal fun CodexSheet(
                     value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.let { it.pairs(linked, it.recaps) }.orEmpty()
                 }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled, profiles)
+                    codexHeader(progress, controller, scanEnabled, profiles)
                     codexTabs(CodexTab.RELATIONSHIPS, tabs, controller)
                     val graph = panel.graph
                     if (panel.graphFailed) item {
@@ -355,19 +360,63 @@ private fun LazyListScope.mentions(
     }
 }
 
-// The scan state, scope, tabs and search scroll with the results, so a
-// short window (a phone on its side, the keyboard up) still has room to
-// show them.
+/**
+ * One row over every view: the sheet's name with the chapter it stops
+ * before, or on a character page Back, the name and that same scope.
+ */
+@Composable
+private fun CodexTopBar(title: String?, scope: Int?, onBack: (() -> Unit)?, onClose: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        onBack?.let {
+            IconButton(onClick = it) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back)) }
+        }
+        if (title != null) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                scope?.let {
+                    Text(stringResource(R.string.codex_scope, it + 1), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.codex_title), Modifier.weight(1f, fill = false), style = MaterialTheme.typography.headlineSmall,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                scope?.let { ScopePill(it) }
+            }
+        }
+        IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.close)) }
+    }
+}
+
+@Composable
+private fun ScopePill(ceiling: Int) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, if (LocalEInk.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Text(
+            stringResource(R.string.codex_scope, ceiling + 1),
+            Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+}
+
+// The scan state, tabs and search scroll with the results, so a short
+// window (a phone on its side, the keyboard up) still has room to show
+// them.
 private fun LazyListScope.codexHeader(
     progress: CodexProgress,
     controller: CodexViewModel,
-    ceiling: Int,
     scanning: Boolean,
     profiles: CharacterProfiles? = null,
 ) {
-    if (scanning) item(key = "codex:progress") { Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) } }
-    item(key = "codex:scope") {
-        Text(stringResource(R.string.codex_scope, ceiling + 1), Modifier.padding(bottom = 10.dp), style = MaterialTheme.typography.bodySmall)
+    if (scanning && progress.stage != CodexStage.COMPLETE) item(key = "codex:progress") {
+        Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) }
     }
     if (profiles?.aiHint == true) item(key = "codex:ai-hint") {
         StoryCard {
@@ -488,24 +537,30 @@ internal fun kindLabel(kind: CodexKind): String = stringResource(when (kind) {
 
 @Composable
 private fun CodexScanProgress(progress: CodexProgress, controller: CodexViewModel) {
+    if (progress.stage == CodexStage.COMPLETE) return
     Column {
-        Text(stringResource(when (progress.stage) {
-            CodexStage.PREPARING -> R.string.codex_preparing
-            CodexStage.SCANNING -> R.string.codex_scanning
-            CodexStage.PAUSED -> R.string.codex_paused
-            CodexStage.COMPLETE -> R.string.codex_complete
-            CodexStage.FAILED -> R.string.codex_failed
-        }), style = MaterialTheme.typography.labelLarge)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(when (progress.stage) {
+                    CodexStage.PREPARING -> R.string.codex_preparing
+                    CodexStage.SCANNING -> R.string.codex_scanning
+                    CodexStage.PAUSED -> R.string.codex_paused
+                    else -> R.string.codex_failed
+                }), style = MaterialTheme.typography.labelLarge)
+                if (progress.total > 0) {
+                    Text(stringResource(R.string.codex_progress, progress.completed, progress.total), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            when (progress.stage) {
+                CodexStage.PREPARING, CodexStage.SCANNING -> TextButton(onClick = controller::pause) { Text(stringResource(R.string.codex_pause)) }
+                CodexStage.PAUSED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.codex_resume)) }
+                else -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.companion_retry)) }
+            }
+        }
         if (progress.total > 0) {
-            Text(stringResource(R.string.codex_progress, progress.completed, progress.total), style = MaterialTheme.typography.bodySmall)
             LinearProgressIndicator(progress = { progress.completed.toFloat() / progress.total }, modifier = Modifier.fillMaxWidth())
         } else if (progress.stage == CodexStage.PREPARING) BusyBar()
-        when (progress.stage) {
-            CodexStage.PREPARING, CodexStage.SCANNING -> TextButton(onClick = controller::pause) { Text(stringResource(R.string.codex_pause)) }
-            CodexStage.PAUSED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.codex_resume)) }
-            CodexStage.FAILED -> TextButton(onClick = controller::resume) { Text(stringResource(R.string.companion_retry)) }
-            CodexStage.COMPLETE -> Unit
-        }
     }
 }
 

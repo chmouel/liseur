@@ -1505,13 +1505,12 @@
     <string name="codex_preparing">正在准备书籍…</string>
     <string name="codex_scanning">正在扫描书籍…</string>
     <string name="codex_paused">扫描已暂停</string>
-    <string name="codex_complete">书籍已索引</string>
     <string name="codex_failed">阅读伴侣无法读取本书。已完成的章节已保存。</string>
     <string name="codex_progress">已扫描章节：%1$d/%2$d</string>
     <string name="codex_pause">暂停扫描</string>
     <string name="codex_resume">继续扫描</string>
     <string name="codex_unplaced">无法确定当前章节。请从书中已知位置重新打开阅读伴侣。</string>
-    <string name="codex_scope">仅显示第 %1$d 章之前的内容。</string>
+    <string name="codex_scope">第 %1$d 章之前</string>
     <string name="codex_names">名称</string>
     <string name="codex_story">前情</string>
     <string name="codex_search">搜索名称</string>

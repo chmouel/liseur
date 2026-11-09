@@ -1566,13 +1566,12 @@
     <string name="codex_preparing">Buch wird vorbereitet…</string>
     <string name="codex_scanning">Buch wird erfasst…</string>
     <string name="codex_paused">Erfassung pausiert</string>
-    <string name="codex_complete">Buch erfasst</string>
     <string name="codex_failed">Der Lesebegleiter konnte das Buch nicht lesen. Fertige Kapitel sind gespeichert.</string>
     <string name="codex_progress">Erfasste Kapitel: %1$d/%2$d</string>
     <string name="codex_pause">Erfassung pausieren</string>
     <string name="codex_resume">Erfassung fortsetzen</string>
     <string name="codex_unplaced">Kapitel nicht gefunden. Öffne den Lesebegleiter erneut an einer bekannten Stelle im Buch.</string>
-    <string name="codex_scope">Nur Kapitel vor Kapitel %1$d werden angezeigt.</string>
+    <string name="codex_scope">Vor Kapitel %1$d</string>
     <string name="codex_names">Namen</string>
     <string name="codex_story">Handlung</string>
     <string name="codex_search">Namen suchen</string>
