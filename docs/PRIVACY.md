@@ -112,16 +112,18 @@ cover what the server does with the data it receives.
 An empty library offers to start from a free public catalog:
 [Project Gutenberg](https://www.gutenberg.org), [textos.info](https://www.textos.info),
 [ManyBooks](https://manybooks.net) or [Gallica](https://gallica.bnf.fr/opds). Nothing is
-contacted until you pick one
-in the chooser, and picking one only saves its OPDS address as an anonymous
-catalog connection, exactly as if you had typed it yourself. From then on,
-browsing it sends ordinary OPDS feed and cover requests to that site, and
-downloading a book fetches the file from it. No account, identifier, book
-title or reading data is sent: these catalogs have no sign-in and cannot see
-your library. Each saved catalog can be removed from Remote libraries like
-any other, and all of these requests are made over HTTPS. The presets
-shipped in the app decide which sites are offered; the four above are what
-this version offers.
+contacted until you pick one in the chooser, and picking one only saves its
+OPDS address as an anonymous catalog connection, exactly as if you had typed
+it yourself. From then on, browsing it sends ordinary OPDS feed and cover
+requests to that site, and downloading a book fetches the file from it, so
+the site sees which book or section you asked for, the same as any other
+visitor. What it never gets is an account, an identifier of the app or the
+device, your reading position or anything about the rest of your library:
+these catalogs have no sign-in and know nothing about you beyond the requests
+you make. Each saved catalog can be removed from Remote libraries like any
+other, and all of these requests are made over HTTPS. The presets shipped in
+the app decide which sites are offered; the four above are what this version
+offers.
 
 ### A dictionary site, if you enable it
 
