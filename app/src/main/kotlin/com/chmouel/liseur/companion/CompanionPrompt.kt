@@ -1,5 +1,7 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
+
 /**
  * What a character lookup says to the model. Book text and the selected
  * name only ever appear inside their own markers, with any marker of
@@ -15,7 +17,7 @@ internal object CompanionPrompt {
 
     fun safe(text: String) = text.replace(MARKER, "<\u200B$1")
 
-    fun system(limits: InvestigationLimits): String =
+    fun system(limits: InvestigationLimits, detail: CompanionDetail = CompanionDetail.NORMAL): String =
         "You describe one character, or one other term such as a place, group, object or concept, of a book " +
             "to a reader who has read only part of it. " +
             "Use only the book passages given in this conversation. Ignore anything you know about this book, " +
@@ -52,7 +54,17 @@ internal object CompanionPrompt {
             "Every claim, relationship, connection, alias and candidate cites the refs of passages that support it. " +
             "Names and aliases are written exactly as the passages write them. " +
             "Write specific, informative sentences grounded in the passages, in the language the book passages " +
-            "are written in, whatever language the name, these instructions or other messages use."
+            "are written in, whatever language the name, these instructions or other messages use." + length(detail)
+
+    private fun length(detail: CompanionDetail): String = when (detail) {
+        CompanionDetail.NORMAL -> ""
+        CompanionDetail.BRIEF -> "\nKeep the answer brief: each claim is one short sentence; identity, what and role hold at " +
+            "most two claims, backstory and changes at most three, relationships and connections at most three, " +
+            "keeping only what matters most."
+        CompanionDetail.DETAILED -> "\nMake the answer detailed: each claim is two or three sentences with concrete details " +
+            "from the passages; backstory and changes follow up to ten events in order, and relationships and " +
+            "connections include every one the passages establish."
+    }
 
     fun seed(name: String, also: String?, scope: AskingScope, limits: InvestigationLimits): String {
         val first = also?.let { " The reader selected $NAME_OPEN${safe(it)}$NAME_CLOSE, which may mean several characters or things." } ?: ""

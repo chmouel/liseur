@@ -1604,6 +1604,11 @@
     <string name="companion_settings_service_change">Сменить сервис помощника при чтении</string>
     <string name="companion_settings_manage_detail">Добавьте сервер, например OpenRouter или собственный, для помощника при чтении.</string>
     <string name="companion_settings_model">Модель</string>
+    <string name="companion_settings_detail">Длина ответов</string>
+    <string name="companion_settings_detail_summary">Насколько подробны профили, «На чём я остановился?», история до сих пор и новые пересказы глав. Уже написанные пересказы сохраняют свою длину.</string>
+    <string name="companion_settings_detail_brief">Кратко</string>
+    <string name="companion_settings_detail_normal">Обычно</string>
+    <string name="companion_settings_detail_detailed">Подробно</string>
     <string name="companion_settings_recaps_group">Фоновые пересказы</string>
     <string name="companion_settings_recaps">Пересказывать главы во время чтения</string>
     <string name="companion_settings_recaps_summary">Когда вы дочитываете главу, она пересказывается в фоне, чтобы следующие поиски быстрее находили отрывки. По умолчанию выключено. Для каждой книги это можно изменить в читалке: Aa, Дополнительно.</string>

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -63,6 +64,11 @@ class CompanionServer internal constructor(
     val codexEnabled: Flow<Boolean> = settings.settings.map { it.codexEnabled }.distinctUntilChanged()
 
     suspend fun setCodexEnabled(enabled: Boolean) = settings.setCodexEnabled(enabled)
+
+    /** How long answers are. */
+    val detail: Flow<CompanionDetail> = settings.settings.map { it.companionDetail }.distinctUntilChanged()
+
+    suspend fun setDetail(detail: CompanionDetail) = settings.setCompanionDetail(detail)
 
     /** Whether background recaps are on. */
     val recapsEnabled: Flow<Boolean> = settings.settings.map { it.companionRecaps }.distinctUntilChanged()

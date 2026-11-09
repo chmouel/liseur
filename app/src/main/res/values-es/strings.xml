@@ -1504,6 +1504,11 @@
     <string name="companion_settings_service_change">Cambiar el servicio del compañero de lectura</string>
     <string name="companion_settings_manage_detail">Añade un servidor, como OpenRouter o uno propio, para el compañero de lectura.</string>
     <string name="companion_settings_model">Modelo</string>
+    <string name="companion_settings_detail">Longitud de las respuestas</string>
+    <string name="companion_settings_detail_summary">Cuánto dicen los perfiles, ¿Dónde me quedé?, la historia hasta ahora y los nuevos resúmenes de capítulo. Los resúmenes ya escritos conservan su longitud.</string>
+    <string name="companion_settings_detail_brief">Breve</string>
+    <string name="companion_settings_detail_normal">Normal</string>
+    <string name="companion_settings_detail_detailed">Detallada</string>
     <string name="companion_settings_recaps_group">Resúmenes en segundo plano</string>
     <string name="companion_settings_recaps">Resumir capítulos mientras lees</string>
     <string name="companion_settings_recaps_summary">Cuando pasas el final de un capítulo, se resume en segundo plano para que las búsquedas posteriores encuentren pasajes antes. Desactivado por defecto. Cada libro puede cambiarlo en Aa, Avanzado, en el lector.</string>

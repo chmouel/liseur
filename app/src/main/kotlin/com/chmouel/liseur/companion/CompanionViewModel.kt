@@ -12,6 +12,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
+import com.chmouel.liseur.data.settings.CompanionDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -72,6 +73,9 @@ class CompanionViewModel(
     private val choice: StateFlow<CompanionChoice?> = server.choice
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private val detail: StateFlow<CompanionDetail> = server.detail
+        .stateIn(viewModelScope, SharingStarted.Eagerly, CompanionDetail.Default)
+
     private val foreground: StateFlow<Boolean> = ProcessLifecycleOwner.get().lifecycle.currentStateFlow
         .map { it.isAtLeast(Lifecycle.State.STARTED) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -108,6 +112,7 @@ class CompanionViewModel(
         hints = ::hints,
         aside = { block -> scheduler?.aside(block) ?: block() },
         log = { Log.w(TAG, "Character lookup failed: ${CompanionError.describe(it)}") },
+        detail = { server.detail.first() },
     )
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
@@ -123,6 +128,7 @@ class CompanionViewModel(
             }
         },
         aside = { block -> scheduler?.aside(block) ?: block() },
+        detail = { server.detail.first() },
     )
 
     // Follows the stored switch, and is true at once on Allow so the picks it makes are accepted.
@@ -214,10 +220,10 @@ class CompanionViewModel(
                 return@launch
             }
             contentSha.value = sha
-            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), scanned, recapSettings, foreground, storyAllowed)
+            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), scanned, recapSettings, foreground, storyAllowed) { detail.value }
                 .also { it.start() }
             storyController.value = StoryController(
-                viewModelScope, store.forBook(bookUrl, sha), opened, started, choice, storyAllowed,
+                viewModelScope, store.forBook(bookUrl, sha), opened, started, choice, detail, storyAllowed,
                 setAllowed = {
                     storyAllowed.value = true
                     viewModelScope.launch { quietly { server.setStoryAutoOk(true) } }

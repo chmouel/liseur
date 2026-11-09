@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -147,6 +148,7 @@ class CompanionLookups<P>(
     private val hints: suspend (CompanionChoice, AskingScope, List<Passage<P>>) -> List<RecapHint>,
     private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
     private val log: (Throwable) -> Unit = {},
+    private val detail: suspend () -> CompanionDetail = { CompanionDetail.NORMAL },
 ) {
     // The scope is kept without its read point: within a chapter, the
     // mentions the answer was seeded with stand for where it was asked.
@@ -159,6 +161,7 @@ class CompanionLookups<P>(
         val also: String?,
         val hints: List<RecapHint>,
         val mentions: List<String>,
+        val detail: CompanionDetail,
     )
 
     private class Cached<P>(val until: ReadPoint?, val answer: CompanionAnswer<P>)
@@ -282,7 +285,8 @@ class CompanionLookups<P>(
                     return
                 }
                 val offered = hints(chosen, asked, passages)
-                val investigation = Investigation(recorded, asked, passages, chosen.limits.investigation)
+                val length = detail()
+                val investigation = Investigation(recorded, asked, passages, chosen.limits.investigation, length)
                 val key = CacheKey(
                     serverId = chosen.serverId,
                     model = chosen.model,
@@ -292,6 +296,7 @@ class CompanionLookups<P>(
                     also = also?.let(PassageText::fold),
                     hints = offered,
                     mentions = investigation.mentions(name, also),
+                    detail = length,
                 )
                 // An answer from further on may rest on text not yet read
                 // here, so only one from this point or earlier is reused.

@@ -1516,6 +1516,11 @@
     <string name="companion_settings_service_change">Dienst des Lesebegleiters ändern</string>
     <string name="companion_settings_manage_detail">Füge einen Server hinzu, etwa OpenRouter oder deinen eigenen, für den Lesebegleiter.</string>
     <string name="companion_settings_model">Modell</string>
+    <string name="companion_settings_detail">Antwortlänge</string>
+    <string name="companion_settings_detail_summary">Wie ausführlich Profile, Wo war ich, die bisherige Handlung und neue Kapitelzusammenfassungen sind. Bereits geschriebene Zusammenfassungen behalten ihre Länge.</string>
+    <string name="companion_settings_detail_brief">Kurz</string>
+    <string name="companion_settings_detail_normal">Normal</string>
+    <string name="companion_settings_detail_detailed">Ausführlich</string>
     <string name="companion_settings_recaps_group">Hintergrund-Zusammenfassungen</string>
     <string name="companion_settings_recaps">Kapitel beim Lesen zusammenfassen</string>
     <string name="companion_settings_recaps_summary">Wenn du über das Ende eines Kapitels hinausliest, wird es im Hintergrund zusammengefasst, damit spätere Suchen Stellen schneller finden. Standardmäßig aus. Jedes Buch kann das im Reader unter Aa, Erweitert ändern.</string>

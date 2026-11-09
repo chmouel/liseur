@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.util.Log
+import com.chmouel.liseur.data.settings.CompanionDetail
 import java.net.URI
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +32,7 @@ internal class StoryController(
     private val catalog: PublicationCatalog,
     private val scheduler: RecapScheduler<Locator>,
     private val choice: StateFlow<CompanionChoice?>,
+    private val detail: StateFlow<CompanionDetail>,
     private val allowed: StateFlow<Boolean>,
     /** Allows at once, so [allowed] is true before this returns; storing it may finish later. */
     private val setAllowed: () -> Unit,
@@ -45,7 +47,7 @@ internal class StoryController(
     private val summaryFailure = MutableStateFlow<Pair<String, RecapFailure>?>(null)
     // Written automatically once each; a reader's tap writes again.
     private val autoWritten = mutableSetOf<String>()
-    private var planned: Pair<List<SummaryInput>, SummaryStep?>? = null
+    private var planned: Triple<List<SummaryInput>, CompanionDetail, SummaryStep?>? = null
 
     private val _view = MutableStateFlow<StoryView?>(null)
     val view: StateFlow<StoryView?> = _view.asStateFlow()
@@ -75,7 +77,7 @@ internal class StoryController(
                 val state = combine(scheduler.activity, allowed, stages, tops, summaryFailure) { a, ok, _, saved, failure ->
                     Inputs(a, ok, saved, failure)
                 }
-                combine(book.watch().distinctUntilChanged(), state, choice, ::Triple).collect { (saved, inputs, chosen) ->
+                combine(book.watch().distinctUntilChanged(), state, choice, detail, ::Watched).collect { (saved, inputs, chosen, length) ->
                     val stored = Story.chapters(catalog.map, chapters, if (chapters.isEmpty()) emptyList() else saved, decoder::of, decoder::names)
                     val failed = { f: RecapFailure -> failedView(f, chosen) }
                     var current = Story.progress(stored, inputs.activity, failed)
@@ -89,7 +91,7 @@ internal class StoryController(
                     val fresh = Story.shown(catalog.map, stored).filter { touched.add(it) }
                     if (fresh.isNotEmpty()) quietly { book.touch(fresh) }
 
-                    val step = plan(stored.map { StorySummaries.input(it.unit, listed.getValue(it.unit), it.recap) }, asked.lo)
+                    val step = plan(stored.map { StorySummaries.input(it.unit, listed.getValue(it.unit), it.recap) }, asked.lo, length)
                     top = step
                     val best = StorySummaries.best(inputs.saved.orEmpty(), listed, step?.key)
                     if (best != null && best.key != shownTop) {
@@ -218,10 +220,10 @@ internal class StoryController(
         )
     }
 
-    private suspend fun plan(inputs: List<SummaryInput>, ceiling: Int): SummaryStep? {
-        planned?.let { (was, step) -> if (was == inputs) return step }
-        val step = withContext(Dispatchers.Default) { StorySummaries.plan(book.contentSha, inputs, ceiling) }
-        planned = inputs to step
+    private suspend fun plan(inputs: List<SummaryInput>, ceiling: Int, length: CompanionDetail): SummaryStep? {
+        planned?.let { (was, wasLength, step) -> if (was == inputs && wasLength == length) return step }
+        val step = withContext(Dispatchers.Default) { StorySummaries.plan(book.contentSha, inputs, ceiling, length) }
+        planned = Triple(inputs, length, step)
         return step
     }
 
@@ -233,6 +235,8 @@ internal class StoryController(
         f.failure,
         f.details?.copy(host = f.details.host ?: chosen?.let(::serviceName), model = f.details.model ?: chosen?.model),
     )
+
+    private data class Watched<S>(val saved: S, val inputs: Inputs, val chosen: CompanionChoice?, val length: CompanionDetail)
 
     private class Inputs(
         val activity: RecapActivity,

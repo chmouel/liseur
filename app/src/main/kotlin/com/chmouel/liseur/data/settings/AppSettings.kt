@@ -309,6 +309,7 @@ enum class DefinitionTarget(val id: String) {
  *   or null for a listed server.
  * @param companionGeminiModel The Gemini model the reading companion uses,
  *   or null for the default.
+ * @param companionDetail How long the reading companion's answers are.
  */
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.Default,
@@ -367,6 +368,7 @@ data class AppSettings(
     val companionAiHintDismissed: Boolean = false,
     val companionProvider: String? = null,
     val companionGeminiModel: String? = null,
+    val companionDetail: CompanionDetail = CompanionDetail.Default,
 ) {
     /** The server character profiles are set to use, when it is listed. */
     val companionServerConnection: ServerConnection?
@@ -455,6 +457,20 @@ enum class TranslationContextSize(val id: String, val sentences: Int, val charac
     }
 }
 
+/** How long the reading companion's answers are; [NORMAL] asks what it always has. */
+enum class CompanionDetail(val id: String) {
+    BRIEF("brief"),
+    NORMAL("normal"),
+    DETAILED("detailed"),
+    ;
+
+    companion object {
+        val Default = NORMAL
+
+        fun fromId(id: String?): CompanionDetail = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
     produceMigrations = { context -> listOf(LegacySpeechServerMigration(serverNamer(context))) },
@@ -532,6 +548,7 @@ class AppSettingsRepository(
         val STORY_AUTO_OK = booleanPreferencesKey(STORY_AUTO_OK_NAME)
         val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
         val COMPANION_GEMINI_MODEL = stringPreferencesKey(COMPANION_GEMINI_MODEL_NAME)
+        val COMPANION_DETAIL = stringPreferencesKey(COMPANION_DETAIL_NAME)
     }
 
     private fun Preferences.volumeKeyMode(): VolumeKeyMode =
@@ -642,6 +659,7 @@ class AppSettingsRepository(
             companionAiHintDismissed = p[Keys.COMPANION_AI_HINT_DISMISSED] ?: false,
             companionProvider = p[Keys.COMPANION_PROVIDER],
             companionGeminiModel = p[Keys.COMPANION_GEMINI_MODEL],
+            companionDetail = CompanionDetail.fromId(p[Keys.COMPANION_DETAIL]),
         )
     }
 
@@ -1079,6 +1097,10 @@ class AppSettingsRepository(
         store.edit { it[Keys.COMPANION_RECAPS] = enabled }
     }
 
+    suspend fun setCompanionDetail(detail: CompanionDetail) {
+        store.edit { it[Keys.COMPANION_DETAIL] = detail.id }
+    }
+
     /** Records whether Story may send earlier chapters on its own. */
     suspend fun dismissCompanionAiHint() {
         store.edit { it[Keys.COMPANION_AI_HINT_DISMISSED] = true }
@@ -1336,6 +1358,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     STORY_AUTO_OK_NAME to BackupValueType.BOOLEAN,
     COMPANION_PROVIDER_NAME to BackupValueType.STRING,
     COMPANION_GEMINI_MODEL_NAME to BackupValueType.STRING,
+    COMPANION_DETAIL_NAME to BackupValueType.STRING,
 )
 
 private const val DICTIONARY_ALT_LANGUAGE_NAME = "dictionary_alt_language"
@@ -1349,3 +1372,4 @@ private const val COMPANION_RECAPS_NAME = "companion_recaps"
 private const val STORY_AUTO_OK_NAME = "story_auto_ok"
 private const val COMPANION_PROVIDER_NAME = "companion_provider"
 private const val COMPANION_GEMINI_MODEL_NAME = "companion_gemini_model"
+private const val COMPANION_DETAIL_NAME = "companion_detail"

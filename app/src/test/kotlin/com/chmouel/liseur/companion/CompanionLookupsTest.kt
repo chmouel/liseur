@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -52,6 +53,7 @@ class CompanionLookupsTest {
     private val chats = mutableListOf<CompanionChoice>()
     private var replies: suspend (List<ChatMessage>) -> String = { profileFor(it) }
     private val requests = mutableListOf<List<ChatMessage>>()
+    private var detail = CompanionDetail.NORMAL
 
     private fun TestScope.lookups(bookCatalog: BookCatalog<Int> = catalog) = CompanionLookups(
         scope = this,
@@ -67,6 +69,7 @@ class CompanionLookupsTest {
         },
         hints = { _, _, _ -> emptyList() },
         aside = { it() },
+        detail = { detail },
     )
 
     private fun refs(messages: List<ChatMessage>): List<String> =
@@ -357,6 +360,26 @@ class CompanionLookupsTest {
 
         lookups.close()
         assertNull(lookups.panel.value)
+    }
+
+    @Test
+    fun `another answer length asks afresh with that length, and each length keeps its answer`() = runTest {
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertFalse(requests.single().first().content.contains("brief"))
+
+        detail = CompanionDetail.BRIEF
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertEquals(2, requests.size)
+        assertTrue(requests.last().first().content.contains("Keep the answer brief"))
+
+        detail = CompanionDetail.NORMAL
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertTrue(view(lookups) is CompanionView.Profile)
+        assertEquals(2, requests.size)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.util.Log
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -96,6 +97,8 @@ class RecapScheduler<P>(
     private val foreground: StateFlow<Boolean>,
     /** Whether Story may send on its own; read live, so work offered on a stale value is refused. */
     private val automatic: StateFlow<Boolean> = MutableStateFlow(true),
+    /** Read as each batch is sent, so a change applies to the next one without stopping the work. */
+    private val detail: () -> CompanionDetail = { CompanionDetail.NORMAL },
 ) {
     private val displayed = MutableStateFlow<Int?>(null)
     private val origin = MutableStateFlow<Int?>(null)
@@ -299,7 +302,7 @@ class RecapScheduler<P>(
         fun allowed(g: Gate) = g.runnable && g.enabled && g.setup == setup && unit.index < g.current()!!
         guarded({ allowed(it) }) {
             try {
-                val worker = RecapWorker(book, catalog)
+                val worker = RecapWorker(book, catalog, detail)
                 val done = worker.recap(unit, setup, onBatch = progress(unit)) {
                     val g = gateNow()
                     allowed(g) && g.requested() == null && !g.summarizes()
@@ -323,7 +326,7 @@ class RecapScheduler<P>(
         var failure: RecapFailure? = null
         val finished = guarded({ allowed(it) }) {
             try {
-                val done = RecapWorker(book, catalog)
+                val done = RecapWorker(book, catalog, detail)
                     .recap(request.unit, setup.copy(chat = counted), request.replace, progress(request.unit)) { allowed(gateNow()) }
                 if (!done) failure = RecapFailure(CompanionFailure.CANCELLED, null)
             } catch (e: CancellationException) {
@@ -390,7 +393,11 @@ class RecapScheduler<P>(
 }
 
 /** Recaps one chapter: batch by batch, each saved as it is done, then merged here without asking anyone. */
-class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatalog<P>) {
+class RecapWorker<P>(
+    private val book: RecapBook,
+    private val catalog: BookCatalog<P>,
+    private val detail: () -> CompanionDetail = { CompanionDetail.NORMAL },
+) {
 
     /**
      * [allowed] is asked before every request, and a false ends the work
@@ -430,7 +437,8 @@ class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatal
     private suspend fun ask(batch: List<Passage<P>>, unit: RecapUnit, setup: RecapSetup, allowed: () -> Boolean): ChapterRecap {
         var requests = 0
         val user = Recaps.user(batch, unit.index, catalog.map.chapterCount)
-        var messages = listOf(ChatMessage("system", Recaps.system()), ChatMessage("user", user))
+        val detail = detail()
+        var messages = listOf(ChatMessage("system", Recaps.system(detail)), ChatMessage("user", user))
         var code = "not_json"
         repeat(2) { attempt ->
             val reply = try {
@@ -442,7 +450,7 @@ class RecapWorker<P>(private val book: RecapBook, private val catalog: BookCatal
                 null
             }
             code = if (reply == null) CompanionPrompt.TOO_LONG else "not_json"
-            reply?.let { Recaps.parse(it, batch) }?.let { return it }
+            reply?.let { Recaps.parse(it, batch, detail) }?.let { return it }
             if (attempt == 0) messages = listOf(messages[0], ChatMessage("user", user + "\n\n" + Recaps.correction(code)))
         }
         throw CompanionError.Malformed(code)
