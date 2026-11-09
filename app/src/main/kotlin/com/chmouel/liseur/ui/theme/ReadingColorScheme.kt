@@ -84,10 +84,11 @@ fun readingColorScheme(
         surfaceContainerHigh = mix(CONTAINER_HIGH),
         surfaceContainerHighest = mix(CONTAINER_HIGHEST),
         surfaceVariant = mix(CONTAINER),
-        // A wash under full ink dithers to grey on electronic paper, so
-        // there the quieter text is simply the ink.
-        onSurfaceVariant = if (eInk) ink else mix(QUIET_INK),
-        outline = mix(OUTLINE),
+        // A wash under full ink dithers to grey on electronic paper, and
+        // a dim page has no contrast to spare for one, so on both the
+        // quieter text and the outline are simply the ink.
+        onSurfaceVariant = if (eInk || page.isDim) ink else mix(QUIET_INK),
+        outline = if (page.isDim) ink else mix(OUTLINE),
         outlineVariant = mix(OUTLINE_VARIANT),
         inverseSurface = ink,
         inverseOnSurface = paper,
@@ -105,8 +106,8 @@ fun readingColorScheme(
  * How much ink each derived colour carries.
  *
  * Settled by ReadingColorSchemeTest rather than by eye: every one of these
- * has to keep the ink readable on the surface it produces across all four
- * reading themes and both palettes. Raising one until its test passes is the
+ * has to keep the ink readable on the surface it produces across every
+ * reading theme and both palettes. Raising one until its test passes is the
  * intended way to change it.
  *
  * On the Black page the lowest steps round back to pure black, so a sheet

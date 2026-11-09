@@ -730,6 +730,12 @@
     <string name="reader_theme_sepia">米黄</string>
     <string name="reader_theme_dark">深色</string>
     <string name="reader_theme_black">纯黑</string>
+    <string name="reader_theme_amber">琥珀</string>
+    <string name="reader_theme_night_red">夜间红</string>
+    <string name="reader_theme_charcoal">炭灰</string>
+    <string name="reader_low_light">弱光</string>
+    <string name="reader_low_light_hint">暖色页面，蓝光更少，适合夜间阅读。</string>
+    <string name="reader_low_light_sample">灯光微弱，书页在安静的房间里柔和地发着光。</string>
     <string name="reader_font_publisher">出版商字体</string>
     <string name="reader_font_add">添加字体…</string>
     <string name="reader_font_remove">移除 %1$s</string>

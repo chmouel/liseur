@@ -1,6 +1,6 @@
 # 5. Warm light
 
-Status: proposed
+Status: superseded by [69. Warm night reading themes](0069-warm-night-reading-themes.md)
 GitHub issue: [#43](https://github.com/chmouel/liseur/issues/43)
 
 ## Context

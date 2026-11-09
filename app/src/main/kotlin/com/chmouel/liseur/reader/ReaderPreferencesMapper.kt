@@ -74,7 +74,9 @@ fun ReaderPrefs.toEpubPreferences(
         theme = when (theme) {
             ReaderTheme.LIGHT -> Theme.LIGHT
             ReaderTheme.SEPIA -> Theme.SEPIA
-            ReaderTheme.DARK, ReaderTheme.BLACK -> Theme.DARK
+            ReaderTheme.DARK, ReaderTheme.BLACK,
+            ReaderTheme.AMBER, ReaderTheme.NIGHT_RED, ReaderTheme.CHARCOAL,
+            -> Theme.DARK
         },
         // Readium's own palette is close to ours but not identical (its sepia
         // is #FAF4E8 against our #F6EFDF, its dark #000000 against our

@@ -190,6 +190,7 @@ class ReadingColorSchemeTest {
                 page.foreground,
                 scheme(page, eInk = true).onSurfaceVariant,
             )
+            if (page.isDim) continue
             assertTrue(
                 "a screen that can dither should still get the quieter wash on $page",
                 scheme(page, eInk = false).onSurfaceVariant != page.foreground,

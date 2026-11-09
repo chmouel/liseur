@@ -735,6 +735,12 @@
     <string name="reader_theme_sepia">Sepia</string>
     <string name="reader_theme_dark">Dark</string>
     <string name="reader_theme_black">Black</string>
+    <string name="reader_theme_amber">Amber</string>
+    <string name="reader_theme_night_red">Night red</string>
+    <string name="reader_theme_charcoal">Charcoal</string>
+    <string name="reader_low_light">Low light</string>
+    <string name="reader_low_light_hint">Warm pages with less blue light, for reading at night.</string>
+    <string name="reader_low_light_sample">The lamp burned low, and the page glowed softly in the quiet room.</string>
     <string name="reader_font_literata" translatable="false">Literata</string>
     <string name="reader_font_vollkorn" translatable="false">Vollkorn</string>
     <string name="reader_font_atkinson" translatable="false">Atkinson Hyperlegible</string>

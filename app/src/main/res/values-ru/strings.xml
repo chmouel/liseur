@@ -756,6 +756,12 @@
     <string name="reader_theme_sepia">Сепия</string>
     <string name="reader_theme_dark">Тёмная</string>
     <string name="reader_theme_black">Чёрная</string>
+    <string name="reader_theme_amber">Янтарная</string>
+    <string name="reader_theme_night_red">Ночная красная</string>
+    <string name="reader_theme_charcoal">Угольная</string>
+    <string name="reader_low_light">Слабый свет</string>
+    <string name="reader_low_light_hint">Тёплые страницы с меньшим количеством синего света для чтения ночью.</string>
+    <string name="reader_low_light_sample">Лампа горела тускло, и страница мягко светилась в тихой комнате.</string>
     <string name="reader_font_publisher">Шрифт издателя</string>
     <string name="reader_font_add">Добавить шрифт…</string>
     <string name="reader_font_remove">Удалить %1$s</string>

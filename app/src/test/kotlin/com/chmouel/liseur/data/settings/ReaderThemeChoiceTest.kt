@@ -1,7 +1,9 @@
 package com.chmouel.liseur.data.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -35,6 +37,24 @@ class ReaderThemeChoiceTest {
         // asking for it. Sepia is a taste, and it cannot.
         for (dark in listOf(false, true)) {
             assertNotEquals(ReaderTheme.SEPIA, ReaderThemeChoice.FOLLOW_APP.resolve(dark))
+        }
+    }
+
+    @Test
+    fun `a warm page on electronic paper falls back to Black`() {
+        // The hue is the whole point of these pages, and e-paper draws it
+        // as one more grey.
+        val hued = ReaderThemeChoice.entries.filter { it.palette?.isHued == true }
+        assertEquals(3, hued.size)
+        for (choice in hued) {
+            assertEquals(choice.palette, choice.resolve(appIsDark = false))
+            assertEquals(ReaderTheme.BLACK, choice.resolve(appIsDark = false, eInk = true))
+            assertFalse(choice.offeredOn(eInk = true))
+            assertTrue(choice.offeredOn(eInk = false))
+        }
+        for (choice in ReaderThemeChoice.entries - hued.toSet()) {
+            assertEquals(choice.resolve(true), choice.resolve(true, eInk = true))
+            assertTrue(choice.offeredOn(eInk = true))
         }
     }
 
