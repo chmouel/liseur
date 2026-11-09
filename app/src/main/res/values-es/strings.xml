@@ -1523,9 +1523,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Compañero</string>
-    <string name="codex_settings_available">Compañero sin conexión disponible</string>
+    <string name="codex_settings_available">Solo sin conexión. Añade un servicio de IA para mucho más</string>
     <string name="codex_settings_enabled">Compañero en el dispositivo</string>
     <string name="codex_settings_summary">Indexa nombres y conexiones sin conexión al abrir el Compañero. Sin IA ni clave API. Desactivado, el Compañero sigue mostrando la historia y los perfiles de personajes con IA.</string>
+    <string name="codex_ai_hint_title">El compañero hace mucho más con un servicio de IA</string>
+    <string name="codex_ai_hint">Por sí solo, el compañero enumera los nombres del libro y quién aparece con quién. Con un servicio de IA también resume la historia hasta ahora, describe a cada personaje y explica cómo se relacionan, siempre a partir del libro hasta donde vas.</string>
+    <string name="codex_ai_hint_dismiss">No volver a mostrar</string>
     <string name="codex_preparing">Preparando el libro…</string>
     <string name="codex_scanning">Analizando el libro…</string>
     <string name="codex_paused">Análisis en pausa</string>

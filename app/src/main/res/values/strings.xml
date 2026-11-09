@@ -1588,9 +1588,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Companion</string>
-    <string name="codex_settings_available">Offline companion available</string>
+    <string name="codex_settings_available">Offline only. Add an AI service for much more</string>
     <string name="codex_settings_enabled">On-device companion</string>
     <string name="codex_settings_summary">Index names and connections offline when you open Companion. No AI or API key needed. When off, Companion still shows Story and AI character profiles.</string>
+    <string name="codex_ai_hint_title">Companion does much more with an AI service</string>
+    <string name="codex_ai_hint">On its own, Companion lists the names in the book and who appears with whom. With an AI service it also recaps the story so far, describes each character and explains how they relate, always from the book up to your place.</string>
+    <string name="codex_ai_hint_dismiss">Don\'t show again</string>
     <string name="codex_preparing">Preparing book…</string>
     <string name="codex_scanning">Scanning book…</string>
     <string name="codex_paused">Scan paused</string>

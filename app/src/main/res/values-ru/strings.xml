@@ -1623,9 +1623,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Помощник</string>
-    <string name="codex_settings_available">Доступен автономный помощник</string>
+    <string name="codex_settings_available">Только офлайн. Подключите ИИ-сервис, чтобы получить намного больше</string>
     <string name="codex_settings_enabled">Помощник на устройстве</string>
     <string name="codex_settings_summary">Индексирует имена и связи при открытии Помощника. Без ИИ и ключа API. Если выключено, Помощник всё равно показывает сюжет и профили персонажей от ИИ.</string>
+    <string name="codex_ai_hint_title">С ИИ-сервисом помощник умеет намного больше</string>
+    <string name="codex_ai_hint">Сам по себе помощник показывает имена из книги и кто с кем появляется. С ИИ-сервисом он ещё пересказывает сюжет до текущего места, описывает каждого персонажа и объясняет их отношения, всегда по тексту книги до того места, где вы читаете.</string>
+    <string name="codex_ai_hint_dismiss">Больше не показывать</string>
     <string name="codex_preparing">Подготовка книги…</string>
     <string name="codex_scanning">Анализ книги…</string>
     <string name="codex_paused">Анализ приостановлен</string>

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -92,7 +93,7 @@ data class CodexPanel(
 class CodexViewModel(
     private val bookUrl: String,
     private val store: CodexStore,
-    settings: AppSettingsRepository,
+    private val settings: AppSettingsRepository,
     private val books: BookDao,
     private val fingerprints: BookFingerprintStore,
     profilesFlow: Flow<Boolean> = flowOf(false),
@@ -103,6 +104,10 @@ class CodexViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
     /** Whether a companion service is chosen, so characters have a profile. */
     val profiles: StateFlow<Boolean> = profilesFlow.distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    /** No service is chosen and the note on what one adds is not dismissed; off until both are known. */
+    val aiHint: StateFlow<Boolean> = combine(profilesFlow, settings.settings) { chosen, s -> !chosen && !s.companionAiHintDismissed }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
     private val _panel = MutableStateFlow<CodexPanel?>(null)
     val panel = _panel.asStateFlow()
@@ -431,6 +436,7 @@ class CodexViewModel(
     fun back() { detailJob?.cancel(); _panel.update { it?.copy(detail = null) } }
     fun hide() { _panel.update { it?.copy(visible = false) } }
     fun reveal() { _panel.update { it?.copy(visible = true) } }
+    fun dismissAiHint() { viewModelScope.launch { settings.dismissCompanionAiHint() } }
     fun close() {
         opening?.cancel()
         detailJob?.cancel()

@@ -364,6 +364,7 @@ data class AppSettings(
     val companionRecaps: Boolean = false,
     val storyAutoOk: Boolean = false,
     val codexEnabled: Boolean = true,
+    val companionAiHintDismissed: Boolean = false,
     val companionProvider: String? = null,
     val companionGeminiModel: String? = null,
 ) {
@@ -526,6 +527,7 @@ class AppSettingsRepository(
         val TRANSLATION_CONTEXT = stringPreferencesKey(TRANSLATION_CONTEXT_NAME)
         val TRANSLATION_BOOK_CONTEXT = stringPreferencesKey(TRANSLATION_BOOK_CONTEXT_NAME)
         val CODEX_ENABLED = booleanPreferencesKey(CODEX_ENABLED_NAME)
+        val COMPANION_AI_HINT_DISMISSED = booleanPreferencesKey("companion_ai_hint_dismissed")
         val COMPANION_RECAPS = booleanPreferencesKey(COMPANION_RECAPS_NAME)
         val STORY_AUTO_OK = booleanPreferencesKey(STORY_AUTO_OK_NAME)
         val COMPANION_PROVIDER = stringPreferencesKey(COMPANION_PROVIDER_NAME)
@@ -637,6 +639,7 @@ class AppSettingsRepository(
             companionRecaps = p[Keys.COMPANION_RECAPS] ?: false,
             storyAutoOk = p[Keys.STORY_AUTO_OK] ?: false,
             codexEnabled = p[Keys.CODEX_ENABLED] ?: true,
+            companionAiHintDismissed = p[Keys.COMPANION_AI_HINT_DISMISSED] ?: false,
             companionProvider = p[Keys.COMPANION_PROVIDER],
             companionGeminiModel = p[Keys.COMPANION_GEMINI_MODEL],
         )
@@ -1077,6 +1080,10 @@ class AppSettingsRepository(
     }
 
     /** Records whether Story may send earlier chapters on its own. */
+    suspend fun dismissCompanionAiHint() {
+        store.edit { it[Keys.COMPANION_AI_HINT_DISMISSED] = true }
+    }
+
     suspend fun setStoryAutoOk(allowed: Boolean) {
         store.edit { it[Keys.STORY_AUTO_OK] = allowed }
     }

@@ -1523,9 +1523,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Compagnon</string>
-    <string name="codex_settings_available">Compagnon hors ligne disponible</string>
+    <string name="codex_settings_available">Hors ligne seulement. Ajoutez un service d\'IA pour bien plus</string>
     <string name="codex_settings_enabled">Compagnon sur cet appareil</string>
     <string name="codex_settings_summary">Indexez les noms et les liens hors ligne en ouvrant le Compagnon. Sans IA ni clé API. Désactivé, le Compagnon garde l\'histoire et les profils IA des personnages.</string>
+    <string name="codex_ai_hint_title">Le compagnon fait bien plus avec un service d\'IA</string>
+    <string name="codex_ai_hint">Seul, le compagnon liste les noms du livre et qui apparaît avec qui. Avec un service d\'IA, il résume aussi l\'histoire jusqu\'ici, décrit chaque personnage et explique leurs liens, toujours d\'après le livre jusqu\'à votre position.</string>
+    <string name="codex_ai_hint_dismiss">Ne plus afficher</string>
     <string name="codex_preparing">Préparation du livre…</string>
     <string name="codex_scanning">Analyse du livre…</string>
     <string name="codex_paused">Analyse en pause</string>
