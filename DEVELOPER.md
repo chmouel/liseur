@@ -1791,8 +1791,9 @@ separate from translation's, moved and forgotten with server edits in
   `too_long` correction. Failures log only the error class and, for
   `CompanionError.Malformed`, fixed rule codes, never text.
   `FailureDetails` (including `TranslationError.serverMessage`, never in
-  `message`, and the requests sent) stay in the panel's copyable dialog:
-  never logged, cached, saved or sent. A failed panel asks again when the
+  `message`, and the requests sent) stay in the panel's copyable dialog,
+  with the failure's hint, behind Show details: never logged, cached,
+  saved or sent. A failed panel asks again when the
   choice changes.
 - `companion_detail` (`CompanionDetail`: brief, normal, detailed; in the
   settings backup) sets answer length for profiles, Where was I, the story
@@ -1845,7 +1846,9 @@ separate from translation's, moved and forgotten with server edits in
   retried within the same limits.
 - A lookup answers `profile` or `term` (`CompanionAnswer.Term`, nature
   normalised to `Term.NATURES`); both share the gate, ref checks and
-  cache. Profiles, terms and "Where was I?" copy or save as notes through
+  cache. A profile or term shows as one card with a subheading per
+  section; a term's open questions (`unknown`) go only into its note.
+  Profiles, terms and "Where was I?" copy or save as notes through
   `CompanionNotes`: copy is plain text, a note is note Markdown (`##`
   title, italic aliases, `###` sections, bold names, a lone item as a
   paragraph) with the model's `*`, `_` and `\` escaped so they never

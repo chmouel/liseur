@@ -1568,7 +1568,7 @@
         <item quantity="many">%1$d отрывков</item>
         <item quantity="other">%1$d отрывков</item>
     </plurals>
-    <string name="companion_peek_return">Вернуться к месту вопроса</string>
+    <string name="companion_peek_return">Вернуться к месту</string>
     <string name="companion_retry">Повторить</string>
     <string name="companion_failed_cancelled">Поиск отменён.</string>
     <string name="companion_failed_key">Сервер отклонил ключ. Проверьте его в разделе «Внешние сервисы и ключи API».</string>
@@ -1582,7 +1582,6 @@
     <string name="companion_failed_too_long">В этом запросе больше текста, чем модель может прочитать за раз.</string>
     <string name="companion_failed_unreadable">Не удалось прочитать предыдущий текст книги.</string>
     <string name="companion_failed_refused">Модель отказалась отвечать, или фильтр безопасности заблокировал ответ.</string>
-    <string name="companion_failed_asked">Запрос к %1$s на %2$s.</string>
     <string name="companion_hint_malformed">Модель не ответила в нужном помощнику формате, даже после указания на ошибку. Небольшие модели часто с этим не справляются. Попробуйте другую модель.</string>
     <string name="companion_hint_refused">Некоторые модели отказываются отвечать на вопросы о тексте книги. Попробуйте другую модель.</string>
     <string name="companion_hint_limit">Модель продолжала искать в книге, так и не дав ответа. Попробуйте другую модель.</string>
@@ -1649,7 +1648,7 @@
     <string name="codex_settings_enabled">Помощник на устройстве</string>
     <string name="codex_settings_summary">Индексирует имена и связи при открытии Помощника. Без ИИ и ключа API. Если выключено, Помощник всё равно показывает сюжет и профили персонажей от ИИ.</string>
     <string name="codex_ai_hint_title">С ИИ-сервисом помощник умеет намного больше</string>
-    <string name="codex_ai_hint">Сам по себе помощник показывает имена из книги и кто с кем появляется. С ИИ-сервисом он ещё пересказывает сюжет до текущего места, описывает каждого персонажа и объясняет их отношения, всегда по тексту книги до того места, где вы читаете.</string>
+    <string name="codex_ai_hint">С ИИ-сервисом помощник также пересказывает сюжет и описывает каждого персонажа по тексту книги до вашего места.</string>
     <string name="codex_ai_hint_dismiss">Больше не показывать</string>
     <string name="codex_preparing">Подготовка книги…</string>
     <string name="codex_scanning">Анализ книги…</string>

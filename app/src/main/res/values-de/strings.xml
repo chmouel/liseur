@@ -1480,7 +1480,7 @@
         <item quantity="one">%1$d Textstelle</item>
         <item quantity="other">%1$d Textstellen</item>
     </plurals>
-    <string name="companion_peek_return">Zurück zur Frage</string>
+    <string name="companion_peek_return">Zurück zur Stelle</string>
     <string name="companion_retry">Erneut versuchen</string>
     <string name="companion_failed_cancelled">Suche abgebrochen.</string>
     <string name="companion_failed_key">Der Server hat den Schlüssel abgelehnt. Prüfe ihn unter Externe Dienste und API-Schlüssel.</string>
@@ -1494,7 +1494,6 @@
     <string name="companion_failed_too_long">Diese Suche enthält mehr Text, als das Modell auf einmal lesen kann.</string>
     <string name="companion_failed_unreadable">Der vorherige Text dieses Buchs konnte nicht gelesen werden.</string>
     <string name="companion_failed_refused">Das Modell hat die Antwort verweigert, oder ein Sicherheitsfilter hat sie zurückgehalten.</string>
-    <string name="companion_failed_asked">Gefragt wurde %1$s auf %2$s.</string>
     <string name="companion_hint_malformed">Es hat nicht im Format geantwortet, das der Begleiter braucht, auch nicht nach einem Hinweis auf den Fehler. Kleinere Modelle haben damit oft Mühe. Versuche ein anderes Modell.</string>
     <string name="companion_hint_refused">Manche Modelle lehnen Fragen zum Text eines Buchs ab. Versuche ein anderes Modell.</string>
     <string name="companion_hint_limit">Das Modell hat weiter im Buch gesucht, ohne zu einer Antwort zu kommen. Versuche ein anderes Modell.</string>
@@ -1561,7 +1560,7 @@
     <string name="codex_settings_enabled">Lesebegleiter auf diesem Gerät</string>
     <string name="codex_settings_summary">Namen und Verbindungen beim Öffnen des Lesebegleiters offline erfassen. Ohne KI oder API-Schlüssel. Ausgeschaltet zeigt der Lesebegleiter weiterhin Handlung und KI-Figurenprofile.</string>
     <string name="codex_ai_hint_title">Mit einem KI-Dienst kann der Lesebegleiter viel mehr</string>
-    <string name="codex_ai_hint">Allein listet der Lesebegleiter die Namen im Buch auf und wer mit wem vorkommt. Mit einem KI-Dienst fasst er außerdem die bisherige Handlung zusammen, beschreibt jede Figur und erklärt ihre Beziehungen, immer nach dem Buch bis zu Ihrer Stelle.</string>
+    <string name="codex_ai_hint">Mit einem KI-Dienst fasst der Lesebegleiter auch die Handlung zusammen und beschreibt jede Figur, nach dem Buch bis zu Ihrer Stelle.</string>
     <string name="codex_ai_hint_dismiss">Nicht mehr anzeigen</string>
     <string name="codex_preparing">Buch wird vorbereitet…</string>
     <string name="codex_scanning">Buch wird erfasst…</string>

@@ -439,8 +439,12 @@ private fun LazyListScope.codexHeader(
     }
     if (profiles?.aiHint == true) item(key = "codex:ai-hint") {
         StoryCard {
-            Text(stringResource(R.string.codex_ai_hint_title), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.codex_ai_hint), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.codex_ai_hint_title), style = MaterialTheme.typography.titleSmall)
+            Text(
+                stringResource(R.string.codex_ai_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(onClick = profiles.setUp) { Text(stringResource(R.string.companion_setup_action)) }
                 TextButton(onClick = profiles.dismissAiHint) { Text(stringResource(R.string.codex_ai_hint_dismiss)) }

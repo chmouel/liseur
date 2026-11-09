@@ -1468,7 +1468,7 @@
         <item quantity="one">%1$d passage</item>
         <item quantity="other">%1$d passages</item>
     </plurals>
-    <string name="companion_peek_return">Revenir où vous étiez</string>
+    <string name="companion_peek_return">Revenir à ma page</string>
     <string name="companion_retry">Réessayer</string>
     <string name="companion_failed_cancelled">Recherche annulée.</string>
     <string name="companion_failed_key">Le serveur a refusé la clé. Vérifiez-la dans Services externes et clés d\'API.</string>
@@ -1482,7 +1482,6 @@
     <string name="companion_failed_too_long">Cette recherche contient plus de texte que le modèle ne peut en lire d\'un coup.</string>
     <string name="companion_failed_unreadable">Impossible de lire le texte précédent de ce livre.</string>
     <string name="companion_failed_refused">Le modèle a refusé de répondre, ou un filtre de sécurité a bloqué la réponse.</string>
-    <string name="companion_failed_asked">Demandé à %1$s sur %2$s.</string>
     <string name="companion_hint_malformed">Il n\'a pas répondu dans le format attendu par le compagnon, même après qu\'on lui a indiqué l\'erreur. Les petits modèles ont souvent du mal avec cela. Essayez un autre modèle.</string>
     <string name="companion_hint_refused">Certains modèles refusent les questions sur le texte d\'un livre. Essayez un autre modèle.</string>
     <string name="companion_hint_limit">Le modèle a continué à chercher dans le livre sans arriver à une réponse. Essayez un autre modèle.</string>
@@ -1549,7 +1548,7 @@
     <string name="codex_settings_enabled">Compagnon sur cet appareil</string>
     <string name="codex_settings_summary">Indexez les noms et les liens hors ligne en ouvrant le Compagnon. Sans IA ni clé API. Désactivé, le Compagnon garde l\'histoire et les profils IA des personnages.</string>
     <string name="codex_ai_hint_title">Le compagnon fait bien plus avec un service d\'IA</string>
-    <string name="codex_ai_hint">Seul, le compagnon liste les noms du livre et qui apparaît avec qui. Avec un service d\'IA, il résume aussi l\'histoire jusqu\'ici, décrit chaque personnage et explique leurs liens, toujours d\'après le livre jusqu\'à votre position.</string>
+    <string name="codex_ai_hint">Avec un service d\'IA, le compagnon résume aussi l\'histoire et décrit chaque personnage, d\'après le livre jusqu\'à votre position.</string>
     <string name="codex_ai_hint_dismiss">Ne plus afficher</string>
     <string name="codex_preparing">Préparation du livre…</string>
     <string name="codex_scanning">Analyse du livre…</string>

@@ -45,8 +45,8 @@ private val MODEL_FAILURES = setOf(
 )
 
 /**
- * A failed lookup: what happened, what may help, and on request the
- * details, which the reader can select or copy.
+ * A failed lookup: what happened and the ways on. What may help and the
+ * details, which the reader can select or copy, wait behind Show details.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -57,16 +57,10 @@ internal fun FailureMessage(
 ) {
     val details = failed.details
     var open by rememberSaveable { mutableStateOf(false) }
+    val hint = hintText(failed.failure, details)
     Text(failureText(failed.failure), style = MaterialTheme.typography.bodyLarge)
-    hintText(failed.failure, details)?.let {
-        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    if (details?.model != null && details.host != null) {
-        Text(
-            stringResource(R.string.companion_failed_asked, details.model, details.host),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    if (details == null && hint != null) {
+        Text(hint, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedButton(onClick = onRetry) { Text(stringResource(R.string.companion_retry)) }
@@ -77,7 +71,7 @@ internal fun FailureMessage(
             TextButton(onClick = { open = true }) { Text(stringResource(R.string.companion_details)) }
         }
     }
-    if (open && details != null) FailureDetailsDialog(details) { open = false }
+    if (open && details != null) FailureDetailsDialog(details, hint) { open = false }
 }
 
 @Composable
@@ -125,7 +119,7 @@ private fun ruleText(code: String): String? = when (code) {
 private data class DetailRow(val label: String, val value: String, val verbatim: Boolean = false)
 
 @Composable
-private fun FailureDetailsDialog(details: FailureDetails, onDismiss: () -> Unit) {
+private fun FailureDetailsDialog(details: FailureDetails, hint: String?, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
@@ -155,6 +149,7 @@ private fun FailureDetailsDialog(details: FailureDetails, onDismiss: () -> Unit)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    hint?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                     rows.forEach { row ->
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
@@ -177,7 +172,7 @@ private fun FailureDetailsDialog(details: FailureDetails, onDismiss: () -> Unit)
         dismissButton = {
             TextButton(
                 onClick = {
-                    val text = rows.joinToString("\n\n") { "${it.label}:\n${it.value}" }
+                    val text = listOfNotNull(hint).plus(rows.map { "${it.label}:\n${it.value}" }).joinToString("\n\n")
                     scope.launch {
                         clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(title, text)))
                         // Android 13 confirms a copy itself.
