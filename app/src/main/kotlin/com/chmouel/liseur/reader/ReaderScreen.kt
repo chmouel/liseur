@@ -160,7 +160,7 @@ import com.chmouel.liseur.reader.annotations.BookmarkRibbon
 import com.chmouel.liseur.reader.annotations.DECORATION_GROUP
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
-import com.chmouel.liseur.reader.annotations.NoteDialog
+import com.chmouel.liseur.reader.annotations.NoteEditor
 import com.chmouel.liseur.reader.annotations.NoteSheet
 import com.chmouel.liseur.reader.annotations.NoteSheetActions
 import com.chmouel.liseur.reader.annotations.NoteText
@@ -5422,11 +5422,18 @@ internal fun ReaderScreen(
     }
 
     noteFor?.let { active ->
-        NoteDialog(
+        NoteEditor(
             passage = active.text,
             initialNote = active.existing?.note.orEmpty(),
-            onSave = { note ->
-                onAnnotationAction.addNote(active.locator, note, active.existing?.id)
+            initialTint = active.existing?.tint?.let(HighlightTint::fromName)
+                ?: highlightPalette.passageNoteTint,
+            theme = readingTheme,
+            palette = highlightPalette,
+            titleRes = R.string.annotation_note_title,
+            hintRes = R.string.annotation_note_hint,
+            clearRes = R.string.annotation_note_remove,
+            onSave = { note, tint ->
+                onAnnotationAction.addNote(active.locator, note, active.existing?.id, tint)
                 noteFor = null
             },
             onDismiss = { noteFor = null },
@@ -5434,12 +5441,16 @@ internal fun ReaderScreen(
     }
 
     bookNoteEditor?.let { editor ->
-        NoteDialog(
+        NoteEditor(
             passage = null,
             initialNote = editor.existing?.note.orEmpty(),
+            initialTint = null,
+            theme = readingTheme,
+            palette = highlightPalette,
             titleRes = R.string.annotation_book_note_title,
             hintRes = R.string.annotation_book_note_hint,
-            onSave = { note ->
+            clearRes = R.string.annotation_note_delete,
+            onSave = { note, _ ->
                 onAnnotationAction.saveBookNote(note, editor.existing?.id)
                 bookNoteEditor = null
             },
@@ -5799,7 +5810,7 @@ class ReaderSearchActions(
 /** Bundle of annotation actions passed down to the reader chrome. */
 class ReaderAnnotationActions(
     val highlight: (Locator, HighlightTint, String?) -> Unit,
-    val addNote: (Locator, String, String?) -> Unit,
+    val addNote: (Locator, String, String?, HighlightTint?) -> Unit,
     val saveBookNote: (String, String?) -> Unit,
     val toggleBookmark: () -> Unit,
     val remove: (BookAnnotation) -> Unit,

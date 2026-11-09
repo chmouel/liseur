@@ -516,6 +516,17 @@
     <string name="annotation_note_edit">Edit</string>
     <string name="annotation_note_added">Added %1$s</string>
     <string name="annotation_note_edited">Edited %1$s</string>
+    <string name="annotation_note_remove">Remove note</string>
+    <string name="annotation_note_delete">Delete note</string>
+    <string name="annotation_note_discard_title">Discard changes?</string>
+    <string name="annotation_note_discard_body">What you changed in this note will be lost.</string>
+    <string name="annotation_note_discard">Discard</string>
+    <string name="annotation_note_keep_editing">Keep editing</string>
+    <string name="note_format_bold">Bold</string>
+    <string name="note_format_italic">Italic</string>
+    <string name="note_format_bullets">Bulleted list</string>
+    <string name="note_format_numbers">Numbered list</string>
+    <string name="note_format_quote">Quote</string>
     <string name="annotation_add_book_note">Add a book note</string>
     <string name="annotation_book_note_title">Book note</string>
     <string name="annotation_book_note_hint">What do you want to remember about this book?</string>
