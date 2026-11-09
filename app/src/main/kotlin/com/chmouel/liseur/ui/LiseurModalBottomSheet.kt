@@ -9,6 +9,9 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcherOwner
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.WindowInsets
@@ -99,7 +102,10 @@ fun LiseurModalBottomSheet(
             scrimColor = scrimColor,
             properties = ModalBottomSheetProperties(shouldDismissOnBackPress = onBack == null),
             dragHandle = {
-                BottomSheetDefaults.DragHandle(color = contentColor.copy(alpha = 0.4f))
+                BottomSheetDefaults.DragHandle(
+                    modifier = Modifier.dragsAsScroll(),
+                    color = contentColor.copy(alpha = 0.4f),
+                )
             },
             content = {
                 // The sheet is a window of its own, and Material points
@@ -113,7 +119,7 @@ fun LiseurModalBottomSheet(
                 if (onBack != null) {
                     DialogBack(onBack)
                 }
-                Column(Modifier.fillMaxWidth().nestedScroll(KeepUpwardLeftover)) { content() }
+                Column(Modifier.fillMaxWidth().dragsAsScroll()) { content() }
             },
         )
         return
@@ -193,6 +199,19 @@ private val KeepUpwardLeftover = object : NestedScrollConnection {
     override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
         if (available.y < 0f) Velocity(0f, available.y) else Velocity.Zero
 }
+
+/**
+ * Sends a drag on the handle, a title or anything else that does not
+ * scroll through [KeepUpwardLeftover] too. Left alone it goes to the
+ * sheet's own drag, which settles with a spring started at the flick's
+ * speed, so an upward flick throws an expanded sheet up and back. As a
+ * scroll that consumes nothing, it reaches the sheet the way a list's
+ * leftover does.
+ */
+@Composable
+private fun Modifier.dragsAsScroll(): Modifier =
+    nestedScroll(KeepUpwardLeftover)
+        .scrollable(rememberScrollableState { 0f }, Orientation.Vertical)
 
 @Composable
 private fun DialogBack(onBack: () -> Unit) {
