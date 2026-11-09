@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.chmouel.liseur.companion.Candidate
 import com.chmouel.liseur.companion.CompanionPanel
 import com.chmouel.liseur.companion.CodexViewModel
+import com.chmouel.liseur.companion.NoteTarget
 import com.chmouel.liseur.companion.AskingScope
 import com.chmouel.liseur.companion.RecapNote
 import com.chmouel.liseur.companion.SavedRecap
@@ -22,9 +23,12 @@ class ReaderCompanion(
     val codex: CodexViewModel,
     val panel: StateFlow<CompanionPanel<Locator>?>,
     val peek: StateFlow<SourcePeek?>,
-    val open: (selection: String, place: Locator, translated: Boolean) -> Unit,
-    /** Asks about a name on a character page, in the chapters Codex froze. */
-    val ask: (name: String, scope: AskingScope?) -> Unit,
+    /** Asks about a selection; [NoteTarget] is the passage selected and its mark, where a saved answer goes. */
+    val open: (selection: String, place: Locator, translated: Boolean, note: NoteTarget<Locator>) -> Unit,
+    /** Saves a companion answer as a note: on the selected passage, or on the book without a target. */
+    val saveNote: (text: String, target: NoteTarget<Locator>?) -> Unit,
+    /** Asks about a name on a character page, in the chapters Codex froze; [NoteTarget] is the selection the page was opened from. */
+    val ask: (name: String, scope: AskingScope?, note: NoteTarget<Locator>?) -> Unit,
     /** What [recaps] already say of a name, or of a pair, before a scope; writes and sends nothing. */
     val notes: suspend (name: String, other: String?, scope: AskingScope, saved: List<SavedRecap>) -> List<RecapNote<Locator>>,
     /** For the pairs on the relationships map, what [recaps] last say links each; writes and sends nothing. */

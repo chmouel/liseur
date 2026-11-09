@@ -108,6 +108,24 @@ def main() -> int:
         code, reply = stub.json("POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "Hello"}]})
         check("chat without markers echoes the user message", reply["choices"][0]["message"]["content"] == "[T] Hello", reply)
 
+        lookup = {"messages": [
+            {"role": "system", "content": "You describe one character, or one other term."},
+            {"role": "user", "content": 'Describe <name>the ring</name>.\n<book ref="S1" chapter="1">\nA ring.\n</book>'},
+        ]}
+        code, reply = stub.json("POST", "/v1/chat/completions", lookup)
+        answer = json.loads(reply["choices"][0]["message"]["content"])
+        check("a companion lookup gets a term citing the first passage",
+              answer["answer"] == "term" and answer["name"] == "the ring" and answer["what"][0]["refs"] == ["S1"], answer)
+
+        where = {"messages": [
+            {"role": "system", "content": "You help a reader get back into the book."},
+            {"role": "user", "content": '<summary ref="C1" chapter="1">Before.</summary>\n<book ref="S1" chapter="2">\nA.\n</book>\n<book ref="S2" chapter="2">\nB.\n</book>'},
+        ]}
+        code, reply = stub.json("POST", "/v1/chat/completions", where)
+        answer = json.loads(reply["choices"][0]["message"]["content"])
+        check("Where was I? cites the last passage and the first recap",
+              answer["stopped"]["refs"] == ["S2"] and answer["tone"]["refs"] == ["C1"], answer)
+
         code, voices = stub.json("GET", "/v1/audio/voices")
         check("voices lists ungrouped and multilingual stub voices", code == 200 and voices == {"voices": ["stub_a", "stub_b", "af_bella", "ff_siwis", "ef_dora"]}, voices)
 
@@ -137,7 +155,7 @@ def main() -> int:
         code, entries = stub.json("GET", "/_stub/requests")
         first_chat = next((e for e in entries if e["path"] == "/v1/chat/completions"), {})
         first_speech = next((e for e in entries if e["path"] == "/v1/audio/speech"), {})
-        check("the log keeps every request", code == 200 and len(entries) == 10, len(entries))
+        check("the log keeps every request", code == 200 and len(entries) == 12, len(entries))
         check(
             "the log splits the prompt's blocks",
             first_chat.get("blocks") == {"book": "Book: Dune", "context": "Il fait gris.", "passage": "Il pleut."},
@@ -148,7 +166,7 @@ def main() -> int:
             first_speech.get("blocks") == {"book": "Book: Dune", "context": "Earlier text."},
             first_speech.get("blocks"),
         )
-        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 10)
+        check("the log file matches the endpoint", len(stub.log.read_text().splitlines()) == 12)
 
         stub.json("DELETE", "/_stub/requests")
         code, entries = stub.json("GET", "/_stub/requests")

@@ -196,7 +196,8 @@ OpenAI-compatible server. Use it for any change to what the app sends to
 AI translation or OpenAI-compatible speech, never a real provider or a
 one-off stub. It serves `GET /v1/models` (`stub-chat`, `stub-tts`),
 `POST /v1/chat/completions` (the `<passage>` prefixed `[T]`,
-`--prefix`), `POST /v1/audio/speech` (silent 24 kHz WAV; other
+`--prefix`; a companion lookup gets a term citing its first passage and
+"Where was I?" fields citing its last passage and first recap), `POST /v1/audio/speech` (silent 24 kHz WAV; other
 `response_format` gets the 400 that triggers the MP3 fallback),
 `GET /v1/audio/voices` (`stub_a`, `stub_b`, and English/French/Spanish
 voices), and `GET /_stub/requests`
@@ -1755,9 +1756,12 @@ separate from translation's, moved and forgotten with server edits in
 - Only these go into a request body: the selected name, the numeric scope,
   app-issued refs (`S1`…), and eligible passage text. Never
   `Locator.text.before/after`, chapter titles, notes, recap prose, or the
-  model's malformed reply. Sole exception: Story's running summary
+  model's malformed reply. Exceptions: Story's running summary
   (ADR-0057) sends recap summary sentences of listed chapters in `<summary
-  chapter="N">` blocks, with chapter numbers only. Book text and name sit in
+  chapter="N">` blocks, with chapter numbers only, and "Where was I?"
+  (`Reimmersion`, ADR-0067) sends up to six such summaries as `C` refs plus
+  the eligible text tail before the frozen read point as `S` refs, only on
+  a tap. Book text and name sit in
   `CompanionPrompt`'s unclosable data blocks, as in `TranslationPrompt`. The
   profile is written in the passages' language, whatever the app language or
   EPUB metadata. `InvestigationTest` and `RecapTest` assert no
@@ -1771,6 +1775,13 @@ separate from translation's, moved and forgotten with server edits in
   book by asking chapter and the refs naming the character, reused only at
   their read point or later. An insufficient answer with unseen matches is
   retried within the same limits.
+- A lookup answers `profile` or `term` (`CompanionAnswer.Term`, nature
+  normalised to `Term.NATURES`); both share the gate, ref checks and
+  cache. Profiles, terms and "Where was I?" copy or save as notes through
+  `CompanionNotes`; `CompanionPanel.note` carries the selection and its
+  mark across retries, `ReaderViewModel.saveCompanionNote` appends to an
+  existing note and falls back to a book note
+  ([ADR-0067](docs/adr/0067-companion-recalls-where-you-stopped.md)).
 - Background recaps are opt-in. `RecapScheduler` queues a chapter only when
   `READER_MOVEMENT` crosses into the next (no jumps, no backfill), runs in
   the foreground one batch at a time, and never sends a chapter at or after

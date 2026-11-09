@@ -9,6 +9,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -94,6 +95,17 @@ interface BookAnnotationDao {
 
     @Upsert
     suspend fun upsert(annotation: BookAnnotation)
+
+    /**
+     * Rewrites one mark from what is stored now, in one transaction, so
+     * an edit made since the caller last looked (a sync pull, say) is
+     * built on rather than written over. Nothing when the mark is gone.
+     */
+    @Transaction
+    suspend fun update(id: String, change: (BookAnnotation) -> BookAnnotation): BookAnnotation? {
+        val current = byId(id) ?: return null
+        return change(current).also { upsert(it) }
+    }
 
     /**
      * Corrects the page number printed beside a mark, and nothing else.

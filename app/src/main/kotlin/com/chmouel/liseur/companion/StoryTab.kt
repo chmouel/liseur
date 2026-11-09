@@ -60,6 +60,10 @@ class StoryActions(
     val summarizeMissing: () -> Unit,
     val write: () -> Unit,
     val stop: () -> Unit,
+    val whereWasI: () -> Unit = {},
+    val stopWhereWasI: () -> Unit = {},
+    /** Keeps a "Where was I?" answer as a note on the book. */
+    val saveNote: (String) -> Unit = {},
 )
 
 /**
@@ -76,7 +80,10 @@ internal fun LazyListScope.storyTab(
     when {
         story == null || story.loading -> item(key = "story:loading") { BusyBar() }
         story.failed -> item(key = "story:failed") { StoryNote(stringResource(R.string.story_failed)) }
-        story.chapters.isEmpty() -> item(key = "story:empty") { StoryNote(stringResource(R.string.story_nothing_before)) }
+        story.chapters.isEmpty() -> {
+            item(key = "story:empty") { StoryNote(stringResource(R.string.story_nothing_before)) }
+            item(key = "story:where") { WhereCard(story.whereWasI, story.service, actions, onChapter, onChooseModel) }
+        }
         else -> {
             if (story.asking) item(key = "story:consent") { StoryConsent(story.service, actions) }
             story.work?.let { work -> item(key = "story:work") { StoryWorkStrip(work, actions.stop) } }
@@ -84,6 +91,7 @@ internal fun LazyListScope.storyTab(
             if (!story.asking || story.soFar.text != null || story.soFar.writing) {
                 item(key = "story:sofar") { StorySoFarCard(story.soFar, actions, onChooseModel) }
             }
+            item(key = "story:where") { WhereCard(story.whereWasI, story.service, actions, onChapter, onChooseModel) }
             if (story.missing > 0 && !story.asking) item(key = "story:missing") {
                 SummarizeMissing(story.missing, story.service, actions.summarizeMissing)
             }
@@ -275,6 +283,105 @@ private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseMod
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/** "Where was I?": asked only on a tap, with what it sends said before it. */
+@Composable
+private fun WhereCard(
+    where: WhereView<Locator>,
+    service: String?,
+    actions: StoryActions,
+    onChapter: (Locator) -> Unit,
+    onChooseModel: () -> Unit,
+) {
+    StoryCard {
+        Text(
+            stringResource(R.string.story_where_title),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        when (where) {
+            WhereView.Idle -> {
+                Text(
+                    stringResource(R.string.story_where_about, service ?: ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(onClick = actions.whereWasI) { Text(stringResource(R.string.story_where_ask)) }
+            }
+            WhereView.Loading -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.story_where_asking),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = actions.stopWhereWasI) { Text(stringResource(R.string.story_stop)) }
+                }
+                BusyBar()
+            }
+            WhereView.Empty -> Text(
+                stringResource(R.string.story_where_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            is WhereView.Failed -> FailureMessage(where.failed, onRetry = actions.whereWasI, onChooseModel = onChooseModel)
+            is WhereView.Shown -> {
+                WhereAnswer(where.answer, onChapter)
+                val title = stringResource(R.string.story_where_title)
+                val text = CompanionNotes.whereWasI(
+                    where.answer,
+                    title,
+                    WhereHeadings(
+                        stopped = stringResource(R.string.story_where_stopped),
+                        objective = stringResource(R.string.story_where_objective),
+                        conflict = stringResource(R.string.story_where_conflict),
+                        focus = stringResource(R.string.story_where_focus),
+                        tone = stringResource(R.string.story_where_tone),
+                        questions = stringResource(R.string.story_where_questions),
+                    ),
+                )
+                AnswerActions(title, { text }, actions.saveNote)
+            }
+        }
+    }
+}
+
+@Composable
+private fun WhereAnswer(answer: WhereWasI<Locator>, onChapter: (Locator) -> Unit) {
+    listOf(
+        R.string.story_where_stopped to answer.stopped,
+        R.string.story_where_objective to answer.objective,
+        R.string.story_where_conflict to answer.conflict,
+        R.string.story_where_focus to answer.focus,
+        R.string.story_where_tone to answer.tone,
+    ).forEach { (title, claim) ->
+        if (claim == null) return@forEach
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ClaimItem(
+                key = "where-$title",
+                heading = stringResource(title),
+                text = claim.text,
+                sources = claim.sources,
+                onSource = { onChapter(it.place) },
+            )
+            if (claim.recaps.isNotEmpty()) {
+                Text(
+                    pluralStringResource(
+                        R.plurals.story_where_from_recaps,
+                        claim.recaps.size,
+                        StorySummaries.ranges(claim.recaps.map { it + 1 }, "–"),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+    if (answer.questions.isNotEmpty()) {
+        Text(stringResource(R.string.story_where_questions), style = MaterialTheme.typography.titleSmall)
+        answer.questions.forEach { Text("• $it", style = MaterialTheme.typography.bodyLarge) }
     }
 }
 

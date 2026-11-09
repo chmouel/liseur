@@ -111,6 +111,8 @@ internal class CharacterProfiles(
     val cancel: () -> Unit,
     val choose: (Candidate<Locator>) -> Unit,
     val setUp: () -> Unit,
+    /** Saves an answer as a note, where the lookup it came from says. */
+    val saveNote: (String) -> Unit = {},
 )
 
 /**
@@ -223,6 +225,7 @@ internal fun CodexSheet(
                             onChoose = profiles.choose,
                             onSetUp = profiles.setUp,
                             onChooseModel = onChooseModel,
+                            onSaveNote = profiles.saveNote,
                         )
                     }
                     if (pane == CharacterPane.MENTIONS) mentions(detail, panel.titles, controller, onSource)

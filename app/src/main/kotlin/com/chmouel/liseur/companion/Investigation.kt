@@ -36,6 +36,26 @@ sealed interface CompanionAnswer<out P> {
         val relationships: List<Relationship<P>>,
     ) : CompanionAnswer<P>
 
+    /**
+     * Something other than a character: a place, group, object or concept.
+     * [nature] is the model's word for which, one of [Term.NATURES]; [unknown]
+     * lists questions the passages leave open, and cites nothing.
+     */
+    data class Term<P>(
+        val name: String,
+        val nature: String,
+        val aliases: List<Alias<P>>,
+        val what: List<Claim<P>>,
+        val role: List<Claim<P>>,
+        val changes: List<Claim<P>>,
+        val connections: List<Relationship<P>>,
+        val unknown: List<String>,
+    ) : CompanionAnswer<P> {
+        companion object {
+            val NATURES = listOf("place", "group", "object", "concept", "other")
+        }
+    }
+
     data class Ambiguous<P>(val candidates: List<Candidate<P>>) : CompanionAnswer<P>
 
     /** The book up to the selection does not say enough about the name. */
@@ -371,6 +391,7 @@ class Investigation<P>(
             return when (json.optString("answer")) {
                 "insufficient" -> Parsed.Answer(CompanionAnswer.Insufficient)
                 "profile" -> profile(json)
+                "term" -> term(json)
                 "ambiguous" -> ambiguous(json)
                 else -> Parsed.Invalid("unknown_reply")
             }
@@ -442,31 +463,64 @@ class Investigation<P>(
             if (identity.isEmpty() && backstory.isEmpty()) {
                 return Parsed.Invalid(if (badIdentity || badBackstory) "bad_citation" else "empty_profile")
             }
-            val relationships = mutableListOf<Relationship<P>>()
-            json.items("relationships")?.let { array ->
-                for (k in 0 until minOf(array.length(), MAX_CLAIMS)) {
-                    val o = array.optJSONObject(k) ?: continue
-                    val text = o.optString("text").trim().takeIf { it.isNotEmpty() && it.length <= MAX_CLAIM }
-                        ?: continue
-                    val cited = sources(o.optJSONArray("refs")) ?: continue
-                    // A person the passages never name is not shown, whatever the model knows of them.
-                    val other = PassageText.name(o.optString("name")) ?: continue
-                    if (cited.none { PassageText.mentions(it, other) }) continue
-                    relationships += Relationship(other, text, cited)
-                }
-            }
-            val aliases = mutableListOf<Alias<P>>()
-            json.items("aliases")?.let { array ->
-                for (k in 0 until minOf(array.length(), MAX_ALIASES)) {
-                    val o = array.optJSONObject(k) ?: continue
-                    val cited = sources(o.optJSONArray("refs")) ?: continue
-                    val alias = PassageText.name(o.optString("name")) ?: continue
-                    if (PassageText.fold(alias) == PassageText.fold(name)) continue
-                    if (cited.none { PassageText.mentions(it, alias) }) continue
-                    if (aliases.none { PassageText.fold(it.name) == PassageText.fold(alias) }) aliases += Alias(alias, cited)
-                }
-            }
+            val relationships = connections(json.items("relationships"))
+            val aliases = aliases(json.items("aliases"))
             return Parsed.Answer(CompanionAnswer.Profile(name, aliases, identity, backstory, relationships))
+        }
+
+        private fun term(json: JSONObject): Parsed {
+            val (what, badWhat) = claims(json.items("what"), MAX_CLAIMS)
+            val (role, badRole) = claims(json.items("role"), MAX_CLAIMS)
+            val (changes, badChanges) = claims(json.items("changes"), MAX_CLAIMS)
+            if (what.isEmpty() && role.isEmpty() && changes.isEmpty()) {
+                return Parsed.Invalid(if (badWhat || badRole || badChanges) "bad_citation" else "empty_term")
+            }
+            val nature = json.optString("nature").trim().lowercase()
+                .takeIf { it in CompanionAnswer.Term.NATURES } ?: "other"
+            val unknown = mutableListOf<String>()
+            json.optJSONArray("unknown")?.let { array ->
+                for (k in 0 until array.length()) {
+                    if (unknown.size >= MAX_UNKNOWN) break
+                    val text = array.optString(k).trim().takeIf { it.isNotEmpty() && it.length <= MAX_CLAIM } ?: continue
+                    unknown += text
+                }
+            }
+            return Parsed.Answer(
+                CompanionAnswer.Term(
+                    name, nature, aliases(json.items("aliases")), what, role, changes,
+                    connections(json.items("connections")), unknown,
+                ),
+            )
+        }
+
+        private fun connections(array: JSONArray?): List<Relationship<P>> {
+            val relationships = mutableListOf<Relationship<P>>()
+            if (array == null) return relationships
+            for (k in 0 until minOf(array.length(), MAX_CLAIMS)) {
+                val o = array.optJSONObject(k) ?: continue
+                val text = o.optString("text").trim().takeIf { it.isNotEmpty() && it.length <= MAX_CLAIM }
+                    ?: continue
+                val cited = sources(o.optJSONArray("refs")) ?: continue
+                // A person the passages never name is not shown, whatever the model knows of them.
+                val other = PassageText.name(o.optString("name")) ?: continue
+                if (cited.none { PassageText.mentions(it, other) }) continue
+                relationships += Relationship(other, text, cited)
+            }
+            return relationships
+        }
+
+        private fun aliases(array: JSONArray?): List<Alias<P>> {
+            val aliases = mutableListOf<Alias<P>>()
+            if (array == null) return aliases
+            for (k in 0 until minOf(array.length(), MAX_ALIASES)) {
+                val o = array.optJSONObject(k) ?: continue
+                val cited = sources(o.optJSONArray("refs")) ?: continue
+                val alias = PassageText.name(o.optString("name")) ?: continue
+                if (PassageText.fold(alias) == PassageText.fold(name)) continue
+                if (cited.none { PassageText.mentions(it, alias) }) continue
+                if (aliases.none { PassageText.fold(it.name) == PassageText.fold(alias) }) aliases += Alias(alias, cited)
+            }
+            return aliases
         }
 
         private fun ambiguous(json: JSONObject): Parsed {
@@ -517,6 +571,7 @@ class Investigation<P>(
         const val MAX_CLAIMS = 12
         const val MAX_ALIASES = 8
         const val MAX_CANDIDATES = 8
+        const val MAX_UNKNOWN = 3
         const val SNIPPET = 400
         val REF = Regex("S[0-9]{1,4}")
         val HONORIFICS = setOf(

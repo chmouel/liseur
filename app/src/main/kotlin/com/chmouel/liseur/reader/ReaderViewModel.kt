@@ -9,6 +9,8 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.chmouel.liseur.companion.CompanionNotes
+import com.chmouel.liseur.companion.NoteTarget
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.readaloud.PausedListening
@@ -2696,6 +2698,29 @@ class ReaderViewModel(
                 createdAt = existing?.createdAt ?: now,
             ),
         )
+    }
+
+    /**
+     * Keeps a companion answer as a note: on [target]'s passage, after any
+     * note the reader already wrote on its mark, or on the book without one.
+     */
+    fun saveCompanionNote(text: String, target: NoteTarget<Locator>?) {
+        if (target == null) return saveBookNote(text)
+        val id = target.annotationId ?: return addNote(target.place, text)
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val saved = annotationDao.update(id) { current ->
+                val earlier = current.note?.takeIf { it.isNotBlank() }
+                current.copy(
+                    kind = AnnotationKind.NOTE.name,
+                    note = CompanionNotes.appended(current.note, text),
+                    noteCreatedAt = current.noteCreatedAt ?: if (earlier == null) now else current.createdAt,
+                    noteUpdatedAt = if (earlier == null) null else now * 1000,
+                    updatedAt = now * 1000,
+                )
+            }
+            if (saved == null) addNote(target.place, text) else requestBookSync(bookId)
+        }
     }
 
     /** Writes a thought about the book itself, without inventing a place for it. */

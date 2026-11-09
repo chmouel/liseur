@@ -1,5 +1,8 @@
 package com.chmouel.liseur.companion
 
+import android.content.ClipData
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -38,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -45,6 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -60,6 +67,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.chrome.ChromePill
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
+import kotlinx.coroutines.launch
 import org.readium.r2.shared.publication.Locator
 
 /**
@@ -91,11 +99,13 @@ internal fun CharacterProfile(
     onChoose: (Candidate<Locator>) -> Unit,
     onSetUp: () -> Unit,
     onChooseModel: () -> Unit,
+    onSaveNote: (String) -> Unit = {},
 ) {
     CompositionLocalProvider(LocalChapterTitles provides titles) {
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val view = lookup?.view
             val profile = (view as? CompanionView.Profile)?.profile
+            val term = (view as? CompanionView.Term)?.term
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (entry != null) {
                     Text(
@@ -108,6 +118,13 @@ internal fun CharacterProfile(
                 if (profile != null && PassageText.fold(profile.name) != PassageText.fold(name)) {
                     Text(profile.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 }
+                if (term != null) {
+                    Text(
+                        natureLabel(term.nature),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 lookup?.also?.let {
                     Text(
                         stringResource(R.string.companion_also_from, it),
@@ -118,10 +135,13 @@ internal fun CharacterProfile(
                 if (other == null && profile != null && profile.aliases.isNotEmpty()) {
                     AliasPills(profile.aliases, knows, onAlias, onSource)
                 }
+                if (term != null && term.aliases.isNotEmpty()) {
+                    AliasPills(term.aliases, knows, onAlias, onSource)
+                }
             }
             // Until the profile answers, what the chapter recaps already say stands in
             // for it; on a pair's page they stay, as the answer may not link the two.
-            if (notes.isNotEmpty() && (view !is CompanionView.Profile || other != null)) {
+            if (notes.isNotEmpty() && view !is CompanionView.Term && (view !is CompanionView.Profile || other != null)) {
                 SectionCard(title = R.string.codex_profile_recaps) {
                     notes.forEachIndexed { index, note ->
                         if (index > 0) CardDivider()
@@ -158,8 +178,15 @@ internal fun CharacterProfile(
                     is CompanionView.Loading -> Loading(view.stage, onCancel)
                     is CompanionView.Failed -> FailureMessage(view, onRetry, onChooseModel)
                     is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
+                    is CompanionView.Term -> {
+                        TermPane(view.term, onSource)
+                        val text = termText(view.term)
+                        AnswerActions(view.term.name, { text }, onSaveNote)
+                    }
                     is CompanionView.Profile -> if (other == null) {
                         Profile(view.profile, onSource)
+                        val text = profileText(view.profile)
+                        AnswerActions(view.profile.name, { text }, onSaveNote)
                     } else {
                         val relation = relationOf(view.profile, other)
                         if (relation != null) {
@@ -369,6 +396,103 @@ private fun Profile(profile: CompanionAnswer.Profile<Locator>, onSource: (Passag
 }
 
 @Composable
+private fun TermPane(term: CompanionAnswer.Term<Locator>, onSource: (Passage<Locator>) -> Unit) {
+    listOf(
+        R.string.companion_term_what to term.what,
+        R.string.companion_term_role to term.role,
+        R.string.companion_term_changes to term.changes,
+    ).forEach { (title, claims) ->
+        if (claims.isNotEmpty()) {
+            SectionCard(title = title) {
+                claims.forEachIndexed { index, claim ->
+                    if (index > 0) CardDivider()
+                    ClaimItem(key = "term-$title-$index", text = claim.text, sources = claim.sources, onSource = onSource)
+                }
+            }
+        }
+    }
+    if (term.connections.isNotEmpty()) {
+        SectionCard(title = R.string.companion_term_connections) {
+            term.connections.forEachIndexed { index, connection ->
+                if (index > 0) CardDivider()
+                ClaimItem(
+                    key = "term-con-$index",
+                    heading = connection.name,
+                    text = connection.text,
+                    sources = connection.sources,
+                    onSource = onSource,
+                )
+            }
+        }
+    }
+    if (term.unknown.isNotEmpty()) {
+        SectionCard(title = R.string.companion_term_unknown) {
+            term.unknown.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
+        }
+    }
+}
+
+@Composable
+private fun profileText(profile: CompanionAnswer.Profile<Locator>): String = CompanionNotes.profile(
+    profile,
+    ProfileHeadings(
+        aliases = stringResource(R.string.companion_aliases),
+        identity = stringResource(R.string.companion_identity),
+        backstory = stringResource(R.string.companion_backstory),
+        relationships = stringResource(R.string.companion_relationships),
+    ),
+)
+
+@Composable
+private fun termText(term: CompanionAnswer.Term<Locator>): String = CompanionNotes.term(
+    term,
+    natureLabel(term.nature),
+    TermHeadings(
+        aliases = stringResource(R.string.companion_aliases),
+        what = stringResource(R.string.companion_term_what),
+        role = stringResource(R.string.companion_term_role),
+        changes = stringResource(R.string.companion_term_changes),
+        connections = stringResource(R.string.companion_term_connections),
+        unknown = stringResource(R.string.companion_term_unknown),
+    ),
+)
+
+/** Copy an answer as plain text, or keep it as a note; nothing is saved unless asked. */
+@Composable
+internal fun AnswerActions(title: String, text: () -> String, onSaveNote: (String) -> Unit) {
+    val clipboard = LocalClipboard.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val copied = stringResource(R.string.translation_copied)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = {
+                val plain = text()
+                scope.launch {
+                    clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(title, plain)))
+                    // Android 13 confirms a copy itself.
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                        Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+        ) { Text(stringResource(R.string.companion_details_copy)) }
+        OutlinedButton(onClick = { onSaveNote(text()) }) { Text(stringResource(R.string.companion_save_note)) }
+    }
+}
+
+@Composable
+internal fun natureLabel(nature: String): String = stringResource(
+    when (nature) {
+        "place" -> R.string.companion_nature_place
+        "group" -> R.string.companion_nature_group
+        "object" -> R.string.companion_nature_object
+        "concept" -> R.string.companion_nature_concept
+        else -> R.string.companion_nature_other
+    },
+)
+
+@Composable
 private fun SectionCard(title: Int? = null, content: @Composable () -> Unit) {
     val eInk = LocalEInk.current
     val border = if (eInk) {
@@ -412,7 +536,7 @@ private fun CardDivider() {
 }
 
 @Composable
-private fun ClaimItem(
+internal fun ClaimItem(
     key: String,
     text: String,
     sources: List<Passage<Locator>>,
