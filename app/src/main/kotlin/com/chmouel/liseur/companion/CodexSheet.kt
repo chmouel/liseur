@@ -195,6 +195,7 @@ internal fun CodexSheet(
                 val panes = views.panes.filter { it != CharacterPane.PROFILE || profiles != null }
                 val pane = detail.pane.takeIf { it in panes } ?: panes.firstOrNull()
                 LazyColumn(Modifier.weight(1f), state = detailList, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    codexHeader(progress, controller, scanEnabled)
                     if (panes.size > 1) item(key = "codex:panes") {
                         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                             panes.forEachIndexed { index, each ->
