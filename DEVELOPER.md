@@ -204,7 +204,8 @@ voices), and `GET /_stub/requests`
 (all requests, `DELETE` empties; also `tmp/ai-stub/requests.jsonl`; chat
 entries split `<book>`, `<context>`, `<passage>` into `blocks`; the API
 key is never logged). Flags: `--speech-failures COUNT` (first speech requests return 503), `--fail CODE`, `--delay SECONDS`,
-`--key KEY` (require bearer), `--think` (prepend `<think>`).
+`--key KEY` (require bearer), `--think` (prepend `<think>`), `--long`
+(fill every section of a companion term, so the profile scrolls).
 
 It binds `127.0.0.1` (emulator: `10.0.2.2`); `--host 0.0.0.0` exposes the
 log of sent text. In Settings, External services and API keys, add
