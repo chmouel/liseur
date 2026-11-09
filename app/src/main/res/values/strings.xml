@@ -1533,7 +1533,7 @@
         <item quantity="one">%1$d passage</item>
         <item quantity="other">%1$d passages</item>
     </plurals>
-    <string name="companion_peek_return">Back to where you asked</string>
+    <string name="companion_peek_return">Back to place</string>
     <string name="companion_retry">Try again</string>
     <string name="companion_failed_cancelled">Lookup cancelled.</string>
     <string name="companion_failed_key">The server refused the key. Check it in External services and API keys.</string>
@@ -1547,7 +1547,6 @@
     <string name="companion_failed_too_long">This lookup holds more of the book than the model can read at once.</string>
     <string name="companion_failed_unreadable">Could not read this book\'s earlier text.</string>
     <string name="companion_failed_refused">The model declined to answer, or a safety filter held the answer back.</string>
-    <string name="companion_failed_asked">Asked %1$s on %2$s.</string>
     <string name="companion_hint_malformed">The model did not reply in the format the companion needs, even after being told what was wrong. Smaller models often have trouble with this. Try another model.</string>
     <string name="companion_hint_refused">Some models refuse questions about a book\'s text. Try another model.</string>
     <string name="companion_hint_limit">The model kept searching the book without settling on an answer. Try another model.</string>
@@ -1614,7 +1613,7 @@
     <string name="codex_settings_enabled">On-device companion</string>
     <string name="codex_settings_summary">Index names and connections offline when you open Companion. No AI or API key needed. When off, Companion still shows Story and AI character profiles.</string>
     <string name="codex_ai_hint_title">Companion does much more with an AI service</string>
-    <string name="codex_ai_hint">On its own, Companion lists the names in the book and who appears with whom. With an AI service it also recaps the story so far, describes each character and explains how they relate, always from the book up to your place.</string>
+    <string name="codex_ai_hint">With an AI service, Companion also recaps the story and describes each character, from the book up to your place.</string>
     <string name="codex_ai_hint_dismiss">Don\'t show again</string>
     <string name="codex_preparing">Preparing book…</string>
     <string name="codex_scanning">Scanning book…</string>

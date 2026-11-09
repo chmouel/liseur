@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Hub
@@ -179,14 +181,14 @@ internal fun CharacterProfile(
                     is CompanionView.Failed -> FailureMessage(view, onRetry, onChooseModel)
                     is CompanionView.Ambiguous -> Ambiguous(view.candidates, onChoose)
                     is CompanionView.Term -> {
-                        TermPane(view.term, onSource)
                         val text = termText(view.term)
                         AnswerActions(view.term.name, { text }, onSaveNote)
+                        TermPane(view.term, onSource)
                     }
                     is CompanionView.Profile -> if (other == null) {
-                        Profile(view.profile, onSource)
                         val text = profileText(view.profile)
                         AnswerActions(view.profile.name, { text }, onSaveNote)
+                        Profile(view.profile, onSource)
                     } else {
                         val relation = relationOf(view.profile, other)
                         if (relation != null) {
@@ -363,73 +365,51 @@ private fun AliasPills(
 
 @Composable
 private fun Profile(profile: CompanionAnswer.Profile<Locator>, onSource: (Passage<Locator>) -> Unit) {
-    if (profile.identity.isNotEmpty()) {
-        SectionCard(title = R.string.companion_identity) {
-            profile.identity.forEachIndexed { index, claim ->
-                if (index > 0) CardDivider()
-                ClaimItem(key = "id-$index", text = claim.text, sources = claim.sources, onSource = onSource)
-            }
-        }
-    }
-    if (profile.backstory.isNotEmpty()) {
-        SectionCard(title = R.string.companion_backstory) {
-            profile.backstory.forEachIndexed { index, claim ->
-                if (index > 0) CardDivider()
-                ClaimItem(key = "back-$index", text = claim.text, sources = claim.sources, onSource = onSource)
-            }
-        }
-    }
-    if (profile.relationships.isNotEmpty()) {
-        SectionCard(title = R.string.companion_relationships) {
-            profile.relationships.forEachIndexed { index, relation ->
-                if (index > 0) CardDivider()
-                ClaimItem(
-                    key = "rel-$index",
-                    heading = relation.name,
-                    text = relation.text,
-                    sources = relation.sources,
-                    onSource = onSource,
-                )
+    val sections = listOf(
+        R.string.companion_identity to profile.identity.map { Triple(null, it.text, it.sources) },
+        R.string.companion_backstory to profile.backstory.map { Triple(null, it.text, it.sources) },
+        R.string.companion_relationships to profile.relationships.map { Triple(it.name, it.text, it.sources) },
+    )
+    ClaimSections(sections, "profile", onSource)
+}
+
+/**
+ * The answer as one card: each non-empty section under its own
+ * subheading, a [Triple] being a claim's heading, text and sources.
+ */
+@Composable
+private fun ClaimSections(
+    sections: List<Pair<Int, List<Triple<String?, String, List<Passage<Locator>>>>>>,
+    key: String,
+    onSource: (Passage<Locator>) -> Unit,
+) {
+    val shown = sections.filter { it.second.isNotEmpty() }
+    if (shown.isEmpty()) return
+    SectionCard {
+        shown.forEachIndexed { index, (title, claims) ->
+            if (index > 0) CardDivider()
+            Text(
+                stringResource(title),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            claims.forEachIndexed { at, (heading, text, sources) ->
+                ClaimItem(key = "$key-$title-$at", heading = heading, text = text, sources = sources, onSource = onSource)
             }
         }
     }
 }
 
+// What the passages leave open goes in the saved note only.
 @Composable
 private fun TermPane(term: CompanionAnswer.Term<Locator>, onSource: (Passage<Locator>) -> Unit) {
-    listOf(
-        R.string.companion_term_what to term.what,
-        R.string.companion_term_role to term.role,
-        R.string.companion_term_changes to term.changes,
-    ).forEach { (title, claims) ->
-        if (claims.isNotEmpty()) {
-            SectionCard(title = title) {
-                claims.forEachIndexed { index, claim ->
-                    if (index > 0) CardDivider()
-                    ClaimItem(key = "term-$title-$index", text = claim.text, sources = claim.sources, onSource = onSource)
-                }
-            }
-        }
-    }
-    if (term.connections.isNotEmpty()) {
-        SectionCard(title = R.string.companion_term_connections) {
-            term.connections.forEachIndexed { index, connection ->
-                if (index > 0) CardDivider()
-                ClaimItem(
-                    key = "term-con-$index",
-                    heading = connection.name,
-                    text = connection.text,
-                    sources = connection.sources,
-                    onSource = onSource,
-                )
-            }
-        }
-    }
-    if (term.unknown.isNotEmpty()) {
-        SectionCard(title = R.string.companion_term_unknown) {
-            term.unknown.forEach { Text(it, style = MaterialTheme.typography.bodyLarge) }
-        }
-    }
+    val sections = listOf(
+        R.string.companion_term_what to term.what.map { Triple(null, it.text, it.sources) },
+        R.string.companion_term_role to term.role.map { Triple(null, it.text, it.sources) },
+        R.string.companion_term_changes to term.changes.map { Triple(null, it.text, it.sources) },
+        R.string.companion_term_connections to term.connections.map { Triple(it.name, it.text, it.sources) },
+    )
+    ClaimSections(sections, "term", onSource)
 }
 
 @Composable
@@ -464,8 +444,8 @@ internal fun AnswerActions(title: String, text: () -> CompanionNote, onSaveNote:
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val copied = stringResource(R.string.translation_copied)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(
             onClick = {
                 val plain = text().plain
                 scope.launch {
@@ -476,8 +456,14 @@ internal fun AnswerActions(title: String, text: () -> CompanionNote, onSaveNote:
                     }
                 }
             },
-        ) { Text(stringResource(R.string.companion_details_copy)) }
-        OutlinedButton(onClick = { onSaveNote(text().markdown) }) { Text(stringResource(R.string.companion_save_note)) }
+        ) {
+            Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(stringResource(R.string.companion_details_copy), modifier = Modifier.padding(start = 6.dp))
+        }
+        TextButton(onClick = { onSaveNote(text().markdown) }) {
+            Icon(Icons.Outlined.EditNote, contentDescription = null, modifier = Modifier.size(18.dp))
+            Text(stringResource(R.string.companion_save_note), modifier = Modifier.padding(start = 6.dp))
+        }
     }
 }
 

@@ -328,7 +328,6 @@ private fun WhereSection(
             )
             is WhereView.Failed -> FailureMessage(where.failed, onRetry = actions.whereWasI, onChooseModel = onChooseModel)
             is WhereView.Shown -> {
-                WhereAnswer(where.answer, onChapter)
                 val title = stringResource(R.string.story_where_title)
                 val text = CompanionNotes.whereWasI(
                     where.answer,
@@ -343,6 +342,7 @@ private fun WhereSection(
                     ),
                 )
                 AnswerActions(title, { text }, actions.saveNote)
+                WhereAnswer(where.answer, onChapter)
             }
         }
     }

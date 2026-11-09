@@ -1468,7 +1468,7 @@
         <item quantity="one">%1$d passaggio</item>
         <item quantity="other">%1$d passaggi</item>
     </plurals>
-    <string name="companion_peek_return">Torna dove hai chiesto</string>
+    <string name="companion_peek_return">Torna alla pagina</string>
     <string name="companion_retry">Riprova</string>
     <string name="companion_failed_cancelled">Ricerca annullata.</string>
     <string name="companion_failed_key">Il server ha rifiutato la chiave. Controllala in Servizi esterni e chiavi API.</string>
@@ -1482,7 +1482,6 @@
     <string name="companion_failed_too_long">Questa ricerca contiene più testo di quanto il modello possa leggere in una volta.</string>
     <string name="companion_failed_unreadable">Impossibile leggere il testo precedente di questo libro.</string>
     <string name="companion_failed_refused">Il modello si è rifiutato di rispondere, oppure un filtro di sicurezza ha bloccato la risposta.</string>
-    <string name="companion_failed_asked">Chiesto a %1$s su %2$s.</string>
     <string name="companion_hint_malformed">Non ha risposto nel formato richiesto dal compagno, nemmeno dopo che gli è stato indicato l\'errore. I modelli piccoli spesso hanno difficoltà con questo. Prova un altro modello.</string>
     <string name="companion_hint_refused">Alcuni modelli rifiutano domande sul testo di un libro. Prova un altro modello.</string>
     <string name="companion_hint_limit">Il modello ha continuato a cercare nel libro senza arrivare a una risposta. Prova un altro modello.</string>
@@ -1549,7 +1548,7 @@
     <string name="codex_settings_enabled">Compagno sul dispositivo</string>
     <string name="codex_settings_summary">Indicizza nomi e collegamenti offline aprendo il Compagno. Senza IA né chiave API. Se disattivato, il Compagno mostra comunque la storia e i profili IA dei personaggi.</string>
     <string name="codex_ai_hint_title">Il compagno fa molto di più con un servizio di IA</string>
-    <string name="codex_ai_hint">Da solo, il compagno elenca i nomi del libro e chi compare con chi. Con un servizio di IA riassume anche la storia finora, descrive ogni personaggio e spiega come sono legati, sempre in base al libro fino al punto in cui sei.</string>
+    <string name="codex_ai_hint">Con un servizio di IA, il compagno riassume anche la storia e descrive ogni personaggio, in base al libro fino al punto in cui sei.</string>
     <string name="codex_ai_hint_dismiss">Non mostrare più</string>
     <string name="codex_preparing">Preparazione del libro…</string>
     <string name="codex_scanning">Analisi del libro…</string>

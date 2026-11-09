@@ -1419,7 +1419,7 @@
     <plurals name="companion_sources_count">
         <item quantity="other">%1$d 处段落</item>
     </plurals>
-    <string name="companion_peek_return">返回提问处</string>
+    <string name="companion_peek_return">返回原处</string>
     <string name="companion_retry">重试</string>
     <string name="companion_failed_cancelled">已取消查找。</string>
     <string name="companion_failed_key">服务器拒绝了密钥。请在“外部服务和 API 密钥”中检查。</string>
@@ -1433,7 +1433,6 @@
     <string name="companion_failed_too_long">此次查找包含的文本超过模型一次能读取的量。</string>
     <string name="companion_failed_unreadable">无法读取本书的前文。</string>
     <string name="companion_failed_refused">模型拒绝回答，或安全过滤器拦截了回答。</string>
-    <string name="companion_failed_asked">已询问 %2$s 上的 %1$s。</string>
     <string name="companion_hint_malformed">即使被告知错误后，它仍未按伴侣所需的格式回答。较小的模型常有这个问题。请尝试其他模型。</string>
     <string name="companion_hint_refused">有些模型会拒绝有关书籍文本的问题。请尝试其他模型。</string>
     <string name="companion_hint_limit">模型一直在书中搜索，却没有给出答案。请尝试其他模型。</string>
@@ -1500,7 +1499,7 @@
     <string name="codex_settings_enabled">设备端阅读伴侣</string>
     <string name="codex_settings_summary">打开阅读伴侣即可离线索引名称与联系，无需 AI 或 API 密钥。关闭后，阅读伴侣仍会显示前情与 AI 人物简介。</string>
     <string name="codex_ai_hint_title">配合 AI 服务，阅读伴侣能做得更多</string>
-    <string name="codex_ai_hint">单独使用时，阅读伴侣会列出书中的人名以及谁和谁一起出现。配合 AI 服务，它还能回顾到目前为止的情节、介绍每个人物并说明人物关系，内容始终只来自你当前位置之前的书中文字。</string>
+    <string name="codex_ai_hint">配合 AI 服务，阅读伴侣还能回顾情节并介绍每个人物，内容只来自你当前位置之前的书中文字。</string>
     <string name="codex_ai_hint_dismiss">不再显示</string>
     <string name="codex_preparing">正在准备书籍…</string>
     <string name="codex_scanning">正在扫描书籍…</string>
