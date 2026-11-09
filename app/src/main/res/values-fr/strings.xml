@@ -1587,7 +1587,7 @@
     <string name="codex_graph_empty">Poursuivez la lecture pour trouver des noms partageant au moins deux chapitres.</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
-    <string name="story_about">Écrit par un modèle d’IA à partir des récapitulatifs des chapitres précédents. Il peut se tromper, affirmer ce que le livre ne dit pas, ou révéler ce que le modèle sait de ce livre par ailleurs.</string>
+    <string name="story_about">Résumé par IA des récapitulatifs précédents. Il peut contenir des erreurs.</string>
     <string name="story_failed">Impossible de lire l’histoire jusqu’ici.</string>
     <string name="story_nothing_before">Aucun chapitre précédent à afficher.</string>
     <string name="story_no_summary">Pas de résumé dans ce récapitulatif</string>
@@ -1595,6 +1595,7 @@
     <string name="story_go">Aller au chapitre : %1$s</string>
     <string name="story_go_unavailable">Liseur ne sait pas exactement où commence ce chapitre.</string>
     <string name="story_so_far">Jusqu’ici</string>
+    <string name="story_earlier">Chapitres précédents</string>
     <string name="story_covers_first">Couvre le chapitre 1</string>
     <string name="story_covers">Couvre les chapitres 1 à %1$d</string>
     <string name="story_none_yet">Pas encore de résumé.</string>
@@ -1614,12 +1615,11 @@
     <string name="story_stop">Arrêter</string>
     <string name="story_summarize">Récapituler</string>
     <string name="story_summarize_again">Récapituler à nouveau</string>
-    <string name="story_status_missing">Pas encore récapitulé</string>
     <string name="story_status_queued">En attente</string>
     <string name="story_status_working">Récapitulatif en cours…</string>
     <string name="story_status_failed">Récapitulatif impossible</string>
     <string name="story_where_title">Où en étais-je ?</string>
-    <string name="story_where_about">Rappelle où vous vous êtes arrêté, à partir du texte juste avant votre position et des résumés des chapitres précédents, envoyés à %1$s quand vous touchez Me rappeler.</string>
+    <string name="story_where_about">Envoie le texte juste avant votre position et les récapitulatifs précédents à %1$s quand vous touchez Me rappeler.</string>
     <string name="story_where_ask">Me rappeler</string>
     <string name="story_where_asking">Rappel de l\'endroit où vous vous êtes arrêté…</string>
     <string name="story_where_empty">Il n\'y a encore rien avant votre position à rappeler.</string>
@@ -1629,10 +1629,6 @@
     <string name="story_where_focus">Au premier plan</string>
     <string name="story_where_tone">Ambiance</string>
     <string name="story_where_questions">Encore ouvert</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">D\'après le résumé du chapitre %1$s</item>
-        <item quantity="other">D\'après les résumés des chapitres %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Le chapitre %1$s n’a pas encore de récapitulatif</item>
         <item quantity="other">Les chapitres %1$s n’ont pas encore de récapitulatif</item>

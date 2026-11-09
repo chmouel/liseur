@@ -1538,7 +1538,7 @@
     <string name="codex_graph_empty">继续阅读，以发现至少在两个章节中共同出现的名称。</string>
     <string name="codex_more">加载更多段落</string>
     <string name="codex_no_passages">未找到之前的段落。</string>
-    <string name="story_about">由 AI 模型根据此前各章的回顾写成。内容可能有误，可能写出书中没有的内容，也可能透露模型从别处得知的本书情节。</string>
+    <string name="story_about">AI 根据前面章节的回顾生成的摘要，可能有误。</string>
     <string name="story_failed">无法读取前情回顾。</string>
     <string name="story_nothing_before">没有可显示的前面章节。</string>
     <string name="story_no_summary">此回顾中没有摘要</string>
@@ -1546,6 +1546,7 @@
     <string name="story_go">前往本章：%1$s</string>
     <string name="story_go_unavailable">Liseur 无法确定本章的确切起点。</string>
     <string name="story_so_far">到目前为止</string>
+    <string name="story_earlier">前面的章节</string>
     <string name="story_covers_first">涵盖第 1 章</string>
     <string name="story_covers">涵盖第 1 至 %1$d 章</string>
     <string name="story_none_yet">还没有摘要。</string>
@@ -1565,12 +1566,11 @@
     <string name="story_stop">停止</string>
     <string name="story_summarize">回顾</string>
     <string name="story_summarize_again">重新回顾</string>
-    <string name="story_status_missing">尚未回顾</string>
     <string name="story_status_queued">等待中</string>
     <string name="story_status_working">正在回顾…</string>
     <string name="story_status_failed">无法回顾</string>
     <string name="story_where_title">我读到哪了？</string>
-    <string name="story_where_about">根据你当前位置之前的文字和前面章节的回顾，提醒你读到了哪里；点按“提醒我”时会发送给 %1$s。</string>
+    <string name="story_where_about">点按“提醒我”时，会把你当前位置前的文字和前面的回顾发送给 %1$s。</string>
     <string name="story_where_ask">提醒我</string>
     <string name="story_where_asking">正在回想你读到了哪里…</string>
     <string name="story_where_empty">你的位置之前还没有可回想的内容。</string>
@@ -1580,9 +1580,6 @@
     <string name="story_where_focus">焦点</string>
     <string name="story_where_tone">氛围</string>
     <string name="story_where_questions">悬而未决</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="other">来自第 %1$s 章的回顾</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="other">第 %1$s 章还没有回顾</item>
     </plurals>

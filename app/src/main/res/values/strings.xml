@@ -1652,7 +1652,7 @@
     <string name="codex_graph_empty">Read further to find names sharing at least two chapters.</string>
     <string name="codex_more">Load more passages</string>
     <string name="codex_no_passages">No earlier passages found.</string>
-    <string name="story_about">Written by an AI model from the recaps of earlier chapters. It may be wrong, say things the book does not, or give away something the model knows about this book from elsewhere.</string>
+    <string name="story_about">AI summary of the earlier recaps. It may contain mistakes.</string>
     <string name="story_failed">The story so far could not be read.</string>
     <string name="story_nothing_before">No earlier chapter to show.</string>
     <string name="story_no_summary">No summary in this recap</string>
@@ -1660,6 +1660,7 @@
     <string name="story_go">Go to chapter: %1$s</string>
     <string name="story_go_unavailable">Liseur cannot tell exactly where this chapter starts.</string>
     <string name="story_so_far">So far</string>
+    <string name="story_earlier">Earlier chapters</string>
     <string name="story_covers_first">Covers chapter 1</string>
     <string name="story_covers">Covers chapters 1 to %1$d</string>
     <string name="story_none_yet">No summary yet.</string>
@@ -1679,12 +1680,11 @@
     <string name="story_stop">Stop</string>
     <string name="story_summarize">Recap</string>
     <string name="story_summarize_again">Recap again</string>
-    <string name="story_status_missing">Not recapped yet</string>
     <string name="story_status_queued">Waiting</string>
     <string name="story_status_working">Recapping…</string>
     <string name="story_status_failed">Could not be recapped</string>
     <string name="story_where_title">Where was I?</string>
-    <string name="story_where_about">Recalls where you stopped, from the text just before your place and the recaps of earlier chapters, sent to %1$s when you tap Remind me.</string>
+    <string name="story_where_about">Sends the text just before your place and the earlier recaps to %1$s when you tap Remind me.</string>
     <string name="story_where_ask">Remind me</string>
     <string name="story_where_asking">Recalling where you stopped…</string>
     <string name="story_where_empty">There is nothing before your place to recall yet.</string>
@@ -1694,10 +1694,6 @@
     <string name="story_where_focus">In focus</string>
     <string name="story_where_tone">Mood</string>
     <string name="story_where_questions">Still open</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">From the recap of chapter %1$s</item>
-        <item quantity="other">From the recaps of chapters %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Chapter %1$s has no recap yet</item>
         <item quantity="other">Chapters %1$s have no recap yet</item>

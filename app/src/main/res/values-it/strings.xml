@@ -1587,7 +1587,7 @@
     <string name="codex_graph_empty">Continua a leggere per trovare nomi presenti in almeno due capitoli comuni.</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>
-    <string name="story_about">Scritto da un modello di IA a partire dai riepiloghi dei capitoli precedenti. Può sbagliare, affermare cose che il libro non dice o rivelare ciò che il modello sa di questo libro da altre fonti.</string>
+    <string name="story_about">Sintesi IA dei riepiloghi precedenti. Può contenere errori.</string>
     <string name="story_failed">Impossibile leggere la storia finora.</string>
     <string name="story_nothing_before">Nessun capitolo precedente da mostrare.</string>
     <string name="story_no_summary">Nessun riassunto in questo riepilogo</string>
@@ -1595,6 +1595,7 @@
     <string name="story_go">Vai al capitolo: %1$s</string>
     <string name="story_go_unavailable">Liseur non sa esattamente dove inizia questo capitolo.</string>
     <string name="story_so_far">Finora</string>
+    <string name="story_earlier">Capitoli precedenti</string>
     <string name="story_covers_first">Copre il capitolo 1</string>
     <string name="story_covers">Copre i capitoli da 1 a %1$d</string>
     <string name="story_none_yet">Nessun riassunto per ora.</string>
@@ -1614,12 +1615,11 @@
     <string name="story_stop">Ferma</string>
     <string name="story_summarize">Riepiloga</string>
     <string name="story_summarize_again">Riepiloga di nuovo</string>
-    <string name="story_status_missing">Non ancora riepilogato</string>
     <string name="story_status_queued">In attesa</string>
     <string name="story_status_working">Riepilogo in corso…</string>
     <string name="story_status_failed">Riepilogo non riuscito</string>
     <string name="story_where_title">Dov\'ero rimasto?</string>
-    <string name="story_where_about">Ricorda dove ti sei fermato, dal testo subito prima della tua posizione e dai riassunti dei capitoli precedenti, inviati a %1$s quando tocchi Ricordami.</string>
+    <string name="story_where_about">Invia il testo appena prima della tua posizione e i riepiloghi precedenti a %1$s quando tocchi Ricordami.</string>
     <string name="story_where_ask">Ricordami</string>
     <string name="story_where_asking">Ricostruisco dove ti sei fermato…</string>
     <string name="story_where_empty">Non c\'è ancora niente prima della tua posizione da ricordare.</string>
@@ -1629,10 +1629,6 @@
     <string name="story_where_focus">In primo piano</string>
     <string name="story_where_tone">Atmosfera</string>
     <string name="story_where_questions">Ancora aperto</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">Dal riassunto del capitolo %1$s</item>
-        <item quantity="other">Dai riassunti dei capitoli %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Il capitolo %1$s non ha ancora un riepilogo</item>
         <item quantity="other">I capitoli %1$s non hanno ancora un riepilogo</item>

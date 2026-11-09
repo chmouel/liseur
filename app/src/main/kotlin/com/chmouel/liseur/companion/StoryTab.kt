@@ -2,7 +2,6 @@ package com.chmouel.liseur.companion
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -14,12 +13,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +40,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -82,25 +79,42 @@ internal fun LazyListScope.storyTab(
         story.failed -> item(key = "story:failed") { StoryNote(stringResource(R.string.story_failed)) }
         story.chapters.isEmpty() -> {
             item(key = "story:empty") { StoryNote(stringResource(R.string.story_nothing_before)) }
-            item(key = "story:where") { WhereCard(story.whereWasI, story.service, actions, onChapter, onChooseModel) }
+            item(key = "story:where") { StoryCard { WhereSection(story.whereWasI, story.service, actions, onChapter, onChooseModel) } }
         }
         else -> {
             if (story.asking) item(key = "story:consent") { StoryConsent(story.service, actions) }
+            // Before consent an empty summary only repeats what the consent card asks.
+            val soFar = !story.asking || story.soFar.text != null || story.soFar.writing
+            item(key = "story:catchup") {
+                StoryCard {
+                    if (soFar) {
+                        SoFarSection(story.soFar, actions, onChooseModel)
+                        HorizontalDivider(Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                    WhereSection(story.whereWasI, story.service, actions, onChapter, onChooseModel)
+                }
+            }
+            item(key = "story:earlier") {
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.story_earlier),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (story.missing > 0 && !story.asking && story.work == null) {
+                        SummarizeMissing(story.missing, story.service, actions.summarizeMissing)
+                    }
+                }
+            }
             story.work?.let { work -> item(key = "story:work") { StoryWorkStrip(work, actions.stop) } }
-            // Before consent an empty card only repeats what the consent card asks.
-            if (!story.asking || story.soFar.text != null || story.soFar.writing) {
-                item(key = "story:sofar") { StorySoFarCard(story.soFar, actions, onChooseModel) }
-            }
-            item(key = "story:where") { WhereCard(story.whereWasI, story.service, actions, onChapter, onChooseModel) }
-            if (story.missing > 0 && !story.asking) item(key = "story:missing") {
-                SummarizeMissing(story.missing, story.service, actions.summarizeMissing)
-            }
             val newestFirst = story.chapters.asReversed()
             itemsIndexed(newestFirst, key = { _, chapter -> "story:${chapter.unit}" }) { index, chapter ->
                 StoryRow(
                     chapter = chapter,
                     first = index == 0,
                     last = index == newestFirst.lastIndex,
+                    asking = story.asking,
                     onSummarize = { actions.summarize(chapter.unit) },
                     onChapter = onChapter,
                     onChooseModel = onChooseModel,
@@ -121,9 +135,12 @@ private fun StoryNote(text: String) {
     )
 }
 
-/** Text cut at [lines], with a Show more / Show less button only when there is more to show. */
+/**
+ * Text cut at [lines], with a Show more / Show less button only when there
+ * is more to show; [more] also counts as more, shown only when open.
+ */
 @Composable
-private fun ExpandableText(text: String, style: TextStyle, lines: Int) {
+private fun ExpandableText(text: String, style: TextStyle, lines: Int, more: (@Composable () -> Unit)? = null) {
     var open by rememberSaveable(text) { mutableStateOf(false) }
     var overflows by remember(text) { mutableStateOf(false) }
     Column {
@@ -135,7 +152,8 @@ private fun ExpandableText(text: String, style: TextStyle, lines: Int) {
             onTextLayout = { if (!open) overflows = it.hasVisualOverflow },
             modifier = Modifier.animateContentSize(),
         )
-        if (open || overflows) {
+        if (open) more?.invoke()
+        if (open || overflows || more != null) {
             TextButton(onClick = { open = !open }, contentPadding = PaddingValues(vertical = 8.dp)) {
                 Text(stringResource(if (open) R.string.story_less else R.string.story_more))
             }
@@ -198,34 +216,16 @@ private fun StoryWorkStrip(work: StoryWork, onStop: () -> Unit) {
 }
 
 @Composable
-private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseModel: () -> Unit) {
-    var open by rememberSaveable { mutableStateOf(false) }
+private fun SoFarSection(soFar: StorySoFar, actions: StoryActions, onChooseModel: () -> Unit) {
     val text = soFar.text
-    StoryCard {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .then(if (text != null) Modifier.clickable(role = Role.Button) { open = !open } else Modifier),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                stringResource(R.string.story_so_far),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
-            if (text != null) {
-                Icon(
-                    if (open) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = stringResource(if (open) R.string.story_less else R.string.story_more),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-        if (text != null && open) {
-            Text(text, style = MaterialTheme.typography.bodyLarge)
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            stringResource(R.string.story_so_far),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
         if (text != null) {
+            ExpandableText(text, MaterialTheme.typography.bodyLarge, SO_FAR_LINES)
             soFar.through?.let { through ->
                 Text(
                     if (through == 0) stringResource(R.string.story_covers_first)
@@ -276,7 +276,7 @@ private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseMod
                 }
             }
         }
-        if ((text != null && open) || soFar.writing) {
+        if (text != null || soFar.writing) {
             Text(
                 stringResource(R.string.story_about),
                 style = MaterialTheme.typography.bodySmall,
@@ -288,14 +288,14 @@ private fun StorySoFarCard(soFar: StorySoFar, actions: StoryActions, onChooseMod
 
 /** "Where was I?": asked only on a tap, with what it sends said before it. */
 @Composable
-private fun WhereCard(
+private fun WhereSection(
     where: WhereView<Locator>,
     service: String?,
     actions: StoryActions,
     onChapter: (Locator) -> Unit,
     onChooseModel: () -> Unit,
 ) {
-    StoryCard {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(R.string.story_where_title),
             style = MaterialTheme.typography.labelLarge,
@@ -354,30 +354,15 @@ private fun WhereAnswer(answer: WhereWasI<Locator>, onChapter: (Locator) -> Unit
         R.string.story_where_stopped to answer.stopped,
         R.string.story_where_objective to answer.objective,
         R.string.story_where_conflict to answer.conflict,
-        R.string.story_where_focus to answer.focus,
-        R.string.story_where_tone to answer.tone,
     ).forEach { (title, claim) ->
         if (claim == null) return@forEach
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ClaimItem(
-                key = "where-$title",
-                heading = stringResource(title),
-                text = claim.text,
-                sources = claim.sources,
-                onSource = { onChapter(it.place) },
-            )
-            if (claim.recaps.isNotEmpty()) {
-                Text(
-                    pluralStringResource(
-                        R.plurals.story_where_from_recaps,
-                        claim.recaps.size,
-                        StorySummaries.ranges(claim.recaps.map { it + 1 }, "–"),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        ClaimItem(
+            key = "where-$title",
+            heading = stringResource(title),
+            text = claim.text,
+            sources = claim.sources,
+            onSource = { onChapter(it.place) },
+        )
     }
     if (answer.questions.isNotEmpty()) {
         Text(stringResource(R.string.story_where_questions), style = MaterialTheme.typography.titleSmall)
@@ -389,7 +374,7 @@ private fun WhereAnswer(answer: WhereWasI<Locator>, onChapter: (Locator) -> Unit
 private fun SummarizeMissing(count: Int, service: String?, onConfirm: () -> Unit) {
     var confirming by rememberSaveable { mutableStateOf(false) }
     val label = pluralStringResource(R.plurals.story_summarize_missing, count, count)
-    OutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(bottom = 12.dp)) { Text(label) }
+    TextButton(onClick = { confirming = true }) { Text(label) }
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
@@ -409,6 +394,7 @@ private fun StoryRow(
     chapter: StoryChapter<Locator>,
     first: Boolean,
     last: Boolean,
+    asking: Boolean,
     onSummarize: () -> Unit,
     onChapter: (Locator) -> Unit,
     onChooseModel: () -> Unit,
@@ -464,14 +450,21 @@ private fun StoryRow(
                 }
             }
             if (recap is StoryRecap.Summary) {
-                ExpandableText(recap.sentences.joinToString(" "), MaterialTheme.typography.bodyMedium, CHAPTER_LINES)
-            }
-            if (chapter.characters.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    chapter.characters.forEach { name ->
-                        SuggestionChip(onClick = { onCharacter(name) }, label = { Text(name) })
-                    }
-                }
+                val characters = chapter.characters.take(CHAPTER_CHARACTERS)
+                ExpandableText(
+                    recap.sentences.joinToString(" "),
+                    MaterialTheme.typography.bodyMedium,
+                    CHAPTER_LINES,
+                    more = if (characters.isEmpty()) null else {
+                        {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                characters.forEach { name ->
+                                    SuggestionChip(onClick = { onCharacter(name) }, label = { Text(name) })
+                                }
+                            }
+                        }
+                    },
+                )
             }
             if (chapter.start == null) {
                 Text(
@@ -482,7 +475,7 @@ private fun StoryRow(
             }
             if (progress is StoryProgress.Failed) {
                 FailureMessage(progress.failed, onRetry = onSummarize, onChooseModel = onChooseModel)
-            } else if (chapter.askable) {
+            } else if (chapter.askable && !asking) {
                 FlowRow {
                     TextButton(onClick = onSummarize) {
                         Text(stringResource(if (recap == StoryRecap.Unreadable) R.string.story_summarize_again else R.string.story_summarize))
@@ -501,7 +494,7 @@ private fun statusLabel(chapter: StoryChapter<*>): Pair<String, Color>? {
         is StoryProgress.Working -> stringResource(R.string.story_status_working) to colors.primary
         is StoryProgress.Failed -> stringResource(R.string.story_status_failed) to colors.error
         StoryProgress.Idle -> when (chapter.recap) {
-            StoryRecap.Missing -> stringResource(R.string.story_status_missing) to colors.onSurfaceVariant
+            StoryRecap.Missing -> null
             StoryRecap.NoSummary -> stringResource(R.string.story_no_summary) to colors.onSurfaceVariant
             StoryRecap.Unreadable -> stringResource(R.string.story_unreadable) to colors.error
             is StoryRecap.Summary -> null
@@ -510,6 +503,8 @@ private fun statusLabel(chapter: StoryChapter<*>): Pair<String, Color>? {
 }
 
 private const val CHAPTER_LINES = 3
+private const val CHAPTER_CHARACTERS = 6
+private const val SO_FAR_LINES = 5
 private val RAIL_WIDTH = 28.dp
 private val RAIL_X = 8.dp
 private val NODE_Y = 12.dp

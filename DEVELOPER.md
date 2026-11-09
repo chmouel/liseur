@@ -197,7 +197,9 @@ AI translation or OpenAI-compatible speech, never a real provider or a
 one-off stub. It serves `GET /v1/models` (`stub-chat`, `stub-tts`),
 `POST /v1/chat/completions` (the `<passage>` prefixed `[T]`,
 `--prefix`; a companion lookup gets a term citing its first passage and
-"Where was I?" fields citing its last passage and first recap), `POST /v1/audio/speech` (silent 24 kHz WAV; other
+"Where was I?" fields citing its last passage and first recap; a
+chapter recap names who its first passage mentions, and the story so far
+gets a long summary), `POST /v1/audio/speech` (silent 24 kHz WAV; other
 `response_format` gets the 400 that triggers the MP3 fallback),
 `GET /v1/audio/voices` (`stub_a`, `stub_b`, and English/French/Spanish
 voices), and `GET /_stub/requests`
@@ -1893,6 +1895,12 @@ separate from translation's, moved and forgotten with server edits in
   cancels such work once revoked. Taps on Recap, Recap missing chapters
   (failed ones included) and Write summary always work. Recap again replaces
   only an undecodable row, after the new one is saved.
+- Story's layout: one catch-up card (So far, cut at five lines, then
+  Where was I?, which keeps where you stopped, the objective, the conflict
+  and open questions), then an Earlier chapters header holding Recap
+  missing chapters. Per-row Recap buttons and Recap missing chapters wait
+  for the consent card to be answered; a row's character chips show only
+  when its summary is open.
 - `StorySummaries` folds summaries into `FAN_OUT` windows (none below
   `MIN_RECAPS`, enforced by `SummaryWriter`). A node is written only when
   its whole window is listed. A node is keyed by a hash of formats, content
