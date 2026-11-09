@@ -57,7 +57,7 @@ object Reimmersion {
     private fun fieldLength(detail: CompanionDetail) = when (detail) {
         CompanionDetail.BRIEF -> "one short sentence"
         CompanionDetail.NORMAL -> "one or two short sentences"
-        CompanionDetail.DETAILED -> "two to four sentences, with the concrete details that matter"
+        CompanionDetail.DETAILED -> "two to four sentences, with the concrete details that matter, under $MAX_CLAIM characters"
     }
 
     private fun questions(detail: CompanionDetail) = if (detail == CompanionDetail.BRIEF) 1 else MAX_QUESTIONS

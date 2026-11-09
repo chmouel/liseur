@@ -65,11 +65,13 @@ class CompanionBackupTest {
     fun `running summaries decode and invalid ones are rejected`() {
         val decoded = decodeCompanionBackup(withSummaries(summary()))
         assertEquals(listOf("So far."), decoded.summaries.map { it.summary.text })
+        assertEquals("normal", decoded.summaries.single().summary.detail)
+        assertEquals("brief", decodeCompanionBackup(withSummaries(summary().put("detail", "brief"))).summaries.single().summary.detail)
         val invalid = listOf(
             "key" to "short", "lo" to 3, "level" to -1, "deps" to "[]", "deps" to "broken",
             "deps" to StorySummaries.encodeDeps(listOf(SummaryDep(5, "f", true))),
             "deps" to StorySummaries.encodeDeps(listOf(SummaryDep(2, "c", true), SummaryDep(0, "a", true))),
-            "text" to "", "text" to "x".repeat(StorySummaries.TOP_CHARACTERS + 1), "summary_format" to 0,
+            "text" to "", "text" to "x".repeat(StorySummaries.TOP_CHARACTERS + 1), "summary_format" to 0, "detail" to "huge",
         )
         for ((key, value) in invalid) {
             assertThrows("$key=$value", Exception::class.java) {

@@ -62,8 +62,9 @@ internal object CompanionPrompt {
             "most two claims, backstory and changes at most three, relationships and connections at most three, " +
             "keeping only what matters most."
         CompanionDetail.DETAILED -> "\nMake the answer detailed: each claim is two or three sentences with concrete details " +
-            "from the passages; backstory and changes follow up to ten events in order, and relationships and " +
-            "connections include every one the passages establish."
+            "from the passages, under ${Investigation.MAX_CLAIM} characters; backstory and changes follow up to ten " +
+            "events in order, and relationships and connections include up to ${Investigation.MAX_CLAIMS}, the most " +
+            "important first."
     }
 
     fun seed(name: String, also: String?, scope: AskingScope, limits: InvestigationLimits): String {

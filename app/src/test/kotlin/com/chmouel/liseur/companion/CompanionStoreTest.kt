@@ -51,7 +51,21 @@ class CompanionStoreTest {
     @Test
     fun `the database migrates to its exported schema`() {
         helper.createDatabase("companion-schema-test", 1).close()
-        helper.runMigrationsAndValidate("companion-schema-test", 4, true, *CompanionDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate("companion-schema-test", 5, true, *CompanionDatabase.MIGRATIONS).close()
+    }
+
+    @Test
+    fun `saved stories so far from before the length choice read as normal`() {
+        helper.createDatabase("companion-detail-test", 4).apply {
+            execSQL("INSERT INTO story_summary VALUES ('$BOOK', 'k', 0, 0, 2, '$SHA', 1, 1, '[]', 'So far.', 1, 2)")
+            close()
+        }
+        helper.runMigrationsAndValidate("companion-detail-test", 5, true, *CompanionDatabase.MIGRATIONS).use { migrated ->
+            migrated.query("SELECT detail FROM story_summary").use { c ->
+                c.moveToFirst()
+                assertEquals("normal", c.getString(0))
+            }
+        }
     }
 
     @Test
@@ -64,7 +78,7 @@ class CompanionStoreTest {
             execSQL("INSERT INTO codex_book VALUES ('$BOOK', 'id', 4)")
             close()
         }
-        helper.runMigrationsAndValidate("companion-data-test", 4, true, *CompanionDatabase.MIGRATIONS).use { migrated ->
+        helper.runMigrationsAndValidate("companion-data-test", 5, true, *CompanionDatabase.MIGRATIONS).use { migrated ->
             for (table in listOf("chapter_recap", "recap_part", "recap_queue", "recap_choice", "codex_book")) {
                 migrated.query("SELECT COUNT(*) FROM $table").use { c ->
                     c.moveToFirst()

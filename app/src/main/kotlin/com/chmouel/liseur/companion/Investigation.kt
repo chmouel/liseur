@@ -558,7 +558,7 @@ class Investigation<P>(
         data class Answer(val answer: CompanionAnswer<*>) : Parsed
     }
 
-    private companion object {
+    internal companion object {
         const val SEED_MENTIONS = 10
         const val SEED_HINTS = 6
         const val SEED_CONTEXT = 1

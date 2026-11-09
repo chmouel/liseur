@@ -93,7 +93,7 @@ internal class StoryController(
 
                     val step = plan(stored.map { StorySummaries.input(it.unit, listed.getValue(it.unit), it.recap) }, asked.lo, length)
                     top = step
-                    val best = StorySummaries.best(inputs.saved.orEmpty(), listed, step?.key)
+                    val best = StorySummaries.best(inputs.saved.orEmpty(), listed, step?.key, length)
                     if (best != null && best.key != shownTop) {
                         shownTop = best.key
                         quietly { book.summaries.touch(best.key) }
