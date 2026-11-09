@@ -91,6 +91,18 @@ def main() -> int:
         check("other passages still translate", code == 200 and reply["choices"][0]["message"]["content"] == "[T] Translate this sentence.", reply)
     finally:
         refusal.stop()
+    long = Stub("--long")
+    try:
+        code, reply = long.json("POST", "/v1/chat/completions", {"messages": [
+            {"role": "system", "content": "You describe one character, or one other term."},
+            {"role": "user", "content": 'Describe <name>the ring</name>.\n<book ref="S1" chapter="1">\nA ring.\n</book>'},
+        ]})
+        answer = json.loads(reply["choices"][0]["message"]["content"])
+        check("--long fills every section of a term",
+              all(answer[key] for key in ("what", "role", "changes", "connections", "unknown"))
+              and len(answer["what"]) > 1 and answer["connections"][0]["refs"] == ["S1"], answer)
+    finally:
+        long.stop()
     stub = Stub()
     try:
         code, models = stub.json("GET", "/v1/models")

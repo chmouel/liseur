@@ -34,12 +34,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.DialogWindowProvider
@@ -108,7 +113,7 @@ fun LiseurModalBottomSheet(
                 if (onBack != null) {
                     DialogBack(onBack)
                 }
-                content()
+                Column(Modifier.fillMaxWidth().nestedScroll(KeepUpwardLeftover)) { content() }
             },
         )
         return
@@ -167,6 +172,26 @@ fun LiseurModalBottomSheet(
             }
         }
     }
+}
+
+/**
+ * Keeps what a list leaves over when scrolled or flung up past its end
+ * away from the sheet. Material hands it to the sheet's own drag, and an
+ * expanded sheet can only go further up by overshooting: the sheet then
+ * springs up and back under the reader's finger at every flick. A tall
+ * sheet is worse, as overshooting under the status bar changes the inset
+ * Material pads it with, so its height and its resting place move with
+ * it and it can be left stuck too high, its bottom out of view. A sheet
+ * below its resting place still moves up first, as Material takes upward
+ * scrolls and flings before the list does; pulling down at the top of a
+ * list still drags the sheet down.
+ */
+private val KeepUpwardLeftover = object : NestedScrollConnection {
+    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+        if (available.y < 0f) Offset(0f, available.y) else Offset.Zero
+
+    override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity =
+        if (available.y < 0f) Velocity(0f, available.y) else Velocity.Zero
 }
 
 @Composable
