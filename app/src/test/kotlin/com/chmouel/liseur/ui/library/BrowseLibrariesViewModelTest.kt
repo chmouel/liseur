@@ -213,6 +213,42 @@ class BrowseLibrariesViewModelTest {
     }
 
     @Test
+    fun `a chooser opened from the library leaves it when dismissed empty`() = withMain {
+        val model = model()
+        ready(model)
+        model.openFreeCatalogs(fromLibrary = true)
+        assertTrue(model.state.value.chooserFromLibrary)
+        model.closeChooser()
+
+        assertTrue(model.state.value.leaveForLibrary)
+        model.leaveForLibraryHandled()
+        assertFalse(model.state.value.leaveForLibrary)
+    }
+
+    @Test
+    fun `the screen's own chooser stays on the saved catalogs when dismissed`() = withMain {
+        val model = model()
+        ready(model)
+        model.openFreeCatalogs()
+        model.closeChooser()
+
+        assertFalse(model.state.value.leaveForLibrary)
+    }
+
+    @Test
+    fun `picking a catalog from the library chooser does not leave the browser`() = withMain {
+        db.remoteServerDao().upsert(saved(FreeCatalog.GALLICA.address))
+        val model = model()
+        ready(model)
+        model.openFreeCatalogs(fromLibrary = true)
+        model.connectPreset(FreeCatalog.GALLICA)
+        runCurrent()
+
+        assertFalse(model.state.value.leaveForLibrary)
+        assertEquals(2L, model.state.value.serverId)
+    }
+
+    @Test
     fun `a catalog picked from the form opens instead of leaving the form behind`() = withMain {
         db.remoteServerDao().upsert(saved(FreeCatalog.GUTENBERG.address))
         val model = model()

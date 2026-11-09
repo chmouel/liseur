@@ -178,22 +178,21 @@ fun BrowseLibrariesRoute(
     model: BrowseLibrariesViewModel = viewModel(factory = BrowseLibrariesViewModel.Factory),
 ) {
     val state by model.state.collectAsStateWithLifecycle()
-    // The empty library's card opens the chooser over this screen. If the
-    // reader dismisses it without picking anything there is nothing to
-    // come back to here, so it returns to the library instead of leaving
-    // them on an empty list they did not ask to see.
-    var chooserFromLibrary by remember { mutableStateOf(false) }
+    // The empty library's card opens the chooser over this screen.
     LaunchedEffect(openFreeCatalogs) {
         if (openFreeCatalogs) {
-            chooserFromLibrary = true
-            model.openFreeCatalogs()
+            model.openFreeCatalogs(fromLibrary = true)
             onFreeCatalogsOpened()
         }
     }
-    LaunchedEffect(state.chooserOpen) {
-        if (!state.chooserOpen && chooserFromLibrary) {
-            chooserFromLibrary = false
-            if (state.serverId == null) onExit()
+    // Dismissing that chooser without picking anything leaves the reader on
+    // an empty list they did not ask to see, so it returns to the library.
+    // The view model decides it: no effect here reads a chooser that the
+    // composition has not caught up with yet.
+    LaunchedEffect(state.leaveForLibrary) {
+        if (state.leaveForLibrary) {
+            model.leaveForLibraryHandled()
+            onExit()
         }
     }
     val back = { if (!model.back()) onExit() }
