@@ -256,7 +256,7 @@ private fun HitList(
                 pluralStringResource(R.plurals.search_result_count, hits.size, hits.size)
             },
             style = MaterialTheme.typography.labelMedium,
-            color = theme.foreground.copy(alpha = 0.6f),
+            color = theme.faded(0.6f),
             modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
         )
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp + bottomInset)) {
@@ -281,7 +281,7 @@ private fun SearchHitRow(hit: Locator, theme: ReaderTheme, onClick: () -> Unit) 
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelSmall,
-                color = theme.foreground.copy(alpha = 0.6f),
+                color = theme.faded(0.6f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -308,7 +308,7 @@ private fun Message(theme: ReaderTheme, text: String, bottomInset: Dp) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
-            color = theme.foreground.copy(alpha = 0.7f),
+            color = theme.faded(0.7f),
             modifier = Modifier.padding(horizontal = 32.dp),
         )
     }

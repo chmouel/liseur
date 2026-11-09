@@ -194,7 +194,7 @@ fun ContentsScreen(
                             selected = tab == entry,
                             onClick = { tab = entry },
                             selectedContentColor = theme.foreground,
-                            unselectedContentColor = theme.foreground.copy(alpha = 0.6f),
+                            unselectedContentColor = theme.faded(0.6f),
                             text = {
                                 Text(
                                     text = stringResource(entry.labelRes),
@@ -442,7 +442,7 @@ private fun AnnotationRow(
             Icon(
                 Icons.AutoMirrored.Outlined.Notes,
                 contentDescription = null,
-                tint = theme.foreground.copy(alpha = 0.65f),
+                tint = theme.faded(0.65f),
                 modifier = Modifier
                     .padding(top = 1.dp)
                     .size(18.dp),
@@ -465,7 +465,7 @@ private fun AnnotationRow(
                 Text(
                     text = where,
                     style = MaterialTheme.typography.labelSmall,
-                    color = theme.foreground.copy(alpha = 0.6f),
+                    color = theme.faded(0.6f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -486,7 +486,7 @@ private fun AnnotationRow(
             }
             note?.let {
                 Text(
-                    text = noteAnnotated(it, theme.foreground.copy(alpha = 0.6f)),
+                    text = noteAnnotated(it, theme.faded(0.6f)),
                     style = if (bookNote) {
                         MaterialTheme.typography.bodyMedium
                     } else {
@@ -496,7 +496,7 @@ private fun AnnotationRow(
                     color = if (bookNote) {
                         theme.foreground
                     } else {
-                        theme.foreground.copy(alpha = 0.75f)
+                        theme.faded(0.75f)
                     },
                     maxLines = when {
                         expanded -> Int.MAX_VALUE
@@ -531,7 +531,7 @@ private fun AnnotationRow(
                             },
                         ),
                         style = MaterialTheme.typography.labelMedium,
-                        color = theme.foreground.copy(alpha = 0.75f),
+                        color = theme.faded(0.75f),
                     )
                 }
             }
@@ -540,7 +540,7 @@ private fun AnnotationRow(
             Icon(
                 Icons.Outlined.Delete,
                 contentDescription = stringResource(R.string.annotation_delete),
-                tint = theme.foreground.copy(alpha = 0.6f),
+                tint = theme.faded(0.6f),
             )
         }
     }
@@ -552,7 +552,7 @@ private fun EmptyMessage(theme: ReaderTheme, textRes: Int, bottomInset: Dp) {
         Text(
             text = stringResource(textRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = theme.foreground.copy(alpha = 0.7f),
+            color = theme.faded(0.7f),
             modifier = Modifier.padding(horizontal = 32.dp),
         )
     }
@@ -601,7 +601,7 @@ private fun ContentsRow(
                     MaterialTheme.typography.bodyMedium
                 },
                 fontWeight = if (current) FontWeight.SemiBold else FontWeight.Normal,
-                color = theme.foreground.copy(alpha = if (entry.depth == 0) 1f else 0.82f),
+                color = if (entry.depth == 0) theme.foreground else theme.faded(0.82f),
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
             )

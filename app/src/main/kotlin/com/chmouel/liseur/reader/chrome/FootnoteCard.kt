@@ -136,7 +136,7 @@ fun FootnoteCard(
                     text = stringResource(R.string.reader_footnote),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = theme.foreground.copy(alpha = 0.6f),
+                    color = theme.faded(0.6f),
                 )
                 Text(
                     text = text,
@@ -155,7 +155,7 @@ fun FootnoteCard(
                     TextButton(onClick = onGoToNote) {
                         Text(
                             text = stringResource(R.string.reader_footnote_go_to),
-                            color = theme.foreground.copy(alpha = 0.75f),
+                            color = theme.faded(0.75f),
                         )
                     }
                     TextButton(onClick = onDismiss) {

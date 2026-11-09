@@ -85,8 +85,8 @@ fun NoteSheet(
     val ink = theme.foreground
     // A wash under half ink dithers to grey on electronic paper; there the
     // quieter text is simply the ink.
-    val quiet = if (eInk) ink else ink.copy(alpha = 0.7f)
-    val faint = if (eInk) ink else ink.copy(alpha = 0.55f)
+    val quiet = if (eInk) ink else theme.faded(0.7f)
+    val faint = if (eInk) ink else theme.faded(0.55f)
     val tint = HighlightTint.fromName(annotation.tint)
 
     LiseurModalBottomSheet(

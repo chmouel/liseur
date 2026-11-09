@@ -158,6 +158,12 @@ enum class ReaderTheme(
     val isDim: Boolean
         get() = this == NIGHT_RED
 
+    /**
+     * The ink softened for secondary text and icons, or the full ink on
+     * a [isDim] page, which has no contrast to give away.
+     */
+    fun faded(alpha: Float): Color = if (isDim) foreground else foreground.copy(alpha = alpha)
+
     companion object {
         val Default = LIGHT
 

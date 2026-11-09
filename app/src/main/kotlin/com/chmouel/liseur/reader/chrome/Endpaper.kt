@@ -222,7 +222,7 @@ fun Endpaper(
                         Text(
                             text = seriesLine,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = theme.foreground.copy(alpha = 0.7f),
+                            color = theme.faded(0.7f),
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -234,7 +234,7 @@ fun Endpaper(
                             text = author,
                             style = MaterialTheme.typography.bodyLarge,
                             fontStyle = FontStyle.Italic,
-                            color = theme.foreground.copy(alpha = 0.7f),
+                            color = theme.faded(0.7f),
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -251,7 +251,7 @@ fun Endpaper(
                                 readingDuration(timeSpentMs),
                             ),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = theme.foreground.copy(alpha = 0.65f),
+                            color = theme.faded(0.65f),
                             textAlign = TextAlign.Center,
                         )
                     }
@@ -270,7 +270,7 @@ fun Endpaper(
                         Text(
                             text = stringResource(R.string.series_missing_volume, missingLabel),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = theme.foreground.copy(alpha = 0.7f),
+                            color = theme.faded(0.7f),
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
@@ -285,7 +285,7 @@ fun Endpaper(
                             Text(
                                 text = it,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = theme.foreground.copy(alpha = 0.7f),
+                                color = theme.faded(0.7f),
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
                             )

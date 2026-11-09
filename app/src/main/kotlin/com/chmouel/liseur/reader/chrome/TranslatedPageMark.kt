@@ -42,7 +42,7 @@ fun TranslatedPageMark(
         TranslationLanguages.name(target, ui),
     )
     // Electronic paper has no faint grey worth the name.
-    val alpha = if (LocalEInk.current) 1f else 0.45f
+    val alpha = if (LocalEInk.current || theme.isDim) 1f else 0.45f
     Box(
         contentAlignment = Alignment.TopCenter,
         modifier = modifier

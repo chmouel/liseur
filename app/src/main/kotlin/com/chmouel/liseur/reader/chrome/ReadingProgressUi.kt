@@ -189,7 +189,7 @@ fun ReadingFooter(
                 (progress == null || footerMiddle(progress, next, reflowable, screens) == null),
         )
     }
-    val color = theme.foreground.copy(alpha = 0.6f)
+    val color = theme.faded(0.6f)
     // The row's padding, horizontal and vertical alike, lives inside
     // each slot's clickable instead of on the row. The height of the
     // band is the same either way, and [FooterMetrics.reservedHeightDp]
