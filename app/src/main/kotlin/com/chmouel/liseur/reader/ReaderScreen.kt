@@ -269,6 +269,7 @@ import com.chmouel.liseur.reader.progress.SectionScreenProgress
 import com.chmouel.liseur.reader.progress.SectionScreens
 import com.chmouel.liseur.companion.CharacterPane
 import com.chmouel.liseur.companion.CompanionPeekBar
+import com.chmouel.liseur.companion.NoteTarget
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.reader.progress.OpeningRestoration
 import com.chmouel.liseur.reader.progress.OpeningRestorationVerdict
@@ -5082,7 +5083,7 @@ internal fun ReaderScreen(
                                 return@launch
                             }
                             if (pageTranslated != translated) return@launch
-                            lookups.open(live.text, SelectionBlock.place(live.locator, block), translated)
+                            lookups.open(live.text, SelectionBlock.place(live.locator, block), translated, NoteTarget(live.locator, live.existing?.id))
                             dismissSelection()
                         }
                     }

@@ -112,6 +112,19 @@ class CompanionViewModel(
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
 
+    private val whereWasI = WhereWasIRunner(
+        scope = viewModelScope,
+        catalog = { sources.await() },
+        choice = { server.current() },
+        chatFor = server::chat,
+        recaps = {
+            byChapter(recaps.value).mapNotNull { (unit, recap) ->
+                recap.summary.joinToString(" ").trim().takeIf { it.isNotEmpty() }?.let { RecapInput(unit, it) }
+            }
+        },
+        aside = { block -> scheduler?.aside(block) ?: block() },
+    )
+
     // Follows the stored switch, and is true at once on Allow so the picks it makes are accepted.
     private val storyAllowed = MutableStateFlow(false).also { allowed ->
         viewModelScope.launch { server.storyAutoOk.distinctUntilChanged().collect { allowed.value = it } }
@@ -136,6 +149,7 @@ class CompanionViewModel(
     @OptIn(ExperimentalCoroutinesApi::class)
     val story: StateFlow<StoryView?> = storyController
         .flatMapLatest { it?.view ?: flowOf(null) }
+        .combine(whereWasI.view) { view, where -> view?.copy(whereWasI = where) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** Read from settings rather than [choice], which reports none until it first loads. */
@@ -154,6 +168,9 @@ class CompanionViewModel(
         viewModelScope.launch {
             // A panel waiting on setup asks as soon as the reader chooses.
             choice.drop(1).filterNotNull().collect { lookups.setUp() }
+        }
+        viewModelScope.launch {
+            choice.drop(1).collect { whereWasI.changed() }
         }
     }
 
@@ -277,20 +294,23 @@ class CompanionViewModel(
         }
     }
 
-    fun open(selection: String, place: Locator, translated: Boolean) = lookups.open(selection, place, translated)
+    fun open(selection: String, place: Locator, translated: Boolean, note: NoteTarget<Locator>?) =
+        lookups.open(selection, place, translated, note)
 
     /** Asks about [name] in the chapters Codex froze, from a character page's Ask. */
-    fun ask(name: String, scope: AskingScope?) = lookups.openAt(name, scope)
+    fun ask(name: String, scope: AskingScope?, note: NoteTarget<Locator>? = null) = lookups.openAt(name, scope, note)
 
     /** Shows the Story tab for [scope], the place Codex was opened from. */
     fun showStory(scope: AskingScope) {
         storyScope = scope
+        whereWasI.showing(scope)
         storyController.value?.show(scope)
     }
 
     /** The Story tab left the screen; the work it asked for goes on. */
     fun hideStory() {
         storyScope = null
+        whereWasI.stop(quiet = true)
         storyController.value?.hide()
     }
 
@@ -305,6 +325,13 @@ class CompanionViewModel(
     fun writeStory() = storyController.value?.write()
 
     fun stopStory() = storyController.value?.stop()
+
+    /** Asks where the reader stands, for the place Story is shown for. */
+    fun whereWasI() {
+        storyScope?.let(whereWasI::run)
+    }
+
+    fun stopWhereWasI() = whereWasI.stop()
 
     fun retry() = lookups.retry()
 

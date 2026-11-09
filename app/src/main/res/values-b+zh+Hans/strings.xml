@@ -1372,7 +1372,7 @@
     <string name="translation_consent_title">使用%1$s？</string>
     <string name="translation_consent_agree">同意并使用</string>
     <string name="companion_action">询问阅读伴侣</string>
-    <string name="companion_also_from">“%1$s”可能指的人物之一</string>
+    <string name="companion_also_from">“%1$s”可能指的对象之一</string>
     <string name="companion_setup">请为阅读伴侣选择服务器和模型。</string>
     <string name="companion_setup_action">设置</string>
     <string name="companion_first_chapter">这是本书的开头，前面没有可供查找的内容。</string>
@@ -1380,11 +1380,21 @@
     <string name="companion_not_a_name">请选择一个名字，最多几个词。</string>
     <string name="companion_loading_reading">正在查找前文…</string>
     <string name="companion_loading_asking">正在查阅前文…</string>
-    <string name="companion_ambiguous">可能指不止一个人物。是哪一个？</string>
+    <string name="companion_ambiguous">可能指不止一个。是哪一个？</string>
     <string name="companion_insufficient">本书到此为止对“%1$s”的描述不足。</string>
     <string name="companion_aliases">别名</string>
     <string name="companion_identity">身份</string>
     <string name="companion_backstory">背景</string>
+    <string name="companion_term_what">是什么</string>
+    <string name="companion_term_role">作用</string>
+    <string name="companion_term_changes">如何变化</string>
+    <string name="companion_term_connections">关联</string>
+    <string name="companion_term_unknown">尚不清楚</string>
+    <string name="companion_nature_place">地点</string>
+    <string name="companion_nature_group">群体</string>
+    <string name="companion_nature_object">物品</string>
+    <string name="companion_nature_concept">概念</string>
+    <string name="companion_nature_other">词条</string>
     <string name="companion_relationships">人物关系</string>
     <string name="companion_source_chapter">第 %1$d 章</string>
     <string name="companion_source_chapters">第 %1$d–%2$d 章</string>
@@ -1423,6 +1433,8 @@
     <string name="companion_details_rules">回答的问题所在</string>
     <string name="companion_details_server_message">服务器的说明</string>
     <string name="companion_details_reply">模型回答的开头</string>
+    <string name="companion_save_note">保存为笔记</string>
+    <string name="companion_note_saved">已保存为笔记</string>
     <string name="companion_details_copy">复制</string>
     <string name="companion_rule_not_json">它不是 JSON 对象。</string>
     <string name="companion_rule_actions_after_limit">达到搜索上限后，它仍要求继续搜索。</string>
@@ -1430,11 +1442,11 @@
     <string name="companion_rule_bad_action">它要求了伴侣无法理解的搜索或阅读。</string>
     <string name="companion_rule_bad_citation">它引用了未向它展示过的段落。</string>
     <string name="companion_rule_empty_profile">它给出了一个空的档案。</string>
-    <string name="companion_rule_bad_candidates">它列出的可能人物少于两个，或列法有误。</string>
+    <string name="companion_rule_bad_candidates">它列出的可能对象少于两个，或列法有误。</string>
     <string name="companion_rule_too_long">它在模型的输出上限处被截断。</string>
     <string name="companion_settings_title">阅读伴侣</string>
     <string name="companion_settings_entry_summary">%1$s，%2$s</string>
-    <string name="companion_settings_intro">阅读时选择一个名字并点按“询问阅读伴侣”，即可根据书中到所选位置之前的内容了解此人。</string>
+    <string name="companion_settings_intro">阅读时选择一个名字或词语并点按“询问阅读伴侣”，即可根据书中到所选位置之前的内容了解它所指的人或事物。</string>
     <string name="companion_settings_server">服务器</string>
     <string name="companion_settings_server_none">未选择服务器</string>
     <string name="companion_settings_server_none_detail">从已添加的服务器中选择一个</string>
@@ -1530,6 +1542,20 @@
     <string name="story_status_queued">等待中</string>
     <string name="story_status_working">正在回顾…</string>
     <string name="story_status_failed">无法回顾</string>
+    <string name="story_where_title">我读到哪了？</string>
+    <string name="story_where_about">根据你当前位置之前的文字和前面章节的回顾，提醒你读到了哪里；点按“提醒我”时会发送给 %1$s。</string>
+    <string name="story_where_ask">提醒我</string>
+    <string name="story_where_asking">正在回想你读到了哪里…</string>
+    <string name="story_where_empty">你的位置之前还没有可回想的内容。</string>
+    <string name="story_where_stopped">你停在哪里</string>
+    <string name="story_where_objective">他们在追求什么</string>
+    <string name="story_where_conflict">利害所在</string>
+    <string name="story_where_focus">焦点</string>
+    <string name="story_where_tone">氛围</string>
+    <string name="story_where_questions">悬而未决</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="other">来自第 %1$s 章的回顾</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="other">第 %1$s 章还没有回顾</item>
     </plurals>

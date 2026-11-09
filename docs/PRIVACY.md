@@ -315,7 +315,7 @@ run a translation server on your own computer.
 
 Selecting a name in the reader and tapping Ask companion asks a server on the
 External services and API keys page that speaks OpenAI's chat API who
-that character is, from the book up to your selection.
+that character, place, object or idea is, from the book up to your selection.
 Nothing is sent until you choose that server and a model in Settings,
 Intelligence, Reading companion, and Liseur then asks it for its list of models the same way
 as for translation. A lookup sends the name you selected, how many
@@ -358,6 +358,18 @@ two chapters have one, writes a summary of the
 story so far by sending the recaps' summary sentences with their chapter
 numbers, and no book text. Not now, Stop, and the switch in the
 companion settings stop this; the buttons on the tab still work.
+
+Story's Where was I? card sends something only when you tap Remind me.
+It then sends, to the same server, the text just before your place (up to
+about 12,000 characters, never the paragraph on screen or anything after
+it) and the summary sentences of up to six saved recaps of earlier
+chapters with their chapter numbers. The answer is kept in memory until
+you close the book.
+
+A profile or Where was I? answer is not stored unless you tap Save as
+note. It then becomes one of your notes, on the passage you selected or
+on the book, and is stored, backed up and synced like any note you
+write.
 
 ### Google Gemini, for reading aloud (Google Play build only)
 
@@ -468,7 +480,7 @@ Gemini as the companion's service in Settings, Intelligence, Reading
 companion. Opening the model list on that screen asks
 `generativelanguage.googleapis.com` which text models the key can use,
 carrying only your key. From then on, lookups, chapter recaps and
-the story so far send exactly what is described above for a server, the same
+the story so far and Where was I? send exactly what is described above for a server, the same
 passages from the book up to your selection, the same whole chapters and the
 same recap sentences, to that
 address over HTTPS, together with your key and the model you picked.

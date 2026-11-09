@@ -6,7 +6,10 @@ External services and API keys page:
 
   GET  /v1/models            stub-chat and stub-tts
   POST /v1/chat/completions  replies with the <passage> it was sent, prefixed;
-                             a numbered batch ([1] ..., [2] ...) line by line
+                             a numbered batch ([1] ..., [2] ...) line by line;
+                             a reading companion lookup with a term citing the
+                             first passage, and "Where was I?" with fields citing
+                             the last passage and the first recap
   POST /v1/audio/speech      silent 24 kHz mono 16-bit WAV, sized to the text
   GET  /v1/audio/voices      stub_a, stub_b and English/French/Spanish voices
 
@@ -76,6 +79,39 @@ def blocks(text: str) -> dict[str, str]:
         if match:
             found[name] = match.group(2)
     return found
+
+
+def companion(body: dict) -> dict | None:
+    """A canned reading companion answer, citing only refs the request showed."""
+    messages = [m for m in body.get("messages", []) if isinstance(m, dict) and isinstance(m.get("content"), str)]
+    system = next((m["content"] for m in messages if m.get("role") == "system"), "")
+    text = "\n".join(m["content"] for m in messages if m.get("role") != "system")
+    passages = re.findall(r'ref="(S\d+)"', text)
+    if system.startswith("You describe one character"):
+        name = re.search(r"<name>(.*?)</name>", text)
+        if not passages:
+            return {"answer": "insufficient"}
+        cite = [passages[0]]
+        return {
+            "answer": "term", "name": name.group(1) if name else "Stub", "nature": "object", "aliases": [],
+            "what": [{"text": "Stub: what the passages say it is.", "refs": cite}],
+            "role": [{"text": "Stub: the part it plays so far.", "refs": cite}],
+            "changes": [], "connections": [],
+            "unknown": ["Stub: what the passages leave open."],
+        }
+    if system.startswith("You help a reader get back"):
+        recaps = re.findall(r'ref="(C\d+)"', text)
+        last = passages[-1:] or recaps[:1]
+        if not last:
+            return None
+        return {
+            "stopped": {"text": "Stub: where the action stands.", "refs": last},
+            "objective": {"text": "Stub: what they are after.", "refs": last},
+            "conflict": None, "focus": None,
+            "tone": {"text": "Stub: the mood so far.", "refs": recaps[:1] or last},
+            "questions": ["Stub: what is still open?"],
+        }
+    return None
 
 
 def user_text(body: dict) -> str:
@@ -231,10 +267,13 @@ def handler(stub: Stub):
                     "choices": [{"index": 0, "finish_reason": "stop",
                                  "message": {"role": "assistant", "refusal": "Stub refusal"}}],
                 })
+            answer = companion(body)
             passage = found.get("passage", user_text(body))
             lines = passage.split("\n")
             numbered = [NUMBERED.match(line) for line in lines]
-            if len(lines) > 1 and all(numbered):
+            if answer is not None:
+                text = json.dumps(answer, ensure_ascii=False)
+            elif len(lines) > 1 and all(numbered):
                 text = "\n".join(f"[{m.group(1)}] {args.prefix}{m.group(2)}" for m in numbered)
             else:
                 text = args.prefix + passage

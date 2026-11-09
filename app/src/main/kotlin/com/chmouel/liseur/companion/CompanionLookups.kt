@@ -35,6 +35,8 @@ sealed interface CompanionView<out P> {
 
     data class Profile<P>(val profile: CompanionAnswer.Profile<P>) : CompanionView<P>
 
+    data class Term<P>(val term: CompanionAnswer.Term<P>) : CompanionView<P>
+
     enum class Stage {
         /** Finding the earlier chapters' text in the book. */
         READING,
@@ -120,6 +122,8 @@ data class CompanionPanel<P>(
     val also: String? = null,
     /** Each chapter's title in the contents, where it has one, to label sources; never sent away. */
     val titles: List<String?> = emptyList(),
+    /** Where the answer goes when saved as a note; kept while asking again or choosing a candidate. */
+    val note: NoteTarget<P>? = null,
 )
 
 /**
@@ -170,19 +174,25 @@ class CompanionLookups<P>(
     private var job: Job? = null
 
     /** Asks about [selection], selected at [place]; [translated] when the page showed a translation. */
-    fun open(selection: String, place: P, translated: Boolean) = start(selection, null) { it.scopeOf(place, translated) }
+    fun open(selection: String, place: P, translated: Boolean, note: NoteTarget<P>? = null) =
+        start(selection, null, note) { it.scopeOf(place, translated) }
 
     /**
      * Asks about [selection] in chapters already placed, such as those
      * Codex froze when it opened, so both read the same book; a null
      * [asked] could not be placed.
      */
-    fun openAt(selection: String, asked: AskingScope?) = start(selection, asked) { asked }
+    fun openAt(selection: String, asked: AskingScope?, note: NoteTarget<P>? = null) = start(selection, asked, note) { asked }
 
-    private fun start(selection: String, known: AskingScope?, place: suspend (BookCatalog<P>) -> AskingScope?) {
+    private fun start(
+        selection: String,
+        known: AskingScope?,
+        note: NoteTarget<P>?,
+        place: suspend (BookCatalog<P>) -> AskingScope?,
+    ) {
         job?.cancel()
         val name = PassageText.name(selection)
-        _panel.value = CompanionPanel(selection, name, known, CompanionView.Loading(CompanionView.Stage.READING))
+        _panel.value = CompanionPanel(selection, name, known, CompanionView.Loading(CompanionView.Stage.READING), note = note)
         job = scope.launch {
             var titles = emptyList<String?>()
             val asked = try {
@@ -294,13 +304,14 @@ class CompanionLookups<P>(
                     show(CompanionView.Loading(CompanionView.Stage.ASKING))
                     investigation.run(name, also, offered)
                 }.also { fresh ->
-                    if (cached == null && (fresh is CompanionAnswer.Profile || fresh is CompanionAnswer.Ambiguous)) {
+                    if (cached == null && (fresh !is CompanionAnswer.Insufficient)) {
                         synchronized(cache) { cache[key] = Cached(asked.until, fresh) }
                     }
                 }
                 show(
                     when (answer) {
                         is CompanionAnswer.Profile -> CompanionView.Profile(answer)
+                        is CompanionAnswer.Term -> CompanionView.Term(answer)
                         is CompanionAnswer.Ambiguous -> CompanionView.Ambiguous(answer.candidates)
                         CompanionAnswer.Insufficient -> CompanionView.Insufficient
                     },

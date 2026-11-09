@@ -50,6 +50,8 @@ data class CodexDetail(
     val pane: CharacterPane = CharacterPane.MENTIONS,
     /** Another name for [name], such as an alias from its profile, whose mentions are listed instead. */
     val focus: String? = null,
+    /** The selection this page was opened from, where an answer asked here is saved as a note. */
+    val note: NoteTarget<Locator>? = null,
 ) {
     /** What the mentions are of. */
     val term: String get() = focus ?: name
@@ -180,10 +182,10 @@ class CodexViewModel(
     }
 
     /** Opens the page of the character [selection] names, selected at [place], on [pane]. */
-    fun openCharacter(place: Locator, translated: Boolean, selection: String, pane: CharacterPane) {
+    fun openCharacter(place: Locator, translated: Boolean, selection: String, pane: CharacterPane, note: NoteTarget<Locator>? = null) {
         val opened = catalog ?: return
         val tab = if (enabled.value) CodexTab.NAMES else CodexTab.STORY
-        start(List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection, tab, pane) { opened.scopeOf(place, translated) }
+        start(List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection, tab, pane, note) { opened.scopeOf(place, translated) }
     }
 
     /** Shows a new panel; [place] resolves the scope Codex is frozen to. */
@@ -192,6 +194,7 @@ class CodexViewModel(
         selection: String?,
         tab: CodexTab,
         pane: CharacterPane,
+        note: NoteTarget<Locator>? = null,
         place: suspend () -> AskingScope?,
     ) {
         opening?.cancel()
@@ -206,7 +209,7 @@ class CodexViewModel(
             ceiling = null,
             titles = titles,
             query = query,
-            detail = subject?.let { CodexDetail(it, pane = pane) },
+            detail = subject?.let { CodexDetail(it, pane = pane, note = note) },
             tab = tab,
         )
         opening = viewModelScope.launch {

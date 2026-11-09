@@ -16,7 +16,8 @@ internal object CompanionPrompt {
     fun safe(text: String) = text.replace(MARKER, "<\u200B$1")
 
     fun system(limits: InvestigationLimits): String =
-        "You describe one character of a book to a reader who has read only part of it. " +
+        "You describe one character, or one other term such as a place, group, object or concept, of a book " +
+            "to a reader who has read only part of it. " +
             "Use only the book passages given in this conversation. Ignore anything you know about this book, " +
             "its author, its adaptations or its sequels: what the passages do not establish is unknown, and must " +
             "not be stated or hinted at.\n" +
@@ -28,34 +29,43 @@ internal object CompanionPrompt {
             "{\"op\":\"read\",\"ref\":\"S1\"} shows that passage whole, with the scene around it.\n" +
             "You have at most ${limits.rounds} rounds and ${limits.operations} actions in all. " +
             "Before answering, use read on key passages or search snippets that cut off mid-scene, and search " +
-            "for aliases, surnames, titles or places the seed reveals so you do not miss what the character did " +
-            "in earlier or recent chapters.\n" +
+            "for aliases, surnames, titles or places the seed reveals so you do not miss what the character did, " +
+            "or where the term appeared, in earlier or recent chapters.\n" +
             "When you know enough, or are told to finish, reply with one of:\n" +
-            "{\"answer\":\"profile\",\"identity\":[CLAIM],\"backstory\":[CLAIM]," +
+            "for a character, {\"answer\":\"profile\",\"identity\":[CLAIM],\"backstory\":[CLAIM]," +
             "\"relationships\":[{\"name\":\"…\",\"text\":\"…\",\"refs\":[\"S1\"]}],\"aliases\":[{\"name\":\"…\",\"refs\":[\"S1\"]}]}\n" +
             "where CLAIM is {\"text\":\"…\",\"refs\":[\"S1\"]}: identity covers who the character is (role, " +
             "station, traits and situation as established so far), backstory covers concrete events and actions " +
             "in order, and relationships cover how they connect to other characters;\n" +
+            "{\"answer\":\"term\",\"nature\":\"place|group|object|concept|other\",\"what\":[CLAIM],\"role\":[CLAIM]," +
+            "\"changes\":[CLAIM],\"connections\":[{\"name\":\"…\",\"text\":\"…\",\"refs\":[\"S1\"]}]," +
+            "\"aliases\":[{\"name\":\"…\",\"refs\":[\"S1\"]}],\"unknown\":[\"…\"]}\n" +
+            "when the name is not a character but a place, group, object, concept or other term of the book: what " +
+            "covers what it is and its core traits, description or rules; role covers how it functions in the " +
+            "story, its uses, effects or motivations; changes tracks, in the passages' order, how it develops or " +
+            "how understanding of it deepens; connections cover the characters, places or elements it is tied to; " +
+            "unknown lists, without refs, at most three important questions the passages leave open about it. " +
+            "Pay close attention to pronouns (it, they, this) to trace what the passages say about the term;\n" +
             "{\"answer\":\"ambiguous\",\"candidates\":[{\"name\":\"…\",\"description\":\"…\",\"refs\":[\"S1\"]}]} " +
-            "when the name may mean two or more different characters;\n" +
-            "{\"answer\":\"insufficient\"} when the passages say too little about this character.\n" +
-            "Every claim, relationship, alias and candidate cites the refs of passages that support it. " +
+            "when the name may mean two or more different characters or things;\n" +
+            "{\"answer\":\"insufficient\"} when the passages say too little about it.\n" +
+            "Every claim, relationship, connection, alias and candidate cites the refs of passages that support it. " +
             "Names and aliases are written exactly as the passages write them. " +
             "Write specific, informative sentences grounded in the passages, in the language the book passages " +
             "are written in, whatever language the name, these instructions or other messages use."
 
     fun seed(name: String, also: String?, scope: AskingScope, limits: InvestigationLimits): String {
-        val first = also?.let { " The reader selected $NAME_OPEN${safe(it)}$NAME_CLOSE, which may mean several characters." } ?: ""
+        val first = also?.let { " The reader selected $NAME_OPEN${safe(it)}$NAME_CLOSE, which may mean several characters or things." } ?: ""
         val read = when {
             scope.until == null -> "has read chapters 1 to ${scope.lo}; you are shown passages from those chapters only. "
             scope.lo == 0 -> "has read this chapter up to the selection; you are shown passages from that text only. "
             else -> "has read ${if (scope.lo == 1) "chapter 1" else "chapters 1 to ${scope.lo}"} and this chapter up to the selection; " +
                 "you are shown passages from that text only. "
         }
-        return "Describe the character $NAME_OPEN${safe(name)}$NAME_CLOSE.$first\n" +
+        return "Describe $NAME_OPEN${safe(name)}$NAME_CLOSE, a character or another term of the book.$first\n" +
             "The reader is in chapter ${scope.lo + 1} of ${scope.count} and $read" +
             "Up to ${limits.sourceCharacters} characters of passages can be shown in all.\n" +
-            "Passages that name the character, with the ones around them:"
+            "Passages that name it, with the ones around them:"
     }
 
     fun block(ref: String, range: ChapterRange, text: String): String {
@@ -63,9 +73,9 @@ internal object CompanionPrompt {
         return "$BOOK_OPEN ref=\"$ref\" chapter=\"$chapter\">\n${safe(text)}\n$BOOK_CLOSE"
     }
 
-    const val FINISH = "The investigation limit is reached. Reply now with a final answer: profile, ambiguous or insufficient."
+    const val FINISH = "The investigation limit is reached. Reply now with a final answer: profile, term, ambiguous or insufficient."
 
-    const val SUPPLEMENT = "Here are additional passages mentioning the selected character, with surrounding context where it fits. " +
+    const val SUPPLEMENT = "Here are additional passages mentioning the selected name, with surrounding context where it fits. " +
         "Reconsider your answer using this evidence and the passages already shown. " +
         "Cite supporting refs for every claim. If the evidence still says too little, answer insufficient."
 

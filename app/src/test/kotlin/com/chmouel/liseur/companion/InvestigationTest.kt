@@ -428,6 +428,59 @@ class InvestigationTest {
         assertEquals(2, chat.requests.last().size)
     }
 
+    private fun term(refs: List<String>, nature: String = "place", unknown: JSONArray = JSONArray()) = JSONObject()
+        .put("answer", "term")
+        .put("nature", nature)
+        .put("what", JSONArray().put(claim("The mill on the river.", refs)))
+        .put("role", JSONArray())
+        .put("changes", JSONArray())
+        .put("connections", JSONArray().put(JSONObject().put("name", "Mira").put("text", "She walks there.").put("refs", JSONArray(refs))))
+        .put("aliases", JSONArray())
+        .put("unknown", unknown)
+        .toString()
+
+    @Test
+    fun `a lowercase term is described with its own sections, from earlier chapters only`() = runTest {
+        val chat = FakeChat { messages -> term(holding(messages, "the mill").take(1), nature = "PLACE", unknown = JSONArray(listOf("Who built it.", "Its age.", "Its owner.", "A fourth."))) }
+
+        val answer = investigation(chat).run("the mill")
+
+        answer as CompanionAnswer.Term
+        assertEquals("place", answer.nature)
+        assertEquals(1, answer.what.size)
+        assertEquals(listOf("Mira"), answer.connections.map { it.name })
+        assertEquals(3, answer.unknown.size)
+        assertTrue(chat.requests.first().first().content.contains("\"answer\":\"term\""))
+        assertNothingLater(chat)
+    }
+
+    @Test
+    fun `an unknown nature is kept as other, and a term without cited claims is corrected`() = runTest {
+        val chat = FakeChat { messages ->
+            if (requests.size == 1) term(listOf("S99")) else term(holding(messages, "the mill").take(1), nature = "spaceship")
+        }
+
+        val answer = investigation(chat).run("the mill")
+
+        assertEquals("other", (answer as CompanionAnswer.Term).nature)
+        assertEquals(2, chat.requests.size)
+    }
+
+    @Test
+    fun `a term may be the answer after the round limit and after an insufficient reply`() = runTest {
+        val limited = FakeChat { messages ->
+            if (messages.last().content.contains(CompanionPrompt.FINISH)) term(holding(messages, "river").take(1)) else actions(search("river"))
+        }
+        assertTrue(investigation(limited).run("river") is CompanionAnswer.Term)
+
+        val many = (0 until 40).map { passage(0, it, "The river floods bank number $it. " + "Details. ".repeat(70)) }
+        val supplemented = FakeChat { messages ->
+            if (requests.size == 1) """{"answer":"insufficient"}""" else term(holding(messages, "bank number 39").take(1))
+        }
+        assertTrue(investigation(supplemented, passages = many).run("river") is CompanionAnswer.Term)
+        assertEquals(2, supplemented.requests.size)
+    }
+
     @Test
     fun `the model may say the passages are not enough`() = runTest {
         val chat = FakeChat { """{"answer":"insufficient"}""" }

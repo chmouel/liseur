@@ -69,6 +69,7 @@ data class StoryView(
     val service: String? = null,
     val soFar: StorySoFar = StorySoFar(),
     val work: StoryWork? = null,
+    val whereWasI: WhereView<Locator> = WhereView.Idle,
 ) {
     val missing: Int get() = Story.missing(chapters).size
 }

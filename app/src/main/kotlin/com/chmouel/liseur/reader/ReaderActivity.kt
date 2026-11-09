@@ -767,16 +767,20 @@ class ReaderActivity : FragmentActivity() {
         codex = codexViewModel,
         panel = companionViewModel.panel,
         peek = viewModel.peek,
-        open = { selection, place, translated ->
+        open = { selection, place, translated, note ->
             lifecycleScope.launch {
                 // With a service, or with no scan to list mentions, the page opens
                 // on the profile and asks at once; otherwise on the mentions, as
                 // Codex alone always has. Both place the selection the same way.
                 val pane = codexViews(companionViewModel.hasChoice(), codexViewModel.enabled.value).opening
                 companionViewModel.close()
-                codexViewModel.openCharacter(place, translated, selection, pane)
-                if (pane == CharacterPane.PROFILE && codexViewModel.panel.value != null) companionViewModel.open(selection, place, translated)
+                codexViewModel.openCharacter(place, translated, selection, pane, note)
+                if (pane == CharacterPane.PROFILE && codexViewModel.panel.value != null) companionViewModel.open(selection, place, translated, note)
             }
+        },
+        saveNote = { text, target ->
+            viewModel.saveCompanionNote(text, target)
+            Toast.makeText(this, R.string.companion_note_saved, Toast.LENGTH_SHORT).show()
         },
         ask = companionViewModel::ask,
         notes = companionViewModel::notes,
@@ -797,6 +801,12 @@ class ReaderActivity : FragmentActivity() {
             summarizeMissing = { companionViewModel.summarizeMissing() },
             write = { companionViewModel.writeStory() },
             stop = { companionViewModel.stopStory() },
+            whereWasI = { companionViewModel.whereWasI() },
+            stopWhereWasI = { companionViewModel.stopWhereWasI() },
+            saveNote = { text ->
+                viewModel.saveCompanionNote(text, null)
+                Toast.makeText(this, R.string.companion_note_saved, Toast.LENGTH_SHORT).show()
+            },
         ),
         startPeek = viewModel::startPeek,
         onUserTurn = viewModel::onUserTurn,
