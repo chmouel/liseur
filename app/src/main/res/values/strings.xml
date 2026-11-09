@@ -1619,13 +1619,12 @@
     <string name="codex_preparing">Preparing book…</string>
     <string name="codex_scanning">Scanning book…</string>
     <string name="codex_paused">Scan paused</string>
-    <string name="codex_complete">Book indexed</string>
     <string name="codex_failed">Companion could not read the book. Completed chapters are saved.</string>
     <string name="codex_progress">Chapters scanned: %1$d/%2$d</string>
     <string name="codex_pause">Pause scan</string>
     <string name="codex_resume">Resume scan</string>
     <string name="codex_unplaced">Your chapter could not be located. Open Companion again from a known place in the book.</string>
-    <string name="codex_scope">Only chapters before chapter %1$d are shown.</string>
+    <string name="codex_scope">Before chapter %1$d</string>
     <string name="codex_names">Names</string>
     <string name="codex_story">Story</string>
     <string name="codex_search">Search names</string>

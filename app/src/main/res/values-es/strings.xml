@@ -1554,13 +1554,12 @@
     <string name="codex_preparing">Preparando el libro…</string>
     <string name="codex_scanning">Analizando el libro…</string>
     <string name="codex_paused">Análisis en pausa</string>
-    <string name="codex_complete">Libro indexado</string>
     <string name="codex_failed">El Compañero no pudo leer el libro. Los capítulos completados están guardados.</string>
     <string name="codex_progress">Capítulos analizados: %1$d/%2$d</string>
     <string name="codex_pause">Pausar análisis</string>
     <string name="codex_resume">Reanudar análisis</string>
     <string name="codex_unplaced">No se pudo localizar tu capítulo. Abre el Compañero desde una ubicación conocida del libro.</string>
-    <string name="codex_scope">Solo se muestran capítulos anteriores al capítulo %1$d.</string>
+    <string name="codex_scope">Antes del capítulo %1$d</string>
     <string name="codex_names">Nombres</string>
     <string name="codex_story">Historia</string>
     <string name="codex_search">Buscar nombres</string>

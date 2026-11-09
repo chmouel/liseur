@@ -1654,13 +1654,12 @@
     <string name="codex_preparing">Подготовка книги…</string>
     <string name="codex_scanning">Анализ книги…</string>
     <string name="codex_paused">Анализ приостановлен</string>
-    <string name="codex_complete">Книга проиндексирована</string>
     <string name="codex_failed">Помощнику не удалось прочитать книгу. Обработанные главы сохранены.</string>
     <string name="codex_progress">Обработано глав: %1$d/%2$d</string>
     <string name="codex_pause">Приостановить анализ</string>
     <string name="codex_resume">Продолжить анализ</string>
     <string name="codex_unplaced">Не удалось определить главу. Откройте Помощника из известного места в книге.</string>
-    <string name="codex_scope">Показаны только главы до главы %1$d.</string>
+    <string name="codex_scope">До главы %1$d</string>
     <string name="codex_names">Имена</string>
     <string name="codex_story">Сюжет</string>
     <string name="codex_search">Поиск имён</string>
