@@ -226,6 +226,25 @@ class BrowseLibrariesViewModelTest {
     }
 
     @Test
+    fun `a catalog left open earlier does not keep the library's chooser from leaving`() = withMain {
+        db.remoteServerDao().upsert(saved(FreeCatalog.MANYBOOKS.address))
+        val model = model()
+        ready(model)
+        model.openFreeCatalogs()
+        model.connectPreset(FreeCatalog.MANYBOOKS)
+        runCurrent()
+        assertEquals(2L, model.state.value.serverId)
+        // The reader left the browser, which keeps the catalog it was on.
+        model.leave()
+        assertEquals(2L, model.state.value.serverId)
+
+        model.openFreeCatalogs(fromLibrary = true)
+        model.closeChooser()
+
+        assertTrue(model.state.value.leaveForLibrary)
+    }
+
+    @Test
     fun `the screen's own chooser stays on the saved catalogs when dismissed`() = withMain {
         val model = model()
         ready(model)
