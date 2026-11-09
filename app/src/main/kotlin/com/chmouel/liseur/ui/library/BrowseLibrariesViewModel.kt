@@ -169,7 +169,8 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
         _state.update { it.copy(connectingPreset = null) }
     }
 
-    private fun abandonCategory() {        categoryGeneration++
+    private fun abandonCategory() {
+        categoryGeneration++
         if (categoryJob?.isActive == true) {
             categoryJob?.cancel()
             _state.update { it.copy(working = false) }
