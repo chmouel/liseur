@@ -164,6 +164,13 @@ object NoteMarkdown {
             ) {
                 return j
             }
+            // `**one***two*`: three stars between words close the bold with
+            // the first two when the third opens an italic that closes later.
+            if (text.startsWith("***", j) && (j + 3 >= to || text[j + 3] != '*') && closes(text, j, from) &&
+                opens(text, j + 3, to) && closingSingle(text, '*', j + 3, to) != null
+            ) {
+                return j
+            }
             j++
         }
         return null
