@@ -8,6 +8,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.em
 
 /** A note drawn with its formatting, markers gone, for reading. */
 fun noteAnnotated(note: String, quiet: Color): AnnotatedString {
@@ -38,4 +39,7 @@ private fun NoteMarkdown.Style.span(quiet: Color): SpanStyle = when (this) {
     NoteMarkdown.Style.BOLD -> SpanStyle(fontWeight = FontWeight.Bold)
     NoteMarkdown.Style.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
     NoteMarkdown.Style.QUIET, NoteMarkdown.Style.MARKER -> SpanStyle(color = quiet)
+    NoteMarkdown.Style.HEADING1 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.5.em)
+    NoteMarkdown.Style.HEADING2 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.35.em)
+    NoteMarkdown.Style.HEADING3 -> SpanStyle(fontWeight = FontWeight.Bold, fontSize = 1.2.em)
 }

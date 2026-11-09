@@ -27,7 +27,7 @@ fun exportNotebookMarkdown(
         out.append("\n## Book notes\n")
         for (annotation in bookNotes) {
             annotation.note?.takeIf { it.isNotBlank() }?.let {
-                out.append('\n').append(it.trim()).append('\n')
+                out.append('\n').append(nested(it.trim())).append('\n')
             }
         }
     }
@@ -54,7 +54,7 @@ fun exportNotebookMarkdown(
                     text.trim().lines().forEach { out.append("> ").append(it.trim()).append('\n') }
                 }
                 annotation.note?.takeIf { it.isNotBlank() }?.let {
-                    out.append('\n').append(it.trim()).append('\n')
+                    out.append('\n').append(nested(it.trim())).append('\n')
                 }
             }
         }
@@ -63,6 +63,12 @@ fun exportNotebookMarkdown(
 }
 
 private const val NO_CHAPTER_YET = "\u0000"
+
+private val NOTE_HEADING = Regex("""^( {0,3})(#{1,6})(?=[ \t])""", RegexOption.MULTILINE)
+
+/** A note's own headings, moved below the book's and the chapters' so they never read as one of them. */
+private fun nested(note: String): String =
+    note.replace(NOTE_HEADING) { it.groupValues[1] + "#".repeat(minOf(6, it.groupValues[2].length + 2)) }
 
 private fun BookAnnotation.pageSuffix(): String =
     position?.let { " — page $it" }.orEmpty()

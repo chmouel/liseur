@@ -433,7 +433,7 @@ private fun TermPane(term: CompanionAnswer.Term<Locator>, onSource: (Passage<Loc
 }
 
 @Composable
-private fun profileText(profile: CompanionAnswer.Profile<Locator>): String = CompanionNotes.profile(
+private fun profileText(profile: CompanionAnswer.Profile<Locator>): CompanionNote = CompanionNotes.profile(
     profile,
     ProfileHeadings(
         aliases = stringResource(R.string.companion_aliases),
@@ -444,7 +444,7 @@ private fun profileText(profile: CompanionAnswer.Profile<Locator>): String = Com
 )
 
 @Composable
-private fun termText(term: CompanionAnswer.Term<Locator>): String = CompanionNotes.term(
+private fun termText(term: CompanionAnswer.Term<Locator>): CompanionNote = CompanionNotes.term(
     term,
     natureLabel(term.nature),
     TermHeadings(
@@ -457,9 +457,9 @@ private fun termText(term: CompanionAnswer.Term<Locator>): String = CompanionNot
     ),
 )
 
-/** Copy an answer as plain text, or keep it as a note; nothing is saved unless asked. */
+/** Copy an answer as plain text, or keep it as a formatted note; nothing is saved unless asked. */
 @Composable
-internal fun AnswerActions(title: String, text: () -> String, onSaveNote: (String) -> Unit) {
+internal fun AnswerActions(title: String, text: () -> CompanionNote, onSaveNote: (String) -> Unit) {
     val clipboard = LocalClipboard.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -467,7 +467,7 @@ internal fun AnswerActions(title: String, text: () -> String, onSaveNote: (Strin
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
             onClick = {
-                val plain = text()
+                val plain = text().plain
                 scope.launch {
                     clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(title, plain)))
                     // Android 13 confirms a copy itself.
@@ -477,7 +477,7 @@ internal fun AnswerActions(title: String, text: () -> String, onSaveNote: (Strin
                 }
             },
         ) { Text(stringResource(R.string.companion_details_copy)) }
-        OutlinedButton(onClick = { onSaveNote(text()) }) { Text(stringResource(R.string.companion_save_note)) }
+        OutlinedButton(onClick = { onSaveNote(text().markdown) }) { Text(stringResource(R.string.companion_save_note)) }
     }
 }
 

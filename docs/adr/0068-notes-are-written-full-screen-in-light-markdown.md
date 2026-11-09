@@ -37,9 +37,10 @@ palette offers more than one; the field; and a toolbar over the keyboard.
 - The field opens focused with the keyboard up, the cursor at the end,
   sentence capitalisation and autocorrect.
 - Notes may carry a small Markdown subset: `**bold**`, `*italic*` or
-  `_italic_`, `-` and `1.` lists, and `>` quotes. The toolbar writes it
-  and lights up what is in force at the cursor; Enter carries a list on
-  and ends it on an empty item. While typing, the characters stay as
+  `_italic_`, `-` and `1.` lists, `>` quotes, and `#` to `######`
+  headings, typed or written by the companion. The toolbar writes all
+  but headings and lights up what is in force at the cursor; Enter
+  carries a list on and ends it on an empty item. While typing, the characters stay as
   they are, so the cursor never jumps, with the words styled and the
   markers dimmed. `NoteSheet` and the contents list draw it with the
   markers gone. Line breaks are kept as typed.

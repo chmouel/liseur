@@ -101,6 +101,7 @@ class NoteFormattingTest {
     fun `enter anywhere else is left to the field`() {
         assertNull(NoteFormatting.continueList(Edit("plain", 5), Edit("plain\n", 6)))
         assertNull(NoteFormatting.continueList(Edit("- a", 3), Edit("- ab", 4)))
+        assertNull(NoteFormatting.continueList(Edit("### Title", 9), Edit("### Title\n", 10)))
     }
 
     @Test

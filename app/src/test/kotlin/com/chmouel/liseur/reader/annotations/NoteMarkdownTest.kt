@@ -21,6 +21,36 @@ class NoteMarkdownTest {
     }
 
     @Test
+    fun `headings lose their hashes and grow by level`() {
+        val rendered = shown("# One\n## Two\n### Three\n#### Four\n#nope")
+        assertEquals("One\nTwo\nThree\nFour\n#nope", rendered.text)
+        assertEquals(
+            setOf(
+                Styled(0, 3, Style.HEADING1),
+                Styled(4, 7, Style.HEADING2),
+                Styled(8, 13, Style.HEADING3),
+                Styled(14, 18, Style.HEADING3),
+            ),
+            rendered.styles.toSet(),
+        )
+    }
+
+    @Test
+    fun `a heading keeps its hashes quiet while typed`() {
+        assertEquals(
+            setOf(Styled(0, 4, Style.MARKER), Styled(4, 9, Style.HEADING3)),
+            NoteMarkdown.editorStyles("### Title").toSet(),
+        )
+    }
+
+    @Test
+    fun `emphasis may start and end with an escaped marker`() {
+        val rendered = shown("*\\*x\\** and **\\_y\\_**")
+        assertEquals("*x* and _y_", rendered.text)
+        assertEquals(setOf(Styled(0, 3, Style.ITALIC), Styled(8, 11, Style.BOLD)), rendered.styles.toSet())
+    }
+
+    @Test
     fun `three stars are bold and italic at once`() {
         val rendered = shown("***both***")
         assertEquals("both", rendered.text)
