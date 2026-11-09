@@ -65,10 +65,16 @@ object CompanionNotes {
         return CompanionNote(plain, markdown)
     }
 
-    /** Model text with every character a note would read as formatting made literal. */
-    fun escape(text: String): String = text.replace(ESCAPED) { "\\${it.value}" }
+    /**
+     * Model text with every character a note would read as formatting made
+     * literal, on one line so a break inside it cannot start a heading,
+     * list or quote.
+     */
+    fun escape(text: String): String =
+        text.replace(LINE_BREAKS, " ").replace(ESCAPED) { "\\${it.value}" }
 
     private val ESCAPED = Regex("""[\\*_]""")
+    private val LINE_BREAKS = Regex("""\s*\R\s*""")
 
     /** A line that starts no list, quote or heading, so it can stand as a paragraph. */
     private fun plainLine(line: String): Boolean =

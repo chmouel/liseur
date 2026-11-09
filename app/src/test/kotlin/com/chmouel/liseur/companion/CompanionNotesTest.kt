@@ -61,6 +61,16 @@ class CompanionNotesTest {
     }
 
     @Test
+    fun `a line break inside an item cannot start a heading or list in the note`() {
+        val note = CompanionNotes.text(
+            "Mira",
+            listOf("Facts" to listOf(NoteItem("Keeps the ledger.\n# Not a section"), NoteItem("Rows\r\n- not a list"))),
+        )
+
+        assertEquals("## Mira\n\n### Facts\n- Keeps the ledger. # Not a section\n- Rows - not a list", note.markdown)
+    }
+
+    @Test
     fun `a saved answer follows the reader's own note and never replaces it`() {
         assertEquals("Answer", CompanionNotes.appended(null, "Answer"))
         assertEquals("Answer", CompanionNotes.appended("  ", "Answer"))
