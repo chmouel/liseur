@@ -82,6 +82,24 @@ def blocks(text: str) -> dict[str, str]:
     return found
 
 
+def passage(text: str, ref: str) -> str:
+    match = re.search(rf'<(\w+) ref="{ref}"[^>]*>\n?(.*?)\n?</\1>', text, re.DOTALL)
+    return match.group(2) if match else ""
+
+
+def names_in(text: str, skip: str, limit: int = 2) -> list[str]:
+    """Capitalised words a passage uses mid-sentence, so the app keeps them as names."""
+    found = []
+    for match in re.finditer(r"\b[A-Z][a-z]{2,}\b", text):
+        before = text[:match.start()].rstrip()
+        if not before or before[-1] in ".!?\"“":
+            continue
+        word = match.group(0)
+        if word.lower() not in skip.lower() and word not in found:
+            found.append(word)
+    return found[:limit]
+
+
 def companion(body: dict, long: bool = False) -> dict | None:
     """A canned reading companion answer, citing only refs the request showed."""
     messages = [m for m in body.get("messages", []) if isinstance(m, dict) and isinstance(m.get("content"), str)]
@@ -94,13 +112,14 @@ def companion(body: dict, long: bool = False) -> dict | None:
             return {"answer": "insufficient"}
         cite = [passages[0]]
         if long:
+            others = names_in(passage(text, passages[0]), name.group(1) if name else "")
             filler = " The passages go on about it at some length, enough to wrap over several lines."
             return {
                 "answer": "term", "name": name.group(1) if name else "Stub", "nature": "object", "aliases": [],
                 "what": [{"text": f"Stub: what the passages say it is ({n}).{filler}", "refs": cite} for n in range(1, 4)],
                 "role": [{"text": f"Stub: the part it plays so far ({n}).{filler}", "refs": cite} for n in range(1, 4)],
                 "changes": [{"text": f"Stub: how it changed ({n}).{filler}", "refs": cite} for n in range(1, 3)],
-                "connections": [{"name": f"Stub link {n}", "text": f"Stub: how it is linked ({n}).", "refs": cite} for n in range(1, 3)],
+                "connections": [{"name": other, "text": f"Stub: how it is linked to {other}.", "refs": cite} for other in others],
                 "unknown": [f"Stub: what the passages leave open ({n})." for n in range(1, 5)],
             }
         return {

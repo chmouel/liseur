@@ -95,12 +95,14 @@ def main() -> int:
     try:
         code, reply = long.json("POST", "/v1/chat/completions", {"messages": [
             {"role": "system", "content": "You describe one character, or one other term."},
-            {"role": "user", "content": 'Describe <name>the ring</name>.\n<book ref="S1" chapter="1">\nA ring.\n</book>'},
+            {"role": "user", "content": 'Describe <name>the ring</name>.\n<book ref="S1" chapter="1">\nA ring. It went from Jim to Silver at the inn.\n</book>'},
         ]})
         answer = json.loads(reply["choices"][0]["message"]["content"])
         check("--long fills every section of a term",
               all(answer[key] for key in ("what", "role", "changes", "connections", "unknown"))
-              and len(answer["what"]) > 1 and answer["connections"][0]["refs"] == ["S1"], answer)
+              and len(answer["what"]) > 1
+              and [c["name"] for c in answer["connections"]] == ["Jim", "Silver"]
+              and answer["connections"][0]["refs"] == ["S1"], answer)
     finally:
         long.stop()
     stub = Stub()
