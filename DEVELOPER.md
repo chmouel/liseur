@@ -1721,13 +1721,16 @@ Companion; code, string IDs and the `codex_*` tables say Codex.
   `companion.db`. Closing the panel keeps scanning while the reader is
   open; leaving the book or backgrounding pauses it.
 - The On-device companion switch (Companion settings, Advanced, default
-  on) off cancels scanning and hides Names, Relationships and Mentions,
-  keeping the cache. With a service chosen Codex still opens for Story and
+  on) off cancels scanning and hides Names (with its Connections filter)
+  and Mentions, keeping the cache. With a service chosen Codex still
+  opens for Story and
   profiles (`CodexViewModel.profiles`) and reads nothing from the index;
   with neither, the entry is hidden. The switch is backed up; the index is
   not.
-- With no service chosen, Names and Relationships show a card on what a
-  service adds, with Set up; dismissing it sets
+- Relationships is the Connections filter inside Names (`CodexTab`
+  keeps `RELATIONSHIPS` for it); the map stays folded until Show map.
+- With no service chosen, Names shows a card on what a service adds, with
+  Set up; dismissing it sets
   `companion_ai_hint_dismissed`, left out of the settings export. Companion
   settings show the same note, not dismissible, while no service is set.
 - Codex hosts the character page, Profile (`CharacterProfile`) and

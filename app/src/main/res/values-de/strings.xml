@@ -1578,10 +1578,14 @@
     <string name="codex_empty">Noch keine passenden Namen in früheren Kapiteln.</string>
     <string name="codex_scripts">Die Namenserkennung stützt sich auf Großbuchstaben und funktioniert daher nicht für Sprachen, die keine haben.</string>
     <string name="codex_entry">%1$s · Erwähnungen: %2$d</string>
+    <string name="codex_entry_mentions">Erwähnungen: %1$d</string>
+    <string name="codex_filter_all">Alle</string>
+    <string name="codex_filter_connections">Verbindungen</string>
+    <string name="codex_map_show">Karte zeigen</string>
+    <string name="codex_map_hide">Karte ausblenden</string>
     <string name="codex_person">Person</string>
     <string name="codex_place">Ort</string>
     <string name="codex_faction">Gruppe</string>
-    <string name="codex_other">Sonstiges</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Profil</string>
     <string name="codex_pane_mentions">Erwähnungen</string>
@@ -1592,7 +1596,6 @@
     <string name="codex_mentions_of">Erwähnungen von %1$s</string>
     <string name="codex_mentions_all">Alle Erwähnungen zeigen</string>
     <string name="codex_shared">Gemeinsame Kapitel: %1$d</string>
-    <string name="codex_graph_hint">Wähle zwei Namen in der Karte oder eine Verbindung darunter.</string>
     <string name="codex_graph_empty">Lies weiter, um Namen mit mindestens zwei gemeinsamen Kapiteln zu finden.</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>

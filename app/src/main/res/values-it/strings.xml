@@ -1566,10 +1566,14 @@
     <string name="codex_empty">Ancora nessun nome corrispondente nei capitoli precedenti.</string>
     <string name="codex_scripts">Il rilevamento dei nomi usa le lettere maiuscole, quindi non funziona per le lingue che non le hanno.</string>
     <string name="codex_entry">%1$s · Menzioni: %2$d</string>
+    <string name="codex_entry_mentions">Menzioni: %1$d</string>
+    <string name="codex_filter_all">Tutti</string>
+    <string name="codex_filter_connections">Collegamenti</string>
+    <string name="codex_map_show">Mostra mappa</string>
+    <string name="codex_map_hide">Nascondi mappa</string>
     <string name="codex_person">Persona</string>
     <string name="codex_place">Luogo</string>
     <string name="codex_faction">Fazione</string>
-    <string name="codex_other">Altro</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Profilo</string>
     <string name="codex_pane_mentions">Menzioni</string>
@@ -1580,7 +1584,6 @@
     <string name="codex_mentions_of">Menzioni di %1$s</string>
     <string name="codex_mentions_all">Mostra tutte le menzioni</string>
     <string name="codex_shared">Capitoli condivisi: %1$d</string>
-    <string name="codex_graph_hint">Seleziona due nomi sulla mappa o un collegamento sotto.</string>
     <string name="codex_graph_empty">Continua a leggere per trovare nomi presenti in almeno due capitoli comuni.</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>

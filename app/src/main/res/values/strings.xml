@@ -1631,10 +1631,14 @@
     <string name="codex_empty">No matching names in earlier chapters yet.</string>
     <string name="codex_scripts">Name detection relies on capital letters, so it does not work for languages without them.</string>
     <string name="codex_entry">%1$s · Mentions: %2$d</string>
+    <string name="codex_entry_mentions">Mentions: %1$d</string>
+    <string name="codex_filter_all">All</string>
+    <string name="codex_filter_connections">Connections</string>
+    <string name="codex_map_show">Show map</string>
+    <string name="codex_map_hide">Hide map</string>
     <string name="codex_person">Person</string>
     <string name="codex_place">Place</string>
     <string name="codex_faction">Faction</string>
-    <string name="codex_other">Other</string>
     <string name="codex_pair">%1$s ↔ %2$s</string>
     <string name="codex_pane_profile">Profile</string>
     <string name="codex_pane_mentions">Mentions</string>
@@ -1645,7 +1649,6 @@
     <string name="codex_mentions_of">Mentions of %1$s</string>
     <string name="codex_mentions_all">Show all mentions</string>
     <string name="codex_shared">Shared chapters: %1$d</string>
-    <string name="codex_graph_hint">Select two names on the map, or choose a connection below.</string>
     <string name="codex_graph_empty">Read further to find names sharing at least two chapters.</string>
     <string name="codex_more">Load more passages</string>
     <string name="codex_no_passages">No earlier passages found.</string>

@@ -51,6 +51,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -245,52 +248,68 @@ internal fun CodexSheet(
                     codexTabs(tab, tabs, controller)
                     storyTab(story, storyActions, onChapter, onChooseModel, onCharacter = { controller.detail(it) })
                 }
-            } else if (tab == CodexTab.NAMES) {
-                val entries = remember(panel.entries, search) {
-                    val needle = PassageText.fold(search)
-                    panel.entries.filter { PassageText.fold(it.name).contains(needle) }
+            } else if (tab == CodexTab.NAMES || tab == CodexTab.RELATIONSHIPS) {
+                val connections = tab == CodexTab.RELATIONSHIPS
+                val needle = remember(search) { PassageText.fold(search) }
+                val entries = remember(panel.entries, needle) { panel.entries.filter { PassageText.fold(it.name).contains(needle) } }
+                val graph = panel.graph
+                val linked = graph?.let { graph.edges.map { graph.nodes[it.a].name to graph.nodes[it.b].name } }.orEmpty()
+                val relations by produceState(emptyMap<Pair<String, String>, String>(), connections, linked, panel.scope, profiles?.available, profiles?.recaps) {
+                    value = profiles?.takeIf { connections && it.available && linked.isNotEmpty() }?.let { it.pairs(linked, it.recaps) }.orEmpty()
                 }
-                LazyColumn(Modifier.weight(1f), state = namesList) {
+                var mapOpen by rememberSaveable { mutableStateOf(false) }
+                LazyColumn(Modifier.weight(1f), state = namesList, verticalArrangement = Arrangement.spacedBy(if (connections) 8.dp else 0.dp)) {
                     codexHeader(progress, controller, scanEnabled, profiles)
                     codexTabs(tab, tabs, controller)
                     item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
                             label = { Text(stringResource(R.string.codex_search)) }, modifier = Modifier.fillMaxWidth())
                     }
-                    if (entries.isEmpty()) item {
-                        Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
-                        // Only a finished scan with no names at all points at the script;
-                        // a search matching nothing, or a scan just begun, does not.
-                        if (panel.entries.isEmpty() && progress.stage == CodexStage.COMPLETE) {
-                            Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
+                    item(key = "codex:filter") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            FilterChip(selected = !connections, onClick = controller::showNames, label = { Text(stringResource(R.string.codex_filter_all)) })
+                            FilterChip(selected = connections, onClick = { if (!connections) controller.showGraph() },
+                                label = { Text(stringResource(R.string.codex_filter_connections)) })
+                            Spacer(Modifier.weight(1f))
+                            if (connections && graph != null && graph.nodes.size >= 2 && graph.edges.isNotEmpty()) {
+                                TextButton(onClick = { mapOpen = !mapOpen }) {
+                                    Text(stringResource(if (mapOpen) R.string.codex_map_hide else R.string.codex_map_show), maxLines = 1)
+                                }
+                            }
                         }
                     }
-                    items(entries, key = { it.name }) { entry ->
-                        ListItem(
-                            headlineContent = { Text(entry.name) },
-                            supportingContent = { Text(stringResource(R.string.codex_entry, kindLabel(entry.kind), entry.occurrences)) },
-                            modifier = Modifier.clickable(role = Role.Button) { controller.detail(entry.name) },
-                        )
-                    }
-                }
-            } else if (tab == CodexTab.RELATIONSHIPS) {
-                val linked = panel.graph?.let { graph -> graph.edges.map { graph.nodes[it.a].name to graph.nodes[it.b].name } }.orEmpty()
-                val relations by produceState(emptyMap<Pair<String, String>, String>(), linked, panel.scope, profiles?.available, profiles?.recaps) {
-                    value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.let { it.pairs(linked, it.recaps) }.orEmpty()
-                }
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, scanEnabled, profiles)
-                    codexTabs(CodexTab.RELATIONSHIPS, tabs, controller)
-                    val graph = panel.graph
-                    if (panel.graphFailed) item {
+                    if (!connections) {
+                        if (entries.isEmpty()) item {
+                            Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp))
+                            // Only a finished scan with no names at all points at the script;
+                            // a search matching nothing, or a scan just begun, does not.
+                            if (panel.entries.isEmpty() && progress.stage == CodexStage.COMPLETE) {
+                                Text(stringResource(R.string.codex_scripts), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        items(entries, key = { it.name }) { entry ->
+                            ListItem(
+                                headlineContent = { Text(entry.name) },
+                                supportingContent = { Text(entryLine(entry.kind, entry.occurrences)) },
+                                modifier = Modifier.clickable(role = Role.Button) { controller.detail(entry.name) },
+                            )
+                        }
+                    } else if (panel.graphFailed) item {
                         Text(stringResource(R.string.codex_failed))
                         TextButton(onClick = { controller.showGraph() }) { Text(stringResource(R.string.companion_retry)) }
                     } else if (graph == null) item { BusyBar() }
                     else if (graph.nodes.size < 2 || graph.edges.isEmpty()) item { Text(stringResource(R.string.codex_graph_empty)) }
                     else {
-                        item { Text(stringResource(R.string.codex_graph_hint), style = MaterialTheme.typography.bodySmall) }
-                        item { CodexMap(graph, controller::detail) }
-                        items(graph.edges) { edge ->
+                        if (mapOpen) item(key = "codex:map") { CodexMap(graph, controller::detail) }
+                        val edges = graph.edges.filter { edge ->
+                            PassageText.fold(graph.nodes[edge.a].name).contains(needle) || PassageText.fold(graph.nodes[edge.b].name).contains(needle)
+                        }
+                        if (edges.isEmpty()) item { Text(stringResource(R.string.codex_empty), Modifier.padding(vertical = 16.dp)) }
+                        items(edges, key = { "${it.a}:${it.b}" }) { edge ->
                             val a = graph.nodes[edge.a].name
                             val b = graph.nodes[edge.b].name
                             ListItem(
@@ -430,31 +449,28 @@ private fun LazyListScope.codexHeader(
     }
 }
 
+// Connections is a filter inside Names, so the row shows Story and Names
+// only, and nothing when just one of them is available.
 @OptIn(ExperimentalMaterial3Api::class)
-private fun LazyListScope.codexTabs(tab: CodexTab, tabs: List<CodexTab>, controller: CodexViewModel) = item(key = "codex:tabs") {
-    PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab), modifier = Modifier.padding(bottom = 10.dp)) {
-        tabs.forEach { each ->
-            Tab(
-                selected = tab == each,
-                onClick = when (each) {
-                    CodexTab.STORY -> controller::showStory
-                    CodexTab.NAMES -> controller::showNames
-                    CodexTab.RELATIONSHIPS -> controller::showGraph
-                },
-                text = {
-                    Text(
-                        stringResource(
-                            when (each) {
-                                CodexTab.STORY -> R.string.codex_story
-                                CodexTab.NAMES -> R.string.codex_names
-                                CodexTab.RELATIONSHIPS -> R.string.companion_relationships
-                            },
-                        ),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-            )
+private fun LazyListScope.codexTabs(tab: CodexTab, tabs: List<CodexTab>, controller: CodexViewModel) {
+    val shown = tabs.filter { it != CodexTab.RELATIONSHIPS }
+    if (shown.size < 2) return
+    val selected = if (tab == CodexTab.RELATIONSHIPS) CodexTab.NAMES else tab
+    item(key = "codex:tabs") {
+        PrimaryTabRow(selectedTabIndex = shown.indexOf(selected), modifier = Modifier.padding(bottom = 10.dp)) {
+            shown.forEach { each ->
+                Tab(
+                    selected = selected == each,
+                    onClick = if (each == CodexTab.STORY) controller::showStory else controller::showNames,
+                    text = {
+                        Text(
+                            stringResource(if (each == CodexTab.STORY) R.string.codex_story else R.string.codex_names),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                )
+            }
         }
     }
 }
@@ -527,13 +543,14 @@ private fun highlightedExcerpt(text: String, terms: List<String>, style: SpanSty
     }
 }
 
+/** "Person · Mentions: 21", or just the mentions when the kind is unknown. */
 @Composable
-internal fun kindLabel(kind: CodexKind): String = stringResource(when (kind) {
-    CodexKind.PERSON -> R.string.codex_person
-    CodexKind.PLACE -> R.string.codex_place
-    CodexKind.FACTION -> R.string.codex_faction
-    CodexKind.UNKNOWN -> R.string.codex_other
-})
+internal fun entryLine(kind: CodexKind, occurrences: Int): String = when (kind) {
+    CodexKind.PERSON -> stringResource(R.string.codex_entry, stringResource(R.string.codex_person), occurrences)
+    CodexKind.PLACE -> stringResource(R.string.codex_entry, stringResource(R.string.codex_place), occurrences)
+    CodexKind.FACTION -> stringResource(R.string.codex_entry, stringResource(R.string.codex_faction), occurrences)
+    CodexKind.UNKNOWN -> stringResource(R.string.codex_entry_mentions, occurrences)
+}
 
 @Composable
 private fun CodexScanProgress(progress: CodexProgress, controller: CodexViewModel) {
