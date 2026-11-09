@@ -28,6 +28,13 @@ class NoteMarkdownTest {
     }
 
     @Test
+    fun `bold right against italic keeps each its own word`() {
+        val rendered = shown("**one***two*")
+        assertEquals("onetwo", rendered.text)
+        assertEquals(setOf(Styled(0, 3, Style.BOLD), Styled(3, 6, Style.ITALIC)), rendered.styles.toSet())
+    }
+
+    @Test
     fun `stars and underscores that are not emphasis stay as typed`() {
         listOf("2 * 3 * 4", "snake_case_name", "**never closed", "a ** b **", "\\*literal\\*").forEach { note ->
             val rendered = shown(note)

@@ -29,6 +29,12 @@ class NoteFormattingTest {
     }
 
     @Test
+    fun `bold over words partly bold makes one run`() {
+        assertEquals(Edit("**one two three**", 2, 15), toggle(Edit("one **two** three", 0, 17), Format.BOLD))
+        assertEquals("**one two three**", toggle(Edit("**one two** three", 4, 17), Format.BOLD).text)
+    }
+
+    @Test
     fun `with nothing selected italic opens a pair and a second press takes it back`() {
         val opened = toggle(Edit("ab", 1), Format.ITALIC)
         assertEquals(Edit("a**b", 2), opened)

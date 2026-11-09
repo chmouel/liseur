@@ -77,32 +77,49 @@ object NoteFormatting {
             return Edit(before + marker + marker + after, edit.start + marker.length)
         }
 
-        val segments = touched(parsed.lines, edit).mapNotNull { line ->
-            var from = maxOf(edit.start, line.contentStart)
-            var to = minOf(edit.end, line.end)
-            while (from < to && edit.text[from].isWhitespace()) from++
-            while (to > from && edit.text[to - 1].isWhitespace()) to--
-            if (from < to) from to to else null
-        }
+        val segments = segments(edit, parsed)
         if (segments.isEmpty()) return edit
         val covering = segments.map { (from, to) ->
             runs.filter { it.openStart <= from && to <= it.closeEnd }.maxByOrNull { it.openStart }
         }
         if (covering.all { it != null }) return unwrap(edit, covering.filterNotNull().distinct())
 
+        // Words already in this style inside the selection lose their own
+        // markers first, so the new pair does not nest inside them.
+        val inside = runs.filter { run -> segments.any { (from, to) -> run.openStart < to && from < run.closeEnd } }
+        if (inside.isNotEmpty()) {
+            val widened = Edit(
+                edit.text,
+                minOf(edit.start, inside.minOf { it.openStart }),
+                maxOf(edit.end, inside.maxOf { it.closeEnd }),
+            )
+            return wrap(unwrap(widened, inside), marker)
+        }
+        return wrap(edit, marker, segments)
+    }
+
+    private fun wrap(edit: Edit, marker: String, segments: List<Pair<Int, Int>> = segments(edit)): Edit {
         var text = edit.text
         var start = edit.start
         var end = edit.end
         // Last part first, so the earlier positions still hold.
-        for ((index, segment) in segments.withIndex().reversed()) {
-            if (covering[index] != null) continue
-            val (from, to) = segment
+        for ((from, to) in segments.reversed()) {
             text = text.substring(0, from) + marker + text.substring(from, to) + marker + text.substring(to)
             if (start >= from) start += marker.length
             end += if (end > to) 2 * marker.length else marker.length
         }
         return Edit(text, start, end)
     }
+
+    /** The selected part of each line it touches, without spaces at the edges. */
+    private fun segments(edit: Edit, parsed: NoteMarkdown.Parsed = NoteMarkdown.parse(edit.text)): List<Pair<Int, Int>> =
+        touched(parsed.lines, edit).mapNotNull { line ->
+            var from = maxOf(edit.start, line.contentStart)
+            var to = minOf(edit.end, line.end)
+            while (from < to && edit.text[from].isWhitespace()) from++
+            while (to > from && edit.text[to - 1].isWhitespace()) to--
+            if (from < to) from to to else null
+        }
 
     private fun unwrap(edit: Edit, runs: List<NoteMarkdown.Emphasis>): Edit {
         var text = edit.text

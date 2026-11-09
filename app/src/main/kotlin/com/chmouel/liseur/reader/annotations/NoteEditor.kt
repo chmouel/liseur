@@ -124,7 +124,9 @@ fun NoteEditor(
     val clearing = value.text.isBlank() && initialNote.isNotBlank()
     val canSave = value.text.isNotBlank() || clearing
     val close = { if (dirty) confirmingDiscard = true else onDismiss() }
-    val save = { onSave(value.text.trimEnd(), tint) }
+    // An untouched note goes back exactly as it was, so a colour change
+    // alone does not count as an edit to its words.
+    val save = { onSave(if (value.text == initialNote) initialNote else value.text.trimEnd(), tint) }
 
     Dialog(
         onDismissRequest = close,
