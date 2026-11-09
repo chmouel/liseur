@@ -258,7 +258,7 @@ class BrowseLibrariesViewModel(private val catalogs: BrowseCatalogRepository) : 
             it.copy(
                 chooserOpen = false,
                 presetFailure = null,
-                leaveForLibrary = it.chooserFromLibrary && it.serverId == null,
+                leaveForLibrary = it.chooserFromLibrary,
                 chooserFromLibrary = false,
             )
         }
