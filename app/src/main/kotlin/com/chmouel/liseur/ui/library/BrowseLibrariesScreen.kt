@@ -690,10 +690,10 @@ private fun FreeCatalogsShortcut(onClick: () -> Unit, modifier: Modifier = Modif
 // Free catalog chooser
 
 /**
- * The three free catalogs, as one sheet.
+ * The free catalogs, as one sheet.
  *
  * Nothing is contacted until a row is tapped: the sheet is a list of
- * choices, not a page that loads three catalogs to show them. A failed
+ * choices, not a page that loads every catalog to show them. A failed
  * attempt stays here rather than closing, because the next thing a
  * reader wants is usually another catalog rather than the failure again.
  */
