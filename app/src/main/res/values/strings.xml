@@ -1693,6 +1693,10 @@
     <string name="story_where_focus">In focus</string>
     <string name="story_where_tone">Mood</string>
     <string name="story_where_questions">Still open</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="one">From the recap of chapter %1$s</item>
+        <item quantity="other">From the recaps of chapters %1$s</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Chapter %1$s has no recap yet</item>
         <item quantity="other">Chapters %1$s have no recap yet</item>

@@ -350,19 +350,38 @@ private fun WhereSection(
 
 @Composable
 private fun WhereAnswer(answer: WhereWasI<Locator>, onChapter: (Locator) -> Unit) {
-    listOf(
+    val main = listOf(
         R.string.story_where_stopped to answer.stopped,
         R.string.story_where_objective to answer.objective,
         R.string.story_where_conflict to answer.conflict,
-    ).forEach { (title, claim) ->
+    )
+    // Focus and tone show only when an answer has nothing else to say.
+    val claims = main.takeIf { it.any { (_, claim) -> claim != null } } ?: listOf(
+        R.string.story_where_focus to answer.focus,
+        R.string.story_where_tone to answer.tone,
+    )
+    claims.forEach { (title, claim) ->
         if (claim == null) return@forEach
-        ClaimItem(
-            key = "where-$title",
-            heading = stringResource(title),
-            text = claim.text,
-            sources = claim.sources,
-            onSource = { onChapter(it.place) },
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ClaimItem(
+                key = "where-$title",
+                heading = stringResource(title),
+                text = claim.text,
+                sources = claim.sources,
+                onSource = { onChapter(it.place) },
+            )
+            if (claim.recaps.isNotEmpty()) {
+                Text(
+                    pluralStringResource(
+                        R.plurals.story_where_from_recaps,
+                        claim.recaps.size,
+                        StorySummaries.ranges(claim.recaps.map { it + 1 }, "–"),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
     if (answer.questions.isNotEmpty()) {
         Text(stringResource(R.string.story_where_questions), style = MaterialTheme.typography.titleSmall)
@@ -449,8 +468,8 @@ private fun StoryRow(
                     }
                 }
             }
+            val characters = chapter.characters.take(CHAPTER_CHARACTERS)
             if (recap is StoryRecap.Summary) {
-                val characters = chapter.characters.take(CHAPTER_CHARACTERS)
                 ExpandableText(
                     recap.sentences.joinToString(" "),
                     MaterialTheme.typography.bodyMedium,
@@ -465,6 +484,13 @@ private fun StoryRow(
                         }
                     },
                 )
+            } else if (characters.isNotEmpty()) {
+                // With no summary to open, the characters are all there is to show.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    characters.forEach { name ->
+                        SuggestionChip(onClick = { onCharacter(name) }, label = { Text(name) })
+                    }
+                }
             }
             if (chapter.start == null) {
                 Text(

@@ -1579,6 +1579,9 @@
     <string name="story_where_focus">焦点</string>
     <string name="story_where_tone">氛围</string>
     <string name="story_where_questions">悬而未决</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="other">来自第 %1$s 章的回顾</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="other">第 %1$s 章还没有回顾</item>
     </plurals>

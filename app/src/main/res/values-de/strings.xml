@@ -1640,6 +1640,10 @@
     <string name="story_where_focus">Im Mittelpunkt</string>
     <string name="story_where_tone">Stimmung</string>
     <string name="story_where_questions">Noch offen</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="one">Aus der Zusammenfassung von Kapitel %1$s</item>
+        <item quantity="other">Aus den Zusammenfassungen der Kapitel %1$s</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Kapitel %1$s hat noch keine Zusammenfassung</item>
         <item quantity="other">Die Kapitel %1$s haben noch keine Zusammenfassung</item>

@@ -1899,11 +1899,13 @@ separate from translation's, moved and forgotten with server edits in
   (failed ones included) and Write summary always work. Recap again replaces
   only an undecodable row, after the new one is saved.
 - Story's layout: one catch-up card (So far, cut at five lines, then
-  Where was I?, which keeps where you stopped, the objective, the conflict
-  and open questions), then an Earlier chapters header holding Recap
-  missing chapters. Per-row Recap buttons and Recap missing chapters wait
-  for the consent card to be answered; a row's character chips show only
-  when its summary is open.
+  Where was I?, which shows where you stopped, the objective, the conflict
+  and open questions, falling back to focus and tone only when those are
+  all missing, each claim naming the recaps it drew on), then an Earlier
+  chapters header holding Recap missing chapters. Per-row Recap buttons
+  and Recap missing chapters wait for the consent card to be answered; a
+  row's character chips show when its summary is open, or straight away
+  when it has no summary.
 - `StorySummaries` folds summaries into `FAN_OUT` windows (none below
   `MIN_RECAPS`, enforced by `SummaryWriter`). A node is written only when
   its whole window is listed. A node is keyed by a hash of formats, content
