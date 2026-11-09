@@ -119,10 +119,11 @@ reopens yours rather than adding a second copy, with the address and the
 credentials you gave it. From then on, browsing it sends ordinary OPDS feed
 and cover requests to that site, and downloading a book fetches the file from
 it, so the site sees which book or section you asked for, the same as any
-other visitor. What it never gets is an account, an identifier of the app or
-the device, your reading position or anything about the rest of your library:
-these catalogs have no sign-in and know nothing about you beyond the requests
-you make. Each saved catalog can be removed from Remote libraries like any
+other visitor. Liseur adds nothing of its own to those requests: no account,
+no identifier of the app or the device, no reading position, nothing about
+the rest of your library. These catalogs have no sign-in, and a connection
+you saved yourself sends only what you configured for it, credentials
+included. Each saved catalog can be removed from Remote libraries like any
 other, and the presets are HTTPS addresses. The presets shipped in the app
 decide which sites are offered; the four above are what this version offers.
 
