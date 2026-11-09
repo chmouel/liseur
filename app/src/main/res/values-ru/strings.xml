@@ -1728,6 +1728,12 @@
     <string name="story_where_focus">В центре внимания</string>
     <string name="story_where_tone">Настроение</string>
     <string name="story_where_questions">Пока открыто</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="one">По пересказу главы %1$s</item>
+        <item quantity="few">По пересказам глав %1$s</item>
+        <item quantity="many">По пересказам глав %1$s</item>
+        <item quantity="other">По пересказам глав %1$s</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">У главы %1$s ещё нет пересказа</item>
         <item quantity="few">У глав %1$s ещё нет пересказа</item>

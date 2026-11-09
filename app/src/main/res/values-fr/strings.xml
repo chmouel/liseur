@@ -1628,6 +1628,10 @@
     <string name="story_where_focus">Au premier plan</string>
     <string name="story_where_tone">Ambiance</string>
     <string name="story_where_questions">Encore ouvert</string>
+    <plurals name="story_where_from_recaps">
+        <item quantity="one">D\'après le résumé du chapitre %1$s</item>
+        <item quantity="other">D\'après les résumés des chapitres %1$s</item>
+    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Le chapitre %1$s n’a pas encore de récapitulatif</item>
         <item quantity="other">Les chapitres %1$s n’ont pas encore de récapitulatif</item>
