@@ -2,7 +2,8 @@ package com.chmouel.liseur.reader.annotations
 
 /**
  * The small piece of Markdown a note may carry: `**bold**`, `*italic*`
- * (or `_italic_`), `-` bullet lists, `1.` numbered lists and `>` quotes.
+ * (or `_italic_`), `#` to `######` headings, `-` bullet lists, `1.`
+ * numbered lists and `>` quotes.
  *
  * Notes are stored, synced and exported as the raw text, so a note keeps
  * reading sensibly in an app that shows it as plain text. Only Liseur
@@ -14,7 +15,7 @@ package com.chmouel.liseur.reader.annotations
  */
 object NoteMarkdown {
 
-    enum class LineKind { TEXT, BULLET, NUMBERED, QUOTE }
+    enum class LineKind { TEXT, HEADING, BULLET, NUMBERED, QUOTE }
 
     /** A `**`/`*`/`_` pair, in positions of the raw text. */
     data class Emphasis(
@@ -28,6 +29,7 @@ object NoteMarkdown {
     /**
      * One line of a note. [markerEnd] is where its list or quote marker
      * (and the space after it) ends; for plain text it is [contentStart].
+     * [level] is a heading's number of `#`.
      */
     data class Line(
         val start: Int,
@@ -38,6 +40,7 @@ object NoteMarkdown {
         val number: Int? = null,
         val delimiter: Char? = null,
         val bullet: Char? = null,
+        val level: Int? = null,
     )
 
     data class Parsed(
@@ -46,7 +49,7 @@ object NoteMarkdown {
         val escapes: List<Int>,
     )
 
-    enum class Style { BOLD, ITALIC, QUIET, MARKER }
+    enum class Style { BOLD, ITALIC, QUIET, MARKER, HEADING1, HEADING2, HEADING3 }
 
     /** A style laid over `[start, end)`. */
     data class Styled(val start: Int, val end: Int, val style: Style)
@@ -54,6 +57,7 @@ object NoteMarkdown {
     /** A note made ready to show: the markers gone, the styles to apply. */
     data class Rendered(val text: String, val styles: List<Styled>)
 
+    private val HEADING = Regex("""^ {0,3}(#{1,6})[ \t]+""")
     private val BULLET = Regex("""^([ \t]*)([-*+•])[ \t]+""")
     private val NUMBERED = Regex("""^([ \t]*)(\d{1,9})([.)])[ \t]+""")
     private val QUOTE = Regex("""^([ \t]*)>[ \t]?""")
@@ -76,6 +80,14 @@ object NoteMarkdown {
 
     private fun line(text: String, start: Int, end: Int): Line {
         val raw = text.substring(start, end)
+        HEADING.find(raw)?.let { match ->
+            return Line(
+                start, end, LineKind.HEADING,
+                indent = match.range.first + match.value.indexOf('#'),
+                contentStart = start + match.range.last + 1,
+                level = match.groupValues[1].length,
+            )
+        }
         NUMBERED.find(raw)?.let { match ->
             return Line(
                 start, end, LineKind.NUMBERED,
@@ -153,7 +165,7 @@ object NoteMarkdown {
         at > contentStart && !text[at - 1].isWhitespace()
 
     private fun closingDouble(text: String, from: Int, to: Int): Int? {
-        var j = from + 1
+        var j = firstCloser(text, from)
         while (j + 1 < to) {
             if (text[j] == '\\') {
                 j += 2
@@ -177,7 +189,7 @@ object NoteMarkdown {
     }
 
     private fun closingSingle(text: String, marker: Char, from: Int, to: Int): Int? {
-        var j = from + 1
+        var j = firstCloser(text, from)
         while (j < to) {
             val c = text[j]
             if (c == '\\') {
@@ -197,6 +209,9 @@ object NoteMarkdown {
         return null
     }
 
+    /** Where a closer may first be, past at least one character of content, an escape being two. */
+    private fun firstCloser(text: String, from: Int): Int = if (text[from] == '\\') from + 2 else from + 1
+
     /** `_` only counts outside a word, so snake_case_names stay as they are. */
     private fun wordBoundary(text: String, at: Int): Boolean =
         at < 0 || at >= text.length || !text[at].isLetterOrDigit()
@@ -215,6 +230,9 @@ object NoteMarkdown {
             if (line.kind == LineKind.QUOTE && line.end > line.contentStart) {
                 out += Styled(line.contentStart, line.end, Style.QUIET)
             }
+            if (line.kind == LineKind.HEADING && line.end > line.contentStart) {
+                out += Styled(line.contentStart, line.end, heading(line.level))
+            }
         }
         parsed.emphasis.forEach { e ->
             out += Styled(e.openStart, e.contentStart, Style.MARKER)
@@ -229,7 +247,8 @@ object NoteMarkdown {
 
     /**
      * The note as it is shown: emphasis markers and escapes gone, bullets
-     * drawn as `•`, numbers kept, quotes set in and quiet.
+     * drawn as `•`, numbers kept, quotes set in and quiet, headings
+     * without their `#` and larger by level.
      */
     fun render(text: String): Rendered {
         val parsed = parse(text)
@@ -247,7 +266,7 @@ object NoteMarkdown {
         parsed.lines.forEachIndexed { index, line ->
             if (index > 0) out.append('\n')
             when (line.kind) {
-                LineKind.TEXT -> Unit
+                LineKind.TEXT, LineKind.HEADING -> Unit
                 LineKind.BULLET -> {
                     out.append(text, line.start, line.start + line.indent)
                     val markStart = out.length
@@ -275,6 +294,9 @@ object NoteMarkdown {
                 styles += Styled(contentShownStart, out.length, Style.QUIET)
                 styles += Styled(contentShownStart, out.length, Style.ITALIC)
             }
+            if (line.kind == LineKind.HEADING && out.length > contentShownStart) {
+                styles += Styled(contentShownStart, out.length, heading(line.level))
+            }
         }
         parsed.emphasis.forEach { e ->
             val start = shownAt[e.contentStart]
@@ -282,5 +304,11 @@ object NoteMarkdown {
             if (end > start) styles += Styled(start, end, if (e.bold) Style.BOLD else Style.ITALIC)
         }
         return Rendered(out.toString(), styles)
+    }
+
+    private fun heading(level: Int?): Style = when (level) {
+        1 -> Style.HEADING1
+        2 -> Style.HEADING2
+        else -> Style.HEADING3
     }
 }

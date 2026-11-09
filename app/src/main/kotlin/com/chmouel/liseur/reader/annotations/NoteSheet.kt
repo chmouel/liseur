@@ -142,9 +142,7 @@ fun NoteSheet(
                     style = MaterialTheme.typography.bodyLarge,
                     color = ink,
                     modifier = Modifier
-                        .padding(top = 16.dp)
-                        .heightIn(max = 280.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .padding(top = 16.dp),
                 )
             }
 

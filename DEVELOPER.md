@@ -1100,9 +1100,11 @@ changing reader behavior.
   `DictionaryInflectionTest`.
 
 - Notes are stored, synced, backed up and exported as the raw text the
-  reader typed. `NoteMarkdown` (bold, italic, `-`/`1.` lists, `>`
-  quotes) is drawn only in Liseur (`NoteEditor`, `NoteSheet`, contents);
-  never rewrite or strip it on the way out. Saving an empty passage note
+  reader typed. `NoteMarkdown` (bold, italic, `#` headings, `-`/`1.`
+  lists, `>` quotes) is drawn only in Liseur (`NoteEditor`, `NoteSheet`,
+  contents); never rewrite or strip it on the way out, except that the
+  Markdown notebook export moves a note's headings two levels down, below
+  the book and chapter headings. Saving an empty passage note
   turns the mark back into a plain highlight (`NoteText.cleared`); an
   empty book note deletes it. The editor asks before discarding changes.
   See [ADR-0068](docs/adr/0068-notes-are-written-full-screen-in-light-markdown.md).
@@ -1803,7 +1805,10 @@ separate from translation's, moved and forgotten with server edits in
 - A lookup answers `profile` or `term` (`CompanionAnswer.Term`, nature
   normalised to `Term.NATURES`); both share the gate, ref checks and
   cache. Profiles, terms and "Where was I?" copy or save as notes through
-  `CompanionNotes`; `CompanionPanel.note` carries the selection and its
+  `CompanionNotes`: copy is plain text, a note is note Markdown (`##`
+  title, italic aliases, `###` sections, bold names, a lone item as a
+  paragraph) with the model's `*`, `_` and `\` escaped so they never
+  format; `CompanionPanel.note` carries the selection and its
   mark across retries, `ReaderViewModel.saveCompanionNote` appends to an
   existing note and falls back to a book note
   ([ADR-0067](docs/adr/0067-companion-recalls-where-you-stopped.md)).

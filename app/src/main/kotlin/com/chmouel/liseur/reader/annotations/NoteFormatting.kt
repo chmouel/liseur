@@ -223,7 +223,7 @@ object NoteFormatting {
             return null
         }
         val line = NoteMarkdown.parse(before.text).lines.firstOrNull { at in it.start..it.end } ?: return null
-        if (line.kind == LineKind.TEXT || at < line.contentStart) return null
+        if (line.kind == LineKind.TEXT || line.kind == LineKind.HEADING || at < line.contentStart) return null
         val indent = before.text.substring(line.start, line.start + line.indent)
 
         if (line.end == line.contentStart) {

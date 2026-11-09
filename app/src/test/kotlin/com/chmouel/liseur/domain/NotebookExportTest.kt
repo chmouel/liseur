@@ -45,6 +45,19 @@ class NotebookExportTest {
     }
 
     @Test
+    fun `a note's headings sit below the chapter's`() {
+        val md = exportNotebookMarkdown(
+            title = "A book",
+            author = null,
+            annotations = listOf(
+                annotation(text = "Ishmael", note = "## Ishmael\n### Who\n###### Deep\n#tag", chapter = "Loomings"),
+            ),
+        )
+
+        assertTrue(md.contains("\n#### Ishmael\n##### Who\n###### Deep\n#tag\n"))
+    }
+
+    @Test
     fun `passages are block quotes and notes are plain paragraphs`() {
         val md = exportNotebookMarkdown(
             title = "A book",
