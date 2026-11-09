@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
@@ -43,6 +44,8 @@ class SummaryStep(
     val hi: Int,
     val items: List<SummaryItem>,
     val deps: List<SummaryDep>,
+    /** How long the story so far is; windows are written the same way at every length. */
+    val detail: CompanionDetail = CompanionDetail.NORMAL,
 ) {
     /** The last chapter this summary is written from; nothing is sent while it is not before the reader. */
     val last: Int get() = deps.last().unit
@@ -81,7 +84,15 @@ object StorySummaries {
     const val FAN_OUT = 8
     const val CHAPTER_CHARACTERS = 600
     const val WINDOW_CHARACTERS = 500
-    const val TOP_CHARACTERS = 1_200
+
+    /** The longest story so far, at [CompanionDetail.DETAILED]. */
+    const val TOP_CHARACTERS = 2_400
+
+    fun topCharacters(detail: CompanionDetail): Int = when (detail) {
+        CompanionDetail.BRIEF -> 500
+        CompanionDetail.NORMAL -> 1_200
+        CompanionDetail.DETAILED -> TOP_CHARACTERS
+    }
 
     private const val OPEN = "<summary"
     private const val CLOSE = "</summary>"
@@ -95,10 +106,15 @@ object StorySummaries {
 
     /**
      * What to summarize for the [listed] chapters, all before [ceiling]:
-     * the largest whole windows first, then the chapters left. Null when
-     * nothing is listed.
+     * the largest whole windows first, then the chapters left, with the
+     * story so far written at [detail]. Null when nothing is listed.
      */
-    fun plan(contentSha: String, listed: List<SummaryInput>, ceiling: Int): SummaryStep? {
+    fun plan(
+        contentSha: String,
+        listed: List<SummaryInput>,
+        ceiling: Int,
+        detail: CompanionDetail = CompanionDetail.NORMAL,
+    ): SummaryStep? {
         val inputs = listed.filter { it.unit in 0 until ceiling }.sortedBy { it.unit }
         if (inputs.isEmpty()) return null
         val byUnit = inputs.associateBy { it.unit }
@@ -118,7 +134,7 @@ object StorySummaries {
             }
         }
         for (unit in start until ceiling) byUnit[unit]?.let { items += SummaryItem.Chapter(it) }
-        return step(contentSha, TOP, 0, inputs.last().unit, items)
+        return step(contentSha, TOP, 0, inputs.last().unit, items, detail)
     }
 
     private fun span(level: Int): Int {
@@ -138,7 +154,14 @@ object StorySummaries {
         return if (items.isEmpty()) null else step(sha, level, lo, hi, items)
     }
 
-    private fun step(sha: String, level: Int, lo: Int, hi: Int, items: List<SummaryItem>): SummaryStep {
+    private fun step(
+        sha: String,
+        level: Int,
+        lo: Int,
+        hi: Int,
+        items: List<SummaryItem>,
+        detail: CompanionDetail = CompanionDetail.NORMAL,
+    ): SummaryStep {
         val deps = items.flatMap { item ->
             when (item) {
                 is SummaryItem.Chapter -> listOf(SummaryDep(item.input.unit, item.input.unitKey, item.input.text != null))
@@ -147,6 +170,8 @@ object StorySummaries {
         }
         val identity = buildString {
             append("$FORMAT|$sha|${Recaps.FORMAT}|$level|$lo|$hi")
+            // Each length is saved apart, so going back to one shows it again; normal keeps the keys it always had.
+            if (detail != CompanionDetail.NORMAL) append("|d:${detail.id}")
             for (item in items) {
                 when (item) {
                     is SummaryItem.Chapter -> append("|c:${item.input.unit}:${item.input.unitKey}:${item.input.text?.let(::digest) ?: "-"}")
@@ -154,7 +179,7 @@ object StorySummaries {
                 }
             }
         }
-        return SummaryStep(digest(identity), level, lo, hi, items, deps)
+        return SummaryStep(digest(identity), level, lo, hi, items, deps, detail)
     }
 
     private fun digest(text: String): String = MessageDigest.getInstance("SHA-256")
@@ -215,8 +240,8 @@ object StorySummaries {
         return cut.take(end).trim()
     }
 
-    fun system(level: Int): String {
-        val limit = if (level == TOP) TOP_CHARACTERS else WINDOW_CHARACTERS
+    fun system(level: Int, detail: CompanionDetail = CompanionDetail.NORMAL): String {
+        val limit = limit(level, detail)
         val task = if (level == TOP) {
             "You tell a reader the story so far of the book they are reading, from short summaries of the " +
                 "chapters they have read. Write one account of what has happened, in the order it happened."
@@ -263,7 +288,9 @@ object StorySummaries {
             (if (code == CompanionPrompt.TOO_LONG) ", much shorter" else "") + "."
 
     /** The summary in [reply], bounded; null when it is not the JSON asked for. */
-    fun parse(reply: String, level: Int): String? {
+    private fun limit(level: Int, detail: CompanionDetail) = if (level == TOP) topCharacters(detail) else WINDOW_CHARACTERS
+
+    fun parse(reply: String, level: Int, detail: CompanionDetail = CompanionDetail.NORMAL): String? {
         val start = reply.indexOf('{')
         val end = reply.lastIndexOf('}')
         if (start < 0 || end < start) return null
@@ -272,7 +299,7 @@ object StorySummaries {
         } catch (_: JSONException) {
             return null
         }
-        return text.takeIf { it.isNotEmpty() }?.let { bounded(it, if (level == TOP) TOP_CHARACTERS else WINDOW_CHARACTERS) }
+        return text.takeIf { it.isNotEmpty() }?.let { bounded(it, limit(level, detail)) }
     }
 }
 
@@ -322,7 +349,7 @@ class SummaryWriter(
     private suspend fun ask(step: SummaryStep, texts: List<String?>, allowed: () -> Boolean): String {
         var requests = 0
         val user = StorySummaries.user(step, texts, count)
-        var messages = listOf(ChatMessage("system", StorySummaries.system(step.level)), ChatMessage("user", user))
+        var messages = listOf(ChatMessage("system", StorySummaries.system(step.level, step.detail)), ChatMessage("user", user))
         var code = "not_json"
         repeat(2) { attempt ->
             val reply = try {
@@ -334,7 +361,7 @@ class SummaryWriter(
                 null
             }
             code = if (reply == null) CompanionPrompt.TOO_LONG else "not_json"
-            reply?.let { StorySummaries.parse(it, step.level) }?.let { return it }
+            reply?.let { StorySummaries.parse(it, step.level, step.detail) }?.let { return it }
             if (attempt == 0) messages = listOf(messages[0], ChatMessage("user", user + "\n\n" + StorySummaries.correction(code)))
         }
         throw CompanionError.Malformed(code)

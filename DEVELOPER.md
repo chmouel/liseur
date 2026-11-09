@@ -1743,6 +1743,15 @@ separate from translation's, moved and forgotten with server edits in
   `message`, and the requests sent) stay in the panel's copyable dialog:
   never logged, cached, saved or sent. A failed panel asks again when the
   choice changes.
+- `companion_detail` (`CompanionDetail`: brief, normal, detailed; in the
+  settings backup) sets answer length for profiles, Where was I, the story
+  so far and new chapter recaps. `NORMAL` sends the prompts unchanged, so
+  its cache and summary keys stay the same. The level stays out of
+  `CompanionChoice` and `RecapSetup`, so changing it never fences or
+  cancels requests in flight. Lookup and Where was I caches key on it; the
+  story-so-far top summary key carries it (windows are shared), so each
+  level is saved apart and reused. Saved recaps keep their length and are
+  not rewritten (no `Recaps.FORMAT` bump).
 - Chapters come from the contents (`ChapterMap`), not files; parts that
   open several files contribute their entries as chapters, and deeper
   entries never split one. Titles stay on the phone. Text of uncertain

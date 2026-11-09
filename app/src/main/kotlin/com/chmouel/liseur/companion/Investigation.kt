@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import org.json.JSONArray
 import org.json.JSONException
@@ -120,6 +121,7 @@ class Investigation<P>(
     private val scope: AskingScope,
     passages: List<Passage<P>>,
     private val limits: InvestigationLimits = InvestigationLimits(),
+    private val detail: CompanionDetail = CompanionDetail.NORMAL,
 ) {
     private val eligible = passages.filter { Eligibility.allows(scope, it) }
     private val positions = eligible.withIndex().associate { it.value.ref to it.index }
@@ -177,7 +179,7 @@ class Investigation<P>(
             val mentions = asked.flatMap(::mentioning).distinct().sorted()
             val hinted = hintedFor(asked, hints)
             if (mentions.isEmpty() && hinted.isEmpty()) return CompanionAnswer.Insufficient
-            history += ChatMessage("system", CompanionPrompt.system(limits))
+            history += ChatMessage("system", CompanionPrompt.system(limits, detail))
             history += ChatMessage("user", seed(mentions, hinted))
             while (true) {
                 val parsed = try {

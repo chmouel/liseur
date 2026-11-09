@@ -1504,6 +1504,11 @@
     <string name="companion_settings_service_change">Cambia il servizio del compagno di lettura</string>
     <string name="companion_settings_manage_detail">Aggiungi un server, come OpenRouter o uno tuo, per il compagno di lettura.</string>
     <string name="companion_settings_model">Modello</string>
+    <string name="companion_settings_detail">Lunghezza delle risposte</string>
+    <string name="companion_settings_detail_summary">Quanto dicono i profili, Dov\'ero rimasto?, la storia finora e i nuovi riassunti dei capitoli. I riassunti già scritti mantengono la loro lunghezza.</string>
+    <string name="companion_settings_detail_brief">Breve</string>
+    <string name="companion_settings_detail_normal">Normale</string>
+    <string name="companion_settings_detail_detailed">Dettagliata</string>
     <string name="companion_settings_recaps_group">Riassunti in background</string>
     <string name="companion_settings_recaps">Riassumi i capitoli durante la lettura</string>
     <string name="companion_settings_recaps_summary">Quando superi la fine di un capitolo, viene riassunto in background così le ricerche successive trovano prima i passaggi. Disattivato per impostazione predefinita. Ogni libro può cambiarlo in Aa, Avanzate, nel lettore.</string>

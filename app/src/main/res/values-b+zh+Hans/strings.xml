@@ -1455,6 +1455,11 @@
     <string name="companion_settings_service_change">更改阅读伴侣的服务</string>
     <string name="companion_settings_manage_detail">添加一个服务器（例如 OpenRouter 或你自己的服务器）供阅读伴侣使用。</string>
     <string name="companion_settings_model">模型</string>
+    <string name="companion_settings_detail">回答长度</string>
+    <string name="companion_settings_detail_summary">人物档案、“我读到哪了”、故事梗概和新的章节回顾的详细程度。已写好的回顾保持原有长度。</string>
+    <string name="companion_settings_detail_brief">简短</string>
+    <string name="companion_settings_detail_normal">标准</string>
+    <string name="companion_settings_detail_detailed">详细</string>
     <string name="companion_settings_recaps_group">后台章节摘要</string>
     <string name="companion_settings_recaps">阅读时为章节生成摘要</string>
     <string name="companion_settings_recaps_summary">读过一章的结尾后，会在后台为其生成摘要，帮助之后的查找更快找到段落。默认关闭。每本书都可以在阅读器的 Aa › 高级中单独更改。</string>

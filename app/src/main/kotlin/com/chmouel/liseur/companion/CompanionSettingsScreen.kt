@@ -34,10 +34,12 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.providers.ServiceRow
 import com.chmouel.liseur.providers.ServiceSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
@@ -89,6 +91,7 @@ internal fun CompanionSettingsScreen(
     val unset by remember { server.choice.map { it == null } }.collectAsState(initial = false)
     val recaps by remember { server.recapsEnabled }.collectAsState(initial = false)
     val storyAuto by remember { server.storyAutoOk }.collectAsState(initial = false)
+    val detail by remember { server.detail }.collectAsState(initial = CompanionDetail.Default)
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     var advancedOpen by remember { mutableStateOf(false) }
@@ -157,6 +160,22 @@ internal fun CompanionSettingsScreen(
                     )
                 }
                 selected?.SettingsRows(onManageServices = { managing = true })
+                ChipRow(
+                    title = stringResource(R.string.companion_settings_detail),
+                    subtitle = stringResource(R.string.companion_settings_detail_summary),
+                    options = CompanionDetail.entries,
+                    selected = detail,
+                    label = { option ->
+                        stringResource(
+                            when (option) {
+                                CompanionDetail.BRIEF -> R.string.companion_settings_detail_brief
+                                CompanionDetail.NORMAL -> R.string.companion_settings_detail_normal
+                                CompanionDetail.DETAILED -> R.string.companion_settings_detail_detailed
+                            },
+                        )
+                    },
+                    onSelected = { option -> scope.launch { server.setDetail(option) } },
+                )
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,

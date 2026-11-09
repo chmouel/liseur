@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.data.settings.CompanionDetail
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
@@ -112,6 +113,26 @@ class StorySummariesTest {
         SummaryWriter(FakeSummaries(), shortChat, 9).write(short) { true }
         assertEquals("a short window is passed on as it is", 1, shortChat.requests.size)
         assertTrue(shortChat.requests.single().last().content.contains("chapters=\"1-8\">Brief 0."))
+    }
+
+    @Test
+    fun `each length of the story so far is saved apart and shares the windows`() = runTest {
+        val book = FakeSummaries()
+        val chat = SummaryChat()
+        val wide = { k: Int -> "Chapter ${k + 1}: " + "Mira walks the long road on. ".repeat(4) }
+        val normal = StorySummaries.plan("sha", inputs(20, wide), 20)!!
+        SummaryWriter(book, chat, 20).write(normal) { true }
+        assertEquals(3, chat.requests.size)
+
+        val detailed = StorySummaries.plan("sha", inputs(20, wide), 20, CompanionDetail.DETAILED)!!
+        assertNotEquals(normal.key, detailed.key)
+        assertEquals(normal.windows().map { it.key }, detailed.windows().map { it.key })
+        SummaryWriter(book, chat, 20).write(detailed) { true }
+        assertEquals("only the story so far is asked again", 4, chat.requests.size)
+        assertTrue(chat.requests.last().first().content.contains("at most ${StorySummaries.TOP_CHARACTERS} characters"))
+
+        SummaryWriter(book, chat, 20).write(StorySummaries.plan("sha", inputs(20, wide), 20)!!) { true }
+        assertEquals("going back reuses the saved one", 4, chat.requests.size)
     }
 
     @Test

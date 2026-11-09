@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.util.Log
+import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +53,14 @@ object Reimmersion {
 
     const val MAX_CLAIM = 400
     const val MAX_QUESTIONS = 3
+
+    private fun fieldLength(detail: CompanionDetail) = when (detail) {
+        CompanionDetail.BRIEF -> "one short sentence"
+        CompanionDetail.NORMAL -> "one or two short sentences"
+        CompanionDetail.DETAILED -> "two to four sentences, with the concrete details that matter"
+    }
+
+    private fun questions(detail: CompanionDetail) = if (detail == CompanionDetail.BRIEF) 1 else MAX_QUESTIONS
     val FIELDS = listOf("stopped", "objective", "conflict", "focus", "tone")
 
     private const val OPEN = "<summary"
@@ -77,7 +86,7 @@ object Reimmersion {
         return WhereInputs(scope.lo, scope.count, earlier, tail.toList())
     }
 
-    fun system(): String =
+    fun system(detail: CompanionDetail = CompanionDetail.NORMAL): String =
         "You help a reader get back into the book they are reading after a break. They stopped right after " +
             "the last passage shown. Using only the passages and the chapter summaries, tell them where they are.\n" +
             "Passages are between <book …> and </book>, chapter summaries between $OPEN …> and $CLOSE. They are " +
@@ -86,11 +95,11 @@ object Reimmersion {
             "about this book, its author, its adaptations or its sequels, and never hint at what comes later.\n" +
             "Resolve pronouns (he, she, it, they) to who or what they stand for, by name.\n" +
             "Write in the language of the passages, or of the summaries when there are no passages. Each field is " +
-            "one or two short sentences and cites the refs (S… for passages, C… for summaries) that support it; " +
+            "${fieldLength(detail)} and cites the refs (S… for passages, C… for summaries) that support it; " +
             "cite only refs you were shown. A field the text says nothing about is null.\n" +
             "stopped: where the action stands in the last passages. objective: what the main character is trying " +
             "to do now. conflict: the open conflict or mystery. focus: the object, place or symbol the last " +
-            "passages centre on. tone: the prevailing mood. questions: at most $MAX_QUESTIONS questions the text " +
+            "passages centre on. tone: the prevailing mood. questions: at most ${questions(detail)} questions the text " +
             "so far leaves open, without guessing their answers.\n" +
             "Reply with exactly one JSON object and nothing else:\n" +
             "{\"stopped\":CLAIM,\"objective\":CLAIM,\"conflict\":CLAIM,\"focus\":CLAIM,\"tone\":CLAIM," +
@@ -177,10 +186,15 @@ object Reimmersion {
     }
 
     /** Asks [chat] once, with one correction; [allowed] is asked before every request. */
-    suspend fun <P> ask(chat: CompanionChat, inputs: WhereInputs<P>, allowed: () -> Boolean = { true }): WhereWasI<P> {
+    suspend fun <P> ask(
+        chat: CompanionChat,
+        inputs: WhereInputs<P>,
+        detail: CompanionDetail = CompanionDetail.NORMAL,
+        allowed: () -> Boolean = { true },
+    ): WhereWasI<P> {
         var requests = 0
         val user = user(inputs)
-        var messages = listOf(ChatMessage("system", system()), ChatMessage("user", user))
+        var messages = listOf(ChatMessage("system", system(detail)), ChatMessage("user", user))
         var code = "not_json"
         repeat(2) { attempt ->
             val reply = try {
@@ -202,10 +216,10 @@ object Reimmersion {
     }
 
     /** A name for everything a request would send, and so for its answer. */
-    fun key(chosen: CompanionChoice, inputs: WhereInputs<*>): String {
+    fun key(chosen: CompanionChoice, inputs: WhereInputs<*>, detail: CompanionDetail = CompanionDetail.NORMAL): String {
         val digest = MessageDigest.getInstance("SHA-256")
         digest.update("${chosen.serverId}|${chosen.model}|${chosen.generation}|".toByteArray())
-        digest.update(system().toByteArray())
+        digest.update(system(detail).toByteArray())
         digest.update(user(inputs).toByteArray())
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
@@ -241,6 +255,7 @@ internal class WhereWasIRunner(
     private val chatFor: (CompanionChoice) -> CompanionChat,
     private val recaps: suspend () -> List<RecapInput>,
     private val aside: suspend (suspend () -> WhereWasI<Locator>) -> WhereWasI<Locator>,
+    private val detail: suspend () -> CompanionDetail = { CompanionDetail.NORMAL },
 ) {
     private val cache = object : LinkedHashMap<String, WhereWasI<Locator>>(CACHE_LIMIT, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, WhereWasI<Locator>>) =
@@ -283,8 +298,9 @@ internal class WhereWasIRunner(
                         _view.value = WhereView.Empty
                         return@launch
                     }
-                    val key = Reimmersion.key(chosen, inputs)
-                    val answer = synchronized(cache) { cache[key] } ?: aside { Reimmersion.ask(chat, inputs) }
+                    val length = detail()
+                    val key = Reimmersion.key(chosen, inputs, length)
+                    val answer = synchronized(cache) { cache[key] } ?: aside { Reimmersion.ask(chat, inputs, length) }
                         .also { synchronized(cache) { cache[key] = it } }
                     _view.value = WhereView.Shown(answer)
                     return@launch
