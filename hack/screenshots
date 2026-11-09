@@ -260,8 +260,12 @@ dismiss_sheet() {
 # The press has to register before the finger moves, so this cannot be a
 # swipe: hold the finger down, wait out the long press, and only then
 # drag. The gesture runs in one shell so the wait is the device's own.
+#
+# A second argument pauses that many seconds between moves. Sent back to
+# back, the moves can arrive faster than the selection follows them and
+# leave it stuck a word or two from where it started.
 select_a_phrase() {
-    local span=${1:-short} spot py
+    local span=${1:-short} pause=${2:-0} spot py
     local -a xs ys
     for spot in 0.45 0.55 0.35 0.65; do
         reader_chrome_down
@@ -305,10 +309,10 @@ select_a_phrase() {
         fi
         adb shell "input motionevent DOWN $(x "${xs[0]}") ${ys[0]}
             sleep 1
-            input motionevent MOVE $(x "${xs[1]}") ${ys[1]}
-            input motionevent MOVE $(x "${xs[2]}") ${ys[2]}
-            input motionevent MOVE $(x "${xs[3]}") ${ys[3]}
-            input motionevent MOVE $(x "${xs[4]}") ${ys[4]}
+            input motionevent MOVE $(x "${xs[1]}") ${ys[1]}; sleep $pause
+            input motionevent MOVE $(x "${xs[2]}") ${ys[2]}; sleep $pause
+            input motionevent MOVE $(x "${xs[3]}") ${ys[3]}; sleep $pause
+            input motionevent MOVE $(x "${xs[4]}") ${ys[4]}; sleep $pause
             input motionevent UP $(x "${xs[5]}") ${ys[5]}" >/dev/null 2>&1
         sleep 3
         if find_popup >/dev/null; then
@@ -426,10 +430,13 @@ annotation_count() {
 # a second one silently turns into a second tap on the first. A tap on
 # the page clears it; Back would leave the book altogether.
 dismiss_popup() {
-    local i
-    for i in 1 2 3; do
+    local spot
+    # Off the middle after the first try, but inside the centre box: a
+    # tap on a mark opens its popup again, and one further out turns
+    # the page.
+    for spot in 0.5 0.65 0.35; do
         find_popup >/dev/null || return 0
-        tap 0.5 0.5
+        tap 0.5 "$spot"
         sleep 2
         reader_chrome_down
     done
@@ -886,6 +893,39 @@ shot 21-navigate
 back
 sleep 2
 
+step "Writing a note"
+# Written through the toolbar rather than typed as markers, so the
+# picture shows the field styling the note as it goes and the list
+# carrying on by itself after Enter. It is thrown away afterwards: a
+# rerun should find the same notebook this one did.
+dismiss_popup
+select_a_phrase long 0.3 || die "no phrase on the page would select"
+tap_in_popup note
+wait_for "What did this make you think" 10 >/dev/null ||
+    die "the note editor never opened"
+sleep 1
+adb shell input text "Why%s"
+tap_on "Bold" exact
+adb shell input text "Ishmael"
+tap_on "Bold" exact
+adb shell input text "%sgoes%sto%ssea"
+adb shell input keyevent KEYCODE_ENTER
+tap_on "Bulleted list" exact
+adb shell input text "a%sdamp,%sdrizzly%sNovember%sin%sthe%ssoul"
+adb shell input keyevent KEYCODE_ENTER
+adb shell input text "his%ssubstitute%sfor%spistol%sand%sball"
+sleep 1
+on_screen "**Ishmael**" contains || die "the note did not take the bold word"
+shot 29-note-editor
+# Back drops the keyboard first, then asks before throwing the draft away.
+for i in 1 2 3; do
+    on_screen "Discard changes" && break
+    back
+    sleep 2
+done
+tap_on "Discard" exact
+dismiss_popup
+
 step "In-book search"
 # The search field has to have taken focus before the text is sent, and
 # it does not always get there first: a tablet image offers to teach you
@@ -1157,11 +1197,11 @@ i=1
 # theme is worth more as a line in the description than as one picture
 # in six that does not match the other five.
 #
-# All seven now come from this one run. An empty shelf used to be among
-# them, which meant the set could only be completed by a second command
+# All eight come from this one run, and eight is as many as Play
+# takes. An empty shelf used to be among them, which meant the set could only be completed by a second command
 # with a different flag -- and it was the weakest of the lot anyway:
 # nothing sells a reader like the hours somebody has already put into it.
-for name in 01-library 02-reading 24-read-aloud 13-series 04-typography 18-stats 06-highlights; do
+for name in 01-library 02-reading 24-read-aloud 13-series 04-typography 18-stats 06-highlights 29-note-editor; do
     [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"

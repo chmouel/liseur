@@ -74,6 +74,12 @@ Captured with the Play edition's on-device ML Kit translator.
     <td align="center"><sub>A passage longer than the list shows, read in full where it is.</sub></td>
     <td align="center"><sub>A definition without leaving the page. Off until you turn it on.</sub></td>
   </tr>
+  <tr>
+    <td width="33%"><img src="screenshots/29-note-editor.png" alt="Writing a note"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Notes get the whole screen, with bold, italics, lists and quotes.</sub></td>
+  </tr>
 </table>
 
 ## The shelf
