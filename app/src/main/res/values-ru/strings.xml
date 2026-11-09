@@ -1687,7 +1687,7 @@
     <string name="codex_graph_empty">Читайте дальше, чтобы найти имена, встречающиеся вместе хотя бы в двух главах.</string>
     <string name="codex_more">Загрузить ещё отрывки</string>
     <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
-    <string name="story_about">Написано ИИ-моделью по пересказам предыдущих глав. Может содержать ошибки, утверждать то, чего нет в книге, или раскрыть то, что модель знает об этой книге из других источников.</string>
+    <string name="story_about">Сводка ИИ по пересказам предыдущих глав. Может содержать ошибки.</string>
     <string name="story_failed">Не удалось прочитать сюжет на данный момент.</string>
     <string name="story_nothing_before">Нет предыдущих глав.</string>
     <string name="story_no_summary">В пересказе нет краткого содержания</string>
@@ -1695,6 +1695,7 @@
     <string name="story_go">Перейти к главе: %1$s</string>
     <string name="story_go_unavailable">Liseur не может точно определить, где начинается эта глава.</string>
     <string name="story_so_far">На данный момент</string>
+    <string name="story_earlier">Предыдущие главы</string>
     <string name="story_covers_first">Охватывает главу 1</string>
     <string name="story_covers">Охватывает главы с 1 по %1$d</string>
     <string name="story_none_yet">Краткого содержания пока нет.</string>
@@ -1714,12 +1715,11 @@
     <string name="story_stop">Остановить</string>
     <string name="story_summarize">Пересказать</string>
     <string name="story_summarize_again">Пересказать заново</string>
-    <string name="story_status_missing">Ещё не пересказана</string>
     <string name="story_status_queued">В очереди</string>
     <string name="story_status_working">Пересказывается…</string>
     <string name="story_status_failed">Не удалось пересказать</string>
     <string name="story_where_title">На чём я остановился?</string>
-    <string name="story_where_about">Напоминает, где вы остановились, по тексту прямо перед вашим местом и пересказам предыдущих глав; они отправляются на %1$s, когда вы нажмёте «Напомнить».</string>
+    <string name="story_where_about">Отправляет текст перед вашим местом и предыдущие пересказы в %1$s, когда вы нажимаете «Напомнить».</string>
     <string name="story_where_ask">Напомнить</string>
     <string name="story_where_asking">Вспоминаем, где вы остановились…</string>
     <string name="story_where_empty">Перед вашим местом пока нечего вспоминать.</string>
@@ -1729,12 +1729,6 @@
     <string name="story_where_focus">В центре внимания</string>
     <string name="story_where_tone">Настроение</string>
     <string name="story_where_questions">Пока открыто</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">По пересказу главы %1$s</item>
-        <item quantity="few">По пересказам глав %1$s</item>
-        <item quantity="many">По пересказам глав %1$s</item>
-        <item quantity="other">По пересказам глав %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">У главы %1$s ещё нет пересказа</item>
         <item quantity="few">У глав %1$s ещё нет пересказа</item>

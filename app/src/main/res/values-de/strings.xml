@@ -1599,7 +1599,7 @@
     <string name="codex_graph_empty">Lies weiter, um Namen mit mindestens zwei gemeinsamen Kapiteln zu finden.</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
-    <string name="story_about">Von einem KI-Modell aus den Zusammenfassungen der vorherigen Kapitel geschrieben. Es kann Fehler enthalten, Dinge behaupten, die nicht im Buch stehen, oder verraten, was das Modell anderweitig über dieses Buch weiß.</string>
+    <string name="story_about">KI-Zusammenfassung der früheren Rückblicke. Sie kann Fehler enthalten.</string>
     <string name="story_failed">Die bisherige Handlung konnte nicht gelesen werden.</string>
     <string name="story_nothing_before">Kein früheres Kapitel vorhanden.</string>
     <string name="story_no_summary">Kein Überblick in dieser Zusammenfassung</string>
@@ -1607,6 +1607,7 @@
     <string name="story_go">Zum Kapitel: %1$s</string>
     <string name="story_go_unavailable">Liseur kann nicht genau erkennen, wo dieses Kapitel beginnt.</string>
     <string name="story_so_far">Bisher</string>
+    <string name="story_earlier">Frühere Kapitel</string>
     <string name="story_covers_first">Umfasst Kapitel 1</string>
     <string name="story_covers">Umfasst die Kapitel 1 bis %1$d</string>
     <string name="story_none_yet">Noch kein Überblick.</string>
@@ -1626,12 +1627,11 @@
     <string name="story_stop">Stopp</string>
     <string name="story_summarize">Zusammenfassen</string>
     <string name="story_summarize_again">Erneut zusammenfassen</string>
-    <string name="story_status_missing">Noch nicht zusammengefasst</string>
     <string name="story_status_queued">Wartet</string>
     <string name="story_status_working">Wird zusammengefasst…</string>
     <string name="story_status_failed">Zusammenfassen fehlgeschlagen</string>
     <string name="story_where_title">Wo war ich?</string>
-    <string name="story_where_about">Erinnert daran, wo du aufgehört hast, anhand des Texts direkt vor deiner Stelle und der Zusammenfassungen früherer Kapitel, die an %1$s gesendet werden, wenn du auf „Erinnere mich“ tippst.</string>
+    <string name="story_where_about">Sendet den Text kurz vor deiner Stelle und die früheren Rückblicke an %1$s, wenn du auf Erinnere mich tippst.</string>
     <string name="story_where_ask">Erinnere mich</string>
     <string name="story_where_asking">Rufe ab, wo du aufgehört hast …</string>
     <string name="story_where_empty">Vor deiner Stelle gibt es noch nichts, woran zu erinnern wäre.</string>
@@ -1641,10 +1641,6 @@
     <string name="story_where_focus">Im Mittelpunkt</string>
     <string name="story_where_tone">Stimmung</string>
     <string name="story_where_questions">Noch offen</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">Aus der Zusammenfassung von Kapitel %1$s</item>
-        <item quantity="other">Aus den Zusammenfassungen der Kapitel %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Kapitel %1$s hat noch keine Zusammenfassung</item>
         <item quantity="other">Die Kapitel %1$s haben noch keine Zusammenfassung</item>

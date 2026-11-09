@@ -9,6 +9,8 @@ External services and API keys page:
                              a numbered batch ([1] ..., [2] ...) line by line;
                              a reading companion lookup with a term citing the
                              first passage (every section filled with --long),
+                             a chapter recap naming who the first passage
+                             mentions, a story-so-far summary,
                              and "Where was I?" with fields citing
                              the last passage and the first recap
   POST /v1/audio/speech      silent 24 kHz mono 16-bit WAV, sized to the text
@@ -129,6 +131,23 @@ def companion(body: dict, long: bool = False) -> dict | None:
             "changes": [], "connections": [],
             "unknown": ["Stub: what the passages leave open."],
         }
+    if system.startswith("You index one stretch"):
+        recap = re.findall(r'ref="(P\d+)"', text)
+        if not recap:
+            return None
+        first = passage(text, recap[0])
+        return {
+            "summary": "Stub: what happens in this part of the chapter. A second sentence keeps the recap going "
+                       "long enough to wrap over a few lines in the Story tab.",
+            "characters": [
+                {"name": name, "aliases": [], "facts": [{"text": f"Stub: what {name} does here.", "refs": recap[:1]}],
+                 "relationships": []}
+                for name in names_in(first, "", limit=4)
+            ],
+        }
+    if system.startswith(("You tell a reader the story so far", "You condense short summaries")):
+        sentence = "Stub: one more thing that happened, in the order it happened."
+        return {"summary": " ".join(["Stub: the story so far."] + [sentence] * 8)}
     if system.startswith("You help a reader get back"):
         recaps = re.findall(r'ref="(C\d+)"', text)
         last = passages[-1:] or recaps[:1]

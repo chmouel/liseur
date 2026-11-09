@@ -1587,7 +1587,7 @@
     <string name="codex_graph_empty">Sigue leyendo para encontrar nombres que compartan al menos dos capítulos.</string>
     <string name="codex_more">Cargar más pasajes</string>
     <string name="codex_no_passages">No se encontraron pasajes anteriores.</string>
-    <string name="story_about">Escrito por un modelo de IA a partir de los resúmenes de los capítulos anteriores. Puede equivocarse, afirmar cosas que el libro no dice o revelar lo que el modelo sabe de este libro por otras fuentes.</string>
+    <string name="story_about">Resumen por IA de los resúmenes anteriores. Puede contener errores.</string>
     <string name="story_failed">No se pudo leer la historia hasta ahora.</string>
     <string name="story_nothing_before">No hay capítulos anteriores que mostrar.</string>
     <string name="story_no_summary">Este resumen no tiene sinopsis</string>
@@ -1595,6 +1595,7 @@
     <string name="story_go">Ir al capítulo: %1$s</string>
     <string name="story_go_unavailable">Liseur no sabe exactamente dónde empieza este capítulo.</string>
     <string name="story_so_far">Hasta ahora</string>
+    <string name="story_earlier">Capítulos anteriores</string>
     <string name="story_covers_first">Abarca el capítulo 1</string>
     <string name="story_covers">Abarca los capítulos 1 a %1$d</string>
     <string name="story_none_yet">Aún no hay sinopsis.</string>
@@ -1614,12 +1615,11 @@
     <string name="story_stop">Detener</string>
     <string name="story_summarize">Resumir</string>
     <string name="story_summarize_again">Resumir de nuevo</string>
-    <string name="story_status_missing">Sin resumir</string>
     <string name="story_status_queued">En espera</string>
     <string name="story_status_working">Resumiendo…</string>
     <string name="story_status_failed">No se pudo resumir</string>
     <string name="story_where_title">¿Dónde me quedé?</string>
-    <string name="story_where_about">Recuerda dónde te quedaste, a partir del texto justo antes de tu posición y de los resúmenes de capítulos anteriores, que se envían a %1$s cuando tocas Recordarme.</string>
+    <string name="story_where_about">Envía el texto justo antes de tu posición y los resúmenes anteriores a %1$s al tocar Recordarme.</string>
     <string name="story_where_ask">Recordarme</string>
     <string name="story_where_asking">Recordando dónde te quedaste…</string>
     <string name="story_where_empty">Aún no hay nada antes de tu posición que recordar.</string>
@@ -1629,10 +1629,6 @@
     <string name="story_where_focus">En primer plano</string>
     <string name="story_where_tone">Ambiente</string>
     <string name="story_where_questions">Aún abierto</string>
-    <plurals name="story_where_from_recaps">
-        <item quantity="one">Según el resumen del capítulo %1$s</item>
-        <item quantity="other">Según los resúmenes de los capítulos %1$s</item>
-    </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">El capítulo %1$s aún no tiene resumen</item>
         <item quantity="other">Los capítulos %1$s aún no tienen resumen</item>
