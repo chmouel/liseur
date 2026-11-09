@@ -45,6 +45,7 @@ import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
 import com.chmouel.liseur.ui.windowWidth
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** The reading companion's row in Settings: the service and model it uses. */
@@ -85,6 +86,7 @@ internal fun CompanionSettingsScreen(
     val offered by remember { server.offered }.collectAsState(initial = listOf(server.server))
     val servers by server.server.servers.collectAsState(initial = ServerList.Empty)
     val codex by server.codexEnabled.collectAsState(initial = true)
+    val unset by remember { server.choice.map { it == null } }.collectAsState(initial = false)
     val recaps by remember { server.recapsEnabled }.collectAsState(initial = false)
     val storyAuto by remember { server.storyAutoOk }.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
@@ -115,6 +117,14 @@ internal fun CompanionSettingsScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (unset) {
+                    Box(Modifier.padding(top = 16.dp)) {
+                        StoryCard {
+                            Text(stringResource(R.string.codex_ai_hint_title), style = MaterialTheme.typography.titleMedium)
+                            Text(stringResource(R.string.codex_ai_hint), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
                 // With only servers to choose from, the row names a server, as before there were other services.
                 val many = offered.size > 1
                 val title = stringResource(if (many) R.string.companion_settings_service else R.string.companion_settings_server)

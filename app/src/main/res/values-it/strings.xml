@@ -1523,9 +1523,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Compagno</string>
-    <string name="codex_settings_available">Compagno offline disponibile</string>
+    <string name="codex_settings_available">Solo offline. Aggiungi un servizio di IA per molto di più</string>
     <string name="codex_settings_enabled">Compagno sul dispositivo</string>
     <string name="codex_settings_summary">Indicizza nomi e collegamenti offline aprendo il Compagno. Senza IA né chiave API. Se disattivato, il Compagno mostra comunque la storia e i profili IA dei personaggi.</string>
+    <string name="codex_ai_hint_title">Il compagno fa molto di più con un servizio di IA</string>
+    <string name="codex_ai_hint">Da solo, il compagno elenca i nomi del libro e chi compare con chi. Con un servizio di IA riassume anche la storia finora, descrive ogni personaggio e spiega come sono legati, sempre in base al libro fino al punto in cui sei.</string>
+    <string name="codex_ai_hint_dismiss">Non mostrare più</string>
     <string name="codex_preparing">Preparazione del libro…</string>
     <string name="codex_scanning">Analisi del libro…</string>
     <string name="codex_paused">Analisi in pausa</string>

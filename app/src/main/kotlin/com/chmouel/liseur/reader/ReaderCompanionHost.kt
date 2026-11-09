@@ -46,6 +46,7 @@ internal fun CompanionPanelHost(
     val scan by companion.codex.progress.collectAsStateWithLifecycle()
     val codexEnabled by companion.codex.enabled.collectAsStateWithLifecycle()
     val profiles by companion.codex.profiles.collectAsStateWithLifecycle()
+    val aiHint by companion.codex.aiHint.collectAsStateWithLifecycle()
     val story by companion.story.collectAsStateWithLifecycle()
     val storyAvailable by companion.storyAvailable.collectAsStateWithLifecycle()
     val savedRecaps by companion.recaps.collectAsStateWithLifecycle()
@@ -124,6 +125,8 @@ internal fun CompanionPanelHost(
                 choose = companion.choose,
                 setUp = { settingsOpen = true },
                 saveNote = { text -> companion.saveNote(text, panel?.note) },
+                aiHint = aiHint,
+                dismissAiHint = companion.codex::dismissAiHint,
             ),
             storyAvailable = storyAvailable,
             story = story,

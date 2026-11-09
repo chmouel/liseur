@@ -1679,6 +1679,10 @@ Companion; code, string IDs and the `codex_*` tables say Codex.
   profiles (`CodexViewModel.profiles`) and reads nothing from the index;
   with neither, the entry is hidden. The switch is backed up; the index is
   not.
+- With no service chosen, Names and Relationships show a card on what a
+  service adds, with Set up; dismissing it sets
+  `companion_ai_hint_dismissed`, left out of the settings export. Companion
+  settings show the same note, not dismissible, while no service is set.
 - Codex hosts the character page, Profile (`CharacterProfile`) and
   Mentions, routed as in
   [ADR-0058](docs/adr/0058-codex-hosts-the-character-profile.md).

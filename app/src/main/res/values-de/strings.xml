@@ -1535,9 +1535,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">Lesebegleiter</string>
-    <string name="codex_settings_available">Offline-Lesebegleiter verfügbar</string>
+    <string name="codex_settings_available">Nur offline. Ein KI-Dienst bietet viel mehr</string>
     <string name="codex_settings_enabled">Lesebegleiter auf diesem Gerät</string>
     <string name="codex_settings_summary">Namen und Verbindungen beim Öffnen des Lesebegleiters offline erfassen. Ohne KI oder API-Schlüssel. Ausgeschaltet zeigt der Lesebegleiter weiterhin Handlung und KI-Figurenprofile.</string>
+    <string name="codex_ai_hint_title">Mit einem KI-Dienst kann der Lesebegleiter viel mehr</string>
+    <string name="codex_ai_hint">Allein listet der Lesebegleiter die Namen im Buch auf und wer mit wem vorkommt. Mit einem KI-Dienst fasst er außerdem die bisherige Handlung zusammen, beschreibt jede Figur und erklärt ihre Beziehungen, immer nach dem Buch bis zu Ihrer Stelle.</string>
+    <string name="codex_ai_hint_dismiss">Nicht mehr anzeigen</string>
     <string name="codex_preparing">Buch wird vorbereitet…</string>
     <string name="codex_scanning">Buch wird erfasst…</string>
     <string name="codex_paused">Erfassung pausiert</string>

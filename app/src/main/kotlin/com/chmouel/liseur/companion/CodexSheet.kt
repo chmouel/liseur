@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
@@ -113,6 +114,9 @@ internal class CharacterProfiles(
     val setUp: () -> Unit,
     /** Saves an answer as a note, where the lookup it came from says. */
     val saveNote: (String) -> Unit = {},
+    /** Whether to say what a service would add, with no service chosen; dismissed for good by [dismissAiHint]. */
+    val aiHint: Boolean = false,
+    val dismissAiHint: () -> Unit = {},
 )
 
 /**
@@ -242,7 +246,7 @@ internal fun CodexSheet(
                     panel.entries.filter { PassageText.fold(it.name).contains(needle) }
                 }
                 LazyColumn(Modifier.weight(1f), state = namesList) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled, profiles)
                     codexTabs(tab, tabs, controller)
                     item(key = "codex:search") {
                         OutlinedTextField(value = search, onValueChange = controller::search, singleLine = true,
@@ -270,7 +274,7 @@ internal fun CodexSheet(
                     value = profiles?.takeIf { it.available && linked.isNotEmpty() }?.let { it.pairs(linked, it.recaps) }.orEmpty()
                 }
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    codexHeader(progress, controller, panel.ceiling, scanEnabled)
+                    codexHeader(progress, controller, panel.ceiling, scanEnabled, profiles)
                     codexTabs(CodexTab.RELATIONSHIPS, tabs, controller)
                     val graph = panel.graph
                     if (panel.graphFailed) item {
@@ -354,10 +358,26 @@ private fun LazyListScope.mentions(
 // The scan state, scope, tabs and search scroll with the results, so a
 // short window (a phone on its side, the keyboard up) still has room to
 // show them.
-private fun LazyListScope.codexHeader(progress: CodexProgress, controller: CodexViewModel, ceiling: Int, scanning: Boolean) {
+private fun LazyListScope.codexHeader(
+    progress: CodexProgress,
+    controller: CodexViewModel,
+    ceiling: Int,
+    scanning: Boolean,
+    profiles: CharacterProfiles? = null,
+) {
     if (scanning) item(key = "codex:progress") { Box(Modifier.padding(bottom = 10.dp)) { CodexScanProgress(progress, controller) } }
     item(key = "codex:scope") {
         Text(stringResource(R.string.codex_scope, ceiling + 1), Modifier.padding(bottom = 10.dp), style = MaterialTheme.typography.bodySmall)
+    }
+    if (profiles?.aiHint == true) item(key = "codex:ai-hint") {
+        StoryCard {
+            Text(stringResource(R.string.codex_ai_hint_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.codex_ai_hint), style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalButton(onClick = profiles.setUp) { Text(stringResource(R.string.companion_setup_action)) }
+                TextButton(onClick = profiles.dismissAiHint) { Text(stringResource(R.string.codex_ai_hint_dismiss)) }
+            }
+        }
     }
 }
 

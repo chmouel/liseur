@@ -1474,9 +1474,12 @@
 
     <!-- Offline codex -->
     <string name="codex_title">阅读伴侣</string>
-    <string name="codex_settings_available">离线阅读伴侣可用</string>
+    <string name="codex_settings_available">仅离线。添加 AI 服务可获得更多功能</string>
     <string name="codex_settings_enabled">设备端阅读伴侣</string>
     <string name="codex_settings_summary">打开阅读伴侣即可离线索引名称与联系，无需 AI 或 API 密钥。关闭后，阅读伴侣仍会显示前情与 AI 人物简介。</string>
+    <string name="codex_ai_hint_title">配合 AI 服务，阅读伴侣能做得更多</string>
+    <string name="codex_ai_hint">单独使用时，阅读伴侣会列出书中的人名以及谁和谁一起出现。配合 AI 服务，它还能回顾到目前为止的情节、介绍每个人物并说明人物关系，内容始终只来自你当前位置之前的书中文字。</string>
+    <string name="codex_ai_hint_dismiss">不再显示</string>
     <string name="codex_preparing">正在准备书籍…</string>
     <string name="codex_scanning">正在扫描书籍…</string>
     <string name="codex_paused">扫描已暂停</string>

@@ -144,7 +144,7 @@ private fun ExpandableText(text: String, style: TextStyle, lines: Int) {
 }
 
 @Composable
-private fun StoryCard(content: @Composable () -> Unit) {
+internal fun StoryCard(content: @Composable () -> Unit) {
     val eInk = LocalEInk.current
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
