@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.reading
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -18,6 +20,8 @@ import androidx.compose.material.icons.outlined.BrightnessAuto
 import androidx.compose.material.icons.outlined.BrightnessHigh
 import androidx.compose.material.icons.outlined.BrightnessLow
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -38,6 +42,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,8 +51,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.Font
@@ -67,6 +75,7 @@ import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ReadingFont
 import com.chmouel.liseur.data.settings.fonts.UserFont
+import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.widthClass
 
 /*
@@ -132,49 +141,63 @@ fun ReadingThemeRow(
     resolved: ReaderTheme,
     onSelected: (ReaderThemeChoice) -> Unit,
 ) {
+    val eInk = LocalEInk.current
+    var lowLightOpen by rememberSaveable { mutableStateOf(false) }
+    val scroll = rememberScrollState()
+    // The Low light swatch ends past a phone's edge; keep it in view
+    // while it is the one in use or its previews are open.
+    val keepEndInView = selected.isLowLight || lowLightOpen
+    LaunchedEffect(keepEndInView) {
+        if (keepEndInView) scroll.animateScrollTo(scroll.maxValue)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         ReadingSectionLabel(stringResource(R.string.settings_theme))
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScroll(scroll),
         ) {
-            ReaderThemeChoice.entries.forEach { choice ->
+            val shownFallback = !selected.offeredOn(eInk)
+            ReaderThemeChoice.everyday.forEach { choice ->
                 val palette = choice.palette ?: resolved
-                val isSelected = choice == selected
-                val label = stringResource(choice.label)
-                Surface(
-                    shape = CircleShape,
-                    color = palette.background,
-                    border = BorderStroke(
-                        width = if (isSelected) 3.dp else 1.dp,
-                        color = if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        },
-                    ),
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clickable { onSelected(choice) }
-                        .semantics { contentDescription = label },
+                // A hidden saved choice marks the palette it falls back to.
+                ThemeSwatch(
+                    background = palette.background,
+                    selected = choice == selected || (shownFallback && choice.palette == resolved),
+                    label = stringResource(choice.label),
+                    onClick = { onSelected(choice) },
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (choice.palette == null) {
-                            Icon(
-                                Icons.Outlined.BrightnessAuto,
-                                contentDescription = null,
-                                tint = palette.foreground,
-                            )
-                        } else {
-                            Text(
-                                text = "Aa",
-                                color = palette.foreground,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                        }
+                    if (choice.palette == null) {
+                        Icon(
+                            Icons.Outlined.BrightnessAuto,
+                            contentDescription = null,
+                            tint = palette.foreground,
+                        )
+                    } else {
+                        Text(
+                            text = "Aa",
+                            color = palette.foreground,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
+                }
+            }
+            if (!eInk) {
+                // Stands in for the warm themes: wears the one in use,
+                // and opens their previews below the row.
+                val warm = selected.palette?.takeIf { selected.isLowLight }
+                ThemeSwatch(
+                    background = warm?.background ?: MaterialTheme.colorScheme.surfaceVariant,
+                    selected = warm != null,
+                    label = stringResource(R.string.reader_low_light),
+                    onClick = { lowLightOpen = !lowLightOpen },
+                ) {
+                    Icon(
+                        if (lowLightOpen) Icons.Outlined.ExpandLess else Icons.Outlined.Bedtime,
+                        contentDescription = null,
+                        tint = warm?.foreground ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -187,6 +210,109 @@ fun ReadingThemeRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        AnimatedVisibility(visible = lowLightOpen && !eInk) {
+            LowLightPreviews(selected = selected, onSelected = onSelected)
+        }
+    }
+}
+
+/**
+ * The warm night palettes, each previewed as a short passage set in its
+ * own colours, so the choice is made by reading rather than by swatch.
+ *
+ * See `docs/adr/0069-warm-night-reading-themes.md`.
+ */
+@Composable
+private fun LowLightPreviews(
+    selected: ReaderThemeChoice,
+    onSelected: (ReaderThemeChoice) -> Unit,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 4.dp),
+    ) {
+        ReadingSectionLabel(stringResource(R.string.reader_low_light))
+        ReadingSupportingText(stringResource(R.string.reader_low_light_hint))
+        val sample = stringResource(R.string.reader_low_light_sample)
+        ReaderThemeChoice.lowLight.forEach { choice ->
+            val palette = choice.palette ?: return@forEach
+            val isSelected = choice == selected
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = palette.background,
+                border = BorderStroke(
+                    width = if (isSelected) 3.dp else 1.dp,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    },
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.RadioButton,
+                        onClick = { onSelected(choice) },
+                    ),
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(choice.label),
+                            color = palette.foreground,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isSelected) {
+                            Icon(
+                                Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = palette.foreground,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                    Text(
+                        text = sample,
+                        color = palette.foreground,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontFamily = FontFamily.Serif,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeSwatch(
+    background: Color,
+    selected: Boolean,
+    label: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = CircleShape,
+        color = background,
+        border = BorderStroke(
+            width = if (selected) 3.dp else 1.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+        modifier = Modifier
+            .size(56.dp)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = label },
+    ) {
+        Box(contentAlignment = Alignment.Center) { content() }
     }
 }
 
@@ -783,6 +909,9 @@ val ReaderThemeChoice.label: Int
         ReaderThemeChoice.SEPIA -> R.string.reader_theme_sepia
         ReaderThemeChoice.DARK -> R.string.reader_theme_dark
         ReaderThemeChoice.BLACK -> R.string.reader_theme_black
+        ReaderThemeChoice.AMBER -> R.string.reader_theme_amber
+        ReaderThemeChoice.NIGHT_RED -> R.string.reader_theme_night_red
+        ReaderThemeChoice.CHARCOAL -> R.string.reader_theme_charcoal
     }
 
 val ReaderFont.label: Int

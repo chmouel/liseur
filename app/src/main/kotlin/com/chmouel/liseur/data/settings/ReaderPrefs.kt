@@ -108,6 +108,15 @@ enum class ReaderTheme(
     SEPIA("sepia", "Sepia", Color(0xFFF6EFDF), Color(0xFF3D3229)),
     DARK("dark", "Dark", Color(0xFF1F1F1F), Color(0xFFCECECE)),
     BLACK("black", "Black", Color(0xFF000000), Color(0xFFB8B8B8)),
+
+    /*
+     * Warm night pages: the hue is in the paper and the ink themselves,
+     * so nothing is laid over the page and pictures keep their colours.
+     * See docs/adr/0069-warm-night-reading-themes.md.
+     */
+    AMBER("amber", "Amber", Color(0xFF18120C), Color(0xFFD4A373)),
+    NIGHT_RED("night_red", "Night red", Color(0xFF000000), Color(0xFFC8605A)),
+    CHARCOAL("charcoal", "Charcoal", Color(0xFF211E1A), Color(0xFFC9BEAD)),
     ;
 
     /**
@@ -123,8 +132,31 @@ enum class ReaderTheme(
     val isDarkPage: Boolean
         get() = when (this) {
             LIGHT, SEPIA -> false
-            DARK, BLACK -> true
+            DARK, BLACK, AMBER, NIGHT_RED, CHARCOAL -> true
         }
+
+    /**
+     * Whether the page's colour is the point of it.
+     *
+     * Electronic paper renders these as one more grey, so there they are
+     * not offered and a page already set in one falls back to [BLACK].
+     */
+    val isHued: Boolean
+        get() = when (this) {
+            LIGHT, SEPIA, DARK, BLACK -> false
+            AMBER, NIGHT_RED, CHARCOAL -> true
+        }
+
+    /**
+     * Whether the ink is kept dim on purpose.
+     *
+     * Red cannot be bright without turning orange, so the Night red ink
+     * sits close to the body-text contrast minimum. Chrome on it uses the
+     * full ink where other pages use a softened step of it, or secondary
+     * text and outlines would fall below what can be read.
+     */
+    val isDim: Boolean
+        get() = this == NIGHT_RED
 
     companion object {
         val Default = LIGHT
@@ -157,6 +189,9 @@ enum class ReaderThemeChoice(val id: String, val palette: ReaderTheme?) {
     SEPIA("sepia", ReaderTheme.SEPIA),
     DARK("dark", ReaderTheme.DARK),
     BLACK("black", ReaderTheme.BLACK),
+    AMBER("amber", ReaderTheme.AMBER),
+    NIGHT_RED("night_red", ReaderTheme.NIGHT_RED),
+    CHARCOAL("charcoal", ReaderTheme.CHARCOAL),
     ;
 
     /**
@@ -167,11 +202,24 @@ enum class ReaderThemeChoice(val id: String, val palette: ReaderTheme?) {
      * taste, dark is a lighting condition, and only the second is
      * something asking the app for a dark theme can be read as wanting.
      */
-    fun resolve(appIsDark: Boolean): ReaderTheme =
-        palette ?: if (appIsDark) ReaderTheme.DARK else ReaderTheme.LIGHT
+    fun resolve(appIsDark: Boolean, eInk: Boolean = false): ReaderTheme = when {
+        palette == null -> if (appIsDark) ReaderTheme.DARK else ReaderTheme.LIGHT
+        eInk && palette.isHued -> ReaderTheme.BLACK
+        else -> palette
+    }
+
+    /** Whether the picker offers this choice on the current screen. */
+    fun offeredOn(eInk: Boolean): Boolean = !(eInk && palette?.isHued == true)
+
+    /** A warm night palette, offered behind the theme row's "Low light" swatch. */
+    val isLowLight: Boolean get() = palette?.isHued == true
 
     companion object {
         val Default = FOLLOW_APP
+
+        val everyday: List<ReaderThemeChoice> = entries.filterNot { it.isLowLight }
+
+        val lowLight: List<ReaderThemeChoice> = entries.filter { it.isLowLight }
 
         fun fromId(id: String?): ReaderThemeChoice =
             entries.firstOrNull { it.id == id } ?: Default

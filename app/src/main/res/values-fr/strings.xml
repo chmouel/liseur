@@ -704,6 +704,12 @@
     <string name="reader_theme_sepia">Sépia</string>
     <string name="reader_theme_dark">Sombre</string>
     <string name="reader_theme_black">Noir</string>
+    <string name="reader_theme_amber">Ambre</string>
+    <string name="reader_theme_night_red">Rouge nuit</string>
+    <string name="reader_theme_charcoal">Anthracite</string>
+    <string name="reader_low_light">Faible lumière</string>
+    <string name="reader_low_light_hint">Des pages chaudes, avec moins de lumière bleue, pour lire la nuit.</string>
+    <string name="reader_low_light_sample">La lampe baissait, et la page luisait doucement dans la chambre silencieuse.</string>
     <string name="reader_font_publisher">Police de l\'éditeur</string>
     <string name="reader_font_add">Ajouter une police…</string>
     <string name="reader_font_remove">Retirer %1$s</string>

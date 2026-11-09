@@ -70,6 +70,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
 import com.chmouel.liseur.ui.widthClass
 import com.chmouel.liseur.ui.ProvideEInk
+import com.chmouel.liseur.ui.isEInkDevice
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -214,10 +215,11 @@ class ReaderActivity : FragmentActivity() {
                 .collectAsStateWithLifecycle(initialValue = false)
             val settings = appSettings ?: AppSettings()
             val appIsDark = settings.themeMode.isDark()
+            val eInkDevice = remember { isEInkDevice(packageManager) }
             val readingPage = if (appSettings == null) {
                 null
             } else {
-                readerPrefs?.themeChoice?.resolve(appIsDark)
+                readerPrefs?.themeChoice?.resolve(appIsDark, settings.eInkMode.resolve(eInkDevice))
             }
             SystemBarIcons(dark = readingPage?.isDarkPage ?: appIsDark)
             LaunchedEffect(readingPage?.isDarkPage) { readingPage?.let(::showPagesAs) }

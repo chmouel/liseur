@@ -714,6 +714,12 @@
     <string name="reader_theme_sepia">Sepia</string>
     <string name="reader_theme_dark">Dunkel</string>
     <string name="reader_theme_black">Schwarz</string>
+    <string name="reader_theme_amber">Bernstein</string>
+    <string name="reader_theme_night_red">Nachtrot</string>
+    <string name="reader_theme_charcoal">Anthrazit</string>
+    <string name="reader_low_light">Wenig Licht</string>
+    <string name="reader_low_light_hint">Warme Seiten mit weniger Blaulicht, zum Lesen in der Nacht.</string>
+    <string name="reader_low_light_sample">Die Lampe brannte schwach, und die Seite leuchtete sanft im stillen Zimmer.</string>
     <string name="reader_font_publisher">Verlagsschrift</string>
     <string name="reader_font_add">Schrift hinzufügen…</string>
     <string name="reader_font_remove">%1$s entfernen</string>

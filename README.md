@@ -50,7 +50,8 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
 
 Liseur renders EPUBs with the Readium engine, in open typefaces (Literata,
 Vollkorn, Atkinson Hyperlegible, Inter) or whatever the publisher shipped.
-Four reading themes: Light, Sepia, Dark, OLED Black. Margins, line spacing,
+Reading themes: Light, Sepia, Dark, OLED Black, and warm "Low light"
+pages in Amber, Night red and Charcoal. Margins, line spacing,
 brightness, and page-turn vs. continuous-scroll are adjustable per book or
 library-wide. Auto-scroll runs at a set pace and continues across chapter
 boundaries, with on-page controls to pause it, change the speed or stop.
