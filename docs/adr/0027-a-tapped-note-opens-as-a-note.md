@@ -2,6 +2,9 @@
 
 Status: accepted
 
+> **Amended.** The editor behind Edit is now the full-screen `NoteEditor`;
+> see [68. Notes are written full screen, in light Markdown](0068-notes-are-written-full-screen-in-light-markdown.md).
+
 ## Context
 
 Since a highlight could be edited by tapping it, every tapped mark

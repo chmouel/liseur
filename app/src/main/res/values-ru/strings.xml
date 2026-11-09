@@ -543,6 +543,17 @@
     <string name="annotation_note_edit">Изменить</string>
     <string name="annotation_note_added">Добавлено %1$s</string>
     <string name="annotation_note_edited">Изменено %1$s</string>
+    <string name="annotation_note_remove">Убрать заметку</string>
+    <string name="annotation_note_delete">Удалить заметку</string>
+    <string name="annotation_note_discard_title">Отменить изменения?</string>
+    <string name="annotation_note_discard_body">Изменения в этой заметке будут потеряны.</string>
+    <string name="annotation_note_discard">Отменить</string>
+    <string name="annotation_note_keep_editing">Продолжить</string>
+    <string name="note_format_bold">Жирный</string>
+    <string name="note_format_italic">Курсив</string>
+    <string name="note_format_bullets">Маркированный список</string>
+    <string name="note_format_numbers">Нумерованный список</string>
+    <string name="note_format_quote">Цитата</string>
     <string name="annotation_add_book_note">Добавить заметку о книге</string>
     <string name="annotation_book_note_title">Заметка о книге</string>
     <string name="annotation_book_note_hint">Что вы хотите запомнить об этой книге?</string>

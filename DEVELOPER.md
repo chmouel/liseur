@@ -1098,6 +1098,14 @@ changing reader behavior.
   `DefinitionSheet` keeps the original text and reports unresolved
   meanings. Ordinary definition links never trigger lookups. Fixtures:
   `DictionaryInflectionTest`.
+
+- Notes are stored, synced, backed up and exported as the raw text the
+  reader typed. `NoteMarkdown` (bold, italic, `-`/`1.` lists, `>`
+  quotes) is drawn only in Liseur (`NoteEditor`, `NoteSheet`, contents);
+  never rewrite or strip it on the way out. Saving an empty passage note
+  turns the mark back into a plain highlight (`NoteText.cleared`); an
+  empty book note deletes it. The editor asks before discarding changes.
+  See [ADR-0068](docs/adr/0068-notes-are-written-full-screen-in-light-markdown.md).
 - `AppSettings.dictionaryAltLanguage`: null = automatic,
   `ALT_LANGUAGE_OFF` ("none", never a valid tag) = off, else a tag.
   `altLanguageFor`: a chosen tag always applies; automatic uses the UI

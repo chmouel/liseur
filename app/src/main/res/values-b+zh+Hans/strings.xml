@@ -529,6 +529,17 @@
     <string name="annotation_note_edit">编辑</string>
     <string name="annotation_note_added">添加于 %1$s</string>
     <string name="annotation_note_edited">编辑于 %1$s</string>
+    <string name="annotation_note_remove">移除笔记</string>
+    <string name="annotation_note_delete">删除笔记</string>
+    <string name="annotation_note_discard_title">放弃更改？</string>
+    <string name="annotation_note_discard_body">你对这条笔记所做的更改将会丢失。</string>
+    <string name="annotation_note_discard">放弃</string>
+    <string name="annotation_note_keep_editing">继续编辑</string>
+    <string name="note_format_bold">粗体</string>
+    <string name="note_format_italic">斜体</string>
+    <string name="note_format_bullets">项目符号列表</string>
+    <string name="note_format_numbers">编号列表</string>
+    <string name="note_format_quote">引用</string>
     <string name="annotation_add_book_note">添加图书批注</string>
     <string name="annotation_book_note_title">图书批注</string>
     <string name="annotation_book_note_hint">关于这本书，您想记住什么？</string>

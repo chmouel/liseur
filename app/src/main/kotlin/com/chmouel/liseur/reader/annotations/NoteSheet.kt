@@ -138,7 +138,7 @@ fun NoteSheet(
 
             SelectionContainer {
                 Text(
-                    text = annotation.note.orEmpty().trim(),
+                    text = noteAnnotated(annotation.note.orEmpty().trim(), quiet),
                     style = MaterialTheme.typography.bodyLarge,
                     color = ink,
                     modifier = Modifier

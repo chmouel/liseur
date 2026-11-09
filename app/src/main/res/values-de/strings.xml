@@ -499,6 +499,17 @@
     <string name="annotation_note_edit">Bearbeiten</string>
     <string name="annotation_note_added">Hinzugefügt %1$s</string>
     <string name="annotation_note_edited">Bearbeitet %1$s</string>
+    <string name="annotation_note_remove">Notiz entfernen</string>
+    <string name="annotation_note_delete">Notiz löschen</string>
+    <string name="annotation_note_discard_title">Änderungen verwerfen?</string>
+    <string name="annotation_note_discard_body">Deine Änderungen an dieser Notiz gehen verloren.</string>
+    <string name="annotation_note_discard">Verwerfen</string>
+    <string name="annotation_note_keep_editing">Weiter bearbeiten</string>
+    <string name="note_format_bold">Fett</string>
+    <string name="note_format_italic">Kursiv</string>
+    <string name="note_format_bullets">Aufzählung</string>
+    <string name="note_format_numbers">Nummerierte Liste</string>
+    <string name="note_format_quote">Zitat</string>
     <string name="annotation_add_book_note">Buchnotiz hinzufügen</string>
     <string name="annotation_book_note_title">Buchnotiz</string>
     <string name="annotation_book_note_hint">Was möchtest du über dieses Buch behalten?</string>

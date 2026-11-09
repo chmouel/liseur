@@ -90,6 +90,7 @@ import com.chmouel.liseur.domain.exportNotebookMarkdown
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.HighlightPalette
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.annotations.NoteText
 import com.chmouel.liseur.reader.annotations.locator
 import com.chmouel.liseur.ui.messageRes
 import com.chmouel.liseur.reader.progress.BookPositions
@@ -2673,28 +2674,26 @@ class ReaderViewModel(
         )
     }
 
-    /** Attaches the reader's own words to a passage. */
-    fun addNote(locator: Locator, note: String, existingId: String? = null) {
+    /**
+     * Attaches the reader's own words to a passage, in [tint] when one was
+     * picked while writing. Saving no words over a note takes the note
+     * off and leaves the highlight.
+     */
+    fun addNote(locator: Locator, note: String, existingId: String? = null, tint: HighlightTint? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
-        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
+        if (note.isBlank()) {
+            if (existing != null) save(NoteText.cleared(existing, tint))
+            return
+        }
         val now = System.currentTimeMillis()
-        val noteCreatedAt = when {
-            existing?.noteCreatedAt != null -> existing.noteCreatedAt
-            existingNote == null -> now
-            else -> existing.createdAt
-        }
-        val noteUpdatedAt = when {
-            existingNote == null -> null
-            existingNote == note -> existing.noteUpdatedAt
-            else -> now * 1000
-        }
+        val stamps = NoteText.stamps(existing, note, now)
         save(
             annotation(locator, AnnotationKind.NOTE).copy(
                 id = existing?.id ?: UUID.randomUUID().toString(),
                 note = note,
-                noteCreatedAt = noteCreatedAt,
-                noteUpdatedAt = noteUpdatedAt,
-                tint = existing?.tint ?: highlightPalette.value.passageNoteTint.name,
+                noteCreatedAt = stamps.createdAt,
+                noteUpdatedAt = stamps.updatedAt,
+                tint = tint?.name ?: existing?.tint ?: highlightPalette.value.passageNoteTint.name,
                 createdAt = existing?.createdAt ?: now,
             ),
         )
@@ -2723,17 +2722,19 @@ class ReaderViewModel(
         }
     }
 
-    /** Writes a thought about the book itself, without inventing a place for it. */
+    /**
+     * Writes a thought about the book itself, without inventing a place
+     * for it. Saving no words over one deletes it: a book note is nothing
+     * but its words.
+     */
     fun saveBookNote(note: String, existingId: String? = null) {
         val existing = existingId?.let { id -> annotations.value.firstOrNull { it.id == id } }
-        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
-        val now = System.currentTimeMillis()
-        val noteCreatedAt = existing?.noteCreatedAt ?: if (existingNote == null) now else existing.createdAt
-        val noteUpdatedAt = when {
-            existingNote == null -> null
-            existingNote == note -> existing.noteUpdatedAt
-            else -> now * 1000
+        if (note.isBlank()) {
+            existing?.let(::remove)
+            return
         }
+        val now = System.currentTimeMillis()
+        val stamps = NoteText.stamps(existing, note, now)
         save(
             BookAnnotation(
                 id = existing?.id ?: UUID.randomUUID().toString(),
@@ -2742,8 +2743,8 @@ class ReaderViewModel(
                 locatorJson = "",
                 note = note,
                 createdAt = existing?.createdAt ?: now,
-                noteCreatedAt = noteCreatedAt,
-                noteUpdatedAt = noteUpdatedAt,
+                noteCreatedAt = stamps.createdAt,
+                noteUpdatedAt = stamps.updatedAt,
             ),
         )
     }

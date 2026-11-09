@@ -1,5 +1,7 @@
 package com.chmouel.liseur.reader.annotations
 
+import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.data.db.BookAnnotation
 import java.util.concurrent.TimeUnit
 
 /** What a note says about itself, worked out without a screen. */
@@ -17,6 +19,42 @@ object NoteText {
         val updatedAtMs = TimeUnit.MICROSECONDS.toMillis(updatedAtMicros)
         return updatedAtMs - createdAtMs > TimeUnit.MINUTES.toMillis(1)
     }
+
+    /** A note's two stamps: written, in milliseconds; reworked, in microseconds. */
+    data class Stamps(val createdAt: Long, val updatedAt: Long?)
+
+    /**
+     * The stamps to write when [note] is saved over [existing].
+     *
+     * A note first written now has no "edited" stamp; one saved again
+     * unchanged keeps the one it had, so recolouring from the editor does
+     * not claim the words were reworked.
+     */
+    fun stamps(existing: BookAnnotation?, note: String, nowMs: Long): Stamps {
+        val existingNote = existing?.note?.takeIf { it.isNotBlank() }
+        val createdAt = existing?.noteCreatedAt
+            ?: existing?.createdAt?.takeIf { existingNote != null }
+            ?: nowMs
+        val updatedAt = when {
+            existingNote == null -> null
+            existingNote == note -> existing?.noteUpdatedAt
+            else -> nowMs * 1000
+        }
+        return Stamps(createdAt, updatedAt)
+    }
+
+    /**
+     * A passage note with its words taken away: the mark stays, as the
+     * plain highlight it was before the note, in [tint] if one was picked.
+     */
+    fun cleared(existing: BookAnnotation, tint: HighlightTint?): BookAnnotation =
+        existing.copy(
+            kind = AnnotationKind.HIGHLIGHT.name,
+            note = null,
+            noteCreatedAt = null,
+            noteUpdatedAt = null,
+            tint = tint?.name ?: existing.tint,
+        )
 
     /**
      * The passage and the note as one thing to hand to another app: the

@@ -73,6 +73,7 @@ import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.reader.annotations.HighlightTint
+import com.chmouel.liseur.reader.annotations.noteAnnotated
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
@@ -485,7 +486,7 @@ private fun AnnotationRow(
             }
             note?.let {
                 Text(
-                    text = it,
+                    text = noteAnnotated(it, theme.foreground.copy(alpha = 0.6f)),
                     style = if (bookNote) {
                         MaterialTheme.typography.bodyMedium
                     } else {
