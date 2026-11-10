@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -53,13 +54,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -473,9 +479,76 @@ fun LibraryScreen(
         onToggleFilter(LibraryFilterOption.ARCHIVED)
     }
 
+    val layout = state.layout
+    val showBottomBar = layout.bottomBar && !state.isSearchActive && !archived
+    var bottomHomeTab by rememberSaveable { mutableStateOf(layout.style == LibraryStyle.HOME) }
+    var lastLibraryStyle by rememberSaveable {
+        mutableStateOf(if (layout.style != LibraryStyle.HOME) layout.style.id else LibraryStyle.CLASSIC.id)
+    }
+    LaunchedEffect(layout.style) {
+        if (layout.style == LibraryStyle.HOME) {
+            bottomHomeTab = true
+        } else {
+            lastLibraryStyle = layout.style.id
+            bottomHomeTab = false
+        }
+    }
+    val activeStyle = when {
+        !showBottomBar -> layout.style
+        bottomHomeTab -> LibraryStyle.HOME
+        layout.style != LibraryStyle.HOME -> layout.style
+        else -> LibraryStyle.fromId(lastLibraryStyle)
+    }
+    val scrollStyleToTop: (LibraryStyle) -> Unit = { target ->
+        scope.launch {
+            when (target) {
+                LibraryStyle.SHELVES ->
+                    if (eInk) shelvesState.scrollToItem(0) else shelvesState.animateScrollToItem(0)
+                LibraryStyle.LIST ->
+                    if (eInk) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                LibraryStyle.HOME ->
+                    if (eInk) homeState.scrollToItem(0) else homeState.animateScrollToItem(0)
+                LibraryStyle.CLASSIC ->
+                    if (eInk) classicState.scrollToItem(0) else classicState.animateScrollToItem(0)
+            }
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        bottomBar = {
+            if (showBottomBar) {
+                LibraryBottomBar(
+                    continueReading = state.continueReading,
+                    homeSelected = bottomHomeTab,
+                    syncing = syncing,
+                    onOpenBook = { book -> openShelfBook(book) },
+                    onBookActions = { book -> sheetBook = book },
+                    onSelectHome = {
+                        if (bottomHomeTab) {
+                            scrollStyleToTop(LibraryStyle.HOME)
+                        } else {
+                            bottomHomeTab = true
+                        }
+                    },
+                    onSelectLibrary = {
+                        if (!bottomHomeTab) {
+                            scrollStyleToTop(activeStyle)
+                        } else {
+                            bottomHomeTab = false
+                            if (layout.style == LibraryStyle.HOME) {
+                                onSetLayout(layout.copy(style = LibraryStyle.fromId(lastLibraryStyle)))
+                            }
+                        }
+                    },
+                    onOpenStats = onOpenStats,
+                    onSetUpTranslation = onSetUpTranslation,
+                    onSyncNow = syncNow,
+                    onOpenSettings = onOpenSettings,
+                )
+            }
+        },
         topBar = {
             if (state.isSearchActive) {
                 TopAppBar(
@@ -532,23 +605,7 @@ fun LibraryScreen(
                             )
                         } else {
                             Row(
-                                modifier = Modifier.clickable {
-                                    scope.launch {
-                                        // Scrolling the whole way is a long
-                                        // animation on a screen that repaints
-                                        // in frames; e-paper gets there in one.
-                                        when (state.layout.style) {
-                                            LibraryStyle.SHELVES ->
-                                                if (eInk) shelvesState.scrollToItem(0) else shelvesState.animateScrollToItem(0)
-                                            LibraryStyle.LIST ->
-                                                if (eInk) listState.scrollToItem(0) else listState.animateScrollToItem(0)
-                                            LibraryStyle.HOME ->
-                                                if (eInk) homeState.scrollToItem(0) else homeState.animateScrollToItem(0)
-                                            LibraryStyle.CLASSIC ->
-                                                if (eInk) classicState.scrollToItem(0) else classicState.animateScrollToItem(0)
-                                        }
-                                    }
-                                },
+                                modifier = Modifier.clickable { scrollStyleToTop(activeStyle) },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 // A woman reading stretched out on her couch,
@@ -919,9 +976,14 @@ fun LibraryScreen(
                                 extra = extra,
                             )
                         }
-                        when (state.layout.style) {
+                        val shownState = if (activeStyle == state.layout.style) {
+                            state
+                        } else {
+                            state.copy(layout = state.layout.copy(style = activeStyle))
+                        }
+                        when (activeStyle) {
                             LibraryStyle.SHELVES -> ShelvesLibrary(
-                                state = state,
+                                state = shownState,
                                 listState = shelvesState,
                                 controls = controls,
                                 onSetLayout = onSetLayout,
@@ -933,7 +995,7 @@ fun LibraryScreen(
                             )
 
                             LibraryStyle.LIST -> ListLibrary(
-                                state = state,
+                                state = shownState,
                                 gridState = listState,
                                 controls = controls,
                                 onBookSelected = openShelfBook,
@@ -944,8 +1006,8 @@ fun LibraryScreen(
                             )
 
                             LibraryStyle.CLASSIC, LibraryStyle.HOME -> BookGrid(
-                                state = state,
-                                gridState = if (state.layout.style == LibraryStyle.HOME) homeState else classicState,
+                                state = shownState,
+                                gridState = if (activeStyle == LibraryStyle.HOME) homeState else classicState,
                                 onSetSort = onSetSort,
                                 onToggleSortDirection = onToggleSortDirection,
                                 onToggleFilter = onToggleFilter,
@@ -1774,7 +1836,7 @@ private fun BookGrid(
             )
         } else {
             state.continueReading
-                ?.takeIf { onShelf }
+                ?.takeIf { onShelf && !state.layout.bottomBar }
                 ?.let { recent ->
                 item(key = "classic:hero", span = { GridItemSpan(maxLineSpan) }) {
                     ContinueReadingCard(
@@ -2820,5 +2882,210 @@ private fun SortRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * A Kindle-style bottom bar with the book currently being read jutting up
+ * on the start side and Home / Library / More tabs across the rest.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LibraryBottomBar(
+    continueReading: ContinueReading?,
+    homeSelected: Boolean,
+    syncing: Boolean,
+    onOpenBook: (Book) -> Unit,
+    onBookActions: (Book) -> Unit,
+    onSelectHome: () -> Unit,
+    onSelectLibrary: () -> Unit,
+    onOpenStats: () -> Unit,
+    onSetUpTranslation: (() -> Unit)?,
+    onSyncNow: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    val eInk = LocalEInk.current
+    val haptics = LocalHapticFeedback.current
+    var moreOpen by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = if (eInk) 0.dp else 3.dp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(top = if (continueReading != null) 20.dp else 0.dp),
+        ) {
+            Column(Modifier.navigationBarsPadding()) {
+                HorizontalDivider(
+                    thickness = Dp.Hairline,
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .padding(
+                            start = if (continueReading != null) 88.dp else 8.dp,
+                            end = 8.dp,
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    BottomBarTab(
+                        label = stringResource(R.string.library_style_home),
+                        icon = if (homeSelected) Icons.Filled.Home else Icons.Outlined.Home,
+                        selected = homeSelected,
+                        onClick = onSelectHome,
+                        modifier = Modifier.weight(1f),
+                    )
+                    BottomBarTab(
+                        label = stringResource(R.string.library_tab_library),
+                        icon = if (!homeSelected) Icons.Filled.LocalLibrary else Icons.Outlined.LocalLibrary,
+                        selected = !homeSelected,
+                        onClick = onSelectLibrary,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        BottomBarTab(
+                            label = stringResource(R.string.more_options),
+                            icon = Icons.AutoMirrored.Outlined.FormatListBulleted,
+                            selected = moreOpen,
+                            onClick = { moreOpen = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        DropdownMenu(
+                            expanded = moreOpen,
+                            onDismissRequest = { moreOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.reading_stats)) },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.BarChart, contentDescription = null)
+                                },
+                                onClick = {
+                                    moreOpen = false
+                                    onOpenStats()
+                                },
+                            )
+                            onSetUpTranslation?.let { setUp ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.translation_setup_menu)) },
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Translate, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        moreOpen = false
+                                        setUp()
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.server_sync_now)) },
+                                enabled = !syncing,
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Sync, contentDescription = null)
+                                },
+                                onClick = {
+                                    moreOpen = false
+                                    onSyncNow()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.settings)) },
+                                leadingIcon = {
+                                    Icon(Icons.Outlined.Settings, contentDescription = null)
+                                },
+                                onClick = {
+                                    moreOpen = false
+                                    onOpenSettings()
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        continueReading?.let { entry ->
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 20.dp)
+                    .combinedClickable(
+                        onClick = { onOpenBook(entry.book) },
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onBookActions(entry.book)
+                        },
+                        onClickLabel = stringResource(R.string.read_book),
+                        onLongClickLabel = stringResource(R.string.book_actions),
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                BookCover(
+                    book = entry.book,
+                    shape = RoundedCornerShape(4.dp),
+                    modifier = Modifier
+                        .width(50.dp)
+                        .height(74.dp)
+                        .then(
+                            if (eInk) Modifier
+                            else Modifier.shadow(6.dp, RoundedCornerShape(4.dp)),
+                        ),
+                )
+                entry.progression?.let { progression ->
+                    LinearProgressIndicator(
+                        progress = { progression.toFloat() },
+                        strokeCap = StrokeCap.Round,
+                        modifier = Modifier
+                            .padding(top = 3.dp)
+                            .width(50.dp)
+                            .height(3.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomBarTab(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }

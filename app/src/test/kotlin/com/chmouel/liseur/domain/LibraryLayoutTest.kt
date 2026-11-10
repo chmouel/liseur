@@ -202,5 +202,6 @@ class LibraryLayoutTest {
         assertEquals(ShelfTone.THEME, ShelfTone.fromId("bogus"))
         assertEquals(ShelfBackdrop.BRICKS, LibraryLayout().shelfBackdrop)
         assertEquals(ShelfTone.THEME, LibraryLayout().shelfTone)
+        assertEquals(true, LibraryLayout().bottomBar)
     }
 }

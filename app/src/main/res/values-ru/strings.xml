@@ -1989,6 +1989,11 @@
     <string name="shelf_tone_brass">Латунь</string>
     <string name="library_compact_list">Компактные строки</string>
     <string name="library_compact_list_detail">Обложки меньше, название в одну строку</string>
+    <string name="library_bottom_bar">Нижняя панель</string>
+    <string name="library_bottom_bar_detail">Показывать текущую книгу и вкладки Главная, Библиотека и Ещё внизу</string>
+    <string name="library_hero_card">Верхняя карточка</string>
+    <string name="library_hero_card_detail">Показывать текущую книгу на карточке вверху библиотеки</string>
+    <string name="library_tab_library">Библиотека</string>
     <string name="home_continue">Продолжить</string>
     <string name="home_recently_opened">Недавно открытые</string>
     <string name="home_new_books">Новые на полке</string>

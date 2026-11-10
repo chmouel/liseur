@@ -336,4 +336,38 @@ class AppSettingsRepositoryTest {
 
         assertNull(AppSettingsRepository(store).settings.first().dictionaryAltLanguage)
     }
+
+    @Test
+    fun `bottom bar is on by default on a fresh install`() = runTest {
+        val store = store()
+        val migration = LibraryBottomBarUpgradeMigration { false }
+        assertFalse(migration.shouldMigrate(store.data.first()))
+
+        val repo = AppSettingsRepository(store)
+        assertTrue(repo.settings.first().libraryLayout.bottomBar)
+    }
+
+    @Test
+    fun `bottom bar stays off when upgrading an existing install`() = runTest {
+        val store = store()
+        store.edit { it[stringPreferencesKey("theme_mode")] = "DARK" }
+
+        val migration = LibraryBottomBarUpgradeMigration { false }
+        assertTrue(migration.shouldMigrate(store.data.first()))
+        store.updateData { migration.migrate(it) }
+
+        val repo = AppSettingsRepository(store)
+        assertFalse(repo.settings.first().libraryLayout.bottomBar)
+    }
+
+    @Test
+    fun `bottom bar stays off when upgrading an install that already had a library database`() = runTest {
+        val store = store()
+        val migration = LibraryBottomBarUpgradeMigration { true }
+        assertTrue(migration.shouldMigrate(store.data.first()))
+        store.updateData { migration.migrate(it) }
+
+        val repo = AppSettingsRepository(store)
+        assertFalse(repo.settings.first().libraryLayout.bottomBar)
+    }
 }

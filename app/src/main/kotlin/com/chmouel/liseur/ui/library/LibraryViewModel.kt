@@ -1000,7 +1000,7 @@ class LibraryViewModel(
                         emptyList()
                     },
                 home =
-                    if (layout.style == LibraryStyle.HOME) {
+                    if (layout.style == LibraryStyle.HOME || layout.bottomBar) {
                         homeSectionsOf(books, shelves, current = current?.book?.url) { book ->
                             shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
                         }

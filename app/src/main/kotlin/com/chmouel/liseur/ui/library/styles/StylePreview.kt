@@ -147,6 +147,110 @@ internal fun StylePreview(
     }
 }
 
+/**
+ * A thumbnail comparing the top hero card against the Kindle-style bottom
+ * bar with the current book cover jutting above the tabs.
+ */
+@Composable
+internal fun CurrentBookPreview(
+    bottomBar: Boolean,
+    books: List<Book>,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val colors = MaterialTheme.colorScheme
+    val cover = { i: Int -> books.getOrNull(i % books.size.coerceAtLeast(1)) }
+    Box(
+        modifier
+            .size(PREVIEW_WIDTH, PREVIEW_HEIGHT)
+            .clip(shape)
+            .background(colors.surfaceVariant)
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) colors.primary else colors.outlineVariant,
+                shape = shape,
+            )
+            .padding(5.dp),
+    ) {
+        if (!bottomBar) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(colors.surface)
+                        .border(
+                            width = 0.75.dp,
+                            color = colors.primary.copy(alpha = 0.6f),
+                            shape = RoundedCornerShape(3.dp),
+                        )
+                        .padding(2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MiniCover(cover(0), index = 0, modifier = Modifier.height(18.dp))
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        TextLine(Modifier.fillMaxWidth())
+                        ProgressLine(fraction = 0.65f)
+                    }
+                }
+                CoverGrid(rows = 2, columns = 3, first = 1, cover = cover)
+            }
+        } else {
+            Column(
+                Modifier.fillMaxHeight(),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    CoverGrid(rows = 2, columns = 3, first = 1, cover = cover)
+                }
+                Box(Modifier.fillMaxWidth().height(21.dp)) {
+                    Row(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(14.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(colors.surface)
+                            .border(
+                                width = 0.75.dp,
+                                color = colors.primary.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(3.dp),
+                            )
+                            .padding(start = 18.dp, end = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        repeat(3) { tab ->
+                            Box(
+                                Modifier
+                                    .size(width = 7.dp, height = 2.5.dp)
+                                    .clip(RoundedCornerShape(1.dp))
+                                    .background(
+                                        if (tab == 1) colors.primary
+                                        else colors.onSurfaceVariant.copy(alpha = 0.45f),
+                                    ),
+                            )
+                        }
+                    }
+                    MiniCover(
+                        book = cover(0),
+                        index = 0,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 3.dp, bottom = 2.dp)
+                            .height(18.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ColumnScope.CoverGrid(rows: Int, columns: Int, first: Int, cover: (Int) -> Book?) {
     repeat(rows) { r ->

@@ -84,6 +84,7 @@ data class LibraryLayout(
     val shelfBackdropUri: String? = null,
     val shelfTone: ShelfTone = ShelfTone.Default,
     val compactList: Boolean = false,
+    val bottomBar: Boolean = true,
 )
 
 /** What a shelf in [LibraryStyle.SHELVES] is labelled with. */

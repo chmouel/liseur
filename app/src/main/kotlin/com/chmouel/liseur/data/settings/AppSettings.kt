@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.settings
 
 import android.content.Context
+import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -480,8 +481,31 @@ enum class CompanionDetail(val id: String) {
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
-    produceMigrations = { context -> listOf(LegacySpeechServerMigration(serverNamer(context))) },
+    produceMigrations = { context ->
+        listOf(
+            LegacySpeechServerMigration(serverNamer(context)),
+            LibraryBottomBarUpgradeMigration { context.getDatabasePath("liseur.db").exists() },
+        )
+    },
 )
+
+/**
+ * Keeps the top hero card on an existing install when upgrading to a
+ * build that turns the bottom bar on by default for new installs.
+ */
+internal class LibraryBottomBarUpgradeMigration(
+    private val hasExistingLibrary: () -> Boolean = { false },
+) : DataMigration<Preferences> {
+    private val key = booleanPreferencesKey("library_bottom_bar")
+
+    override suspend fun shouldMigrate(currentData: Preferences): Boolean =
+        key !in currentData && (currentData.asMap().isNotEmpty() || hasExistingLibrary())
+
+    override suspend fun migrate(currentData: Preferences): Preferences =
+        currentData.toMutablePreferences().also { it[key] = false }.toPreferences()
+
+    override suspend fun cleanUp() = Unit
+}
 
 /** A new server's name: the hosted service it is on, or its host. */
 internal fun serverNamer(context: Context): (String) -> String = { url ->
@@ -527,6 +551,7 @@ class AppSettingsRepository(
         val LIBRARY_SHELF_BACKDROP_URI = stringPreferencesKey("library_shelf_backdrop_uri")
         val LIBRARY_SHELF_TONE = stringPreferencesKey("library_shelf_tone")
         val LIBRARY_COMPACT_LIST = booleanPreferencesKey("library_compact_list")
+        val LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
@@ -633,6 +658,8 @@ class AppSettingsRepository(
                 shelfBackdropUri = p[Keys.LIBRARY_SHELF_BACKDROP_URI],
                 shelfTone = ShelfTone.fromId(p[Keys.LIBRARY_SHELF_TONE]),
                 compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
+                bottomBar = p[Keys.LIBRARY_BOTTOM_BAR]
+                    ?: (p.asMap().keys.none { it != Keys.LIBRARY_BOTTOM_BAR }),
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
@@ -825,6 +852,7 @@ class AppSettingsRepository(
             }
             it[Keys.LIBRARY_SHELF_TONE] = layout.shelfTone.id
             it[Keys.LIBRARY_COMPACT_LIST] = layout.compactList
+            it[Keys.LIBRARY_BOTTOM_BAR] = layout.bottomBar
         }
     }
 
@@ -1367,6 +1395,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_style" to BackupValueType.STRING, "library_shelf_grouping" to BackupValueType.STRING,
     "library_shelf_backdrop" to BackupValueType.STRING, "library_shelf_tone" to BackupValueType.STRING,
     "library_compact_list" to BackupValueType.BOOLEAN,
+    "library_bottom_bar" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
     "dictionary_on_long_press" to BackupValueType.BOOLEAN,

@@ -141,8 +141,40 @@ internal fun LibraryStyleSheet(
                     )
                 }
             }
-            if (layout.style == LibraryStyle.SHELVES || layout.style == LibraryStyle.LIST) {
-                HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+            Column(Modifier.selectableGroup()) {
+                listOf(false, true).forEach { useBottomBar ->
+                    val selected = layout.bottomBar == useBottomBar
+                    val title = if (useBottomBar) {
+                        R.string.library_bottom_bar
+                    } else {
+                        R.string.library_hero_card
+                    }
+                    val detail = if (useBottomBar) {
+                        R.string.library_bottom_bar_detail
+                    } else {
+                        R.string.library_hero_card_detail
+                    }
+                    ListItem(
+                        headlineContent = { Text(stringResource(title)) },
+                        supportingContent = { Text(stringResource(detail)) },
+                        leadingContent = {
+                            CurrentBookPreview(
+                                bottomBar = useBottomBar,
+                                books = books,
+                                selected = selected,
+                            )
+                        },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .selectable(
+                                selected = selected,
+                                role = Role.RadioButton,
+                                onClick = { onChange(layout.copy(bottomBar = useBottomBar)) },
+                            ),
+                    )
+                }
             }
             when (layout.style) {
                 LibraryStyle.SHELVES -> Column(Modifier.padding(horizontal = 8.dp)) {

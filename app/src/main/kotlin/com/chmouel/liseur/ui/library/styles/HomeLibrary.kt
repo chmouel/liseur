@@ -70,7 +70,9 @@ internal fun LazyGridScope.homeDashboard(
     onSeriesSelected: (SeriesShelf) -> Unit,
 ) {
     val home = state.home
-    state.continueReading?.let { current ->
+    state.continueReading
+        ?.takeIf { !state.layout.bottomBar }
+        ?.let { current ->
         item(key = "home:hero", span = { GridItemSpan(maxLineSpan) }) {
             HomeHero(
                 entry = current,

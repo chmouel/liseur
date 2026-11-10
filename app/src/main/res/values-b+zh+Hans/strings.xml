@@ -1825,6 +1825,11 @@
     <string name="shelf_tone_brass">黄铜</string>
     <string name="library_compact_list">紧凑行</string>
     <string name="library_compact_list_detail">封面更小，标题只占一行</string>
+    <string name="library_bottom_bar">底部栏</string>
+    <string name="library_bottom_bar_detail">在底部显示在读书籍与主页、书库和更多标签</string>
+    <string name="library_hero_card">顶部卡片</string>
+    <string name="library_hero_card_detail">在书库顶部的卡片中显示在读书籍</string>
+    <string name="library_tab_library">书库</string>
     <string name="home_continue">继续</string>
     <string name="home_recently_opened">最近打开</string>
     <string name="home_new_books">新上架</string>
