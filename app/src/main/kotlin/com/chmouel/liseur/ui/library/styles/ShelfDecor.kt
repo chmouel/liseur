@@ -46,6 +46,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.ui.browseCover
 import kotlin.math.roundToInt
 
@@ -82,7 +83,7 @@ private val PageEdge = Color(0xFFBDB8AD)
 
 @Immutable
 internal class ShelfArt(
-    val wall: ImageBitmap,
+    val wall: ImageBitmap?,
     val ledge: ImageBitmap,
     val bracket: ImageBitmap,
     val rectFrame: ImageBitmap,
@@ -94,18 +95,25 @@ internal class ShelfArt(
     val wallTint: ColorFilter,
     val stoneTint: ColorFilter,
     val giltTint: ColorFilter,
-    /** Laid over the bricks to soften them behind text. */
+    /** Laid over the backdrop to soften it behind text. */
     val wash: Color,
-    /** Behind the controls, so the buttons read on the bricks. */
+    /** Laid over a custom photo so shelf headers stay legible. */
+    val customWash: Color,
+    /** Behind the controls, so the buttons read on the wall. */
     val panel: Color,
     val panelEdge: Color,
 )
 
 @Composable
-internal fun rememberShelfArt(): ShelfArt {
+internal fun rememberShelfArt(backdrop: ShelfBackdrop = ShelfBackdrop.Default): ShelfArt {
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
-    val wall = ImageBitmap.imageResource(R.drawable.shelf_wall)
+    val wall = when (backdrop) {
+        ShelfBackdrop.BRICKS -> ImageBitmap.imageResource(R.drawable.shelf_wall)
+        ShelfBackdrop.WOOD -> ImageBitmap.imageResource(R.drawable.shelf_wall_wood)
+        ShelfBackdrop.PLASTER -> ImageBitmap.imageResource(R.drawable.shelf_wall_plaster)
+        ShelfBackdrop.PLAIN, ShelfBackdrop.CUSTOM -> null
+    }
     val ledge = ImageBitmap.imageResource(R.drawable.shelf_ledge)
     val bracket = ImageBitmap.imageResource(R.drawable.shelf_ledge_end)
     val rect = ImageBitmap.imageResource(R.drawable.shelf_frame_rect)
@@ -118,11 +126,12 @@ internal fun rememberShelfArt(): ShelfArt {
     val stoneColor = if (dark) scheme.onSurfaceVariant else scheme.surfaceContainerLowest
     val giltColor = if (dark) Color(0xFFC2A458) else Color(0xFFD4B460)
     val wash = scheme.surface.copy(alpha = if (dark) 0.12f else 0.5f)
+    val customWash = scheme.surface.copy(alpha = if (dark) 0.52f else 0.58f)
     val panel = scheme.surface.copy(alpha = 0.85f)
     val panelEdge = scheme.outlineVariant.copy(alpha = 0.6f)
     return remember(
         wall, ledge, bracket, rect, oval, succulent, fern, flowers, trailing,
-        wallColor, stoneColor, giltColor, wash, panel, panelEdge,
+        wallColor, stoneColor, giltColor, wash, customWash, panel, panelEdge,
     ) {
         ShelfArt(
             wall = wall,
@@ -138,6 +147,7 @@ internal fun rememberShelfArt(): ShelfArt {
             stoneTint = ColorFilter.tint(stoneColor, BlendMode.Modulate),
             giltTint = ColorFilter.tint(giltColor, BlendMode.Modulate),
             wash = wash,
+            customWash = customWash,
             panel = panel,
             panelEdge = panelEdge,
         )
@@ -173,8 +183,9 @@ private fun DrawScope.tile(
 }
 
 internal fun DrawScope.drawShelfWall(art: ShelfArt) {
+    val wall = art.wall ?: return
     val tile = WallTile.toPx()
-    tile(art.wall, tile, tile, size, art.wallTint)
+    tile(wall, tile, tile, size, art.wallTint)
     drawRect(art.wash)
 }
 

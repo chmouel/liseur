@@ -193,8 +193,11 @@ class LibraryLayoutTest {
     }
 
     @Test
-    fun `style ids round trip and unknown ids fall back to classic`() {
+    fun `style and backdrop ids round trip and unknown ids fall back to defaults`() {
         LibraryStyle.entries.forEach { assertEquals(it, LibraryStyle.fromId(it.id)) }
         assertEquals(LibraryStyle.CLASSIC, LibraryStyle.fromId("bogus"))
+        ShelfBackdrop.entries.forEach { assertEquals(it, ShelfBackdrop.fromId(it.id)) }
+        assertEquals(ShelfBackdrop.BRICKS, ShelfBackdrop.fromId("bogus"))
+        assertEquals(ShelfBackdrop.BRICKS, LibraryLayout().shelfBackdrop)
     }
 }

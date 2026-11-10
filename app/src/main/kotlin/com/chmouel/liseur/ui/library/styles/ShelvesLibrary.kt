@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -64,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.calibre.DownloadProgress
 import com.chmouel.liseur.data.db.Book
@@ -73,6 +76,7 @@ import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.PlankRow
 import com.chmouel.liseur.domain.PlankSegment
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.ShelfLabel
 import com.chmouel.liseur.domain.displayAuthor
@@ -125,7 +129,8 @@ internal fun ShelvesLibrary(
         )
     }
     val onShelf = !state.isSearchActive && !state.filters.archived
-    val art = if (LocalEInk.current) null else rememberShelfArt()
+    val backdrop = state.layout.shelfBackdrop
+    val art = if (LocalEInk.current) null else rememberShelfArt(backdrop)
     val finished = state.framedCovers
     // The hero comes and goes with the grouping; without this the list
     // stays anchored on the first shelf and the hero lands off-screen.
@@ -138,66 +143,86 @@ internal fun ShelvesLibrary(
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = if (art != null) modifier.drawBehind { drawShelfWall(art) } else modifier,
-        contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp + bottomInset),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        state.continueReading
-            // Grouped by reading state, the Reading shelf comes first and
-            // already shows the book.
-            ?.takeIf { onShelf && state.layout.shelfGrouping != ShelfGrouping.STATUS }
-            ?.let { recent ->
-                item(key = "shelves:hero") {
-                    ContinueReadingCard(
-                        entry = recent,
-                        onClick = { onBookSelected(recent.book) },
-                        onActions = { onBookLongPress(recent.book) },
-                        modifier = Modifier.padding(horizontal = 16.dp),
+    val customUri = state.layout.shelfBackdropUri?.takeIf { backdrop == ShelfBackdrop.CUSTOM }
+    Box(modifier = modifier) {
+        if (art != null && customUri != null) {
+            AsyncImage(
+                model = customUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(art.customWash),
+            )
+        }
+        LazyColumn(
+            state = listState,
+            modifier = if (art?.wall != null) {
+                Modifier.fillMaxSize().drawBehind { drawShelfWall(art) }
+            } else {
+                Modifier.fillMaxSize()
+            },
+            contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp + bottomInset),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            state.continueReading
+                // Grouped by reading state, the Reading shelf comes first and
+                // already shows the book.
+                ?.takeIf { onShelf && state.layout.shelfGrouping != ShelfGrouping.STATUS }
+                ?.let { recent ->
+                    item(key = "shelves:hero") {
+                        ContinueReadingCard(
+                            entry = recent,
+                            onClick = { onBookSelected(recent.book) },
+                            onActions = { onBookLongPress(recent.book) },
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                        )
+                    }
+                }
+            item(key = "controls") {
+                Box(
+                    Modifier
+                        .padding(horizontal = 16.dp)
+                        .then(
+                            if (art != null) {
+                                Modifier
+                                    .background(art.panel, CircleShape)
+                                    .border(Dp.Hairline, art.panelEdge, CircleShape)
+                                    .padding(start = 4.dp, end = 2.dp)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
+                    controls(
+                        if (onShelf) {
+                            {
+                                ShelfGroupingMenu(
+                                    selected = state.layout.shelfGrouping,
+                                    onSelect = { onSetLayout(state.layout.copy(shelfGrouping = it)) },
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
-        item(key = "controls") {
-            Box(
-                Modifier
-                    .padding(horizontal = 16.dp)
-                    .then(
-                        if (art != null) {
-                            Modifier
-                                .background(art.panel, CircleShape)
-                                .border(Dp.Hairline, art.panelEdge, CircleShape)
-                                .padding(start = 4.dp, end = 2.dp)
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
-                controls(
-                    if (onShelf) {
-                        {
-                            ShelfGroupingMenu(
-                                selected = state.layout.shelfGrouping,
-                                onSelect = { onSetLayout(state.layout.copy(shelfGrouping = it)) },
-                            )
-                        }
-                    } else {
-                        null
-                    },
+            items(planks, key = { it.key }) { row ->
+                PlankBoardRow(
+                    row = row,
+                    columns = columns,
+                    state = state,
+                    art = art,
+                    finished = finished,
+                    onSeriesSelected = onSeriesSelected,
+                    onBookSelected = onBookSelected,
+                    onBookLongPress = onBookLongPress,
                 )
             }
-        }
-        items(planks, key = { it.key }) { row ->
-            PlankBoardRow(
-                row = row,
-                columns = columns,
-                state = state,
-                art = art,
-                finished = finished,
-                onSeriesSelected = onSeriesSelected,
-                onBookSelected = onBookSelected,
-                onBookLongPress = onBookLongPress,
-            )
         }
     }
 }

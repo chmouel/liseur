@@ -1865,6 +1865,12 @@
     <string name="shelf_grouping">Étagères par</string>
     <string name="shelf_group_author">Auteur</string>
     <string name="shelf_group_status">État de lecture</string>
+    <string name="shelf_backdrop">Fond</string>
+    <string name="shelf_backdrop_plain">Uni</string>
+    <string name="shelf_backdrop_wood">Bois</string>
+    <string name="shelf_backdrop_plaster">Enduit</string>
+    <string name="shelf_backdrop_bricks">Briques</string>
+    <string name="shelf_backdrop_custom">Image personnalisée</string>
     <string name="library_compact_list">Lignes compactes</string>
     <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
     <string name="home_continue">Continuer</string>

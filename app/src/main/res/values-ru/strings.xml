@@ -1975,6 +1975,12 @@
     <string name="shelf_grouping">Полки по</string>
     <string name="shelf_group_author">Автор</string>
     <string name="shelf_group_status">Состояние чтения</string>
+    <string name="shelf_backdrop">Фон</string>
+    <string name="shelf_backdrop_plain">Однотонный</string>
+    <string name="shelf_backdrop_wood">Дерево</string>
+    <string name="shelf_backdrop_plaster">Штукатурка</string>
+    <string name="shelf_backdrop_bricks">Кирпичи</string>
+    <string name="shelf_backdrop_custom">Своё изображение</string>
     <string name="library_compact_list">Компактные строки</string>
     <string name="library_compact_list_detail">Обложки меньше, название в одну строку</string>
     <string name="home_continue">Продолжить</string>

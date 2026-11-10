@@ -1877,6 +1877,12 @@
     <string name="shelf_grouping">Regale nach</string>
     <string name="shelf_group_author">Autor</string>
     <string name="shelf_group_status">Lesestand</string>
+    <string name="shelf_backdrop">Hintergrund</string>
+    <string name="shelf_backdrop_plain">Schlicht</string>
+    <string name="shelf_backdrop_wood">Holz</string>
+    <string name="shelf_backdrop_plaster">Putz</string>
+    <string name="shelf_backdrop_bricks">Ziegel</string>
+    <string name="shelf_backdrop_custom">Eigenes Bild</string>
     <string name="library_compact_list">Kompakte Zeilen</string>
     <string name="library_compact_list_detail">Kleinere Cover und eine Zeile pro Titel</string>
     <string name="home_continue">Weiterlesen</string>

@@ -468,6 +468,65 @@ def trailing():
     finish(img, w, h, "shelf_plant_trailing.webp")
 
 
+def wall_wood():
+    """Vertical tongue-and-groove wood panelling tile, 384px square, shown at 128dp."""
+    size, planks = 384, 4
+    pw = size // planks
+    # Stretch noise vertically for wood fibres.
+    streak_low = noise(size, size // 8, 45).resize((size, size), Image.Resampling.BICUBIC)
+    streak = wrap_blur(streak_low, 4).load()
+    fine_low = noise(size, size // 4, 24).resize((size, size), Image.Resampling.BILINEAR).load()
+    plank_tone = [rng.uniform(0.76, 0.92) for _ in range(planks)]
+    plank_phase = [rng.uniform(0, math.tau) for _ in range(planks)]
+    out = Image.new("L", (size, size))
+    px = out.load()
+    for y in range(size):
+        ty = y / size * math.tau
+        for x in range(size):
+            p = x // pw
+            lx = x % pw
+            if lx < 3:
+                v = 0.50 * 255  # groove shadow
+            elif lx == 3 or lx == 4:
+                v = 0.96 * 255  # lit bevel edge
+            elif lx > pw - 3:
+                v = 0.68 * 255  # right bevel
+            else:
+                # Subtle cathedral grain ring modulation across the plank width.
+                u = (lx - pw / 2) / (pw / 2)
+                ring = math.sin(u * u * 7.0 + math.sin(ty + plank_phase[p]) * 1.4)
+                v = (plank_tone[p] + 0.045 * ring) * 255
+                v += (streak[x, y] - 128) * 0.55 + (fine_low[x, y] - 128) * 0.45
+            px[x, y] = clamp(v)
+    save(out.convert("RGB"), "shelf_wall_wood.webp", quality=75, method=6)
+
+
+def wall_plaster():
+    """Soft Venetian plaster / warm linen paper tile, 384px square, shown at 128dp."""
+    size = 384
+    cloud = wrap_blur(noise(size, size, 55), 18).load()
+    med = wrap_blur(noise(size, size, 32), 5).load()
+    # Faint linen weave (horizontal and vertical threads).
+    weft = wrap_blur(noise(size // 6, size, 18).resize((size, size), Image.Resampling.BILINEAR), 1).load()
+    warp = wrap_blur(noise(size, size // 6, 18).resize((size, size), Image.Resampling.BILINEAR), 1).load()
+    grain = noise(size, size, 10).load()
+    out = Image.new("L", (size, size))
+    px = out.load()
+    base = 0.86 * 255
+    for y in range(size):
+        for x in range(size):
+            v = (
+                base
+                + (cloud[x, y] - 128) * 0.55
+                + (med[x, y] - 128) * 0.35
+                + (weft[x, y] - 128) * 0.25
+                + (warp[x, y] - 128) * 0.25
+                + (grain[x, y] - 128) * 0.35
+            )
+            px[x, y] = clamp(v)
+    save(out.convert("RGB"), "shelf_wall_plaster.webp", quality=75, method=6)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     wall()
@@ -479,6 +538,8 @@ def main():
     fern()
     flowers()
     trailing()
+    wall_wood()
+    wall_plaster()
 
 
 if __name__ == "__main__":
