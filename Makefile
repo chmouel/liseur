@@ -29,7 +29,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build build-all debug release bundle test test-fast lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test test-fast lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-clear dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -57,6 +57,7 @@ help:
 		'make dev-install       Build and install it beside the real app' \
 		'make dev-run           Install it and launch it' \
 		'make dev-reset         Reinstall it from scratch, wiping its storage' \
+		'make dev-clear         Wipe its data and backup, keeping it installed' \
 		'make dev-uninstall     Remove it' \
 		'make dev-logcat        Tail its logs' \
 		'make dev-locale        Show or set dev app locale with LOCALE=xx' \
@@ -238,6 +239,27 @@ dev-reset: dev-phone
 	fi
 	$(MAKE) dev-install
 	$(ADB) $(ADB_PHONE_TARGET) shell am start -n '$(DEV_ACTIVITY)'
+
+# Wipes the installed dev app back to a first launch without rebuilding:
+# its storage, and its Android backup, which a later reinstall would
+# otherwise restore. When `pm clear` is refused, run-as empties the data
+# directory instead; the dev build is debuggable, so that always works.
+dev-clear: dev-phone
+	@if ! $(ADB) $(ADB_PHONE_TARGET) shell pm list packages '$(DEV_PACKAGE)' \
+		| tr -d '\r' | grep -qx 'package:$(DEV_PACKAGE)'; then \
+		printf '%s is not installed\n' '$(DEV_PACKAGE)'; exit 0; \
+	fi; \
+	$(ADB) $(ADB_PHONE_TARGET) shell am force-stop '$(DEV_PACKAGE)'; \
+	if ! $(ADB) $(ADB_PHONE_TARGET) shell pm clear '$(DEV_PACKAGE)' 2>&1 | tr -d '\r' | grep -qx Success; then \
+		printf 'pm clear refused; emptying the data directory with run-as\n'; \
+		$(ADB) $(ADB_PHONE_TARGET) shell "run-as '$(DEV_PACKAGE)' sh -c 'find . -mindepth 1 -maxdepth 1 ! -name lib -exec rm -rf {} +'" || exit 1; \
+		$(ADB) $(ADB_PHONE_TARGET) shell rm -rf '/sdcard/Android/data/$(DEV_PACKAGE)' 2>/dev/null || true; \
+	fi; \
+	transport=$$($(ADB) $(ADB_PHONE_TARGET) shell bmgr list transports 2>/dev/null | tr -d '\r' | sed -n 's/^ *\* *//p'); \
+	if [ -n "$$transport" ]; then \
+		$(ADB) $(ADB_PHONE_TARGET) shell bmgr wipe "$$transport" '$(DEV_PACKAGE)'; \
+	fi; \
+	printf '%s cleared\n' '$(DEV_PACKAGE)'
 
 # Filtered by pid rather than by tag: the app logs under a dozen of them,
 # and the pid is the one thing that says "this build and not the other".

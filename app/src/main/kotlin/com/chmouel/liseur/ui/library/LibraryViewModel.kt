@@ -16,6 +16,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.BookProgression
 import com.chmouel.liseur.data.db.BookReadAt
 import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.RefusedBytes
@@ -65,6 +66,7 @@ import com.chmouel.liseur.domain.searchLibrary
 import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.domain.shelfStateFor
 import com.chmouel.liseur.domain.shelvesOf
+import com.chmouel.liseur.domain.syncsPositions
 import com.chmouel.liseur.domain.trackLengths
 import com.chmouel.liseur.domain.worthShowing
 import com.chmouel.liseur.sync.PositionSyncCoordinator
@@ -292,6 +294,8 @@ data class LibraryUiState(
      * Downloaded filter would only ever say "all of them".
      */
     val hasServer: Boolean = false,
+    /** Whether the connected server or its kosync pairing can sync reading positions. */
+    val canSyncPositions: Boolean = false,
     /**
      * Whether the connected catalog is one the reader addresses
      * themselves, so "point at a single shelf" is advice they can act
@@ -480,6 +484,7 @@ class LibraryViewModel(
     private val seriesOrderDao: SeriesOrderDao,
     private val seriesExtras: SeriesExtrasRepository,
     private val refusals: UploadRefusalDao,
+    private val kosyncPeer: Flow<KosyncPeer?> = flowOf(null),
     /** Books whose translations the account could be asked to clear (ADR-0050). */
     accountTranslationBookUrls: Flow<Set<String>> = flowOf(emptySet()),
     /** Records the account's clear of a book's translations; whether there was one to record. */
@@ -732,6 +737,7 @@ class LibraryViewModel(
                 refusedByServer,
                 appSettings.catalogPartialDismissedFor,
                 account.browseServers,
+                kosyncPeer,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -957,6 +963,7 @@ class LibraryViewModel(
                 hasArchived = books.any { it.archived },
                 hasFinished = books.any { !it.archived && it.finished },
                 hasServer = server != null,
+                canSyncPositions = syncsPositions(server, baseValues[13] as KosyncPeer?),
                 catalogIsAddressable = server?.kind == ServerKind.CUSTOM,
                 // Not an error and not retryable, so it is not folded
                 // into the failure notice: the shelf is real, there is
@@ -1775,6 +1782,7 @@ class LibraryViewModel(
                         seriesOrderDao = container.database.seriesOrderDao(),
                         seriesExtras = container.seriesExtras,
                         refusals = container.database.uploadRefusalDao(),
+                        kosyncPeer = container.kosyncAccount.peer,
                         accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                     )

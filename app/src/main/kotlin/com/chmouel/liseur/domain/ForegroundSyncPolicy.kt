@@ -39,6 +39,14 @@ fun shouldSyncOnForeground(
     return catalogDue || kosyncDue
 }
 
+/**
+ * Whether anything could carry reading positions: the connected server
+ * itself, or a kosync pairing on a server that hosts one. Without either,
+ * asking for a sync has nothing to talk to.
+ */
+fun syncsPositions(server: RemoteServer?, kosync: KosyncPeer?): Boolean =
+    server != null && (server.canSync || (kosync != null && server.kind.hostsKosyncPeer))
+
 private fun due(syncedAt: Long?, now: Long, freshForMs: Long): Boolean {
     if (syncedAt == null) return true
     // A clock put back — a timezone fixed, a phone that lost its
