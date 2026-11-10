@@ -843,6 +843,11 @@
     <string name="settings_pinch_to_resize_eink">在墨水屏上不可用，因为此类屏幕重绘实时尺寸预览太慢。请改用字号滑块。捏合放大的图片仍可正常使用。如果这不是墨水屏，请在上方关闭“墨水屏”。</string>
     <string name="settings_brightness_edge">边缘滑动调节亮度</string>
     <string name="settings_brightness_edge_detail">沿页面这一侧边缘上下滑动，无需打开菜单即可调节亮度。从边缘开始的点按和左右翻页照常可用。仅在翻页时有效，滚动阅读时无效。</string>
+    <string name="settings_reader_orientation">屏幕方向</string>
+    <string name="settings_reader_orientation_detail">阅读器随手机旋转，或者无论系统旋转设置如何都保持竖屏或横屏。书库不受影响。</string>
+    <string name="reader_orientation_auto">自动</string>
+    <string name="reader_orientation_portrait">竖屏</string>
+    <string name="reader_orientation_landscape">横屏</string>
     <string name="settings_resume">打开上次阅读的书</string>
     <string name="settings_resume_detail">中途放下书时跳过书库直接打开。</string>
     <string name="settings_keep_screen_on">保持屏幕常亮</string>

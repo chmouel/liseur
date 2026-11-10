@@ -15,6 +15,7 @@ data class SearchContext(
     val vendorRefresh: Boolean = false,
     val builtInDictionary: Boolean = true,
     val dictionaryLookup: Boolean = false,
+    val orientationLock: Boolean = true,
 )
 
 /**
@@ -179,6 +180,10 @@ object SettingsEntries {
     val BrightnessEdge = advanced(
         "brightness_edge", Route.ReadingNavigation, R.string.settings_brightness_edge,
         R.string.settings_brightness_edge_detail,
+    )
+    val ReaderOrientation = advanced(
+        "reader_orientation", Route.ReadingNavigation, R.string.settings_reader_orientation,
+        R.string.settings_reader_orientation_detail, shown = { it.orientationLock },
     )
     val LockFooter = advanced(
         "lock_footer", Route.ReadingNavigation, R.string.settings_lock_footer, R.string.settings_lock_footer_detail,

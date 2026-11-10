@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
 import com.chmouel.liseur.ui.reading.FineTypographyActions
+import com.chmouel.liseur.ui.reading.orientationLockHonoured
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
@@ -584,6 +585,7 @@ private fun LiseurApp(
                             vendorRefresh = context.container.eInkDisplay.vendor != null,
                             builtInDictionary = settings.definitionTarget == DefinitionTarget.BUILT_IN,
                             dictionaryLookup = settings.dictionaryLookupEnabled,
+                            orientationLock = orientationLockHonoured(),
                         )
                         SettingsSearchScreen(
                             entries = remember { SettingsEntries.all(flavorSettingsEntries) },
@@ -673,6 +675,7 @@ private fun LiseurApp(
                             onOpenPageTaps = { backStack.push(Route.PageTaps) },
                             onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
                             onEdgeBrightness = { scope.launch { repository.setEdgeBrightness(it) } },
+                            onReaderOrientation = { scope.launch { repository.setReaderOrientation(it) } },
                             onPageTurnStyle = { scope.launch { readerPreferences.setPageTurnStyle(it) } },
                             onResumeLastBook = { scope.launch { repository.setResumeLastBook(it) } },
                             onScrollMode = { scope.launch { repository.setScrollMode(it) } },

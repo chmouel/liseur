@@ -201,6 +201,11 @@ class ReaderActivity : FragmentActivity() {
             container.appSettings.settings.collect { volumeKeyMode = it.volumeKeyMode }
         }
         lifecycleScope.launch {
+            container.appSettings.settings.map { it.readerOrientation.requested }.distinctUntilChanged().collect {
+                requestedOrientation = it
+            }
+        }
+        lifecycleScope.launch {
             container.readAloud.session.map { it != null }.distinctUntilChanged().collect {
                 readingAloud = it
                 // Paused, nothing is playing, so the keys would otherwise set the ringer.
@@ -561,7 +566,7 @@ class ReaderActivity : FragmentActivity() {
                                     onScrollingChanged = viewModel::onScrollingChanged,
                                     tapLayoutFlow = viewModel.tapLayout,
                                     pinchToResizeFlow = viewModel.pinchToResize,
-                                    edgeBrightnessFlow = viewModel.edgeBrightness,
+                                    screenHandlingFlow = viewModel.screenHandling,
                                     onEdgeBrightnessChanged = { viewModel.setEdgeBrightness(it) },
                                     selectionActionLayoutFlow = viewModel.selectionActionLayout,
                                     onSelectionActionLayoutChanged = viewModel::updateSelectionActionLayout,
@@ -593,6 +598,7 @@ class ReaderActivity : FragmentActivity() {
                                             setAutoScrollSpeed = viewModel::setAutoScrollSpeed,
                                             nudgeAutoScrollSpeed = { viewModel.nudgeAutoScrollSpeed(it) },
                                             setTypographyIsOwn = viewModel::setTypographyIsOwn,
+                                            setReaderOrientation = { viewModel.setReaderOrientation(it) },
                                             fineTypography = FineTypographyActions(
                                                 onTextAlignChanged = viewModel::setTextAlign,
                                                 onHyphensChanged = viewModel::setHyphens,
