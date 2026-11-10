@@ -1853,4 +1853,25 @@
     <string name="book_details_file_info">Infos sur le fichier</string>
     <string name="book_details_read_more">Lire la suite</string>
     <string name="book_details_show_less">Réduire</string>
+    <string name="library_style">Style de la bibliothèque</string>
+    <string name="library_style_classic">Classique</string>
+    <string name="library_style_classic_detail">La grille de couvertures, avec le livre en cours en haut</string>
+    <string name="library_style_home">Accueil</string>
+    <string name="library_style_home_detail">Le livre en cours, puis des bandeaux de livres récents, de séries entamées et de nouveautés</string>
+    <string name="library_style_shelves">Étagères</string>
+    <string name="library_style_shelves_detail">Des rangées de couvertures posées sur des étagères, une par série, auteur ou état de lecture</string>
+    <string name="library_style_list">Liste</string>
+    <string name="library_style_list_detail">Une ligne par livre avec ses détails et une barre de progression aussi longue que le livre</string>
+    <string name="shelf_grouping">Étagères par</string>
+    <string name="shelf_group_author">Auteur</string>
+    <string name="shelf_group_status">État de lecture</string>
+    <string name="library_compact_list">Lignes compactes</string>
+    <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
+    <string name="home_continue">Continuer</string>
+    <string name="home_recently_opened">Ouverts récemment</string>
+    <string name="home_new_books">Nouveaux sur l\'étagère</string>
+    <string name="home_series_underway">Séries en cours</string>
+    <string name="home_all_books">Tous les livres</string>
+    <string name="shelf_other_books">Autres livres</string>
+    <string name="list_new">Nouveau</string>
 </resources>

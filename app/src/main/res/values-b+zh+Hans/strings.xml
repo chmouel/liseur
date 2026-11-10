@@ -1799,4 +1799,25 @@
     <string name="book_details_file_info">文件信息</string>
     <string name="book_details_read_more">展开全文</string>
     <string name="book_details_show_less">收起</string>
+    <string name="library_style">书库样式</string>
+    <string name="library_style_classic">经典</string>
+    <string name="library_style_classic_detail">封面网格，正在读的书置顶</string>
+    <string name="library_style_home">主页</string>
+    <string name="library_style_home_detail">正在读的书，然后是最近打开、在读系列和新书的横条</string>
+    <string name="library_style_shelves">书架</string>
+    <string name="library_style_shelves_detail">封面立在书架上，按系列、作者或阅读状态分架</string>
+    <string name="library_style_list">列表</string>
+    <string name="library_style_list_detail">每本书一行，显示详情，进度条长度与书的篇幅相称</string>
+    <string name="shelf_grouping">书架分组</string>
+    <string name="shelf_group_author">作者</string>
+    <string name="shelf_group_status">阅读状态</string>
+    <string name="library_compact_list">紧凑行</string>
+    <string name="library_compact_list_detail">封面更小，标题只占一行</string>
+    <string name="home_continue">继续</string>
+    <string name="home_recently_opened">最近打开</string>
+    <string name="home_new_books">新上架</string>
+    <string name="home_series_underway">在读系列</string>
+    <string name="home_all_books">全部书籍</string>
+    <string name="shelf_other_books">其他书籍</string>
+    <string name="list_new">新</string>
 </resources>

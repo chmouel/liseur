@@ -1935,6 +1935,11 @@ separate from translation's, moved and forgotten with server edits in
 - New reading settings go in the Advanced sheet unless changed frequently.
   Keep Settings and reader surfaces consistent and keep the
   appearance/navigation split.
+- Library styles (Classic, Home, Shelves, List) live in
+  `ui/library/styles/` and share book actions, badges, download
+  progress, search, empty states and e-ink rules; derive their groupings
+  in `domain/LibraryLayout.kt`
+  ([ADR 0070](docs/adr/0070-library-styles-are-fixed-layouts.md)).
 - UI strings go into English and the six shipped locales together.
   Russian plurals need `one`, `few`, `many`, `other`; escape apostrophes.
 - Dependencies and bundled fonts must stay FOSS and reproducible;
