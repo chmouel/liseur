@@ -130,7 +130,7 @@ internal fun ShelvesLibrary(
     }
     val onShelf = !state.isSearchActive && !state.filters.archived
     val backdrop = state.layout.shelfBackdrop
-    val art = if (LocalEInk.current) null else rememberShelfArt(backdrop)
+    val art = if (LocalEInk.current) null else rememberShelfArt(backdrop, state.layout.shelfTone)
     val finished = state.framedCovers
     // The hero comes and goes with the grouping; without this the list
     // stays anchored on the first shelf and the hero lands off-screen.

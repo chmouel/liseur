@@ -21,10 +21,11 @@ e-ink.
 Four styles, picked in Settings › Appearance or from the button beside
 the sort above the books: Classic (the grid, still the default), Home,
 Shelves and List.
-Each is a fixed layout with at most a couple of options of its own:
-Shelves chooses series, author or reading state for its shelves and a
-backdrop behind them (plain, wood, plaster, bricks or a custom image),
-and List can use compact rows. Nothing is reorderable.
+Each is a fixed layout with at most a few options of its own:
+Shelves chooses series, author or reading state for its shelves, a shelf
+colour (theme accent, stone, oak, walnut or brass) and a backdrop behind
+them (plain, wood, plaster, bricks or a custom image), and List can use
+compact rows. Nothing is reorderable.
 
 Only the library screen changes. Every style keeps the same book
 actions, badges, download progress, search results, empty states and
@@ -36,23 +37,24 @@ top. The grouping, strips and track lengths are computed in
 `domain/LibraryLayout.kt`, outside Compose.
 
 The layouts borrow ideas from the plugins and none of their code or
-artwork. Shelves stand on a stone bookcase: a wall (bricks by default,
-or wood panelling, plaster, plain surface or a photo from the device),
+artwork. Shelves stand on a bookcase: a wall (bricks by default, or
+wood panelling, plaster, plain surface or a photo from the device),
 ledges with a dentil band, and empty places that take either a finished
 book's cover hung as a framed picture or a potted plant. Some shelves
 also get a small pot at one end or a plant hanging under them, chosen
 from the shelf's key so nothing moves while scrolling. The wall, ledge
 and frame textures are drawn by `hack/shelf-textures` in grayscale and
-tinted from the theme at run time, so they follow light, dark and
-dynamic colour; the plants keep their natural colours. E-ink keeps a
-flat plank and no decoration.
+tinted from the theme or chosen shelf tone at run time, so they follow
+light, dark and dynamic colour; the plants keep their natural colours.
+E-ink keeps a flat plank and no decoration.
 
 ## Consequences
 
-Four DataStore keys (`library_style`, `library_shelf_grouping`,
-`library_shelf_backdrop`, `library_compact_list`) are backed up with the
-other settings; a fifth (`library_shelf_backdrop_uri`) points to the
-copied custom image in local app storage. No database change.
+Five DataStore keys (`library_style`, `library_shelf_grouping`,
+`library_shelf_backdrop`, `library_shelf_tone`, `library_compact_list`)
+are backed up with the other settings; a sixth
+(`library_shelf_backdrop_uri`) points to the copied custom image in
+local app storage. No database change.
 
 Search and the empty and loading states are shared, so they look the
 same in every style.

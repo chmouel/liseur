@@ -1817,6 +1817,12 @@
     <string name="shelf_backdrop_plaster">灰泥</string>
     <string name="shelf_backdrop_bricks">砖墙</string>
     <string name="shelf_backdrop_custom">自定义图片</string>
+    <string name="shelf_tone">书架颜色</string>
+    <string name="shelf_tone_theme">主题色</string>
+    <string name="shelf_tone_stone">石材</string>
+    <string name="shelf_tone_oak">橡木</string>
+    <string name="shelf_tone_walnut">胡桃木</string>
+    <string name="shelf_tone_brass">黄铜</string>
     <string name="library_compact_list">紧凑行</string>
     <string name="library_compact_list_detail">封面更小，标题只占一行</string>
     <string name="home_continue">继续</string>

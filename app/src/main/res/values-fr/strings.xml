@@ -1871,6 +1871,12 @@
     <string name="shelf_backdrop_plaster">Enduit</string>
     <string name="shelf_backdrop_bricks">Briques</string>
     <string name="shelf_backdrop_custom">Image personnalisée</string>
+    <string name="shelf_tone">Couleur des étagères</string>
+    <string name="shelf_tone_theme">Thème</string>
+    <string name="shelf_tone_stone">Pierre</string>
+    <string name="shelf_tone_oak">Chêne</string>
+    <string name="shelf_tone_walnut">Noyer</string>
+    <string name="shelf_tone_brass">Laiton</string>
     <string name="library_compact_list">Lignes compactes</string>
     <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
     <string name="home_continue">Continuer</string>

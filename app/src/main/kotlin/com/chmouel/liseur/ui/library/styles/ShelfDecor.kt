@@ -47,6 +47,7 @@ import coil3.request.ImageRequest
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.ShelfBackdrop
+import com.chmouel.liseur.domain.ShelfTone
 import com.chmouel.liseur.ui.browseCover
 import kotlin.math.roundToInt
 
@@ -105,7 +106,10 @@ internal class ShelfArt(
 )
 
 @Composable
-internal fun rememberShelfArt(backdrop: ShelfBackdrop = ShelfBackdrop.Default): ShelfArt {
+internal fun rememberShelfArt(
+    backdrop: ShelfBackdrop = ShelfBackdrop.Default,
+    tone: ShelfTone = ShelfTone.Default,
+): ShelfArt {
     val scheme = MaterialTheme.colorScheme
     val dark = scheme.surface.luminance() < 0.5f
     val wall = when (backdrop) {
@@ -123,8 +127,19 @@ internal fun rememberShelfArt(backdrop: ShelfBackdrop = ShelfBackdrop.Default): 
     val flowers = ImageBitmap.imageResource(R.drawable.shelf_plant_flowers)
     val trailing = ImageBitmap.imageResource(R.drawable.shelf_plant_trailing)
     val wallColor = if (dark) scheme.surfaceContainerHighest else scheme.surfaceDim
-    val stoneColor = if (dark) scheme.onSurfaceVariant else scheme.surfaceContainerLowest
-    val giltColor = if (dark) Color(0xFFC2A458) else Color(0xFFD4B460)
+    val stoneColor = when (tone) {
+        ShelfTone.THEME -> if (dark) scheme.primaryContainer else scheme.secondaryContainer
+        ShelfTone.STONE -> if (dark) scheme.onSurfaceVariant else scheme.surfaceContainerLowest
+        ShelfTone.OAK -> if (dark) Color(0xFFA87E4F) else Color(0xFFD9B382)
+        ShelfTone.WALNUT -> if (dark) Color(0xFF72513B) else Color(0xFF9C7254)
+        ShelfTone.BRASS -> if (dark) Color(0xFFA98C47) else Color(0xFFD6BA73)
+    }
+    val giltColor = when (tone) {
+        ShelfTone.THEME -> if (dark) scheme.primary else scheme.tertiary
+        ShelfTone.STONE, ShelfTone.OAK -> if (dark) Color(0xFFC2A458) else Color(0xFFD4B460)
+        ShelfTone.WALNUT -> if (dark) Color(0xFFCAA55C) else Color(0xFFBA9248)
+        ShelfTone.BRASS -> if (dark) Color(0xFFD8BE78) else Color(0xFFE5CA7E)
+    }
     val wash = scheme.surface.copy(alpha = if (dark) 0.12f else 0.5f)
     val customWash = scheme.surface.copy(alpha = if (dark) 0.52f else 0.58f)
     val panel = scheme.surface.copy(alpha = 0.85f)

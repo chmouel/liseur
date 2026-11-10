@@ -1883,6 +1883,12 @@
     <string name="shelf_backdrop_plaster">Putz</string>
     <string name="shelf_backdrop_bricks">Ziegel</string>
     <string name="shelf_backdrop_custom">Eigenes Bild</string>
+    <string name="shelf_tone">Regalfarbe</string>
+    <string name="shelf_tone_theme">Design</string>
+    <string name="shelf_tone_stone">Stein</string>
+    <string name="shelf_tone_oak">Eiche</string>
+    <string name="shelf_tone_walnut">Walnuss</string>
+    <string name="shelf_tone_brass">Messing</string>
     <string name="library_compact_list">Kompakte Zeilen</string>
     <string name="library_compact_list_detail">Kleinere Cover und eine Zeile pro Titel</string>
     <string name="home_continue">Weiterlesen</string>
