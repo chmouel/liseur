@@ -3,6 +3,8 @@ package com.chmouel.liseur.ui.library.styles
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -226,6 +228,30 @@ internal fun LibraryStyleSheet(
 
 private const val MAX_BACKDROP_EDGE = 2048
 
+/** Applies the EXIF rotation or mirroring that recompressing would otherwise drop. */
+private fun upright(source: Bitmap, orientation: Int): Bitmap {
+    val matrix = Matrix()
+    when (orientation) {
+        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
+        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
+        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
+        ExifInterface.ORIENTATION_TRANSPOSE -> {
+            matrix.postRotate(90f)
+            matrix.postScale(-1f, 1f)
+        }
+        ExifInterface.ORIENTATION_TRANSVERSE -> {
+            matrix.postRotate(270f)
+            matrix.postScale(-1f, 1f)
+        }
+        else -> return source
+    }
+    val rotated = Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true)
+    if (rotated !== source) source.recycle()
+    return rotated
+}
+
 /**
  * Copies the chosen backdrop into app storage so it survives document
  * provider changes, downscaling oversized photos first.
@@ -243,9 +269,16 @@ private suspend fun importBackdropImage(context: Context, uri: Uri): String? =
                 sample *= 2
             }
             val decode = BitmapFactory.Options().apply { inSampleSize = sample }
-            val bitmap = resolver.openInputStream(uri)?.use {
+            val decoded = resolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, decode)
             } ?: return@runCatching null
+            val orientation = resolver.openInputStream(uri)?.use {
+                ExifInterface(it).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION,
+                    ExifInterface.ORIENTATION_NORMAL,
+                )
+            } ?: ExifInterface.ORIENTATION_NORMAL
+            val bitmap = upright(decoded, orientation)
             val out = File(context.filesDir, "shelf_backdrop.jpg")
             try {
                 out.outputStream().use { stream ->

@@ -34,6 +34,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -485,12 +492,12 @@ fun LibraryScreen(
     var lastLibraryStyle by rememberSaveable {
         mutableStateOf(if (layout.style != LibraryStyle.HOME) layout.style.id else LibraryStyle.CLASSIC.id)
     }
+    var appliedStyle by rememberSaveable { mutableStateOf(layout.style.id) }
     LaunchedEffect(layout.style) {
-        if (layout.style == LibraryStyle.HOME) {
-            bottomHomeTab = true
-        } else {
-            lastLibraryStyle = layout.style.id
-            bottomHomeTab = false
+        if (layout.style != LibraryStyle.HOME) lastLibraryStyle = layout.style.id
+        if (layout.style.id != appliedStyle) {
+            appliedStyle = layout.style.id
+            bottomHomeTab = layout.style == LibraryStyle.HOME
         }
     }
     val activeStyle = when {
@@ -1035,7 +1042,10 @@ fun LibraryScreen(
         LibraryStyleSheet(
             layout = state.layout,
             books = previewBooks,
-            onChange = onSetLayout,
+            onChange = { chosen ->
+                if (chosen == layout) bottomHomeTab = chosen.style == LibraryStyle.HOME
+                onSetLayout(chosen)
+            },
             onDismiss = { choosingStyle = false },
         )
     }
@@ -3013,7 +3023,12 @@ private fun LibraryBottomBar(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
+                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
                     .padding(start = 20.dp)
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = listOfNotNull(entry.book.title, entry.book.author)
+                            .joinToString(", ")
+                    }
                     .combinedClickable(
                         onClick = { onOpenBook(entry.book) },
                         onLongClick = {
@@ -3067,7 +3082,7 @@ private fun BottomBarTab(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .clickable(role = Role.Tab, onClick = onClick)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
