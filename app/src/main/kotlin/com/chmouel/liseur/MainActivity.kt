@@ -536,6 +536,7 @@ private fun LiseurApp(
                             dynamicColorAvailable = dynamicColorAvailable,
                             onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                             onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
+                            onLibraryStyle = { scope.launch { repository.setLibraryStyle(it) } },
                             appLanguage = remember { AppLocales.current(context) },
                             onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
                             onOpenAccount = { openPage(Route.ServerAccount) },
@@ -1290,6 +1291,7 @@ private fun LibraryRoute(
         onSearchQueryChange = viewModel::setSearchQuery,
         onToggleFilter = viewModel::toggleFilter,
         onSetGroupBySeries = viewModel::setGroupBySeries,
+        onSetLayout = viewModel::setLayout,
         onClearFilters = viewModel::clearFilters,
         onSetSearchActive = viewModel::setSearchActive,
         onSeriesSelected = { shelf ->

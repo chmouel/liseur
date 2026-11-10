@@ -37,6 +37,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,8 +63,12 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.ui.library.styles.label
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
+import com.chmouel.liseur.ui.navigation.Route
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
 import com.chmouel.liseur.ui.settings.search.SettingsEntries
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
@@ -80,6 +86,7 @@ fun SettingsScreen(
     dynamicColorAvailable: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
+    onLibraryStyle: (LibraryStyle) -> Unit = {},
     appLanguage: AppLanguage = AppLanguage.SYSTEM,
     onAppLanguage: (AppLanguage) -> Unit = {},
     onOpenAccount: () -> Unit,
@@ -151,21 +158,14 @@ fun SettingsScreen(
                         onSelected = onThemeMode,
                         modifier = Modifier.settingsAnchor(SettingsEntries.Theme),
                     )
-                    if (dynamicColorAvailable) {
-                        RowDivider()
-                        SwitchRow(
-                            title = stringResource(R.string.settings_dynamic_color),
-                            subtitle = stringResource(R.string.settings_dynamic_color_detail),
-                            checked = settings.dynamicColor,
-                            onCheckedChange = onDynamicColor,
-                            modifier = Modifier.settingsAnchor(SettingsEntries.DynamicColor),
-                        )
-                    }
                     RowDivider()
-                    AppLanguageRow(
-                        selected = appLanguage,
-                        onSelected = onAppLanguage,
-                        modifier = Modifier.settingsAnchor(SettingsEntries.AppLanguage),
+                    ChipRow(
+                        title = stringResource(R.string.library_style),
+                        options = LibraryStyle.entries,
+                        selected = settings.libraryLayout.style,
+                        label = { stringResource(it.label) },
+                        onSelected = onLibraryStyle,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.LibraryStyle),
                     )
                 }
 
@@ -316,6 +316,36 @@ fun SettingsScreen(
                         onClick = onOpenWatchedFolders,
                         modifier = Modifier.settingsAnchor(SettingsEntries.LibraryFolders),
                     )
+                }
+
+                SettingsGroup(stringResource(R.string.settings_intelligence)) {
+                    intelligenceRows()
+                }
+
+                // What most people set once or never, folded away so the
+                // sections above stay short enough to take in at a glance.
+                var advancedOpen by rememberSaveable { mutableStateOf(false) }
+                ExpandForSettingsFocus(Route.Settings) { advancedOpen = true }
+                SettingsExpandableGroup(
+                    title = stringResource(R.string.settings_advanced),
+                    expanded = advancedOpen,
+                    onExpandedChange = { advancedOpen = it },
+                ) {
+                    if (dynamicColorAvailable) {
+                        SwitchRow(
+                            title = stringResource(R.string.settings_dynamic_color),
+                            subtitle = stringResource(R.string.settings_dynamic_color_detail),
+                            checked = settings.dynamicColor,
+                            onCheckedChange = onDynamicColor,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.DynamicColor),
+                        )
+                        RowDivider()
+                    }
+                    AppLanguageRow(
+                        selected = appLanguage,
+                        onSelected = onAppLanguage,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.AppLanguage),
+                    )
                     RowDivider()
                     ConnectionRow(
                         icon = {
@@ -345,10 +375,6 @@ fun SettingsScreen(
                         onClick = onOpenSettingsBackup,
                         modifier = Modifier.settingsAnchor(SettingsEntries.Backup),
                     )
-                }
-
-                SettingsGroup(stringResource(R.string.settings_intelligence)) {
-                    intelligenceRows()
                 }
 
                 SettingsGroup(stringResource(R.string.settings_about)) {

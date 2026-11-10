@@ -43,22 +43,29 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.HomeSections
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesPickOption
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.Shelf
 import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.domain.asPickOption
 import com.chmouel.liseur.domain.groupedIntoSeries
+import com.chmouel.liseur.domain.homeSectionsOf
 import com.chmouel.liseur.domain.mixedShelf
 import com.chmouel.liseur.domain.movedItem
 import com.chmouel.liseur.domain.renumbered
 import com.chmouel.liseur.domain.searchLibrary
 import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.domain.shelfStateFor
+import com.chmouel.liseur.domain.shelvesOf
+import com.chmouel.liseur.domain.trackLengths
 import com.chmouel.liseur.domain.worthShowing
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
@@ -328,6 +335,16 @@ data class LibraryUiState(
      */
     val shownSeries: Set<String> = emptySet(),
     val inProgressBooks: Set<String> = emptySet(),
+    /** The library style and its options. */
+    val layout: LibraryLayout = LibraryLayout(),
+    /** How far into each in-progress book the reader is, by URL. */
+    val progressions: Map<String, Double> = emptyMap(),
+    /** The shelves [LibraryStyle.SHELVES] draws, from [books]; empty in the other styles. */
+    val styleShelves: List<Shelf> = emptyList(),
+    /** The strips [LibraryStyle.HOME] draws above the grid; empty in the other styles. */
+    val home: HomeSections = HomeSections(),
+    /** How long [LibraryStyle.LIST] draws each book's progress track, by URL; empty elsewhere. */
+    val trackLengths: Map<String, Float> = emptyMap(),
 )
 
 /** Whether [book] is in a shelf bucket that can be marked unread. */
@@ -356,6 +373,29 @@ internal fun continueReadingFor(
             shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
     return ContinueReading(book, progression).takeIf { !unread }
 }
+
+/**
+ * Picks the most recently touched book on the shelf that is not marked or
+ * counted as unread, so a book glanced at on page one or put back on the
+ * unread pile does not hide the book actually being read behind it.
+ */
+internal fun continueReadingFrom(
+    books: List<Book>,
+    progressions: Map<String, Double>,
+    overrides: Map<String, FinishedOverride>,
+    readAt: Map<String, Long>,
+): ContinueReading? =
+    books
+        .asSequence()
+        .filter { !it.archived && !it.hidden && (it.lastOpenedAt != null || it.url in progressions) }
+        .sortedWith(
+            compareByDescending<Book> {
+                maxOf(it.lastOpenedAt ?: 0L, readAt[it.url] ?: 0L)
+            }.thenBy { it.url },
+        )
+        .firstNotNullOfOrNull { book ->
+            continueReadingFor(book, progressions[book.url], overrides[book.url])
+        }
 
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean = book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
@@ -841,6 +881,10 @@ class LibraryViewModel(
                     }
                 }
 
+            val layout = settings.libraryLayout
+            val current =
+                recent ?: continueReadingFrom(onTheShelf, progressions, overrides, readAt)
+
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
@@ -858,7 +902,7 @@ class LibraryViewModel(
                     } else {
                         emptyList()
                     },
-                continueReading = recent,
+                continueReading = current,
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
@@ -930,6 +974,25 @@ class LibraryViewModel(
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
                 inProgressBooks = inProgressBooks,
+                layout = layout,
+                progressions = progressions.filterKeys { it in inProgressBooks },
+                styleShelves =
+                    if (layout.style == LibraryStyle.SHELVES) {
+                        shelvesOf(filteredBooks, layout.shelfGrouping, shownSeries) { book ->
+                            shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
+                        }
+                    } else {
+                        emptyList()
+                    },
+                home =
+                    if (layout.style == LibraryStyle.HOME) {
+                        homeSectionsOf(books, shelves, current = current?.book?.url) { book ->
+                            shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
+                        }
+                    } else {
+                        HomeSections()
+                    },
+                trackLengths = if (layout.style == LibraryStyle.LIST) trackLengths(filteredBooks) else emptyMap(),
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
@@ -1050,6 +1113,10 @@ class LibraryViewModel(
      * turns it round, which is what a second tap on the same thing in a
      * menu is nearly always meant to do.
      */
+    fun setLayout(layout: LibraryLayout) {
+        viewModelScope.launch { appSettings.setLibraryLayout(layout) }
+    }
+
     fun setSort(sort: LibrarySort) {
         viewModelScope.launch {
             val current = state.value

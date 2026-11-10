@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -47,6 +48,7 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -62,6 +64,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Sync
@@ -82,7 +85,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.displayAuthor
@@ -170,6 +175,10 @@ import com.chmouel.liseur.ui.UploadBookOfferDialog
 import com.chmouel.liseur.ui.BRAND_TILE_ASPECT
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.brandTileHeight
+import com.chmouel.liseur.ui.library.styles.LibraryStyleSheet
+import com.chmouel.liseur.ui.library.styles.ListLibrary
+import com.chmouel.liseur.ui.library.styles.ShelvesLibrary
+import com.chmouel.liseur.ui.library.styles.homeDashboard
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.libraryBarHeight
@@ -230,6 +239,7 @@ fun LibraryScreen(
     onToggleFilter: (LibraryFilterOption) -> Unit = {},
     onSetGroupBySeries: (Boolean) -> Unit = {},
     onClearFilters: () -> Unit = {},
+    onSetLayout: (LibraryLayout) -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     onStartWithFreeBooks: () -> Unit = {},
@@ -251,7 +261,10 @@ fun LibraryScreen(
     // e-reader lands just under Material's tablet threshold, and the
     // bar should follow the size of the tile it is holding.
     val wide = tileHeight >= 64.dp
-    val gridState = rememberLazyGridState()
+    val classicState = rememberLazyGridState()
+    val homeState = rememberLazyGridState()
+    val shelvesState = rememberLazyListState()
+    val listState = rememberLazyGridState()
     // Results get a grid of their own, so they always start at the top
     // and closing search finds the shelf scrolled where it was left.
     val searchGridState = rememberLazyGridState()
@@ -267,6 +280,7 @@ fun LibraryScreen(
     var confirmRemoveFromLibrary by remember { mutableStateOf<Book?>(null) }
     var confirmRemoveDownload by remember { mutableStateOf<Book?>(null) }
     var editSeriesOf by remember { mutableStateOf<Book?>(null) }
+    var choosingStyle by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val resources = LocalResources.current
     var syncing by remember { mutableStateOf(false) }
@@ -522,10 +536,15 @@ fun LibraryScreen(
                                         // Scrolling the whole way is a long
                                         // animation on a screen that repaints
                                         // in frames; e-paper gets there in one.
-                                        if (eInk) {
-                                            gridState.scrollToItem(0)
-                                        } else {
-                                            gridState.animateScrollToItem(0)
+                                        when (state.layout.style) {
+                                            LibraryStyle.SHELVES ->
+                                                if (eInk) shelvesState.scrollToItem(0) else shelvesState.animateScrollToItem(0)
+                                            LibraryStyle.LIST ->
+                                                if (eInk) listState.scrollToItem(0) else listState.animateScrollToItem(0)
+                                            LibraryStyle.HOME ->
+                                                if (eInk) homeState.scrollToItem(0) else homeState.animateScrollToItem(0)
+                                            LibraryStyle.CLASSIC ->
+                                                if (eInk) classicState.scrollToItem(0) else classicState.animateScrollToItem(0)
                                         }
                                     }
                                 },
@@ -692,28 +711,6 @@ fun LibraryScreen(
                                 expanded = moreOpen,
                                 onDismissRequest = { moreOpen = false },
                             ) {
-                                // Only once something has been archived:
-                                // an empty archive is not worth a
-                                // permanent entry, and the way in should
-                                // not lead to an empty screen. Gone once
-                                // you are in it, where the way out is
-                                // the arrow in the bar rather than the
-                                // entry that led you here.
-                                if (state.hasArchived && !archived) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.filter_archived)) },
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Outlined.Archive,
-                                                contentDescription = null,
-                                            )
-                                        },
-                                        onClick = {
-                                            moreOpen = false
-                                            onToggleFilter(LibraryFilterOption.ARCHIVED)
-                                        },
-                                    )
-                                }
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.reading_stats)) },
                                     leadingIcon = {
@@ -841,6 +838,7 @@ fun LibraryScreen(
                         onToggleFilter = onToggleFilter,
                         onSetGroupBySeries = onSetGroupBySeries,
                         onClearFilters = onClearFilters,
+                        onChooseStyle = { choosingStyle = true },
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },
                         onSeriesSelected = onSeriesSelected,
@@ -907,23 +905,70 @@ fun LibraryScreen(
                         modifier = fillAboveBar,
                     )
 
-                    else -> BookGrid(
-                        state = state,
-                        gridState = gridState,
-                        onSetSort = onSetSort,
-                        onToggleSortDirection = onToggleSortDirection,
-                        onToggleFilter = onToggleFilter,
-                        onSetGroupBySeries = onSetGroupBySeries,
-                        onClearFilters = onClearFilters,
-                        onBookSelected = openShelfBook,
-                        onBookLongPress = { sheetBook = it },
-                        onSeriesSelected = onSeriesSelected,
-                        bottomInset = bottomInset,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    else -> {
+                        val controls: @Composable () -> Unit = {
+                            LibraryControlsRow(
+                                state = state,
+                                onSetSort = onSetSort,
+                                onToggleSortDirection = onToggleSortDirection,
+                                onToggleFilter = onToggleFilter,
+                                onSetGroupBySeries = onSetGroupBySeries,
+                                onClearFilters = onClearFilters,
+                                onChooseStyle = { choosingStyle = true },
+                            )
+                        }
+                        when (state.layout.style) {
+                            LibraryStyle.SHELVES -> ShelvesLibrary(
+                                state = state,
+                                listState = shelvesState,
+                                controls = controls,
+                                onSetLayout = onSetLayout,
+                                onBookSelected = openShelfBook,
+                                onBookLongPress = { sheetBook = it },
+                                onSeriesSelected = onSeriesSelected,
+                                bottomInset = bottomInset,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            LibraryStyle.LIST -> ListLibrary(
+                                state = state,
+                                gridState = listState,
+                                controls = controls,
+                                onBookSelected = openShelfBook,
+                                onBookLongPress = { sheetBook = it },
+                                onSeriesSelected = onSeriesSelected,
+                                bottomInset = bottomInset,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+
+                            LibraryStyle.CLASSIC, LibraryStyle.HOME -> BookGrid(
+                                state = state,
+                                gridState = if (state.layout.style == LibraryStyle.HOME) homeState else classicState,
+                                onSetSort = onSetSort,
+                                onToggleSortDirection = onToggleSortDirection,
+                                onToggleFilter = onToggleFilter,
+                                onSetGroupBySeries = onSetGroupBySeries,
+                                onClearFilters = onClearFilters,
+                                onChooseStyle = { choosingStyle = true },
+                                onBookSelected = openShelfBook,
+                                onBookLongPress = { sheetBook = it },
+                                onSeriesSelected = onSeriesSelected,
+                                bottomInset = bottomInset,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    if (choosingStyle) {
+        LibraryStyleSheet(
+            layout = state.layout,
+            onChange = onSetLayout,
+            onDismiss = { choosingStyle = false },
+        )
     }
 
     confirmServerDelete?.let { book ->
@@ -1695,6 +1740,7 @@ private fun BookGrid(
     onToggleFilter: (LibraryFilterOption) -> Unit,
     onSetGroupBySeries: (Boolean) -> Unit,
     onClearFilters: () -> Unit,
+    onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
 ) {
@@ -1711,15 +1757,25 @@ private fun BookGrid(
         // archived book, so in the archive it is a book from somewhere
         // else entirely.
         val results = state.searchResults
-        state.continueReading
-            ?.takeIf { !state.isSearchActive && !state.filters.archived }
-            ?.let { recent ->
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                ContinueReadingCard(
-                    entry = recent,
-                    onClick = { onBookSelected(recent.book) },
-                    onActions = { onBookLongPress(recent.book) },
-                )
+        val onShelf = !state.isSearchActive && !state.filters.archived
+        if (onShelf && state.layout.style == LibraryStyle.HOME) {
+            homeDashboard(
+                state = state,
+                onBookSelected = onBookSelected,
+                onBookLongPress = onBookLongPress,
+                onSeriesSelected = onSeriesSelected,
+            )
+        } else {
+            state.continueReading
+                ?.takeIf { onShelf }
+                ?.let { recent ->
+                item(key = "classic:hero", span = { GridItemSpan(maxLineSpan) }) {
+                    ContinueReadingCard(
+                        entry = recent,
+                        onClick = { onBookSelected(recent.book) },
+                        onActions = { onBookLongPress(recent.book) },
+                    )
+                }
             }
         }
         if (results != null) {
@@ -1761,33 +1817,16 @@ private fun BookGrid(
             }
             return@LazyVerticalGrid
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            // Filters and sort share one line: they answer the same
-            // question, "which books and in what order", and stacking
-            // them cost a whole row of covers for no reason.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                FilterMenu(
-                    state = state,
-                    onToggleFilter = onToggleFilter,
-                    onSetGroupBySeries = onSetGroupBySeries,
-                    onClearFilters = onClearFilters,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                // Pinned to the far end of the row and laid out last, so
-                // it is never squeezed: the filter summary gives way to
-                // it rather than the other way round.
-                SortRow(
-                    sort = state.sort,
-                    reversed = state.sortReversed,
-                    onSetSort = onSetSort,
-                    onToggleDirection = onToggleSortDirection,
-                    modifier = Modifier.padding(start = 4.dp),
-                )
-            }
+        item(key = "controls", span = { GridItemSpan(maxLineSpan) }) {
+            LibraryControlsRow(
+                state = state,
+                onSetSort = onSetSort,
+                onToggleSortDirection = onToggleSortDirection,
+                onToggleFilter = onToggleFilter,
+                onSetGroupBySeries = onSetGroupBySeries,
+                onClearFilters = onClearFilters,
+                onChooseStyle = onChooseStyle,
+            )
         }
         if (state.filters.groupBySeries) {
             items(state.shelfEntries, key = { it.gridKey }) { entry ->
@@ -1826,8 +1865,60 @@ private fun BookGrid(
     }
 }
 
+/**
+ * The filters and the sort, on the one line every style puts above its
+ * books. They share it because they answer the same question, "which
+ * books and in what order", and stacking them cost a whole row of covers
+ * for no reason.
+ */
 @Composable
-private fun ContinueReadingCard(
+internal fun LibraryControlsRow(
+    state: LibraryUiState,
+    onSetSort: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
+    onToggleFilter: (LibraryFilterOption) -> Unit,
+    onSetGroupBySeries: (Boolean) -> Unit,
+    onClearFilters: () -> Unit,
+    onChooseStyle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        FilterMenu(
+            state = state,
+            onToggleFilter = onToggleFilter,
+            onSetGroupBySeries = onSetGroupBySeries,
+            onClearFilters = onClearFilters,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        // Pinned to the far end of the row and laid out last, so they are
+        // never squeezed: the filter summary gives way to them rather than
+        // the other way round.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SortRow(
+                sort = state.sort,
+                reversed = state.sortReversed,
+                onSetSort = onSetSort,
+                onToggleDirection = onToggleSortDirection,
+                modifier = Modifier.padding(start = 4.dp),
+            )
+            IconButton(onClick = onChooseStyle) {
+                Icon(
+                    Icons.Outlined.Dashboard,
+                    contentDescription = stringResource(R.string.library_style),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ContinueReadingCard(
     entry: ContinueReading,
     onClick: () -> Unit,
     onActions: () -> Unit,
@@ -1906,7 +1997,7 @@ private fun ContinueReadingCard(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun BookCard(
+internal fun BookCard(
     book: Book,
     progress: DownloadProgress?,
     /**
@@ -2021,7 +2112,7 @@ internal fun searchHighlighted(text: String, query: String?): AnnotatedString {
 
 /** What a screen reader should say about a book beyond its title and author. */
 @Composable
-private fun bookStateDescription(book: Book, progress: DownloadProgress?): String {
+internal fun bookStateDescription(book: Book, progress: DownloadProgress?): String {
     val state = when {
         progress?.queued == true -> stringResource(R.string.state_download_queued)
         progress != null -> stringResource(R.string.state_downloading)
@@ -2235,12 +2326,24 @@ private fun CatalogPartialNotice(
 
 @Composable
 internal fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
         contentAlignment = Alignment.Center,
     ) {
+        // A thumbnail has no room for a title, only its first letter.
+        if (maxWidth < 64.dp) {
+            Text(
+                text = book.displayTitle.take(1),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = FontFamily.Serif,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            return@BoxWithConstraints
+        }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -2392,7 +2495,7 @@ internal fun OnServerBadge(modifier: Modifier = Modifier) {
  * description already says it, so the icon says nothing of its own.
  */
 @Composable
-private fun ArchivedBadge(modifier: Modifier = Modifier) {
+internal fun ArchivedBadge(modifier: Modifier = Modifier) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
@@ -2501,7 +2604,8 @@ private fun FilterMenu(
             // on the shelf. Offered only once something says which
             // series it is in, and never in the archive, where there are
             // no series to gather.
-            if (state.hasSeries && !filters.archived) {
+            // Shelves has its own grouping, so the toggle would do nothing there.
+            if (state.hasSeries && !filters.archived && state.layout.style != LibraryStyle.SHELVES) {
                 FilterMenuItem(
                     label = grouped,
                     checked = filters.groupBySeries,

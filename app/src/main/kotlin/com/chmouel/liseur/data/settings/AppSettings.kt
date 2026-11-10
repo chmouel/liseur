@@ -14,7 +14,10 @@ import org.json.JSONObject
 import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
+import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.HighlightPalette
@@ -243,6 +246,7 @@ enum class DefinitionTarget(val id: String) {
  * @param librarySort How the library grid is arranged.
  * @param librarySortReversed The library order read back to front.
  * @param libraryFilters What the library grid is narrowed to.
+ * @param libraryLayout Which style the library is drawn in, with its options.
  * @param eInkMode Whether to drop animation for an electronic paper screen.
  * @param colorEInk Keep the small useful colour palette on a colour e-paper
  *   panel. Ignored while e-ink mode is inactive.
@@ -326,6 +330,7 @@ data class AppSettings(
     val librarySort: LibrarySort = LibrarySort.Default,
     val librarySortReversed: Boolean = false,
     val libraryFilters: LibraryFilters = LibraryFilters.None,
+    val libraryLayout: LibraryLayout = LibraryLayout(),
     val eInkMode: EInkMode = EInkMode.Default,
     val colorEInk: Boolean = false,
     val vendorRefresh: Boolean = false,
@@ -514,6 +519,9 @@ class AppSettingsRepository(
         val LIBRARY_SORT_REVERSED = booleanPreferencesKey("library_sort_reversed")
         val LIBRARY_FILTERS = stringPreferencesKey("library_filters")
         val LIBRARY_GROUP_BY_SERIES = booleanPreferencesKey("library_group_by_series")
+        val LIBRARY_STYLE = stringPreferencesKey("library_style")
+        val LIBRARY_SHELF_GROUPING = stringPreferencesKey("library_shelf_grouping")
+        val LIBRARY_COMPACT_LIST = booleanPreferencesKey("library_compact_list")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
@@ -612,6 +620,11 @@ class AppSettingsRepository(
             libraryFilters = LibraryFilters(
                 options = LibraryFilters.parse(p[Keys.LIBRARY_FILTERS]),
                 groupBySeries = p[Keys.LIBRARY_GROUP_BY_SERIES] ?: true,
+            ),
+            libraryLayout = LibraryLayout(
+                style = LibraryStyle.fromId(p[Keys.LIBRARY_STYLE]),
+                shelfGrouping = ShelfGrouping.fromId(p[Keys.LIBRARY_SHELF_GROUPING]),
+                compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
@@ -786,6 +799,18 @@ class AppSettingsRepository(
 
     suspend fun setLibrarySortReversed(reversed: Boolean) {
         store.edit { it[Keys.LIBRARY_SORT_REVERSED] = reversed }
+    }
+
+    suspend fun setLibraryStyle(style: LibraryStyle) {
+        store.edit { it[Keys.LIBRARY_STYLE] = style.id }
+    }
+
+    suspend fun setLibraryLayout(layout: LibraryLayout) {
+        store.edit {
+            it[Keys.LIBRARY_STYLE] = layout.style.id
+            it[Keys.LIBRARY_SHELF_GROUPING] = layout.shelfGrouping.id
+            it[Keys.LIBRARY_COMPACT_LIST] = layout.compactList
+        }
     }
 
     /**
@@ -1324,6 +1349,8 @@ internal val APP_BACKUP_TYPES = mapOf(
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,
     "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,
     "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,
+    "library_style" to BackupValueType.STRING, "library_shelf_grouping" to BackupValueType.STRING,
+    "library_compact_list" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,
     "dictionary_on_long_press" to BackupValueType.BOOLEAN,

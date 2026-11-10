@@ -66,6 +66,9 @@ object SettingsEntries {
 
     // Settings
     val Theme = entry("theme", Route.Settings, R.string.settings_theme, section = R.string.settings_appearance)
+    val LibraryStyle = entry(
+        "library_style", Route.Settings, R.string.library_style, section = R.string.settings_appearance,
+    )
     val ReadingAppearance = entry(
         "reading_appearance", Route.Settings, R.string.settings_reading_appearance, section = R.string.settings_reading,
     )
@@ -92,20 +95,16 @@ object SettingsEntries {
         "services", Route.Settings, R.string.services_title, R.string.services_entry_summary,
         R.string.settings_intelligence,
     )
-    val DynamicColor = entry(
+    val DynamicColor = advanced(
         "dynamic_color", Route.Settings, R.string.settings_dynamic_color, R.string.settings_dynamic_color_detail,
-        R.string.settings_appearance, shown = { it.dynamicColorAvailable },
+        shown = { it.dynamicColorAvailable },
     )
-    val AppLanguage = entry(
-        "app_language", Route.Settings, R.string.app_language, section = R.string.settings_appearance,
-    )
-    val HiddenBooks = entry(
+    val AppLanguage = advanced("app_language", Route.Settings, R.string.app_language)
+    val HiddenBooks = advanced(
         "hidden_books", Route.Settings, R.string.hidden_books, R.string.hidden_books_summary,
-        R.string.settings_library,
     )
-    val Backup = entry(
+    val Backup = advanced(
         "backup", Route.Settings, R.string.settings_backup_title, R.string.settings_backup_detail,
-        R.string.settings_library,
     )
     val About = entry("about", Route.Settings, R.string.about_open, section = R.string.settings_about)
 
