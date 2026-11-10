@@ -1891,6 +1891,11 @@
     <string name="shelf_tone_brass">Messing</string>
     <string name="library_compact_list">Kompakte Zeilen</string>
     <string name="library_compact_list_detail">Kleinere Cover und eine Zeile pro Titel</string>
+    <string name="library_bottom_bar">Untere Leiste</string>
+    <string name="library_bottom_bar_detail">Aktuelles Buch sowie Start, Bibliothek und Mehr unten anzeigen</string>
+    <string name="library_hero_card">Obere Karte</string>
+    <string name="library_hero_card_detail">Aktuelles Buch in einer Karte oben in der Bibliothek anzeigen</string>
+    <string name="library_tab_library">Bibliothek</string>
     <string name="home_continue">Weiterlesen</string>
     <string name="home_recently_opened">Zuletzt geöffnet</string>
     <string name="home_new_books">Neu im Regal</string>

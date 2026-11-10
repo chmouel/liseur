@@ -22,10 +22,14 @@ Four styles, picked in Settings › Appearance or from the button beside
 the sort above the books: Classic (the grid, still the default), Home,
 Shelves and List.
 Each is a fixed layout with at most a few options of its own:
-Shelves chooses series, author or reading state for its shelves, a shelf
-colour (theme accent, stone, oak, walnut or brass) and a backdrop behind
-them (plain, wood, plaster, bricks or a custom image), and List can use
-compact rows. Nothing is reorderable.
+any style can choose between a top card for the current book and a
+bottom bar with the current book's cover on the left and Home, Library
+and More tabs beside it (the bottom bar is the default on new installs,
+and upgrades keep the top card unless changed); Shelves chooses series,
+author or reading state for its shelves, a shelf colour (theme accent,
+stone, oak, walnut or brass) and a backdrop behind them (plain, wood,
+plaster, bricks or a custom image); and List can use compact rows.
+Nothing is reorderable.
 
 Only the library screen changes. Every style keeps the same book
 actions, badges, download progress, search results, empty states and
@@ -50,9 +54,9 @@ E-ink keeps a flat plank and no decoration.
 
 ## Consequences
 
-Five DataStore keys (`library_style`, `library_shelf_grouping`,
-`library_shelf_backdrop`, `library_shelf_tone`, `library_compact_list`)
-are backed up with the other settings; a sixth
+Six DataStore keys (`library_style`, `library_shelf_grouping`,
+`library_shelf_backdrop`, `library_shelf_tone`, `library_compact_list`,
+`library_bottom_bar`) are backed up with the other settings; a seventh
 (`library_shelf_backdrop_uri`) points to the copied custom image in
 local app storage. No database change.
 

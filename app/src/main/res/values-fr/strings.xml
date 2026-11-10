@@ -1879,6 +1879,11 @@
     <string name="shelf_tone_brass">Laiton</string>
     <string name="library_compact_list">Lignes compactes</string>
     <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
+    <string name="library_bottom_bar">Barre inférieure</string>
+    <string name="library_bottom_bar_detail">Afficher le livre en cours et les onglets Accueil, Bibliothèque et Plus en bas</string>
+    <string name="library_hero_card">Carte supérieure</string>
+    <string name="library_hero_card_detail">Afficher le livre en cours dans une carte en haut de la bibliothèque</string>
+    <string name="library_tab_library">Bibliothèque</string>
     <string name="home_continue">Continuer</string>
     <string name="home_recently_opened">Ouverts récemment</string>
     <string name="home_new_books">Nouveaux sur l\'étagère</string>

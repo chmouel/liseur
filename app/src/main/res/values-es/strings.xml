@@ -1879,6 +1879,11 @@
     <string name="shelf_tone_brass">Latón</string>
     <string name="library_compact_list">Filas compactas</string>
     <string name="library_compact_list_detail">Portadas más pequeñas y una línea por título</string>
+    <string name="library_bottom_bar">Barra inferior</string>
+    <string name="library_bottom_bar_detail">Mostrar el libro actual y las pestañas Inicio, Biblioteca y Más abajo</string>
+    <string name="library_hero_card">Tarjeta superior</string>
+    <string name="library_hero_card_detail">Mostrar el libro actual en una tarjeta en la parte superior de la biblioteca</string>
+    <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
     <string name="home_recently_opened">Abiertos recientemente</string>
     <string name="home_new_books">Recién llegados</string>

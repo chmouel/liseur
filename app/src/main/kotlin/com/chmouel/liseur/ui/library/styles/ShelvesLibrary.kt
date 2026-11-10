@@ -170,8 +170,9 @@ internal fun ShelvesLibrary(
         ) {
             state.continueReading
                 // Grouped by reading state, the Reading shelf comes first and
-                // already shows the book.
-                ?.takeIf { onShelf && state.layout.shelfGrouping != ShelfGrouping.STATUS }
+                // already shows the book; with the bottom bar on, its cover is
+                // already sitting in the bar.
+                ?.takeIf { onShelf && !state.layout.bottomBar && state.layout.shelfGrouping != ShelfGrouping.STATUS }
                 ?.let { recent ->
                     item(key = "shelves:hero") {
                         ContinueReadingCard(

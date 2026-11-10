@@ -1879,6 +1879,11 @@
     <string name="shelf_tone_brass">Ottone</string>
     <string name="library_compact_list">Righe compatte</string>
     <string name="library_compact_list_detail">Copertine più piccole e una riga per titolo</string>
+    <string name="library_bottom_bar">Barra inferiore</string>
+    <string name="library_bottom_bar_detail">Mostra il libro in lettura e le schede Home, Libreria e Altro in basso</string>
+    <string name="library_hero_card">Scheda superiore</string>
+    <string name="library_hero_card_detail">Mostra il libro in lettura in una scheda in cima alla libreria</string>
+    <string name="library_tab_library">Libreria</string>
     <string name="home_continue">Continua</string>
     <string name="home_recently_opened">Aperti di recente</string>
     <string name="home_new_books">Nuovi sullo scaffale</string>
