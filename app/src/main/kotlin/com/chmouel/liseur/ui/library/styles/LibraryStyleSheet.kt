@@ -12,7 +12,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -22,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfGrouping
@@ -60,6 +60,8 @@ private val ShelfGrouping.label: Int
 @Composable
 internal fun LibraryStyleSheet(
     layout: LibraryLayout,
+    /** A few of the reader's books, whose covers fill the previews. */
+    books: List<Book>,
     onChange: (LibraryLayout) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -82,7 +84,7 @@ internal fun LibraryStyleSheet(
                     ListItem(
                         headlineContent = { Text(stringResource(style.label)) },
                         supportingContent = { Text(stringResource(style.detail)) },
-                        leadingContent = { RadioButton(selected = selected, onClick = null) },
+                        leadingContent = { StylePreview(style = style, books = books, selected = selected) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier
                             .padding(horizontal = 8.dp)
