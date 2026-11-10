@@ -910,6 +910,9 @@
     <string name="settings_library_help_title">Serveurs de livres</string>
     <string name="settings_library_help_body" formatted="true">Un serveur de livres (calibre-web, Komga, liseur-sync ou un catalogue OPDS) détient votre bibliothèque : Liseur la parcourt et télécharge depuis elle, et garde votre place à jour là où le serveur le permet. Une connexion OPDS Personnalisée peut s\'associer à un serveur de sync KOReader pour les positions de lecture. Un seul serveur est connecté à la fois.\n\nliseur-sync garde aussi à jour les livres qui ne sont que sur ce téléphone : un fichier d\'une carte SD synchronise aussi sa position. Hébergez le vôtre depuis %1$s.</string>
     <string name="settings_account_detail">Parcourir et télécharger depuis un serveur calibre-web, Komga, liseur-sync ou OPDS, et garder votre place à jour (pour OPDS, via un serveur de sync KOReader associé).</string>
+    <string name="settings_search">Rechercher dans les paramètres</string>
+    <string name="settings_search_prompt">Tapez un mot du nom ou de la description d\'un paramètre.</string>
+    <string name="settings_search_no_results">Aucun paramètre ne correspond à « %1$s ».</string>
     <string name="settings_about">À propos</string>
     <string name="about_title">À propos</string>
     <string name="about_open">À propos de Liseur</string>

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -62,6 +63,8 @@ import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -91,6 +94,7 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSearch: () -> Unit = {},
     /** Rows a build flavor adds to Reading: read aloud, in both builds. */
     flavorReadingRows: @Composable () -> Unit = {},
     /** Rows for the AI features and the services they use: translation, the reading companion, servers and keys. */
@@ -111,6 +115,11 @@ fun SettingsScreen(
                             Icons.AutoMirrored.Outlined.ArrowBack,
                             contentDescription = stringResource(R.string.back),
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.settings_search))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -140,6 +149,7 @@ fun SettingsScreen(
                         selected = settings.themeMode,
                         label = { stringResource(it.label) },
                         onSelected = onThemeMode,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.Theme),
                     )
                     if (dynamicColorAvailable) {
                         RowDivider()
@@ -148,12 +158,14 @@ fun SettingsScreen(
                             subtitle = stringResource(R.string.settings_dynamic_color_detail),
                             checked = settings.dynamicColor,
                             onCheckedChange = onDynamicColor,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.DynamicColor),
                         )
                     }
                     RowDivider()
                     AppLanguageRow(
                         selected = appLanguage,
                         onSelected = onAppLanguage,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.AppLanguage),
                     )
                 }
 
@@ -171,6 +183,7 @@ fun SettingsScreen(
                             stringResource(readingThemeChoice.label),
                         ),
                         onClick = onOpenReadingAppearance,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.ReadingAppearance),
                     )
                     RowDivider()
                     // The section behind this row had grown to eight
@@ -199,6 +212,7 @@ fun SettingsScreen(
                             )
                         },
                         onClick = onOpenReadingNavigation,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.ReadingNavigation),
                     )
                     flavorReadingRows()
                 }
@@ -279,6 +293,7 @@ fun SettingsScreen(
                             }
                         } ?: stringResource(R.string.settings_account_detail),
                         onClick = onOpenAccount,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.ServerAccount),
                     )
                     RowDivider()
                     ConnectionRow(
@@ -299,6 +314,7 @@ fun SettingsScreen(
                             )
                         },
                         onClick = onOpenWatchedFolders,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.LibraryFolders),
                     )
                     RowDivider()
                     ConnectionRow(
@@ -319,6 +335,7 @@ fun SettingsScreen(
                             )
                         },
                         onClick = onOpenHiddenBooks,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.HiddenBooks),
                     )
                     RowDivider()
                     ConnectionRow(
@@ -326,6 +343,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_backup_title),
                         subtitle = stringResource(R.string.settings_backup_detail),
                         onClick = onOpenSettingsBackup,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.Backup),
                     )
                 }
 
@@ -343,6 +361,7 @@ fun SettingsScreen(
                             BuildConfig.VERSION_CODE,
                         ),
                         onClick = onOpenAbout,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.About),
                     )
                 }
             }
@@ -364,6 +383,7 @@ internal fun BackupActionRow(
     subtitle: String,
     enabled: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     ListItem(
         headlineContent = { Text(title) },
@@ -379,7 +399,7 @@ internal fun BackupActionRow(
                 leadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             )
         },
-        modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        modifier = modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick),
     )
 }
 
@@ -397,6 +417,7 @@ internal fun ConnectionRow(
     onClick: () -> Unit,
     /** What accessibility reads for [subtitle] when it shows more than words, such as a flag. */
     subtitleDescription: String? = null,
+    modifier: Modifier = Modifier,
 ) {
     ListItem(
         headlineContent = { Text(title) },
@@ -411,6 +432,6 @@ internal fun ConnectionRow(
             Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
+        modifier = modifier.clickable(role = Role.Button, onClick = onClick),
     )
 }

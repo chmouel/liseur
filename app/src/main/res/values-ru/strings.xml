@@ -974,6 +974,9 @@
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг (calibre-web, Komga, liseur-sync или каталог OPDS) хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync также синхронизирует книги, которые есть только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения (для OPDS через связанный сервер синхронизации KOReader).</string>
+    <string name="settings_search">Поиск по настройкам</string>
+    <string name="settings_search_prompt">Введите слово из названия или описания настройки.</string>
+    <string name="settings_search_no_results">Нет настроек по запросу «%1$s».</string>
     <string name="settings_about">О приложении</string>
     <string name="about_title">О приложении</string>
     <string name="about_open">О Liseur</string>

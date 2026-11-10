@@ -16,6 +16,7 @@ import androidx.compose.runtime.toMutableStateList
 sealed interface Route {
     data object Library : Route
     data object Settings : Route
+    data object SettingsSearch : Route
     data object SettingsBackup : Route
     data object ReadingAppearance : Route
     data object SelectionToolbar : Route
@@ -44,6 +45,7 @@ private val Route.tag: String
     get() = when (this) {
         Route.Library -> "Library"
         Route.Settings -> "Settings"
+        Route.SettingsSearch -> "SettingsSearch"
         Route.SettingsBackup -> "SettingsBackup"
         Route.ReadingAppearance -> "ReadingAppearance"
         Route.SelectionToolbar -> "SelectionToolbar"
@@ -65,7 +67,7 @@ private val Route.tag: String
     }
 
 private val objectRoutes: Map<String, Route> = listOf(
-    Route.Library, Route.Settings, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
+    Route.Library, Route.Settings, Route.SettingsSearch, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
     Route.About, Route.Stats,
@@ -155,6 +157,34 @@ fun MutableList<Route>.openDetail(route: Route) {
         while (size > settings + 1) removeAt(lastIndex)
     }
     add(route)
+}
+
+/** The Settings page a nested page is opened from, so Back walks out through it. */
+val Route.settingsParent: Route?
+    get() = when (this) {
+        Route.PageTaps -> Route.ReadingNavigation
+        Route.SelectionToolbar -> Route.ReadingAppearance
+        else -> null
+    }
+
+/**
+ * Opens the page a settings search result lives on, closing the search.
+ *
+ * A row on Settings itself only closes the search, leaving any page open
+ * beside it. A nested page opens over its parent, as it would by hand.
+ */
+fun MutableList<Route>.openSettingsResult(page: Route) {
+    if (page == Route.Settings) {
+        while (lastOrNull() == Route.SettingsSearch) removeAt(lastIndex)
+        return
+    }
+    val parent = page.settingsParent
+    if (parent == null) {
+        openDetail(page)
+    } else {
+        openDetail(parent)
+        push(page)
+    }
 }
 
 /** Closes Settings and any page open beside it. */

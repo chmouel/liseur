@@ -85,6 +85,7 @@ import com.chmouel.liseur.tts.onLeaving
 import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.InfoDialog
 import com.chmouel.liseur.ui.settings.NestedPage
@@ -93,6 +94,9 @@ import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import java.text.NumberFormat
 import kotlin.coroutines.cancellation.CancellationException
@@ -192,18 +196,20 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                 var picking by remember { mutableStateOf(false) }
                 // A service that needs agreement first, held until the reader agrees.
                 var agreeing by remember { mutableStateOf<TranslationService?>(null) }
-                ServiceRow(
-                    icon = service.icon,
-                    overline = stringResource(R.string.translation_settings_provider),
-                    headline = server?.name ?: stringResource(service.label),
-                    supporting = when {
-                        !chosen || !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
-                        server != null -> server!!.host
-                        else -> stringResource(service.summary)
-                    },
-                    changeLabel = stringResource(R.string.translation_settings_provider_change),
-                    onClick = { picking = true },
-                )
+                Column(Modifier.settingsAnchor(SettingsEntries.TranslationProvider)) {
+                    ServiceRow(
+                        icon = service.icon,
+                        overline = stringResource(R.string.translation_settings_provider),
+                        headline = server?.name ?: stringResource(service.label),
+                        supporting = when {
+                            !chosen || !configured -> stringResource(R.string.read_aloud_settings_entry_missing)
+                            server != null -> server!!.host
+                            else -> stringResource(service.summary)
+                        },
+                        changeLabel = stringResource(R.string.translation_settings_provider_change),
+                        onClick = { picking = true },
+                    )
+                }
                 if (picking) {
                     TranslationServiceSheet(
                         services = offeredServices(feature, provider),
@@ -253,11 +259,16 @@ internal fun TranslationSettingsScreen(feature: ServiceTranslate, onBack: () -> 
                 }
                 service.AdvancedSettings()
                 SettingsGroup(stringResource(R.string.translation_settings_target)) {
-                    TargetRow(feature, service, configured)
+                    Column(Modifier.settingsAnchor(SettingsEntries.TranslationTarget)) {
+                        TargetRow(feature, service, configured)
+                    }
                     TestRow(feature, service, chosen && configured)
                 }
-                WholeBookTranslationsGroup()
+                Column(Modifier.settingsAnchor(SettingsEntries.WholeBookTranslations)) {
+                    WholeBookTranslationsGroup()
+                }
                 var advancedOpen by remember { mutableStateOf(false) }
+                ExpandForSettingsFocus(Route.Translation) { advancedOpen = true }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
@@ -328,17 +339,21 @@ private fun SharedContextSection(feature: ServiceTranslate, onChangeService: () 
             Text(stringResource(R.string.translation_settings_provider_change))
         }
     }
-    BookEarlierTextRow(
-        chosen = chosen,
-        unusedNote = unused.takeIf { !takesContext && takesBook },
-        onSelect = { scope.launch { feature.setContext(it) } },
-    )
-    loaded?.let { stored ->
-        BookDetailsTemplateSettings(
-            storedTemplate = stored.template,
-            unusedNote = unused.takeIf { takesContext && !takesBook },
-            onSave = feature::setBookContext,
+    Column(Modifier.settingsAnchor(SettingsEntries.TranslationContext)) {
+        BookEarlierTextRow(
+            chosen = chosen,
+            unusedNote = unused.takeIf { !takesContext && takesBook },
+            onSelect = { scope.launch { feature.setContext(it) } },
         )
+    }
+    loaded?.let { stored ->
+        Column(Modifier.settingsAnchor(SettingsEntries.TranslationBookDetails)) {
+            BookDetailsTemplateSettings(
+                storedTemplate = stored.template,
+                unusedNote = unused.takeIf { takesContext && !takesBook },
+                onSave = feature::setBookContext,
+            )
+        }
     }
 }
 

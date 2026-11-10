@@ -1083,6 +1083,13 @@ changing reader behavior.
 - Server statistics are optional: failures stay null and silent.
   Cross-device counts only when stored evidence proves the merge, else the
   local-only result with provenance.
+- Settings search only finds rows listed in
+  `ui/settings/search/SettingsIndex.kt`. A new settings row gets a
+  `SettingsEntry` there (with `shown` when the page only sometimes shows
+  it, `advanced` when it sits in the Advanced group) and
+  `Modifier.settingsAnchor(entry)` on the row. A row only the Play build
+  shows goes in `app/src/play/.../FlavorSettingsEntries.kt`. A page with
+  an Advanced group calls `ExpandForSettingsFocus`.
 
 ### Annotation synchronization
 

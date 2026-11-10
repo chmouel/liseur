@@ -50,6 +50,8 @@ import androidx.compose.ui.semantics.semantics
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.library.SettingsBackupFailure
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -237,6 +239,7 @@ fun SettingsBackupScreen(
                         onClick = {
                             if (includeConnections) passwordMode = "export" else backup.export(null, includeTranslations)
                         },
+                        modifier = Modifier.settingsAnchor(SettingsEntries.BackupExport),
                     )
                     RowDivider()
                     BackupActionRow(
@@ -245,6 +248,7 @@ fun SettingsBackupScreen(
                         subtitle = stringResource(R.string.settings_backup_restore_detail),
                         enabled = !backup.busy,
                         onClick = backup.restore,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.BackupRestore),
                     )
                 }
 
@@ -255,6 +259,7 @@ fun SettingsBackupScreen(
                         subtitle = stringResource(R.string.books_export_detail),
                         enabled = !backup.busy,
                         onClick = backup.exportBooks,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.BooksExport),
                     )
                     backup.bookProgress?.let { progress ->
                         RowDivider()

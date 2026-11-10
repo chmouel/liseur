@@ -223,6 +223,7 @@ internal fun SwitchRow(
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
     info: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     ListItem(
         headlineContent = { Text(title) },
@@ -235,7 +236,7 @@ internal fun SwitchRow(
             }
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier
+        modifier = modifier
             // One tap target for the whole row, so the switch is not the
             // only thing you are allowed to hit. Toggleable rather than
             // merely clickable, so the row carries its own on-or-off state
@@ -293,9 +294,10 @@ internal fun <T> ChipRow(
     selected: T,
     label: @Composable (T) -> String,
     onSelected: (T) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier.padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
         Text(title, style = MaterialTheme.typography.bodyLarge)
         subtitle?.let {

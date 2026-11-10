@@ -914,6 +914,9 @@
     <string name="settings_library_help_title">图书服务器</string>
     <string name="settings_library_help_body">图书服务器（calibre-web、Komga、liseur-sync 或 OPDS 书库）存放着您的书库：Liseur 浏览并从中下载图书，并在服务器支持时同步您的阅读进度。自定义 OPDS 连接可搭配 KOReader 同步服务器以同步阅读位置。同一时间只能连接一台服务器。\n\nliseur-sync 还能同步仅存在于本机的图书：从 SD 卡导入的文件也会同步其位置。您可以在 %1$s 上自建。</string>
     <string name="settings_account_detail">从 calibre-web、Komga、liseur-sync 或 OPDS 服务器浏览和下载，并同步您的阅读进度（OPDS 通过配对的 KOReader 同步服务器实现）。</string>
+    <string name="settings_search">搜索设置</string>
+    <string name="settings_search_prompt">输入设置名称或说明中的词语。</string>
+    <string name="settings_search_no_results">没有与“%1$s”匹配的设置。</string>
     <string name="settings_about">关于</string>
     <string name="about_title">关于</string>
     <string name="about_open">关于 Liseur</string>
