@@ -964,8 +964,13 @@ fun LibraryScreen(
     }
 
     if (choosingStyle) {
+        val previewBooks = remember(state.books) {
+            val (withArt, without) = state.books.partition { (it.coverPath ?: it.coverUrl) != null }
+            (withArt + without).take(9)
+        }
         LibraryStyleSheet(
             layout = state.layout,
+            books = previewBooks,
             onChange = onSetLayout,
             onDismiss = { choosingStyle = false },
         )
