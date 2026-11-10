@@ -57,6 +57,7 @@ import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.ui.library.ArchivedBadge
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.DownloadOverlay
+import com.chmouel.liseur.ui.library.ContinueReadingCard
 import com.chmouel.liseur.ui.library.LibraryControls
 import com.chmouel.liseur.ui.library.LibraryUiState
 import com.chmouel.liseur.ui.library.SeriesLine
@@ -91,6 +92,18 @@ internal fun ListLibrary(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        state.continueReading
+            ?.takeIf { !state.layout.bottomBar && !state.isSearchActive && !state.filters.archived }
+            ?.let { recent ->
+                item(key = "list:hero", span = { GridItemSpan(maxLineSpan) }) {
+                    ContinueReadingCard(
+                        entry = recent,
+                        onClick = { onBookSelected(recent.book) },
+                        onActions = { onBookLongPress(recent.book) },
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
         item(key = "controls", span = { GridItemSpan(maxLineSpan) }) { controls(null) }
         if (state.filters.groupBySeries) {
             items(state.shelfEntries, key = { it.gridKey }) { entry ->
