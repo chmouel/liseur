@@ -154,6 +154,19 @@ class LibraryLayoutTest {
     }
 
     @Test
+    fun `home leaves out the new strip when every book on the shelf is new`() {
+        val books = listOf(
+            book("fresh", addedAt = 5),
+            book("fresher", addedAt = 9),
+            book("boxed", openedAt = 40, archived = true),
+        )
+
+        val home = homeSectionsOf(books, emptyList(), current = null) { LibraryFilterOption.UNREAD }
+
+        assertEquals(emptyList<Book>(), home.newBooks)
+    }
+
+    @Test
     fun `home lists only series begun and not finished, most recent first`() {
         fun shelf(key: String, vararg volumes: Book): SeriesShelf {
             val vs = volumes.map { SeriesVolume(it, progression = null) }

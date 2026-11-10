@@ -555,7 +555,7 @@ fun LibraryScreen(
                     },
                     onOpenStats = onOpenStats,
                     onSetUpTranslation = onSetUpTranslation,
-                    onSyncNow = syncNow,
+                    onSyncNow = syncNow.takeIf { state.canSyncPositions },
                     onOpenSettings = onOpenSettings,
                 )
             }
@@ -807,17 +807,19 @@ fun LibraryScreen(
                                         },
                                     )
                                 }
-                                DropdownMenuItem(
-                                  text = { Text(stringResource(R.string.server_sync_now)) },
-                                  enabled = !syncing,
-                                  leadingIcon = {
-                                    Icon(Icons.Outlined.Sync, contentDescription = null)
-                                  },
-                                  onClick = {
-                                    moreOpen = false
-                                    syncNow()
-                                  },
-                                )
+                                if (state.canSyncPositions) {
+                                    DropdownMenuItem(
+                                      text = { Text(stringResource(R.string.server_sync_now)) },
+                                      enabled = !syncing,
+                                      leadingIcon = {
+                                        Icon(Icons.Outlined.Sync, contentDescription = null)
+                                      },
+                                      onClick = {
+                                        moreOpen = false
+                                        syncNow()
+                                      },
+                                    )
+                                }
                                 // Keep this setting action as the last item in the menu.
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.settings)) },
@@ -2915,7 +2917,7 @@ private fun LibraryBottomBar(
     onSelectLibrary: () -> Unit,
     onOpenStats: () -> Unit,
     onSetUpTranslation: (() -> Unit)?,
-    onSyncNow: () -> Unit,
+    onSyncNow: (() -> Unit)?,
     onOpenSettings: () -> Unit,
 ) {
     val eInk = LocalEInk.current
@@ -2997,17 +2999,19 @@ private fun LibraryBottomBar(
                                     },
                                 )
                             }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.server_sync_now)) },
-                                enabled = !syncing,
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.Sync, contentDescription = null)
-                                },
-                                onClick = {
-                                    moreOpen = false
-                                    onSyncNow()
-                                },
-                            )
+                            onSyncNow?.let { sync ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.server_sync_now)) },
+                                    enabled = !syncing,
+                                    leadingIcon = {
+                                        Icon(Icons.Outlined.Sync, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        moreOpen = false
+                                        sync()
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.settings)) },
                                 leadingIcon = {

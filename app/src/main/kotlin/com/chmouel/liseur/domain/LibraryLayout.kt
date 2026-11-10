@@ -307,6 +307,9 @@ private const val HOME_SERIES_LIMIT = 3
  *
  * [current] is the book the hero card already shows, kept out of the
  * strips so it does not appear twice at the top of the screen.
+ *
+ * When every book on the shelf is new, the new strip is left empty: it
+ * would only repeat the grid below.
  */
 fun homeSectionsOf(
     books: List<Book>,
@@ -321,13 +324,15 @@ fun homeSectionsOf(
     val begun = { book: Book ->
         book.lastOpenedAt != null || states[book.url] == LibraryFilterOption.IN_PROGRESS
     }
+    val fresh = shelf.filter { !begun(it) && states[it.url] == LibraryFilterOption.UNREAD }
     return HomeSections(
         recentlyOpened = shelf
             .filter { begun(it) && states[it.url] != LibraryFilterOption.FINISHED && it.url != current }
             .sortedWith(compareByDescending(nullsFirst()) { it.lastOpenedAt })
             .take(HOME_STRIP_LIMIT),
-        newBooks = shelf
-            .filter { !begun(it) && states[it.url] == LibraryFilterOption.UNREAD }
+        newBooks = fresh
+            .takeIf { it.size < shelf.size }
+            .orEmpty()
             .sortedByDescending { it.addedAt }
             .take(HOME_STRIP_LIMIT),
         seriesUnderway = series

@@ -115,6 +115,16 @@ class ForegroundSyncPolicyTest {
     )
 
     @Test
+    fun `positions sync only through a server that can or a kosync pairing it hosts`() {
+        val custom = server(kind = ServerKind.CUSTOM, syncedAt = null)
+        assertEquals(false, syncsPositions(null, kosync(syncedAt = null)))
+        assertEquals(false, syncsPositions(custom, null))
+        assertEquals(true, syncsPositions(custom, kosync(syncedAt = null)))
+        assertEquals(false, syncsPositions(server(kind = ServerKind.CALIBRE, syncedAt = null), null))
+        assertEquals(true, syncsPositions(server(syncedAt = null), null))
+    }
+
+    @Test
     fun `a kosync partner makes sync due even when the server cannot sync itself`() {
         val custom = server(kind = ServerKind.CUSTOM, koboToken = null, syncedAt = null)
         assertEquals(false, shouldSyncOnForeground(custom, now))
