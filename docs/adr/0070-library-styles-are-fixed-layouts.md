@@ -35,8 +35,14 @@ top. The grouping, strips and track lengths are computed in
 `domain/LibraryLayout.kt`, outside Compose.
 
 The layouts borrow ideas from the plugins and none of their code or
-artwork. Shelves are drawn in the theme's surface colours, with no wood
-texture.
+artwork. Shelves stand on a stone bookcase: a brick wall, ledges with
+a dentil band, and empty places that take either a finished book's
+cover hung as a framed picture or a potted plant. Some shelves also get
+a small pot at one end or a plant hanging under them, chosen from the
+shelf's key so nothing moves while scrolling. The textures are drawn by
+`hack/shelf-textures` in grayscale and tinted from the theme at run
+time, so they follow light, dark and dynamic colour; the plants keep
+their natural colours. E-ink keeps a flat plank and no decoration.
 
 ## Consequences
 

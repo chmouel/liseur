@@ -1,0 +1,485 @@
+#!/usr/bin/env python3
+"""Draw the stone bookcase images used by the Shelves library style.
+
+The wall, ledge and frames are grayscale so the app can tint them from
+the theme; the plants keep their own colours. Everything is drawn from
+scratch here so nothing third party ends up in the APK. The seed is
+fixed: running the script again gives the same files.
+
+    hack/shelf-textures            # writes app/src/main/res/drawable-nodpi/
+    hack/shelf-textures OUT_DIR    # writes somewhere else
+
+Needs Pillow. Images are drawn at 3 pixels per dp; the app scales them to
+the sizes noted below.
+"""
+
+import math
+import pathlib
+import random
+import sys
+
+from PIL import Image, ImageDraw, ImageFilter
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "app/src/main/res/drawable-nodpi"
+
+rng = random.Random(20261018)
+
+
+def clamp(v):
+    return max(0, min(255, int(round(v))))
+
+
+def wrap_blur(img, radius):
+    """Blur a tile so it still repeats seamlessly."""
+    w, h = img.size
+    big = Image.new(img.mode, (w * 3, h * 3))
+    for i in range(3):
+        for j in range(3):
+            big.paste(img, (i * w, j * h))
+    return big.filter(ImageFilter.GaussianBlur(radius)).crop((w, h, 2 * w, 2 * h))
+
+
+def noise(w, h, spread):
+    img = Image.new("L", (w, h))
+    img.putdata([clamp(128 + rng.gauss(0, spread)) for _ in range(w * h)])
+    return img
+
+
+def save(img, name, **kw):
+    path = OUT / name
+    img.save(path, "WEBP", **kw)
+    print(f"{path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}: {path.stat().st_size} bytes")
+
+
+def wall():
+    """Brick wall tile, 384px square, shown at 128dp. Opaque."""
+    size, rows, per_row = 384, 6, 3
+    bh, bw, mortar = size // rows, size // per_row, 5
+    coarse = wrap_blur(noise(size, size, 60), 9).load()
+    grain = noise(size, size, 14).load()
+    tone = {}
+    out = Image.new("L", (size, size))
+    px = out.load()
+    for row in range(rows):
+        for col in range(per_row + 1):
+            tone[(row, col)] = rng.uniform(0.74, 0.95)
+    for y in range(size):
+        row = y // bh
+        ly = y % bh
+        offset = (bw // 2) * (row % 2)
+        for x in range(size):
+            sx = (x + size - offset) % size
+            col = sx // bw
+            lx = sx % bw
+            if ly < mortar or lx < mortar:
+                v = 0.58 * 255
+            else:
+                v = tone[(row, col)] * 255
+                if ly < mortar + 3 or lx < mortar + 3:
+                    v *= 1.06
+                elif ly > bh - 4 or lx > bw - 4:
+                    v *= 0.88
+            v += (coarse[x, y] - 128) * 0.6 + (grain[x, y] - 128) * 0.8
+            px[x, y] = clamp(v)
+    save(out.convert("RGB"), "shelf_wall.webp", quality=72, method=6)
+
+
+def ledge_rows():
+    """Vertical tone profile of the ledge strip, row by row (None = clear)."""
+    rows = []
+    for y in range(30):  # top surface, back to front
+        rows.append(0.72 + 0.22 * y / 29)
+    rows += [1.0, 1.0, 0.96]  # lit lip
+    rows += [0.86 - 0.08 * i / 23 for i in range(24)]  # fascia
+    rows += [0.45, 0.45, 0.55]  # shadow line under the fascia
+    rows += [0.9, 0.92, 0.88, 0.82, 0.78, 0.74, 0.7, 0.68, 0.66, 0.64, 0.6, 0.5]  # moulding
+    return rows
+
+
+LEDGE_W, LEDGE_H, DENTIL_TOP, DENTIL_PERIOD = 96, 114, 72, 24
+
+
+def ledge():
+    """Stone shelf strip, 96x114px, tiled across at 32x38dp."""
+    rows = ledge_rows()
+    grain = noise(LEDGE_W, LEDGE_H, 10).load()
+    out = Image.new("LA", (LEDGE_W, LEDGE_H), (0, 0))
+    px = out.load()
+    for y, base in enumerate(rows):
+        for x in range(LEDGE_W):
+            px[x, y] = (clamp(base * 255 + (grain[x, y] - 128) * 0.5), 255)
+    # Dentils: little arched teeth hanging under the moulding.
+    tooth_w, tooth_h = 16, 26
+    for start in range(0, LEDGE_W, DENTIL_PERIOD):
+        x0 = start + (DENTIL_PERIOD - tooth_w) // 2
+        for y in range(DENTIL_TOP, DENTIL_TOP + tooth_h):
+            ly = y - DENTIL_TOP
+            for x in range(x0, x0 + tooth_w):
+                lx = x - x0 + 0.5
+                # The bottom third rounds off into a point.
+                if ly > tooth_h - 9:
+                    t = (ly - (tooth_h - 9)) / 9
+                    half = (tooth_w / 2) * math.sqrt(max(0.0, 1 - t * t))
+                    if abs(lx - tooth_w / 2) > half:
+                        continue
+                shade = 0.92 - 0.3 * (lx / tooth_w)
+                if ly < 3:
+                    shade *= 0.8
+                px[x, y] = (clamp(shade * 255 + (grain[x, y] - 128) * 0.5), 255)
+    # Soft shadow on the wall just under the shelf.
+    for y in range(DENTIL_TOP + tooth_h, LEDGE_H):
+        alpha = 110 * (1 - (y - DENTIL_TOP - tooth_h) / (LEDGE_H - DENTIL_TOP - tooth_h))
+        for x in range(LEDGE_W):
+            if px[x, y][1] == 0:
+                px[x, y] = (0, clamp(alpha))
+    for y in range(DENTIL_TOP, DENTIL_TOP + tooth_h):
+        for x in range(LEDGE_W):
+            if px[x, y][1] == 0:
+                px[x, y] = (0, 70)
+    save(out.convert("RGBA"), "shelf_ledge.webp", quality=85, alpha_quality=90, method=6)
+
+
+def bracket():
+    """Left end bracket, 54x156px, drawn at 18x52dp from the ledge top."""
+    w, h, ss = 54, 156, 4
+    big = Image.new("LA", (w * ss, h * ss), (0, 0))
+    px = big.load()
+    top = 30 * ss
+
+    def inside(x, y):
+        # A corbel: full width under the lip, then a curve in to a knob.
+        if y < top:
+            return False
+        if y < 72 * ss:
+            return True
+        t = (y - 72 * ss) / ((h - 12) * ss - 72 * ss)
+        if t <= 1:
+            right = w * ss - (w * ss - 26 * ss) * math.sin(t * math.pi / 2)
+            return 4 * ss < x < right
+        cx, cy, r = 15 * ss, (h - 8) * ss, 7 * ss
+        return (x - cx) ** 2 + (y - cy) ** 2 < r * r
+
+    for y in range(h * ss):
+        for x in range(w * ss):
+            if not inside(x, y):
+                continue
+            shade = 0.95 - 0.35 * (x / (w * ss))
+            if y < top + 3 * ss:
+                shade = 1.0
+            elif 57 * ss <= y < 60 * ss:
+                shade = 0.5
+            px[x, y] = (clamp(shade * 255), 255)
+    out = big.resize((w, h), Image.LANCZOS)
+    save(out.convert("RGBA"), "shelf_ledge_end.webp", quality=85, alpha_quality=90, method=6)
+
+
+FRAME_PROFILE = [
+    (0.0, 0.3), (0.08, 0.65), (0.2, 1.0), (0.34, 0.72), (0.5, 0.45),
+    (0.66, 0.8), (0.78, 1.0), (0.9, 0.62), (1.0, 0.35),
+]
+
+
+def profile(t):
+    for (t0, v0), (t1, v1) in zip(FRAME_PROFILE, FRAME_PROFILE[1:]):
+        if t <= t1:
+            return v0 + (v1 - v0) * (t - t0) / (t1 - t0)
+    return FRAME_PROFILE[-1][1]
+
+
+def frame(name, oval):
+    """A carved frame with a clear middle, 300x380px. Rectangle border is
+    40px, oval ring 28px; the app puts the picture under the hole."""
+    w, h, ss = 300, 380, 2
+    thick = (28 if oval else 40) * ss
+    W, H = w * ss, h * ss
+    big = Image.new("LA", (W, H), (0, 0))
+    px = big.load()
+    beads = 46 if oval else 0
+    for y in range(H):
+        for x in range(W):
+            if oval:
+                nx, ny = (x + 0.5 - W / 2) / (W / 2), (y + 0.5 - H / 2) / (H / 2)
+                r = math.hypot(nx, ny)
+                if r > 1:
+                    continue
+                # Distance in from the outer edge, in pixels along the radius.
+                d = (1 - r) * min(W, H) / 2
+                if d > thick:
+                    continue
+                angle = math.atan2(ny, nx)
+                light = 1 + 0.18 * math.cos(angle + 3 * math.pi / 4)
+                t = d / thick
+                v = profile(t)
+                # A row of beads along the outer crest.
+                if 0.12 < t < 0.3:
+                    phase = (angle / (2 * math.pi) * beads) % 1
+                    v *= 0.75 + 0.35 * math.sin(phase * math.pi)
+            else:
+                d_left, d_right, d_top, d_bottom = x, W - 1 - x, y, H - 1 - y
+                d = min(d_left, d_right, d_top, d_bottom)
+                if d > thick:
+                    continue
+                side = [d_left, d_top, d_right, d_bottom].index(d)
+                light = (1.12, 1.18, 0.85, 0.8)[side]
+                t = d / thick
+                # Dark wood outside, gilt only along the inner edge.
+                v = profile(t) * (0.45 if t < 0.6 else 1.0)
+                along = y if side in (0, 2) else x
+                if 0.12 < t < 0.3:
+                    v *= 0.75 + 0.35 * math.sin((along / (9 * ss)) % 1 * math.pi)
+            px[x, y] = (clamp(v * light * 235), 255)
+    out = big.resize((w, h), Image.LANCZOS)
+    save(out.convert("RGBA"), name, quality=82, alpha_quality=90, method=6)
+
+
+# Plants are drawn SS times larger, then scaled down for smooth edges.
+SS = 4
+
+
+def canvas(w, h):
+    img = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
+    return img, ImageDraw.Draw(img)
+
+
+def finish(img, w, h, name):
+    out = img.resize((w, h), Image.LANCZOS)
+    save(out, name, quality=88, alpha_quality=90, method=6)
+
+
+def darker(c, f):
+    return tuple(clamp(v * f) for v in c[:3])
+
+
+def leaf(base, angle, length, width, bend=0.0, n=20):
+    """A pointed leaf from base (in drawing units) along angle (radians).
+    bend curls the tip sideways, as a share of the length."""
+    dx, dy = math.cos(angle), math.sin(angle)
+    px, py = -dy, dx
+    left, right, mid = [], [], []
+    for i in range(n + 1):
+        t = i / n
+        off = bend * length * t * t
+        cx = base[0] + dx * length * t + px * off
+        cy = base[1] + dy * length * t + py * off
+        hw = width / 2 * math.sin(math.pi * min(1.0, t * 1.15)) ** 0.8 if t < 0.87 else width / 2 * (1 - t) * 3.8
+        left.append((cx + px * hw, cy + py * hw))
+        right.append((cx - px * hw, cy - py * hw))
+        mid.append((cx, cy))
+    return left + right[::-1], mid
+
+
+def draw_leaf(d, base, angle, length, width, color, bend=0.0, rib=True):
+    outline, mid = leaf(base, angle, length, width, bend)
+    d.polygon(outline, fill=color)
+    # The far half a shade darker gives the leaf a fold.
+    half = outline[: len(outline) // 2] + mid[::-1]
+    d.polygon(half, fill=darker(color, 0.86))
+    if rib:
+        d.line(mid[: int(len(mid) * 0.85)], fill=darker(color, 0.7), width=max(1, int(width / 14)))
+
+
+def pot(d, cx, top, bottom, top_w, bottom_w, rim_h, color, band=None):
+    rim_w = top_w * 1.1
+    body = [
+        (cx - top_w / 2, top + rim_h), (cx + top_w / 2, top + rim_h),
+        (cx + bottom_w / 2, bottom), (cx - bottom_w / 2, bottom),
+    ]
+    d.polygon(body, fill=color)
+    # Shadowed right third, lit left edge.
+    d.polygon([
+        (cx + top_w / 6, top + rim_h), (cx + top_w / 2, top + rim_h),
+        (cx + bottom_w / 2, bottom), (cx + bottom_w / 6, bottom),
+    ], fill=darker(color, 0.8))
+    d.polygon([
+        (cx - top_w / 2, top + rim_h), (cx - top_w / 2.6, top + rim_h),
+        (cx - bottom_w / 2.6, bottom), (cx - bottom_w / 2, bottom),
+    ], fill=tuple(min(255, int(v * 1.12)) for v in color))
+    if band:
+        y0 = top + rim_h + (bottom - top - rim_h) * 0.35
+        y1 = y0 + (bottom - top) * 0.12
+        w0 = top_w + (bottom_w - top_w) * (y0 - top) / (bottom - top)
+        w1 = top_w + (bottom_w - top_w) * (y1 - top) / (bottom - top)
+        d.polygon([(cx - w0 / 2, y0), (cx + w0 / 2, y0), (cx + w1 / 2, y1), (cx - w1 / 2, y1)], fill=band)
+    d.rectangle((cx - rim_w / 2, top, cx + rim_w / 2, top + rim_h), fill=darker(color, 0.93))
+    d.rectangle((cx + rim_w / 6, top, cx + rim_w / 2, top + rim_h), fill=darker(color, 0.78))
+    d.line([(cx - rim_w / 2, top + rim_h), (cx + rim_w / 2, top + rim_h)], fill=darker(color, 0.6), width=SS)
+
+
+TERRACOTTA = (190, 102, 66)
+
+
+def succulent():
+    """Echeveria in a small clay pot, 120x150px, stood at a shelf end."""
+    w, h = 120, 150
+    img, d = canvas(w, h)
+    k = SS
+    base = (60 * k, 90 * k)
+    layers = [
+        (11, 58, 24, (104, 146, 124), 1.0),
+        (9, 46, 22, (124, 164, 136), 0.8),
+        (7, 34, 19, (146, 182, 150), 0.6),
+        (4, 22, 15, (168, 198, 160), 0.45),
+    ]
+    for count, length, width, color, spread in layers:
+        for i in range(count):
+            t = (i + 0.5) / count
+            angle = -math.pi / 2 + (t - 0.5) * math.pi * 1.15 * spread * 1.6
+            draw_leaf(d, base, angle, length * k, width * k, color, bend=0, rib=False)
+            # Blushed tip.
+            tip = (base[0] + math.cos(angle) * length * k * 0.78, base[1] + math.sin(angle) * length * k * 0.78)
+            draw_leaf(d, tip, angle, length * k * 0.22, width * k * 0.35, (196, 120, 128), rib=False)
+    pot(d, 60 * k, 92 * k, 148 * k, 80 * k, 58 * k, 12 * k, TERRACOTTA)
+    finish(img, w, h, "shelf_plant_succulent.webp")
+
+
+def fern():
+    """Boston fern in a glazed pot, 300x440px, for an empty shelf place."""
+    w, h = 300, 440
+    img, d = canvas(w, h)
+    k = SS
+    base = (150 * k, 300 * k)
+    greens = [(52, 104, 58), (66, 122, 64), (82, 140, 72), (98, 156, 82)]
+    fronds = []
+    for i in range(15):
+        t = i / 14
+        angle = math.radians(-172 + 164 * t + rng.uniform(-5, 5))
+        centre = 1 - abs(t - 0.5) * 2
+        length = (150 + 120 * centre + rng.uniform(-15, 15)) * k
+        droop = 0.55 - 0.45 * centre
+        fronds.append((centre + rng.uniform(-0.2, 0.2), angle, length, droop))
+    fronds.sort()
+    for n, (_, angle, length, droop) in enumerate(fronds):
+        color = greens[n * len(greens) // len(fronds)]
+        dx, dy = math.cos(angle), math.sin(angle)
+        pts = []
+        for i in range(31):
+            t = i / 30
+            pts.append((base[0] + dx * length * t, base[1] + dy * length * t + droop * length * t * t))
+        for i in range(3, 30):
+            t = i / 30
+            (x0, y0), (x1, y1) = pts[i - 1], pts[i + 1]
+            a = math.atan2(y1 - y0, x1 - x0)
+            size = (30 * (1 - t) ** 0.7 + 7) * k
+            for side in (-1, 1):
+                draw_leaf(d, pts[i], a + side * 1.0, size, size * 0.38, color, rib=False)
+        d.line(pts, fill=darker(color, 0.7), width=int(2.5 * k))
+    pot(d, 150 * k, 292 * k, 436 * k, 176 * k, 128 * k, 24 * k, (222, 212, 192), band=(92, 126, 140))
+    finish(img, w, h, "shelf_plant_fern.webp")
+
+
+def flowers():
+    """A bunch of garden flowers in a blue jug, 300x440px."""
+    w, h = 300, 440
+    img, d = canvas(w, h)
+    k = SS
+    neck = (150 * k, 300 * k)
+    stem = (72, 118, 60)
+    heads = [
+        (70, 120, "cosmos"), (112, 70, "daisy"), (160, 98, "tulip"), (208, 66, "daisy"),
+        (238, 132, "cosmos"), (128, 160, "yellow"), (186, 170, "lavender"), (88, 196, "lavender"),
+        (222, 210, "yellow"), (150, 38, "lavender"),
+    ]
+    for x, y, _ in heads:
+        mx = (neck[0] + x * k) / 2 + rng.uniform(-10, 10) * k
+        my = (neck[1] + y * k) / 2
+        pts = [(
+            (1 - t) ** 2 * neck[0] + 2 * (1 - t) * t * mx + t * t * x * k,
+            (1 - t) ** 2 * neck[1] + 2 * (1 - t) * t * my + t * t * y * k,
+        ) for t in (i / 20 for i in range(21))]
+        d.line(pts, fill=stem, width=int(3 * k))
+        lx, ly = pts[9]
+        side = 1 if x < 150 else -1
+        draw_leaf(d, (lx, ly), math.radians(-90 - side * 60), 34 * k, 12 * k, (84, 136, 68))
+    for x, y, kind in heads:
+        c = (x * k, y * k)
+        if kind == "lavender":
+            for i in range(8):
+                r = (4.5 - i * 0.3) * k
+                cy = c[1] + (14 - i * 5) * k
+                cx = c[0] + (2 if i % 2 else -2) * k
+                d.ellipse((cx - r, cy - r * 1.3, cx + r, cy + r * 1.3), fill=(150, 120, 196) if i % 2 else (126, 98, 178))
+            continue
+        if kind == "tulip":
+            for a, col in ((-0.35, (206, 70, 82)), (0.35, (206, 70, 82)), (0, (228, 96, 104))):
+                draw_leaf(d, (c[0], c[1] + 18 * k), -math.pi / 2 + a, 40 * k, 26 * k, col, rib=False)
+            continue
+        petals, colour, centre, r = {
+            "daisy": (12, (250, 248, 240), (232, 180, 52), 26),
+            "cosmos": (8, (232, 128, 168), (240, 200, 70), 28),
+            "yellow": (7, (244, 196, 64), (150, 92, 40), 22),
+        }[kind]
+        for i in range(petals):
+            a = 2 * math.pi * i / petals + rng.uniform(-0.08, 0.08)
+            draw_leaf(d, c, a, r * k, r * k * (0.42 if petals > 8 else 0.62), colour, rib=False)
+        cr = r * 0.32 * k
+        d.ellipse((c[0] - cr, c[1] - cr, c[0] + cr, c[1] + cr), fill=centre)
+        d.ellipse((c[0] - cr, c[1] - cr, c[0] + cr * 0.2, c[1] + cr * 0.2), fill=darker(centre, 1.1))
+    # Jug: a round body, a short neck and a lip.
+    blue, blue_dark, blue_light = (64, 104, 158), (44, 74, 120), (116, 156, 204)
+    d.ellipse((72 * k, 318 * k, 228 * k, 438 * k), fill=blue)
+    d.chord((72 * k, 318 * k, 228 * k, 438 * k), -60, 80, fill=blue_dark)
+    d.rectangle((112 * k, 284 * k, 188 * k, 340 * k), fill=blue)
+    d.rectangle((160 * k, 284 * k, 188 * k, 340 * k), fill=blue_dark)
+    d.ellipse((102 * k, 276 * k, 198 * k, 296 * k), fill=blue_light)
+    d.ellipse((112 * k, 280 * k, 188 * k, 292 * k), fill=(30, 52, 86))
+    d.ellipse((92 * k, 340 * k, 110 * k, 400 * k), fill=blue_light)
+    d.line([(76 * k, 386 * k), (224 * k, 386 * k)], fill=(232, 220, 196), width=int(4 * k))
+    finish(img, w, h, "shelf_plant_flowers.webp")
+
+
+def trailing():
+    """Pothos in a hanging pot on jute ropes, 200x420px. The hook is at
+    the top centre."""
+    w, h = 200, 420
+    img, d = canvas(w, h)
+    k = SS
+    jute = (196, 166, 116)
+    hook = (100 * k, 12 * k)
+    d.ellipse((92 * k, 0, 108 * k, 16 * k), outline=(120, 110, 100), width=int(3 * k))
+    for x in (36, 100, 164):
+        d.line([hook, (x * k, 122 * k)], fill=darker(jute, 0.85 if x == 100 else 1), width=int(3 * k))
+    greens = [(70, 134, 66), (96, 156, 72), (120, 170, 84)]
+    vines = [(40, 170, -1), (62, 260, 1), (86, 300, -1), (112, 230, 1), (136, 286, -1), (158, 190, 1)]
+    for x0, length, phase in vines:
+        pts = []
+        for i in range(41):
+            t = i / 40
+            pts.append(((x0 + phase * 10 * math.sin(t * 5 + x0)) * k, (124 + length * t) * k))
+        d.line(pts, fill=(64, 104, 52), width=int(2 * k))
+        for i in range(2, 41, 3):
+            t = i / 40
+            size = (24 - 12 * t) * k
+            side = 1 if (i // 3) % 2 else -1
+            draw_leaf(d, pts[i], math.radians(90 + side * 55), size, size * 0.8,
+                      greens[(i + x0) % len(greens)], rib=True)
+    # Bowl, in front of where the vines start: the lower half of an
+    # ellipse under a rim.
+    cream, cream_dark = (236, 230, 216), (196, 186, 168)
+    d.pieslice((28 * k, 60 * k, 172 * k, 196 * k), 0, 180, fill=cream)
+    d.pieslice((28 * k, 60 * k, 172 * k, 196 * k), 0, 60, fill=cream_dark)
+    d.rectangle((24 * k, 118 * k, 176 * k, 130 * k), fill=(222, 214, 198))
+    for x in (36, 164):
+        d.line([(x * k, 122 * k), ((100 + (x - 100) * 0.3) * k, 192 * k)], fill=jute, width=int(3 * k))
+    for i in range(11):
+        t = i / 10
+        draw_leaf(d, ((34 + 132 * t) * k, 124 * k), math.radians(-90 + (t - 0.5) * 150 + rng.uniform(-10, 10)),
+                  rng.uniform(26, 36) * k, 22 * k, greens[i % len(greens)])
+    finish(img, w, h, "shelf_plant_trailing.webp")
+
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    wall()
+    ledge()
+    bracket()
+    frame("shelf_frame_rect.webp", oval=False)
+    frame("shelf_frame_oval.webp", oval=True)
+    succulent()
+    fern()
+    flowers()
+    trailing()
+
+
+if __name__ == "__main__":
+    main()

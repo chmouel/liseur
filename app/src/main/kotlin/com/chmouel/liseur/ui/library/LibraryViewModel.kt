@@ -341,6 +341,13 @@ data class LibraryUiState(
     val progressions: Map<String, Double> = emptyMap(),
     /** The shelves [LibraryStyle.SHELVES] draws, from [books]; empty in the other styles. */
     val styleShelves: List<Shelf> = emptyList(),
+    /**
+     * Finished books with a cover, most recently finished first, that
+     * [LibraryStyle.SHELVES] hangs on the wall as pictures. Taken from the
+     * whole shelf, since finished books are usually filtered out of
+     * [books]; empty in the other styles.
+     */
+    val framedCovers: List<Book> = emptyList(),
     /** The strips [LibraryStyle.HOME] draws above the grid; empty in the other styles. */
     val home: HomeSections = HomeSections(),
     /** How long [LibraryStyle.LIST] draws each book's progress track, by URL; empty elsewhere. */
@@ -981,6 +988,14 @@ class LibraryViewModel(
                         shelvesOf(filteredBooks, layout.shelfGrouping, shownSeries) { book ->
                             shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
                         }
+                    } else {
+                        emptyList()
+                    },
+                framedCovers =
+                    if (layout.style == LibraryStyle.SHELVES) {
+                        onTheShelf
+                            .filter { it.finished && (it.coverPath ?: it.coverUrl) != null }
+                            .sortedByDescending { it.finishedAt }
                     } else {
                         emptyList()
                     },

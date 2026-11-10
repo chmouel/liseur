@@ -129,6 +129,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -906,7 +907,7 @@ fun LibraryScreen(
                     )
 
                     else -> {
-                        val controls: @Composable () -> Unit = {
+                        val controls: LibraryControls = { extra ->
                             LibraryControlsRow(
                                 state = state,
                                 onSetSort = onSetSort,
@@ -915,6 +916,7 @@ fun LibraryScreen(
                                 onSetGroupBySeries = onSetGroupBySeries,
                                 onClearFilters = onClearFilters,
                                 onChooseStyle = { choosingStyle = true },
+                                extra = extra,
                             )
                         }
                         when (state.layout.style) {
@@ -1870,6 +1872,9 @@ private fun BookGrid(
     }
 }
 
+/** The controls line; a style may pass one more control to sit before the sort. */
+internal typealias LibraryControls = @Composable (extra: (@Composable () -> Unit)?) -> Unit
+
 /**
  * The filters and the sort, on the one line every style puts above its
  * books. They share it because they answer the same question, "which
@@ -1886,6 +1891,7 @@ internal fun LibraryControlsRow(
     onClearFilters: () -> Unit,
     onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
+    extra: (@Composable () -> Unit)? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -1903,6 +1909,7 @@ internal fun LibraryControlsRow(
         // never squeezed: the filter summary gives way to them rather than
         // the other way round.
         Row(verticalAlignment = Alignment.CenterVertically) {
+            extra?.invoke()
             SortRow(
                 sort = state.sort,
                 reversed = state.sortReversed,
@@ -2381,8 +2388,7 @@ internal fun PlaceholderCover(book: Book, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun BookCover(book: Book, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(10.dp)
+fun BookCover(book: Book, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(10.dp)) {
     val artwork = book.coverPath ?: book.coverUrl
     val borderModifier = modifier
         .clip(shape)

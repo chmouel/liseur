@@ -57,6 +57,7 @@ import com.chmouel.liseur.domain.seriesKey
 import com.chmouel.liseur.ui.library.ArchivedBadge
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.DownloadOverlay
+import com.chmouel.liseur.ui.library.LibraryControls
 import com.chmouel.liseur.ui.library.LibraryUiState
 import com.chmouel.liseur.ui.library.SeriesLine
 import com.chmouel.liseur.ui.library.bookStateDescription
@@ -75,7 +76,7 @@ import com.chmouel.liseur.ui.library.seriesStateDescription
 internal fun ListLibrary(
     state: LibraryUiState,
     gridState: LazyGridState,
-    controls: @Composable () -> Unit,
+    controls: LibraryControls,
     onBookSelected: (Book) -> Unit,
     onBookLongPress: (Book) -> Unit,
     onSeriesSelected: (SeriesShelf) -> Unit,
@@ -90,7 +91,7 @@ internal fun ListLibrary(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
-        item(key = "controls", span = { GridItemSpan(maxLineSpan) }) { controls() }
+        item(key = "controls", span = { GridItemSpan(maxLineSpan) }) { controls(null) }
         if (state.filters.groupBySeries) {
             items(state.shelfEntries, key = { it.gridKey }) { entry ->
                 when (entry) {
