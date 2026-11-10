@@ -1022,6 +1022,7 @@ class SettingsBackupRepository(
             "volume_keys_mode" to VolumeKeyMode.entries.map { it.id }.toSet(),
             "tap_zones" to TapZones.entries.map { it.id }.toSet(),
             "edge_brightness" to com.chmouel.liseur.data.settings.EdgeBrightness.entries.map { it.id }.toSet(),
+            "reader_orientation" to com.chmouel.liseur.data.settings.ReaderOrientation.entries.map { it.id }.toSet(),
             "library_sort" to setOf("recent", "title", "author", "added", "series"),
             "eink_mode" to setOf("auto", "on", "off"),
             "definition_target" to setOf("built_in", "external_app"),

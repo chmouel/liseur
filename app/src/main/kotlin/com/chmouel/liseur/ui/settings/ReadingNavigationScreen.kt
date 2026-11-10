@@ -58,8 +58,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.data.settings.ReaderOrientation
 import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.reading.label
+import com.chmouel.liseur.ui.reading.orientationLockHonoured
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.data.settings.EInkMode
@@ -104,6 +106,7 @@ fun ReadingNavigationScreen(
     onOpenPageTaps: () -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onEdgeBrightness: (EdgeBrightness) -> Unit,
+    onReaderOrientation: (ReaderOrientation) -> Unit,
     onPageTurnStyle: (PageTurnStyle) -> Unit,
     onResumeLastBook: (Boolean) -> Unit,
     onScrollMode: (Boolean) -> Unit,
@@ -311,6 +314,18 @@ fun ReadingNavigationScreen(
                         modifier = Modifier.settingsAnchor(SettingsEntries.BrightnessEdge),
                     )
                     RowDivider()
+                    if (orientationLockHonoured()) {
+                        ChipRow(
+                            title = stringResource(R.string.settings_reader_orientation),
+                            subtitle = stringResource(R.string.settings_reader_orientation_detail),
+                            options = ReaderOrientation.entries,
+                            selected = settings.readerOrientation,
+                            label = { stringResource(it.label) },
+                            onSelected = onReaderOrientation,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.ReaderOrientation),
+                        )
+                        RowDivider()
+                    }
                     SwitchRow(
                         title = stringResource(R.string.settings_lock_footer),
                         subtitle = stringResource(R.string.settings_lock_footer_detail),

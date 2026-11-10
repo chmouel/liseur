@@ -209,6 +209,8 @@ import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.data.settings.ReaderOrientation
+import com.chmouel.liseur.data.settings.ScreenHandling
 import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.reader.chrome.CatchUpPill
 import com.chmouel.liseur.reader.chrome.SelectionToolbarSheet
@@ -528,7 +530,7 @@ internal fun ReaderScreen(
     onScrollingChanged: (Boolean) -> Unit = {},
     tapLayoutFlow: StateFlow<TapLayout>,
     pinchToResizeFlow: StateFlow<Boolean>,
-    edgeBrightnessFlow: StateFlow<EdgeBrightness>,
+    screenHandlingFlow: StateFlow<ScreenHandling>,
     onEdgeBrightnessChanged: (EdgeBrightness) -> Unit,
     selectionActionLayoutFlow: StateFlow<SelectionActionLayout>,
     onSelectionActionLayoutChanged: ((SelectionActionLayout) -> SelectionActionLayout) -> Unit,
@@ -600,7 +602,7 @@ internal fun ReaderScreen(
     val lockFooterOn by lockFooterOnFlow.collectAsStateWithLifecycle()
     val tapLayoutNow by rememberUpdatedState(tapLayout)
     val pinchToResize by pinchToResizeFlow.collectAsStateWithLifecycle()
-    val edgeBrightness by edgeBrightnessFlow.collectAsStateWithLifecycle()
+    val screenHandling by screenHandlingFlow.collectAsStateWithLifecycle()
     val highlightPalette by highlightPaletteFlow.collectAsStateWithLifecycle()
     val selectionActionLayout by selectionActionLayoutFlow.collectAsStateWithLifecycle()
     // Readium reads vertical text off the book rather than off the
@@ -778,7 +780,7 @@ internal fun ReaderScreen(
     // (ADR 64).
     var brightnessPreview by remember { mutableStateOf<Float?>(null) }
     var brightnessSwiping by remember { mutableStateOf(false) }
-    val edgeBrightnessNow by rememberUpdatedState(edgeBrightness)
+    val edgeBrightnessNow by rememberUpdatedState(screenHandling.edgeBrightness)
     val brightnessNow by rememberUpdatedState(prefs.brightness)
     val commitBrightnessNow by rememberUpdatedState(onPrefsAction.commitBrightness)
     // The pointer loop runs in a restricted suspension scope, so taking
@@ -5523,8 +5525,10 @@ internal fun ReaderScreen(
             keepScreenOn = keepScreenOn,
             onKeepScreenOnChanged = onKeepScreenOnChanged,
             onTypographyIsOwnChanged = onPrefsAction.setTypographyIsOwn,
-            edgeBrightness = edgeBrightness,
+            edgeBrightness = screenHandling.edgeBrightness,
             onEdgeBrightnessChanged = onEdgeBrightnessChanged,
+            orientation = screenHandling.orientation,
+            onOrientationChanged = onPrefsAction.setReaderOrientation,
             onClearTranslations = onClearTranslations?.let { { clearingTranslations = true } },
             recapsHere = companion?.recapsHere?.collectAsStateWithLifecycle()?.value,
             onRecapsHereChanged = { companion?.setRecapsHere?.invoke(it) },
@@ -5926,6 +5930,7 @@ class ReaderPrefsActions(
     val setAutoScrollSpeed: (Float) -> Unit,
     val nudgeAutoScrollSpeed: (Int) -> Unit,
     val setTypographyIsOwn: (Boolean) -> Unit,
+    val setReaderOrientation: (ReaderOrientation) -> Unit,
     val fineTypography: FineTypographyActions,
 )
 
