@@ -869,6 +869,11 @@
     <string name="settings_pinch_to_resize_eink">Выключено на экранах электронных чернил: они слишком медленно перерисовывают превью размера. Используйте ползунок «Размер». Увеличение изображения щипком всё равно работает. Выключите «Экран электронных чернил» выше, если у вас не такой экран.</string>
     <string name="settings_brightness_edge">Яркость жестом у края</string>
     <string name="settings_brightness_edge_detail">Проведите вверх или вниз вдоль этого края страницы, чтобы изменить яркость, не открывая меню. Нажатия и перелистывание, начатые у края, работают как прежде. Только при перелистывании, не при прокрутке.</string>
+    <string name="settings_reader_orientation">Ориентация экрана</string>
+    <string name="settings_reader_orientation_detail">Читалка поворачивается вместе с телефоном или остаётся в книжной или альбомной ориентации независимо от системной настройки поворота. На библиотеку это не влияет.</string>
+    <string name="reader_orientation_auto">Авто</string>
+    <string name="reader_orientation_portrait">Книжная</string>
+    <string name="reader_orientation_landscape">Альбомная</string>
     <string name="settings_resume">Открывать книгу, которую читали</string>
     <string name="settings_resume_detail">Пропускать библиотеку, если вы остановились на середине книги.</string>
     <string name="settings_keep_screen_on">Не гасить экран</string>

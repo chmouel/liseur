@@ -817,6 +817,11 @@
     <string name="settings_pinch_to_resize_eink">Spento sugli schermi e-ink, che ridisegnano troppo lentamente l\'anteprima della dimensione. Usa invece il cursore Dimensione. Pizzicare un\'immagine per ingrandirla funziona comunque. Disattiva Schermo e-ink qui sopra se questo non è uno schermo e-ink.</string>
     <string name="settings_brightness_edge">Luminosità con scorrimento</string>
     <string name="settings_brightness_edge_detail">Scorri in su o in giù lungo questo bordo della pagina per cambiare la luminosità senza aprire il menu. I tocchi e i cambi pagina che partono dal bordo funzionano come prima. Solo quando si girano le pagine, non durante lo scorrimento.</string>
+    <string name="settings_reader_orientation">Orientamento dello schermo</string>
+    <string name="settings_reader_orientation_detail">Il lettore ruota con il telefono, oppure resta in verticale o in orizzontale qualunque sia l\'impostazione di rotazione del sistema. La libreria non cambia.</string>
+    <string name="reader_orientation_auto">Auto</string>
+    <string name="reader_orientation_portrait">Verticale</string>
+    <string name="reader_orientation_landscape">Orizzontale</string>
     <string name="settings_resume">Apri sul libro che stavi leggendo</string>
     <string name="settings_resume_detail">Salta la libreria quando hai lasciato a metà un libro.</string>
     <string name="settings_keep_screen_on">Tieni lo schermo acceso</string>

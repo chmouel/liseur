@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.settings
 
 import android.content.Context
+import android.content.pm.ActivityInfo
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -187,6 +188,12 @@ data class TapLayout(
     val sideWidth: Int = TapSideWidth.WIDE,
 )
 
+/** App-wide reader settings about the screen itself, bundled for the reader. */
+data class ScreenHandling(
+    val edgeBrightness: EdgeBrightness = EdgeBrightness.Default,
+    val orientation: ReaderOrientation = ReaderOrientation.Default,
+)
+
 /**
  * Which screen edge, if any, takes a vertical swipe as a brightness
  * change. The physical edge, whatever the book's reading direction. See
@@ -202,6 +209,39 @@ enum class EdgeBrightness(val id: String) {
         val Default = LEFT
 
         fun fromId(id: String?): EdgeBrightness = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
+ * Which way up the reader holds the page. AUTO follows the system,
+ * including its own rotation lock; the other two still let the sensor
+ * pick between the two sides of the chosen orientation.
+ */
+enum class ReaderOrientation(val id: String) {
+    AUTO("auto"),
+    PORTRAIT("portrait"),
+    LANDSCAPE("landscape"),
+    ;
+
+    /** The value for `Activity.requestedOrientation`. */
+    val requested: Int
+        get() = when (this) {
+            AUTO -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
+
+    companion object {
+        val Default = AUTO
+
+        fun fromId(id: String?): ReaderOrientation = entries.firstOrNull { it.id == id } ?: Default
+
+        /**
+         * Whether the system obeys an orientation request on this screen.
+         * From Android 16, an app targeting it has the request ignored on
+         * a display whose smallest width is 600dp or more.
+         */
+        fun honoured(sdk: Int, smallestWidthDp: Int): Boolean = sdk < 36 || smallestWidthDp < 600
     }
 }
 
@@ -238,6 +278,8 @@ enum class DefinitionTarget(val id: String) {
  *   is one visible thing, dismissed with a tap.
  * @param edgeBrightness Which edge of a paginated page changes the screen
  *   brightness when swiped up or down.
+ * @param readerOrientation Whether the reader rotates with the phone or
+ *   stays in portrait or landscape. Applies to the reader only.
  * @param resumeLastBook Opening the app goes back into the book you were in.
  * @param keepScreenOn The screen stays awake while a book is open. On by
  *   default for new installs, and can be turned off per reader or per
@@ -325,6 +367,7 @@ data class AppSettings(
     val tapSideWidth: Int = TapSideWidth.WIDE,
     val pinchToResize: Boolean = true,
     val edgeBrightness: EdgeBrightness = EdgeBrightness.Default,
+    val readerOrientation: ReaderOrientation = ReaderOrientation.Default,
     val resumeLastBook: Boolean = true,
     val keepScreenOn: Boolean = true,
     val scrollMode: Boolean = false,
@@ -513,6 +556,7 @@ class AppSettingsRepository(
         val TAP_SIDE_WIDTH = intPreferencesKey("tap_side_width")
         val PINCH_TO_RESIZE = booleanPreferencesKey("pinch_to_resize")
         val EDGE_BRIGHTNESS = stringPreferencesKey("edge_brightness")
+        val READER_ORIENTATION = stringPreferencesKey("reader_orientation")
         val RESUME_LAST_BOOK = booleanPreferencesKey("resume_last_book")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         val SCROLL_MODE = booleanPreferencesKey("scroll_mode")
@@ -617,6 +661,7 @@ class AppSettingsRepository(
             tapSideWidth = TapSideWidth.sanitize(p[Keys.TAP_SIDE_WIDTH]),
             pinchToResize = p[Keys.PINCH_TO_RESIZE] ?: true,
             edgeBrightness = EdgeBrightness.fromId(p[Keys.EDGE_BRIGHTNESS]),
+            readerOrientation = ReaderOrientation.fromId(p[Keys.READER_ORIENTATION]),
             resumeLastBook = p[Keys.RESUME_LAST_BOOK] ?: true,
             keepScreenOn = p[Keys.KEEP_SCREEN_ON] ?: true,
             scrollMode = p[Keys.SCROLL_MODE] ?: false,
@@ -778,6 +823,10 @@ class AppSettingsRepository(
 
     suspend fun setEdgeBrightness(edge: EdgeBrightness) {
         store.edit { it[Keys.EDGE_BRIGHTNESS] = edge.id }
+    }
+
+    suspend fun setReaderOrientation(orientation: ReaderOrientation) {
+        store.edit { it[Keys.READER_ORIENTATION] = orientation.id }
     }
 
     suspend fun setResumeLastBook(enabled: Boolean) {
@@ -1363,7 +1412,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "volume_keys_turn_pages" to BackupValueType.BOOLEAN, "volume_keys_mode" to BackupValueType.STRING,
     "tap_zones" to BackupValueType.STRING, "tap_side_width" to BackupValueType.INT,
     "pinch_to_resize" to BackupValueType.BOOLEAN, "edge_brightness" to BackupValueType.STRING,
-    "resume_last_book" to BackupValueType.BOOLEAN,
+    "reader_orientation" to BackupValueType.STRING, "resume_last_book" to BackupValueType.BOOLEAN,
     "keep_screen_on" to BackupValueType.BOOLEAN, "scroll_mode" to BackupValueType.BOOLEAN,
     "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,
     "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,

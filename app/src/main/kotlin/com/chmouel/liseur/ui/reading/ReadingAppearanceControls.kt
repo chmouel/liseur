@@ -1,5 +1,7 @@
 package com.chmouel.liseur.ui.reading
 
+import android.os.Build
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -52,6 +54,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -63,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.data.settings.ReaderOrientation
 import com.chmouel.liseur.data.settings.ColumnMode
 import com.chmouel.liseur.data.settings.PageTurnStyle
 import com.chmouel.liseur.data.settings.FooterMode
@@ -870,6 +874,51 @@ fun ReadingBrightnessEdgeControl(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** The short name of an orientation, for the reader sheet and the settings. */
+val ReaderOrientation.label: Int
+    get() = when (this) {
+        ReaderOrientation.AUTO -> R.string.reader_orientation_auto
+        ReaderOrientation.PORTRAIT -> R.string.reader_orientation_portrait
+        ReaderOrientation.LANDSCAPE -> R.string.reader_orientation_landscape
+    }
+
+/**
+ * Whether the system would obey the orientation lock on this screen.
+ * Android 16 judges the whole display, not the app's window, so a split
+ * screen on a tablet still counts as large.
+ */
+@Composable
+fun orientationLockHonoured(): Boolean {
+    val context = LocalContext.current
+    // Read so a fold or display change recomposes the check.
+    LocalConfiguration.current
+    if (Build.VERSION.SDK_INT < 36) return true
+    val display = context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+    val smallestDp = minOf(display.width(), display.height()) / context.resources.displayMetrics.density
+    return ReaderOrientation.honoured(Build.VERSION.SDK_INT, smallestDp.toInt())
+}
+
+/** Whether the reader turns with the phone or stays one way up (#438). */
+@Composable
+fun ReadingOrientationControl(
+    selected: ReaderOrientation,
+    onSelected: (ReaderOrientation) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ReadingSectionLabel(stringResource(R.string.settings_reader_orientation))
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            val options = ReaderOrientation.entries
+            options.forEachIndexed { index, option ->
+                SegmentedButton(
+                    selected = selected == option,
+                    onClick = { onSelected(option) },
+                    shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                ) { Text(stringResource(option.label)) }
+            }
+        }
     }
 }
 

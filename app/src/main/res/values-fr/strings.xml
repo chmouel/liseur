@@ -817,6 +817,11 @@
     <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>
     <string name="settings_brightness_edge">Luminosité par glissement</string>
     <string name="settings_brightness_edge_detail">Glissez vers le haut ou le bas le long de ce bord de la page pour changer la luminosité sans ouvrir le menu. Les appuis et les pages tournées depuis le bord fonctionnent comme avant. Uniquement en mode page, pas en défilement.</string>
+    <string name="settings_reader_orientation">Orientation de l\'écran</string>
+    <string name="settings_reader_orientation_detail">Le lecteur pivote avec le téléphone, ou reste en portrait ou en paysage quel que soit le réglage de rotation du système. La bibliothèque n\'est pas concernée.</string>
+    <string name="reader_orientation_auto">Auto</string>
+    <string name="reader_orientation_portrait">Portrait</string>
+    <string name="reader_orientation_landscape">Paysage</string>
     <string name="settings_resume">Ouvrir sur le livre que vous lisiez</string>
     <string name="settings_resume_detail">Passer la bibliothèque quand vous aviez quitté un livre en cours.</string>
     <string name="settings_keep_screen_on">Garder l\'écran allumé</string>
