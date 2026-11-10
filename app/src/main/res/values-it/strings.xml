@@ -1865,6 +1865,12 @@
     <string name="shelf_grouping">Scaffali per</string>
     <string name="shelf_group_author">Autore</string>
     <string name="shelf_group_status">Stato di lettura</string>
+    <string name="shelf_backdrop">Sfondo</string>
+    <string name="shelf_backdrop_plain">Tinta unita</string>
+    <string name="shelf_backdrop_wood">Legno</string>
+    <string name="shelf_backdrop_plaster">Intonaco</string>
+    <string name="shelf_backdrop_bricks">Mattoni</string>
+    <string name="shelf_backdrop_custom">Immagine personalizzata</string>
     <string name="library_compact_list">Righe compatte</string>
     <string name="library_compact_list_detail">Copertine più piccole e una riga per titolo</string>
     <string name="home_continue">Continua</string>

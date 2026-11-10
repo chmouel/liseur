@@ -1865,6 +1865,12 @@
     <string name="shelf_grouping">Estantes por</string>
     <string name="shelf_group_author">Autor</string>
     <string name="shelf_group_status">Estado de lectura</string>
+    <string name="shelf_backdrop">Fondo</string>
+    <string name="shelf_backdrop_plain">Liso</string>
+    <string name="shelf_backdrop_wood">Madera</string>
+    <string name="shelf_backdrop_plaster">Estuco</string>
+    <string name="shelf_backdrop_bricks">Ladrillos</string>
+    <string name="shelf_backdrop_custom">Imagen personalizada</string>
     <string name="library_compact_list">Filas compactas</string>
     <string name="library_compact_list_detail">Portadas más pequeñas y una línea por título</string>
     <string name="home_continue">Continuar</string>

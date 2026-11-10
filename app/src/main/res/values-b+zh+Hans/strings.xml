@@ -1811,6 +1811,12 @@
     <string name="shelf_grouping">书架分组</string>
     <string name="shelf_group_author">作者</string>
     <string name="shelf_group_status">阅读状态</string>
+    <string name="shelf_backdrop">背景</string>
+    <string name="shelf_backdrop_plain">纯色</string>
+    <string name="shelf_backdrop_wood">木纹</string>
+    <string name="shelf_backdrop_plaster">灰泥</string>
+    <string name="shelf_backdrop_bricks">砖墙</string>
+    <string name="shelf_backdrop_custom">自定义图片</string>
     <string name="library_compact_list">紧凑行</string>
     <string name="library_compact_list_detail">封面更小，标题只占一行</string>
     <string name="home_continue">继续</string>

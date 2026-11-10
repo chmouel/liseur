@@ -1939,6 +1939,12 @@
     <string name="shelf_grouping">Shelves by</string>
     <string name="shelf_group_author">Author</string>
     <string name="shelf_group_status">Reading state</string>
+    <string name="shelf_backdrop">Backdrop</string>
+    <string name="shelf_backdrop_plain">Plain</string>
+    <string name="shelf_backdrop_wood">Wood</string>
+    <string name="shelf_backdrop_plaster">Plaster</string>
+    <string name="shelf_backdrop_bricks">Bricks</string>
+    <string name="shelf_backdrop_custom">Custom image</string>
     <string name="library_compact_list">Compact rows</string>
     <string name="library_compact_list_detail">Smaller covers and one line per title</string>
     <string name="home_continue">Continue</string>

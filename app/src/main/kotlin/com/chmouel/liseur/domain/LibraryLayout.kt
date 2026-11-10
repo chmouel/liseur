@@ -44,10 +44,28 @@ enum class ShelfGrouping(val id: String) {
     }
 }
 
-/** The chosen style and the one option each of the styles that has one carries. */
+/** The wall drawn behind the shelves in [LibraryStyle.SHELVES]. */
+enum class ShelfBackdrop(val id: String) {
+    PLAIN("plain"),
+    WOOD("wood"),
+    PLASTER("plaster"),
+    BRICKS("bricks"),
+    CUSTOM("custom"),
+    ;
+
+    companion object {
+        val Default = BRICKS
+
+        fun fromId(id: String?): ShelfBackdrop = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/** The chosen style and the options each of the styles that has any carries. */
 data class LibraryLayout(
     val style: LibraryStyle = LibraryStyle.Default,
     val shelfGrouping: ShelfGrouping = ShelfGrouping.Default,
+    val shelfBackdrop: ShelfBackdrop = ShelfBackdrop.Default,
+    val shelfBackdropUri: String? = null,
     val compactList: Boolean = false,
 )
 
