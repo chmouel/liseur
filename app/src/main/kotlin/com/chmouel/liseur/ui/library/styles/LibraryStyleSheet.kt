@@ -265,7 +265,7 @@ private suspend fun importBackdropImage(context: Context, uri: Uri): String? =
             val longest = max(bounds.outWidth, bounds.outHeight)
             if (longest <= 0) return@runCatching null
             var sample = 1
-            while (longest / (sample * 2) >= MAX_BACKDROP_EDGE) {
+            while (longest / sample > MAX_BACKDROP_EDGE) {
                 sample *= 2
             }
             val decode = BitmapFactory.Options().apply { inSampleSize = sample }
