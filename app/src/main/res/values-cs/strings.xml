@@ -11,6 +11,7 @@
     <plurals name="library_book_count">
         <item quantity="one">%d kniha</item>
         <item quantity="few">%d knihy</item>
+        <item quantity="many">%d knihy</item>
         <item quantity="other">%d knih</item>
     </plurals>
     <string name="add_book">Přidat knihu</string>
@@ -22,6 +23,7 @@
     <plurals name="library_folders_count">
         <item quantity="one">Sledovaná %d složka</item>
         <item quantity="few">Sledované %d složky</item>
+        <item quantity="many">Sledované %d složky</item>
         <item quantity="other">Sledováno %d složek</item>
     </plurals>
     <string name="remove_folder">Odebrat složku</string>
@@ -48,6 +50,7 @@
     <plurals name="series_book_count">
         <item quantity="one">%d kniha</item>
         <item quantity="few">%d knihy</item>
+        <item quantity="many">%d knihy</item>
         <item quantity="other">%d knih</item>
     </plurals>
     <string name="series_read_count">Přečteno: %d</string>
@@ -151,6 +154,7 @@
     <plurals name="footer_pages_left_in_chapter">
         <item quantity="one">Do konce kapitoly zbývá %d stránka</item>
         <item quantity="few">Do konce kapitoly zbývají %d stránky</item>
+        <item quantity="many">Do konce kapitoly zbývá %d stránky</item>
         <item quantity="other">Do konce kapitoly zbývá %d stránek</item>
     </plurals>
     <string name="footer_last_page_in_chapter">Poslední stránka kapitoly</string>
@@ -167,41 +171,49 @@
     <plurals name="footer_percent_read_a11y">
         <item quantity="one">Přečteno %d procento</item>
         <item quantity="few">Přečtena %d procenta</item>
+        <item quantity="many">Přečteno %d procenta</item>
         <item quantity="other">Přečteno %d procent</item>
     </plurals>
     <plurals name="footer_percent_left_a11y">
         <item quantity="one">Zbývá %d procento</item>
         <item quantity="few">Zbývají %d procenta</item>
+        <item quantity="many">Zbývá %d procenta</item>
         <item quantity="other">Zbývá %d procent</item>
     </plurals>
     <plurals name="footer_chapter_percent_read_a11y">
         <item quantity="one">Přečteno %d procento kapitoly</item>
         <item quantity="few">Přečtena %d procenta kapitoly</item>
+        <item quantity="many">Přečteno %d procenta kapitoly</item>
         <item quantity="other">Přečteno %d procent kapitoly</item>
     </plurals>
     <plurals name="footer_chapter_percent_left_a11y">
         <item quantity="one">Zbývá %d procento kapitoly</item>
         <item quantity="few">Zbývají %d procenta kapitoly</item>
+        <item quantity="many">Zbývá %d procenta kapitoly</item>
         <item quantity="other">Zbývá %d procent kapitoly</item>
     </plurals>
     <plurals name="footer_pages_left_book">
         <item quantity="one">Zbývá %d</item>
         <item quantity="few">Zbývají %d</item>
+        <item quantity="many">Zbývá %d</item>
         <item quantity="other">Zbývá %d</item>
     </plurals>
     <plurals name="footer_pages_left_book_a11y">
         <item quantity="one">V knize zbývá %d stránka</item>
         <item quantity="few">V knize zbývají %d stránky</item>
+        <item quantity="many">V knize zbývá %d stránky</item>
         <item quantity="other">V knize zbývá %d stránek</item>
     </plurals>
     <plurals name="footer_pages_left_book_about_a11y">
         <item quantity="one">V knize zbývá přibližně %d stránka</item>
         <item quantity="few">V knize zbývají přibližně %d stránky</item>
+        <item quantity="many">V knize zbývá přibližně %d stránky</item>
         <item quantity="other">V knize zbývá přibližně %d stránek</item>
     </plurals>
     <plurals name="footer_pages_left_chapter_short">
         <item quantity="one">Zbývá %d</item>
         <item quantity="few">Zbývají %d</item>
+        <item quantity="many">Zbývá %d</item>
         <item quantity="other">Zbývá %d</item>
     </plurals>
     <string name="footer_last_page_in_chapter_short">Poslední stránka</string>
@@ -212,11 +224,13 @@
     <plurals name="footer_battery_a11y">
         <item quantity="one">Baterie: %d procento</item>
         <item quantity="few">Baterie: %d procenta</item>
+        <item quantity="many">Baterie: %d procenta</item>
         <item quantity="other">Baterie: %d procent</item>
     </plurals>
     <plurals name="footer_battery_charging_a11y">
         <item quantity="one">Baterie: %d procento, nabíjí se</item>
         <item quantity="few">Baterie: %d procenta, nabíjí se</item>
+        <item quantity="many">Baterie: %d procenta, nabíjí se</item>
         <item quantity="other">Baterie: %d procent, nabíjí se</item>
     </plurals>
     <string name="footer_clock_a11y">Čas: %s</string>
@@ -239,11 +253,13 @@
     <plurals name="duration_minutes">
         <item quantity="one">%d minuta</item>
         <item quantity="few">%d minuty</item>
+        <item quantity="many">%d minuty</item>
         <item quantity="other">%d minut</item>
     </plurals>
     <plurals name="duration_hours">
         <item quantity="one">%d hodina</item>
         <item quantity="few">%d hodiny</item>
+        <item quantity="many">%d hodiny</item>
         <item quantity="other">%d hodin</item>
     </plurals>
     <!-- Offers to jump back on this device, or catch up to another device's place. -->
@@ -273,6 +289,7 @@
     <plurals name="sync_server_ambiguous">
         <item quantity="one">Jedna kniha odpovídá více knihám na serveru. Liseur ji raději nespároval odhadem; o sloučení můžeš rozhodnout pouze přímo na serveru.</item>
         <item quantity="few">%1$d knihy odpovídají více knihám na serveru. Liseur je raději nespároval odhadem; o sloučení můžeš rozhodnout pouze přímo na serveru.</item>
+        <item quantity="many">%1$d knihy odpovídá více knihám na serveru. Liseur je raději nespároval odhadem; o sloučení můžeš rozhodnout pouze přímo na serveru.</item>
         <item quantity="other">%1$d knih odpovídá více knihám na serveru. Liseur je raději nespároval odhadem; o sloučení můžeš rozhodnout pouze přímo na serveru.</item>
     </plurals>
     <string name="server_account">Knižní server</string>
@@ -441,6 +458,7 @@
     <plurals name="download_all_confirm">
         <item quantity="one">Stáhnout %1$d knihu?</item>
         <item quantity="few">Stáhnout %1$d knihy?</item>
+        <item quantity="many">Stáhnout %1$d knihy?</item>
         <item quantity="other">Stáhnout %1$d knih?</item>
     </plurals>
     <string name="download_all_size">Přibližně %1$s; volné místo: %2$s. Jde o hrubý odhad podle údajů ze serveru.</string>
@@ -458,11 +476,13 @@
     <plurals name="download_all_failed">
         <item quantity="one">%1$d knihu se nepodařilo stáhnout.</item>
         <item quantity="few">%1$d knihy se nepodařilo stáhnout.</item>
+        <item quantity="many">%1$d knihy se nepodařilo stáhnout.</item>
         <item quantity="other">%1$d knih se nepodařilo stáhnout.</item>
     </plurals>
     <plurals name="server_storage">
         <item quantity="one">Stažena %1$d kniha · %2$s</item>
         <item quantity="few">Staženy %1$d knihy · %2$s</item>
+        <item quantity="many">Staženo %1$d knihy · %2$s</item>
         <item quantity="other">Staženo %1$d knih · %2$s</item>
     </plurals>
     <string name="server_lost_to_restore">Účet na serveru byl odhlášen. Hesla a klíče API jsou šifrovány klíčem, který nikdy neopouští původní telefon. Po obnovení zálohy nebo přenosu do jiného zařízení je proto nelze přečíst. Přihlas se znovu.</string>
@@ -482,21 +502,25 @@
     <plurals name="server_sync_pulled">
         <item quantity="one">Poslední synchronizace: přijata %1$d pozice čtení</item>
         <item quantity="few">Poslední synchronizace: přijaty %1$d pozice čtení</item>
+        <item quantity="many">Poslední synchronizace: přijato %1$d pozice čtení</item>
         <item quantity="other">Poslední synchronizace: přijato %1$d pozic čtení</item>
     </plurals>
     <plurals name="server_sync_pushed">
         <item quantity="one">Poslední synchronizace: odeslána %1$d pozice čtení</item>
         <item quantity="few">Poslední synchronizace: odeslány %1$d pozice čtení</item>
+        <item quantity="many">Poslední synchronizace: odesláno %1$d pozice čtení</item>
         <item quantity="other">Poslední synchronizace: odesláno %1$d pozic čtení</item>
     </plurals>
     <plurals name="server_sync_unresolved">
         <item quantity="one">%1$d kniha čeká na výběr pozice. Zobrazí se při otevření.</item>
         <item quantity="few">%1$d knihy čekají na výběr pozice. Zobrazí se při otevření.</item>
+        <item quantity="many">%1$d knihy čeká na výběr pozice. Zobrazí se při otevření.</item>
         <item quantity="other">%1$d knih čeká na výběr pozice. Zobrazí se při otevření.</item>
     </plurals>
     <plurals name="server_sync_stranded">
         <item quantity="one">%1$d kniha má pozici čtení z jiného přihlášení. Zůstane zde a neodešle se.</item>
         <item quantity="few">%1$d knihy mají pozice čtení z jiného přihlášení. Zůstanou zde a neodešlou se.</item>
+        <item quantity="many">%1$d knihy má pozici čtení z jiného přihlášení. Zůstane zde a neodešle se.</item>
         <item quantity="other">%1$d knih má pozice čtení z jiného přihlášení. Zůstanou zde a neodešlou se.</item>
     </plurals>
     <string name="save">Uložit</string>
@@ -560,6 +584,7 @@
     <plurals name="search_result_count">
         <item quantity="one">%1$d výsledek</item>
         <item quantity="few">%1$d výsledky</item>
+        <item quantity="many">%1$d výsledky</item>
         <item quantity="other">%1$d výsledků</item>
     </plurals>
     <string name="no_books_match">Žádné knihy neodpovídají hledání</string>
@@ -625,6 +650,7 @@
     <plurals name="upload_offer_message">
         <item quantity="one">%d kniha je pouze v tomto zařízení. Odesláním na server se objeví v knihovně i na ostatních zařízeních. Tvoje pozice čtení zůstane zachována.</item>
         <item quantity="few">%d knihy jsou pouze v tomto zařízení. Odesláním na server se objeví v knihovně i na ostatních zařízeních. Tvoje pozice čtení zůstanou zachovány.</item>
+        <item quantity="many">%d knihy je pouze v tomto zařízení. Odesláním na server se objeví v knihovně i na ostatních zařízeních. Tvoje pozice čtení zůstanou zachovány.</item>
         <item quantity="other">%d knih je pouze v tomto zařízení. Odesláním na server se objeví v knihovně i na ostatních zařízeních. Tvoje pozice čtení zůstanou zachovány.</item>
     </plurals>
     <string name="upload_offer_confirm">Odeslat</string>
@@ -867,6 +893,11 @@
     <string name="settings_pinch_to_resize_eink">Na displeji s elektronickým inkoustem je funkce vypnutá. Gesto totiž průběžně zobrazuje náhled velikosti a opakované překreslování mnohokrát za sekundu takovým displejům nesvědčí. Bez náhledu by nebylo jasné, jakou velikost nastavuješ, a každý pokus by znamenal úplné překreslení stránky. Lepší je posuvník velikosti. Zvětšování obrázků gestem funguje dál. Pokud zařízení tento typ displeje nemá, vypni výše volbu E-ink displej.</string>
     <string name="settings_brightness_edge">Ovládání jasu přejetím</string>
     <string name="settings_brightness_edge_detail">Přejetím prstem nahoru nebo dolů podél zvoleného okraje změníš jas bez otevření nabídky. Klepnutí i vodorovné listování od okraje funguje jako dřív. Platí jen při stránkování, ne při posouvání.</string>
+    <string name="settings_reader_orientation">Orientace obrazovky</string>
+    <string name="settings_reader_orientation_detail">Čtečka se otáčí s telefonem, nebo zůstává na výšku či na šířku bez ohledu na systémové nastavení otáčení obrazovky. Knihovnu toto nastavení neovlivňuje.</string>
+    <string name="reader_orientation_auto">Automaticky</string>
+    <string name="reader_orientation_portrait">Na výšku</string>
+    <string name="reader_orientation_landscape">Na šířku</string>
     <string name="settings_resume">Otevřít naposledy rozečtenou knihu</string>
     <string name="settings_resume_detail">Pokud zůstala kniha rozečtená, při spuštění se otevře rovnou místo knihovny.</string>
     <string name="settings_keep_screen_on">Nechat obrazovku zapnutou</string>
@@ -927,31 +958,37 @@
     <plurals name="settings_backup_setting_count">
         <item quantity="one">%1$d nastavení</item>
         <item quantity="few">%1$d nastavení</item>
+        <item quantity="many">%1$d nastavení</item>
         <item quantity="other">%1$d nastavení</item>
     </plurals>
     <plurals name="settings_backup_font_count">
         <item quantity="one">%1$d vlastní písmo</item>
         <item quantity="few">%1$d vlastní písma</item>
+        <item quantity="many">%1$d vlastní písma</item>
         <item quantity="other">%1$d vlastních písem</item>
     </plurals>
     <plurals name="settings_backup_exported">
         <item quantity="one">Záloha uložena s %1$d vlastním písmem.</item>
         <item quantity="few">Záloha uložena s %1$d vlastními písmy.</item>
+        <item quantity="many">Záloha uložena s %1$d vlastními písmy.</item>
         <item quantity="other">Záloha uložena s %1$d vlastními písmy.</item>
     </plurals>
     <plurals name="settings_backup_restored_fonts">
         <item quantity="one">Obnoveno %1$d písmo.</item>
         <item quantity="few">Obnovena %1$d písma.</item>
+        <item quantity="many">Obnoveno %1$d písma.</item>
         <item quantity="other">Obnoveno %1$d písem.</item>
     </plurals>
     <plurals name="settings_backup_already_installed">
         <item quantity="one">%1$d písmo už bylo nainstalováno.</item>
         <item quantity="few">%1$d písma už byla nainstalována.</item>
+        <item quantity="many">%1$d písma už bylo nainstalováno.</item>
         <item quantity="other">%1$d písem už bylo nainstalováno.</item>
     </plurals>
     <plurals name="settings_backup_font_failures">
         <item quantity="one">%1$d písmo se nepodařilo nainstalovat.</item>
         <item quantity="few">%1$d písma se nepodařilo nainstalovat.</item>
+        <item quantity="many">%1$d písma se nepodařilo nainstalovat.</item>
         <item quantity="other">%1$d písem se nepodařilo nainstalovat.</item>
     </plurals>
     <string name="settings_backup_annotation_count">Anotace: %1$d.</string>
@@ -1025,11 +1062,13 @@
     <plurals name="annotations_backup_mark_count">
         <item quantity="one">%d označení</item>
         <item quantity="few">%d označení</item>
+        <item quantity="many">%d označení</item>
         <item quantity="other">%d označení</item>
     </plurals>
     <plurals name="annotations_backup_book_count">
         <item quantity="one">%d kniha</item>
         <item quantity="few">%d knihy</item>
+        <item quantity="many">%d knihy</item>
         <item quantity="other">%d knih</item>
     </plurals>
     <string name="annotations_backup_none">Zatím nejsou žádné anotace</string>
@@ -1066,6 +1105,7 @@
     <plurals name="reading_stats_reading_for_days">
         <item quantity="one">%d den</item>
         <item quantity="few">%d dny</item>
+        <item quantity="many">%d dne</item>
         <item quantity="other">%d dní</item>
     </plurals>
     <string name="reading_stats_progress">Přečteno %1$d%%</string>
@@ -1108,6 +1148,7 @@
     <plurals name="reading_stats_book_sessions">
         <item quantity="one">Přečteno během %d relace</item>
         <item quantity="few">Přečteno během %d relací</item>
+        <item quantity="many">Přečteno během %d relací</item>
         <item quantity="other">Přečteno během %d relací</item>
     </plurals>
     <string name="reading_stats_heatmap_day">%1$s dne %2$s</string>
@@ -1156,11 +1197,13 @@
     <plurals name="browse_download_count">
         <item quantity="one">Stáhnout %1$d knihu?</item>
         <item quantity="few">Stáhnout %1$d knihy?</item>
+        <item quantity="many">Stáhnout %1$d knihy?</item>
         <item quantity="other">Stáhnout %1$d knih?</item>
     </plurals>
     <plurals name="browse_added_count">
         <item quantity="one">Přidána %1$d kniha. Stahování zahájeno.</item>
         <item quantity="few">Přidány %1$d knihy. Stahování zahájeno.</item>
+        <item quantity="many">Přidáno %1$d knihy. Stahování zahájeno.</item>
         <item quantity="other">Přidáno %1$d knih. Stahování zahájeno.</item>
     </plurals>
     <string name="browse_title">Vzdálené knihovny</string>
@@ -1196,11 +1239,13 @@
     <plurals name="browse_selected_count">
         <item quantity="one">Vybrána %1$d položka</item>
         <item quantity="few">Vybrány %1$d položky</item>
+        <item quantity="many">Vybráno %1$d položky</item>
         <item quantity="other">Vybráno %1$d položek</item>
     </plurals>
     <plurals name="browse_add_n">
         <item quantity="one">Přidat %1$d knihu</item>
         <item quantity="few">Přidat %1$d knihy</item>
+        <item quantity="many">Přidat %1$d knihy</item>
         <item quantity="other">Přidat %1$d knih</item>
     </plurals>
     <string name="browse_load_more">Načíst další</string>
@@ -1209,16 +1254,19 @@
     <plurals name="settings_backup_positions_preview">
         <item quantity="one">%1$d pozice čtení. Obnovením se současné pozice nahradí uloženými.</item>
         <item quantity="few">%1$d pozice čtení. Obnovením se současné pozice nahradí uloženými.</item>
+        <item quantity="many">%1$d pozice čtení. Obnovením se současné pozice nahradí uloženými.</item>
         <item quantity="other">%1$d pozic čtení. Obnovením se současné pozice nahradí uloženými.</item>
     </plurals>
     <plurals name="settings_backup_positions_restored">
         <item quantity="one">Obnovena %1$d pozice čtení.</item>
         <item quantity="few">Obnoveny %1$d pozice čtení.</item>
+        <item quantity="many">Obnoveno %1$d pozice čtení.</item>
         <item quantity="other">Obnoveno %1$d pozic čtení.</item>
     </plurals>
     <plurals name="annotations_backup_matched_books">
         <item quantity="one">%d kniha je v této knihovně.</item>
         <item quantity="few">%d knihy jsou v této knihovně.</item>
+        <item quantity="many">%d knihy je v této knihovně.</item>
         <item quantity="other">%d knih je v této knihovně.</item>
     </plurals>
     <string name="shortcut_library">Knihovna</string>
@@ -1330,11 +1378,13 @@
     <plurals name="read_aloud_settings_test_models">
         <item quantity="one">%d hlasový model</item>
         <item quantity="few">%d hlasové modely</item>
+        <item quantity="many">%d hlasového modelu</item>
         <item quantity="other">%d hlasových modelů</item>
     </plurals>
     <plurals name="read_aloud_settings_test_voices">
         <item quantity="one">%d hlas</item>
         <item quantity="few">%d hlasy</item>
+        <item quantity="many">%d hlasu</item>
         <item quantity="other">%d hlasů</item>
     </plurals>
     <string name="read_aloud_change_voice">Změnit hlas</string>
@@ -1360,6 +1410,7 @@
     <plurals name="read_aloud_sleep_minutes">
         <item quantity="one">%d minuta</item>
         <item quantity="few">%d minuty</item>
+        <item quantity="many">%d minuty</item>
         <item quantity="other">%d minut</item>
     </plurals>
     <string name="services_title">Externí služby a klíče API</string>
@@ -1381,6 +1432,7 @@
     <plurals name="services_test_passed">
         <item quantity="one">Připojeno. Dostupný %d model.</item>
         <item quantity="few">Připojeno. Dostupné %d modely.</item>
+        <item quantity="many">Připojeno. Dostupného %d modelu.</item>
         <item quantity="other">Připojeno. Dostupných %d modelů.</item>
     </plurals>
     <string name="services_server_used_translation">%1$s, používá se pro překlad</string>
@@ -1427,6 +1479,7 @@
     <plurals name="translation_context_limit">
         <item quantity="one">Až %1$d věta, %2$s znaků</item>
         <item quantity="few">Až %1$d věty, %2$s znaků</item>
+        <item quantity="many">Až %1$d věty, %2$s znaků</item>
         <item quantity="other">Až %1$d vět, %2$s znaků</item>
     </plurals>
     <string name="translation_book_switch">Posílat údaje o knize</string>
@@ -1450,6 +1503,7 @@
     <plurals name="translation_settings_saved_count">
         <item quantity="one">%1$s věta, %2$s</item>
         <item quantity="few">%1$s věty, %2$s</item>
+        <item quantity="many">%1$s věty, %2$s</item>
         <item quantity="other">%1$s vět, %2$s</item>
     </plurals>
     <string name="translation_settings_saved_none">Zatím nejsou uloženy žádné překlady</string>
@@ -1551,6 +1605,7 @@
     <plurals name="companion_sources_count">
         <item quantity="one">%1$d pasáž</item>
         <item quantity="few">%1$d pasáže</item>
+        <item quantity="many">%1$d pasáže</item>
         <item quantity="other">%1$d pasáží</item>
     </plurals>
     <string name="companion_peek_return">Zpět na místo dotazu</string>
@@ -1716,27 +1771,32 @@
     <plurals name="story_where_from_recaps">
         <item quantity="one">Ze shrnutí kapitoly %1$s</item>
         <item quantity="few">Ze shrnutí kapitol %1$s</item>
+        <item quantity="many">Ze shrnutí kapitol %1$s</item>
         <item quantity="other">Ze shrnutí kapitol %1$s</item>
     </plurals>
     <plurals name="story_unsummarized">
         <item quantity="one">Kapitola %1$s zatím nemá shrnutí</item>
         <item quantity="few">Kapitoly %1$s zatím nemají shrnutí</item>
+        <item quantity="many">Kapitoly %1$s zatím nemají shrnutí</item>
         <item quantity="other">Kapitoly %1$s zatím nemají shrnutí</item>
     </plurals>
     <string name="story_consent">Liseur může odeslat text předchozí kapitoly službě %1$s, aby jej shrnula, a odeslat shrnutí kapitol pro vytvoření přehledu dosavadního děje. Po povolení to Příběh dělá automaticky.</string>
     <plurals name="story_waiting">
         <item quantity="one">Čeká ještě %d kapitola</item>
         <item quantity="few">Čekají ještě %d kapitoly</item>
+        <item quantity="many">Čeká ještě %d kapitoly</item>
         <item quantity="other">Čeká ještě %d kapitol</item>
     </plurals>
     <plurals name="story_summarize_missing">
         <item quantity="one">Shrnout %d chybějící kapitolu</item>
         <item quantity="few">Shrnout %d chybějící kapitoly</item>
+        <item quantity="many">Shrnout %d chybějící kapitoly</item>
         <item quantity="other">Shrnout %d chybějících kapitol</item>
     </plurals>
     <plurals name="story_confirm_missing">
         <item quantity="one">Odeslat text %1$d kapitoly službě %2$s ke shrnutí?</item>
         <item quantity="few">Odeslat text %1$d kapitol službě %2$s ke shrnutí?</item>
+        <item quantity="many">Odeslat text %1$d kapitol službě %2$s ke shrnutí?</item>
         <item quantity="other">Odeslat text %1$d kapitol službě %2$s ke shrnutí?</item>
     </plurals>
     <string name="whole_book_title">Překlady celých knih</string>
@@ -1940,4 +2000,42 @@
     <string name="book_details_file_info">Informace o souboru</string>
     <string name="book_details_read_more">Zobrazit více</string>
     <string name="book_details_show_less">Zobrazit méně</string>
+    <string name="library_style">Vzhled knihovny</string>
+    <string name="library_style_classic">Klasický</string>
+    <string name="library_style_classic_detail">Mřížka obálek s právě rozečtenou knihou nahoře</string>
+    <string name="library_style_home">Domů</string>
+    <string name="library_style_home_detail">Právě rozečtená kniha a pod ní řady nedávno otevřených knih, rozečtených sérií a nových přírůstků</string>
+    <string name="library_style_shelves">Police</string>
+    <string name="library_style_shelves_detail">Řady obálek stojících na policích, uspořádané podle sérií, autorů nebo stavu čtení</string>
+    <string name="library_style_list">Seznam</string>
+    <string name="library_style_list_detail">Každá kniha na vlastním řádku s podrobnostmi a ukazatelem průběhu čtení, jehož délka odpovídá délce knihy</string>
+    <string name="shelf_grouping">Seskupení polic</string>
+    <string name="shelf_group_author">Autor</string>
+    <string name="shelf_group_status">Stav čtení</string>
+    <string name="shelf_backdrop">Pozadí</string>
+    <string name="shelf_backdrop_plain">Jednobarevné</string>
+    <string name="shelf_backdrop_wood">Dřevo</string>
+    <string name="shelf_backdrop_plaster">Omítka</string>
+    <string name="shelf_backdrop_bricks">Cihly</string>
+    <string name="shelf_backdrop_custom">Vlastní obrázek</string>
+    <string name="shelf_tone">Barva polic</string>
+    <string name="shelf_tone_theme">Podle motivu</string>
+    <string name="shelf_tone_stone">Kámen</string>
+    <string name="shelf_tone_oak">Dub</string>
+    <string name="shelf_tone_walnut">Ořech</string>
+    <string name="shelf_tone_brass">Mosaz</string>
+    <string name="library_compact_list">Úsporné řádky</string>
+    <string name="library_compact_list_detail">Menší obálky a názvy knih na jednom řádku</string>
+    <string name="library_bottom_bar">Spodní lišta</string>
+    <string name="library_bottom_bar_detail">Dole zobrazovat aktuální knihu a záložky Domů, Knihovna a Další</string>
+    <string name="library_hero_card">Horní karta</string>
+    <string name="library_hero_card_detail">Zobrazovat právě rozečtenou knihu na kartě v horní části knihovny</string>
+    <string name="library_tab_library">Knihovna</string>
+    <string name="home_continue">Pokračovat</string>
+    <string name="home_recently_opened">Nedávno otevřené</string>
+    <string name="home_new_books">Nově v knihovně</string>
+    <string name="home_series_underway">Rozečtené série</string>
+    <string name="home_all_books">Všechny knihy</string>
+    <string name="shelf_other_books">Ostatní knihy</string>
+    <string name="list_new">Novinka</string>
 </resources>
