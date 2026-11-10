@@ -1,0 +1,25 @@
+Čti knihy EPUB po svém: poslouchej předčítání se zvýrazňováním textu, překládej stránky během čtení nebo se ptej na postavy a události. Liseur propojí knihy v telefonu, katalogy OPDS a knihovní servery calibre-web, Komga, BookOrbit a liseur-sync do jedné knihovny.
+
+Předčítání
+Poslouchej libovolnou knihu EPUB se zvýrazňováním právě čtených vět a automatickým otáčením stránek. Hlasy Androidu mohou předčítat i offline, pokud máš nainstalovaný kompatibilní hlas. Vyber si hlas podle jazyka, uprav rychlost, poslouchej i se zhasnutou obrazovkou nebo nastav časovač vypnutí. Připojit můžeš také server pro syntézu řeči kompatibilní s OpenAI, třeba i ve vlastní síti.
+
+Překlady
+Přelož vybranou pasáž nebo čti knihu stránku po stránce v jiném jazyce. Liseur ukládá přeložené věty do telefonu, aby byly připravené i při návratu na danou stránku. Využij překladač Androidu přímo v zařízení nebo službu kompatibilní s OpenAI, provozovanou ve vlastní síti či online. Přeložené stránky si můžeš nechat předčítat v cílovém jazyce a vyhledávat významy slov bez opuštění čtečky.
+
+Průvodce čtením
+Ptej se průvodce na postavy a události. Profily postav vycházejí pouze z pasáží před místem, kde právě čteš, včetně dřívějších kapitol a předchozího textu aktuální kapitoly. Odkazy na úryvky ukazují, odkud informace pocházejí. Pro jednotlivé knihy lze zapnout automatická shrnutí dočtených kapitol na pozadí. Průvodce využívá službu kompatibilní s OpenAI.
+
+I bez služby AI vytváří průvodce přímo v zařízení prohledávatelný rejstřík osob, míst a skupin a ukazuje, která jména se společně vyskytují v předchozích kapitolách. Není potřeba klíč API.
+
+Čtečka podle tebe
+Vyber si listování po stránkách nebo souvislé posouvání, uprav písmo, okraje a jas a používej světlý, sépiový, tmavý nebo černý motiv. Zvýrazňuj pasáže, přidávej poznámky a záložky, prohledávej celý text knihy a zobrazuj poznámky pod čarou ve vyskakovacím okně. Můžeš importovat vlastní písma nebo používat přiložená písma a písma od vydavatele. Režim E-ink vypíná animace a podporuje ovládání překreslování na zařízeních Onyx.
+
+Knihovna a synchronizace
+Procházej místní složky a karty SD, seskupuj knihy do sérií nebo objevuj knihy zdarma v integrovaném katalogu projektu Gutenberg. Widgety na domovské obrazovce ukazují právě čtenou knihu nebo polici obálek. Nastavení, písma, pozice čtení a poznámky můžeš zálohovat do souboru ZIP.
+
+Synchronizuj pozice čtení se servery calibre-web, Komga, BookOrbit nebo liseur-sync. Libovolný katalog OPDS můžeš propojit se synchronizačním serverem KOReader. S liseur-sync navíc získáš zálohování nastavení pro jednotlivá zařízení a statistiky čtení napříč zařízeními.
+
+Soukromí
+Bez reklam. Pro čtení knih uložených v telefonu nepotřebuješ účet. Systémový překladač Androidu a místní rejstřík průvodce zpracovávají text knihy v zařízení. Pokud si zvolíš online službu pro překlad, průvodce nebo předčítání, Liseur jí odešle potřebný text. Volitelné vyhledávání ve slovníku komunikuje s Wikislovníkem a procházení katalogu s projektem Gutenberg.
+
+Aplikace je svobodný software pod licencí MIT. Zdrojový kód a hlášení chyb: https://github.com/chmouel/liseur
