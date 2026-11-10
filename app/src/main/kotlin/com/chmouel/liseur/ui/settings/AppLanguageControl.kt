@@ -44,6 +44,7 @@ import com.chmouel.liseur.ui.LiseurModalBottomSheet
 internal fun AppLanguageRow(
     selected: AppLanguage,
     onSelected: (AppLanguage) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var open by remember { mutableStateOf(false) }
     ListItem(
@@ -58,7 +59,7 @@ internal fun AppLanguageRow(
             Icon(Icons.Outlined.UnfoldMore, contentDescription = null)
         },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-        modifier = Modifier.clickable(role = Role.Button, onClick = { open = true }),
+        modifier = modifier.clickable(role = Role.Button, onClick = { open = true }),
     )
     if (open) {
         LiseurModalBottomSheet(

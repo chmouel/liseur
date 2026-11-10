@@ -42,6 +42,7 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.reading.SelectionToolbarRow
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
@@ -62,6 +63,9 @@ import com.chmouel.liseur.ui.reading.previewTextAlign
 import com.chmouel.liseur.ui.reading.ReadingSectionLabel
 import com.chmouel.liseur.ui.reading.ReadingThemeRow
 import com.chmouel.liseur.ui.reading.composeFamily
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 
 /**
@@ -134,27 +138,35 @@ fun ReadingAppearanceScreen(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        ReadingThemeRow(
-                            selected = prefs.themeChoice,
-                            resolved = resolved,
-                            onSelected = onTheme,
-                        )
-                        ReadingFontSizeSlider(
-                            value = prefs.fontSize,
-                            // No book here, so nothing is refused: the reader is
-                            // choosing a default for every book they will open.
-                            enabled = true,
-                            onChanged = onFontSize,
-                        )
-                        ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
-                        ReadingFontDropdown(
-                            selected = prefs.font,
-                            imported = fontLibrary.fonts,
-                            enabled = true,
-                            onSelected = onFont,
-                            onImport = fontLibrary.pick,
-                            onRemove = fontLibrary.remove,
-                        )
+                        Column(Modifier.settingsAnchor(SettingsEntries.ReaderTheme)) {
+                            ReadingThemeRow(
+                                selected = prefs.themeChoice,
+                                resolved = resolved,
+                                onSelected = onTheme,
+                            )
+                        }
+                        Column(Modifier.settingsAnchor(SettingsEntries.FontSize)) {
+                            ReadingFontSizeSlider(
+                                value = prefs.fontSize,
+                                // No book here, so nothing is refused: the reader is
+                                // choosing a default for every book they will open.
+                                enabled = true,
+                                onChanged = onFontSize,
+                            )
+                        }
+                        Column(Modifier.settingsAnchor(SettingsEntries.Brightness)) {
+                            ReadingBrightnessSlider(value = prefs.brightness, onChanged = onBrightness)
+                        }
+                        Column(Modifier.settingsAnchor(SettingsEntries.Font)) {
+                            ReadingFontDropdown(
+                                selected = prefs.font,
+                                imported = fontLibrary.fonts,
+                                enabled = true,
+                                onSelected = onFont,
+                                onImport = fontLibrary.pick,
+                                onRemove = fontLibrary.remove,
+                            )
+                        }
                         Text(
                             text = stringResource(R.string.settings_reading_appearance_detail),
                             style = MaterialTheme.typography.bodyMedium,
@@ -166,6 +178,7 @@ fun ReadingAppearanceScreen(
                 // is: the same settings should not be everyday on one
                 // surface and buried on the other.
                 var advancedOpen by rememberSaveable { mutableStateOf(false) }
+                ExpandForSettingsFocus(Route.ReadingAppearance) { advancedOpen = true }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
@@ -175,36 +188,44 @@ fun ReadingAppearanceScreen(
                         Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
-                        ReadingLayoutControls(
-                            lineHeight = prefs.lineHeight,
-                            pageMargins = prefs.pageMargins,
-                            columnMode = prefs.columnMode,
-                            // The sheet hides this in a scrolled book, where
-                            // columns don't apply. There is no book here to
-                            // check, so the preference is always offered; the
-                            // reader surface decides whether to honor it.
-                            showColumns = true,
-                            enabled = true,
-                            onLineHeightChanged = onLineHeight,
-                            onPageMarginsChanged = onPageMargins,
-                            onColumnModeChanged = onColumnMode,
-                        )
+                        Column(Modifier.settingsAnchor(SettingsEntries.LineSpacing, SettingsEntries.Margins, SettingsEntries.Columns)) {
+                            ReadingLayoutControls(
+                                lineHeight = prefs.lineHeight,
+                                pageMargins = prefs.pageMargins,
+                                columnMode = prefs.columnMode,
+                                // The sheet hides this in a scrolled book, where
+                                // columns don't apply. There is no book here to
+                                // check, so the preference is always offered; the
+                                // reader surface decides whether to honor it.
+                                showColumns = true,
+                                enabled = true,
+                                onLineHeightChanged = onLineHeight,
+                                onPageMarginsChanged = onPageMargins,
+                                onColumnModeChanged = onColumnMode,
+                            )
+                        }
                         // No book is open here, so nothing is disabled and the
                         // wording names the writing systems a setting applies
                         // to rather than claiming anything about one book.
-                        ReadingFineTypographyControls(
-                            prefs = prefs,
-                            css = ReadingCss.Unknown,
-                            actions = fineTypography,
-                        )
-                        ReadingFooterControls(
-                            footerMode = prefs.footerMode,
-                            footerLeft = prefs.footerLeft,
-                            footerRight = prefs.footerRight,
-                            onModeSelected = onFooterMode,
-                            onFieldSelected = onFooterField,
-                        )
-                        SelectionToolbarRow(onOpenSelectionToolbar)
+                        Column {
+                            ReadingFineTypographyControls(
+                                prefs = prefs,
+                                css = ReadingCss.Unknown,
+                                actions = fineTypography,
+                            )
+                        }
+                        Column(Modifier.settingsAnchor(SettingsEntries.Footer)) {
+                            ReadingFooterControls(
+                                footerMode = prefs.footerMode,
+                                footerLeft = prefs.footerLeft,
+                                footerRight = prefs.footerRight,
+                                onModeSelected = onFooterMode,
+                                onFieldSelected = onFooterField,
+                            )
+                        }
+                        Column(Modifier.settingsAnchor(SettingsEntries.SelectionToolbar)) {
+                            SelectionToolbarRow(onOpenSelectionToolbar)
+                        }
                     }
                 }
             }

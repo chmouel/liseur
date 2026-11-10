@@ -21,6 +21,8 @@ class RoutesTest {
         assertEquals(deep, decodeRoutes(encodeRoutes(deep)))
         val settings = listOf(Route.Library, Route.Settings, Route.About, Route.Licences)
         assertEquals(settings, decodeRoutes(encodeRoutes(settings)))
+        val search = listOf(Route.Library, Route.Settings, Route.About, Route.SettingsSearch)
+        assertEquals(search, decodeRoutes(encodeRoutes(search)))
     }
 
     @Test
@@ -129,5 +131,26 @@ class RoutesTest {
         val alone = mutableListOf(Route.Library, Route.Settings)
         alone.closeSettings()
         assertEquals(listOf(Route.Library), alone)
+    }
+
+    @Test
+    fun aSearchResultOpensItsPageInPlaceOfTheSearch() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.SettingsSearch)
+        stack.openSettingsResult(Route.ReadAloud)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadAloud), stack)
+    }
+
+    @Test
+    fun aSearchResultOnANestedPageOpensOverItsParent() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.SettingsSearch)
+        stack.openSettingsResult(Route.PageTaps)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.PageTaps), stack)
+    }
+
+    @Test
+    fun aSearchResultOnSettingsItselfOnlyClosesTheSearch() {
+        val stack = mutableListOf(Route.Library, Route.Settings, Route.About, Route.SettingsSearch)
+        stack.openSettingsResult(Route.Settings)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.About), stack)
     }
 }

@@ -39,6 +39,7 @@ import com.chmouel.liseur.data.settings.ServerList
 import com.chmouel.liseur.providers.ServiceRow
 import com.chmouel.liseur.providers.ServiceSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.NestedPage
@@ -46,6 +47,9 @@ import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -95,6 +99,7 @@ internal fun CompanionSettingsScreen(
     val scope = rememberCoroutineScope()
     var picking by remember { mutableStateOf(false) }
     var advancedOpen by remember { mutableStateOf(false) }
+    ExpandForSettingsFocus(Route.ReadingCompanion) { advancedOpen = true }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -175,6 +180,7 @@ internal fun CompanionSettingsScreen(
                         )
                     },
                     onSelected = { option -> scope.launch { server.setDetail(option) } },
+                    modifier = Modifier.settingsAnchor(SettingsEntries.CompanionDetail),
                 )
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
@@ -192,6 +198,7 @@ internal fun CompanionSettingsScreen(
                         subtitle = stringResource(R.string.companion_settings_recaps_summary),
                         checked = recaps,
                         onCheckedChange = { on -> scope.launch { server.setRecaps(on, store) } },
+                        modifier = Modifier.settingsAnchor(SettingsEntries.CompanionRecaps),
                     )
                     RowDivider()
                     SwitchRow(
@@ -199,6 +206,7 @@ internal fun CompanionSettingsScreen(
                         subtitle = stringResource(R.string.companion_settings_story_auto_summary),
                         checked = storyAuto,
                         onCheckedChange = { on -> scope.launch { server.setStoryAutoOk(on) } },
+                        modifier = Modifier.settingsAnchor(SettingsEntries.CompanionStoryAuto),
                     )
                     RowDivider()
                     SwitchRow(
@@ -206,6 +214,7 @@ internal fun CompanionSettingsScreen(
                         subtitle = stringResource(R.string.codex_settings_summary),
                         checked = codex,
                         onCheckedChange = { on -> scope.launch { server.setCodexEnabled(on) } },
+                        modifier = Modifier.settingsAnchor(SettingsEntries.CompanionCodex),
                     )
                 }
                 Text(

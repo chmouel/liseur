@@ -910,6 +910,9 @@
     <string name="settings_library_help_title">Server dei libri</string>
     <string name="settings_library_help_body" formatted="true">Un server dei libri (calibre-web, Komga, liseur-sync o un catalogo OPDS) tiene la tua libreria: Liseur la sfoglia e scarica da essa, e tiene il tuo posto allineato dove il server lo supporta. Una connessione OPDS Personalizzata può abbinarsi a un server di sync KOReader per le posizioni di lettura. Si collega un solo server alla volta.\n\nliseur-sync tiene allineati anche i libri che esistono solo su questo telefono: anche un file da una scheda SD sincronizza la posizione. Installane uno tuo da %1$s.</string>
     <string name="settings_account_detail">Sfoglia e scarica da un server calibre-web, Komga, liseur-sync o OPDS, e tieni il tuo posto allineato (per OPDS, tramite un server di sync KOReader abbinato).</string>
+    <string name="settings_search">Cerca nelle impostazioni</string>
+    <string name="settings_search_prompt">Scrivi una parola del nome o della descrizione di un\'impostazione.</string>
+    <string name="settings_search_no_results">Nessuna impostazione corrisponde a «%1$s».</string>
     <string name="settings_about">Informazioni</string>
     <string name="about_title">Informazioni</string>
     <string name="about_open">Informazioni su Liseur</string>

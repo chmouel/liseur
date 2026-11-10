@@ -947,6 +947,9 @@
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server (calibre-web, Komga, liseur-sync or an OPDS catalog) holds your library: Liseur browses it and downloads from it, and keeps your place in step where the server supports it. A Custom OPDS connection can pair with a KOReader sync server for reading positions. One server is connected at a time.\n\nliseur-sync also keeps books that exist only on this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
     <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or OPDS server, and keep your place in step (for OPDS, through a paired KOReader sync server).</string>
+    <string name="settings_search">Search settings</string>
+    <string name="settings_search_prompt">Type a word from a setting\'s name or description.</string>
+    <string name="settings_search_no_results">No setting matches “%1$s”.</string>
     <string name="settings_about">About</string>
     <string name="about_title">About</string>
     <string name="about_open">About Liseur</string>

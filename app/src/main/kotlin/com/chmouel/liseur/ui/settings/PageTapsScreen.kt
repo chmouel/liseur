@@ -39,6 +39,8 @@ import com.chmouel.liseur.data.settings.TapLayout
 import com.chmouel.liseur.data.settings.TapSideWidth
 import com.chmouel.liseur.data.settings.TapZones
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowHeight
 import com.chmouel.liseur.ui.windowWidth
 import kotlin.math.roundToInt
@@ -148,14 +150,17 @@ private fun ColumnScope.PageTapsControls(
             selected = tapZones,
             label = { stringResource(it.label) },
             onSelected = onTapZones,
+            modifier = Modifier.settingsAnchor(SettingsEntries.TapZones),
         )
         RowDivider()
-        TapSideWidthRow(
-            position = position,
-            enabled = tapZones.turnsPages,
-            onPosition = onPosition,
-            onFinished = onFinished,
-        )
+        Column(Modifier.settingsAnchor(SettingsEntries.TapSideWidth)) {
+            TapSideWidthRow(
+                position = position,
+                enabled = tapZones.turnsPages,
+                onPosition = onPosition,
+                onFinished = onFinished,
+            )
+        }
     }
 }
 

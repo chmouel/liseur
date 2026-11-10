@@ -112,6 +112,7 @@ import com.chmouel.liseur.translate.BookEarlierTextRow
 import com.chmouel.liseur.translate.SharedContextHeader
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.settings.ConnectionRow
 import com.chmouel.liseur.ui.settings.InfoButton
 import com.chmouel.liseur.ui.settings.NestedPage
@@ -121,6 +122,9 @@ import com.chmouel.liseur.ui.settings.SettingsExpandableGroup
 import com.chmouel.liseur.ui.settings.SettingsExpandableSection
 import com.chmouel.liseur.ui.settings.SettingsGroup
 import com.chmouel.liseur.ui.settings.SwitchRow
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -197,7 +201,9 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
             ) {
-                ServiceRow(service, server, onClick = { picking = true })
+                Column(Modifier.settingsAnchor(SettingsEntries.ReadAloudProvider)) {
+                    ServiceRow(service, server, onClick = { picking = true })
+                }
                 if (picking) {
                     ServiceSheet(
                         services = feature.services,
@@ -223,9 +229,12 @@ internal fun ReadAloudSettingsScreen(feature: SpeechReadAloud, onBack: () -> Uni
                     service.SettingsRows(feature, onManageServices = { managing = true })
                 }
                 SettingsGroup(stringResource(R.string.read_aloud_settings_playback)) {
-                    SentencesPerRequestRow(feature)
+                    Column(Modifier.settingsAnchor(SettingsEntries.SentencesPerRequest)) {
+                        SentencesPerRequestRow(feature)
+                    }
                 }
                 var advancedOpen by remember { mutableStateOf(false) }
+                ExpandForSettingsFocus(Route.ReadAloud) { advancedOpen = true }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
@@ -269,6 +278,7 @@ private fun ReadAloudContextGroup(feature: SpeechReadAloud, onChangeService: () 
         enabled = supported,
         onCheckedChange = { checked -> scope.launch { feature.setContextEnabled(checked) } },
         info = { InfoButton(title, about) },
+        modifier = Modifier.settingsAnchor(SettingsEntries.ReadAloudContext),
     )
     if (!supported) {
         TextButton(onClick = onChangeService, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)) {

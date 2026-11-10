@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.EdgeBrightness
+import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.reading.label
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.DefinitionTarget
@@ -76,6 +77,9 @@ import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
+import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import kotlin.math.roundToInt
 
@@ -150,6 +154,7 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_resume_detail),
                         checked = settings.resumeLastBook,
                         onCheckedChange = onResumeLastBook,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.Resume),
                     )
                     RowDivider()
                     SwitchRow(
@@ -157,6 +162,7 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_scroll_mode_detail),
                         checked = settings.scrollMode,
                         onCheckedChange = onScrollMode,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.ScrollMode),
                     )
                 }
 
@@ -172,6 +178,7 @@ fun ReadingNavigationScreen(
                         selected = settings.eInkMode,
                         label = { stringResource(it.label) },
                         onSelected = onEInkMode,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.EInk),
                     )
                     if (LocalEInk.current) {
                         RowDivider()
@@ -180,6 +187,7 @@ fun ReadingNavigationScreen(
                             subtitle = stringResource(R.string.settings_color_eink_detail),
                             checked = settings.colorEInk,
                             onCheckedChange = onColorEInk,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.ColorEInk),
                         )
                     }
                     vendorName?.let { vendor ->
@@ -192,6 +200,7 @@ fun ReadingNavigationScreen(
                             ),
                             checked = settings.vendorRefresh,
                             onCheckedChange = onVendorRefresh,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.VendorRefresh),
                         )
                     }
                 }
@@ -203,6 +212,7 @@ fun ReadingNavigationScreen(
                         selected = settings.definitionTarget,
                         label = { stringResource(it.label) },
                         onSelected = onDefinitionTarget,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.DefineWith),
                     )
                     if (settings.definitionTarget == DefinitionTarget.BUILT_IN) {
                         RowDivider()
@@ -211,18 +221,23 @@ fun ReadingNavigationScreen(
                             subtitle = stringResource(R.string.settings_dictionary_lookup_detail),
                             checked = settings.dictionaryLookupEnabled,
                             onCheckedChange = onDictionaryLookup,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.DictionaryLookup),
                         )
                         if (settings.dictionaryLookupEnabled) {
                             RowDivider()
-                            DictionarySiteRow(
-                                baseUrl = settings.dictionaryBaseUrl,
-                                onBaseUrl = onDictionaryBaseUrl,
-                            )
+                            Column(Modifier.settingsAnchor(SettingsEntries.DictionarySite)) {
+                                DictionarySiteRow(
+                                    baseUrl = settings.dictionaryBaseUrl,
+                                    onBaseUrl = onDictionaryBaseUrl,
+                                )
+                            }
                             RowDivider()
-                            DictionaryAltLanguageRow(
-                                selected = settings.dictionaryAltLanguage,
-                                onSelected = onDictionaryAltLanguage,
-                            )
+                            Column(Modifier.settingsAnchor(SettingsEntries.DictionaryAltLanguage)) {
+                                DictionaryAltLanguageRow(
+                                    selected = settings.dictionaryAltLanguage,
+                                    onSelected = onDictionaryAltLanguage,
+                                )
+                            }
                         }
                         RowDivider()
                         SwitchRow(
@@ -230,17 +245,21 @@ fun ReadingNavigationScreen(
                             subtitle = stringResource(R.string.settings_dictionary_on_long_press_detail),
                             checked = settings.dictionaryOnLongPress,
                             onCheckedChange = onDictionaryOnLongPress,
+                            modifier = Modifier.settingsAnchor(SettingsEntries.DictionaryOnLongPress),
                         )
                     }
                 }
 
                 var advancedOpen by remember { mutableStateOf(false) }
+                ExpandForSettingsFocus(Route.ReadingNavigation) { advancedOpen = true }
                 SettingsExpandableGroup(
                     title = stringResource(R.string.settings_advanced),
                     expanded = advancedOpen,
                     onExpandedChange = { advancedOpen = it },
                 ) {
-                    PageTurnStyleRow(selected = pageTurnStyle, onSelected = onPageTurnStyle)
+                    Column(Modifier.settingsAnchor(SettingsEntries.PageTurnStyle)) {
+                        PageTurnStyleRow(selected = pageTurnStyle, onSelected = onPageTurnStyle)
+                    }
                     RowDivider()
                     ChipRow(
                         title = stringResource(R.string.settings_volume_keys),
@@ -249,13 +268,16 @@ fun ReadingNavigationScreen(
                         selected = settings.volumeKeyMode,
                         label = { stringResource(it.label) },
                         onSelected = onVolumeKeyMode,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.VolumeKeys),
                     )
                     RowDivider()
-                    PageTapsRow(
-                        tapZones = settings.tapZones,
-                        tapSideWidth = settings.tapSideWidth,
-                        onClick = onOpenPageTaps,
-                    )
+                    Column(Modifier.settingsAnchor(SettingsEntries.PageTaps)) {
+                        PageTapsRow(
+                            tapZones = settings.tapZones,
+                            tapSideWidth = settings.tapSideWidth,
+                            onClick = onOpenPageTaps,
+                        )
+                    }
                     RowDivider()
                     // The switch stays visible rather than disappearing
                     // on e-paper: a row that is simply gone reads as a
@@ -276,6 +298,7 @@ fun ReadingNavigationScreen(
                         checked = settings.pinchToResize && !pinchOffForEInk,
                         onCheckedChange = onPinchToResize,
                         enabled = !pinchOffForEInk,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.PinchToResize),
                     )
                     RowDivider()
                     ChipRow(
@@ -285,6 +308,7 @@ fun ReadingNavigationScreen(
                         selected = settings.edgeBrightness,
                         label = { stringResource(it.label) },
                         onSelected = onEdgeBrightness,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.BrightnessEdge),
                     )
                     RowDivider()
                     SwitchRow(
@@ -292,6 +316,7 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_lock_footer_detail),
                         checked = settings.lockFooterOn,
                         onCheckedChange = onLockFooter,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.LockFooter),
                     )
                     RowDivider()
                     SwitchRow(
@@ -299,6 +324,7 @@ fun ReadingNavigationScreen(
                         subtitle = stringResource(R.string.settings_keep_screen_on_detail),
                         checked = settings.keepScreenOn,
                         onCheckedChange = onKeepScreenOn,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.KeepScreenOn),
                     )
                 }
             }

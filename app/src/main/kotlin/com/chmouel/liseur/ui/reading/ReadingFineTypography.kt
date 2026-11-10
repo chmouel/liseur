@@ -33,6 +33,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.intl.Locale
 import androidx.compose.ui.unit.dp
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderFontWeight
 import com.chmouel.liseur.data.settings.ReaderPrefs
@@ -102,6 +104,7 @@ fun ReadingFineTypographyControls(
         val enabled = css.honoursAnything
 
         AlignmentRow(
+            modifier = Modifier.settingsAnchor(SettingsEntries.TextAlign),
             value = prefs.textAlign,
             enabled = enabled && css.honoursAlignment,
             note = when {
@@ -121,6 +124,7 @@ fun ReadingFineTypographyControls(
         val latinOnly = enabled && css.honoursLatinSpacing
 
         HyphensRow(
+            modifier = Modifier.settingsAnchor(SettingsEntries.Hyphens),
             value = prefs.hyphens,
             enabled = latinOnly,
             // The justification note is the one thing a reader cannot
@@ -132,6 +136,7 @@ fun ReadingFineTypographyControls(
         )
 
         DefaultableSpacingSlider(
+            modifier = Modifier.settingsAnchor(SettingsEntries.LetterSpacing),
             label = stringResource(R.string.reader_letter_spacing),
             value = prefs.letterSpacing,
             range = TypographyRange.LETTER_SPACING,
@@ -141,6 +146,7 @@ fun ReadingFineTypographyControls(
         )
 
         DefaultableSpacingSlider(
+            modifier = Modifier.settingsAnchor(SettingsEntries.WordSpacing),
             label = stringResource(R.string.reader_word_spacing),
             value = prefs.wordSpacing,
             range = TypographyRange.WORD_SPACING,
@@ -150,6 +156,7 @@ fun ReadingFineTypographyControls(
         )
 
         DefaultableSpacingSlider(
+            modifier = Modifier.settingsAnchor(SettingsEntries.ParagraphSpacing),
             label = stringResource(R.string.reader_paragraph_spacing),
             value = prefs.paragraphSpacing,
             range = TypographyRange.PARAGRAPH_SPACING,
@@ -161,6 +168,7 @@ fun ReadingFineTypographyControls(
         )
 
         FontWeightRow(
+            modifier = Modifier.settingsAnchor(SettingsEntries.FontWeight),
             value = prefs.fontWeight,
             enabled = enabled,
             onChanged = actions.onFontWeightChanged,
@@ -183,6 +191,7 @@ private fun latinNote(css: ReadingCss, enabled: Boolean): String? = when {
 
 @Composable
 private fun AlignmentRow(
+    modifier: Modifier = Modifier,
     value: ReaderTextAlign,
     enabled: Boolean,
     note: String?,
@@ -193,7 +202,7 @@ private fun AlignmentRow(
         ReaderTextAlign.RAGGED to R.string.reader_text_align_ragged,
         ReaderTextAlign.JUSTIFIED to R.string.reader_text_align_justified,
     )
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_text_align))
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (align, label) ->
@@ -211,6 +220,7 @@ private fun AlignmentRow(
 
 @Composable
 private fun HyphensRow(
+    modifier: Modifier = Modifier,
     value: Boolean?,
     enabled: Boolean,
     note: String?,
@@ -221,7 +231,7 @@ private fun HyphensRow(
         false to R.string.reader_hyphens_off,
         true to R.string.reader_hyphens_on,
     )
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_hyphens))
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (choice, label) ->
@@ -247,12 +257,13 @@ private fun HyphensRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FontWeightRow(
+    modifier: Modifier = Modifier,
     value: ReaderFontWeight,
     enabled: Boolean,
     onChanged: (ReaderFontWeight) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         ReadingSectionLabel(stringResource(R.string.reader_font_weight))
         ExposedDropdownMenuBox(
             expanded = expanded && enabled,
@@ -318,6 +329,7 @@ private fun ReaderFontWeight.labelRes(): Int = when (this) {
  */
 @Composable
 fun DefaultableSpacingSlider(
+    modifier: Modifier = Modifier,
     label: String,
     value: Double?,
     range: TypographyRange.Slider,
@@ -326,7 +338,7 @@ fun DefaultableSpacingSlider(
     onChanged: (Double?) -> Unit,
 ) {
     var thumb by remember(value) { mutableFloatStateOf(spacingThumb(value, range)) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,

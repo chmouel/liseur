@@ -138,6 +138,17 @@ import com.chmouel.liseur.ui.navigation.launchStack
 import com.chmouel.liseur.ui.navigation.openDetail
 import com.chmouel.liseur.ui.navigation.pop
 import com.chmouel.liseur.ui.navigation.push
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.Modifier
+import com.chmouel.liseur.data.settings.DefinitionTarget
+import com.chmouel.liseur.providers.flavorSettingsEntries
+import com.chmouel.liseur.ui.navigation.openSettingsResult
+import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.ui.settings.search.SearchContext
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.SettingsFocus
+import com.chmouel.liseur.ui.settings.search.SettingsSearchScreen
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
@@ -317,8 +328,9 @@ private fun LiseurApp(
     val readerPreferences = remember(context) { context.container.readerPreferences }
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
+    // The settings search opens over the page, which keeps working under it.
     val settingsZipBackup by rememberUpdatedState(rememberSettingsZipBackup(
-        active = backStack.lastOrNull() == Route.SettingsBackup,
+        active = backStack.lastOrNull { it != Route.SettingsSearch } == Route.SettingsBackup,
     ))
     // Closing the backup screen first cancels whatever it was doing, the
     // same whether it is closed by its arrow or by Back.
@@ -537,17 +549,54 @@ private fun LiseurApp(
                             server = context.container.remoteAccount.server,
                             onOpenAbout = { openPage(Route.About) },
                             onBack = closeSettings,
+                            onOpenSearch = { backStack.push(Route.SettingsSearch) },
                             flavorReadingRows = {
                                 RowDivider()
-                                context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
+                                Column(Modifier.settingsAnchor(SettingsEntries.ReadAloud)) {
+                                    context.container.readAloud.SettingsEntry(onClick = { openPage(Route.ReadAloud) })
+                                }
                             },
                             intelligenceRows = {
-                                context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
+                                Column(Modifier.settingsAnchor(SettingsEntries.Translation)) {
+                                    context.container.translate.SettingsEntry(onClick = { openPage(Route.Translation) })
+                                }
                                 RowDivider()
-                                CompanionSettingsEntry(context.container.companionServer, onClick = { openPage(Route.ReadingCompanion) })
+                                Column(Modifier.settingsAnchor(SettingsEntries.Companion)) {
+                                    CompanionSettingsEntry(
+                                        context.container.companionServer,
+                                        onClick = { openPage(Route.ReadingCompanion) },
+                                    )
+                                }
                                 RowDivider()
-                                ServicesEntry(onClick = { openPage(Route.Services) })
+                                Column(Modifier.settingsAnchor(SettingsEntries.Services)) {
+                                    ServicesEntry(onClick = { openPage(Route.Services) })
+                                }
                             },
+                        )
+                    }
+
+                    Route.SettingsSearch -> {
+                        val searchContext = SearchContext(
+                            columnsAvailable = widthClass().isAtLeastMedium,
+                            dynamicColorAvailable = dynamicColorAvailable,
+                            eInk = eInk,
+                            vendorRefresh = context.container.eInkDisplay.vendor != null,
+                            builtInDictionary = settings.definitionTarget == DefinitionTarget.BUILT_IN,
+                            dictionaryLookup = settings.dictionaryLookupEnabled,
+                        )
+                        SettingsSearchScreen(
+                            entries = remember { SettingsEntries.all(flavorSettingsEntries) },
+                            context = searchContext,
+                            onOpen = { entry ->
+                                if (backStack.lastOrNull { it != Route.SettingsSearch } == Route.SettingsBackup &&
+                                    entry.page != Route.SettingsBackup
+                                ) {
+                                    settingsZipBackup.close()
+                                }
+                                SettingsFocus.key = entry.key
+                                backStack.openSettingsResult(entry.page)
+                            },
+                            onBack = back,
                         )
                     }
 

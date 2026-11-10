@@ -98,6 +98,8 @@ import com.chmouel.liseur.ui.settings.NestedPage
 import com.chmouel.liseur.ui.settings.PaneBackButton
 import com.chmouel.liseur.ui.settings.RowDivider
 import com.chmouel.liseur.ui.settings.SettingsGroup
+import com.chmouel.liseur.ui.settings.search.SettingsEntries
+import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import com.chmouel.liseur.ui.windowWidth
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -187,7 +189,9 @@ internal fun ServicesScreen(connections: ServerConnections, accounts: ServiceAcc
                         RowDivider()
                     }
                     ListItem(
-                        modifier = Modifier.clickable(role = Role.Button) { edit(NEW_SERVER) },
+                        modifier = Modifier
+                            .settingsAnchor(SettingsEntries.ServicesServers)
+                            .clickable(role = Role.Button) { edit(NEW_SERVER) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         leadingContent = {
                             Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
