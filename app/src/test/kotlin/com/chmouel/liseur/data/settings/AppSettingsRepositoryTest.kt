@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import com.chmouel.liseur.reader.annotations.SelectionAction
 import com.chmouel.liseur.reader.annotations.SelectionActionIcon
@@ -338,36 +339,15 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
-    fun `bottom bar is on by default on a fresh install`() = runTest {
+    fun `bottom bar is on by default`() = runTest {
         val store = store()
-        val migration = LibraryBottomBarUpgradeMigration { false }
-        assertFalse(migration.shouldMigrate(store.data.first()))
-
         val repo = AppSettingsRepository(store)
         assertTrue(repo.settings.first().libraryLayout.bottomBar)
-    }
 
-    @Test
-    fun `bottom bar stays off when upgrading an existing install`() = runTest {
-        val store = store()
         store.edit { it[stringPreferencesKey("theme_mode")] = "DARK" }
+        assertTrue(repo.settings.first().libraryLayout.bottomBar)
 
-        val migration = LibraryBottomBarUpgradeMigration { false }
-        assertTrue(migration.shouldMigrate(store.data.first()))
-        store.updateData { migration.migrate(it) }
-
-        val repo = AppSettingsRepository(store)
-        assertFalse(repo.settings.first().libraryLayout.bottomBar)
-    }
-
-    @Test
-    fun `bottom bar stays off when upgrading an install that already had a library database`() = runTest {
-        val store = store()
-        val migration = LibraryBottomBarUpgradeMigration { true }
-        assertTrue(migration.shouldMigrate(store.data.first()))
-        store.updateData { migration.migrate(it) }
-
-        val repo = AppSettingsRepository(store)
+        repo.setLibraryLayout(LibraryLayout(bottomBar = false))
         assertFalse(repo.settings.first().libraryLayout.bottomBar)
     }
 }

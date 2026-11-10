@@ -24,11 +24,10 @@ Shelves and List.
 Each is a fixed layout with at most a few options of its own:
 any style can choose between a top card for the current book and a
 bottom bar with the current book's cover on the left and Home, Library
-and More tabs beside it (the bottom bar is the default on new installs,
-and upgrades keep the top card unless changed); Shelves chooses series,
-author or reading state for its shelves, a shelf colour (theme accent,
-stone, oak, walnut or brass) and a backdrop behind them (plain, wood,
-plaster, bricks or a custom image); and List can use compact rows.
+and More tabs beside it (the bottom bar is the default); Shelves chooses
+series, author or reading state for its shelves, a shelf colour (theme
+accent, stone, oak, walnut or brass) and a backdrop behind them (plain,
+wood, plaster, bricks or a custom image); and List can use compact rows.
 Nothing is reorderable.
 
 Only the library screen changes. Every style keeps the same book

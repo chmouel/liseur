@@ -181,7 +181,10 @@ PY
 #   set_switch <label> <on|off>
 set_switch() {
     local label=$1 want=$2 now
-    wait_for "$label" 15 >/dev/null || die "no \"$label\" switch on screen"
+    scroll_to "$label" || {
+        tap_if_there "Advanced" exact || true
+        scroll_to "$label"
+    } || die "no \"$label\" switch on screen"
     now=$(switch_state "$label") || die "could not read the \"$label\" switch"
     if [[ $now == "$want" ]]; then
         note "$label already $want"
