@@ -1,7 +1,6 @@
 package com.chmouel.liseur.data.settings
 
 import android.content.Context
-import androidx.datastore.core.DataMigration
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -481,31 +480,8 @@ enum class CompanionDetail(val id: String) {
 
 private val Context.appSettingsStore: DataStore<Preferences> by preferencesDataStore(
     name = "app_settings",
-    produceMigrations = { context ->
-        listOf(
-            LegacySpeechServerMigration(serverNamer(context)),
-            LibraryBottomBarUpgradeMigration { context.getDatabasePath("liseur.db").exists() },
-        )
-    },
+    produceMigrations = { context -> listOf(LegacySpeechServerMigration(serverNamer(context))) },
 )
-
-/**
- * Keeps the top hero card on an existing install when upgrading to a
- * build that turns the bottom bar on by default for new installs.
- */
-internal class LibraryBottomBarUpgradeMigration(
-    private val hasExistingLibrary: () -> Boolean = { false },
-) : DataMigration<Preferences> {
-    private val key = booleanPreferencesKey("library_bottom_bar")
-
-    override suspend fun shouldMigrate(currentData: Preferences): Boolean =
-        key !in currentData && (currentData.asMap().isNotEmpty() || hasExistingLibrary())
-
-    override suspend fun migrate(currentData: Preferences): Preferences =
-        currentData.toMutablePreferences().also { it[key] = false }.toPreferences()
-
-    override suspend fun cleanUp() = Unit
-}
 
 /** A new server's name: the hosted service it is on, or its host. */
 internal fun serverNamer(context: Context): (String) -> String = { url ->
@@ -658,8 +634,7 @@ class AppSettingsRepository(
                 shelfBackdropUri = p[Keys.LIBRARY_SHELF_BACKDROP_URI],
                 shelfTone = ShelfTone.fromId(p[Keys.LIBRARY_SHELF_TONE]),
                 compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
-                bottomBar = p[Keys.LIBRARY_BOTTOM_BAR]
-                    ?: (p.asMap().keys.none { it != Keys.LIBRARY_BOTTOM_BAR }),
+                bottomBar = p[Keys.LIBRARY_BOTTOM_BAR] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
