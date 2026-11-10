@@ -44,6 +44,7 @@ sessions) is lost. Use the `dev` build type instead:
 make dev             # ./gradlew assemblePlayDev (FLAVOR=foss for assembleFossDev)
 make dev-install     # adb install -r, beside the real app
 make dev-run         # install and launch
+make dev-clear       # wipe its data and Android backup, no rebuild
 make dev-uninstall
 make dev-logcat      # logcat filtered to its pid
 ```

@@ -487,7 +487,11 @@ fun LibraryScreen(
     }
 
     val layout = state.layout
-    val showBottomBar = layout.bottomBar && !state.isSearchActive && !archived
+    // Nothing to read or switch between yet: the empty-library onboarding
+    // gets the whole screen. Still shown while loading, so a stocked
+    // library does not have the bar pop in on every launch.
+    val onboarding = !state.loading && state.libraryIsEmpty && !state.hasArchived
+    val showBottomBar = layout.bottomBar && !state.isSearchActive && !archived && !onboarding
     var bottomHomeTab by rememberSaveable { mutableStateOf(layout.style == LibraryStyle.HOME) }
     var lastLibraryStyle by rememberSaveable {
         mutableStateOf(if (layout.style != LibraryStyle.HOME) layout.style.id else LibraryStyle.CLASSIC.id)
