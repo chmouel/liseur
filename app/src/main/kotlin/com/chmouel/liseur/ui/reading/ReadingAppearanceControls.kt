@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.reading
 
 import android.os.Build
+import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -884,10 +885,21 @@ val ReaderOrientation.label: Int
         ReaderOrientation.LANDSCAPE -> R.string.reader_orientation_landscape
     }
 
-/** Whether the system would obey the orientation lock on this screen. */
+/**
+ * Whether the system would obey the orientation lock on this screen.
+ * Android 16 judges the whole display, not the app's window, so a split
+ * screen on a tablet still counts as large.
+ */
 @Composable
-fun orientationLockHonoured(): Boolean =
-    ReaderOrientation.honoured(Build.VERSION.SDK_INT, LocalConfiguration.current.smallestScreenWidthDp)
+fun orientationLockHonoured(): Boolean {
+    val context = LocalContext.current
+    // Read so a fold or display change recomposes the check.
+    LocalConfiguration.current
+    if (Build.VERSION.SDK_INT < 36) return true
+    val display = context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+    val smallestDp = minOf(display.width(), display.height()) / context.resources.displayMetrics.density
+    return ReaderOrientation.honoured(Build.VERSION.SDK_INT, smallestDp.toInt())
+}
 
 /** Whether the reader turns with the phone or stays one way up (#438). */
 @Composable
