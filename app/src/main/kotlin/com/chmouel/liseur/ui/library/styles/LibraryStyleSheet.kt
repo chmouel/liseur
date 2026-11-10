@@ -34,6 +34,7 @@ import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
+import com.chmouel.liseur.domain.ShelfTone
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.SwitchRow
@@ -73,6 +74,15 @@ private val ShelfBackdrop.label: Int
         ShelfBackdrop.PLASTER -> R.string.shelf_backdrop_plaster
         ShelfBackdrop.BRICKS -> R.string.shelf_backdrop_bricks
         ShelfBackdrop.CUSTOM -> R.string.shelf_backdrop_custom
+    }
+
+private val ShelfTone.label: Int
+    get() = when (this) {
+        ShelfTone.THEME -> R.string.shelf_tone_theme
+        ShelfTone.STONE -> R.string.shelf_tone_stone
+        ShelfTone.OAK -> R.string.shelf_tone_oak
+        ShelfTone.WALNUT -> R.string.shelf_tone_walnut
+        ShelfTone.BRASS -> R.string.shelf_tone_brass
     }
 
 /**
@@ -142,6 +152,13 @@ internal fun LibraryStyleSheet(
                         selected = layout.shelfGrouping,
                         label = { stringResource(it.label) },
                         onSelected = { onChange(layout.copy(shelfGrouping = it)) },
+                    )
+                    ChipRow(
+                        title = stringResource(R.string.shelf_tone),
+                        options = ShelfTone.entries,
+                        selected = layout.shelfTone,
+                        label = { stringResource(it.label) },
+                        onSelected = { onChange(layout.copy(shelfTone = it)) },
                     )
                     ChipRow(
                         title = stringResource(R.string.shelf_backdrop),

@@ -60,12 +60,29 @@ enum class ShelfBackdrop(val id: String) {
     }
 }
 
+/** The material and accent tint of the shelves and frames in [LibraryStyle.SHELVES]. */
+enum class ShelfTone(val id: String) {
+    THEME("theme"),
+    STONE("stone"),
+    OAK("oak"),
+    WALNUT("walnut"),
+    BRASS("brass"),
+    ;
+
+    companion object {
+        val Default = THEME
+
+        fun fromId(id: String?): ShelfTone = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
 /** The chosen style and the options each of the styles that has any carries. */
 data class LibraryLayout(
     val style: LibraryStyle = LibraryStyle.Default,
     val shelfGrouping: ShelfGrouping = ShelfGrouping.Default,
     val shelfBackdrop: ShelfBackdrop = ShelfBackdrop.Default,
     val shelfBackdropUri: String? = null,
+    val shelfTone: ShelfTone = ShelfTone.Default,
     val compactList: Boolean = false,
 )
 

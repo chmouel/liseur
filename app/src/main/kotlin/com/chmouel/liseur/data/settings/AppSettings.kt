@@ -19,6 +19,7 @@ import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
+import com.chmouel.liseur.domain.ShelfTone
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.reader.annotations.SelectionActionLayout
 import com.chmouel.liseur.reader.annotations.HighlightPalette
@@ -524,6 +525,7 @@ class AppSettingsRepository(
         val LIBRARY_SHELF_GROUPING = stringPreferencesKey("library_shelf_grouping")
         val LIBRARY_SHELF_BACKDROP = stringPreferencesKey("library_shelf_backdrop")
         val LIBRARY_SHELF_BACKDROP_URI = stringPreferencesKey("library_shelf_backdrop_uri")
+        val LIBRARY_SHELF_TONE = stringPreferencesKey("library_shelf_tone")
         val LIBRARY_COMPACT_LIST = booleanPreferencesKey("library_compact_list")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
@@ -629,6 +631,7 @@ class AppSettingsRepository(
                 shelfGrouping = ShelfGrouping.fromId(p[Keys.LIBRARY_SHELF_GROUPING]),
                 shelfBackdrop = ShelfBackdrop.fromId(p[Keys.LIBRARY_SHELF_BACKDROP]),
                 shelfBackdropUri = p[Keys.LIBRARY_SHELF_BACKDROP_URI],
+                shelfTone = ShelfTone.fromId(p[Keys.LIBRARY_SHELF_TONE]),
                 compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
@@ -820,6 +823,7 @@ class AppSettingsRepository(
             } else {
                 it.remove(Keys.LIBRARY_SHELF_BACKDROP_URI)
             }
+            it[Keys.LIBRARY_SHELF_TONE] = layout.shelfTone.id
             it[Keys.LIBRARY_COMPACT_LIST] = layout.compactList
         }
     }
@@ -1361,7 +1365,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_sort" to BackupValueType.STRING, "library_sort_reversed" to BackupValueType.BOOLEAN,
     "library_filters" to BackupValueType.STRING, "library_group_by_series" to BackupValueType.BOOLEAN,
     "library_style" to BackupValueType.STRING, "library_shelf_grouping" to BackupValueType.STRING,
-    "library_shelf_backdrop" to BackupValueType.STRING,
+    "library_shelf_backdrop" to BackupValueType.STRING, "library_shelf_tone" to BackupValueType.STRING,
     "library_compact_list" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,

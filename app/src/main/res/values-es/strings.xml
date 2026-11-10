@@ -1871,6 +1871,12 @@
     <string name="shelf_backdrop_plaster">Estuco</string>
     <string name="shelf_backdrop_bricks">Ladrillos</string>
     <string name="shelf_backdrop_custom">Imagen personalizada</string>
+    <string name="shelf_tone">Color de los estantes</string>
+    <string name="shelf_tone_theme">Tema</string>
+    <string name="shelf_tone_stone">Piedra</string>
+    <string name="shelf_tone_oak">Roble</string>
+    <string name="shelf_tone_walnut">Nogal</string>
+    <string name="shelf_tone_brass">Latón</string>
     <string name="library_compact_list">Filas compactas</string>
     <string name="library_compact_list_detail">Portadas más pequeñas y una línea por título</string>
     <string name="home_continue">Continuar</string>

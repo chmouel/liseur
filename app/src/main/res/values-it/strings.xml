@@ -1871,6 +1871,12 @@
     <string name="shelf_backdrop_plaster">Intonaco</string>
     <string name="shelf_backdrop_bricks">Mattoni</string>
     <string name="shelf_backdrop_custom">Immagine personalizzata</string>
+    <string name="shelf_tone">Colore degli scaffali</string>
+    <string name="shelf_tone_theme">Tema</string>
+    <string name="shelf_tone_stone">Pietra</string>
+    <string name="shelf_tone_oak">Rovere</string>
+    <string name="shelf_tone_walnut">Noce</string>
+    <string name="shelf_tone_brass">Ottone</string>
     <string name="library_compact_list">Righe compatte</string>
     <string name="library_compact_list_detail">Copertine più piccole e una riga per titolo</string>
     <string name="home_continue">Continua</string>
