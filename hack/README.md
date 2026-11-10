@@ -124,6 +124,10 @@ target wrapping them. Run `make help` for the short list. See
   and buildable on its own for opening by hand.
 - `icon`: Renders the adaptive launcher icon (two vector drawables)
   to a flat PNG for the F-Droid listing and the README.
+- `shelf-textures`: Draws the Shelves library style images into
+  `res/drawable-nodpi` with Pillow and a fixed seed: the grayscale wall
+  tiles (bricks, wood panelling, plaster), ledge, bracket and frames,
+  and the coloured potted plants. Run it after changing how they look.
 - `feature-graphic-font`: Subsets Noto Serif SC to the Chinese
   characters in `promo/feature-graphic.json`, for the feature graphic.
   Run it with fontTools whenever the zh copy changes.

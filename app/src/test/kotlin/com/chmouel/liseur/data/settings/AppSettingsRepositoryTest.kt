@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import com.chmouel.liseur.reader.annotations.SelectionAction
 import com.chmouel.liseur.reader.annotations.SelectionActionIcon
@@ -335,5 +336,18 @@ class AppSettingsRepositoryTest {
         store.edit { it[stringPreferencesKey("dictionary_alt_language")] = "not a language" }
 
         assertNull(AppSettingsRepository(store).settings.first().dictionaryAltLanguage)
+    }
+
+    @Test
+    fun `bottom bar is on by default`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+        assertTrue(repo.settings.first().libraryLayout.bottomBar)
+
+        store.edit { it[stringPreferencesKey("theme_mode")] = "DARK" }
+        assertTrue(repo.settings.first().libraryLayout.bottomBar)
+
+        repo.setLibraryLayout(LibraryLayout(bottomBar = false))
+        assertFalse(repo.settings.first().libraryLayout.bottomBar)
     }
 }

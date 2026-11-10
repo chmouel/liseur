@@ -47,6 +47,23 @@ class LibraryViewModelTest {
     }
 
     @Test
+    fun `continue reading falls back to the next started book when the most recent is unread`() {
+        val peeked = book().copy(id = 1L, url = "file:///peeked.epub", title = "Peeked", lastOpenedAt = 200L)
+        val active = book().copy(id = 2L, url = "file:///active.epub", title = "Active", lastOpenedAt = 100L)
+        val untouched = book().copy(id = 3L, url = "file:///untouched.epub", title = "Untouched", lastOpenedAt = null)
+
+        val current = continueReadingFrom(
+            books = listOf(peeked, active, untouched),
+            progressions = mapOf(peeked.url to 0.001, active.url to 0.35),
+            overrides = mapOf(peeked.url to FinishedOverride.NONE, active.url to FinishedOverride.NONE),
+            readAt = emptyMap(),
+        )
+
+        assertEquals("Active", current?.book?.title)
+        assertEquals(0.35, current?.progression)
+    }
+
+    @Test
     fun `selected account clear failure leaves removal undone and reports the failure`() =
         runTest {
             var removed = false
