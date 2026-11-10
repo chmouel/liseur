@@ -61,8 +61,13 @@ class BrowseLibrariesViewModelTest {
     @Before
     fun open() {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        // Inline executors: on Room's own threads the view model's
+        // collectors resume after runCurrent() has returned, and can touch
+        // Main while the next test is installing its dispatcher.
         db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java)
             .allowMainThreadQueries()
+            .setQueryExecutor { it.run() }
+            .setTransactionExecutor { it.run() }
             .build()
         if (!WorkManager.isInitialized()) {
             WorkManager.initialize(context, Configuration.Builder().setExecutor { it.run() }.build())
@@ -125,6 +130,11 @@ class BrowseLibrariesViewModelTest {
             block()
         } finally {
             models.clear()
+            // Download progress comes from WorkManager's serial executor, and
+            // an emission in flight there reads Main. A lookup queued behind
+            // it returns once that executor has gone quiet.
+            WorkManager.getInstance(ApplicationProvider.getApplicationContext())
+                .getWorkInfosByTag("browse-test-drain").get()
             Dispatchers.resetMain()
         }
     }
