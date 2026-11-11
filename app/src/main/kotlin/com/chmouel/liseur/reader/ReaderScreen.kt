@@ -1204,7 +1204,7 @@ internal fun ReaderScreen(
             to = locator.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
-        val went = nav.go(locator, animated = false)
+        val went = nav.goIfShown(locator)
         if (!went) {
             moves.cancel(token)
             pendingPositionEvent = null
@@ -1251,7 +1251,7 @@ internal fun ReaderScreen(
             to = fallback.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
-        if (!nav.go(fallback, animated = false)) {
+        if (!nav.goIfShown(fallback)) {
             moves.cancel(fallbackToken)
             pendingPositionEvent = null
         }
@@ -1903,7 +1903,7 @@ internal fun ReaderScreen(
             to = fallback.destination(),
             nowMs = SystemClock.elapsedRealtime(),
         )
-        if (!nav.go(fallback, animated = false)) {
+        if (!nav.goIfShown(fallback)) {
             moves.cancel(fallbackToken)
             pendingPositionEvent = null
         }
@@ -4787,7 +4787,7 @@ internal fun ReaderScreen(
                                     to = publication.locatorFromLink(note.link)?.destination(),
                                     nowMs = SystemClock.elapsedRealtime(),
                                 )
-                                if (!nav.go(note.link, animated = false)) moves.cancel(noteToken)
+                                if (!nav.goIfShown(note.link)) moves.cancel(noteToken)
                             }
                         }
                     },
