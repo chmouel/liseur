@@ -9,6 +9,21 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LocalLibrary
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.LocalLibrary
+import androidx.compose.material3.Icon
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -100,6 +115,9 @@ internal fun LibraryStyleSheet(
     onChange: (LibraryLayout) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // With the tabs, Home is a tab of its own and the sheet styles only the Library.
+    val tabs = layout.bottomBar
+    val shown = if (tabs && layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pickBackdrop = rememberLauncherForActivityResult(
@@ -120,14 +138,25 @@ internal fun LibraryStyleSheet(
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
         ) {
-            Text(
-                text = stringResource(R.string.library_style),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            ) {
+                Text(
+                    text = stringResource(if (tabs) R.string.library_view_title else R.string.library_style),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                if (tabs) {
+                    StartTabToggle(
+                        startOnHome = layout.startOnHome,
+                        onChange = { onChange(layout.copy(startOnHome = it)) },
+                    )
+                }
+            }
             Column(Modifier.selectableGroup()) {
-                LibraryStyle.entries.forEach { style ->
-                    val selected = style == layout.style
+                LibraryStyle.entries.filter { !tabs || it != LibraryStyle.HOME }.forEach { style ->
+                    val selected = style == shown
                     ListItem(
                         headlineContent = { Text(stringResource(style.label)) },
                         supportingContent = { Text(stringResource(style.detail)) },
@@ -178,7 +207,7 @@ internal fun LibraryStyleSheet(
                     )
                 }
             }
-            when (layout.style) {
+            when (shown) {
                 LibraryStyle.SHELVES -> Column(Modifier.padding(horizontal = 8.dp)) {
                     ChipRow(
                         title = stringResource(R.string.shelf_grouping),
@@ -220,7 +249,60 @@ internal fun LibraryStyleSheet(
                     )
                 }
 
-                LibraryStyle.CLASSIC, LibraryStyle.HOME -> Unit
+                LibraryStyle.CLASSIC -> Column(Modifier.padding(horizontal = 8.dp)) {
+                    ChipRow(
+                        title = stringResource(R.string.library_columns),
+                        options = listOf(false, true),
+                        selected = layout.compactGrid,
+                        label = {
+                            stringResource(
+                                if (it) R.string.library_columns_compact else R.string.library_columns_comfortable,
+                            )
+                        },
+                        onSelected = { onChange(layout.copy(compactGrid = it)) },
+                    )
+                }
+
+                LibraryStyle.HOME -> Unit
+            }
+        }
+    }
+}
+
+/** Which tab the app opens on: a quiet house-or-books toggle beside the title. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StartTabToggle(startOnHome: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = stringResource(R.string.library_opens_on),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+        SingleChoiceSegmentedButtonRow {
+            listOf(true, false).forEachIndexed { index, home ->
+                val label = stringResource(if (home) R.string.library_style_home else R.string.library_tab_library)
+                SegmentedButton(
+                    selected = startOnHome == home,
+                    onClick = { onChange(home) },
+                    shape = SegmentedButtonDefaults.itemShape(index, 2),
+                    icon = {},
+                    modifier = Modifier
+                        .width(56.dp)
+                        .semantics { contentDescription = label },
+                ) {
+                    Icon(
+                        imageVector = when {
+                            home && startOnHome -> Icons.Filled.Home
+                            home -> Icons.Outlined.Home
+                            !startOnHome -> Icons.Filled.LocalLibrary
+                            else -> Icons.Outlined.LocalLibrary
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }

@@ -1912,7 +1912,7 @@
     <string name="library_style_classic">Clássico</string>
     <string name="library_style_classic_detail">Grade de capas, com o livro em leitura no topo</string>
     <string name="library_style_home">Início</string>
-    <string name="library_style_home_detail">O livro em leitura, seguido de faixas com livros recentes, séries em andamento e novidades</string>
+    <string name="library_style_home_detail">O livro que você está lendo, suas estantes, séries em andamento e o que ler a seguir</string>
     <string name="library_style_shelves">Prateleiras</string>
     <string name="library_style_shelves_detail">Fileiras de capas em prateleiras, agrupadas por série, autor ou estado de leitura</string>
     <string name="library_style_list">Lista</string>
@@ -1940,10 +1940,60 @@
     <string name="library_hero_card_detail">Mostrar o livro atual em um cartão no topo da biblioteca</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
-    <string name="home_recently_opened">Abertos recentemente</string>
-    <string name="home_new_books">Novos na prateleira</string>
     <string name="home_series_underway">Séries que você está lendo</string>
-    <string name="home_all_books">Todos os livros</string>
     <string name="shelf_other_books">Outros livros</string>
     <string name="list_new">Novo</string>
+    <string name="library_chip_all">Todos</string>
+    <string name="home_tile_reading">Lendo</string>
+    <string name="home_tile_to_read">Para ler</string>
+    <string name="home_tile_series">Séries</string>
+    <string name="home_tile_finished">Concluídos</string>
+    <string name="home_your_shelves">Suas estantes</string>
+    <string name="home_pick_up_next">Para continuar</string>
+    <string name="home_recently_added">Adicionados recentemente</string>
+    <string name="home_time_left_minutes">Faltam ~%d min</string>
+    <string name="home_time_left_hours">Faltam ~%1$d h %2$d min</string>
+    <string name="home_page_of">Página %1$d de %2$d</string>
+    <string name="home_start_reading">Começar a ler</string>
+    <string name="home_series_read">%1$d / %2$d lidos</string>
+    <string name="home_series_next">Próximo: %s</string>
+    <string name="home_pick_next_volume">Próximo · %s</string>
+    <string name="home_pick_next_in_series">Próximo da série</string>
+    <string name="library_shown_of">%1$d de %2$d</string>
+    <string name="home_pulse_today">%d min hoje</string>
+    <string name="library_view_title">Visualização da biblioteca</string>
+    <string name="library_opens_on">Abre em</string>
+    <string name="library_columns">Colunas</string>
+    <string name="library_columns_comfortable">Confortável</string>
+    <string name="library_columns_compact">Compacta</string>
+    <plurals name="home_browse_all">
+        <item quantity="one">Ver %d livro</item>
+        <item quantity="many">Ver os %d livros</item>
+        <item quantity="other">Ver os %d livros</item>
+    </plurals>
+    <plurals name="home_note_almost_done">
+        <item quantity="one">%d quase concluído</item>
+        <item quantity="many">%d quase concluídos</item>
+        <item quantity="other">%d quase concluídos</item>
+    </plurals>
+    <plurals name="home_note_added_lately">
+        <item quantity="one">%d adicionado há pouco</item>
+        <item quantity="many">%d adicionados há pouco</item>
+        <item quantity="other">%d adicionados há pouco</item>
+    </plurals>
+    <plurals name="home_note_series_underway">
+        <item quantity="one">%d em andamento</item>
+        <item quantity="many">%d em andamento</item>
+        <item quantity="other">%d em andamento</item>
+    </plurals>
+    <plurals name="home_note_this_month">
+        <item quantity="one">%d este mês</item>
+        <item quantity="many">%d este mês</item>
+        <item quantity="other">%d este mês</item>
+    </plurals>
+    <plurals name="home_pulse_streak">
+        <item quantity="one">%d dia seguido</item>
+        <item quantity="many">%d dias seguidos</item>
+        <item quantity="other">%d dias seguidos</item>
+    </plurals>
 </resources>

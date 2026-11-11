@@ -1,6 +1,10 @@
 package com.chmouel.liseur.domain
 
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.ReadingSession
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.math.sqrt
 
 /**
@@ -13,7 +17,11 @@ enum class LibraryStyle(val id: String) {
     /** The cover grid. */
     CLASSIC("classic"),
 
-    /** The current book large, then strips of recent books and series, then the grid. */
+    /**
+     * The reading desk: the current book, shelf tiles, series under way and
+     * what to pick up next. With the bottom bar it is a tab rather than a
+     * style of the library.
+     */
     HOME("home"),
 
     /** Rows of covers standing on shelves, one shelf per group. */
@@ -84,7 +92,10 @@ data class LibraryLayout(
     val shelfBackdropUri: String? = null,
     val shelfTone: ShelfTone = ShelfTone.Default,
     val compactList: Boolean = false,
+    val compactGrid: Boolean = false,
     val bottomBar: Boolean = true,
+    /** With the bottom bar, whether the app opens on the Home tab or the Library tab. */
+    val startOnHome: Boolean = true,
 )
 
 /** What a shelf in [LibraryStyle.SHELVES] is labelled with. */
@@ -288,58 +299,211 @@ fun planksOf(
     return rows
 }
 
-/** The strips [LibraryStyle.HOME] puts above the grid. */
-data class HomeSections(
-    val recentlyOpened: List<Book> = emptyList(),
-    val newBooks: List<Book> = emptyList(),
-    val seriesUnderway: List<SeriesShelf> = emptyList(),
-) {
-    val isEmpty: Boolean get() = recentlyOpened.isEmpty() && newBooks.isEmpty() && seriesUnderway.isEmpty()
-}
-
-private const val HOME_STRIP_LIMIT = 12
-private const val HOME_SERIES_LIMIT = 3
+/** The four tiles under "Your shelves" on the Home tab. */
+enum class HomeShelfKind { READING, TO_READ, SERIES, FINISHED }
 
 /**
- * The home strips, from every book on the shelf rather than what the
- * filters left: the strips are about what was read lately, not what the
- * grid below happens to be narrowed to.
- *
- * [current] is the book the hero card already shows, kept out of the
- * strips so it does not appear twice at the top of the screen.
- *
- * When every book on the shelf is new, the new strip is left empty: it
- * would only repeat the grid below.
+ * One tile under "Your shelves": how many books it holds, up to three
+ * covers to fan out, and the one figure worth a second look ([note];
+ * zero leaves it out).
  */
-fun homeSectionsOf(
+data class HomeShelfTile(
+    val kind: HomeShelfKind,
+    val count: Int,
+    val covers: List<Book>,
+    val note: Int,
+)
+
+/** A series under way, drawn as one wide card with a bar per volume. */
+data class HomeSeriesSet(
+    val shelf: SeriesShelf,
+    val read: Int,
+    val next: SeriesVolume?,
+    /** How far through each volume, in series order, from 0 to 1. */
+    val volumeProgress: List<Float>,
+)
+
+/** Why a book is in "Pick up next", which decides its label. */
+enum class PickReason { IN_PROGRESS, NEXT_IN_SERIES, UNREAD }
+
+data class HomePick(val book: Book, val reason: PickReason, val progression: Double?)
+
+/**
+ * The Home tab: a finite desk about what is being read and what comes
+ * next, rather than another way of looking at the whole library.
+ *
+ * [starter] is offered in the hero's place when nothing is under way,
+ * so a freshly stocked library still opens on something to read.
+ */
+data class HomeDesk(
+    val tiles: List<HomeShelfTile> = emptyList(),
+    val seriesSets: List<HomeSeriesSet> = emptyList(),
+    val pickUpNext: List<HomePick> = emptyList(),
+    val recentlyAdded: List<Book> = emptyList(),
+    val starter: Book? = null,
+    val shelfSize: Int = 0,
+)
+
+private const val HOME_STRIP_LIMIT = 12
+private const val HOME_SERIES_LIMIT = 4
+private const val HOME_STARTER_PICKS = 6
+private const val ALMOST_DONE = 0.85
+private const val ADDED_LATELY_MS = 14L * 24 * 60 * 60 * 1000
+
+/**
+ * The Home tab, from every book on the shelf rather than what the
+ * library's filters left: Home is about what is being read, not about
+ * what the Library tab happens to be narrowed to.
+ *
+ * [current] is the book the hero already shows, kept out of the strips
+ * so it does not appear twice. [thisMonthFrom] is the first instant of
+ * the current month, for the Finished tile's note.
+ */
+fun homeDeskOf(
     books: List<Book>,
     series: List<SeriesShelf>,
     current: String?,
+    progressions: Map<String, Double>,
+    now: Long,
+    thisMonthFrom: Long,
     stateOf: (Book) -> LibraryFilterOption,
-): HomeSections {
+): HomeDesk {
     val shelf = books.filter { !it.archived && !it.hidden }
     val states = shelf.associate { it.url to stateOf(it) }
-    // A book read on another device has progress but was never opened
-    // here; it is still underway, not new.
-    val begun = { book: Book ->
-        book.lastOpenedAt != null || states[book.url] == LibraryFilterOption.IN_PROGRESS
-    }
-    val fresh = shelf.filter { !begun(it) && states[it.url] == LibraryFilterOption.UNREAD }
-    return HomeSections(
-        recentlyOpened = shelf
-            .filter { begun(it) && states[it.url] != LibraryFilterOption.FINISHED && it.url != current }
-            .sortedWith(compareByDescending(nullsFirst()) { it.lastOpenedAt })
-            .take(HOME_STRIP_LIMIT),
-        newBooks = fresh
-            .takeIf { it.size < shelf.size }
-            .orEmpty()
-            .sortedByDescending { it.addedAt }
-            .take(HOME_STRIP_LIMIT),
-        seriesUnderway = series
-            .filter { it.nextUp != null && (it.inProgressCount > 0 || it.finishedCount > 0) }
-            .sortedByDescending { shelf -> shelf.volumes.maxOf { it.book.lastOpenedAt ?: 0L } }
-            .take(HOME_SERIES_LIMIT),
+    val reading = shelf
+        .filter { states[it.url] == LibraryFilterOption.IN_PROGRESS }
+        .sortedWith(compareByDescending(nullsFirst()) { it.lastOpenedAt })
+    val unread = shelf
+        .filter { states[it.url] == LibraryFilterOption.UNREAD }
+        .sortedByDescending { it.addedAt }
+    val finished = shelf
+        .filter { states[it.url] == LibraryFilterOption.FINISHED }
+        .sortedByDescending { it.finishedAt }
+    val underway = series
+        .filter { it.nextUp != null && (it.inProgressCount > 0 || it.finishedCount > 0) }
+        .sortedByDescending { set -> set.volumes.maxOf { it.book.lastOpenedAt ?: 0L } }
+
+    val tiles = listOf(
+        HomeShelfTile(
+            kind = HomeShelfKind.READING,
+            count = reading.size,
+            covers = reading.take(3),
+            note = reading.count { (progressions[it.url] ?: 0.0) >= ALMOST_DONE },
+        ),
+        HomeShelfTile(
+            kind = HomeShelfKind.TO_READ,
+            count = unread.size,
+            covers = unread.take(3),
+            note = unread.count { it.addedAt >= now - ADDED_LATELY_MS },
+        ),
+        HomeShelfTile(
+            kind = HomeShelfKind.SERIES,
+            count = series.size,
+            covers = series.take(3).map { it.cover },
+            note = underway.size,
+        ),
+        HomeShelfTile(
+            kind = HomeShelfKind.FINISHED,
+            count = finished.size,
+            covers = finished.take(3),
+            note = finished.count { (it.finishedAt ?: 0L) >= thisMonthFrom },
+        ),
     )
+
+    val picks = LinkedHashMap<String, HomePick>()
+    reading.filter { it.url != current }.forEach {
+        picks[it.url] = HomePick(it, PickReason.IN_PROGRESS, progressions[it.url])
+    }
+    underway.mapNotNull { it.nextUp }.forEach { volume ->
+        val url = volume.book.url
+        if (url != current && url !in picks) {
+            picks[url] = HomePick(volume.book, PickReason.NEXT_IN_SERIES, volume.progression)
+        }
+    }
+    // A library nobody has started yet still gets something to pick up.
+    if (picks.isEmpty()) {
+        unread.filter { it.url != current }.take(HOME_STARTER_PICKS).forEach {
+            picks[it.url] = HomePick(it, PickReason.UNREAD, null)
+        }
+    }
+    val pickUpNext = picks.values.take(HOME_STRIP_LIMIT)
+    val picked = pickUpNext.mapTo(mutableSetOf()) { it.book.url }
+
+    return HomeDesk(
+        tiles = tiles,
+        seriesSets = underway.take(HOME_SERIES_LIMIT).map { set ->
+            HomeSeriesSet(
+                shelf = set,
+                read = set.finishedCount,
+                next = set.nextUp,
+                volumeProgress = set.volumes.map { volume ->
+                    when {
+                        volume.finished -> 1f
+                        volume.inProgress -> (volume.progression ?: 0.0).toFloat().coerceIn(0f, 1f)
+                        else -> 0f
+                    }
+                },
+            )
+        },
+        pickUpNext = pickUpNext,
+        recentlyAdded = unread
+            .filter { it.url != current && it.url !in picked }
+            // Every book on the shelf being new would only repeat the Library.
+            .takeIf { unread.size < shelf.size }
+            .orEmpty()
+            .take(HOME_STRIP_LIMIT),
+        starter = unread.firstOrNull().takeIf { current == null },
+        shelfSize = shelf.size,
+    )
+}
+
+/** Today's reading and the run of days with some, for the Home header. */
+data class ReadingPulse(val minutesToday: Int, val streakDays: Int)
+
+/**
+ * The Home header's figure, from the sessions this device recorded.
+ * Null when there is nothing to say, so the header does not boast about
+ * a nought.
+ */
+fun readingPulseOf(
+    sessions: List<ReadingSession>,
+    today: LocalDate,
+    zone: ZoneId,
+): ReadingPulse? {
+    val byDay = sessions
+        .filter { it.durationMs > 0 }
+        .groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() }
+        .mapValues { (_, day) -> day.sumOf { it.durationMs } }
+    val minutes = ((byDay[today] ?: 0L) / 60_000L).toInt()
+    val streak = activeDayStreak(byDay.keys, today)
+    return ReadingPulse(minutes, streak).takeIf { minutes > 0 || streak > 0 }
+}
+
+private const val MIN_PACE_EVIDENCE_MS = 5L * 60 * 1000
+private const val MIN_PACE_COVERED = 0.02
+
+/**
+ * How long the rest of a book should take at the pace its own sessions
+ * show, or null when they show too little to say: a guess on a page or
+ * two of evidence would be a number the reader cannot trust.
+ */
+fun timeLeftMs(
+    sessions: List<ReadingSession>,
+    progression: Double?,
+): Long? {
+    val at = progression?.takeIf { it in 0.0..<1.0 } ?: return null
+    var spent = 0L
+    var covered = 0.0
+    sessions.forEach { session ->
+        val from = session.startProgression ?: return@forEach
+        val to = session.endProgression ?: return@forEach
+        if (to > from && session.durationMs > 0) {
+            spent += session.durationMs
+            covered += to - from
+        }
+    }
+    if (spent < MIN_PACE_EVIDENCE_MS || covered < MIN_PACE_COVERED) return null
+    return ((1.0 - at) * spent / covered).toLong()
 }
 
 /** Shortest a progress track gets in [LibraryStyle.LIST], as a share of the longest. */

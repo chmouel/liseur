@@ -2004,7 +2004,7 @@
     <string name="library_style_classic">Klasický</string>
     <string name="library_style_classic_detail">Mřížka obálek s právě rozečtenou knihou nahoře</string>
     <string name="library_style_home">Domů</string>
-    <string name="library_style_home_detail">Právě rozečtená kniha a pod ní řady nedávno otevřených knih, rozečtených sérií a nových přírůstků</string>
+    <string name="library_style_home_detail">Kniha, kterou čtete, vaše police, rozečtené série a co číst dál</string>
     <string name="library_style_shelves">Police</string>
     <string name="library_style_shelves_detail">Řady obálek stojících na policích, uspořádané podle sérií, autorů nebo stavu čtení</string>
     <string name="library_style_list">Seznam</string>
@@ -2032,10 +2032,66 @@
     <string name="library_hero_card_detail">Zobrazovat právě rozečtenou knihu na kartě v horní části knihovny</string>
     <string name="library_tab_library">Knihovna</string>
     <string name="home_continue">Pokračovat</string>
-    <string name="home_recently_opened">Nedávno otevřené</string>
-    <string name="home_new_books">Nově v knihovně</string>
     <string name="home_series_underway">Rozečtené série</string>
-    <string name="home_all_books">Všechny knihy</string>
     <string name="shelf_other_books">Ostatní knihy</string>
     <string name="list_new">Novinka</string>
+    <string name="library_chip_all">Vše</string>
+    <string name="home_tile_reading">Čtu</string>
+    <string name="home_tile_to_read">K přečtení</string>
+    <string name="home_tile_series">Série</string>
+    <string name="home_tile_finished">Přečtené</string>
+    <string name="home_your_shelves">Vaše police</string>
+    <string name="home_pick_up_next">Číst dál</string>
+    <string name="home_recently_added">Nedávno přidané</string>
+    <string name="home_time_left_minutes">zbývá ~%d min</string>
+    <string name="home_time_left_hours">zbývá ~%1$d h %2$d min</string>
+    <string name="home_page_of">Strana %1$d z %2$d</string>
+    <string name="home_start_reading">Začít číst</string>
+    <string name="home_series_read">přečteno %1$d / %2$d</string>
+    <string name="home_series_next">Další: %s</string>
+    <string name="home_pick_next_volume">Další · %s</string>
+    <string name="home_pick_next_in_series">Další v sérii</string>
+    <string name="library_shown_of">%1$d z %2$d</string>
+    <string name="home_pulse_today">%d min dnes</string>
+    <string name="library_view_title">Zobrazení knihovny</string>
+    <string name="library_opens_on">Otevírá se na</string>
+    <string name="library_columns">Sloupce</string>
+    <string name="library_columns_comfortable">Pohodlné</string>
+    <string name="library_columns_compact">Kompaktní</string>
+    <plurals name="home_browse_all">
+        <item quantity="one">Procházet %d knihu</item>
+        <item quantity="few">Procházet všechny %d knihy</item>
+        <item quantity="many">Procházet všech %d knihy</item>
+        <item quantity="other">Procházet všech %d knih</item>
+    </plurals>
+    <plurals name="home_note_almost_done">
+        <item quantity="one">%d skoro dočtená</item>
+        <item quantity="few">%d skoro dočtené</item>
+        <item quantity="many">%d skoro dočtené</item>
+        <item quantity="other">%d skoro dočtených</item>
+    </plurals>
+    <plurals name="home_note_added_lately">
+        <item quantity="one">%d nově přidaná</item>
+        <item quantity="few">%d nově přidané</item>
+        <item quantity="many">%d nově přidané</item>
+        <item quantity="other">%d nově přidaných</item>
+    </plurals>
+    <plurals name="home_note_series_underway">
+        <item quantity="one">%d rozečtená</item>
+        <item quantity="few">%d rozečtené</item>
+        <item quantity="many">%d rozečtené</item>
+        <item quantity="other">%d rozečtených</item>
+    </plurals>
+    <plurals name="home_note_this_month">
+        <item quantity="one">%d tento měsíc</item>
+        <item quantity="few">%d tento měsíc</item>
+        <item quantity="many">%d tento měsíc</item>
+        <item quantity="other">%d tento měsíc</item>
+    </plurals>
+    <plurals name="home_pulse_streak">
+        <item quantity="one">%d den v řadě</item>
+        <item quantity="few">%d dny v řadě</item>
+        <item quantity="many">%d dne v řadě</item>
+        <item quantity="other">%d dní v řadě</item>
+    </plurals>
 </resources>

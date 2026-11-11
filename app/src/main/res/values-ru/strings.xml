@@ -1972,7 +1972,7 @@
     <string name="library_style_classic">Классический</string>
     <string name="library_style_classic_detail">Сетка обложек, сверху книга, которую вы читаете</string>
     <string name="library_style_home">Главная</string>
-    <string name="library_style_home_detail">Книга, которую вы читаете, затем ленты недавних книг, начатых серий и новинок</string>
+    <string name="library_style_home_detail">Книга, которую вы читаете, ваши полки, начатые серии и что читать дальше</string>
     <string name="library_style_shelves">Полки</string>
     <string name="library_style_shelves_detail">Ряды обложек на полках: по сериям, авторам или состоянию чтения</string>
     <string name="library_style_list">Список</string>
@@ -2000,10 +2000,66 @@
     <string name="library_hero_card_detail">Показывать текущую книгу на карточке вверху библиотеки</string>
     <string name="library_tab_library">Библиотека</string>
     <string name="home_continue">Продолжить</string>
-    <string name="home_recently_opened">Недавно открытые</string>
-    <string name="home_new_books">Новые на полке</string>
     <string name="home_series_underway">Серии, которые вы читаете</string>
-    <string name="home_all_books">Все книги</string>
     <string name="shelf_other_books">Другие книги</string>
     <string name="list_new">Новая</string>
+    <string name="library_chip_all">Все</string>
+    <string name="home_tile_reading">Читаю</string>
+    <string name="home_tile_to_read">Прочитать</string>
+    <string name="home_tile_series">Серии</string>
+    <string name="home_tile_finished">Прочитано</string>
+    <string name="home_your_shelves">Ваши полки</string>
+    <string name="home_pick_up_next">Читать дальше</string>
+    <string name="home_recently_added">Недавно добавленные</string>
+    <string name="home_time_left_minutes">Осталось ~%d мин</string>
+    <string name="home_time_left_hours">Осталось ~%1$d ч %2$d мин</string>
+    <string name="home_page_of">Страница %1$d из %2$d</string>
+    <string name="home_start_reading">Начать чтение</string>
+    <string name="home_series_read">Прочитано %1$d / %2$d</string>
+    <string name="home_series_next">Далее: %s</string>
+    <string name="home_pick_next_volume">Далее · %s</string>
+    <string name="home_pick_next_in_series">Следующая в серии</string>
+    <string name="library_shown_of">%1$d из %2$d</string>
+    <string name="home_pulse_today">%d мин сегодня</string>
+    <string name="library_view_title">Вид библиотеки</string>
+    <string name="library_opens_on">Открывать</string>
+    <string name="library_columns">Столбцы</string>
+    <string name="library_columns_comfortable">Свободно</string>
+    <string name="library_columns_compact">Компактно</string>
+    <plurals name="home_browse_all">
+        <item quantity="one">Все книги: %d</item>
+        <item quantity="few">Все книги: %d</item>
+        <item quantity="many">Все книги: %d</item>
+        <item quantity="other">Все книги: %d</item>
+    </plurals>
+    <plurals name="home_note_almost_done">
+        <item quantity="one">%d почти дочитана</item>
+        <item quantity="few">%d почти дочитаны</item>
+        <item quantity="many">%d почти дочитаны</item>
+        <item quantity="other">%d почти дочитаны</item>
+    </plurals>
+    <plurals name="home_note_added_lately">
+        <item quantity="one">%d недавно добавлена</item>
+        <item quantity="few">%d недавно добавлены</item>
+        <item quantity="many">%d недавно добавлено</item>
+        <item quantity="other">%d недавно добавлено</item>
+    </plurals>
+    <plurals name="home_note_series_underway">
+        <item quantity="one">%d начата</item>
+        <item quantity="few">%d начаты</item>
+        <item quantity="many">%d начато</item>
+        <item quantity="other">%d начато</item>
+    </plurals>
+    <plurals name="home_note_this_month">
+        <item quantity="one">%d в этом месяце</item>
+        <item quantity="few">%d в этом месяце</item>
+        <item quantity="many">%d в этом месяце</item>
+        <item quantity="other">%d в этом месяце</item>
+    </plurals>
+    <plurals name="home_pulse_streak">
+        <item quantity="one">%d день подряд</item>
+        <item quantity="few">%d дня подряд</item>
+        <item quantity="many">%d дней подряд</item>
+        <item quantity="other">%d дня подряд</item>
+    </plurals>
 </resources>

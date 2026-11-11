@@ -1936,7 +1936,7 @@
     <string name="library_style_classic">Classic</string>
     <string name="library_style_classic_detail">The cover grid, with the book you are reading on top</string>
     <string name="library_style_home">Home</string>
-    <string name="library_style_home_detail">The book you are reading, then strips of recent books, series under way and new arrivals</string>
+    <string name="library_style_home_detail">The book you are reading, your shelves, series under way and what to read next</string>
     <string name="library_style_shelves">Shelves</string>
     <string name="library_style_shelves_detail">Rows of covers standing on shelves, one shelf per series, author or reading state</string>
     <string name="library_style_list">List</string>
@@ -1964,10 +1964,54 @@
     <string name="library_hero_card_detail">Show the current book in a card at the top of the library</string>
     <string name="library_tab_library">Library</string>
     <string name="home_continue">Continue</string>
-    <string name="home_recently_opened">Recently opened</string>
-    <string name="home_new_books">New on the shelf</string>
     <string name="home_series_underway">Series you are reading</string>
-    <string name="home_all_books">All books</string>
     <string name="shelf_other_books">Other books</string>
     <string name="list_new">New</string>
+    <string name="library_chip_all">All</string>
+    <string name="home_tile_reading">Reading</string>
+    <string name="home_tile_to_read">To read</string>
+    <string name="home_tile_series">Series</string>
+    <string name="home_tile_finished">Finished</string>
+    <string name="home_your_shelves">Your shelves</string>
+    <string name="home_pick_up_next">Pick up next</string>
+    <string name="home_recently_added">Recently added</string>
+    <string name="home_time_left_minutes">~%d min left</string>
+    <string name="home_time_left_hours">~%1$d h %2$d min left</string>
+    <string name="home_page_of">Page %1$d of %2$d</string>
+    <string name="home_start_reading">Start reading</string>
+    <string name="home_series_read">%1$d / %2$d read</string>
+    <string name="home_series_next">Next: %s</string>
+    <string name="home_pick_next_volume">Next · %s</string>
+    <string name="home_pick_next_in_series">Next in series</string>
+    <string name="library_shown_of">%1$d of %2$d</string>
+    <string name="home_pulse_today">%d min today</string>
+    <string name="library_view_title">Library view</string>
+    <string name="library_opens_on">Opens on</string>
+    <string name="library_columns">Columns</string>
+    <string name="library_columns_comfortable">Comfortable</string>
+    <string name="library_columns_compact">Compact</string>
+    <plurals name="home_browse_all">
+        <item quantity="one">Browse %d book</item>
+        <item quantity="other">Browse all %d books</item>
+    </plurals>
+    <plurals name="home_note_almost_done">
+        <item quantity="one">%d almost done</item>
+        <item quantity="other">%d almost done</item>
+    </plurals>
+    <plurals name="home_note_added_lately">
+        <item quantity="one">%d added lately</item>
+        <item quantity="other">%d added lately</item>
+    </plurals>
+    <plurals name="home_note_series_underway">
+        <item quantity="one">%d under way</item>
+        <item quantity="other">%d under way</item>
+    </plurals>
+    <plurals name="home_note_this_month">
+        <item quantity="one">%d this month</item>
+        <item quantity="other">%d this month</item>
+    </plurals>
+    <plurals name="home_pulse_streak">
+        <item quantity="one">%d-day streak</item>
+        <item quantity="other">%d-day streak</item>
+    </plurals>
 </resources>

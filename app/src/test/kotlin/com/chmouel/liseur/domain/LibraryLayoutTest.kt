@@ -125,63 +125,140 @@ class LibraryLayoutTest {
         )
     }
 
+    private fun series(key: String, vararg volumes: Book, progress: Map<String, Double> = emptyMap()): SeriesShelf {
+        val vs = volumes.map { SeriesVolume(it, progression = progress[it.url]) }
+        return SeriesShelf(key, key, null, vs, nextUp = vs.firstOrNull { !it.finished }, gaps = emptyList())
+    }
+
+    private fun stateFrom(progress: Map<String, Double>): (Book) -> LibraryFilterOption = {
+        when {
+            it.finished -> LibraryFilterOption.FINISHED
+            it.url in progress || it.lastOpenedAt != null -> LibraryFilterOption.IN_PROGRESS
+            else -> LibraryFilterOption.UNREAD
+        }
+    }
+
+    private fun desk(
+        books: List<Book>,
+        series: List<SeriesShelf> = emptyList(),
+        current: String? = null,
+        progress: Map<String, Double> = emptyMap(),
+        now: Long = 100,
+        monthFrom: Long = 0,
+    ) = homeDeskOf(books, series, current, progress, now, monthFrom, stateFrom(progress))
+
     @Test
-    fun `home strips leave out the hero, finished and archived books`() {
+    fun `home desk counts the shelf tiles from the whole shelf with their notes`() {
+        val books = listOf(
+            book("almost", openedAt = 10),
+            book("barely", openedAt = 20),
+            book("fresh", addedAt = 99),
+            book("old", addedAt = 1),
+            book("doneEarly", finished = true).copy(finishedAt = 5),
+            book("doneLate", finished = true).copy(finishedAt = 50),
+            book("boxed", openedAt = 40, archived = true),
+        )
+        val progress = mapOf(books[0].url to 0.9, books[1].url to 0.1)
+
+        val tiles = desk(books, progress = progress, now = 100, monthFrom = 40).tiles.associateBy { it.kind }
+
+        assertEquals(2, tiles.getValue(HomeShelfKind.READING).count)
+        assertEquals(1, tiles.getValue(HomeShelfKind.READING).note)
+        assertEquals(2, tiles.getValue(HomeShelfKind.TO_READ).count)
+        assertEquals(2, tiles.getValue(HomeShelfKind.TO_READ).note)
+        assertEquals(2, tiles.getValue(HomeShelfKind.FINISHED).count)
+        assertEquals(1, tiles.getValue(HomeShelfKind.FINISHED).note)
+        assertEquals(listOf("doneLate", "doneEarly"), tiles.getValue(HomeShelfKind.FINISHED).covers.map { it.title })
+    }
+
+    @Test
+    fun `pick up next puts books under way first, then the next volume of each series, never the hero`() {
         val hero = book("hero", openedAt = 50)
-        val books = listOf(
-            hero,
-            book("older", openedAt = 10),
-            book("newer", openedAt = 20),
-            book("done", openedAt = 30, finished = true),
-            book("boxed", openedAt = 40, archived = true),
-            book("fresh", addedAt = 5),
-            book("fresher", addedAt = 9),
-            book("elsewhere", addedAt = 20),
-            book("marked", addedAt = 30),
-        )
-        // Read on another device, so never opened here; marked finished
-        // without being opened.
-        val home = homeSectionsOf(books, emptyList(), current = hero.url) {
-            when {
-                it.finished || it.title == "marked" -> LibraryFilterOption.FINISHED
-                it.title == "elsewhere" -> LibraryFilterOption.IN_PROGRESS
-                else -> LibraryFilterOption.UNREAD
-            }
-        }
+        val older = book("older", openedAt = 10)
+        val newer = book("newer", openedAt = 20)
+        val s1 = book("s1", finished = true, openedAt = 5)
+        val s2 = book("s2")
+        val loose = book("loose", addedAt = 30)
+        val books = listOf(hero, older, newer, s1, s2, loose)
 
-        assertEquals(listOf("newer", "older", "elsewhere"), home.recentlyOpened.map { it.title })
-        assertEquals(listOf("fresher", "fresh"), home.newBooks.map { it.title })
+        val home = desk(books, series = listOf(series("saga", s1, s2)), current = hero.url)
+
+        assertEquals(listOf("newer", "older", "s2"), home.pickUpNext.map { it.book.title })
+        assertEquals(
+            listOf(PickReason.IN_PROGRESS, PickReason.IN_PROGRESS, PickReason.NEXT_IN_SERIES),
+            home.pickUpNext.map { it.reason },
+        )
+        assertEquals(listOf("loose"), home.recentlyAdded.map { it.title })
+        assertEquals(null, home.starter)
     }
 
     @Test
-    fun `home leaves out the new strip when every book on the shelf is new`() {
-        val books = listOf(
-            book("fresh", addedAt = 5),
-            book("fresher", addedAt = 9),
-            book("boxed", openedAt = 40, archived = true),
-        )
+    fun `an untouched library is offered unread picks and a starter instead of a hero`() {
+        val books = listOf(book("a", addedAt = 1), book("b", addedAt = 2))
 
-        val home = homeSectionsOf(books, emptyList(), current = null) { LibraryFilterOption.UNREAD }
+        val home = desk(books)
 
-        assertEquals(emptyList<Book>(), home.newBooks)
+        assertEquals(listOf("b", "a"), home.pickUpNext.map { it.book.title })
+        assertTrue(home.pickUpNext.all { it.reason == PickReason.UNREAD })
+        // Everything is new, so a recently added strip would only repeat it.
+        assertEquals(emptyList<Book>(), home.recentlyAdded)
+        assertEquals("b", home.starter?.title)
     }
 
     @Test
-    fun `home lists only series begun and not finished, most recent first`() {
-        fun shelf(key: String, vararg volumes: Book): SeriesShelf {
-            val vs = volumes.map { SeriesVolume(it, progression = null) }
-            return SeriesShelf(key, key, null, vs, nextUp = vs.firstOrNull { !it.finished }, gaps = emptyList())
-        }
-        val untouched = shelf("untouched", book("u1"), book("u2"))
-        val done = shelf("done", book("d1", finished = true), book("d2", finished = true))
-        val early = shelf("early", book("e1", finished = true, openedAt = 10), book("e2"))
-        val late = shelf("late", book("l1", finished = true, openedAt = 30), book("l2"))
+    fun `series sets keep only series under way, with read count, next volume and a bar per volume`() {
+        val untouched = series("untouched", book("u1"), book("u2"))
+        val done = series("done", book("d1", finished = true), book("d2", finished = true))
+        val e2 = book("e2", openedAt = 10)
+        val early = series("early", book("e1", finished = true, openedAt = 10), e2, book("e3"), progress = mapOf(e2.url to 0.5))
+        val late = series("late", book("l1", finished = true, openedAt = 30), book("l2"))
 
-        val home = homeSectionsOf(emptyList(), listOf(untouched, done, early, late), current = null) {
-            LibraryFilterOption.UNREAD
-        }
+        val sets = desk(emptyList(), series = listOf(untouched, done, early, late)).seriesSets
 
-        assertEquals(listOf("late", "early"), home.seriesUnderway.map { it.key })
+        assertEquals(listOf("late", "early"), sets.map { it.shelf.key })
+        val earlySet = sets[1]
+        assertEquals(1, earlySet.read)
+        assertEquals("e2", earlySet.next?.book?.title)
+        assertEquals(listOf(1f, 0.5f, 0f), earlySet.volumeProgress)
+    }
+
+    @Test
+    fun `reading pulse counts today's minutes and the day streak, and stays quiet with none`() {
+        val zone = java.time.ZoneOffset.UTC
+        val today = java.time.LocalDate.of(2026, 11, 11)
+        fun at(day: java.time.LocalDate, minutes: Long) = com.chmouel.liseur.data.db.ReadingSession(
+            bookUrl = "b",
+            startedAt = day.atStartOfDay(zone).toInstant().toEpochMilli() + 3_600_000,
+            lastCheckpointAt = 0,
+            durationMs = minutes * 60_000,
+        )
+
+        val pulse = readingPulseOf(
+            listOf(at(today, 30), at(today, 12), at(today.minusDays(1), 5), at(today.minusDays(3), 9)),
+            today,
+            zone,
+        )
+
+        assertEquals(ReadingPulse(minutesToday = 42, streakDays = 2), pulse)
+        assertEquals(null, readingPulseOf(emptyList(), today, zone))
+    }
+
+    @Test
+    fun `time left follows the book's own pace and refuses to guess on thin evidence`() {
+        fun session(from: Double, to: Double, minutes: Long) = com.chmouel.liseur.data.db.ReadingSession(
+            bookUrl = "b",
+            startedAt = 0,
+            lastCheckpointAt = 0,
+            durationMs = minutes * 60_000,
+            startProgression = from,
+            endProgression = to,
+        )
+
+        // 20 minutes for a tenth of the book: the remaining half is 100 minutes.
+        assertEquals(100L * 60_000, timeLeftMs(listOf(session(0.0, 0.05, 10), session(0.05, 0.1, 10)), 0.5))
+        assertEquals(null, timeLeftMs(listOf(session(0.0, 0.1, 2)), 0.5))
+        assertEquals(null, timeLeftMs(listOf(session(0.0, 0.001, 30)), 0.5))
+        assertEquals(null, timeLeftMs(listOf(session(0.0, 0.1, 20)), null))
     }
 
     @Test
