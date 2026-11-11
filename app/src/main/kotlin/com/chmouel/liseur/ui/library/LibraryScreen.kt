@@ -82,6 +82,7 @@ import androidx.compose.material.icons.outlined.LibraryAdd
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -96,12 +97,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import com.chmouel.liseur.domain.HomeShelfKind
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.SeriesShelf
+import com.chmouel.liseur.domain.ReadingPulse
 import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
@@ -192,7 +195,8 @@ import com.chmouel.liseur.ui.brandTileHeight
 import com.chmouel.liseur.ui.library.styles.LibraryStyleSheet
 import com.chmouel.liseur.ui.library.styles.ListLibrary
 import com.chmouel.liseur.ui.library.styles.ShelvesLibrary
-import com.chmouel.liseur.ui.library.styles.homeDashboard
+import com.chmouel.liseur.ui.library.styles.HomeLibrary
+import com.chmouel.liseur.ui.library.styles.isUnderway
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.coverMinSize
 import com.chmouel.liseur.ui.libraryBarHeight
@@ -252,8 +256,14 @@ fun LibraryScreen(
     onSearchQueryChange: (String) -> Unit = {},
     onToggleFilter: (LibraryFilterOption) -> Unit = {},
     onSetGroupBySeries: (Boolean) -> Unit = {},
+    /** Narrows the Library to one reading state, or clears that axis with an empty set. */
+    onSetReadingFilter: (Set<LibraryFilterOption>) -> Unit = {},
     onClearFilters: () -> Unit = {},
     onSetLayout: (LibraryLayout) -> Unit = {},
+    /** Today's reading and the day streak, for the Home header. */
+    pulse: ReadingPulse? = null,
+    /** The chapter and time left of the book the Home hero shows. */
+    heroDetail: HeroDetail? = null,
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     onStartWithFreeBooks: () -> Unit = {},
@@ -276,7 +286,7 @@ fun LibraryScreen(
     // bar should follow the size of the tile it is holding.
     val wide = tileHeight >= 64.dp
     val classicState = rememberLazyGridState()
-    val homeState = rememberLazyGridState()
+    val homeState = rememberLazyListState()
     val shelvesState = rememberLazyListState()
     val listState = rememberLazyGridState()
     // Results get a grid of their own, so they always start at the top
@@ -492,24 +502,16 @@ fun LibraryScreen(
     // library does not have the bar pop in on every launch.
     val onboarding = !state.loading && state.libraryIsEmpty && !state.hasArchived
     val showBottomBar = layout.bottomBar && !state.isSearchActive && !archived && !onboarding
-    var bottomHomeTab by rememberSaveable { mutableStateOf(layout.style == LibraryStyle.HOME) }
-    var lastLibraryStyle by rememberSaveable {
-        mutableStateOf(if (layout.style != LibraryStyle.HOME) layout.style.id else LibraryStyle.CLASSIC.id)
-    }
-    var appliedStyle by rememberSaveable { mutableStateOf(layout.style.id) }
-    LaunchedEffect(layout.style) {
-        if (layout.style != LibraryStyle.HOME) lastLibraryStyle = layout.style.id
-        if (layout.style.id != appliedStyle) {
-            appliedStyle = layout.style.id
-            bottomHomeTab = layout.style == LibraryStyle.HOME
-        }
-    }
-    val activeStyle = when {
-        !showBottomBar -> layout.style
-        bottomHomeTab -> LibraryStyle.HOME
-        layout.style != LibraryStyle.HOME -> layout.style
-        else -> LibraryStyle.fromId(lastLibraryStyle)
-    }
+    // With the bottom bar, Home is a tab of its own and the style only
+    // chooses how the Library tab draws the catalogue; without it, Home
+    // is one of the styles. A Home style saved from the latter leaves the
+    // Library tab on Classic. The tab the reader picked wins over the
+    // saved one the app opens on.
+    var pickedTab by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val homeTab = pickedTab ?: layout.startOnHome
+    val catalogueStyle = if (layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
+    val showHome = !archived && if (layout.bottomBar) homeTab else layout.style == LibraryStyle.HOME
+    val activeStyle = if (showHome) LibraryStyle.HOME else catalogueStyle
     val scrollStyleToTop: (LibraryStyle) -> Unit = { target ->
         scope.launch {
             when (target) {
@@ -525,33 +527,32 @@ fun LibraryScreen(
         }
     }
 
+    val showCatalogue: () -> Unit = {
+        if (layout.bottomBar) {
+            pickedTab = false
+        } else {
+            onSetLayout(layout.copy(style = LibraryStyle.CLASSIC))
+        }
+        scrollStyleToTop(catalogueStyle)
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         bottomBar = {
             if (showBottomBar) {
                 LibraryBottomBar(
-                    continueReading = state.continueReading,
-                    homeSelected = bottomHomeTab,
+                    // The Home hero already shows the book, large.
+                    continueReading = state.continueReading.takeIf { !homeTab },
+                    homeSelected = homeTab,
                     syncing = syncing,
                     onOpenBook = { book -> openShelfBook(book) },
                     onBookActions = { book -> sheetBook = book },
                     onSelectHome = {
-                        if (bottomHomeTab) {
-                            scrollStyleToTop(LibraryStyle.HOME)
-                        } else {
-                            bottomHomeTab = true
-                        }
+                        if (homeTab) scrollStyleToTop(LibraryStyle.HOME) else pickedTab = true
                     },
                     onSelectLibrary = {
-                        if (!bottomHomeTab) {
-                            scrollStyleToTop(activeStyle)
-                        } else {
-                            bottomHomeTab = false
-                            if (layout.style == LibraryStyle.HOME) {
-                                onSetLayout(layout.copy(style = LibraryStyle.fromId(lastLibraryStyle)))
-                            }
-                        }
+                        if (!homeTab) scrollStyleToTop(catalogueStyle) else pickedTab = false
                     },
                     onOpenStats = onOpenStats,
                     onSetUpTranslation = onSetUpTranslation,
@@ -649,21 +650,27 @@ fun LibraryScreen(
                                 )
                                 Spacer(Modifier.width(if (wide) 16.dp else 10.dp))
                                 Column {
+                                    // With the tabs, the bar names the tab, so
+                                    // Home and Library never look like one screen.
                                     Text(
-                                        text = stringResource(R.string.library_title),
+                                        text = when {
+                                            !layout.bottomBar || onboarding -> stringResource(R.string.library_title)
+                                            showHome -> stringResource(R.string.library_style_home)
+                                            else -> stringResource(R.string.library_tab_library)
+                                        },
                                         style = if (wide) {
                                             MaterialTheme.typography.headlineMedium
                                         } else {
                                             MaterialTheme.typography.titleLarge
                                         },
                                     )
-                                    if (!state.loading && state.books.isNotEmpty()) {
+                                    if (showHome && !onboarding) {
+                                        pulse?.let { PulseLine(it, onOpenStats) }
+                                    } else if (!state.loading && state.books.isNotEmpty()) {
                                         Text(
-                                            text = pluralStringResource(
-                                                R.plurals.library_book_count,
-                                                state.books.size,
-                                                state.books.size,
-                                            ),
+                                            text = shelfCountLine(state),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             style = MaterialTheme.typography.labelSmall,
                                             letterSpacing = 0.8.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -946,6 +953,35 @@ fun LibraryScreen(
                         modifier = fillAboveBar,
                     )
 
+                    // Home is drawn from the whole shelf, so it comes before
+                    // the empty states that only the Library's filters cause.
+                    showHome -> HomeLibrary(
+                        state = state,
+                        hero = heroDetail,
+                        listState = homeState,
+                        onBookSelected = openShelfBook,
+                        onBookLongPress = { sheetBook = it },
+                        onSeriesSelected = onSeriesSelected,
+                        onOpenShelf = { kind ->
+                            when (kind) {
+                                HomeShelfKind.READING -> onSetReadingFilter(setOf(LibraryFilterOption.IN_PROGRESS))
+                                HomeShelfKind.TO_READ -> onSetReadingFilter(setOf(LibraryFilterOption.UNREAD))
+                                HomeShelfKind.FINISHED -> onSetReadingFilter(setOf(LibraryFilterOption.FINISHED))
+                                HomeShelfKind.SERIES -> {
+                                    onSetReadingFilter(emptySet())
+                                    onSetGroupBySeries(true)
+                                }
+                            }
+                            showCatalogue()
+                        },
+                        onBrowseAll = {
+                            onSetReadingFilter(ALL_READING_STATES)
+                            showCatalogue()
+                        },
+                        bottomInset = bottomInset,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+
                     // Every book on the shelf has been read. The rule
                     // that hides them is the app's own, not something
                     // the reader asked for, so this is the one empty
@@ -970,14 +1006,10 @@ fun LibraryScreen(
                     // Books exist, they are simply all hidden. Offering to
                     // add a folder here would be answering a question nobody
                     // asked, and would suggest the shelf had been lost.
-                    state.books.isEmpty() -> NothingMatched(
-                        searching = false,
-                        onClear = onClearFilters,
-                        modifier = fillAboveBar,
-                    )
-
-                    else -> {
-                        val controls: LibraryControls = { extra ->
+                    // The controls stay above it so another quick chip is
+                    // still one tap away.
+                    state.books.isEmpty() -> Column(fillAboveBar) {
+                        if (!archived) {
                             LibraryControlsRow(
                                 state = state,
                                 onSetSort = onSetSort,
@@ -986,13 +1018,35 @@ fun LibraryScreen(
                                 onSetGroupBySeries = onSetGroupBySeries,
                                 onClearFilters = onClearFilters,
                                 onChooseStyle = { choosingStyle = true },
-                                extra = extra,
+                                onSetReadingFilter = onSetReadingFilter,
+                                modifier = Modifier.padding(horizontal = 16.dp),
                             )
                         }
+                        NothingMatched(
+                            searching = false,
+                            onClear = onClearFilters,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                        )
+                    }
+
+                    else -> {
                         val shownState = if (activeStyle == state.layout.style) {
                             state
                         } else {
                             state.copy(layout = state.layout.copy(style = activeStyle))
+                        }
+                        val controls: LibraryControls = { extra ->
+                            LibraryControlsRow(
+                                state = shownState,
+                                onSetSort = onSetSort,
+                                onToggleSortDirection = onToggleSortDirection,
+                                onToggleFilter = onToggleFilter,
+                                onSetGroupBySeries = onSetGroupBySeries,
+                                onClearFilters = onClearFilters,
+                                onChooseStyle = { choosingStyle = true },
+                                onSetReadingFilter = onSetReadingFilter,
+                                extra = extra,
+                            )
                         }
                         when (activeStyle) {
                             LibraryStyle.SHELVES -> ShelvesLibrary(
@@ -1020,7 +1074,8 @@ fun LibraryScreen(
 
                             LibraryStyle.CLASSIC, LibraryStyle.HOME -> BookGrid(
                                 state = shownState,
-                                gridState = if (activeStyle == LibraryStyle.HOME) homeState else classicState,
+                                gridState = classicState,
+                                onSetReadingFilter = onSetReadingFilter,
                                 onSetSort = onSetSort,
                                 onToggleSortDirection = onToggleSortDirection,
                                 onToggleFilter = onToggleFilter,
@@ -1049,7 +1104,8 @@ fun LibraryScreen(
             layout = state.layout,
             books = previewBooks,
             onChange = { chosen ->
-                if (chosen == layout) bottomHomeTab = chosen.style == LibraryStyle.HOME
+                // Turning the tabs on from the Home style lands on the Home tab.
+                if (chosen.bottomBar && !layout.bottomBar) pickedTab = chosen.style == LibraryStyle.HOME
                 onSetLayout(chosen)
             },
             onDismiss = { choosingStyle = false },
@@ -1828,9 +1884,19 @@ private fun BookGrid(
     onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    onSetReadingFilter: ((Set<LibraryFilterOption>) -> Unit)? = null,
 ) {
+    // Compact fits one more column than the comfortable width allows.
+    val compact = state.layout.compactGrid && state.searchResults == null
+    val width = windowWidth()
+    val minCover = coverMinSize(width)
+    val columns = if (compact) {
+        GridCells.Fixed(((width - 32.dp + 12.dp) / (minCover + 12.dp)).toInt().coerceAtLeast(1) + 1)
+    } else {
+        GridCells.Adaptive(minSize = minCover)
+    }
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = coverMinSize(windowWidth())),
+        columns = columns,
         state = gridState,
         modifier = modifier,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset),
@@ -1843,17 +1909,9 @@ private fun BookGrid(
         // else entirely.
         val results = state.searchResults
         val onShelf = !state.isSearchActive && !state.filters.archived
-        if (onShelf && state.layout.style == LibraryStyle.HOME) {
-            homeDashboard(
-                state = state,
-                onBookSelected = onBookSelected,
-                onBookLongPress = onBookLongPress,
-                onSeriesSelected = onSeriesSelected,
-            )
-        } else {
-            state.continueReading
-                ?.takeIf { onShelf && !state.layout.bottomBar }
-                ?.let { recent ->
+        state.continueReading
+            ?.takeIf { onShelf && !state.layout.bottomBar }
+            ?.let { recent ->
                 item(key = "classic:hero", span = { GridItemSpan(maxLineSpan) }) {
                     ContinueReadingCard(
                         entry = recent,
@@ -1862,7 +1920,6 @@ private fun BookGrid(
                     )
                 }
             }
-        }
         if (results != null) {
             // In the slot the filter row sits in, at its height, so the
             // covers do not jump on the first letter typed. The filters
@@ -1894,6 +1951,7 @@ private fun BookGrid(
                 BookCard(
                     book = book,
                     progress = state.downloads[book.url],
+                    progression = state.progressions[book.url],
                     inASeries = !book.seriesName.isNullOrBlank(),
                     highlight = state.searchQuery,
                     onClick = { onBookSelected(book) },
@@ -1911,6 +1969,7 @@ private fun BookGrid(
                 onSetGroupBySeries = onSetGroupBySeries,
                 onClearFilters = onClearFilters,
                 onChooseStyle = onChooseStyle,
+                onSetReadingFilter = onSetReadingFilter,
             )
         }
         if (state.filters.groupBySeries) {
@@ -1927,6 +1986,8 @@ private fun BookGrid(
                     is ShelfEntry.Single -> BookCard(
                         book = entry.book,
                         progress = state.downloads[entry.book.url],
+                        progression = state.progressions[entry.book.url],
+                        compact = compact,
                         // A single here is a book whose series is not on
                         // the shelf; a pile it belonged to would have
                         // swallowed it.
@@ -1941,6 +2002,8 @@ private fun BookGrid(
                 BookCard(
                     book = book,
                     progress = state.downloads[book.url],
+                    progression = state.progressions[book.url],
+                    compact = compact,
                     inASeries = seriesKey(book.seriesName) in state.shownSeries,
                     onClick = { onBookSelected(book) },
                     onLongClick = { onBookLongPress(book) },
@@ -1969,10 +2032,117 @@ internal fun LibraryControlsRow(
     onClearFilters: () -> Unit,
     onChooseStyle: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Draws the quick reading chips above the row when set; never in the archive. */
+    onSetReadingFilter: ((Set<LibraryFilterOption>) -> Unit)? = null,
     extra: (@Composable () -> Unit)? = null,
 ) {
+    Column(modifier.fillMaxWidth()) {
+        if (onSetReadingFilter != null && !state.filters.archived) {
+            QuickFilterChips(
+                state = state,
+                onSetReadingFilter = onSetReadingFilter,
+                onSetGroupBySeries = onSetGroupBySeries,
+            )
+        }
+        LibraryControlsLine(
+            state = state,
+            onSetSort = onSetSort,
+            onToggleSortDirection = onToggleSortDirection,
+            onToggleFilter = onToggleFilter,
+            onSetGroupBySeries = onSetGroupBySeries,
+            onClearFilters = onClearFilters,
+            onChooseStyle = onChooseStyle,
+            extra = extra,
+        )
+    }
+}
+
+/** Every reading state at once: the shelf with its finished books back on it. */
+internal val ALL_READING_STATES = setOf(
+    LibraryFilterOption.UNREAD,
+    LibraryFilterOption.IN_PROGRESS,
+    LibraryFilterOption.FINISHED,
+)
+
+/**
+ * The reading states one tap away, with how many books each holds, and
+ * the series grouping where the style has it. They write the same
+ * filters the Filter menu does; tapping the chip already chosen goes
+ * back to the default shelf.
+ */
+@Composable
+private fun QuickFilterChips(
+    state: LibraryUiState,
+    onSetReadingFilter: (Set<LibraryFilterOption>) -> Unit,
+    onSetGroupBySeries: (Boolean) -> Unit,
+) {
+    val reading = state.filters.options.filterTo(mutableSetOf()) {
+        it.group == com.chmouel.liseur.domain.FilterGroup.READING
+    }
+    val counts = state.quickCounts
+    val chips = listOf(
+        Triple(R.string.library_chip_all, counts.all, ALL_READING_STATES),
+        Triple(R.string.home_tile_reading, counts.reading, setOf(LibraryFilterOption.IN_PROGRESS)),
+        Triple(R.string.home_tile_to_read, counts.toRead, setOf(LibraryFilterOption.UNREAD)),
+        Triple(R.string.home_tile_finished, counts.finished, setOf(LibraryFilterOption.FINISHED)),
+    )
+    androidx.compose.foundation.lazy.LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        chips.forEach { (label, count, options) ->
+            item(key = label) {
+                // With nothing finished, the default shelf already holds every
+                // book, so All reads as the chip in use.
+                val selected = reading == options ||
+                    (options == ALL_READING_STATES && reading.isEmpty() && counts.finished == 0)
+                androidx.compose.material3.FilterChip(
+                    selected = selected,
+                    onClick = {
+                        onSetReadingFilter(
+                            when {
+                                options == ALL_READING_STATES -> options
+                                selected -> emptySet()
+                                else -> options
+                            },
+                        )
+                    },
+                    label = { Text("${stringResource(label)} $count") },
+                )
+            }
+        }
+        if (state.hasSeries && state.layout.style != LibraryStyle.SHELVES) {
+            item(key = "series") {
+                androidx.compose.material3.FilterChip(
+                    selected = state.filters.groupBySeries,
+                    onClick = { onSetGroupBySeries(!state.filters.groupBySeries) },
+                    label = { Text(stringResource(R.string.home_tile_series)) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Outlined.CollectionsBookmark,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryControlsLine(
+    state: LibraryUiState,
+    onSetSort: (LibrarySort) -> Unit,
+    onToggleSortDirection: () -> Unit,
+    onToggleFilter: (LibraryFilterOption) -> Unit,
+    onSetGroupBySeries: (Boolean) -> Unit,
+    onClearFilters: () -> Unit,
+    onChooseStyle: () -> Unit,
+    extra: (@Composable () -> Unit)?,
+) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2101,6 +2271,10 @@ internal fun BookCard(
     modifier: Modifier = Modifier,
     /** What was searched for, to embolden where it matched; null on the shelf. */
     highlight: String? = null,
+    /** How far in the book is, drawn as a bar inside the cover while it is under way. */
+    progression: Double? = null,
+    /** Narrower columns: the title keeps to one line. */
+    compact: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
     val state = bookStateDescription(book, progress)
@@ -2151,26 +2325,35 @@ internal fun BookCard(
                     modifier = Modifier.align(Alignment.TopStart),
                 )
             }
+            if (progress == null && progression.isUnderway(book)) {
+                LinearProgressIndicator(
+                    progress = { progression!!.toFloat() },
+                    strokeCap = StrokeCap.Round,
+                    drawStopIndicator = {},
+                    trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp)
+                        .fillMaxWidth()
+                        .height(4.dp),
+                )
+            }
         }
+        // The actions are a long press away, as on every other cover,
+        // so the title has the card's whole width.
         Column(
             modifier = Modifier
                 .padding(top = 6.dp)
-                .heightIn(min = 56.dp),
+                .heightIn(min = if (compact) 36.dp else 48.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = searchHighlighted(book.displayTitle, highlight),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    lineHeight = 18.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onLongClick) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.book_actions))
-                }
-            }
+            Text(
+                text = searchHighlighted(book.displayTitle, highlight),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 18.sp,
+                maxLines = if (compact) 1 else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
             book.displayAuthor?.let {
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -3111,4 +3294,34 @@ private fun BottomBarTab(
             overflow = TextOverflow.Ellipsis,
         )
     }
+}
+
+/** "19 books", or "12 of 19" when the filters hide some. */
+@Composable
+private fun shelfCountLine(state: LibraryUiState): String {
+    val shown = state.books.size
+    val all = state.quickCounts.all
+    return if (state.filters.archived || shown >= all) {
+        pluralStringResource(R.plurals.library_book_count, shown, shown)
+    } else {
+        stringResource(R.string.library_shown_of, shown, all)
+    }
+}
+
+/** Today's minutes and the streak under the Home title; opens the reading stats. */
+@Composable
+private fun PulseLine(pulse: ReadingPulse, onOpenStats: () -> Unit) {
+    val parts = listOfNotNull(
+        pulse.minutesToday.takeIf { it > 0 }?.let { stringResource(R.string.home_pulse_today, it) },
+        pulse.streakDays.takeIf { it > 0 }?.let { pluralStringResource(R.plurals.home_pulse_streak, it, it) },
+    )
+    Text(
+        text = parts.joinToString(" · "),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        style = MaterialTheme.typography.labelSmall,
+        letterSpacing = 0.8.sp,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.clickable(onClickLabel = stringResource(R.string.reading_stats), onClick = onOpenStats),
+    )
 }

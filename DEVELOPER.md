@@ -1949,6 +1949,8 @@ separate from translation's, moved and forgotten with server edits in
   progress, search, empty states and e-ink rules; derive their groupings
   in `domain/LibraryLayout.kt`
   ([ADR 0070](docs/adr/0070-library-styles-are-fixed-layouts.md)).
+  Home (`HomeDesk`) is built from the unfiltered shelf; Library filters
+  must never reach it.
 - UI strings go into English and all shipped locales together.
   Russian plurals need `one`, `few`, `many`, `other`; escape apostrophes.
 - Dependencies and bundled fonts must stay FOSS and reproducible;

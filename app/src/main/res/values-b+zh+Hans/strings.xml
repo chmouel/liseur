@@ -1808,7 +1808,7 @@
     <string name="library_style_classic">经典</string>
     <string name="library_style_classic_detail">封面网格，正在读的书置顶</string>
     <string name="library_style_home">主页</string>
-    <string name="library_style_home_detail">正在读的书，然后是最近打开、在读系列和新书的横条</string>
+    <string name="library_style_home_detail">正在读的书、你的书架、在读系列和接下来读什么</string>
     <string name="library_style_shelves">书架</string>
     <string name="library_style_shelves_detail">封面立在书架上，按系列、作者或阅读状态分架</string>
     <string name="library_style_list">列表</string>
@@ -1836,10 +1836,48 @@
     <string name="library_hero_card_detail">在书库顶部的卡片中显示在读书籍</string>
     <string name="library_tab_library">书库</string>
     <string name="home_continue">继续</string>
-    <string name="home_recently_opened">最近打开</string>
-    <string name="home_new_books">新上架</string>
     <string name="home_series_underway">在读系列</string>
-    <string name="home_all_books">全部书籍</string>
     <string name="shelf_other_books">其他书籍</string>
     <string name="list_new">新</string>
+    <string name="library_chip_all">全部</string>
+    <string name="home_tile_reading">在读</string>
+    <string name="home_tile_to_read">待读</string>
+    <string name="home_tile_series">系列</string>
+    <string name="home_tile_finished">已读完</string>
+    <string name="home_your_shelves">你的书架</string>
+    <string name="home_pick_up_next">接着读</string>
+    <string name="home_recently_added">最近添加</string>
+    <string name="home_time_left_minutes">约剩 %d 分钟</string>
+    <string name="home_time_left_hours">约剩 %1$d 小时 %2$d 分钟</string>
+    <string name="home_page_of">第 %1$d 页，共 %2$d 页</string>
+    <string name="home_start_reading">开始阅读</string>
+    <string name="home_series_read">已读 %1$d / %2$d</string>
+    <string name="home_series_next">下一本：%s</string>
+    <string name="home_pick_next_volume">下一本 · %s</string>
+    <string name="home_pick_next_in_series">系列下一本</string>
+    <string name="library_shown_of">%1$d / %2$d</string>
+    <string name="home_pulse_today">今天 %d 分钟</string>
+    <string name="library_view_title">书库视图</string>
+    <string name="library_opens_on">启动时打开</string>
+    <string name="library_columns">列数</string>
+    <string name="library_columns_comfortable">宽松</string>
+    <string name="library_columns_compact">紧凑</string>
+    <plurals name="home_browse_all">
+        <item quantity="other">浏览全部 %d 本</item>
+    </plurals>
+    <plurals name="home_note_almost_done">
+        <item quantity="other">%d 本快读完</item>
+    </plurals>
+    <plurals name="home_note_added_lately">
+        <item quantity="other">新添 %d 本</item>
+    </plurals>
+    <plurals name="home_note_series_underway">
+        <item quantity="other">%d 个在读</item>
+    </plurals>
+    <plurals name="home_note_this_month">
+        <item quantity="other">本月 %d 本</item>
+    </plurals>
+    <plurals name="home_pulse_streak">
+        <item quantity="other">连续 %d 天</item>
+    </plurals>
 </resources>

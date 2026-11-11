@@ -27,14 +27,28 @@ bottom bar with the current book's cover on the left and Home, Library
 and More tabs beside it (the bottom bar is the default); Shelves chooses
 series, author or reading state for its shelves, a shelf colour (theme
 accent, stone, oak, walnut or brass) and a backdrop behind them (plain,
-wood, plaster, bricks or a custom image); and List can use compact rows.
+wood, plaster, bricks or a custom image); Classic can fit one more
+column with one-line titles; and List can use compact rows.
 Nothing is reorderable.
+
+With the bottom bar, Home is a tab rather than a style: the app opens
+on Home or Library as the reader chooses, and the style sheet, titled
+Library view, picks only how the Library tab looks (Classic, Shelves or
+List). Without the bottom bar,
+Home is the fourth style. A saved Home style needs no migration: with
+the bottom bar it reads as Classic for the Library tab.
 
 Only the library screen changes. Every style keeps the same book
 actions, badges, download progress, search results, empty states and
-e-ink rules. Home is the Classic grid with a larger current book and
-strips of recent books, series under way and new books above it, so
-filters, the archive and series piles still work there. Shelves and
+e-ink rules. Home is a short reading desk of its own, not a prefix of
+the grid: the current book with its chapter and time left (or a book
+to start), four shelf tiles (reading, to read, series, finished) that
+open the Library filtered to them, series under way with the next
+volume, a pick-up-next strip, recently added books and a way into the
+whole Library. It is computed from the whole shelf, so the Library's
+filters never change it. The Library tab shows one-tap reading-state
+chips with their counts above the filter row; they write the same
+filters as the Filter menu. Shelves and
 List lay out the filtered, sorted library and keep the filter row on
 top. The grouping, strips and track lengths are computed in
 `domain/LibraryLayout.kt`, outside Compose.
@@ -53,9 +67,10 @@ E-ink keeps a flat plank and no decoration.
 
 ## Consequences
 
-Six DataStore keys (`library_style`, `library_shelf_grouping`,
+Eight DataStore keys (`library_style`, `library_shelf_grouping`,
 `library_shelf_backdrop`, `library_shelf_tone`, `library_compact_list`,
-`library_bottom_bar`) are backed up with the other settings; a seventh
+`library_grid_compact`, `library_bottom_bar`, `library_start_home`) are
+backed up with the other settings; a ninth
 (`library_shelf_backdrop_uri`) points to the copied custom image in
 local app storage. No database change.
 

@@ -1237,8 +1237,12 @@ private fun LibraryRoute(
         translate.SetupSheet(onDismiss = { settingUpTranslation = false }, onMore = onOpenTranslation)
     }
 
+    val pulse by viewModel.pulse.collectAsStateWithLifecycle()
+    val heroDetail by viewModel.heroDetail.collectAsStateWithLifecycle()
     LibraryScreen(
         state = state,
+        pulse = pulse,
+        heroDetail = heroDetail,
         onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(
@@ -1294,6 +1298,7 @@ private fun LibraryRoute(
         onSearchQueryChange = viewModel::setSearchQuery,
         onToggleFilter = viewModel::toggleFilter,
         onSetGroupBySeries = viewModel::setGroupBySeries,
+        onSetReadingFilter = viewModel::setReadingFilter,
         onSetLayout = viewModel::setLayout,
         onClearFilters = viewModel::clearFilters,
         onSetSearchActive = viewModel::setSearchActive,

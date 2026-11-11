@@ -571,7 +571,9 @@ class AppSettingsRepository(
         val LIBRARY_SHELF_BACKDROP_URI = stringPreferencesKey("library_shelf_backdrop_uri")
         val LIBRARY_SHELF_TONE = stringPreferencesKey("library_shelf_tone")
         val LIBRARY_COMPACT_LIST = booleanPreferencesKey("library_compact_list")
+        val LIBRARY_GRID_COMPACT = booleanPreferencesKey("library_grid_compact")
         val LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
+        val LIBRARY_START_HOME = booleanPreferencesKey("library_start_home")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
@@ -679,7 +681,9 @@ class AppSettingsRepository(
                 shelfBackdropUri = p[Keys.LIBRARY_SHELF_BACKDROP_URI],
                 shelfTone = ShelfTone.fromId(p[Keys.LIBRARY_SHELF_TONE]),
                 compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
+                compactGrid = p[Keys.LIBRARY_GRID_COMPACT] ?: false,
                 bottomBar = p[Keys.LIBRARY_BOTTOM_BAR] ?: true,
+                startOnHome = p[Keys.LIBRARY_START_HOME] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
@@ -876,7 +880,9 @@ class AppSettingsRepository(
             }
             it[Keys.LIBRARY_SHELF_TONE] = layout.shelfTone.id
             it[Keys.LIBRARY_COMPACT_LIST] = layout.compactList
+            it[Keys.LIBRARY_GRID_COMPACT] = layout.compactGrid
             it[Keys.LIBRARY_BOTTOM_BAR] = layout.bottomBar
+            it[Keys.LIBRARY_START_HOME] = layout.startOnHome
         }
     }
 
@@ -1419,6 +1425,8 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_style" to BackupValueType.STRING, "library_shelf_grouping" to BackupValueType.STRING,
     "library_shelf_backdrop" to BackupValueType.STRING, "library_shelf_tone" to BackupValueType.STRING,
     "library_compact_list" to BackupValueType.BOOLEAN,
+    "library_grid_compact" to BackupValueType.BOOLEAN,
+    "library_start_home" to BackupValueType.BOOLEAN,
     "library_bottom_bar" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,

@@ -19,6 +19,7 @@ import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.KosyncPeer
 import com.chmouel.liseur.data.db.LibraryFolder
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.SeriesOrderDao
@@ -44,7 +45,7 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.data.settings.UploadPolicy
 import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.FinishedOverride
-import com.chmouel.liseur.domain.HomeSections
+import com.chmouel.liseur.domain.HomeDesk
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
@@ -58,7 +59,10 @@ import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.domain.asPickOption
 import com.chmouel.liseur.domain.groupedIntoSeries
-import com.chmouel.liseur.domain.homeSectionsOf
+import com.chmouel.liseur.domain.homeDeskOf
+import com.chmouel.liseur.domain.ReadingPulse
+import com.chmouel.liseur.domain.readingPulseOf
+import com.chmouel.liseur.domain.timeLeftMs
 import com.chmouel.liseur.domain.mixedShelf
 import com.chmouel.liseur.domain.movedItem
 import com.chmouel.liseur.domain.renumbered
@@ -97,11 +101,33 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import org.readium.r2.shared.publication.Locator
 import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneId
 
 data class ContinueReading(
     val book: Book,
     val progression: Double?,
+)
+
+/** The Library tab's quick filter chips and how many books each would show. */
+data class QuickFilterCounts(
+    val all: Int = 0,
+    val reading: Int = 0,
+    val toRead: Int = 0,
+    val finished: Int = 0,
+)
+
+/**
+ * What the Home hero adds about the current book: the chapter it is open
+ * at and how long the rest should take, each null when unknown.
+ */
+data class HeroDetail(
+    val bookUrl: String,
+    val chapter: String?,
+    val timeLeftMs: Long?,
 )
 
 /**
@@ -352,8 +378,10 @@ data class LibraryUiState(
      * [books]; empty in the other styles.
      */
     val framedCovers: List<Book> = emptyList(),
-    /** The strips [LibraryStyle.HOME] draws above the grid; empty in the other styles. */
-    val home: HomeSections = HomeSections(),
+    /** The Home tab's desk; empty when neither the Home style nor the bottom bar is in use. */
+    val home: HomeDesk = HomeDesk(),
+    /** How many shelf books each Library quick filter would show, from the unfiltered shelf. */
+    val quickCounts: QuickFilterCounts = QuickFilterCounts(),
     /** How long [LibraryStyle.LIST] draws each book's progress track, by URL; empty elsewhere. */
     val trackLengths: Map<String, Float> = emptyMap(),
 )
@@ -489,7 +517,20 @@ class LibraryViewModel(
     accountTranslationBookUrls: Flow<Set<String>> = flowOf(emptySet()),
     /** Records the account's clear of a book's translations; whether there was one to record. */
     private val requestAccountTranslationClear: suspend (String) -> Boolean = { false },
+    /** This device's reading sessions, for the Home header and the hero's time left. */
+    readingSessions: Flow<List<ReadingSession>> = flowOf(emptyList()),
 ) : ViewModel() {
+    private val sessions = readingSessions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Today's minutes and the day streak for the Home header; null when there is nothing to show. */
+    val pulse: StateFlow<ReadingPulse?> =
+        sessions
+            .map { all ->
+                val zone = ZoneId.systemDefault()
+                readingPulseOf(all, LocalDate.now(zone), zone)
+            }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /** Where the remove and delete dialogs offer to clear the account's translations too. */
     val accountTranslationBooks: StateFlow<Set<String>> =
         accountTranslationBookUrls.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptySet())
@@ -1008,16 +1049,57 @@ class LibraryViewModel(
                     },
                 home =
                     if (layout.style == LibraryStyle.HOME || layout.bottomBar) {
-                        homeSectionsOf(books, shelves, current = current?.book?.url) { book ->
+                        val zone = ZoneId.systemDefault()
+                        homeDeskOf(
+                            books = books,
+                            series = shelves,
+                            current = current?.book?.url,
+                            progressions = progressions,
+                            now = System.currentTimeMillis(),
+                            thisMonthFrom = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                        ) { book ->
                             shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
                         }
                     } else {
-                        HomeSections()
+                        HomeDesk()
                     },
+                quickCounts =
+                    onTheShelf
+                        .map { shelfStateFor(it, progressions[it.url], overrides[it.url] ?: FinishedOverride.NONE) }
+                        .let { states ->
+                            QuickFilterCounts(
+                                all = states.size,
+                                reading = states.count { it == LibraryFilterOption.IN_PROGRESS },
+                                toRead = states.count { it == LibraryFilterOption.UNREAD },
+                                finished = states.count { it == LibraryFilterOption.FINISHED },
+                            )
+                        },
                 trackLengths = if (layout.style == LibraryStyle.LIST) trackLengths(filteredBooks) else emptyMap(),
             )
         }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryUiState())
+
+    /** The chapter and time left the Home hero shows for the current book. */
+    val heroDetail: StateFlow<HeroDetail?> =
+        state
+            .map { it.continueReading?.book?.url }
+            .distinctUntilChanged()
+            .flatMapLatest { url ->
+                if (url == null) {
+                    flowOf(null)
+                } else {
+                    combine(progressDao.observe(url), sessions) { row, all ->
+                        HeroDetail(
+                            bookUrl = url,
+                            chapter = row?.locatorJson?.let { json ->
+                                runCatching { Locator.fromJSON(JSONObject(json))?.title }.getOrNull()
+                            }?.takeIf { it.isNotBlank() },
+                            timeLeftMs = timeLeftMs(all.filter { it.bookUrl == url }, row?.totalProgression),
+                        )
+                    }
+                }
+            }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
@@ -1038,6 +1120,19 @@ class LibraryViewModel(
 
     fun toggleFilter(option: LibraryFilterOption) {
         editFilters { it.toggle(option) }
+    }
+
+    /**
+     * Narrows the reading axis to [options] alone, or clears it with an
+     * empty set, leaving availability and the archive as they were. The
+     * Library chips and the Home shelf tiles both come through here.
+     */
+    fun setReadingFilter(options: Set<LibraryFilterOption>) {
+        editFilters { stored ->
+            stored.copy(
+                options = stored.options.filterTo(mutableSetOf()) { it.group != FilterGroup.READING } + options,
+            )
+        }
     }
 
     fun setGroupBySeries(grouped: Boolean) {
@@ -1785,6 +1880,7 @@ class LibraryViewModel(
                         kosyncPeer = container.kosyncAccount.peer,
                         accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
+                        readingSessions = container.database.readingSessionDao().observeAll(),
                     )
                 }
             }

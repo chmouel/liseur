@@ -159,10 +159,13 @@ fun SettingsScreen(
                         modifier = Modifier.settingsAnchor(SettingsEntries.Theme),
                     )
                     RowDivider()
+                    // With the tabs, Home is a tab and this picks the Library's look.
+                    val tabs = settings.libraryLayout.bottomBar
                     ChipRow(
-                        title = stringResource(R.string.library_style),
-                        options = LibraryStyle.entries,
-                        selected = settings.libraryLayout.style,
+                        title = stringResource(if (tabs) R.string.library_view_title else R.string.library_style),
+                        options = LibraryStyle.entries.filter { !tabs || it != LibraryStyle.HOME },
+                        selected = settings.libraryLayout.style
+                            .takeUnless { tabs && it == LibraryStyle.HOME } ?: LibraryStyle.CLASSIC,
                         label = { stringResource(it.label) },
                         onSelected = onLibraryStyle,
                         modifier = Modifier.settingsAnchor(SettingsEntries.LibraryStyle),
