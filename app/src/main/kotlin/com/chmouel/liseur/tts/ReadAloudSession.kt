@@ -7,10 +7,12 @@ import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.OpenBookHandle
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -162,12 +164,20 @@ internal class ReadAloudSession(
         },
     )
 
+    private val cover = scope.async(start = CoroutineStart.LAZY) { ReadAloudMetadata.writeCover(application, publication) }
+
     val playback: ReadAloudPlayback = ReadAloudPlayback(
         scope = scope,
         opener = { initial, observer, listener ->
             val voices = setOf(SpeechTtsEngine.Voice(mutableChoice.value.voice, spoken))
             val provider = SpeechTtsEngineProvider(scope, cache, { AudioTrackPcmOutput(speed) }, voices, observer)
-            TtsNavigatorFactory(application, spokenPublication, provider, tokenizerFactory)
+            TtsNavigatorFactory(
+                application,
+                spokenPublication,
+                provider,
+                tokenizerFactory,
+                ReadAloudMetadata(cover.await()),
+            )
                 ?.createNavigator(listener, initial, SpeechTtsPreferences(textLanguage))
                 ?.getOrNull()
         },
