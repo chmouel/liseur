@@ -87,7 +87,7 @@ browse it by language, shelf or section, and download the books you want
 before there is anything to connect to. No account is needed for any of them.
 
 Reading position syncs across devices through [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org/),
-[BookOrbit](https://bookorbit.app) or [liseur-sync](https://github.com/chmouel/liseur-sync),
+[BookOrbit](https://bookorbit.app) or [liseur-sync](https://chmouel.github.io/liseur-sync/),
 down to the exact sentence on the last three. BookOrbit positions travel as EPUB CFIs.
 A Custom connection can be an [OPDS](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) address, a kosync address, or both, so a plain catalog and a sync server that know nothing about each other still add up to a library that follows you. What each server can and cannot do is in [`docs/SERVER_CAPABILITIES.md`](docs/SERVER_CAPABILITIES.md).
 
@@ -123,8 +123,10 @@ also makes network requests. See the
 
 ## Related Projects
 
-- [liseur-sync](https://github.com/chmouel/liseur-sync): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
+- [liseur-sync](https://chmouel.github.io/liseur-sync/): Lightweight self-hosted library and sync server. Watched folders, browse, download, positions and reading stats. This will give you the best "kindle/just work" experience compared to the other sync servers.
 - ~[liseur-desktop](https://github.com/chmouel/liseur-desktop): Desktop version of Liseur (abandoned).~
+
+
 
 ## Development
 
