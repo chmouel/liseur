@@ -71,27 +71,32 @@ class ReportingTest {
         }
     }
 
-    @Test fun crashIsQueuedWithoutItsMessageThenHandedOnOnce() {
+    @Test fun crashIsSavedWithoutItsMessageBeforeBeingHandedOnOnce() {
+        val server = MockWebServer()
+        server.start(InetAddress.getByName("127.0.0.1"), 0)
         val before = Thread.getDefaultUncaughtExceptionHandler()
+        val queue = File(context.noBackupFilesDir, "usage-reporting-queue")
         val handed = mutableListOf<Throwable>()
-        Thread.setDefaultUncaughtExceptionHandler { _, error -> handed += error }
-        val reports = PlayUsageReporting(context, token = "phc_test", host = "http://127.0.0.1:9/")
+        var savedWhenHanded = ""
+        Thread.setDefaultUncaughtExceptionHandler { _, error ->
+            handed += error
+            savedWhenHanded = queue.walk().filter { it.isFile }.joinToString { it.readText() }
+        }
+        val reports = PlayUsageReporting(context, token = "phc_test", host = server.url("/").toString())
         try {
+            server.enqueue(MockResponse.Builder().headersDelay(10, TimeUnit.SECONDS).body("{}").build())
+            reports.capture(UsageEvent.BOOK_OPENED)
+            reports.flush()
+            assertNotNull(server.takeRequest(10, TimeUnit.SECONDS))
             val crash = IllegalStateException("private book title")
             Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
             assertEquals(listOf<Throwable>(crash), handed)
-            val queue = File(context.noBackupFilesDir, "usage-reporting-queue")
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            var queued = ""
-            while (System.nanoTime() < deadline && "IllegalStateException" !in queued) {
-                queued = queue.walk().filter { it.isFile }.joinToString { it.readText() }
-                Thread.sleep(50)
-            }
-            assertTrue(queued.contains("IllegalStateException"))
-            assertFalse(queued.contains("private book title"))
+            assertTrue(savedWhenHanded.contains("IllegalStateException"))
+            assertFalse(savedWhenHanded.contains("private book title"))
         } finally {
             reports.stop()
             Thread.setDefaultUncaughtExceptionHandler(before)
+            server.close()
         }
     }
 

@@ -92,7 +92,7 @@ internal class PlayUsageReporting(
         val http = OkHttpClient.Builder()
             .callTimeout(5, TimeUnit.SECONDS)
             .addInterceptor { chain ->
-                if (!sending.get() || chain.request().url.encodedPath !in setOf("/batch/", "/batch")) {
+                if (!sending.get() || crashing.get() || chain.request().url.encodedPath !in setOf("/batch/", "/batch")) {
                     throw IOException("Reporting disabled")
                 }
                 chain.proceed(chain.request())
@@ -136,6 +136,9 @@ internal class PlayUsageReporting(
         crashHandler = Thread.UncaughtExceptionHandler { thread, error ->
             try {
                 if (sending.get() && crashing.compareAndSet(false, true)) {
+                    // Uploads share the executor that saves the crash; the
+                    // interrupted batch stays on disk for the next launch.
+                    transport?.dispatcher?.cancelAll()
                     val worker = Thread({
                         try {
                             client?.capture("\$exception", distinctId = choice.installation,
