@@ -1,1 +1,1 @@
-EPUBs: AI, read-aloud, translation, character guides and automatic mind maps.
+A modern, open-source EPUB reader with powerful reading features.

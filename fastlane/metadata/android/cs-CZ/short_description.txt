@@ -1,1 +1,1 @@
-Čtečka EPUB: předčítání, AI, překlady a automatické mapy vztahů.
+Moderní open-source čtečka knih EPUB s bohatými funkcemi pro čtení.

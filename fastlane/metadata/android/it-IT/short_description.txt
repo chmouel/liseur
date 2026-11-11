@@ -1,1 +1,1 @@
-EPUB con IA, lettura vocale, traduzioni, guide ai personaggi e mappe automatiche
+Un lettore EPUB moderno e open source con potenti funzioni di lettura.
