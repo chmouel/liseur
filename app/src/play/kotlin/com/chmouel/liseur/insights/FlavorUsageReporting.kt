@@ -83,6 +83,10 @@ internal class PlayUsageReporting(
 
     @Suppress("DEPRECATION")
     private fun start() {
+        // Each identity queues in its own folder, so a write that outlived a
+        // previous opt-out can never be sent under the new identity.
+        val storage = File(directory, choice.installation)
+        directory.listFiles()?.filter { it != storage }?.forEach { it.deleteRecursively() }
         val sending = AtomicBoolean(true)
         gate = sending
         val http = OkHttpClient.Builder()
@@ -112,9 +116,9 @@ internal class PlayUsageReporting(
             },
         ).apply {
             httpClient = http
-            storagePrefix = directory.absolutePath
-            replayStoragePrefix = File(directory, "replay").absolutePath
-            logsStoragePrefix = File(directory, "logs").absolutePath
+            storagePrefix = storage.absolutePath
+            replayStoragePrefix = File(storage, "replay").absolutePath
+            logsStoragePrefix = File(storage, "logs").absolutePath
             persistOptOut = false
             debug = false
             addBeforeSend { event ->
