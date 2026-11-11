@@ -1,0 +1,6 @@
+<resources>
+    <string name="reporting_title">Sdílet anonymní hlášení o používání a pádech</string>
+    <string name="reporting_detail">Hlášení jsou anonymizovaná. Odesílá používané funkce, verzi aplikace a typy a zásobníky pádů do PostHog v EU s náhodným identifikátorem instalace. Žádný obsah knih, názvy, poznámky, adresy serverů ani přihlašovací údaje. Vypnutím se smažou neodeslaná hlášení.</string>
+    <string name="reporting_privacy">Zásady ochrany osobních údajů</string>
+    <string name="reporting_save_failed">Nastavení se nepodařilo uložit. Zkuste to znovu.</string>
+</resources>

@@ -38,6 +38,21 @@ val releaseKeystoreFile =
         null
     }
 
+val reportingToken = providers.environmentVariable("LISEUR_POSTHOG_PROJECT_TOKEN").orElse("").get()
+val reportingTestToken = providers.environmentVariable("LISEUR_POSTHOG_TEST_TOKEN").orElse("").get()
+for (token in listOf(reportingToken, reportingTestToken)) {
+    require(token.isEmpty() || token.matches(Regex("phc_[A-Za-z0-9]+"))) {
+        "Reporting requires a public phc_ project token, never an administrative token"
+    }
+}
+val officialPlayRelease = providers.gradleProperty("officialPlayRelease").orNull == "true"
+if (officialPlayRelease) {
+    require(reportingToken.isNotEmpty()) { "Official Play releases require LISEUR_POSTHOG_PROJECT_TOKEN" }
+    require(providers.environmentVariable("LISEUR_REPORTING_CONSENT_REVIEWED").orNull == "true") {
+        "Resolve applicable reporting consent requirements before publishing"
+    }
+}
+
 android {
     namespace = "com.chmouel.liseur"
     compileSdk = 37
@@ -115,6 +130,8 @@ android {
         create("play") {
             dimension = "distribution"
             isDefault = true
+            buildConfigField("String", "REPORTING_PROJECT_TOKEN", "\"$reportingToken\"")
+            buildConfigField("String", "REPORTING_TEST_TOKEN", "\"$reportingTestToken\"")
             proguardFiles("proguard-rules-play.pro")
         }
     }
@@ -201,6 +218,7 @@ ksp {
 android.sourceSets.getByName("debug").assets.srcDir("$projectDir/schemas")
 
 dependencies {
+    "playImplementation"(libs.posthog.android)
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 
     implementation(libs.androidx.core.ktx)

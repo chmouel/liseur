@@ -96,8 +96,8 @@ make check   # tests, lint and builds, when a change spans them
 
 - Dependencies must be FOSS and come from Maven Central or Google's Maven.
   No `readium-lcp`, proprietary blobs, trackers, analytics, Google Play
-  services or unapproved network endpoints; F-Droid rejects them. The one
-  exception is ML Kit (`com.google.mlkit:translate`) via
+  services or unapproved network endpoints; F-Droid rejects them. The Play-only exceptions are the PostHog Android SDK for usage and
+  sanitized JVM crashes (see `docs/POSTHOG.md`), and ML Kit (`com.google.mlkit:translate`) via
   `playImplementation` under `app/src/play/`, with whatever it brings
   (Play services client libraries, Firebase, datatransport, model
   downloads, diagnostics, attribution assets). It must never reach

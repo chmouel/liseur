@@ -1,0 +1,6 @@
+<resources>
+    <string name="reporting_title">Compartir informes anónimos de uso y fallos</string>
+    <string name="reporting_detail">Los informes están anonimizados. Envía las funciones usadas, la versión de la aplicación y los tipos y trazas de fallos a PostHog en la UE con un identificador de instalación aleatorio. Sin contenido, títulos, anotaciones, direcciones de servidores ni credenciales. Al desactivarlo se eliminan los informes no enviados.</string>
+    <string name="reporting_privacy">Política de privacidad</string>
+    <string name="reporting_save_failed">No se pudo guardar este ajuste. Inténtalo de nuevo.</string>
+</resources>

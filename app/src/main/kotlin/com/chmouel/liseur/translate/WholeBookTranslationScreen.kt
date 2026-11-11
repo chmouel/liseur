@@ -142,6 +142,7 @@ private fun WholeBookTranslationContent(
         actionFailure = null
         try {
             jobs.start(approved, retryFailures = approved.retryFailures)
+            container.usageReporting.capture(com.chmouel.liseur.insights.UsageEvent.TRANSLATION_REQUESTED)
             starting = true
         } catch (e: Exception) {
             starting = false

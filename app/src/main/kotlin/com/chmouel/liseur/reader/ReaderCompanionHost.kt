@@ -40,6 +40,7 @@ internal fun CompanionPanelHost(
     scope: CoroutineScope,
     progress: ReaderProgressActions,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val panel by companion.panel.collectAsStateWithLifecycle()
     val peek by companion.peek.collectAsStateWithLifecycle()
     val codex by companion.codex.panel.collectAsStateWithLifecycle()
@@ -50,6 +51,12 @@ internal fun CompanionPanelHost(
     val story by companion.story.collectAsStateWithLifecycle()
     val storyAvailable by companion.storyAvailable.collectAsStateWithLifecycle()
     val savedRecaps by companion.recaps.collectAsStateWithLifecycle()
+    LaunchedEffect(codex?.visible == true || panel != null) {
+        if (codex?.visible == true || panel != null) {
+            (context.applicationContext as com.chmouel.liseur.LiseurApplication).container.usageReporting
+                .capture(com.chmouel.liseur.insights.UsageEvent.COMPANION_OPENED)
+        }
+    }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var peeked by rememberSaveable { mutableStateOf(false) }
 

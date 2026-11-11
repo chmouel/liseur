@@ -6,27 +6,40 @@ title: Liseur Privacy Policy
 
 **App:** Liseur (`com.chmouel.liseur`)
 **Developer:** Chmouel Boudjnah
-**Last updated:** 15 October 2026
+**Last updated:** 11 November 2026
 
-Liseur is an open-source ebook reader. It has no account, no advertising,
-no analytics and no trackers of its own, and the developer collects
-nothing about you. The one exception is Google's ML Kit in the Google
-Play build, used by a translator, which reports diagnostics to Google
-once you choose it; it is described below. Its
-source code is public at
-<https://github.com/chmouel/liseur>, so every claim on this page can be
-checked rather than taken on trust.
+Liseur is an open-source ebook reader with no advertising or Liseur account.
+The F-Droid build has no analytics or crash reporting. Google Play releases
+include usage and JVM crash reporting described below, and the optional
+Google ML Kit translator described under “Google on this phone”.
 
-## What Liseur collects
+## Usage and crash reports in Google Play releases
 
-The developer receives nothing. There is no server run by the
-developer, no crash reporting, no advertising identifier, and no account
-to sign up for, and Liseur's own code measures no usage. No data leaves
-your device except to the servers described below, which are ones you
-choose and enter yourself. The one exception to "no usage measurement"
-is in the Google Play build: if you choose Google's on-phone translator,
-Google's SDK reports its own usage to Google, as described under
-"Google on this phone" below.
+Reporting is on by default for new and upgrading installations, unless you
+previously disabled it. In Settings > Advanced, turn off “Share anonymous
+usage and crash reports” to stop collection and delete unsent reports. This
+preference stays on this device and is not backed up or synced. Re-enabling
+creates a new random installation identifier and does not replay activity
+from while disabled.
+Previously transmitted reports are not deleted by this switch.
+
+Liseur sends five explicit events: app foregrounded, book opened, read aloud
+started, translation requested and companion opened. Reports contain the
+feature name, app version, event time and a random installation identifier.
+Uncaught JVM crash reports include exception types and stack frames, without
+exception messages. They do not contain book text, titles, book identifiers,
+annotations, server addresses, credentials or account identities. There is no
+screen or deep-link capture, replay, person profile, native crash reporting,
+ANR collection or detailed performance monitoring.
+
+The developer uses these reports to understand feature use and fix crashes.
+They are sent over HTTPS to PostHog Cloud EU in Frankfurt. PostHog receives
+your IP address as part of the connection; the project discards it and does
+not look up your location. PostHog processes the reports only on the
+developer's behalf, under a signed data processing agreement, and keeps them
+for one year before deleting them. See [PostHog privacy information](https://posthog.com/privacy).
+
+Other data leaves your device only for the services described below.
 
 ## What Liseur stores on your device
 
@@ -535,16 +548,17 @@ You can turn this off in your device's backup settings.
 
 ## Children
 
-Liseur is not directed at children. The developer collects no personal
-information from anyone, of any age. The Google Play build's optional
-Google translator sends Google the diagnostic data described above.
+Liseur is not directed at children. The developer collects nothing beyond
+the usage and crash reports of Google Play releases described above, which
+carry no name, contact or account. The Google Play build's optional Google
+translator sends Google the diagnostic data described above.
 
 ## Sharing
 
-Nothing is shared or sold. The developer receives no data from the app
-whatsoever. In the Google Play build, if you choose Google's on-phone
-translator, Google receives the diagnostic data described above under
-its own terms.
+Nothing is shared or sold. In Google Play releases, the developer receives
+only the usage and crash reports described above, through PostHog acting
+as a service provider. If you choose Google's on-phone translator, Google
+receives the diagnostic data described above under its own terms.
 
 ## Changes
 

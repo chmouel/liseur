@@ -6,3 +6,6 @@
 -keep class * implements com.google.firebase.components.ComponentRegistrar {
     <init>();
 }
+
+-keepattributes SourceFile,LineNumberTable
+-keepnames class com.chmouel.liseur.** { *; }

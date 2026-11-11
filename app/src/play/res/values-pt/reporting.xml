@@ -1,0 +1,6 @@
+<resources>
+    <string name="reporting_title">Compartilhar relatórios anônimos de uso e de falhas</string>
+    <string name="reporting_detail">Os relatórios são anonimizados. Envia os recursos usados, a versão do app e os tipos e pilhas de falhas ao PostHog na UE com um identificador de instalação aleatório. Nenhum conteúdo, título, anotação, endereço de servidor ou credencial. Desativar exclui os relatórios não enviados.</string>
+    <string name="reporting_privacy">Política de privacidade</string>
+    <string name="reporting_save_failed">Não foi possível salvar esta configuração. Tente novamente.</string>
+</resources>

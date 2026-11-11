@@ -96,9 +96,12 @@ With liseur-sync you get extras, like a per-device settings backup, and better i
 Two home-screen widgets show the current book cover or a paged shelf of your
 library covers. Tap a cover to read. Neither needs configuration.
 
-Liseur has no ads or account, and its own code has no trackers or analytics.
-It connects to services you choose for book sync, speech, translation and the
-reading companion. Browsing the free catalogs (Project Gutenberg,
+Liseur has no ads or account. The F-Droid and GitHub builds have no trackers
+or analytics. The Google Play build reports which features are used and why
+the app crashed, under a random installation identifier and with no book
+content or account details. You can turn this off in Settings > Advanced.
+Liseur connects to services you choose for book sync, speech, translation and
+the reading companion. Browsing the free catalogs (Project Gutenberg,
 textos.info, ManyBooks, Gallica) and using an online dictionary
 also makes network requests. See the
 [privacy policy](https://chmouel.github.io/liseur/PRIVACY) for details.

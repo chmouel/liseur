@@ -2624,6 +2624,8 @@ internal fun ReaderScreen(
     }
 
     fun translatePage(selection: Locator, source: String?, target: String) {
+        context.applicationContext.let { it as com.chmouel.liseur.LiseurApplication }.container.usageReporting
+            .capture(com.chmouel.liseur.insights.UsageEvent.TRANSLATION_REQUESTED)
         val nav = navigatorNow ?: return
         effectScope.launch { startTranslatingPage(nav, selection, source, target) }
     }
@@ -4543,6 +4545,8 @@ internal fun ReaderScreen(
                             )
                         }
                         val translateFromHere: (PageTranslationModes.Mode) -> Unit = { languages ->
+                            (context.applicationContext as com.chmouel.liseur.LiseurApplication).container.usageReporting
+                                .capture(com.chmouel.liseur.insights.UsageEvent.TRANSLATION_REQUESTED)
                             effectScope.launch {
                                 val nav = navigatorNow ?: return@launch
                                 val locator = placeOnScreen(nav) ?: return@launch
@@ -5107,6 +5111,8 @@ internal fun ReaderScreen(
             onTranslate = if (translate.isAvailable && translateReady && !pageTranslated) {
                 {
                     act { live ->
+                        (context.applicationContext as com.chmouel.liseur.LiseurApplication).container.usageReporting
+                            .capture(com.chmouel.liseur.insights.UsageEvent.TRANSLATION_REQUESTED)
                         translatePassage = live
                         dismissSelection()
                     }

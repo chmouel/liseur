@@ -44,7 +44,7 @@ import kotlinx.coroutines.withContext
  * licence to be distributed with every copy of the font; libraries are
  * named and licensed but not reproduced.
  */
-private data class Component(
+internal data class Component(
     val name: String,
     val licence: String,
     val notice: String? = null,
@@ -172,7 +172,7 @@ fun LicencesScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             )
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Components.forEach { component ->
+                    (Components + flavorComponents).forEach { component ->
                         ComponentRow(component) { showing = component }
                     }
                 }
