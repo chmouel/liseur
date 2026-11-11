@@ -44,7 +44,7 @@ import androidx.sqlite.execSQL
         BookAiPreferences::class,
         BookMetadata::class,
     ],
-    version = 73,
+    version = 74,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -85,6 +85,17 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookMetadataDao(): BookMetadataDao
 
     companion object {
+        /** Remembers an unread reset by revision, so reading on does not hide that it is still owed. */
+        val MIGRATION_73_74 = object : Migration(73, 74) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `reading_progress` ADD COLUMN `unread_reset_revision` INTEGER")
+                connection.execSQL(
+                    "UPDATE `reading_progress` SET `unread_reset_revision` = `local_revision` " +
+                        "WHERE `finished_override` = 2 AND `total_progression` = 0.0",
+                )
+            }
+        }
+
         /** Keeps every format a catalog offers, and which one the reader prefers per catalog. */
         val MIGRATION_72_73 = object : Migration(72, 73) {
             override fun migrate(connection: SQLiteConnection) {
@@ -2023,6 +2034,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_70_71,
             MIGRATION_71_72,
             MIGRATION_72_73,
+            MIGRATION_73_74,
         )
     }
 }

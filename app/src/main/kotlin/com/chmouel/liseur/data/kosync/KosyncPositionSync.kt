@@ -468,6 +468,7 @@ class KosyncPositionSync(
             baseline = state?.baseline(),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset(state?.ackedRevision ?: 0) == true,
         )
         return act(account, identity, book, document, stored, state, decision)
     }

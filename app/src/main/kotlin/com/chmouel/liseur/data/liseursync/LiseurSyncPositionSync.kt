@@ -1497,6 +1497,7 @@ class LiseurSyncPositionSync(
             baseline = state?.baseline(),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset(state?.ackedRevision ?: 0) == true,
             exactPositionAgreement = ExactLocatorAnchor.agreement(
                 stored?.locatorJson,
                 exactRemote,

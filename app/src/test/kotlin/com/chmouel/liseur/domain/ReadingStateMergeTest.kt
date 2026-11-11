@@ -308,6 +308,21 @@ class ReadingStateMergeTest {
     }
 
     @Test
+    fun `reading on before an unread reset is delivered still pushes`() {
+        val local = state(0.1, ReadingStatus.READING)
+        assertEquals(
+            SyncDecision.Push(local),
+            reconcileReadingState(
+                local = local,
+                remote = state(0.8, ReadingStatus.READING),
+                baseline = baseline(0.5),
+                localDirty = true,
+                unreadResetUndelivered = true,
+            ),
+        )
+    }
+
+    @Test
     fun `a status change on its own is a move`() {
         val decision = reconcileReadingState(
             local = state(0.99, ReadingStatus.READING),

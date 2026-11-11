@@ -455,6 +455,7 @@ class KoboSyncRepository(
             baseline = stored?.baselineFor(account),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset() == true,
         )
         return apply(base, server, uuid, book.url, stored, decision)
     }

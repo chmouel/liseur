@@ -150,6 +150,10 @@ sealed interface SyncDecision {
  * [localUnreadOverride] is set when the reader deliberately marked the
  * book unread here. That is an act, not an absence, and it outranks a
  * stale `Finished` still sitting on the server.
+ *
+ * [unreadResetUndelivered] is set while this device's unread reset has
+ * not been acknowledged by the server. It survives reading on, so a place
+ * from before the reset cannot come back before the reset is delivered.
  */
 fun reconcileReadingState(
     local: ReadingState?,
@@ -157,6 +161,7 @@ fun reconcileReadingState(
     baseline: ReadingBaseline?,
     localDirty: Boolean,
     localUnreadOverride: Boolean = false,
+    unreadResetUndelivered: Boolean = false,
     exactPositionAgreement: Boolean? = null,
 ): SyncDecision {
     if (local == null && remote == null) return SyncDecision.InSync
@@ -168,7 +173,8 @@ fun reconcileReadingState(
     if (sameSpot(local, remote, exactPositionAgreement)) return SyncDecision.InSync
 
     // A pending unread reset must reach the server before it can restore an old place
-    if (localUnreadOverride &&
+    if (unreadResetUndelivered ||
+        localUnreadOverride &&
         (remote.status == ReadingStatus.FINISHED ||
             localDirty && local.progression == 0.0 && local.status == ReadingStatus.READY_TO_READ)
     ) {
