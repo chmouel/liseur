@@ -71,6 +71,30 @@ class ReportingTest {
         }
     }
 
+    @Test fun crashIsQueuedWithoutItsMessageThenHandedOnOnce() {
+        val before = Thread.getDefaultUncaughtExceptionHandler()
+        val handed = mutableListOf<Throwable>()
+        Thread.setDefaultUncaughtExceptionHandler { _, error -> handed += error }
+        val reports = PlayUsageReporting(context, token = "phc_test", host = "http://127.0.0.1:9/")
+        try {
+            val crash = IllegalStateException("private book title")
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(), crash)
+            assertEquals(listOf<Throwable>(crash), handed)
+            val queue = File(context.noBackupFilesDir, "usage-reporting-queue")
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            var queued = ""
+            while (System.nanoTime() < deadline && "IllegalStateException" !in queued) {
+                queued = queue.walk().filter { it.isFile }.joinToString { it.readText() }
+                Thread.sleep(50)
+            }
+            assertTrue(queued.contains("IllegalStateException"))
+            assertFalse(queued.contains("private book title"))
+        } finally {
+            reports.stop()
+            Thread.setDefaultUncaughtExceptionHandler(before)
+        }
+    }
+
     @Test fun corruptPreferenceFailsClosed() {
         File(context.noBackupFilesDir, "usage-reporting").writeText("bad")
         assertFalse(ReportingPreference(context.noBackupFilesDir).read().enabled)
@@ -114,8 +138,13 @@ class ReportingTest {
             reports.capture(UsageEvent.COMPANION_OPENED)
             reports.flush()
             server.takeRequest(10, TimeUnit.SECONDS)
+            val queue = File(context.noBackupFilesDir, "usage-reporting-queue")
+            val straggler = File(context.cacheDir, "straggler").apply { deleteRecursively() }
+            queue.copyRecursively(straggler)
             reports.setEnabled(false)
-            assertFalse(File(context.noBackupFilesDir, "usage-reporting-queue").exists())
+            assertFalse(queue.exists())
+            // A queue write that outlived the opt-out lands after the deletion.
+            straggler.copyRecursively(queue)
 
             reports.setEnabled(true)
             val second = ReportingPreference(context.noBackupFilesDir).read().installation
