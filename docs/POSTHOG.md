@@ -82,9 +82,10 @@ Run `testPlayDebugUnitTest --tests 'com.chmouel.liseur.insights.*'`, both flavor
 lint/debug builds, and `assemblePlayRelease`. A release build reads only
 `LISEUR_POSTHOG_PROJECT_TOKEN`, so for a local minified check set it to the
 test project's token; never ship that APK.
-Check the Play R8 mapping and a minified test crash for readable frames. Preserve
-mapping files for dependency frames; app class/member names and line tables are
-retained. Inspect `fossDebugRuntimeClasspath` and the FOSS APK for SDK classes
+Check the Play R8 mapping and a minified test crash for readable frames. App
+class/member names and line tables are retained, but R8 still optimizes app
+code and may inline small methods, so preserve mapping files to restore inlined
+and dependency frames. Inspect `fossDebugRuntimeClasspath` and the FOSS APK for SDK classes
 and the EU endpoint.
 
 On a disposable emulator with an explicitly configured test token: capture all

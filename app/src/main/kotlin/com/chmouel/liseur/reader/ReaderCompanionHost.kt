@@ -51,8 +51,8 @@ internal fun CompanionPanelHost(
     val story by companion.story.collectAsStateWithLifecycle()
     val storyAvailable by companion.storyAvailable.collectAsStateWithLifecycle()
     val savedRecaps by companion.recaps.collectAsStateWithLifecycle()
-    LaunchedEffect(codex?.visible == true || panel != null) {
-        if (codex?.visible == true || panel != null) {
+    LaunchedEffect(codex?.visible == true) {
+        if (codex?.visible == true) {
             (context.applicationContext as com.chmouel.liseur.LiseurApplication).container.usageReporting
                 .capture(com.chmouel.liseur.insights.UsageEvent.COMPANION_OPENED)
         }

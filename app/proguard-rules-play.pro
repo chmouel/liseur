@@ -8,4 +8,4 @@
 }
 
 -keepattributes SourceFile,LineNumberTable
--keepnames class com.chmouel.liseur.** { *; }
+-keep,allowshrinking,allowoptimization class com.chmouel.liseur.** { *; }
