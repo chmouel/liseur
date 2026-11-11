@@ -91,6 +91,8 @@ class FinishedStateTest {
             val row = progress.get(BOOK)!!
             assertTrue(row.isDirty)
             assertFalse(row.hasPendingUnreadReset())
+            // A per-peer partner that has not acknowledged it is still owed the reset.
+            assertTrue(row.hasPendingUnreadReset(ackedRevision = 0))
         }
 
     @Test

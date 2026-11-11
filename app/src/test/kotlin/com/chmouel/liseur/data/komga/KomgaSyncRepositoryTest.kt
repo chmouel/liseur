@@ -490,6 +490,30 @@ class KomgaSyncRepositoryTest {
     }
 
     @Test
+    fun `a resumed place Komga cannot take stays owed after the reset clears the server`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(bookUrl, locatorJson("OEBPS/ch20.xhtml", 0.9, 1.0), 1.0, null, "Finished", 5_000)
+        FinishedState(bookDao = db.bookDao(), progressDao = progress).setFinished(bookUrl, false)
+        progress.recordLocal(
+            bookUrl, locatorJson("OEBPS/ch1.xhtml", 0.5, 0.1), 0.1, null, null, null, null, "Reading", 6_000,
+            resumesReading = true,
+        )
+        server.enqueue(json(bookJson(page = 400, completed = true, readDate = "2024-01-01T00:00:00Z")))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch20.xhtml", 0.9, 1.0))))
+        server.enqueue(MockResponse(code = 204))
+        server.enqueue(MockResponse(code = 400))
+        // No position index to snap to, so the resumed place cannot be placed.
+        server.enqueue(MockResponse(code = 200))
+
+        sync.syncBook(bookUrl)
+
+        val row = requireNotNull(progress.get(bookUrl))
+        assertTrue(row.isDirty)
+        assertTrue(row.hasPendingUnreadReset())
+    }
+
+    @Test
     fun `reading done here is sent as a locator the server will take`() = runTest {
         connect()
         db.readingProgressDao().recordLocal(

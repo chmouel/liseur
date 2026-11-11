@@ -661,10 +661,9 @@ abstract class ReadingProgressDao {
      *
      * The baseline becomes exactly what was sent, unconditionally: the
      * server holds it now, whatever has happened here since. The
-     * acknowledgement is the conditional half — if a page turn landed
-     * while the request was in flight, the revision no longer matches,
-     * [ReadingProgress.ackedRevision] stays behind and the row is still
-     * dirty for the next run. Two different conditions, deliberately, but
+     * acknowledgement moves only to the revision that was sent — if a
+     * page turn landed while the request was in flight, it stays behind
+     * that page turn and the row is still dirty for the next run. Two different conditions, deliberately, but
      * one transaction: a half-written row here is a lost position.
      */
     @Transaction
@@ -678,24 +677,8 @@ abstract class ReadingProgressDao {
     ) {
         setBaseline(bookUrl, progression, status, account, now)
         ackRevision(bookUrl, sentRevision)
-        deliverUnreadReset(bookUrl, sentRevision)
         clearPending(bookUrl)
     }
-
-    /**
-     * The server holds an unread reset once a revision at or after it was
-     * sent, even when a page turn kept [ackRevision] from moving.
-     */
-    @Query(
-        """
-        UPDATE reading_progress SET unread_reset_revision = NULL
-        WHERE book_url = :bookUrl AND unread_reset_revision <= :sentRevision
-        """,
-    )
-    protected abstract suspend fun deliverUnreadReset(
-        bookUrl: String,
-        sentRevision: Long,
-    )
 
     @Query(
         """
@@ -717,15 +700,16 @@ abstract class ReadingProgressDao {
     )
 
     /**
-     * Acknowledges exactly the revision that was sent, and no other. The
-     * old unconditional `SET synced_at` could mark a page turn agreed on
-     * that the server had never been told about.
+     * Acknowledges the revision that was sent, never one after it, so a
+     * page turn made while the request was in flight stays dirty. What
+     * was sent, such as an unread reset, still counts as delivered.
      */
     @Query(
         """
         UPDATE reading_progress
         SET acked_revision = :sentRevision
-        WHERE book_url = :bookUrl AND local_revision = :sentRevision
+        WHERE book_url = :bookUrl AND acked_revision < :sentRevision
+            AND local_revision >= :sentRevision
         """,
     )
     protected abstract suspend fun ackRevision(

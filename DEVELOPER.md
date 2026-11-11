@@ -989,9 +989,9 @@ changing reader behavior.
 - An unread reset is owed to a peer by `unread_reset_revision`, not by the
   unread mark, which reading on clears. While the peer's acknowledged
   revision is below it, no preserved conflict is offered and the merge
-  pushes the local place (Komga clears the server's copy first). A push
-  that carried the reset delivers it, even if a page turn kept the
-  shared acknowledgement back
+  pushes the local place (Komga clears the server's copy first). The shared
+  acknowledgement moves to the revision sent, never past it, so a push
+  delivers the reset while a page turned during it stays dirty
   ([ADR 0065](docs/adr/0065-marking-a-book-unread.md)).
 
 ### liseur-sync positions and accounts
