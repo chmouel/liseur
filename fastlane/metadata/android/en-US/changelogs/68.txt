@@ -1,0 +1,1 @@
+The Shelves library now has Marigold, Willow and Daisy backdrops. Its reading chips, filters, series and sort controls fit within the panel, and the chip row can scroll. The app now opens the library more reliably at startup.
