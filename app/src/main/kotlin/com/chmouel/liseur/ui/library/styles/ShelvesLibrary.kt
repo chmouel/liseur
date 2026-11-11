@@ -33,7 +33,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ArrowDropDown
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -45,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
@@ -184,15 +184,17 @@ internal fun ShelvesLibrary(
                     }
                 }
             item(key = "controls") {
+                val panelShape = MaterialTheme.shapes.medium
                 Box(
                     Modifier
                         .padding(horizontal = 16.dp)
                         .then(
                             if (art != null) {
                                 Modifier
-                                    .background(art.panel, CircleShape)
-                                    .border(Dp.Hairline, art.panelEdge, CircleShape)
-                                    .padding(start = 4.dp, end = 2.dp)
+                                    .clip(panelShape)
+                                    .background(art.panel, panelShape)
+                                    .border(Dp.Hairline, art.panelEdge, panelShape)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
                             } else {
                                 Modifier
                             },
