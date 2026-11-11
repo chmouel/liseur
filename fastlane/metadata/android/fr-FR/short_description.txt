@@ -1,1 +1,1 @@
-EPUB : IA, lecture audio, traduction, fiches personnages et cartes mentales auto
+Un lecteur EPUB moderne et open source aux fonctions de lecture puissantes.

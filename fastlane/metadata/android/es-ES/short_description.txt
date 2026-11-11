@@ -1,1 +1,1 @@
-EPUB: IA, voz, traducción, guías de personajes y mapas mentales automáticos
+Un lector de EPUB moderno y de código abierto con funciones potentes.
