@@ -107,7 +107,8 @@ make check   # tests, lint and builds, when a change spans them
   `app/build.gradle.kts`: F-Droid only publishes builds it can reproduce
   byte for byte ([details](DEVELOPER.md#f-droid-readiness)).
 - User-facing text goes in the English strings and, in the same change,
-  French, Spanish, Russian, Italian, German and Simplified Chinese
+  French, Czech, Spanish, Russian, Italian, German, Brazilian Portuguese and
+  Simplified Chinese
   (`values-b+zh+Hans`). Use `stringResource`/`pluralStringResource`, mark
   brand names `translatable="false"`, and keep Russian plural categories
   ([details](DEVELOPER.md#translations)).

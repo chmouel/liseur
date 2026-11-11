@@ -740,7 +740,7 @@
     <!-- Fine typography: alignment, hyphenation, weight and spacing. -->
     <string name="reader_text_align">Zarovnání</string>
     <string name="reader_text_align_default">Výchozí</string>
-    <string name="reader_text_align_ragged">Vlevo bez zarovnání do bloku</string>
+    <string name="reader_text_align_ragged">Bez zarovnání do bloku</string>
     <string name="reader_text_align_justified">Do bloku</string>
     <string name="reader_hyphens">Dělení slov</string>
     <string name="reader_hyphens_default">Výchozí</string>
@@ -890,7 +890,7 @@
     <string name="page_taps_preview_right_wide">Horní polovina pravé strany listuje zpět, dolní polovina vpřed. Levá polovina, horní okraj a oblast uprostřed otevírají nabídku.</string>
     <string name="settings_pinch_to_resize">Měnit velikost textu gestem sevření</string>
     <string name="settings_pinch_to_resize_detail">Sevřením nebo roztažením dvou prstů na stránce zmenšíš nebo zvětšíš text bez otevírání nabídky. Vypni to, pokud gesto při držení telefonu spouštíš omylem. Zvětšování obrázků tímto gestem funguje vždy.</string>
-    <string name="settings_pinch_to_resize_eink">Na displeji s elektronickým inkoustem je funkce vypnutá. Gesto totiž průběžně zobrazuje náhled velikosti a opakované překreslování mnohokrát za sekundu takovým displejům nesvědčí. Bez náhledu by nebylo jasné, jakou velikost nastavuješ, a každý pokus by znamenal úplné překreslení stránky. Lepší je posuvník velikosti. Zvětšování obrázků gestem funguje dál. Pokud zařízení tento typ displeje nemá, vypni výše volbu E-ink displej.</string>
+    <string name="settings_pinch_to_resize_eink">Na displeji s elektronickým inkoustem je funkce vypnutá, protože překresluje průběžný náhled velikosti příliš pomalu. Použij posuvník velikosti. Zvětšování obrázků gestem funguje dál. Pokud zařízení tento typ displeje nemá, vypni výše volbu E-ink displej.</string>
     <string name="settings_brightness_edge">Ovládání jasu přejetím</string>
     <string name="settings_brightness_edge_detail">Přejetím prstem nahoru nebo dolů podél zvoleného okraje změníš jas bez otevření nabídky. Klepnutí i vodorovné listování od okraje funguje jako dřív. Platí jen při stránkování, ne při posouvání.</string>
     <string name="settings_reader_orientation">Orientace obrazovky</string>
@@ -1651,7 +1651,7 @@
     <string name="companion_rule_too_long">Odpověď byla uříznuta kvůli limitu délky výstupu modelu.</string>
     <string name="companion_settings_title">Průvodce čtením</string>
     <string name="companion_settings_entry_summary">%1$s, %2$s</string>
-    <string name="companion_settings_intro">Během čtení označ jméno a klepni na Zeptat se průvodce. Zjistíš, kdo to je, jen z textu knihy před označeným místem.</string>
+    <string name="companion_settings_intro">Během čtení označ jméno nebo pojem a klepni na Zeptat se průvodce. Zjistíš, kdo nebo co to je, podle textu knihy před označeným místem.</string>
     <string name="companion_settings_server">Server</string>
     <string name="companion_settings_server_none">Není vybrán žádný server</string>
     <string name="companion_settings_server_none_detail">Vyber některý z uvedených serverů</string>

@@ -12,7 +12,7 @@ Compagno di lettura
 
 Chiedi al compagno di lettura informazioni su personaggi ed eventi. I profili dei personaggi usano i passaggi che precedono il testo selezionato, compresi i capitoli precedenti e i passaggi precedenti del capitolo corrente. Gli estratti delle fonti mostrano da dove provengono le informazioni. Attiva i riepiloghi dei capitoli in background per ogni libro. Usa un servizio compatibile con OpenAI.
 
-Anche senza un servizio di IA, il compagno crea sul dispositivo un indice consultabile di persone, luoghi e gruppi e mostra quali nomi compaiono insieme nei capitoli precedenti. Non richiede una chiave API.
+Anche senza un servizio di IA, il compagno crea sul dispositivo un indice consultabile di persone, luoghi e gruppi e mostra quali nomi compaiono insieme nei capitoli precedenti. Riconosce i nomi dalle maiuscole, quindi una scrittura senza maiuscole, come il cinese, non viene indicizzata. Non richiede una chiave API.
 
 Il tuo lettore
 

@@ -16,8 +16,8 @@
     <string name="read_aloud_voice_mature">Reif</string>
     <string name="read_aloud_voice_gentle">Sanft</string>
     <string name="read_aloud_voice_even">Ausgeglichen</string>
-    <string name="read_aloud_settings_gemini_models_loading">Gemini wird nach seinen Sprachmodellen gefragt…</string>
-    <string name="read_aloud_settings_gemini_models_none">Für diesen Schlüssel sind keine Sprachmodelle aufgeführt. Gib eines ein.</string>
+    <string name="read_aloud_settings_gemini_models_loading">Sprachsynthesemodelle von Gemini werden geladen…</string>
+    <string name="read_aloud_settings_gemini_models_none">Für diesen Schlüssel sind keine Sprachsynthesemodelle aufgeführt. Gib einen Modellnamen ein.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini hat seine Modelle nicht aufgelistet.</string>
     <string name="read_aloud_settings_voice_hear">Stimme anhören</string>
     <string name="read_aloud_provider_gemini_summary">Die Online-Stimmen von Google, abgerechnet über deinen Gemini-API-Schlüssel.</string>
@@ -47,7 +47,7 @@
     <string name="translation_mlkit_delete">%1$s löschen</string>
     <string name="licences_intro">Liseur ist aus freien und quelloffenen Komponenten gebaut, mit Ausnahme der ML-Kit-Übersetzung von Google in dieser Google-Play-Ausgabe, die Google unter eigenen Bedingungen bereitstellt.</string>
     <string name="translation_mlkit_acknowledgement">Die Übersetzungen nutzen die Technologie von Google Übersetzer und laufen über Googles ML Kit auf diesem Telefon.</string>
-    <string name="translation_mlkit_consent">Buchtext bleibt auf diesem Telefon. Sobald du es auswählst, sendet Googles ML Kit Diagnose- und Nutzungsdaten über sich selbst an Google, mit einer Kennung für diese Installation. Sprachen werden ebenfalls von Google geladen, nur mit deiner Zustimmung und nur über WLAN.</string>
+    <string name="translation_mlkit_consent">Buchtext bleibt auf diesem Telefon. Sobald du diesen Dienst auswählst, sendet Googles ML Kit Diagnose- und Nutzungsdaten über sich selbst an Google, mit einer Kennung für diese Installation. Sprachen werden ebenfalls von Google heruntergeladen, nur mit deiner Zustimmung und nur über WLAN.</string>
     <string name="translation_mlkit_languages">Sprachen</string>
     <string name="translation_mlkit_languages_summary">Auf diesem Telefon: %1$d. Verfügbar: %2$d.</string>
     <string name="translation_mlkit_languages_downloading">%1$s wird heruntergeladen…</string>

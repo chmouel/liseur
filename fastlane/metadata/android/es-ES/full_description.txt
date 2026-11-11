@@ -12,7 +12,7 @@ Compañero de lectura
 
 Pregunta al compañero de lectura por personajes y acontecimientos. Los perfiles de personajes usan pasajes anteriores al texto seleccionado, incluidos capítulos anteriores y pasajes previos del capítulo actual. Los fragmentos de las fuentes muestran de dónde sale la información. Activa los resúmenes de capítulos en segundo plano para cada libro. Usa un servicio compatible con OpenAI.
 
-Incluso sin un servicio de IA, el compañero crea en el dispositivo un índice consultable de personas, lugares y grupos, y muestra qué nombres aparecen juntos en capítulos anteriores. No necesita una clave de API.
+Incluso sin un servicio de IA, el compañero crea en el dispositivo un índice consultable de personas, lugares y grupos, y muestra qué nombres aparecen juntos en capítulos anteriores. Detecta los nombres por sus mayúsculas, así que una escritura sin mayúsculas, como el chino, no se indexa. No necesita una clave de API.
 
 Tu lector
 

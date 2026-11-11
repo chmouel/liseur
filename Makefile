@@ -51,7 +51,7 @@ help:
 		'make run               Start the emulator, install, launch, and show it with scrcpy' \
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
 		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
-		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru, zh-Hans)' \
+		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru, zh-Hans, cs, pt)' \
 		'make clean             Remove build outputs' \
 		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
 		'make dev-install       Build and install it beside the real app' \
@@ -158,11 +158,13 @@ locale:
 	code=''; \
 	if [ -z "$$loc" ] && command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then \
 		choice=$$(gum choose --header="Choose locale for $(PACKAGE):" \
+			"cs  (Čeština)" \
 			"de  (Deutsch)" \
 			"en  (English)" \
 			"es  (Español)" \
 			"fr  (Français)" \
 			"it  (Italiano)" \
+			"pt  (Português do Brasil)" \
 			"ru  (Русский)" \
 			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \
@@ -209,11 +211,13 @@ dev-locale: dev-phone
 	code=''; \
 	if [ -z "$$loc" ] && command -v gum >/dev/null 2>&1 && [ -t 0 ] && [ -t 1 ]; then \
 		choice=$$(gum choose --header="Choose locale for $(DEV_PACKAGE):" \
+			"cs  (Čeština)" \
 			"de  (Deutsch)" \
 			"en  (English)" \
 			"es  (Español)" \
 			"fr  (Français)" \
 			"it  (Italiano)" \
+			"pt  (Português do Brasil)" \
 			"ru  (Русский)" \
 			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \

@@ -12,7 +12,7 @@ Lesebegleiter
 
 Frage den Lesebegleiter nach Figuren und Ereignissen. Figurenprofile nutzen Text vor der ausgewählten Stelle, darunter frühere Kapitel und frühere Passagen im aktuellen Kapitel. Quellenpassagen zeigen, woher die Informationen stammen. Aktiviere für jedes Buch Zusammenfassungen von Kapiteln im Hintergrund. Nutze einen OpenAI-kompatiblen Dienst.
 
-Auch ohne KI-Dienst erstellt der Lesebegleiter auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Dafür ist kein API-Schlüssel nötig.
+Auch ohne KI-Dienst erstellt der Lesebegleiter auf dem Gerät einen durchsuchbaren Index von Personen, Orten und Gruppen und zeigt, welche Namen in früheren Kapiteln gemeinsam vorkommen. Er erkennt Namen an Großbuchstaben, daher wird eine Schrift ohne Groß- und Kleinschreibung wie Chinesisch nicht erfasst. Dafür ist kein API-Schlüssel nötig.
 
 Dein Lesegerät
 
