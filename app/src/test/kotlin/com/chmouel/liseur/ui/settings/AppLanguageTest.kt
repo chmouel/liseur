@@ -22,6 +22,9 @@ class AppLanguageTest {
         assertEquals(AppLanguage.FRENCH, AppLanguage.fromTag("fr-CA"))
         assertEquals(AppLanguage.ENGLISH, AppLanguage.fromTag("en-US"))
         assertEquals(AppLanguage.RUSSIAN, AppLanguage.fromTag("ru-RU"))
+        assertEquals(AppLanguage.CZECH, AppLanguage.fromTag("cs-CZ"))
+        assertEquals(AppLanguage.PORTUGUESE, AppLanguage.fromTag("pt-BR"))
+        assertEquals(AppLanguage.PORTUGUESE, AppLanguage.fromTag("pt-PT"))
     }
 
     @Test
@@ -35,7 +38,7 @@ class AppLanguageTest {
 
     @Test
     fun `an untranslated language follows the phone`() {
-        assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("pt-BR"))
+        assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("ja-JP"))
     }
 
     @Test

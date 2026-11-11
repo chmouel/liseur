@@ -168,7 +168,7 @@
     <string name="series_continue">继续阅读 %s</string>
     <string name="series_start">开始阅读 %s</string>
     <string name="series_all_read">您已读完整个系列</string>
-    <string name="series_caught_up">这个系列您已经看完了</string>
+    <string name="series_caught_up">本系列目前已出版的书籍，您都读完了</string>
     <string name="series_all_known_read">这里每本书您都读过了</string>
     <string name="series_missing_volume">第 %s 卷：不在您的书库中</string>
     <string name="series_not_published_yet">第 %s 卷：尚未出版</string>
@@ -176,7 +176,7 @@
     <string name="series_mark_read">将系列标记为已读</string>
     <string name="series_archive">归档该系列</string>
     <string name="series_reorder">重新排列图书</string>
-    <string name="series_reorder_explainer">重新排序会将系列重新编号为 1、2、3……像 1.5 这样的半号会丢失，系列也不再报告您现有卷之间缺失的卷。</string>
+    <string name="series_reorder_explainer">重新排序会将系列重新编号为 1、2、3……1.5 这样的非整数编号会丢失，之后也不再提示现有卷册之间缺少哪些卷。</string>
     <string name="series_reorder_drag">拖动以移动</string>
     <string name="series_reorder_up">上移</string>
     <string name="series_reorder_down">下移</string>
@@ -218,7 +218,7 @@
     <string name="series_assign_other_initial">数字与符号</string>
     <string name="series_source_folder">来自监视文件夹的系列</string>
     <string name="series_source_shared">由书库管理员更正的系列</string>
-    <string name="series_source_personal">您的个人系列认定</string>
+    <string name="series_source_personal">您自行设置的系列归属</string>
     <string name="clear">清除</string>
     <string name="continue_reading">继续阅读</string>
     <string name="empty_library_title">您的书库是空的</string>
@@ -692,7 +692,7 @@
     <string name="reader_highlight_make_default">设为默认色</string>
     <string name="reader_text_align">对齐</string>
     <string name="reader_text_align_default">默认</string>
-    <string name="reader_text_align_ragged">左对齐</string>
+    <string name="reader_text_align_ragged">行首对齐</string>
     <string name="reader_text_align_justified">两端对齐</string>
     <string name="reader_hyphens">断字</string>
     <string name="reader_hyphens_default">默认</string>
@@ -839,8 +839,8 @@
     <string name="page_taps_preview_left_wide">左半边上部向后翻，下部向前翻。右半边、顶部和中间的方框打开菜单。</string>
     <string name="page_taps_preview_right_wide">右半边上部向后翻，下部向前翻。左半边、顶部和中间的方框打开菜单。</string>
     <string name="settings_pinch_to_resize">双指捏合调整文字</string>
-    <string name="settings_pinch_to_resize_detail">在页面上双指捏合可放大或缩小文字，且不会打开菜单。如果握持手机的方式导致误触，可将其关闭。捏合放大的图片仍可正常使用。</string>
-    <string name="settings_pinch_to_resize_eink">在墨水屏上不可用，因为此类屏幕重绘实时尺寸预览太慢。请改用字号滑块。捏合放大的图片仍可正常使用。如果这不是墨水屏，请在上方关闭“墨水屏”。</string>
+    <string name="settings_pinch_to_resize_detail">在页面上用双指缩放可调整字号，无需打开菜单。如果握持手机时容易误触，可以关闭此功能。无论是否开启，仍可双指缩放图片。</string>
+    <string name="settings_pinch_to_resize_eink">墨水屏刷新较慢，无法流畅显示字号预览，因此此功能已禁用。请使用字号滑块。仍可双指缩放图片。如果您的屏幕不是墨水屏，请关闭上方的“墨水屏”选项。</string>
     <string name="settings_brightness_edge">边缘滑动调节亮度</string>
     <string name="settings_brightness_edge_detail">沿页面这一侧边缘上下滑动，无需打开菜单即可调节亮度。从边缘开始的点按和左右翻页照常可用。仅在翻页时有效，滚动阅读时无效。</string>
     <string name="settings_reader_orientation">屏幕方向</string>
@@ -1545,7 +1545,7 @@
     <string name="codex_graph_empty">继续阅读，以发现至少在两个章节中共同出现的名称。</string>
     <string name="codex_more">加载更多段落</string>
     <string name="codex_no_passages">未找到之前的段落。</string>
-    <string name="story_about">AI 根据前面章节的回顾生成的摘要，可能有误。</string>
+    <string name="story_about">AI 根据前面章节的回顾生成的摘要，可能出错、编造细节，或提前透露模型从其他来源得知的后续情节。</string>
     <string name="story_failed">无法读取前情回顾。</string>
     <string name="story_nothing_before">没有可显示的前面章节。</string>
     <string name="story_no_summary">此回顾中没有摘要</string>

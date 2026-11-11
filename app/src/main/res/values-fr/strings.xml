@@ -100,7 +100,7 @@
     <string name="series_assign_other_initial">Chiffres et symboles</string>
     <string name="series_source_folder">Série issue du dossier surveillé</string>
     <string name="series_source_shared">Série corrigée par l\'administrateur de la bibliothèque</string>
-    <string name="series_source_personal">Votre série personnelle</string>
+    <string name="series_source_personal">Votre classement personnel dans une série</string>
     <string name="clear">Effacer</string>
     <string name="continue_reading">Continuer la lecture</string>
     <string name="empty_library_title">Votre bibliothèque est vide</string>
@@ -666,7 +666,7 @@
     <string name="reader_highlight_make_default">En faire la couleur par défaut</string>
     <string name="reader_text_align">Alignement</string>
     <string name="reader_text_align_default">Par défaut</string>
-    <string name="reader_text_align_ragged">Au fer</string>
+    <string name="reader_text_align_ragged">Non justifié</string>
     <string name="reader_text_align_justified">Justifié</string>
     <string name="reader_hyphens">Césure</string>
     <string name="reader_hyphens_default">Par défaut</string>
@@ -814,7 +814,7 @@
     <string name="page_taps_preview_right_wide">La moitié droite recule en haut et avance en bas. La moitié gauche, le haut et un cadre au milieu ouvrent le menu.</string>
     <string name="settings_pinch_to_resize">Pincer pour redimensionner le texte</string>
     <string name="settings_pinch_to_resize_detail">Un pincement à deux doigts sur la page agrandit ou réduit le texte, sans ouvrir le menu. Désactivez-le si votre façon de tenir le téléphone le déclenche par accident. Agrandir une image en la pinçant fonctionne dans tous les cas.</string>
-    <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, qui redessinent trop lentement l\'aperçu de la taille en direct. Utilisez plutôt le curseur Taille. Agrandir une image en la pinçant fonctionne encore. Désactivez Écran e-ink ci-dessus si ce n\'est pas un écran e-ink.</string>
+    <string name="settings_pinch_to_resize_eink">Désactivé sur les écrans e-ink, trop lents pour afficher l’aperçu de la taille en temps réel. Utilisez le curseur Taille. Le zoom à deux doigts sur les images reste disponible. Si votre écran n’est pas e-ink, désactivez l’option Écran e-ink ci-dessus.</string>
     <string name="settings_brightness_edge">Luminosité par glissement</string>
     <string name="settings_brightness_edge_detail">Glissez vers le haut ou le bas le long de ce bord de la page pour changer la luminosité sans ouvrir le menu. Les appuis et les pages tournées depuis le bord fonctionnent comme avant. Uniquement en mode page, pas en défilement.</string>
     <string name="settings_reader_orientation">Orientation de l\'écran</string>
@@ -1594,8 +1594,8 @@
     <string name="codex_graph_empty">Poursuivez la lecture pour trouver des noms partageant au moins deux chapitres.</string>
     <string name="codex_more">Afficher plus de passages</string>
     <string name="codex_no_passages">Aucun passage antérieur trouvé.</string>
-    <string name="story_about">Résumé par IA des récapitulatifs précédents. Il peut contenir des erreurs.</string>
-    <string name="story_failed">Impossible de lire l’histoire jusqu’ici.</string>
+    <string name="story_about">Texte rédigé par une IA à partir des récapitulatifs des chapitres précédents. Il peut contenir des erreurs, inventer des détails ou révéler la suite de l’histoire que le modèle connaît par d’autres sources.</string>
+    <string name="story_failed">Impossible de charger le résumé de l’histoire jusqu’ici.</string>
     <string name="story_nothing_before">Aucun chapitre précédent à afficher.</string>
     <string name="story_no_summary">Pas de résumé dans ce récapitulatif</string>
     <string name="story_unreadable">Le récapitulatif est illisible</string>
@@ -1676,7 +1676,7 @@
     <string name="whole_book_characters">Caractères du livre : %1$s</string>
     <string name="whole_book_price_unknown">Prix inconnu. Votre service d’IA peut facturer la traduction.</string>
     <string name="whole_book_cost">Coût approximatif : %1$s–%2$s. Le montant réel peut varier.</string>
-    <string name="whole_book_notice">La lecture hors connexion nécessite les mêmes service, modèle, langues et options de traduction.</string>
+    <string name="whole_book_notice">Pour lire hors connexion, gardez le même service, le même modèle, les mêmes langues et les mêmes options de traduction.</string>
     <string name="whole_book_confirm">Traduire et conserver</string>
     <string name="whole_book_running">Traduction en arrière-plan</string>
     <string name="whole_book_paused">En pause</string>
@@ -1728,14 +1728,14 @@
     <string name="whole_book_reason_service">Le service n’a pas pu continuer. Vérifiez ses identifiants, son modèle et son quota avant de reprendre.</string>
     <string name="whole_book_reason_code">Le service a répondu avec l’erreur %d.</string>
     <string name="whole_book_reason_storage">Impossible de lire ou d’écrire le livre ou ses traductions enregistrées. Vérifiez le fichier et l’espace disponible avant de reprendre.</string>
-    <string name="narration_direction">Direction de narration</string>
-    <string name="narration_direction_default">Direction de narration · Par défaut</string>
-    <string name="narration_direction_custom">Direction de narration · Personnalisée</string>
+    <string name="narration_direction">Consignes de narration</string>
+    <string name="narration_direction_default">Consignes de narration · Par défaut</string>
+    <string name="narration_direction_custom">Consignes de narration · Personnalisées</string>
     <string name="narration_direction_example">Exemple : Lire doucement et chaleureusement, à un rythme mesuré, avec des voix de personnages subtiles.</string>
     <string name="book_preferences_clear">Effacer</string>
     <string name="book_preferences_remove">Supprimer</string>
     <string name="book_translation_preferences">Préférences de traduction</string>
-    <string name="book_translation_direction">Direction de traduction pour ce livre</string>
+    <string name="book_translation_direction">Consignes de traduction pour ce livre</string>
     <string name="book_translation_direction_example">Exemple : Conserver la voix familière à la première personne, l’humour pince-sans-rire et les phrases courtes.</string>
     <string name="book_translation_terms">Noms et termes</string>
     <string name="book_translation_original">Original</string>
@@ -1866,7 +1866,7 @@
     <string name="library_style_shelves">Étagères</string>
     <string name="library_style_shelves_detail">Des rangées de couvertures posées sur des étagères, une par série, auteur ou état de lecture</string>
     <string name="library_style_list">Liste</string>
-    <string name="library_style_list_detail">Une ligne par livre avec ses détails et une barre de progression aussi longue que le livre</string>
+    <string name="library_style_list_detail">Une ligne par livre, avec ses détails et une barre de progression proportionnelle à sa longueur</string>
     <string name="shelf_grouping">Étagères par</string>
     <string name="shelf_group_author">Auteur</string>
     <string name="shelf_group_status">État de lecture</string>

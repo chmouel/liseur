@@ -51,7 +51,7 @@
     <string name="series_continue">Weiter mit %s</string>
     <string name="series_start">%s beginnen</string>
     <string name="series_all_read">Du hast die ganze Reihe gelesen</string>
-    <string name="series_caught_up">Du bist bei dieser Reihe auf dem Stand</string>
+    <string name="series_caught_up">Du hast alle bisher erschienenen Bände dieser Reihe gelesen</string>
     <string name="series_all_known_read">Du hast hier jedes Buch gelesen</string>
     <string name="series_missing_volume">Band %s: nicht in deiner Bibliothek</string>
     <string name="series_not_published_yet">Band %s: noch nicht erschienen</string>
@@ -113,7 +113,7 @@
     <string name="starter_category_science_fiction">Science-Fiction</string>
     <string name="starter_category_fantasy">Fantasy</string>
     <string name="starter_category_horror">Horror</string>
-    <string name="starter_category_gothic">Gothic</string>
+    <string name="starter_category_gothic">Schauerromane</string>
     <string name="starter_category_adventure">Abenteuer</string>
     <string name="starter_category_western">Western</string>
     <string name="starter_category_historical_fiction">Historischer Roman</string>
@@ -825,7 +825,7 @@
     <string name="page_taps_preview_right_wide">Die rechte Hälfte blättert oben zurück und unten vorwärts. Die linke Hälfte, oben und ein Feld in der Mitte öffnen das Menü.</string>
     <string name="settings_pinch_to_resize">Ziehen zum Ändern der Textgröße</string>
     <string name="settings_pinch_to_resize_detail">Ein Zwei-Finger-Ziehen auf der Seite macht den Text größer oder kleiner, ohne das Menü zu öffnen. Schalte es aus, wenn deine Haltung des Geräts es versehentlich auslöst. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem.</string>
-    <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen aus, da sie die Live-Vorschau der Größe zu langsam neu zeichnen. Nutze stattdessen den Größenregler. Ein Bild zum Vergrößern zu ziehen funktioniert trotzdem. Schalte E-Ink-Bildschirm oben aus, wenn das kein E-Ink-Bildschirm ist.</string>
+    <string name="settings_pinch_to_resize_eink">Auf E-Ink-Bildschirmen deaktiviert, da sie die Größenvorschau zu langsam aktualisieren. Nutze stattdessen den Größenregler. Bilder lassen sich weiterhin mit zwei Fingern vergrößern. Falls dein Bildschirm kein E-Ink-Bildschirm ist, schalte die Option oben aus.</string>
     <string name="settings_brightness_edge">Helligkeit per Wischen</string>
     <string name="settings_brightness_edge_detail">Wische an diesem Seitenrand nach oben oder unten, um die Helligkeit zu ändern, ohne das Menü zu öffnen. Tippen und seitliches Umblättern vom Rand aus funktionieren wie bisher. Nur beim Umblättern, nicht beim Scrollen.</string>
     <string name="settings_reader_orientation">Bildschirmausrichtung</string>
@@ -1606,8 +1606,8 @@
     <string name="codex_graph_empty">Lies weiter, um Namen mit mindestens zwei gemeinsamen Kapiteln zu finden.</string>
     <string name="codex_more">Weitere Textstellen laden</string>
     <string name="codex_no_passages">Keine früheren Textstellen gefunden.</string>
-    <string name="story_about">KI-Zusammenfassung der früheren Rückblicke. Sie kann Fehler enthalten.</string>
-    <string name="story_failed">Die bisherige Handlung konnte nicht gelesen werden.</string>
+    <string name="story_about">Von einer KI aus den Rückblicken auf frühere Kapitel erstellt. Der Text kann Fehler enthalten, Details erfinden oder spätere Ereignisse verraten, die das Modell aus anderen Quellen kennt.</string>
+    <string name="story_failed">Die Zusammenfassung der bisherigen Handlung konnte nicht geladen werden.</string>
     <string name="story_nothing_before">Kein früheres Kapitel vorhanden.</string>
     <string name="story_no_summary">Kein Überblick in dieser Zusammenfassung</string>
     <string name="story_unreadable">Die Zusammenfassung ist nicht lesbar</string>
@@ -1817,7 +1817,7 @@
     <string name="book_details_role_narrator">Erzählstimme</string>
     <string name="book_details_role_contributor">Mitwirkende</string>
     <string name="book_details_publisher">Verlag</string>
-    <string name="book_details_imprint">Imprint</string>
+    <string name="book_details_imprint">Verlagsmarke</string>
     <string name="book_details_published">Erschienen</string>
     <string name="book_details_language">Sprache</string>
     <string name="book_details_identifier">Kennung</string>
@@ -1878,7 +1878,7 @@
     <string name="library_style_shelves">Regale</string>
     <string name="library_style_shelves_detail">Cover in Reihen auf Regalbrettern, eines pro Reihe, Autor oder Lesestand</string>
     <string name="library_style_list">Liste</string>
-    <string name="library_style_list_detail">Eine Zeile pro Buch mit Details und einem Fortschrittsbalken so lang wie das Buch</string>
+    <string name="library_style_list_detail">Eine Zeile pro Buch mit Details und einem Fortschrittsbalken, dessen Länge dem Buchumfang entspricht</string>
     <string name="shelf_grouping">Regale nach</string>
     <string name="shelf_group_author">Autor</string>
     <string name="shelf_group_status">Lesestand</string>

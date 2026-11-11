@@ -100,7 +100,7 @@
     <string name="series_assign_other_initial">Números y símbolos</string>
     <string name="series_source_folder">Serie de la carpeta vigilada</string>
     <string name="series_source_shared">Serie corregida por el administrador de la biblioteca</string>
-    <string name="series_source_personal">Tu reclamo personal de serie</string>
+    <string name="series_source_personal">Tu asignación personal a una serie</string>
     <string name="clear">Borrar</string>
     <string name="continue_reading">Seguir leyendo</string>
     <string name="empty_library_title">Tu biblioteca está vacía</string>
@@ -114,7 +114,7 @@
     <string name="starter_category_horror">Terror</string>
     <string name="starter_category_gothic">Gótico</string>
     <string name="starter_category_adventure">Aventuras</string>
-    <string name="starter_category_western">Westerns</string>
+    <string name="starter_category_western">Novelas del Oeste</string>
     <string name="starter_category_historical_fiction">Ficción histórica</string>
     <string name="starter_category_mystery">Misterio</string>
     <string name="starter_category_short_stories">Cuentos</string>
@@ -666,7 +666,7 @@
     <string name="reader_highlight_make_default">Hacerlo el predeterminado</string>
     <string name="reader_text_align">Alineación</string>
     <string name="reader_text_align_default">Predeterminada</string>
-    <string name="reader_text_align_ragged">Irregular</string>
+    <string name="reader_text_align_ragged">Sin justificar</string>
     <string name="reader_text_align_justified">Justificada</string>
     <string name="reader_hyphens">Separación silábica</string>
     <string name="reader_hyphens_default">Predeterminada</string>
@@ -1003,7 +1003,7 @@
     <string name="reading_stats_book_empty">Aún no has leído nada de este.</string>
     <string name="reading_stats_last_read_label">Última lectura</string>
     <string name="reading_stats_started_label">Empezado</string>
-    <string name="reading_stats_reading_for_label">Leyendo desde</string>
+    <string name="reading_stats_reading_for_label">Tiempo desde el inicio</string>
     <plurals name="reading_stats_reading_for_days">
         <item quantity="one">%d día</item>
         <item quantity="other">%d días</item>
@@ -1594,8 +1594,8 @@
     <string name="codex_graph_empty">Sigue leyendo para encontrar nombres que compartan al menos dos capítulos.</string>
     <string name="codex_more">Cargar más pasajes</string>
     <string name="codex_no_passages">No se encontraron pasajes anteriores.</string>
-    <string name="story_about">Resumen por IA de los resúmenes anteriores. Puede contener errores.</string>
-    <string name="story_failed">No se pudo leer la historia hasta ahora.</string>
+    <string name="story_about">Texto generado por IA a partir de los resúmenes de capítulos anteriores. Puede contener errores, inventar detalles o revelar acontecimientos posteriores que el modelo conoce de otras fuentes.</string>
+    <string name="story_failed">No se pudo cargar el resumen de la historia hasta aquí.</string>
     <string name="story_nothing_before">No hay capítulos anteriores que mostrar.</string>
     <string name="story_no_summary">Este resumen no tiene sinopsis</string>
     <string name="story_unreadable">No se pudo leer el resumen</string>
@@ -1676,7 +1676,7 @@
     <string name="whole_book_characters">Caracteres del libro: %1$s</string>
     <string name="whole_book_price_unknown">Precio desconocido. Tu servicio de IA puede cobrar por la traducción.</string>
     <string name="whole_book_cost">Coste aproximado: %1$s–%2$s. El importe real puede variar.</string>
-    <string name="whole_book_notice">La lectura sin conexión requiere los mismos servicio, modelo, idiomas y opciones de traducción.</string>
+    <string name="whole_book_notice">Para leer sin conexión, usa el mismo servicio y modelo, los mismos idiomas y las mismas opciones de traducción.</string>
     <string name="whole_book_confirm">Traducir y guardar</string>
     <string name="whole_book_running">Traduciendo en segundo plano</string>
     <string name="whole_book_paused">En pausa</string>
@@ -1866,7 +1866,7 @@
     <string name="library_style_shelves">Estantes</string>
     <string name="library_style_shelves_detail">Filas de portadas sobre estantes, uno por serie, autor o estado de lectura</string>
     <string name="library_style_list">Lista</string>
-    <string name="library_style_list_detail">Una fila por libro con sus detalles y una barra de progreso tan larga como el libro</string>
+    <string name="library_style_list_detail">Una fila por libro, con sus detalles y una barra de progreso proporcional a su extensión</string>
     <string name="shelf_grouping">Estantes por</string>
     <string name="shelf_group_author">Autor</string>
     <string name="shelf_group_status">Estado de lectura</string>

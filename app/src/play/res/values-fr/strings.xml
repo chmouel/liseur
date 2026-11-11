@@ -16,7 +16,7 @@
     <string name="read_aloud_voice_mature">Mûre</string>
     <string name="read_aloud_voice_gentle">Tendre</string>
     <string name="read_aloud_voice_even">Posée</string>
-    <string name="read_aloud_settings_gemini_models_loading">Demande à Gemini de ses modèles vocaux…</string>
+    <string name="read_aloud_settings_gemini_models_loading">Recherche des modèles vocaux Gemini…</string>
     <string name="read_aloud_settings_gemini_models_none">Aucun modèle vocal n\'est proposé pour cette clé. Saisissez-en un.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini n\'a pas donné la liste de ses modèles.</string>
     <string name="read_aloud_settings_voice_hear">Écouter cette voix</string>
@@ -42,7 +42,7 @@
     <string name="translation_mlkit_help">ML Kit de Google traduit sur ce téléphone : le texte des livres n\'est pas envoyé à Google. ML Kit envoie toutefois à Google des données de diagnostic et d\'utilisation, comme les erreurs et les durées.</string>
     <string name="translation_mlkit_legal">Mentions légales</string>
     <string name="translation_mlkit_terms">Conditions de ML Kit</string>
-    <string name="translation_mlkit_models_kept">Supprimer une langue conserve les traductions déjà enregistrées dans vos livres.</string>
+    <string name="translation_mlkit_models_kept">Les traductions déjà enregistrées dans vos livres sont conservées lorsque vous supprimez une langue.</string>
     <string name="translation_mlkit_models_failed">Impossible de lister les langues téléchargées.</string>
     <string name="translation_mlkit_delete">Supprimer %1$s</string>
     <string name="licences_intro">Liseur est construit à partir de composants libres et open source, à l\'exception de la traduction ML Kit de Google dans cette édition Google Play, fournie par Google selon ses propres conditions.</string>

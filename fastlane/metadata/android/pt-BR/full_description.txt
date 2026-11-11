@@ -1,0 +1,31 @@
+Leia EPUBs do seu jeito: acompanhe o texto enquanto ouve a narração, traduza as páginas durante a leitura ou pergunte sobre personagens e acontecimentos. O Liseur reúne em uma só biblioteca os livros do celular, de catálogos OPDS e de servidores calibre-web, Komga, BookOrbit e liseur-sync.
+
+Leitura em voz alta
+
+Ouça qualquer EPUB com destaque da frase narrada e virada automática de páginas. As vozes do Android funcionam offline quando há uma voz offline compatível instalada. Escolha vozes por idioma, ajuste a velocidade, continue ouvindo com a tela apagada ou defina um temporizador. Conecte um servidor de voz compatível com OpenAI, inclusive na sua própria rede.
+
+Tradução
+
+Traduza um trecho ou leia um livro página por página em outro idioma. O Liseur salva as frases traduzidas no celular para que estejam prontas quando você voltar à página. Use o tradutor do próprio Android ou um serviço compatível com OpenAI, na sua rede ou hospedado online. Ouça páginas traduzidas no idioma de destino e consulte palavras sem sair da página.
+
+Assistente de leitura
+
+Pergunte ao assistente sobre personagens e acontecimentos. Os perfis dos personagens usam trechos anteriores ao texto selecionado, incluindo capítulos anteriores e o texto já lido do capítulo atual. As citações mostram de onde vêm as informações. Ative os resumos de capítulos em segundo plano para cada livro. O assistente usa um serviço compatível com OpenAI.
+
+Mesmo sem um serviço de IA, o assistente cria no dispositivo um índice pesquisável de pessoas, lugares e grupos, e mostra quais nomes aparecem juntos nos capítulos anteriores. Os nomes são identificados pelas letras maiúsculas; por isso, idiomas sem distinção entre maiúsculas e minúsculas, como o chinês, não são indexados. Não é preciso ter chave de API.
+
+Seu leitor
+
+Escolha entre virar páginas ou rolar o texto, ajuste fonte, margens e brilho e use os temas claro, sépia, escuro ou preto. Faça destaques, adicione notas e marcadores, busque no texto inteiro do livro e abra notas de rodapé em uma janela sobre a página. Importe suas fontes ou use as incluídas no app e no livro. O modo e-ink desativa animações e oferece controles de atualização de tela em dispositivos Onyx.
+
+Sua biblioteca e sincronização
+
+Explore pastas locais e cartões SD, agrupe livros em séries ou encontre livros gratuitos no catálogo integrado do Projeto Gutenberg. Os widgets da tela inicial mostram o livro atual ou uma prateleira de capas. Faça backup de configurações, fontes, posições de leitura e anotações em um arquivo ZIP.
+
+Sincronize posições de leitura com calibre-web, Komga, BookOrbit ou liseur-sync. Conecte qualquer catálogo OPDS a um servidor KOReader sync. Com o liseur-sync, você também pode salvar configurações de cada dispositivo e consultar estatísticas de leitura entre dispositivos.
+
+Privacidade
+
+Sem anúncios. Você não precisa de conta para ler os livros do dispositivo. O tradutor do sistema Android e o índice local do assistente processam o texto do livro no celular. Quando você escolhe um serviço online de tradução, assistente de leitura ou voz, o Liseur envia texto a esse provedor. As consultas opcionais ao dicionário acessam o Wikcionário; a navegação no catálogo também acessa o Projeto Gutenberg.
+
+Software livre sob a licença MIT. Código-fonte e relatos de problemas: https://github.com/chmouel/liseur

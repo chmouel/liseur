@@ -838,14 +838,15 @@ montage docs/screenshots/*.png -tile 6x2 -geometry 320x+6+6 /tmp/sheet.png
 ## Translations
 
 English UI copy is `app/src/main/res/values/strings.xml`, with `values-fr`,
-`values-es`, `values-ru`, `values-it`, `values-de` and `values-b+zh+Hans`
-beside it. `play`-only strings live in `app/src/play/res`, same locales.
+`values-es`, `values-ru`, `values-it`, `values-de`, `values-cs`,
+`values-pt` (Brazilian Portuguese) and `values-b+zh+Hans` beside it.
+`play`-only strings live in `app/src/play/res`, same locales.
 
 - New text goes in English first, then every locale; read it with
   `stringResource` / `pluralStringResource`. Brand and product names are
   `translatable="false"` and omitted from locale files.
-- Russian plurals need `one` / `few` / `many` / `other`; Chinese only
-  `other`.
+- Russian and Czech plurals need `one` / `few` / `many` / `other`;
+  Chinese only `other`.
 - The app follows the system language, falling back to English for
   missing keys. `resourceConfigurations` must not freeze the APK to a
   language list.
@@ -1941,7 +1942,7 @@ separate from translation's, moved and forgotten with server edits in
   progress, search, empty states and e-ink rules; derive their groupings
   in `domain/LibraryLayout.kt`
   ([ADR 0070](docs/adr/0070-library-styles-are-fixed-layouts.md)).
-- UI strings go into English and the six shipped locales together.
+- UI strings go into English and all shipped locales together.
   Russian plurals need `one`, `few`, `many`, `other`; escape apostrophes.
 - Dependencies and bundled fonts must stay FOSS and reproducible;
   `readium-lcp` is prohibited. Never remove the reproducibility dependency

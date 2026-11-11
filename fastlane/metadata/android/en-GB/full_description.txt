@@ -12,7 +12,7 @@ Reading companion
 
 Ask the reading companion about characters and events. Character profiles use passages before the selected text, including earlier chapters and earlier passages in the current chapter; source excerpts show where details come from. Turn on background chapter recaps for each book. Use an OpenAI-compatible service.
 
-Even without an AI service, the companion builds a searchable, on-device index of people, places and groups, and shows which names appear together in earlier chapters. It needs no API key.
+Even without an AI service, the companion builds a searchable, on-device index of people, places and groups, and shows which names appear together in earlier chapters. It finds names by their capital letters, so a script without letter case, such as Chinese, is not indexed. It needs no API key.
 
 Your reader
 

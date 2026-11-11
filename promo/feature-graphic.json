@@ -17,6 +17,15 @@
       "Who's who"
     ]
   },
+  "cs-CZ": {
+    "lang": "cs",
+    "headline": "Tvoje knihy,<br><mark>předčítané</mark><br>i pochopené.",
+    "chips": [
+      "Předčítání",
+      "Překlady",
+      "Kdo je kdo"
+    ]
+  },
   "fr-FR": {
     "lang": "fr",
     "headline": "Vos livres,<br><mark>écoutés</mark><br>et compris.",
@@ -69,6 +78,15 @@
       "朗读",
       "翻译",
       "人物关系"
+    ]
+  },
+  "pt-BR": {
+    "lang": "pt-BR",
+    "headline": "Seus livros,<br><mark>para ouvir</mark><br>e entender.",
+    "chips": [
+      "Em voz alta",
+      "Tradução",
+      "Quem é quem"
     ]
   }
 }

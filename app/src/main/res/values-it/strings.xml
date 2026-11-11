@@ -58,7 +58,7 @@
     <string name="series_mark_read">Segna la serie come letta</string>
     <string name="series_archive">Archivia la serie</string>
     <string name="series_reorder">Riordina i libri</string>
-    <string name="series_reorder_explainer">Il riordino rinumera la serie 1, 2, 3… I mezzi numeri come 1.5 si perdono, e la serie smette di segnalare i volumi mancanti tra quelli che hai.</string>
+    <string name="series_reorder_explainer">Il riordino rinumera la serie 1, 2, 3… I numeri intermedi come 1,5 si perdono e la serie smette di segnalare i volumi mancanti tra quelli che hai.</string>
     <string name="series_reorder_drag">Trascina per spostare</string>
     <string name="series_reorder_up">Sposta su</string>
     <string name="series_reorder_down">Sposta giù</string>
@@ -100,7 +100,7 @@
     <string name="series_assign_other_initial">Numeri e simboli</string>
     <string name="series_source_folder">Serie dalla cartella osservata</string>
     <string name="series_source_shared">Serie corretta dall\'amministratore della libreria</string>
-    <string name="series_source_personal">La tua serie personale</string>
+    <string name="series_source_personal">La tua assegnazione personale a una serie</string>
     <string name="clear">Cancella</string>
     <string name="continue_reading">Continua a leggere</string>
     <string name="empty_library_title">La libreria è vuota</string>
@@ -1594,8 +1594,8 @@
     <string name="codex_graph_empty">Continua a leggere per trovare nomi presenti in almeno due capitoli comuni.</string>
     <string name="codex_more">Carica altri brani</string>
     <string name="codex_no_passages">Nessun brano precedente trovato.</string>
-    <string name="story_about">Sintesi IA dei riepiloghi precedenti. Può contenere errori.</string>
-    <string name="story_failed">Impossibile leggere la storia finora.</string>
+    <string name="story_about">Testo generato dall’IA a partire dai riepiloghi dei capitoli precedenti. Può contenere errori, inventare dettagli o svelare eventi successivi che il modello conosce da altre fonti.</string>
+    <string name="story_failed">Impossibile caricare il riassunto della storia fino a questo punto.</string>
     <string name="story_nothing_before">Nessun capitolo precedente da mostrare.</string>
     <string name="story_no_summary">Nessun riassunto in questo riepilogo</string>
     <string name="story_unreadable">Impossibile leggere il riepilogo</string>
@@ -1676,7 +1676,7 @@
     <string name="whole_book_characters">Caratteri del libro: %1$s</string>
     <string name="whole_book_price_unknown">Prezzo sconosciuto. Il servizio IA potrebbe addebitare costi per la traduzione.</string>
     <string name="whole_book_cost">Costo approssimativo: %1$s–%2$s. Il costo effettivo può variare.</string>
-    <string name="whole_book_notice">Per leggere offline occorrono gli stessi servizio, modello, lingue e opzioni di traduzione.</string>
+    <string name="whole_book_notice">Per leggere offline, mantieni invariati il servizio, il modello, le lingue e le opzioni di traduzione.</string>
     <string name="whole_book_confirm">Traduci e salva</string>
     <string name="whole_book_running">Traduzione in background</string>
     <string name="whole_book_paused">In pausa</string>
@@ -1866,7 +1866,7 @@
     <string name="library_style_shelves">Scaffali</string>
     <string name="library_style_shelves_detail">File di copertine sugli scaffali, uno per serie, autore o stato di lettura</string>
     <string name="library_style_list">Elenco</string>
-    <string name="library_style_list_detail">Una riga per libro con i dettagli e una barra di avanzamento lunga quanto il libro</string>
+    <string name="library_style_list_detail">Una riga per libro, con i dettagli e una barra di avanzamento proporzionale alla sua lunghezza</string>
     <string name="shelf_grouping">Scaffali per</string>
     <string name="shelf_group_author">Autore</string>
     <string name="shelf_group_status">Stato di lettura</string>

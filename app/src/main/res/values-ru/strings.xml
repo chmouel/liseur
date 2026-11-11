@@ -56,7 +56,7 @@
     <string name="series_continue">Продолжить с %s</string>
     <string name="series_start">Начать %s</string>
     <string name="series_all_read">Вы прочитали всю серию</string>
-    <string name="series_caught_up">Вы догнали эту серию</string>
+    <string name="series_caught_up">Все вышедшие книги серии прочитаны</string>
     <string name="series_all_known_read">Вы прочитали все книги здесь</string>
     <string name="series_missing_volume">Книга %s: нет в библиотеке</string>
     <string name="series_not_published_yet">Книга %s: ещё не опубликована</string>
@@ -106,7 +106,7 @@
     <string name="series_assign_other_initial">Цифры и символы</string>
     <string name="series_source_folder">Серия из отслеживаемой папки</string>
     <string name="series_source_shared">Серия, исправленная администратором библиотеки</string>
-    <string name="series_source_personal">Ваша личная привязка серии</string>
+    <string name="series_source_personal">Ваше личное распределение по сериям</string>
     <string name="clear">Очистить</string>
     <string name="continue_reading">Продолжить чтение</string>
     <string name="empty_library_title">Библиотека пуста</string>
@@ -277,10 +277,10 @@
     <string name="sync_server_same_book_yes">Та же книга</string>
     <string name="sync_server_same_book_no">Другая</string>
     <plurals name="sync_server_ambiguous">
-        <item quantity="one">%1$d книга совпадает с несколькими на сервере. Liseur не стал угадывать. Если это одна и та же книга, объедините их на сервере.</item>
-        <item quantity="few">%1$d книги совпадают с несколькими на сервере. Liseur не стал угадывать. Если это одна и та же книга, объедините их на сервере.</item>
-        <item quantity="many">%1$d книг совпадают с несколькими на сервере. Liseur не стал угадывать. Если это одна и та же книга, объедините их на сервере.</item>
-        <item quantity="other">%1$d книги совпадают с несколькими на сервере. Liseur не стал угадывать. Если это одна и та же книга, объедините их на сервере.</item>
+        <item quantity="one">%1$d книга совпадает с несколькими книгами на сервере. Liseur не стал угадывать и оставил её как есть. Если это одна и та же книга, объедините их на сервере.</item>
+        <item quantity="few">%1$d книги совпадают с несколькими книгами на сервере. Liseur не стал угадывать и оставил их как есть. Если это одна и та же книга, объедините их на сервере.</item>
+        <item quantity="many">%1$d книг совпадают с несколькими книгами на сервере. Liseur не стал угадывать и оставил их как есть. Если это одна и та же книга, объедините их на сервере.</item>
+        <item quantity="other">%1$d книги совпадают с несколькими книгами на сервере. Liseur не стал угадывать и оставил их как есть. Если это одна и та же книга, объедините их на сервере.</item>
     </plurals>
     <string name="server_account">Сервер книг</string>
     <string name="server_connected" formatted="true">Подключено к %1$s как %2$s</string>
@@ -718,7 +718,7 @@
     <string name="reader_highlight_make_default">Сделать по умолчанию</string>
     <string name="reader_text_align">Выравнивание</string>
     <string name="reader_text_align_default">По умолчанию</string>
-    <string name="reader_text_align_ragged">По левому краю</string>
+    <string name="reader_text_align_ragged">Без выравнивания по ширине</string>
     <string name="reader_text_align_justified">По ширине</string>
     <string name="reader_hyphens">Переносы</string>
     <string name="reader_hyphens_default">По умолчанию</string>
@@ -1694,8 +1694,8 @@
     <string name="codex_graph_empty">Читайте дальше, чтобы найти имена, встречающиеся вместе хотя бы в двух главах.</string>
     <string name="codex_more">Загрузить ещё отрывки</string>
     <string name="codex_no_passages">Предыдущие отрывки не найдены.</string>
-    <string name="story_about">Сводка ИИ по пересказам предыдущих глав. Может содержать ошибки.</string>
-    <string name="story_failed">Не удалось прочитать сюжет на данный момент.</string>
+    <string name="story_about">Текст создан ИИ на основе пересказов предыдущих глав. Он может содержать ошибки, вымышленные подробности или раскрывать дальнейшие события, известные модели из других источников.</string>
+    <string name="story_failed">Не удалось загрузить краткое содержание прочитанного.</string>
     <string name="story_nothing_before">Нет предыдущих глав.</string>
     <string name="story_no_summary">В пересказе нет краткого содержания</string>
     <string name="story_unreadable">Не удалось прочитать пересказ</string>
@@ -1976,7 +1976,7 @@
     <string name="library_style_shelves">Полки</string>
     <string name="library_style_shelves_detail">Ряды обложек на полках: по сериям, авторам или состоянию чтения</string>
     <string name="library_style_list">Список</string>
-    <string name="library_style_list_detail">Строка на книгу с подробностями и полосой прогресса длиной с книгу</string>
+    <string name="library_style_list_detail">Строка для каждой книги с подробностями и полосой прогресса, длина которой зависит от объёма книги</string>
     <string name="shelf_grouping">Полки по</string>
     <string name="shelf_group_author">Автор</string>
     <string name="shelf_group_status">Состояние чтения</string>

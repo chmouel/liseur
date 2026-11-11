@@ -6,13 +6,14 @@ Locales ship in the tree as `app/src/main/res/values-*/strings.xml`.
 Strings used only by the Google Play build (Gemini's read-aloud voices)
 live in `app/src/play/res/values*/strings.xml` and need the same locales.
 
-French (`values-fr`), Spanish (`values-es`), Russian (`values-ru`),
-Italian (`values-it`), German (`values-de`) and Simplified Chinese
-(`values-b+zh+Hans`) are maintained in the repository. At runtime,
-missing keys fall back to English. The phone's language picks which file
-Android loads unless the reader picks one under Settings ▸ Reading
-appearance ▸ Advanced ▸ App language (or, on Android 13 and up, in the
-phone's per-app language settings).
+French (`values-fr`), Czech (`values-cs`), Spanish (`values-es`),
+Russian (`values-ru`), Italian (`values-it`), German (`values-de`),
+Brazilian Portuguese (`values-pt`) and Simplified Chinese
+(`values-b+zh+Hans`) are maintained in the repository.
+At runtime, missing keys fall back to English. The phone's language picks
+which file Android loads unless the reader picks one under Settings ▸
+Reading appearance ▸ Advanced ▸ App language (or, on Android 13 and up,
+in the phone's per-app language settings).
 
 Adding a language also means adding it to `AppLanguage` in
 `app/src/main/kotlin/com/chmouel/liseur/ui/settings/AppLanguage.kt`
@@ -34,10 +35,10 @@ space at build time.
    locale file (skip entries marked `translatable="false"`).
 2. Translate the text. Keep placeholders (`%1$s`, `%d`, `%d%%`) intact
    and grammatical for the target language.
-3. For languages with richer plurals than English (Russian needs
-   `one` / `few` / `many` / `other`), fill every quantity Android asks
-   for. Chinese has only `other`.
-4. Open a pull request that updates English and all six locales
+3. For languages with richer plurals than English (Russian and Czech
+   need `one` / `few` / `many` / `other`), fill every quantity Android asks
+   for. Portuguese uses `one` / `many` / `other`; Chinese has only `other`.
+4. Open a pull request that updates English and all eight locales
    together.
 
 Brand and product names (`Liseur`, `calibre-web`, `Komga`,

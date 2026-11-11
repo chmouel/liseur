@@ -16,7 +16,7 @@
     <string name="read_aloud_voice_mature">Matura</string>
     <string name="read_aloud_voice_gentle">Gentile</string>
     <string name="read_aloud_voice_even">Pacata</string>
-    <string name="read_aloud_settings_gemini_models_loading">Richiesta a Gemini dei modelli vocali…</string>
+    <string name="read_aloud_settings_gemini_models_loading">Caricamento dei modelli vocali di Gemini…</string>
     <string name="read_aloud_settings_gemini_models_none">Per questa chiave non ci sono modelli vocali. Scrivine uno.</string>
     <string name="read_aloud_settings_gemini_models_failed">Gemini non ha fornito l\'elenco dei suoi modelli.</string>
     <string name="read_aloud_settings_voice_hear">Ascolta questa voce</string>
@@ -42,7 +42,7 @@
     <string name="translation_mlkit_help">ML Kit di Google traduce su questo telefono, quindi il testo dei libri non viene inviato a Google. ML Kit invia comunque a Google dati diagnostici e di utilizzo, come errori e tempi.</string>
     <string name="translation_mlkit_legal">Note legali</string>
     <string name="translation_mlkit_terms">Termini di ML Kit</string>
-    <string name="translation_mlkit_models_kept">Eliminando una lingua, le traduzioni già salvate nei tuoi libri restano.</string>
+    <string name="translation_mlkit_models_kept">Le traduzioni già salvate nei tuoi libri vengono conservate quando elimini una lingua.</string>
     <string name="translation_mlkit_models_failed">Impossibile elencare le lingue scaricate.</string>
     <string name="translation_mlkit_delete">Elimina %1$s</string>
     <string name="licences_intro">Liseur è costruito con componenti liberi e open-source, tranne la traduzione ML Kit di Google in questa edizione Google Play, che Google fornisce secondo i propri termini.</string>

@@ -12,7 +12,7 @@ Compagnon de lecture
 
 Interrogez le compagnon de lecture sur les personnages et événements. Les profils s’appuient sur les passages précédant la sélection, dans les chapitres précédents et le chapitre en cours. Les extraits indiquent les sources. Activez les résumés de chapitres en arrière-plan. Utilisez un service compatible avec OpenAI.
 
-Même sans service d’IA, le compagnon crée sur l’appareil un index consultable des personnes, des lieux et des groupes, et indique quels noms apparaissent ensemble dans les chapitres précédents. Il n’a besoin d’aucune clé API.
+Même sans service d’IA, le compagnon crée sur l’appareil un index consultable des personnes, des lieux et des groupes, et indique quels noms apparaissent ensemble dans les chapitres précédents. Il repère les noms à leurs majuscules : une écriture sans majuscules, comme le chinois, n’est donc pas indexée. Il n’a besoin d’aucune clé API.
 
 Votre lecteur
 
