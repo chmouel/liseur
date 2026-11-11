@@ -1,6 +1,6 @@
 <resources>
     <string name="reporting_title">Anonyme Nutzungs- und Absturzberichte teilen</string>
-    <string name="reporting_detail">Die Berichte sind anonymisiert. Sendet genutzte Funktionen, App-Version sowie Fehlertypen und Stacktraces mit einer zufälligen Installations-ID an PostHog in der EU. Keine Buchinhalte, Titel, Anmerkungen, Serveradressen oder Zugangsdaten. Beim Ausschalten werden ungesendete Berichte gelöscht.</string>
+    <string name="reporting_detail">Die Berichte sind anonymisiert. Sendet genutzte Funktionen, App-Version, ungefähren Standort (Stadt und Land) sowie Fehlertypen und Stacktraces mit einer zufälligen Installations-ID an PostHog in der EU. Keine Buchinhalte, Titel, Anmerkungen, Serveradressen oder Zugangsdaten. Beim Ausschalten werden ungesendete Berichte gelöscht.</string>
     <string name="reporting_privacy">Datenschutzerklärung</string>
     <string name="reporting_save_failed">Diese Einstellung konnte nicht gespeichert werden. Bitte erneut versuchen.</string>
 </resources>

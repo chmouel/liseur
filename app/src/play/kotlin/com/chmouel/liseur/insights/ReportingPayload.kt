@@ -6,7 +6,6 @@ internal object ReportingPayload {
         if (feature == null && (event != "\$exception" || exception == null)) return null
         return buildMap {
             put("app_version", version)
-            put("\$geoip_disable", true)
             put("\$process_person_profile", false)
             if (feature != null) put("feature", feature)
             if (exception != null && event == "\$exception") {

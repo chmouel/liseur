@@ -116,7 +116,7 @@ class ReportingTest {
     @Test fun unknownEventsAreDroppedAndAllowedEventsContainOnlyFixedFields() {
         assertNull(ReportingPayload.properties("private book title", "1"))
         UsageEvent.entries.forEach { event ->
-            assertEquals(setOf("app_version", "feature", "\$geoip_disable", "\$process_person_profile"),
+            assertEquals(setOf("app_version", "feature", "\$process_person_profile"),
                 ReportingPayload.properties(event.wireName, "1")!!.keys)
         }
     }
@@ -135,7 +135,7 @@ class ReportingTest {
             val event = sent.getJSONArray("batch").getJSONObject(0)
             assertEquals("book_opened", event.getString("event"))
             assertEquals(first, event.getString("distinct_id"))
-            assertEquals(setOf("app_version", "feature", "\$geoip_disable", "\$process_person_profile"),
+            assertEquals(setOf("app_version", "feature", "\$process_person_profile"),
                 event.getJSONObject("properties").keys().asSequence().toSet())
 
             // Unreachable: the event stays queued on disk until reporting is turned off.

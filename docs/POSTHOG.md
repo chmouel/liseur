@@ -12,8 +12,9 @@ shipped in Play assets and listed in About. Re-audit SDK queue and transport
 behavior when upgrading: SDK opt-out does not erase the queue, and close flushes.
 
 Only the five `UsageEvent` values and sanitized JVM exceptions may enter the
-queue. The before-send allowlist removes SDK context enrichment. A transport
-gate rejects all paths except batch ingestion. Disable closes that gate,
+queue. Events omit `$geoip_disable` so ingestion can add a location. The
+before-send allowlist removes SDK context enrichment. A transport gate rejects
+all paths except batch ingestion. Disable closes that gate,
 cancels calls, persists the preference, drains queue deletion and discards the
 installation ID. An HTTP request already delivered cannot be recalled.
 The uncaught handler waits at most two seconds for crash persistence before
@@ -43,12 +44,16 @@ one project per organization, so they live in separate organizations:
 | Play releases | Chmouel's Organization | Liseur | 344562 |
 | Debug and dev builds | Liseur Test | Liseur Test | 344594 |
 
-Each project has "Discard client IP data" on, and its GeoIP transformation
-is disabled. Autocapture, heatmaps, web vitals, dead clicks, exception
-autocapture, console log and network capture, surveys and session replay are
-off, and no destinations are configured. Billing has no subscription, so usage
-is capped at the free allocation and cannot incur charges. Events are kept for
-one year, the free plan's retention, which `docs/PRIVACY.md` states.
+Each project has "Discard client IP data" on. Its GeoIP transformation is
+followed by a property filter that keeps only `$geoip_city_name`,
+`$geoip_country_code` and `$geoip_country_name`; the IP is discarded after the
+lookup, so neither it nor finer location is stored. Keep that filter directly
+after GeoIP whenever transformations change. Autocapture, heatmaps, web
+vitals, dead clicks, exception autocapture, console log and network capture,
+surveys and session replay are off, and no destinations are configured.
+Billing has no subscription, so usage is capped at the free allocation and
+cannot incur charges. Events are kept for one year, the free plan's retention,
+which `docs/PRIVACY.md` states.
 
 ## Before publication
 
@@ -63,10 +68,12 @@ Play Data safety declares App activity / App interactions and App info and
 performance / Crash logs as collected, not shared, not ephemeral, optional,
 for Analytics (Play's Analytics purpose covers crash diagnosis). Device or
 other IDs was already declared for ML Kit as optional, for App functionality
-and Analytics, which covers the installation identifier. Data is encrypted in
-transit. PostHog is a service provider under the PostHog DPA signed for the
-production organization (listed under Settings > Legal documents), so nothing
-is declared as shared.
+and Analytics, which covers the installation identifier. Location /
+Approximate location (city and country from GeoIP) is collected, not shared,
+not ephemeral, optional, for Analytics; Precise location is not. Data is
+encrypted in transit. PostHog is a service provider under the PostHog DPA
+signed for the production organization (listed under Settings > Legal
+documents), so nothing is declared as shared.
 Keep the ML Kit answers when editing these. No book content or account
 identity is collected by this feature.
 
@@ -89,11 +96,13 @@ and dependency frames. Inspect `fossDebugRuntimeClasspath` and the FOSS APK for 
 and the EU endpoint.
 
 On a disposable emulator with an explicitly configured test token: capture all
-five events, generate an uncaught test exception containing a private sentinel,
-restart, and inspect received event JSON. `adb shell am crash <pid>` on the
-main process raises a JVM exception; `am crash <package>` hits the WebView
-renderer instead, which is a native crash. Confirm the sentinel and free-form
-context are absent. Disable while reports are queued, restart offline then
-online, and verify no pending or new reports arrive. Re-enable and confirm a
-new installation ID and no disabled-period activity. Never run a deliberate
-crash or install over the app on a real phone without permission.
+five events, generate an uncaught test exception containing a private
+sentinel, restart, and inspect received event JSON. `adb shell am crash <pid>`
+on the main process raises a JVM exception; `am crash <package>` hits the
+WebView renderer instead, which is a native crash. Confirm the sentinel and
+free-form context are absent, and that the only location properties are city
+name and country, with no `$ip`, subdivision, postal code or coordinates.
+Disable while reports are queued, restart offline then online, and verify no
+pending or new reports arrive. Re-enable and confirm a new installation ID and
+no disabled-period activity. Never run a deliberate crash or install over the
+app on a real phone without permission.

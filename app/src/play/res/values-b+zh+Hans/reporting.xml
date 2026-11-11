@@ -1,6 +1,6 @@
 <resources>
     <string name="reporting_title">分享匿名使用情况和崩溃报告</string>
-    <string name="reporting_detail">报告经过匿名化处理。使用随机安装标识符向欧盟的 PostHog 发送功能使用情况、应用版本、异常类型和堆栈。不会发送书籍内容、标题、批注、服务器地址或凭据。关闭后将删除尚未发送的报告。</string>
+    <string name="reporting_detail">报告经过匿名化处理。使用随机安装标识符向欧盟的 PostHog 发送功能使用情况、应用版本、大致位置（城市和国家）、异常类型和堆栈。不会发送书籍内容、标题、批注、服务器地址或凭据。关闭后将删除尚未发送的报告。</string>
     <string name="reporting_privacy">隐私政策</string>
     <string name="reporting_save_failed">无法保存此设置，请重试。</string>
 </resources>

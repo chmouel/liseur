@@ -1,6 +1,6 @@
 <resources>
     <string name="reporting_title">Partager des rapports anonymes d’utilisation et de plantage</string>
-    <string name="reporting_detail">Les rapports sont anonymisés. Envoie les fonctionnalités utilisées, la version de l’application et les types et piles de plantage à PostHog dans l’UE avec un identifiant d’installation aléatoire. Aucun contenu, titre, annotation, adresse de serveur ou identifiant de connexion. La désactivation supprime les rapports non envoyés.</string>
+    <string name="reporting_detail">Les rapports sont anonymisés. Envoie les fonctionnalités utilisées, la version de l’application, la localisation approximative (ville et pays) et les types et piles de plantage à PostHog dans l’UE avec un identifiant d’installation aléatoire. Aucun contenu, titre, annotation, adresse de serveur ou identifiant de connexion. La désactivation supprime les rapports non envoyés.</string>
     <string name="reporting_privacy">Politique de confidentialité</string>
     <string name="reporting_save_failed">Impossible d’enregistrer ce réglage. Réessayez.</string>
 </resources>

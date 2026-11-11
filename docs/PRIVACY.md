@@ -25,7 +25,8 @@ Previously transmitted reports are not deleted by this switch.
 
 Liseur sends five explicit events: app foregrounded, book opened, read aloud
 started, translation requested and companion opened. Reports contain the
-feature name, app version, event time and a random installation identifier.
+feature name, app version, event time, approximate location (city and country)
+and a random installation identifier.
 Uncaught JVM crash reports include exception types and stack frames, without
 exception messages. They do not contain book text, titles, book identifiers,
 annotations, server addresses, credentials or account identities. There is no
@@ -34,8 +35,9 @@ ANR collection or detailed performance monitoring.
 
 The developer uses these reports to understand feature use and fix crashes.
 They are sent over HTTPS to PostHog Cloud EU in Frankfurt. PostHog receives
-your IP address as part of the connection; the project discards it and does
-not look up your location. PostHog processes the reports only on the
+your IP address as part of the connection. It uses the address to look up the
+city and country, keeps only those two, and discards the address and any finer
+location before storing the report. PostHog processes the reports only on the
 developer's behalf, under a signed data processing agreement, and keeps them
 for one year before deleting them. See [PostHog privacy information](https://posthog.com/privacy).
 
