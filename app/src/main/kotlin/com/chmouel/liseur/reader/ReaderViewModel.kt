@@ -187,6 +187,7 @@ class ReaderViewModel(
     sessionManager: ReadingSessionManager,
     private val requestBookSync: (String) -> Unit = {},
     private val openBookHandles: OpenBookHandles = OpenBookHandles(),
+    val usageReporting: com.chmouel.liseur.insights.UsageReporting? = null,
     val readAloud: ReadAloudFeature = ReadAloudFeature.None,
     private val pausedListening: PausedListening? = null,
 ) : ViewModel() {
@@ -1605,6 +1606,7 @@ class ReaderViewModel(
             // A timed-out request must never move an already visible book.
             progressDao.openBooks.enter(bookId)
             readingDeclared = true
+            usageReporting?.capture(com.chmouel.liseur.insights.UsageEvent.BOOK_OPENED)
             val latestStored = progressDao.get(bookId)
             val stillCurrent = latestStored == stored
             // A percentage-only BookOrbit place has no passage to verify, so
@@ -1705,6 +1707,7 @@ class ReaderViewModel(
         _catchUp.value = null
         handle.listeningSettles = ListeningSettlement(bookOrbitOpening.verifiedPull, declined)
         readAloud.start(handle, selection, reader, translation)
+        usageReporting?.capture(com.chmouel.liseur.insights.UsageEvent.READ_ALOUD_STARTED)
     }
 
     private var pausedRestoreTried = false
@@ -3233,6 +3236,7 @@ class ReaderViewModel(
                     sessionManager = container.readingSessions,
                     requestBookSync = container::requestBookSync,
                     openBookHandles = container.openBookHandles,
+                    usageReporting = container.usageReporting,
                     readAloud = container.readAloud,
                     pausedListening = container.pausedListening,
                 )

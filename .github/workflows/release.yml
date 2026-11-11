@@ -274,7 +274,10 @@ jobs:
 
       - name: Build the release bundle
         if: steps.play.outputs.enabled == 'true'
-        run: ./gradlew bundlePlayRelease --console=plain
+        env:
+          LISEUR_POSTHOG_PROJECT_TOKEN: ${{ vars.LISEUR_POSTHOG_PROJECT_TOKEN }}
+          LISEUR_REPORTING_CONSENT_REVIEWED: ${{ vars.LISEUR_REPORTING_CONSENT_REVIEWED }}
+        run: ./gradlew bundlePlayRelease -PofficialPlayRelease=true --console=plain
 
       - name: Set up Ruby
         if: steps.play.outputs.enabled == 'true'

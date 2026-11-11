@@ -439,6 +439,7 @@ class AppContainer(
     /** What the app has learned about how fast this reader reads. */
     val readingPace = ReadingPaceRepository(context.applicationContext)
 
+    val usageReporting = com.chmouel.liseur.insights.createUsageReporting(context.applicationContext)
     val appSettings = AppSettingsRepository(context.applicationContext)
 
     val settingsBackup =

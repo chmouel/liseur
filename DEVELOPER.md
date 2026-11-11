@@ -19,6 +19,8 @@ Needs JDK 17+ and a recent Android SDK (SDK 37); use the Gradle wrapper.
 ```
 
 - `foss` is what F-Droid reproduces and the GitHub release carries.
+- `play` also includes default-on usage and sanitized JVM crash reporting.
+  Setup, privacy boundaries and release gates: [PostHog](docs/POSTHOG.md).
 - `play` adds Gemini read-aloud voices, Gemini translation and the
   companion on Gemini (book text goes to a non-free Google service), and
   the ML Kit translator (on-device, proprietary SDK with diagnostics).

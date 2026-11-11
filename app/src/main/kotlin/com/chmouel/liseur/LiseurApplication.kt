@@ -79,6 +79,7 @@ class LiseurApplication : Application(), SingletonImageLoader.Factory {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             object : DefaultLifecycleObserver {
                 override fun onStart(owner: LifecycleOwner) {
+                    container.usageReporting.capture(com.chmouel.liseur.insights.UsageEvent.APP_FOREGROUNDED)
                     container.liveSync.foreground()
                     val now = System.currentTimeMillis()
                     if (now - lastForegroundSyncAt < FOREGROUND_SYNC_DEBOUNCE_MS) return

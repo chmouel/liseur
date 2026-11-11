@@ -378,6 +378,7 @@ fun SettingsScreen(
                         onClick = onOpenSettingsBackup,
                         modifier = Modifier.settingsAnchor(SettingsEntries.Backup),
                     )
+                    com.chmouel.liseur.insights.UsageReportingSettings()
                 }
 
                 SettingsGroup(stringResource(R.string.settings_about)) {
