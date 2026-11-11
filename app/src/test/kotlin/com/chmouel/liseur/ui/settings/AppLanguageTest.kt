@@ -28,6 +28,11 @@ class AppLanguageTest {
     }
 
     @Test
+    fun `the Portuguese tag keeps the region translation needs`() {
+        assertEquals("pt-BR", AppLanguage.PORTUGUESE.tag)
+    }
+
+    @Test
     fun `chinese counts only when it loads the simplified strings`() {
         assertEquals(AppLanguage.CHINESE_SIMPLIFIED, AppLanguage.fromTag("zh-Hans-CN"))
         assertEquals(AppLanguage.CHINESE_SIMPLIFIED, AppLanguage.fromTag("zh-CN"))

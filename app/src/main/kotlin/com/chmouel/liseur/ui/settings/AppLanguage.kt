@@ -18,7 +18,7 @@ enum class AppLanguage(val tag: String?, val nativeName: String?) {
     SPANISH("es", "Español"),
     FRENCH("fr", "Français"),
     ITALIAN("it", "Italiano"),
-    PORTUGUESE("pt", "Português (Brasil)"),
+    PORTUGUESE("pt-BR", "Português (Brasil)"),
     RUSSIAN("ru", "Русский"),
     CHINESE_SIMPLIFIED("zh-Hans", "简体中文"),
     ;
@@ -38,7 +38,9 @@ enum class AppLanguage(val tag: String?, val nativeName: String?) {
                     (locale.script.isEmpty() && locale.country in SIMPLIFIED_REGIONS)
                 return if (simplified) CHINESE_SIMPLIFIED else SYSTEM
             }
-            return entries.firstOrNull { it.tag == locale.language } ?: SYSTEM
+            return entries.firstOrNull {
+                it.tag != null && Locale.forLanguageTag(it.tag).language == locale.language
+            } ?: SYSTEM
         }
 
         private val SIMPLIFIED_REGIONS = setOf("", "CN", "SG", "MY")

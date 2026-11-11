@@ -51,7 +51,7 @@ help:
 		'make run               Start the emulator, install, launch, and show it with scrcpy' \
 		'make run-bg            Start the emulator, install, and launch without scrcpy' \
 		'make reset             Reinstall the app, wipe its storage, and reseed a demo library' \
-		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru, zh-Hans, cs, pt)' \
+		'make locale            Show or set app locale with LOCALE=xx (e.g. fr, de, es, it, ru, zh-Hans, cs, pt-BR)' \
 		'make clean             Remove build outputs' \
 		'make dev               Build the side-by-side APK ($(DEV_PACKAGE))' \
 		'make dev-install       Build and install it beside the real app' \
@@ -164,7 +164,7 @@ locale:
 			"es  (Español)" \
 			"fr  (Français)" \
 			"it  (Italiano)" \
-			"pt  (Português do Brasil)" \
+			"pt-BR  (Português do Brasil)" \
 			"ru  (Русский)" \
 			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \
@@ -217,7 +217,7 @@ dev-locale: dev-phone
 			"es  (Español)" \
 			"fr  (Français)" \
 			"it  (Italiano)" \
-			"pt  (Português do Brasil)" \
+			"pt-BR  (Português do Brasil)" \
 			"ru  (Русский)" \
 			"zh-Hans  (简体中文)" \
 			"reset (System default)"); \
