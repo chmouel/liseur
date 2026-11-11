@@ -44,7 +44,8 @@ revision reaches it, shared for Kobo and Komga and per peer for
 liseur-sync and kOSync. While it is owed, opening a book keeps a
 preserved remote conflict on disk instead of offering it, and sync
 pushes the local place rather than restoring the remote one, even after
-reading on has cleared the unread mark. Marking the book finished drops
+reading on has cleared the unread mark. A push that carried the reset
+delivers it even if a page turn landed while it was in flight. Marking the book finished drops
 the owed reset. Explicit choices remain available.
 
 The next persisted reader movement or local jump clears the unread
