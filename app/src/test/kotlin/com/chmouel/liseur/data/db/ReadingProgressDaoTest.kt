@@ -188,7 +188,7 @@ class ReadingProgressDaoTest {
     }
 
     @Test
-    fun `an acknowledgement for a revision that was never sent is refused`() = runTest {
+    fun `an acknowledgement covers only the revision that was sent`() = runTest {
         read(0.1)
         read(0.2)
         // The server was told about revision 1; two page turns happened.
@@ -196,7 +196,7 @@ class ReadingProgressDaoTest {
         dao.ackPush(book, 1, 0.1, "Reading", account, now = 5_000)
         val row = row()
         assertEquals(2L, row.localRevision)
-        assertEquals(0L, row.ackedRevision)
+        assertEquals(1L, row.ackedRevision)
         assertTrue(row.isDirty)
     }
 
@@ -596,9 +596,9 @@ class ReadingProgressDaoTest {
         dao.settleAgreed(book, 1L, 0.5, "Reading", account, now = 5_000)
 
         val row = row()
-        // Nothing is acknowledged: the compared revision has been
-        // overtaken, and the one that overtook it was never sent.
-        assertEquals(0L, row.ackedRevision)
+        // Only the compared revision is acknowledged; the one that
+        // overtook it was never weighed.
+        assertEquals(1L, row.ackedRevision)
         assertTrue(row.isDirty)
     }
 }

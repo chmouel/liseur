@@ -734,10 +734,9 @@ class KomgaSyncRepository(
         // Komga has no way to say "not finished" other than forgetting the
         // book, so an explicit mark-unread starts by wiping what it holds.
         // Anything pushed after this lands on a clean slate. Reading on
-        // clears the mark, so a reset not yet delivered still counts.
-        val unread = !finished &&
-            (stored?.override == FinishedOverride.UNREAD || stored?.hasPendingUnreadReset() == true)
-        if (unread) {
+        // clears the mark, so a reset not yet delivered still clears.
+        val unread = !finished && stored?.override == FinishedOverride.UNREAD
+        if (unread || !finished && stored?.hasPendingUnreadReset() == true) {
             when (val cleared = positions.clear(server.baseUrl, credentials, id)) {
                 is RemoteResult.Failed -> return BookOutcome(failure = cleared.reason, unreachable = cleared.unreachable)
                 is RemoteResult.Ok -> Unit
