@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
 import java.net.InetAddress
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
@@ -46,6 +47,28 @@ class ReportingTest {
         restarted.capture(UsageEvent.BOOK_OPENED)
         restarted.setEnabled(true)
         assertNotEquals(original.installation, ReportingPreference(context.noBackupFilesDir).read().installation)
+    }
+
+    @Test fun captureDoesNotWaitForOptOut() {
+        val reports = PlayUsageReporting(context, token = "phc_test", host = "http://127.0.0.1:9/")
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val stopping = Thread {
+            synchronized(reports) {
+                held.countDown()
+                release.await()
+            }
+        }.apply { start() }
+        try {
+            held.await()
+            val captured = Thread { reports.capture(UsageEvent.BOOK_OPENED) }.apply { start() }
+            captured.join(2_000)
+            assertFalse(captured.isAlive)
+        } finally {
+            release.countDown()
+            stopping.join()
+            reports.stop()
+        }
     }
 
     @Test fun corruptPreferenceFailsClosed() {
