@@ -31,13 +31,13 @@ internal class PlayUsageReporting(
     private val host: String = "https://eu.i.posthog.com",
 ) : UsageReporting {
     private val preference = ReportingPreference(context.noBackupFilesDir)
-    private var choice = preference.read()
+    @Volatile private var choice = preference.read()
     private val state = MutableStateFlow(choice.enabled)
     override val enabled = state.asStateFlow()
     private val directory = File(context.noBackupFilesDir, "usage-reporting-queue")
-    private var client: PostHogInterface? = null
+    @Volatile private var client: PostHogInterface? = null
     private var transport: OkHttpClient? = null
-    private var gate = AtomicBoolean(false)
+    @Volatile private var gate = AtomicBoolean(false)
     private val queues = mutableListOf<Pair<PostHogQueueInterface<PostHogEvent>, ExecutorService>>()
     private var previousHandler: Thread.UncaughtExceptionHandler? = null
     private var crashHandler: Thread.UncaughtExceptionHandler? = null
@@ -47,9 +47,14 @@ internal class PlayUsageReporting(
         if (choice.enabled && token.isNotBlank()) startSafely() else directory.deleteRecursively()
     }
 
-    @Synchronized
+    // Lock-free: opt-out holds the monitor while it drains queues, and
+    // captures come from the main thread. The SDK's beforeSend and the
+    // transport recheck the gate, so a capture racing opt-out is dropped.
     override fun capture(event: UsageEvent) {
-        if (gate.get()) client?.capture(event.wireName, distinctId = choice.installation)
+        val sending = gate
+        val target = client
+        val installation = choice.installation
+        if (sending.get()) target?.capture(event.wireName, distinctId = installation)
     }
 
     override suspend fun setEnabled(enabled: Boolean) = withContext(Dispatchers.IO) {
@@ -163,6 +168,8 @@ internal class PlayUsageReporting(
                 executor.submit {}.get(5, TimeUnit.SECONDS)
             } catch (_: Exception) {
                 executor.shutdownNow()
+                // The SDK would reuse this dead executor on re-enable.
+                client = null
             }
         }
         queues.clear()
