@@ -373,7 +373,7 @@ class ReaderActivity : FragmentActivity() {
                                                     destinationOf = {
                                                         s.publication.locatorFromLink(it)?.destination()
                                                     },
-                                                    go = { nav.go(it, animated = false) },
+                                                    go = { nav.goIfShown(it) },
                                                     onJump = viewModel::onJump,
                                                     mayFallbackToPublishedPlace =
                                                         origin.mayFallbackToPublishedPlace,
