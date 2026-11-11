@@ -15,6 +15,7 @@ import com.chmouel.liseur.sync.LatestPositionSync
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
 import java.io.File
+import java.util.concurrent.Executors
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.CompletableDeferred
@@ -22,15 +23,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.yield
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -47,9 +49,14 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReaderPositionPersistenceTest {
+    // The view model runs on one thread, as on the device. An unconfined
+    // Main would resume its coroutines on the publisher's thread, racing
+    // the calls made here.
+    private val main = Executors.newSingleThreadExecutor { Thread(it, "reader-test-main") }.asCoroutineDispatcher()
+
     @Test
-    fun `opening waits for saves and unsaved displayed jumps remain saveable`() = runBlocking {
-        Dispatchers.setMain(UnconfinedTestDispatcher())
+    fun `opening waits for saves and unsaved displayed jumps remain saveable`() = runBlocking(main) {
+        Dispatchers.setMain(main)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val models = ViewModelStore()
         try {
@@ -171,11 +178,19 @@ class ReaderPositionPersistenceTest {
 
             val failedPlace = place(0.9)
             reopening.onLocatorChanged(failedPlace, NavigatorPositionEvent.LOCAL_JUMP)
+            // A flush can return without suspending, so the reader's failure
+            // handler, already queued on the main thread, needs a turn.
             assertFalse(publisher.flush(url))
+            yield()
             assertEquals(
                 ReaderViewModel.BookSync.Note(R.string.reader_position_not_saved),
                 reopening.bookSync.value,
             )
+            // The handler then asks the publisher before forgetting the failed
+            // place. This flush is answered after that question; let the
+            // handler finish before retrying the same place.
+            assertFalse(publisher.flush(url))
+            yield()
 
             failWrites = false
             reopening.onLocatorChanged(place(0.8), NavigatorPositionEvent.PREFERENCE_REFLOW)
@@ -208,6 +223,7 @@ class ReaderPositionPersistenceTest {
             models.clear()
             scope.cancel()
             Dispatchers.resetMain()
+            main.close()
         }
     }
 
