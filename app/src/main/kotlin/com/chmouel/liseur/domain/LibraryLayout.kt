@@ -417,7 +417,7 @@ fun homeDeskOf(
     underway.mapNotNull { it.nextUp }.forEach { volume ->
         val url = volume.book.url
         if (url != current && url !in picks) {
-            picks[url] = HomePick(volume.book, PickReason.NEXT_IN_SERIES, volume.progression)
+            picks[url] = HomePick(volume.book, PickReason.NEXT_IN_SERIES, volume.progression.takeIf { volume.inProgress })
         }
     }
     // A library nobody has started yet still gets something to pick up.
