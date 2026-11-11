@@ -969,7 +969,7 @@ fun LibraryScreen(
                                 HomeShelfKind.TO_READ -> onSetReadingFilter(setOf(LibraryFilterOption.UNREAD))
                                 HomeShelfKind.FINISHED -> onSetReadingFilter(setOf(LibraryFilterOption.FINISHED))
                                 HomeShelfKind.SERIES -> {
-                                    onSetReadingFilter(emptySet())
+                                    onSetReadingFilter(ALL_READING_STATES)
                                     onSetGroupBySeries(true)
                                     // Shelves group by their own setting, not the Series chip.
                                     if (layout.bottomBar && layout.style == LibraryStyle.SHELVES) {
