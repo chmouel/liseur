@@ -117,11 +117,16 @@ open_library() {
   adb shell am start -n "$MAIN_ACTIVITY" >/dev/null
   sleep 6
   # The app can open on the book you were reading; step back to the shelf.
-  if ! on_screen "Liseur" exact; then
+  # The search button marks the app's own screens: the title changes with
+  # the tab, and the launcher one back too far also says "Liseur".
+  if ! on_screen "Search books" exact; then
     back
     sleep 3
-    wait_for "Liseur" 20 exact >/dev/null || die "never reached the library"
+    wait_for "Search books" 20 exact >/dev/null || die "never reached the library"
   fi
+  # A shelf with books opens on Home; the books are behind the Library
+  # tab. On the Library screen the first match is its title, a no-op.
+  tap_if_there "Library" exact || true
 }
 
 
