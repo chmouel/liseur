@@ -6,6 +6,9 @@ import android.net.Uri
 import android.util.Size
 import androidx.media3.common.MediaMetadata
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.readium.navigator.media.common.MediaMetadataFactory
 import org.readium.navigator.media.common.MediaMetadataProvider
@@ -42,23 +45,30 @@ internal class ReadAloudMetadata(private val cover: Uri?) : MediaMetadataProvide
     companion object {
         private const val COVER_PX = 400
         private const val DIRECTORY = "read-aloud-cover"
+        private val writing = Mutex()
 
         /**
          * Writes the cover for a new session and returns where it is, or
          * null when the book has none. Each session gets its own name,
          * because Media3 caches artwork by address and would otherwise
          * keep showing the previous book's cover; the previous file goes.
+         * A session that has ended stops before clearing, so it cannot
+         * remove the cover its replacement just wrote.
          */
         suspend fun writeCover(context: Context, publication: Publication): Uri? = withContext(Dispatchers.IO) {
-            runCatching {
-                val bitmap = publication.coverFitting(Size(COVER_PX, COVER_PX)) ?: return@runCatching null
-                val directory = File(context.cacheDir, DIRECTORY)
-                directory.listFiles()?.forEach(File::delete)
-                directory.mkdirs()
-                val file = File(directory, "${System.nanoTime()}.jpg")
-                file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
-                Uri.fromFile(file)
-            }.getOrNull()
+            val bitmap = runCatching { publication.coverFitting(Size(COVER_PX, COVER_PX)) }.getOrNull()
+                ?: return@withContext null
+            writing.withLock {
+                ensureActive()
+                runCatching {
+                    val directory = File(context.cacheDir, DIRECTORY)
+                    directory.listFiles()?.forEach(File::delete)
+                    directory.mkdirs()
+                    val file = File(directory, "${System.nanoTime()}.jpg")
+                    file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+                    Uri.fromFile(file)
+                }.getOrNull()
+            }
         }
     }
 }
