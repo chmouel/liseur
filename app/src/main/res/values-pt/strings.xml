@@ -1925,6 +1925,9 @@
     <string name="shelf_backdrop_wood">Madeira</string>
     <string name="shelf_backdrop_plaster">Reboco</string>
     <string name="shelf_backdrop_bricks">Tijolos</string>
+    <string name="shelf_backdrop_marigold">Calêndulas</string>
+    <string name="shelf_backdrop_willow">Salgueiro</string>
+    <string name="shelf_backdrop_daisy">Margaridas</string>
     <string name="shelf_backdrop_custom">Imagem personalizada</string>
     <string name="shelf_tone">Cor da prateleira</string>
     <string name="shelf_tone_theme">Tema</string>

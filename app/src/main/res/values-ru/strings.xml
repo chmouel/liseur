@@ -1985,6 +1985,9 @@
     <string name="shelf_backdrop_wood">Дерево</string>
     <string name="shelf_backdrop_plaster">Штукатурка</string>
     <string name="shelf_backdrop_bricks">Кирпичи</string>
+    <string name="shelf_backdrop_marigold">Бархатцы</string>
+    <string name="shelf_backdrop_willow">Ива</string>
+    <string name="shelf_backdrop_daisy">Маргаритки</string>
     <string name="shelf_backdrop_custom">Своё изображение</string>
     <string name="shelf_tone">Цвет полок</string>
     <string name="shelf_tone_theme">Тема</string>

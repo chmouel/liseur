@@ -1875,6 +1875,9 @@
     <string name="shelf_backdrop_wood">Bois</string>
     <string name="shelf_backdrop_plaster">Enduit</string>
     <string name="shelf_backdrop_bricks">Briques</string>
+    <string name="shelf_backdrop_marigold">Œillets d’Inde</string>
+    <string name="shelf_backdrop_willow">Saule</string>
+    <string name="shelf_backdrop_daisy">Pâquerettes</string>
     <string name="shelf_backdrop_custom">Image personnalisée</string>
     <string name="shelf_tone">Couleur des étagères</string>
     <string name="shelf_tone_theme">Thème</string>

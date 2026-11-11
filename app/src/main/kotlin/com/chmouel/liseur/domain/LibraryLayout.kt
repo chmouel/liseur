@@ -58,6 +58,9 @@ enum class ShelfBackdrop(val id: String) {
     WOOD("wood"),
     PLASTER("plaster"),
     BRICKS("bricks"),
+    MARIGOLD("marigold"),
+    WILLOW("willow"),
+    DAISY("daisy"),
     CUSTOM("custom"),
     ;
 

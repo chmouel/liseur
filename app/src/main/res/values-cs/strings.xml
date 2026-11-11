@@ -2017,6 +2017,9 @@
     <string name="shelf_backdrop_wood">Dřevo</string>
     <string name="shelf_backdrop_plaster">Omítka</string>
     <string name="shelf_backdrop_bricks">Cihly</string>
+    <string name="shelf_backdrop_marigold">Aksamitník</string>
+    <string name="shelf_backdrop_willow">Vrba</string>
+    <string name="shelf_backdrop_daisy">Sedmikrásky</string>
     <string name="shelf_backdrop_custom">Vlastní obrázek</string>
     <string name="shelf_tone">Barva polic</string>
     <string name="shelf_tone_theme">Podle motivu</string>

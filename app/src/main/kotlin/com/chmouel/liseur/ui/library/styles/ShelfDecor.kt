@@ -40,6 +40,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -60,6 +61,9 @@ import kotlin.math.roundToInt
  */
 
 private val WallTile = 128.dp
+
+/** Width of one repeat of the Morris wallpapers; the height follows the image. */
+private val PatternTile = 240.dp
 private val LedgeTileWidth = 32.dp
 private val LedgeStripHeight = 38.dp
 private val BracketWidth = 18.dp
@@ -85,6 +89,8 @@ private val PageEdge = Color(0xFFBDB8AD)
 @Immutable
 internal class ShelfArt(
     val wall: ImageBitmap?,
+    /** Drawn width of one [wall] tile. */
+    val wallTile: Dp,
     val ledge: ImageBitmap,
     val bracket: ImageBitmap,
     val rectFrame: ImageBitmap,
@@ -116,7 +122,14 @@ internal fun rememberShelfArt(
         ShelfBackdrop.BRICKS -> ImageBitmap.imageResource(R.drawable.shelf_wall)
         ShelfBackdrop.WOOD -> ImageBitmap.imageResource(R.drawable.shelf_wall_wood)
         ShelfBackdrop.PLASTER -> ImageBitmap.imageResource(R.drawable.shelf_wall_plaster)
+        ShelfBackdrop.MARIGOLD -> ImageBitmap.imageResource(R.drawable.shelf_wall_marigold)
+        ShelfBackdrop.WILLOW -> ImageBitmap.imageResource(R.drawable.shelf_wall_willow)
+        ShelfBackdrop.DAISY -> ImageBitmap.imageResource(R.drawable.shelf_wall_daisy)
         ShelfBackdrop.PLAIN, ShelfBackdrop.CUSTOM -> null
+    }
+    val wallTile = when (backdrop) {
+        ShelfBackdrop.MARIGOLD, ShelfBackdrop.WILLOW, ShelfBackdrop.DAISY -> PatternTile
+        else -> WallTile
     }
     val ledge = ImageBitmap.imageResource(R.drawable.shelf_ledge)
     val bracket = ImageBitmap.imageResource(R.drawable.shelf_ledge_end)
@@ -145,11 +158,12 @@ internal fun rememberShelfArt(
     val panel = scheme.surface.copy(alpha = 0.85f)
     val panelEdge = scheme.outlineVariant.copy(alpha = 0.6f)
     return remember(
-        wall, ledge, bracket, rect, oval, succulent, fern, flowers, trailing,
+        wall, wallTile, ledge, bracket, rect, oval, succulent, fern, flowers, trailing,
         wallColor, stoneColor, giltColor, wash, customWash, panel, panelEdge,
     ) {
         ShelfArt(
             wall = wall,
+            wallTile = wallTile,
             ledge = ledge,
             bracket = bracket,
             rectFrame = rect,
@@ -199,8 +213,8 @@ private fun DrawScope.tile(
 
 internal fun DrawScope.drawShelfWall(art: ShelfArt) {
     val wall = art.wall ?: return
-    val tile = WallTile.toPx()
-    tile(wall, tile, tile, size, art.wallTint)
+    val width = art.wallTile.toPx()
+    tile(wall, width, width * wall.height / wall.width, size, art.wallTint)
     drawRect(art.wash)
 }
 

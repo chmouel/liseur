@@ -27,7 +27,8 @@ bottom bar with the current book's cover on the left and Home, Library
 and More tabs beside it (the bottom bar is the default); Shelves chooses
 series, author or reading state for its shelves, a shelf colour (theme
 accent, stone, oak, walnut or brass) and a backdrop behind them (plain,
-wood, plaster, bricks or a custom image); Classic can fit one more
+wood, plaster, bricks, the Marigold, Willow Bough or Daisy wallpapers by
+William Morris, or a custom image); Classic can fit one more
 column with one-line titles; and List can use compact rows.
 Nothing is reorderable.
 
@@ -60,8 +61,10 @@ ledges with a dentil band, and empty places that take either a finished
 book's cover hung as a framed picture or a potted plant. Some shelves
 also get a small pot at one end or a plant hanging under them, chosen
 from the shelf's key so nothing moves while scrolling. The wall, ledge
-and frame textures are drawn by `hack/shelf-textures` in grayscale and
-tinted from the theme or chosen shelf tone at run time, so they follow
+and frame textures are drawn by `hack/shelf-textures` in grayscale; the
+Morris wallpapers are cut by `hack/shelf-patterns` from public-domain
+scans in The Met's Open Access collection into seamless grayscale tiles.
+All are tinted from the theme or chosen shelf tone at run time, so they follow
 light, dark and dynamic colour; the plants keep their natural colours.
 E-ink keeps a flat plank and no decoration.
 

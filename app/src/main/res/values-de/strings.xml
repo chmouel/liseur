@@ -1887,6 +1887,9 @@
     <string name="shelf_backdrop_wood">Holz</string>
     <string name="shelf_backdrop_plaster">Putz</string>
     <string name="shelf_backdrop_bricks">Ziegel</string>
+    <string name="shelf_backdrop_marigold">Ringelblume</string>
+    <string name="shelf_backdrop_willow">Weide</string>
+    <string name="shelf_backdrop_daisy">Gänseblümchen</string>
     <string name="shelf_backdrop_custom">Eigenes Bild</string>
     <string name="shelf_tone">Regalfarbe</string>
     <string name="shelf_tone_theme">Design</string>
