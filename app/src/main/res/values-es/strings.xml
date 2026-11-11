@@ -1875,6 +1875,9 @@
     <string name="shelf_backdrop_wood">Madera</string>
     <string name="shelf_backdrop_plaster">Estuco</string>
     <string name="shelf_backdrop_bricks">Ladrillos</string>
+    <string name="shelf_backdrop_marigold">Caléndulas</string>
+    <string name="shelf_backdrop_willow">Sauce</string>
+    <string name="shelf_backdrop_daisy">Margaritas</string>
     <string name="shelf_backdrop_custom">Imagen personalizada</string>
     <string name="shelf_tone">Color de los estantes</string>
     <string name="shelf_tone_theme">Tema</string>

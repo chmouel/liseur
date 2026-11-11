@@ -1875,6 +1875,9 @@
     <string name="shelf_backdrop_wood">Legno</string>
     <string name="shelf_backdrop_plaster">Intonaco</string>
     <string name="shelf_backdrop_bricks">Mattoni</string>
+    <string name="shelf_backdrop_marigold">Calendule</string>
+    <string name="shelf_backdrop_willow">Salice</string>
+    <string name="shelf_backdrop_daisy">Margherite</string>
     <string name="shelf_backdrop_custom">Immagine personalizzata</string>
     <string name="shelf_tone">Colore degli scaffali</string>
     <string name="shelf_tone_theme">Tema</string>

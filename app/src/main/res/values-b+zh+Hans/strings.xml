@@ -1821,6 +1821,9 @@
     <string name="shelf_backdrop_wood">木纹</string>
     <string name="shelf_backdrop_plaster">灰泥</string>
     <string name="shelf_backdrop_bricks">砖墙</string>
+    <string name="shelf_backdrop_marigold">万寿菊</string>
+    <string name="shelf_backdrop_willow">柳枝</string>
+    <string name="shelf_backdrop_daisy">雏菊</string>
     <string name="shelf_backdrop_custom">自定义图片</string>
     <string name="shelf_tone">书架颜色</string>
     <string name="shelf_tone_theme">主题色</string>

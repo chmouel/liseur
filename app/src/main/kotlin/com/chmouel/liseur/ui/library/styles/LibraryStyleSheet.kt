@@ -90,6 +90,9 @@ private val ShelfBackdrop.label: Int
         ShelfBackdrop.WOOD -> R.string.shelf_backdrop_wood
         ShelfBackdrop.PLASTER -> R.string.shelf_backdrop_plaster
         ShelfBackdrop.BRICKS -> R.string.shelf_backdrop_bricks
+        ShelfBackdrop.MARIGOLD -> R.string.shelf_backdrop_marigold
+        ShelfBackdrop.WILLOW -> R.string.shelf_backdrop_willow
+        ShelfBackdrop.DAISY -> R.string.shelf_backdrop_daisy
         ShelfBackdrop.CUSTOM -> R.string.shelf_backdrop_custom
     }
 

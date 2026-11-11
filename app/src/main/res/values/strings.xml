@@ -1949,6 +1949,9 @@
     <string name="shelf_backdrop_wood">Wood</string>
     <string name="shelf_backdrop_plaster">Plaster</string>
     <string name="shelf_backdrop_bricks">Bricks</string>
+    <string name="shelf_backdrop_marigold">Marigold</string>
+    <string name="shelf_backdrop_willow">Willow</string>
+    <string name="shelf_backdrop_daisy">Daisy</string>
     <string name="shelf_backdrop_custom">Custom image</string>
     <string name="shelf_tone">Shelf colour</string>
     <string name="shelf_tone_theme">Theme</string>

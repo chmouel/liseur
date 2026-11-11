@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Make the wallpaper backdrops of the Shelves library style.
+
+Each one is a William Morris wallpaper from The Metropolitan Museum of
+Art's Open Access collection; the scans are public domain (CC0). The
+script downloads the scan, cuts out one repeat of the pattern, blends its
+edges with the neighbouring repeat so it tiles without a seam, and turns
+the ink into grayscale so the app can tint it from the theme like the
+other walls (see hack/shelf-textures).
+
+    hack/shelf-patterns            # writes app/src/main/res/drawable-nodpi/
+    hack/shelf-patterns OUT_DIR    # writes somewhere else
+
+Needs Pillow and numpy. Scans are cached in tmp/shelf-patterns/. Tiles
+are 720px wide; the app draws them 240dp wide.
+"""
+
+import pathlib
+import sys
+import urllib.request
+
+import numpy as np
+from PIL import Image
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+OUT = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "app/src/main/res/drawable-nodpi"
+CACHE = ROOT / "tmp/shelf-patterns"
+
+TILE_WIDTH = 720
+BLEND = 60
+INK = 0.40  # how far full ink darkens the paper
+
+# name, Met object, scan, crop origin, repeat width and height in scan pixels
+PATTERNS = [
+    ("marigold", 384018, "dp/original/DP306733.jpg", (150, 500), (1476, 1476)),
+    ("willow", 384022, "dp/original/DP306734.jpg", (150, 400), (1444, 2456)),
+    ("daisy", 384017, "dp/original/DP306732.jpg", (150, 300), (1468, 1956)),
+]
+
+
+def scan(name, path):
+    CACHE.mkdir(parents=True, exist_ok=True)
+    local = CACHE / f"{name}.jpg"
+    if not local.exists():
+        url = f"https://images.metmuseum.org/CRDImages/{path}"
+        req = urllib.request.Request(url, headers={"User-Agent": "liseur hack/shelf-patterns"})
+        with urllib.request.urlopen(req) as resp:
+            local.write_bytes(resp.read())
+    return np.asarray(Image.open(local).convert("RGB"), dtype=np.float64)
+
+
+def seamless(src, x0, y0, pw, ph):
+    """One repeat whose far edges fade into the content just before its near edges."""
+    region = src[y0 - BLEND:y0 + ph, x0 - BLEND:x0 + pw]
+    alpha = np.linspace(0, 1, BLEND, endpoint=False)[None, :, None]
+    rows = region[:, BLEND:].copy()
+    rows[:, pw - BLEND:] = rows[:, pw - BLEND:] * (1 - alpha) + region[:, :BLEND] * alpha
+    tile = rows[BLEND:].copy()
+    alpha = alpha.reshape(BLEND, 1, 1)
+    tile[ph - BLEND:] = tile[ph - BLEND:] * (1 - alpha) + rows[:BLEND] * alpha
+    return tile
+
+
+def grayscale(tile):
+    """Paper goes white and ink goes gray, whatever colours the print used."""
+    lum = tile @ np.array([0.299, 0.587, 0.114])
+    paper = tile[lum >= np.percentile(lum, 90)].mean(axis=0)
+    dist = np.linalg.norm(tile - paper, axis=2)
+    ink = np.clip(dist / np.percentile(dist, 99), 0, 1)
+    return Image.fromarray(np.uint8(np.round(255 * (1 - INK * ink))), "L")
+
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    for name, _, path, (x0, y0), (pw, ph) in PATTERNS:
+        img = grayscale(seamless(scan(name, path), x0, y0, pw, ph))
+        img = img.resize((TILE_WIDTH, round(TILE_WIDTH * ph / pw)), Image.LANCZOS)
+        out = OUT / f"shelf_wall_{name}.webp"
+        img.convert("RGB").save(out, "WEBP", quality=70, method=6)
+        shown = out.relative_to(ROOT) if out.is_relative_to(ROOT) else out
+        print(f"{shown}: {out.stat().st_size} bytes")
+
+
+if __name__ == "__main__":
+    main()

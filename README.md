@@ -168,4 +168,7 @@ Another inspiration was a painting by [Pierre-Auguste Renoir](https://en.wikiped
 
 ## Licence
 
-[MIT](LICENSE). Bundled fonts are under the SIL Open Font License.
+[MIT](LICENSE). Bundled fonts are under the SIL Open Font License. The
+Shelves wallpapers are William Morris designs from public-domain scans
+in The Metropolitan Museum of Art's
+[Open Access](https://www.metmuseum.org/hubs/open-access) collection.
