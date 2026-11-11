@@ -16,6 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
+import com.chmouel.liseur.providers.flavorSettingsEntries
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.navigation.Route
 import kotlinx.coroutines.delay
@@ -72,7 +73,7 @@ fun ExpandForSettingsFocus(page: Route, expand: () -> Unit) {
     val target = SettingsFocus.key
     val onExpand by rememberUpdatedState(expand)
     LaunchedEffect(target) {
-        if (target != null && SettingsEntries.all().any { it.key == target && it.page == page && it.advanced }) {
+        if (target != null && SettingsEntries.all(flavorSettingsEntries).any { it.key == target && it.page == page && it.advanced }) {
             onExpand()
         }
     }
