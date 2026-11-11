@@ -1,5 +1,6 @@
 package com.chmouel.liseur.translate
 
+import com.chmouel.liseur.ui.settings.AppLanguage
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -51,6 +52,13 @@ class TranslationLanguagesTest {
         assertEquals("fr", TranslationLanguages.target(null, Locale.FRANCE))
         assertEquals("zh-Hant", TranslationLanguages.target(null, Locale.TAIWAN))
         assertEquals("fr", TranslationLanguages.target("garbage-and-more-garbage-tags", Locale.FRANCE))
+    }
+
+    @Test
+    fun `following the app language translates into what the picker calls it`() {
+        AppLanguage.entries.mapNotNull { it.tag }.forEach { tag ->
+            assertEquals(TranslationLanguages.of(tag), TranslationLanguages.target(null, Locale.forLanguageTag(tag)))
+        }
     }
 
     @Test

@@ -22,6 +22,7 @@ class ShortcutResourcesTest {
         for ((tag, label) in mapOf(
             "en" to "Library", "fr" to "Bibliothèque", "es" to "Biblioteca",
             "ru" to "Библиотека", "it" to "Biblioteca", "de" to "Bibliothek", "zh-Hans" to "书库",
+            "cs" to "Knihovna", "pt" to "Biblioteca",
         )) {
             val configuration = Configuration(context.resources.configuration).apply {
                 setLocale(Locale.forLanguageTag(tag))
