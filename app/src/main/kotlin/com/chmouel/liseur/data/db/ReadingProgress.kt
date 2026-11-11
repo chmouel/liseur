@@ -111,6 +111,12 @@ data class ReadingProgress(
     @ColumnInfo(name = "peak_revision") val peakRevision: Long? = null,
     @ColumnInfo(name = "peak_at") val peakAt: Long? = null,
     @ColumnInfo(name = "peak_edition") val peakEdition: String? = null,
+    /**
+     * The local revision at which this device marked the book unread and
+     * reset its place. Unlike the unread mark it survives reading on, so a
+     * peer that has not acknowledged this revision still owes the reset.
+     */
+    @ColumnInfo(name = "unread_reset_revision") val unreadResetRevision: Long? = null,
 ) {
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
@@ -119,8 +125,7 @@ data class ReadingProgress(
     val hasPending: Boolean get() = pendingAccount != null
 
     fun hasPendingUnreadReset(ackedRevision: Long = this.ackedRevision): Boolean =
-        override == com.chmouel.liseur.domain.FinishedOverride.UNREAD &&
-            totalProgression == 0.0 && localRevision > ackedRevision
+        unreadResetRevision != null && unreadResetRevision > ackedRevision
 
     /** What someone has said about this book being read, if anything. */
     val override: com.chmouel.liseur.domain.FinishedOverride
@@ -1001,6 +1006,11 @@ abstract class ReadingProgressDao {
             locator_json = CASE WHEN :resetPosition THEN '{}' ELSE locator_json END,
             total_progression = CASE WHEN :resetPosition THEN 0.0 ELSE total_progression END,
             position_revision = position_revision + CASE WHEN :resetPosition THEN 1 ELSE 0 END,
+            unread_reset_revision = CASE
+                WHEN :resetPosition THEN local_revision + 1
+                WHEN :override = 2 THEN unread_reset_revision
+                ELSE NULL
+            END,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl
@@ -1018,9 +1028,13 @@ abstract class ReadingProgressDao {
         """
         INSERT OR IGNORE INTO reading_progress (
             book_url, locator_json, total_progression, updated_at,
-            status, finished_override, status_revision, local_revision, acked_revision, position_revision
+            status, finished_override, status_revision, local_revision, acked_revision, position_revision,
+            unread_reset_revision
         )
-        VALUES (:bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0, :positionRevision)
+        VALUES (
+            :bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0, :positionRevision,
+            CASE WHEN :override = 2 THEN 1 ELSE NULL END
+        )
         """,
     )
     abstract suspend fun insertFinishedOverride(
@@ -1099,6 +1113,7 @@ abstract class ReadingProgressDao {
             status = :status,
             finished_override = :override,
             status_revision = status_revision + 1,
+            unread_reset_revision = CASE WHEN :override = 2 THEN unread_reset_revision ELSE NULL END,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl AND status_revision = :expectedStatusRevision

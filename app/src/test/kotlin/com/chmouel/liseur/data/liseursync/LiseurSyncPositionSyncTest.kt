@@ -566,6 +566,31 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `reading on offline keeps an undelivered unread reset protected`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        db.syncPeerStateDao().persistPending(LOCAL, peer(), 0.8, "Reading", NOW)
+        FinishedState(db.bookDao(), progress).setFinished(LOCAL, false)
+        val reset = progress.get(LOCAL)!!
+        progress.recordLocal(
+            LOCAL, """{"href":"OEBPS/ch1.xhtml"}""", 0.1, null, null, null, null, "Reading", NOW + 1,
+            resumesReading = true,
+        )
+        val provider = sync(online = false)
+        val coordinator = PositionSyncCoordinator(provider)
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), coordinator.request(SyncScope.Book(LOCAL)))
+        assertTrue(provider.preservedConflict(LOCAL)!!.localUnreadResetPending)
+        assertNull(coordinator.preservedConflict(LOCAL))
+
+        val pending = db.syncPeerStateDao().get(LOCAL, peer())!!
+        db.syncPeerStateDao().upsert(pending.copy(ackedRevision = reset.localRevision))
+        assertFalse(provider.preservedConflict(LOCAL)!!.localUnreadResetPending)
+    }
+
+    @Test
     fun `keeping the local position works offline, because nothing is sent`() = runTest {
         // Unlike the other two servers, this one settles a disagreement
         // by clearing it and letting the next run push. That is a local

@@ -48,6 +48,30 @@ class FinishedStateTest {
     private fun state() = FinishedState(db.bookDao(), db.readingProgressDao(), onFinished = { finished += it })
 
     @Test
+    fun `an unread reset survives reading on and is dropped by marking finished`() =
+        runTest {
+            db.bookDao().upsert(
+                Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+            )
+            val progress = db.readingProgressDao()
+            progress.recordLocal(BOOK, """{"href":"a.xhtml"}""", 0.8, null, null, null, null, "Reading", 10)
+            state().setFinished(BOOK, false)
+            val reset = progress.get(BOOK)!!
+            assertEquals(reset.localRevision, reset.unreadResetRevision)
+
+            progress.recordLocal(
+                BOOK, """{"href":"a.xhtml"}""", 0.1, null, null, null, null, "Reading", 20,
+                resumesReading = true,
+            )
+            val readOn = progress.get(BOOK)!!
+            assertEquals(FinishedOverride.NONE, readOn.override)
+            assertTrue(readOn.hasPendingUnreadReset())
+
+            state().setFinished(BOOK, true)
+            assertNull(progress.get(BOOK)!!.unreadResetRevision)
+        }
+
+    @Test
     fun `only a book the reader finished is reported, not one put back or adopted`() =
         runTest {
             db.bookDao().upsert(

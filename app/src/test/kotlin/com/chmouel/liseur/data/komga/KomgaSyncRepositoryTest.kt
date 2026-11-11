@@ -610,6 +610,28 @@ class KomgaSyncRepositoryTest {
     }
 
     @Test
+    fun `reading on offline keeps an undelivered unread reset protected`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(bookUrl, locatorJson("OEBPS/ch2.xhtml", 0.5, 0.42), 0.42, null, "Reading", 1_000)
+        progress.persistPending(bookUrl, 0.8, "Reading", 2_000, account, 2_000)
+        FinishedState(db.bookDao(), progress).setFinished(bookUrl, false)
+        val reset = progress.get(bookUrl)!!
+        progress.recordLocal(
+            bookUrl, locatorJson("OEBPS/ch1.xhtml", 0.5, 0.1), 0.1, null, null, null, null, "Reading", 3_000,
+            resumesReading = true,
+        )
+        val coordinator = PositionSyncCoordinator(offlineSync())
+
+        assertEquals(SyncOutcome.Failure(SyncFailure.Offline), coordinator.request(SyncScope.Book(bookUrl)))
+        assertTrue(sync.preservedConflict(bookUrl)!!.localUnreadResetPending)
+        assertNull(coordinator.preservedConflict(bookUrl))
+
+        progress.upsert(progress.get(bookUrl)!!.copy(ackedRevision = reset.localRevision))
+        assertFalse(sync.preservedConflict(bookUrl)!!.localUnreadResetPending)
+    }
+
+    @Test
     fun `taking the server's side restores the locator paired before process death`() = runTest {
         connect()
         val progress = db.readingProgressDao()

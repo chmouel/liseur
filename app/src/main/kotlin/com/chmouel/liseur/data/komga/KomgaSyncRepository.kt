@@ -492,6 +492,7 @@ class KomgaSyncRepository(
             baseline = stored?.baselineFor(account),
             localDirty = dirty,
             localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
+            unreadResetUndelivered = stored?.hasPendingUnreadReset() == true,
             exactPositionAgreement = ExactLocatorAnchor.agreement(
                 stored?.locatorJson,
                 exactRemote,

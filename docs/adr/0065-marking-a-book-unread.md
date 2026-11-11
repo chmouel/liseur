@@ -37,10 +37,15 @@ status-only mark still keeps the saved passage.
 The unread write takes its place in `ReadingPositionPublisher`, after
 earlier position and completion events, including their retries, so a
 page turn accepted before it is on disk first and one accepted after it
-lands after it. Reading and unread choices take the same place. Opening
-a book keeps a preserved remote conflict on disk while its peer still
-owes an acknowledgement of the reset. Explicit choices remain
-available.
+lands after it. Reading and unread choices take the same place. The reset is
+recorded on the row as `unread_reset_revision`, the local revision it was
+written at, and stays owed to each peer until that peer's acknowledged
+revision reaches it, shared for Kobo and Komga and per peer for
+liseur-sync and kOSync. While it is owed, opening a book keeps a
+preserved remote conflict on disk instead of offering it, and sync
+pushes the local place rather than restoring the remote one, even after
+reading on has cleared the unread mark. Marking the book finished drops
+the owed reset. Explicit choices remain available.
 
 The next persisted reader movement or local jump clears the unread
 override in the same transaction as the new position and advances the
@@ -61,15 +66,6 @@ towards a series' in-progress total.
 Read-aloud needs playback evidence before it can clear an unread mark.
 `ReadAloudSession.place` saves the anchor to resume from, which after a
 failed first sentence is a position nobody read.
-
-Reading on before the reset is delivered. The reset is protected while
-the unread mark stands: a preserved conflict is not offered and the
-mark is pushed. Reading on clears the mark, and the only evidence left
-that the peer still owes an acknowledgement is the revision counters,
-which ordinary reading moves too. Until a sync has delivered the newer
-local position (#413), a preserved place from before the reset can therefore
-be offered again on the next open. Telling the two apart needs the
-reset kept on the row with the revision it was written at.
 
 Undo. Marking a book read runs `clearTranslationsOnFinish` immediately,
 so an undo offered afterwards cannot restore what it deleted, and a

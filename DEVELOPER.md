@@ -986,6 +986,11 @@ changing reader behavior.
   with neither progression nor locator is not a reading.
 - Scrolled mode: Readium's last locator may lag the viewport; refresh via
   the current scrolled-place helper before any position-dependent action.
+- An unread reset is owed to a peer by `unread_reset_revision`, not by the
+  unread mark, which reading on clears. While the peer's acknowledged
+  revision is below it, no preserved conflict is offered and the merge
+  pushes the local place
+  ([ADR 0065](docs/adr/0065-marking-a-book-unread.md)).
 
 ### liseur-sync positions and accounts
 
