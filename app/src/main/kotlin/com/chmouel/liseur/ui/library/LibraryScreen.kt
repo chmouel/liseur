@@ -103,6 +103,7 @@ import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.ReadingPulse
 import com.chmouel.liseur.domain.ShelfEntry
@@ -970,6 +971,10 @@ fun LibraryScreen(
                                 HomeShelfKind.SERIES -> {
                                     onSetReadingFilter(emptySet())
                                     onSetGroupBySeries(true)
+                                    // Shelves group by their own setting, not the Series chip.
+                                    if (layout.bottomBar && layout.style == LibraryStyle.SHELVES) {
+                                        onSetLayout(layout.copy(shelfGrouping = ShelfGrouping.SERIES))
+                                    }
                                 }
                             }
                             showCatalogue()
