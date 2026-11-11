@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -69,6 +70,27 @@ class FinishedStateTest {
 
             state().setFinished(BOOK, true)
             assertNull(progress.get(BOOK)!!.unreadResetRevision)
+        }
+
+    @Test
+    fun `a delivered unread reset stops being owed even when a page turn raced the push`() =
+        runTest {
+            db.bookDao().upsert(
+                Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+            )
+            val progress = db.readingProgressDao()
+            state().setFinished(BOOK, false)
+            val sent = progress.get(BOOK)!!.localRevision
+            progress.recordLocal(
+                BOOK, """{"href":"a.xhtml"}""", 0.1, null, null, null, null, "Reading", 20,
+                resumesReading = true,
+            )
+
+            progress.ackPush(BOOK, sent, 0.0, ReadingStatus.READY_TO_READ.wireName, "account", 30)
+
+            val row = progress.get(BOOK)!!
+            assertTrue(row.isDirty)
+            assertFalse(row.hasPendingUnreadReset())
         }
 
     @Test

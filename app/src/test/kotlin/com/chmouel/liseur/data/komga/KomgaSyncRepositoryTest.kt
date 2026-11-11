@@ -466,6 +466,30 @@ class KomgaSyncRepositoryTest {
     }
 
     @Test
+    fun `reading on after marking unread still forgets the server's finished book`() = runTest {
+        connect()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(bookUrl, locatorJson("OEBPS/ch20.xhtml", 0.9, 1.0), 1.0, null, "Finished", 5_000)
+        FinishedState(bookDao = db.bookDao(), progressDao = progress).setFinished(bookUrl, false)
+        progress.recordLocal(
+            bookUrl, locatorJson("OEBPS/ch1.xhtml", 0.5, 0.1), 0.1, null, null, null, null, "Reading", 6_000,
+            resumesReading = true,
+        )
+        server.enqueue(json(bookJson(page = 400, completed = true, readDate = "2024-01-01T00:00:00Z")))
+        server.enqueue(json(progressionJson(locatorJson("OEBPS/ch20.xhtml", 0.9, 1.0))))
+        repeat(2) { server.enqueue(MockResponse(code = 204)) }
+
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+
+        val writes = requests().filter { it.method == "DELETE" || it.method == "PUT" }.map { it.method }
+        assertEquals(listOf("DELETE", "PUT"), writes)
+        val row = requireNotNull(progress.get(bookUrl))
+        assertFalse(row.isDirty)
+        assertFalse(row.hasPendingUnreadReset())
+        assertEquals(0.1, row.totalProgression!!, 0.0)
+    }
+
+    @Test
     fun `reading done here is sent as a locator the server will take`() = runTest {
         connect()
         db.readingProgressDao().recordLocal(

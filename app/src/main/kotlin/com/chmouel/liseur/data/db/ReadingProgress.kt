@@ -678,8 +678,24 @@ abstract class ReadingProgressDao {
     ) {
         setBaseline(bookUrl, progression, status, account, now)
         ackRevision(bookUrl, sentRevision)
+        deliverUnreadReset(bookUrl, sentRevision)
         clearPending(bookUrl)
     }
+
+    /**
+     * The server holds an unread reset once a revision at or after it was
+     * sent, even when a page turn kept [ackRevision] from moving.
+     */
+    @Query(
+        """
+        UPDATE reading_progress SET unread_reset_revision = NULL
+        WHERE book_url = :bookUrl AND unread_reset_revision <= :sentRevision
+        """,
+    )
+    protected abstract suspend fun deliverUnreadReset(
+        bookUrl: String,
+        sentRevision: Long,
+    )
 
     @Query(
         """
