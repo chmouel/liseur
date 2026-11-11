@@ -91,11 +91,7 @@ internal fun AppLanguageRow(
                             role = Role.RadioButton,
                             onClick = {
                                 open = false
-                                // System stays tappable: it is also what an
-                                // unlisted language set elsewhere shows as.
-                                if (!chosen || language == AppLanguage.SYSTEM) {
-                                    onSelected(language)
-                                }
+                                onSelected(language)
                             },
                         ),
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
