@@ -229,7 +229,7 @@ class LibraryLayoutTest {
         fun at(day: java.time.LocalDate, minutes: Long) = com.chmouel.liseur.data.db.ReadingSession(
             bookUrl = "b",
             startedAt = day.atStartOfDay(zone).toInstant().toEpochMilli() + 3_600_000,
-            lastCheckpointAt = 0,
+            lastCheckpointAt = day.atStartOfDay(zone).toInstant().toEpochMilli() + 3_600_000,
             durationMs = minutes * 60_000,
         )
 
@@ -241,6 +241,22 @@ class LibraryLayoutTest {
 
         assertEquals(ReadingPulse(minutesToday = 42, streakDays = 2), pulse)
         assertEquals(null, readingPulseOf(emptyList(), today, zone))
+    }
+
+    @Test
+    fun `a sitting past midnight counts on the day it ended`() {
+        val zone = java.time.ZoneOffset.UTC
+        val today = java.time.LocalDate.of(2026, 11, 11)
+        val start = today.minusDays(1).atTime(23, 40).atZone(zone).toInstant().toEpochMilli()
+        val session = com.chmouel.liseur.data.db.ReadingSession(
+            bookUrl = "b",
+            startedAt = start,
+            endedAt = start + 40 * 60_000,
+            lastCheckpointAt = start + 40 * 60_000,
+            durationMs = 40 * 60_000,
+        )
+
+        assertEquals(40, readingPulseOf(listOf(session), today, zone)?.minutesToday)
     }
 
     @Test

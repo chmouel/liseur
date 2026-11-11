@@ -472,7 +472,8 @@ fun readingPulseOf(
 ): ReadingPulse? {
     val byDay = sessions
         .filter { it.durationMs > 0 }
-        .groupBy { Instant.ofEpochMilli(it.startedAt).atZone(zone).toLocalDate() }
+        // Same rule as the statistics: a sitting that runs past midnight counts on the day it ended.
+        .groupBy { Instant.ofEpochMilli(it.endedAt ?: it.lastCheckpointAt).atZone(zone).toLocalDate() }
         .mapValues { (_, day) -> day.sumOf { it.durationMs } }
     val minutes = ((byDay[today] ?: 0L) / 60_000L).toInt()
     val streak = activeDayStreak(byDay.keys, today)
