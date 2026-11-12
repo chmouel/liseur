@@ -560,7 +560,8 @@ internal fun ReaderScreen(
     // Who a selected name is, from the chapters before; null leaves the action out.
     companion: ReaderCompanion? = null,
 ) {
-    var navigator by remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+    val builtNavigator = remember { mutableStateOf<EpubNavigatorFragment?>(null) }
+    val navigator by rememberViewedFragment(builtNavigator, ::consumeInsetsForReadium)
     val navigatorNow by rememberUpdatedState(navigator)
     val readingThemeNow by rememberUpdatedState(readingTheme)
     var boxInWindow by remember { mutableStateOf(Offset.Zero) }
@@ -4010,7 +4011,7 @@ internal fun ReaderScreen(
                         },
                     ),
             ) { fragment ->
-                navigator = fragment
+                builtNavigator.value = fragment
                 fragment.view?.let(::consumeInsetsForReadium)
             }
         }
