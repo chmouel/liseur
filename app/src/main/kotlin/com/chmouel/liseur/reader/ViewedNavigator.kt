@@ -30,13 +30,16 @@ internal val Fragment.publicationViewOrNull: View?
  * One state for the screen's lifetime, read where it is used, as the
  * plain navigator state was: a fragment rebuilt in the foreground
  * already has its view and replaces the old one in the same frame.
- * [onLateView] gets a view created after the fragment was handed over,
- * which the caller's AndroidFragment update could not reach.
+ * [onView] gets every view the fragment shows, so it also reaches
+ * one created after the fragment was handed over, which the caller's
+ * AndroidFragment update could not. That view may appear before this
+ * starts watching, and the update may already have handled it, so
+ * [onView] must be safe to repeat.
  */
 @Composable
 internal fun <T : Fragment> rememberViewedFragment(
     built: State<T?>,
-    onLateView: (View) -> Unit,
+    onView: (View) -> Unit,
 ): State<T?> {
     // Fragment.view is not snapshot state; this ticks when it changes.
     val viewChanges = remember { mutableIntStateOf(0) }
@@ -49,10 +52,10 @@ internal fun <T : Fragment> rememberViewedFragment(
     val fragment = built.value
     DisposableEffect(fragment) {
         if (fragment == null) return@DisposableEffect onDispose {}
-        var seen = fragment.view
+        var seen: View? = null
         val observer = Observer<LifecycleOwner?> { owner ->
             val view = fragment.view
-            if (owner != null && view != null && view !== seen) onLateView(view)
+            if (owner != null && view != null && view !== seen) onView(view)
             seen = view
             viewChanges.intValue++
         }
