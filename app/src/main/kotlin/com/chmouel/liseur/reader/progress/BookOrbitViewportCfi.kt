@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.bookorbit.BookOrbitEpubPackage
 import com.chmouel.liseur.data.bookorbit.BookOrbitOpenedEpub
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.reader.chrome.visibleWebView
+import com.chmouel.liseur.reader.publicationViewOrNull
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -50,7 +51,7 @@ internal object BookOrbitViewportCfi {
         val native = navigator.currentLocator.value
         val href = native.href.toString()
         val generation = layoutGeneration()
-        val root = navigator.publicationView
+        val root = navigator.publicationViewOrNull ?: return null
         val web = visibleWebView(root) ?: return null
         if (isReflowing() || !isCurrent() || !ResourceAddress.shows(web.url, href)) return null
         val result = suspendCancellableCoroutine<String?> { continuation ->

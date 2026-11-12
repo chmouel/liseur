@@ -13,6 +13,13 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
 
 /**
+ * Readium's `publicationView` is `requireView()`, which throws while the
+ * fragment has no view: before it is created, or once it is destroyed.
+ */
+internal val Fragment.publicationViewOrNull: View?
+    get() = view
+
+/**
  * [built] while it has a view, null otherwise.
  *
  * AndroidFragment hands over every fragment it adds, including one added

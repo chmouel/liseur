@@ -46,8 +46,8 @@ internal object SpokenPassage {
         // Readium can put the next resource on screen before it says so,
         // so the view itself must show this resource, before the question
         // and after it.
-        val web = visibleWebView(navigator.publicationView)
-        fun stillShown() = web != null && web === visibleWebView(navigator.publicationView) &&
+        val web = navigator.publicationViewOrNull?.let(::visibleWebView)
+        fun stillShown() = web != null && web === navigator.publicationViewOrNull?.let(::visibleWebView) &&
             ResourceAddress.shows(web.url, locator.href.toString())
         if (!stillShown()) return false
         val highlight = locator.text.highlight?.takeIf { it.isNotBlank() } ?: return false
