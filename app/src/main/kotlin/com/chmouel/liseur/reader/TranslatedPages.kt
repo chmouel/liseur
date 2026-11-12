@@ -1,6 +1,5 @@
 package com.chmouel.liseur.reader
 
-import android.view.View
 import android.webkit.WebView
 import com.chmouel.liseur.reader.chrome.attachedWebViews
 import com.chmouel.liseur.reader.chrome.layoutPasses
@@ -48,13 +47,6 @@ import org.readium.r2.shared.util.Language
  */
 internal object TranslatedPages {
     private const val CSS_SELECTOR = "cssSelector"
-
-    // Readium's publicationView is requireView, which throws once the
-    // fragment's view is gone. A run still following a fragment rebuilt
-    // for a scroll-mode change meets exactly that, so ask for the view it
-    // may no longer have instead.
-    private val EpubNavigatorFragment.publicationViewOrNull: View?
-        get() = view
 
     // A view set aside after it was picked may not answer until shown again; the next layout pass retries.
     private const val ANSWER_MS = 2_000L

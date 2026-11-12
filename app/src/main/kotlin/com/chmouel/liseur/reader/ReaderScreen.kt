@@ -890,7 +890,7 @@ internal fun ReaderScreen(
     // A BookOrbit place is adopted only once its passage is on the page
     // that is actually shown, in the resource it names.
     suspend fun showsBookOrbitPlace(nav: EpubNavigatorFragment, locator: Locator): Boolean {
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return false
         val web = visibleWebView(root) ?: return false
         val origin = IntArray(2)
         val bounds = Rect()
@@ -1159,7 +1159,7 @@ internal fun ReaderScreen(
         while (true) {
             delay(PAGE_REST_POLL_MS)
             val now = SystemClock.elapsedRealtime()
-            val web = visibleWebView(nav.publicationView)
+            val web = nav.publicationViewOrNull?.let(::visibleWebView)
             val here = web?.let {
                 it.getLocationOnScreen(origin)
                 listOf(System.identityHashCode(it), it.scrollX, it.scrollY, origin[0], origin[1])
@@ -1424,7 +1424,7 @@ internal fun ReaderScreen(
                 navigatorNow?.overflow?.value?.readingProgression == ReadingProgression.RTL
             },
             density = { view.resources.displayMetrics.density },
-            width = { navigatorNow?.publicationView?.width?.toFloat() ?: view.width.toFloat() },
+            width = { navigatorNow?.publicationViewOrNull?.width?.toFloat() ?: view.width.toFloat() },
             onTurnPage = pageTurner::turn,
             curl = object : PageTurnDrag.Curl {
                 // The turn in hand. Set when the navigator has jumped and
@@ -1440,7 +1440,7 @@ internal fun ReaderScreen(
                         }
                         turn = started
                         val pageLocation = IntArray(2)
-                        navigatorNow?.publicationView?.getLocationInWindow(pageLocation)
+                        navigatorNow?.publicationViewOrNull?.getLocationInWindow(pageLocation)
                         pageCurl.begin(
                             bitmap = started.page,
                             grabY = grabY - (pageLocation[1] - boxInWindow.y),
@@ -1588,7 +1588,7 @@ internal fun ReaderScreen(
                 if (retireHeldPlace) heldPlace.retire()
                 val automaticMove = scrollMovement.takeIf { suppressScrollMovement }?.beginAutomaticMove()
                 // Read before the capture suspends, so a drag made while it is answered still counts.
-                val landing = automaticMove?.let { scrollOffset(nav, visibleWebView(nav.publicationView)) }
+                val landing = automaticMove?.let { scrollOffset(nav, nav.publicationViewOrNull?.let(::visibleWebView)) }
                 val captured = try {
                     capture(nav, native)
                 } finally {
@@ -1799,7 +1799,7 @@ internal fun ReaderScreen(
             sectionScreens = null
             return@LaunchedEffect
         }
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         val webViews = visibleWebViewCache(root)
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             merge(
@@ -1858,7 +1858,7 @@ internal fun ReaderScreen(
     LaunchedEffect(navigator, eInkDisplay, vendorRefresh) {
         val nav = navigator ?: return@LaunchedEffect
         if (!vendorRefresh || eInkDisplay.vendor == null) return@LaunchedEffect
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         var spokenTo: WebView? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
@@ -2036,7 +2036,7 @@ internal fun ReaderScreen(
     LaunchedEffect(navigator, reflowableText) {
         val nav = navigator ?: return@LaunchedEffect
         if (!reflowableText) return@LaunchedEffect
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         var fitted: Pair<WebView, String>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
@@ -2145,7 +2145,7 @@ internal fun ReaderScreen(
     // resizing the text.
     LaunchedEffect(navigator) {
         val nav = navigator ?: return@LaunchedEffect
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         var withImages: Pair<WebView, String>? = null
         merge(nav.currentLocator.map { }, layoutPasses(root)).collect {
             val web = visibleWebView(root) ?: return@collect
@@ -2757,7 +2757,8 @@ internal fun ReaderScreen(
                     // Decoration bounds belong to the inset publication
                     // view; the popup is placed in the reader's root.
                     val origin = IntArray(2)
-                    nav.publicationView.getLocationInWindow(origin)
+                    val root = nav.publicationViewOrNull ?: return@launch
+                    root.getLocationInWindow(origin)
                     val rect = event.rect?.let {
                         RectF(it).apply {
                             offset(origin[0] - boxInWindow.x, origin[1] - boxInWindow.y)
@@ -2964,7 +2965,7 @@ internal fun ReaderScreen(
     ) {
         if (!canAutoScroll) return@LaunchedEffect
         val nav = navigator ?: return@LaunchedEffect
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         val ticker = AutoScrollTicker()
         val webViews = visibleWebViewCache(root)
         // The pace cannot change under the loop: every term of it is a
@@ -3135,7 +3136,7 @@ internal fun ReaderScreen(
     LaunchedEffect(navigator, effectiveScrolling, lifecycle) {
         val nav = navigator ?: return@LaunchedEffect
         if (!effectiveScrolling) return@LaunchedEffect
-        val root = nav.publicationView
+        val root = nav.publicationViewOrNull ?: return@LaunchedEffect
         val webViews = visibleWebViewCache(root)
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             launch {
@@ -3286,7 +3287,7 @@ internal fun ReaderScreen(
                     isPinching = isPinching,
                     onToggleChrome = { chromeVisible = !chromeVisible },
                     onZoneTap = zones::onTap,
-                    markedOnPage = { event, spoken -> pageMarksAt(nav.publicationView, event, spoken) },
+                    markedOnPage = { event, spoken -> nav.publicationViewOrNull?.let { pageMarksAt(it, event, spoken) } == true },
                 ),
                 zones,
                 ScrollEdgeTurner(
@@ -3379,7 +3380,7 @@ internal fun ReaderScreen(
                 // already where the view model thinks: answering it as
                 // movement would read on past a place the reader was
                 // only sent to, and accept a BookOrbit opening unread.
-                val offset = scrollOffset(nav, visibleWebView(nav.publicationView))
+                val offset = scrollOffset(nav, nav.publicationViewOrNull?.let(::visibleWebView))
                 // Nor while the page is still being moved for them.
                 fun movingForReader() = gate.isGated || pageMovingForReader()
                 if (movingForReader()) return@let
@@ -3589,7 +3590,7 @@ internal fun ReaderScreen(
             touch.answered = true
             return
         }
-        val web = visibleWebView(nav.publicationView) ?: run { touch.answered = true; return }
+        val web = nav.publicationViewOrNull?.let(::visibleWebView) ?: run { touch.answered = true; return }
         if (web.width <= 0 || web.height <= 0) {
             touch.answered = true
             return
@@ -4050,7 +4051,7 @@ internal fun ReaderScreen(
         // PixelCopy captures the inset publication view. Keep its exact
         // size and origin instead of stretching that image over the screen.
         val pageOverlayBounds = Modifier.layout { measurable, constraints ->
-            val pageView = navigator?.publicationView
+            val pageView = navigator?.publicationViewOrNull
             val location = IntArray(2)
             pageView?.getLocationInWindow(location)
             val width = pageView?.width?.coerceAtLeast(1) ?: constraints.maxWidth
