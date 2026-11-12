@@ -1972,6 +1972,11 @@ providers. Rendering reads Room and cached cover files, never the network.
 - Taps go through the unexported `WidgetLaunchActivity`, which hands off
   to `MainActivity` via `LaunchRequests`; the exported `MainActivity` never
   reads widget targets from intent extras.
+- Widgets use no Glance lazy lists, so the manifest disables Glance's
+  `ActionTrampolineActivity` and `InvisibleActionTrampolineActivity`
+  (a stray launch without Glance's extras crashed the app).
+  `NoLazyWidgetListsTest` enforces it; re-enable both before adding a lazy
+  list, and after a Glance bump confirm widget taps still work.
 - The only redraw trigger is `AppContainer` collecting
   `LiseurDatabase.widgetInputs()` over `WIDGET_TABLES` (`books`,
   `reading_progress`, `work_alias`, `remote_server`); add any table that
