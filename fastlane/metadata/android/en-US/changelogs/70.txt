@@ -1,0 +1,1 @@
+Reading is more reliable when opening a book, returning after rotating your phone, or closing the reader. Page text stays clear of the navigation bar. Read aloud works more reliably with long books and keeps the correct cover in its notification when you switch books.
