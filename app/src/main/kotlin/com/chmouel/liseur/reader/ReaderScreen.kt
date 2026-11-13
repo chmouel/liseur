@@ -4093,7 +4093,8 @@ internal fun ReaderScreen(
             val said = nav.currentLocator.map { ResourceAddress.canonicalPath(it.href.toString()) }
             // Readium can show the next resource before its locator names it,
             // so the view on screen is asked too and both are credited.
-            combine(run.swaps, said, shownResource(nav.publicationView)) { swaps, href, shown ->
+            val onScreen = nav.publicationViewOrNull?.let(::shownResource) ?: flowOf(null)
+            combine(run.swaps, said, onScreen) { swaps, href, shown ->
                 // Without a known resource, everything the run placed is credited.
                 val placed = if (href == null && shown == null) {
                     swaps.values.flatten()
