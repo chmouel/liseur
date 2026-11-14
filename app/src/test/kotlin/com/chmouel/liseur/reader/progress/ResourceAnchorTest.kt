@@ -301,6 +301,70 @@ class ResourceAnchorTest {
     }
 
     @Test
+    fun `a quote asked for keeps its passage, not just its chapter`() {
+        // A quote's locator has no app-owned anchor: the words it was
+        // found by are the whole of what says which passage it is. The
+        // resuming ladder would strip them and land at the top of the
+        // chapter, which in a long one is a different page.
+        val quoted = requireNotNull(
+            Locator.fromJSON(
+                JSONObject()
+                    .put("href", "/chapter-7.xhtml")
+                    .put("type", "application/xhtml+xml")
+                    .put("locations", JSONObject().put("progression", 0.81))
+                    .put(
+                        "text",
+                        JSONObject()
+                            .put("before", "and then ")
+                            .put("highlight", "the line asked for")
+                            .put("after", " was gone"),
+                    ),
+            ),
+        )
+        assertFalse(ExactLocatorAnchor.isExact(quoted))
+
+        val kept = ResourceAnchor.passageIn(quoted, setOf("/chapter-7.xhtml"))
+
+        assertEquals(quoted, kept)
+        assertEquals(0.81, kept?.locations?.progression ?: 0.0, 0.0)
+        assertEquals("the line asked for", kept?.text?.highlight)
+    }
+
+    @Test
+    fun `a quote keeps the spine's spelling of its resource and its id`() {
+        val quoted = requireNotNull(
+            Locator.fromJSON(
+                JSONObject()
+                    .put("href", "/OEBPS/ch2%20long.xhtml#p42")
+                    .put("type", "application/xhtml+xml")
+                    .put("locations", JSONObject().put("progression", 0.3))
+                    .put("text", JSONObject().put("highlight", "a word")),
+            ),
+        )
+
+        val kept = ResourceAnchor.passageIn(quoted, setOf("OEBPS/ch2%20long.xhtml"))
+
+        assertEquals("OEBPS/ch2%20long.xhtml#p42", kept?.href.toString())
+        assertEquals("a word", kept?.text?.highlight)
+    }
+
+    @Test
+    fun `a quote elsewhere is refused, and a repeated spine still has it`() {
+        val elsewhere = locator(progression = 0.4)
+        assertNull(ResourceAnchor.passageIn(elsewhere, setOf("/chapter-9.xhtml")))
+        assertNull(ResourceAnchor.passageIn(null, setOf("/chapter-7.xhtml")))
+
+        // A spine that lists the resource twice still contains it.
+        assertEquals(
+            elsewhere,
+            ResourceAnchor.passageIn(
+                elsewhere,
+                listOf("/chapter-7.xhtml", "/chapter-9.xhtml", "/chapter-7.xhtml"),
+            ),
+        )
+    }
+
+    @Test
     fun `nothing usable leaves the caller what it had`() {
         // Preserving the old behaviour: a locator nobody can improve on
         // is still passed through rather than dropped.

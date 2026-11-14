@@ -2038,6 +2038,14 @@
     <string name="home_your_shelves">Your shelves</string>
     <string name="home_pick_up_next">Pick up next</string>
     <string name="home_recently_added">Recently added</string>
+    <string name="home_quote_title">From your reading</string>
+    <string name="home_quote_highlight">Your highlight</string>
+    <string name="home_quote_another">Another quote</string>
+    <string name="home_quote_open">open the passage</string>
+    <string name="home_quote_text">“%1$s”</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Quote from your reading</string>
+    <string name="home_quote_setting_detail">Show a line from a book you have read, taken only from pages you got through</string>
     <string name="home_time_left_minutes">~%d min left</string>
     <string name="home_time_left_hours">~%1$d h %2$d min left</string>
     <string name="home_page_of">Page %1$d of %2$d</string>

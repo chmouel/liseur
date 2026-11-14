@@ -99,6 +99,8 @@ data class LibraryLayout(
     val bottomBar: Boolean = true,
     /** With the bottom bar, whether the app opens on the Home tab or the Library tab. */
     val startOnHome: Boolean = true,
+    /** Whether Home shows a quote from what has been read. */
+    val homeQuote: Boolean = true,
 )
 
 /** What a shelf in [LibraryStyle.SHELVES] is labelled with. */

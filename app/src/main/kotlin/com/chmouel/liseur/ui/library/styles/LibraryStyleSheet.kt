@@ -210,6 +210,16 @@ internal fun LibraryStyleSheet(
                     )
                 }
             }
+            if (tabs || layout.style == LibraryStyle.HOME) {
+                Column(Modifier.padding(horizontal = 8.dp)) {
+                    SwitchRow(
+                        title = stringResource(R.string.home_quote_setting),
+                        subtitle = stringResource(R.string.home_quote_setting_detail),
+                        checked = layout.homeQuote,
+                        onCheckedChange = { onChange(layout.copy(homeQuote = it)) },
+                    )
+                }
+            }
             when (shown) {
                 LibraryStyle.SHELVES -> Column(Modifier.padding(horizontal = 8.dp)) {
                     ChipRow(

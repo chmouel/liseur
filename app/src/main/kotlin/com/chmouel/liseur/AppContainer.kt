@@ -343,6 +343,43 @@ class AppContainer(
         com.chmouel.liseur.translate
             .TranslationAdmissions()
 
+    private val quoteDatabase by lazy {
+        Room
+            .databaseBuilder(context, com.chmouel.liseur.data.quotes.QuoteDatabase::class.java, com.chmouel.liseur.data.quotes.QuoteDatabase.NAME)
+            .fallbackToDestructiveMigration(dropAllTables = true)
+            .build()
+    }
+
+    private val homeQuotesOpening =
+        lazy {
+            com.chmouel.liseur.data.quotes.HomeQuotes(
+                context = context,
+                database = database,
+                store = { quoteDatabase.quotes() },
+                opener = { translationPublicationOpener },
+                scope = applicationScope,
+            )
+        }
+
+    /** Quotes for Home from what has been read; built only once Home asks. */
+    val homeQuotes by homeQuotesOpening
+
+    init {
+        val quotesFile = context.getDatabasePath(com.chmouel.liseur.data.quotes.QuoteDatabase.NAME)
+        applicationScope.launch {
+            database.invalidationTracker.createFlow("books").conflate().collect {
+                if (homeQuotesOpening.isInitialized() || quotesFile.exists()) {
+                    runCatching {
+                        homeQuotes.sweep { urls ->
+                            database.bookDao().worksByUrl(urls).associate { it.url to it.workId }
+                        }
+                    }
+                }
+                delay(SWEEP_SPACING_MS)
+            }
+        }
+    }
+
     /** [bookUrl]'s saved page translations, the store opened only once a page is translated. */
     fun pageTranslations(bookUrl: String): PageTranslationCache =
         object : PageTranslationCache {

@@ -107,7 +107,7 @@ class ReaderActivity : FragmentActivity() {
 
     private val viewModel: ReaderViewModel by viewModels {
         val open = checkNotNull(target)
-        ReaderViewModel.factory(open.url, open.id)
+        ReaderViewModel.factory(open.url, open.id, open.at)
     }
 
     private val companionViewModel: CompanionViewModel by viewModels {
@@ -128,7 +128,7 @@ class ReaderActivity : FragmentActivity() {
      * entry — filing the book afterwards would strand the position
      * under a URI the library knows nothing about.
      */
-    private data class OpenTarget(val url: AbsoluteUrl, val id: String)
+    private data class OpenTarget(val url: AbsoluteUrl, val id: String, val at: String? = null)
 
     private var target by mutableStateOf<OpenTarget?>(null)
 
@@ -161,7 +161,12 @@ class ReaderActivity : FragmentActivity() {
         }
 
         if (fromLibrary != null) {
-            target = OpenTarget(url, intent.getStringExtra(EXTRA_ID) ?: url.toString())
+            target = OpenTarget(
+                url,
+                intent.getStringExtra(EXTRA_ID) ?: url.toString(),
+                // Only on a fresh open: after recreation the reader's own place wins.
+                intent.getStringExtra(EXTRA_AT).takeIf { savedInstanceState == null },
+            )
         } else {
             // Handed over by another app. Shelve it, then read the copy
             // the library settled on. If that cannot be done the book is
@@ -895,7 +900,7 @@ class ReaderActivity : FragmentActivity() {
         super.onNewIntent(intent)
         val url = intent.getStringExtra(EXTRA_URL) ?: return
         val id = intent.getStringExtra(EXTRA_ID) ?: url
-        if (target?.id != id) startActivity(intent(this, url, id))
+        if (target?.id != id) startActivity(intent(this, url, id, intent.getStringExtra(EXTRA_AT)))
     }
 
     override fun onResume() {
@@ -1021,6 +1026,7 @@ class ReaderActivity : FragmentActivity() {
     companion object {
         private const val EXTRA_URL = "url"
         private const val EXTRA_ID = "id"
+        private const val EXTRA_AT = "at"
 
         private val VOLUME_KEYS = setOf(
             KeyEvent.KEYCODE_VOLUME_DOWN,
@@ -1052,10 +1058,12 @@ class ReaderActivity : FragmentActivity() {
             KeyEvent.KEYCODE_DPAD_UP,
         )
 
-        fun intent(context: Context, url: String, id: String = url): Intent =
+        /** [at] is a locator to open at for a look, leaving the saved place where it is. */
+        fun intent(context: Context, url: String, id: String = url, at: String? = null): Intent =
             Intent(context, ReaderActivity::class.java)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_ID, id)
+                .apply { if (at != null) putExtra(EXTRA_AT, at) }
     }
 }
 

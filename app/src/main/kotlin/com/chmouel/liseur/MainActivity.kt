@@ -1239,10 +1239,18 @@ private fun LibraryRoute(
 
     val pulse by viewModel.pulse.collectAsStateWithLifecycle()
     val heroDetail by viewModel.heroDetail.collectAsStateWithLifecycle()
+    val homeQuote by viewModel.homeQuote.collectAsStateWithLifecycle()
     LibraryScreen(
         state = state,
         pulse = pulse,
         heroDetail = heroDetail,
+        homeQuote = homeQuote,
+        onOpenQuote = { quote ->
+            quote.book.openableUri()?.let {
+                context.startActivity(ReaderActivity.intent(context, it, quote.book.url, at = quote.locatorJson))
+            }
+        },
+        onAnotherQuote = viewModel::anotherQuote,
         onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(

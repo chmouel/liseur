@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -55,6 +56,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -62,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.quotes.HomeQuote
 import com.chmouel.liseur.domain.HomePick
 import com.chmouel.liseur.domain.HomeSeriesSet
 import com.chmouel.liseur.domain.HomeShelfKind
@@ -101,6 +105,9 @@ internal fun HomeLibrary(
     onBrowseAll: () -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    quote: HomeQuote? = null,
+    onOpenQuote: (HomeQuote) -> Unit = {},
+    onAnotherQuote: () -> Unit = {},
 ) {
     val desk = state.home
     val wide = widthClass() != WidthClass.COMPACT
@@ -144,6 +151,16 @@ internal fun HomeLibrary(
                     if (hasHero) heroCard(Modifier.fillMaxWidth())
                     ShelfTiles(desk.tiles, onOpenShelf, Modifier.fillMaxWidth())
                 }
+            }
+        }
+        if (quote != null) {
+            item(key = "home:quote") {
+                QuoteCard(
+                    quote = quote,
+                    onOpen = { onOpenQuote(quote) },
+                    onAnother = onAnotherQuote,
+                    modifier = gutter.fillMaxWidth(),
+                )
             }
         }
         if (desk.seriesSets.isNotEmpty()) {
@@ -263,6 +280,61 @@ private fun DeskCard(
             ),
     ) {
         content()
+    }
+}
+
+/** A line from a book already read; opening it goes to the passage. */
+@Composable
+private fun QuoteCard(
+    quote: HomeQuote,
+    onOpen: () -> Unit,
+    onAnother: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    DeskCard(
+        onClick = onOpen,
+        onClickLabel = stringResource(R.string.home_quote_open),
+        modifier = modifier,
+    ) {
+        Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(
+                        if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onAnother) {
+                    Icon(Icons.Outlined.Shuffle, contentDescription = stringResource(R.string.home_quote_another))
+                }
+            }
+            Text(
+                text = stringResource(R.string.home_quote_text, quote.text),
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
+                fontStyle = FontStyle.Italic,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+            val source = listOfNotNull(quote.book.displayTitle, quote.book.displayAuthor).joinToString(", ")
+            Text(
+                text = stringResource(R.string.home_quote_source, source),
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 12.dp, end = 12.dp),
+            )
+            quote.chapter?.let { chapter ->
+                Text(
+                    text = chapter,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+            }
+        }
     }
 }
 

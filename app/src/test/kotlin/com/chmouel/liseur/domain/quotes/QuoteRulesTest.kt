@@ -1,0 +1,58 @@
+package com.chmouel.liseur.domain.quotes
+
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class QuoteRulesTest {
+
+    @Test
+    fun `a line inside the read point is inside it, one past it is not`() {
+        assertTrue(QuoteRules.withinCeiling(0.4, 0.5))
+        assertTrue(QuoteRules.withinCeiling(0.5, 0.5))
+        assertFalse(QuoteRules.withinCeiling(0.9, 0.5))
+    }
+
+    @Test
+    fun `the last bits of a fraction are not a spoiler`() {
+        // Two writers of the same place differ in the tail; a whole page
+        // of difference is a different thing entirely.
+        assertTrue(QuoteRules.withinCeiling(0.5 + 1e-9, 0.5))
+        assertFalse(QuoteRules.withinCeiling(0.51, 0.5))
+    }
+
+    @Test
+    fun `a mark nobody placed is not evidence of having read there`() {
+        assertFalse(QuoteRules.withinCeiling(null, 1.0))
+        assertFalse(QuoteRules.withinCeiling(Double.NaN, 1.0))
+    }
+
+    @Test
+    fun `a scan still describes the book only while the work is the same`() {
+        assertTrue(QuoteRules.stillSameWork("urn:isbn:1", "urn:isbn:1"))
+        assertTrue(QuoteRules.stillSameWork(null, null))
+        assertFalse(QuoteRules.stillSameWork("urn:isbn:1", "urn:isbn:2"))
+        // One side naming the work and the other not is not the same claim.
+        assertFalse(QuoteRules.stillSameWork(null, "urn:isbn:1"))
+        assertFalse(QuoteRules.stillSameWork("urn:isbn:1", null))
+    }
+
+    @Test
+    fun `the wait is until midnight, and never zero`() {
+        val zone = ZoneId.of("Europe/Paris")
+        val today = LocalDate.of(2024, 3, 9)
+        val noon = ZonedDateTime.of(today.atTime(12, 0), zone).toInstant().toEpochMilli()
+        val justBefore = ZonedDateTime.of(today.atTime(23, 59, 59), zone).toInstant().toEpochMilli()
+
+        assertEquals(12 * 60 * 60 * 1000L, QuoteRules.millisUntilTomorrow(today, noon, zone))
+        // A clock a hair before midnight must not ask again every
+        // millisecond, and a clock already past it waits rather than
+        // spinning.
+        assertEquals(60_000L, QuoteRules.millisUntilTomorrow(today, justBefore, zone))
+        assertEquals(60_000L, QuoteRules.millisUntilTomorrow(today, noon + 24 * 60 * 60 * 1000L, zone))
+    }
+}

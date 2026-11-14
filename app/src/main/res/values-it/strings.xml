@@ -1964,6 +1964,14 @@
     <string name="home_your_shelves">I tuoi scaffali</string>
     <string name="home_pick_up_next">Da riprendere</string>
     <string name="home_recently_added">Aggiunti di recente</string>
+    <string name="home_quote_title">Dalle tue letture</string>
+    <string name="home_quote_highlight">Il tuo evidenziato</string>
+    <string name="home_quote_another">Un\'altra citazione</string>
+    <string name="home_quote_open">apri il passo</string>
+    <string name="home_quote_text">«%1$s»</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Citazione dalle tue letture</string>
+    <string name="home_quote_setting_detail">Mostra una frase di un libro letto, presa solo dalle pagine già lette</string>
     <string name="home_time_left_minutes">~%d min rimasti</string>
     <string name="home_time_left_hours">~%1$d h %2$d min rimasti</string>
     <string name="home_page_of">Pagina %1$d di %2$d</string>

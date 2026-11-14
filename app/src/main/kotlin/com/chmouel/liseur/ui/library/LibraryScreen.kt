@@ -265,6 +265,10 @@ fun LibraryScreen(
     pulse: ReadingPulse? = null,
     /** The chapter and time left of the book the Home hero shows. */
     heroDetail: HeroDetail? = null,
+    /** A quote from what has been read, shown on Home. */
+    homeQuote: com.chmouel.liseur.data.quotes.HomeQuote? = null,
+    onOpenQuote: (com.chmouel.liseur.data.quotes.HomeQuote) -> Unit = {},
+    onAnotherQuote: () -> Unit = {},
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     onStartWithFreeBooks: () -> Unit = {},
@@ -959,6 +963,9 @@ fun LibraryScreen(
                     showHome -> HomeLibrary(
                         state = state,
                         hero = heroDetail,
+                        quote = homeQuote,
+                        onOpenQuote = onOpenQuote,
+                        onAnotherQuote = onAnotherQuote,
                         listState = homeState,
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },

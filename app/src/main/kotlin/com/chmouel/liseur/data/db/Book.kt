@@ -250,6 +250,19 @@ data class Book(
     val openableUrl: String? get() = localUri ?: url.takeIf { downloadState == DownloadState.DOWNLOADED }
 }
 
+/**
+ * Which work a book's URL holds, for caches that outlive a file being
+ * replaced under the same path.
+ *
+ * [workId] is null when the file never named itself, which is not the
+ * same claim as naming a work: a cache cannot show that unknown and
+ * known are the same book.
+ */
+data class BookWork(
+    @ColumnInfo(name = "url") val url: String,
+    @ColumnInfo(name = "work_id") val workId: String?,
+)
+
 @Dao
 interface BookDao {
     /**
@@ -316,6 +329,13 @@ interface BookDao {
 
     @Query("SELECT url FROM books WHERE url IN (:urls)")
     suspend fun presentUrls(urls: List<String>): List<String>
+
+    /**
+     * The work each of [urls] holds, for caches keyed by URL that have to
+     * tell a replaced file from the book that used to be at that path.
+     */
+    @Query("SELECT url, work_id FROM books WHERE url IN (:urls)")
+    suspend fun worksByUrl(urls: List<String>): List<BookWork>
 
     /** Puts a book away, or brings it back to the shelf. */
     @Query("UPDATE books SET archived_at = :archivedAt WHERE url = :url")

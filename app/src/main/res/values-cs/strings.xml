@@ -2128,6 +2128,14 @@
     <string name="home_your_shelves">Vaše police</string>
     <string name="home_pick_up_next">Číst dál</string>
     <string name="home_recently_added">Nedávno přidané</string>
+    <string name="home_quote_title">Z vaší četby</string>
+    <string name="home_quote_highlight">Vaše zvýraznění</string>
+    <string name="home_quote_another">Jiný citát</string>
+    <string name="home_quote_open">otevřít pasáž</string>
+    <string name="home_quote_text">„%1$s“</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Citát z vaší četby</string>
+    <string name="home_quote_setting_detail">Zobrazí větu z knihy, kterou čtete, vybranou jen ze stran, které už máte za sebou</string>
     <string name="home_time_left_minutes">zbývá ~%d min</string>
     <string name="home_time_left_hours">zbývá ~%1$d h %2$d min</string>
     <string name="home_page_of">Strana %1$d z %2$d</string>

@@ -1976,6 +1976,14 @@
     <string name="home_your_shelves">Deine Regale</string>
     <string name="home_pick_up_next">Als Nächstes</string>
     <string name="home_recently_added">Kürzlich hinzugefügt</string>
+    <string name="home_quote_title">Aus deiner Lektüre</string>
+    <string name="home_quote_highlight">Deine Markierung</string>
+    <string name="home_quote_another">Anderes Zitat</string>
+    <string name="home_quote_open">Stelle öffnen</string>
+    <string name="home_quote_text">„%1$s“</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Zitat aus deiner Lektüre</string>
+    <string name="home_quote_setting_detail">Zeigt einen Satz aus einem gelesenen Buch, nur aus Seiten, die du schon gelesen hast</string>
     <string name="home_time_left_minutes">Noch ~%d Min.</string>
     <string name="home_time_left_hours">Noch ~%1$d Std. %2$d Min.</string>
     <string name="home_page_of">Seite %1$d von %2$d</string>

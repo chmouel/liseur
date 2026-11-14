@@ -1899,6 +1899,14 @@
     <string name="home_your_shelves">你的书架</string>
     <string name="home_pick_up_next">接着读</string>
     <string name="home_recently_added">最近添加</string>
+    <string name="home_quote_title">摘自你的阅读</string>
+    <string name="home_quote_highlight">你的高亮</string>
+    <string name="home_quote_another">换一句</string>
+    <string name="home_quote_open">打开该段落</string>
+    <string name="home_quote_text">“%1$s”</string>
+    <string name="home_quote_source">—— %1$s</string>
+    <string name="home_quote_setting">阅读摘句</string>
+    <string name="home_quote_setting_detail">显示一句你读过的书中的话，只取自已读过的页面</string>
     <string name="home_time_left_minutes">约剩 %d 分钟</string>
     <string name="home_time_left_hours">约剩 %1$d 小时 %2$d 分钟</string>
     <string name="home_page_of">第 %1$d 页，共 %2$d 页</string>
