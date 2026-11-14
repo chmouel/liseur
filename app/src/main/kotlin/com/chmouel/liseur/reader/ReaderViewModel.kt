@@ -1656,6 +1656,12 @@ class ReaderViewModel(
             // still a passage: the beginning is the honest origin then
             // rather than refusing to open the quote.
             val lookOrigin = storedTarget ?: safeFallback
+            // A peek is not a visit. An approximate place prepared for the
+            // opening was prepared to be settled by the reading that
+            // started from it, and nobody read from it: left standing,
+            // the first page turn after the quote would agree a place the
+            // reader never saw.
+            if (lookTarget != null) approximateOpening = null
             val initialLocator = lookTarget
                 ?: incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
