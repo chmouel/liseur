@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.library
 
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
+import com.chmouel.liseur.data.db.readAtFor
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.readingStatusFor
@@ -59,6 +60,9 @@ class FinishedState(
     /**
      * Applies a status from a partner as a new local state without moving the passage,
      * unless the row now belongs to another account.
+     *
+     * [finishedAt] is when the partner says the book was finished; without
+     * it the book counts as finished now.
      */
     suspend fun adoptRemoteStatus(
         bookUrl: String,
@@ -66,6 +70,7 @@ class FinishedState(
         account: String,
         override: FinishedOverride,
         status: ReadingStatus,
+        finishedAt: Long? = null,
     ): Boolean {
         val at = now()
         var applied = false
@@ -80,7 +85,7 @@ class FinishedState(
                 progression = progression,
                 now = at,
             )
-            if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, at)
+            if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, readAtFor(finishedAt, at))
         }
         return applied
     }
@@ -109,6 +114,10 @@ class FinishedState(
     /**
      * The position moved, so whatever it now implies stands — unless
      * someone has said otherwise, in which case they still have.
+     *
+     * A newly finished book is dated by when its reading happened, so a
+     * book finished long ago on another device does not arrive as
+     * finished on the day it synced.
      */
     suspend fun refreshFromProgress(bookUrl: String) {
         val at = now()
@@ -116,7 +125,7 @@ class FinishedState(
             val row = progressDao.get(bookUrl) ?: return@inTransaction
             val finished =
                 readingStatusFor(row.totalProgression, row.override) == ReadingStatus.FINISHED
-            applyFlag(bookUrl, finished, at)
+            applyFlag(bookUrl, finished, readAtFor(row.readAt, at))
         }
     }
 

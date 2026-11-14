@@ -1050,6 +1050,7 @@
     <string name="reading_stats">Stats de lecture</string>
     <string name="reading_stats_books_read">Livres entamés</string>
     <string name="reading_stats_books_finished">Livres terminés</string>
+    <string name="reading_stats_books_finished_note">Parmi les livres lus pendant cette période</string>
     <string name="reading_stats_by_book">Par livre</string>
     <string name="reading_stats_scope_all_devices">tous vos appareils</string>
     <string name="reading_stats_scope_this_device">cet appareil uniquement</string>

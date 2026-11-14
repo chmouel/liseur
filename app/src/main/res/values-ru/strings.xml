@@ -1140,6 +1140,7 @@
     <string name="reading_stats">Статистика чтения</string>
     <string name="reading_stats_books_read">Книг начато</string>
     <string name="reading_stats_books_finished">Книг дочитано</string>
+    <string name="reading_stats_books_finished_note">Среди книг, которые вы читали за этот период</string>
     <string name="reading_stats_by_book">По книгам</string>
     <string name="reading_stats_scope_all_devices">все ваши устройства</string>
     <string name="reading_stats_scope_this_device">только это устройство</string>
