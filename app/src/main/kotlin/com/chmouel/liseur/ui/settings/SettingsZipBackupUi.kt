@@ -131,6 +131,8 @@ internal class SettingsBackupViewModel(
     private val bookExport: BookExportRepository,
     /** Holds where the prepared archive waits; the password never leaves this call. */
     private val savedState: SavedStateHandle,
+    /** Loads the books offered for inclusion; a test can hold it to check the export waits. */
+    private val loadBookCandidates: suspend () -> List<BookBackupCandidate> = repository::bookCandidates,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SettingsBackupState())
     val state = _state.asStateFlow()
@@ -149,7 +151,7 @@ internal class SettingsBackupViewModel(
         _state.update { it.copy(includeBooks = enabled) }
         if (enabled && _state.value.bookCandidates == null && candidatesJob?.isActive != true) {
             candidatesJob = viewModelScope.launch(Dispatchers.IO) {
-                val candidates = repository.bookCandidates()
+                val candidates = loadBookCandidates()
                 val initialSelection = candidates
                     .filter { it.sizeBytes == null || it.sizeBytes <= SettingsBackupRepository.MAX_BOOK_BYTES }
                     .mapTo(linkedSetOf()) { it.url }

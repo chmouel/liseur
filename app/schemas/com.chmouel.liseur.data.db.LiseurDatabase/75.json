@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 75,
-    "identityHash": "787071565f5a0b48b09e81b1054eb7a2",
+    "identityHash": "2951d41f26fb90ecdd2f60cc5e74e962",
     "entities": [
       {
         "tableName": "reading_progress",
@@ -1018,7 +1018,7 @@
       },
       {
         "tableName": "reading_sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `book_url` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `last_checkpoint_at` INTEGER NOT NULL, `duration_ms` INTEGER NOT NULL, `start_progression` REAL, `end_progression` REAL, `idle_ms` INTEGER, `uploaded_at` INTEGER, `legacy_evidence_unknown` INTEGER NOT NULL DEFAULT 0, `imported_at` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `book_url` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `last_checkpoint_at` INTEGER NOT NULL, `duration_ms` INTEGER NOT NULL, `start_progression` REAL, `end_progression` REAL, `idle_ms` INTEGER, `uploaded_at` INTEGER, `legacy_evidence_unknown` INTEGER NOT NULL DEFAULT 0, `imported_at` INTEGER, `imported_from` TEXT)",
         "fields": [
           {
             "fieldPath": "id",
@@ -1086,6 +1086,11 @@
             "fieldPath": "importedAt",
             "columnName": "imported_at",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "importedFrom",
+            "columnName": "imported_from",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -2778,7 +2783,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '787071565f5a0b48b09e81b1054eb7a2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2951d41f26fb90ecdd2f60cc5e74e962')"
     ]
   }
 }

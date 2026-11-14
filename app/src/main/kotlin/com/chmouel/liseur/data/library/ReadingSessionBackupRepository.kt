@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.domain.BackedUpBookSessions
+import com.chmouel.liseur.domain.BackedUpSession
 import com.chmouel.liseur.domain.KnownBook
 import com.chmouel.liseur.domain.MAX_SESSION_BOOKS
 import com.chmouel.liseur.domain.MAX_SESSION_DURATION_MS
@@ -107,8 +108,9 @@ class ReadingSessionBackupRepository(
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
         val importedAt = now()
         val seenInArchive = mutableSetOf<Pair<String, Long>>()
-        val candidatesByBook = LinkedHashMap<String, MutableList<ReadingSession>>()
-        val archivedByTarget = LinkedHashMap<String, MutableSet<String>>()
+        /** Archived address to the library address it resolves to on this device. */
+        val targetsByArchived = LinkedHashMap<String, String>()
+        val sittings = mutableListOf<Triple<String, String, BackedUpSession>>()
         var alreadyPresent = 0
 
         for (book in books) {
@@ -116,15 +118,43 @@ class ReadingSessionBackupRepository(
             val targetUrl = aliases[book.bookId]
                 ?: matchBackedUpBookUrl(book.bookId, book.title, book.author, known)
                 ?: book.bookId
-            if (targetUrl != book.bookId) {
-                archivedByTarget.getOrPut(targetUrl) { linkedSetOf() } += book.bookId
-            }
+            targetsByArchived[book.bookId] = targetUrl
             for (session in book.sessions) {
-                if (!seenInArchive.add(targetUrl to session.startedAt)) {
+                if (!seenInArchive.add(book.bookId to session.startedAt)) {
                     alreadyPresent++
                     continue
                 }
-                candidatesByBook.getOrPut(targetUrl) { mutableListOf() } += ReadingSession(
+                sittings += Triple(book.bookId, targetUrl, session)
+            }
+        }
+
+        var added = 0
+        inTransaction {
+            // Restored sittings can sit under an address they no longer resolve to. Collapse the
+            // copies that would double a sitting already under the target, then move the rest.
+            for ((archivedUrl, targetUrl) in targetsByArchived) {
+                if (archivedUrl == targetUrl) continue
+                sessionDao.collapseImportedDuplicates(archivedUrl, targetUrl)
+                sessionDao.reattachImportedSessions(archivedUrl, targetUrl)
+            }
+            val startsByTarget = HashMap<String, MutableSet<Long>>()
+            val startsByArchived = HashMap<String, MutableSet<Long>>()
+            val toInsert = mutableListOf<ReadingSession>()
+            for ((archivedUrl, targetUrl, session) in sittings) {
+                val targetStarts = startsByTarget.getOrPut(targetUrl) {
+                    sessionDao.startedAtFor(targetUrl).toHashSet()
+                }
+                // A sitting stays the same one for this archive address even when the book it
+                // resolves to changes, so the archived identity is part of the duplicate rule.
+                val archivedStarts = startsByArchived.getOrPut(archivedUrl) {
+                    (sessionDao.startedAtFor(archivedUrl) + sessionDao.importedStartsFor(archivedUrl))
+                        .toHashSet()
+                }
+                if (!targetStarts.add(session.startedAt) || !archivedStarts.add(session.startedAt)) {
+                    alreadyPresent++
+                    continue
+                }
+                toInsert += ReadingSession(
                     bookUrl = targetUrl,
                     startedAt = session.startedAt,
                     endedAt = session.endedAt,
@@ -136,34 +166,9 @@ class ReadingSessionBackupRepository(
                     uploadedAt = null,
                     legacyEvidenceUnknown = false,
                     importedAt = importedAt,
+                    importedFrom = archivedUrl,
                 )
-            }
-        }
-
-        var added = 0
-        inTransaction {
-            // Sittings restored earlier stay under the URL they had then; move them to the
-            // book they now resolve to before deciding what is already here.
-            for ((targetUrl, archivedUrls) in archivedByTarget) {
-                for (archivedUrl in archivedUrls) {
-                    sessionDao.reattachImportedSessions(archivedUrl, targetUrl)
-                }
-            }
-            val toInsert = mutableListOf<ReadingSession>()
-            for ((bookUrl, candidates) in candidatesByBook) {
-                val existingStarts = sessionDao.startedAtFor(bookUrl).toHashSet()
-                // Sittings still under an archived address, imported or recorded here, already count.
-                for (archivedUrl in archivedByTarget[bookUrl].orEmpty()) {
-                    existingStarts += sessionDao.startedAtFor(archivedUrl)
-                }
-                for (candidate in candidates) {
-                    if (existingStarts.add(candidate.startedAt)) {
-                        toInsert += candidate
-                        added++
-                    } else {
-                        alreadyPresent++
-                    }
-                }
+                added++
             }
             if (toInsert.isNotEmpty()) {
                 sessionDao.insertAll(toInsert)
