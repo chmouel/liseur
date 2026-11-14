@@ -130,6 +130,15 @@ import androidx.navigation3.ui.defaultTransitionSpec
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import com.chmouel.liseur.ui.navigation.LaunchStack
+import com.chmouel.liseur.ui.navigation.MainTab
+import com.chmouel.liseur.ui.navigation.MainTabBar
+import com.chmouel.liseur.ui.navigation.MainTabsState
+import com.chmouel.liseur.ui.navigation.mainTab
+import com.chmouel.liseur.ui.navigation.mainTabBarSpace
+import com.chmouel.liseur.ui.navigation.rememberMainTabsState
+import com.chmouel.liseur.ui.navigation.selectTab
+import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.navigation.RouteBackStackSaver
 import com.chmouel.liseur.ui.navigation.closeSettings
@@ -139,7 +148,11 @@ import com.chmouel.liseur.ui.navigation.launchStack
 import com.chmouel.liseur.ui.navigation.openDetail
 import com.chmouel.liseur.ui.navigation.pop
 import com.chmouel.liseur.ui.navigation.push
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import com.chmouel.liseur.data.settings.DefinitionTarget
 import com.chmouel.liseur.providers.flavorSettingsEntries
@@ -370,6 +383,49 @@ private fun LiseurApp(
         emptyMap()
     }
 
+    // The bottom bar. Home, Library and Series are views of the library
+    // screen, told apart by its own state; Stats and Settings are routes.
+    val tabs = rememberMainTabsState()
+    val library: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory)
+    val libraryState by library.state.collectAsStateWithLifecycle()
+    val libraryLayout = libraryState.layout
+    val libraryTab = when {
+        tabs.pickedHome ?: libraryLayout.startOnHome -> MainTab.HOME
+        libraryState.filters.groupBySeries -> MainTab.SERIES
+        else -> MainTab.LIBRARY
+    }
+    val shownTab = backStack.mainTab(libraryTab)?.takeIf {
+        libraryLayout.bottomBar && (it != libraryTab || tabs.libraryBar)
+    }
+    val selectTab: (MainTab) -> Unit = { tab ->
+        if (tab == shownTab) {
+            // Only the library screen scrolls back up; Stats and Settings stay put.
+            if (tab != MainTab.STATS && tab != MainTab.SETTINGS) tabs.topRequest++
+        } else {
+            when (tab) {
+                MainTab.HOME -> tabs.pickedHome = true
+                MainTab.LIBRARY -> {
+                    tabs.pickedHome = false
+                    // Also when coming from Home: Series may have left the grouping on.
+                    if (libraryState.filters.groupBySeries) library.setGroupBySeries(false)
+                }
+                MainTab.SERIES -> {
+                    tabs.pickedHome = false
+                    library.setReadingFilter(com.chmouel.liseur.ui.library.ALL_READING_STATES)
+                    library.setGroupBySeries(true)
+                    // Shelves group by their own setting, not the Series chip.
+                    if (libraryLayout.style == LibraryStyle.SHELVES) {
+                        library.setLayout(libraryLayout.copy(shelfGrouping = ShelfGrouping.SERIES))
+                    }
+                }
+                MainTab.STATS, MainTab.SETTINGS -> Unit
+            }
+            if (Route.SettingsBackup in backStack) settingsZipBackup.close()
+            Snapshot.withMutableSnapshot { backStack.selectTab(tab) }
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
     NavDisplay(
         backStack = backStack,
         onBack = back,
@@ -430,6 +486,7 @@ private fun LiseurApp(
                                 openFreeCatalogs = true
                                 backStack.push(Route.BrowseLibraries)
                             },
+                            tabs = tabs,
                         )
                     }
 
@@ -461,9 +518,10 @@ private fun LiseurApp(
                                     backStack.push(Route.BookStats(url, book.title))
                                 }
                             },
-                            onBack = back,
+                            onBack = back.takeIf { shownTab == null },
                             onSelectRange = model::selectRange,
                             onRetry = model::refreshServerInsights,
+                            bottomBarSpace = if (shownTab != null) mainTabBarSpace() else 0.dp,
                         )
                     }
 
@@ -550,7 +608,8 @@ private fun LiseurApp(
                             hiddenBooks = library.hidden,
                             server = context.container.remoteAccount.server,
                             onOpenAbout = { openPage(Route.About) },
-                            onBack = closeSettings,
+                            onBack = closeSettings.takeIf { shownTab == null },
+                            bottomBarSpace = if (shownTab != null) mainTabBarSpace() else 0.dp,
                             onOpenSearch = { backStack.push(Route.SettingsSearch) },
                             flavorReadingRows = {
                                 RowDivider()
@@ -784,6 +843,14 @@ private fun LiseurApp(
             }
         },
     )
+    shownTab?.let { tab ->
+        MainTabBar(
+            selected = tab,
+            onSelect = selectTab,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+    }
 }
 
 /** A screen change with no animation, for e-paper. */
@@ -899,6 +966,7 @@ private fun LibraryRoute(
     onConnectServer: () -> Unit,
     onBrowseLibraries: () -> Unit,
     onStartWithFreeBooks: () -> Unit,
+    tabs: MainTabsState,
     widgetRequest: LaunchRequest? = null,
     onWidgetHandled: () -> Unit = {},
     viewModel: LibraryViewModel = viewModel(factory = LibraryViewModel.Factory),
@@ -1308,6 +1376,7 @@ private fun LibraryRoute(
         onSetGroupBySeries = viewModel::setGroupBySeries,
         onSetReadingFilter = viewModel::setReadingFilter,
         onSetLayout = viewModel::setLayout,
+        tabs = tabs,
         onClearFilters = viewModel::clearFilters,
         onSetSearchActive = viewModel::setSearchActive,
         onSeriesSelected = { shelf ->

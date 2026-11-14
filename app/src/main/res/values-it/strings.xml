@@ -1948,12 +1948,14 @@
     <string name="library_compact_list">Righe compatte</string>
     <string name="library_compact_list_detail">Copertine più piccole e una riga per titolo</string>
     <string name="library_bottom_bar">Barra inferiore</string>
-    <string name="library_bottom_bar_detail">Mostra il libro in lettura e le schede Home, Libreria e Altro in basso</string>
+    <string name="library_bottom_bar_detail">Mostra in basso le schede Home, Libreria, Serie, Statistiche e Impostazioni</string>
     <string name="library_hero_card">Scheda superiore</string>
     <string name="library_hero_card_detail">Mostra il libro in lettura in una scheda in cima alla libreria</string>
     <string name="library_tab_library">Libreria</string>
     <string name="home_continue">Continua</string>
     <string name="home_series_underway">Serie che stai leggendo</string>
+    <string name="home_see_all">Vedi tutto</string>
+    <string name="tab_stats">Statistiche</string>
     <string name="shelf_other_books">Altri libri</string>
     <string name="list_new">Nuovo</string>
     <string name="library_chip_all">Tutti</string>

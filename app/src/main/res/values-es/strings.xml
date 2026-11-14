@@ -1948,12 +1948,14 @@
     <string name="library_compact_list">Filas compactas</string>
     <string name="library_compact_list_detail">Portadas más pequeñas y una línea por título</string>
     <string name="library_bottom_bar">Barra inferior</string>
-    <string name="library_bottom_bar_detail">Mostrar el libro actual y las pestañas Inicio, Biblioteca y Más abajo</string>
+    <string name="library_bottom_bar_detail">Mostrar abajo las pestañas Inicio, Biblioteca, Series, Estadísticas y Ajustes</string>
     <string name="library_hero_card">Tarjeta superior</string>
     <string name="library_hero_card_detail">Mostrar el libro actual en una tarjeta en la parte superior de la biblioteca</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
     <string name="home_series_underway">Series que estás leyendo</string>
+    <string name="home_see_all">Ver todo</string>
+    <string name="tab_stats">Estadísticas</string>
     <string name="shelf_other_books">Otros libros</string>
     <string name="list_new">Nuevo</string>
     <string name="library_chip_all">Todos</string>

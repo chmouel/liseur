@@ -2009,12 +2009,14 @@
     <string name="library_compact_list">Linhas compactas</string>
     <string name="library_compact_list_detail">Capas menores e uma linha por título</string>
     <string name="library_bottom_bar">Barra inferior</string>
-    <string name="library_bottom_bar_detail">Mostrar o livro atual e as abas Início, Biblioteca e Mais na parte inferior</string>
+    <string name="library_bottom_bar_detail">Mostrar as abas Início, Biblioteca, Séries, Estatísticas e Configurações na parte inferior</string>
     <string name="library_hero_card">Cartão superior</string>
     <string name="library_hero_card_detail">Mostrar o livro atual em um cartão no topo da biblioteca</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
     <string name="home_series_underway">Séries que você está lendo</string>
+    <string name="home_see_all">Ver tudo</string>
+    <string name="tab_stats">Estatísticas</string>
     <string name="shelf_other_books">Outros livros</string>
     <string name="list_new">Novo</string>
     <string name="library_chip_all">Todos</string>

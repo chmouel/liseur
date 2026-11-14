@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
@@ -108,20 +109,25 @@ import kotlin.math.roundToInt
 fun ReadingStatsScreen(
     state: ReadingStatsUiState,
     onOpenBook: (BookReadingStats) -> Unit,
-    onBack: () -> Unit,
+    /** Null when Stats is a tab of the bottom bar, which has no way back. */
+    onBack: (() -> Unit)?,
     onSelectRange: (StatsRange) -> Unit = {},
     onRetry: () -> Unit = {},
+    /** The room the bottom bar covers, navigation bar included. */
+    bottomBarSpace: Dp = 0.dp,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.reading_stats)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
+                        }
                     }
                 },
             )
@@ -188,7 +194,7 @@ fun ReadingStatsScreen(
                 contentPadding = PaddingValues(
                     start = 20.dp,
                     end = 20.dp,
-                    bottom = 36.dp + padding.calculateBottomPadding(),
+                    bottom = 36.dp + maxOf(padding.calculateBottomPadding(), bottomBarSpace),
                     top = 4.dp,
                 ),
             ) {

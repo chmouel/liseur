@@ -2022,12 +2022,14 @@
     <string name="library_compact_list">Compact rows</string>
     <string name="library_compact_list_detail">Smaller covers and one line per title</string>
     <string name="library_bottom_bar">Bottom bar</string>
-    <string name="library_bottom_bar_detail">Show the current book and Home, Library and More tabs at the bottom</string>
+    <string name="library_bottom_bar_detail">Show Home, Library, Series, Stats and Settings tabs at the bottom</string>
     <string name="library_hero_card">Top card</string>
     <string name="library_hero_card_detail">Show the current book in a card at the top of the library</string>
     <string name="library_tab_library">Library</string>
     <string name="home_continue">Continue</string>
     <string name="home_series_underway">Series you are reading</string>
+    <string name="home_see_all">See all</string>
+    <string name="tab_stats">Stats</string>
     <string name="shelf_other_books">Other books</string>
     <string name="list_new">New</string>
     <string name="library_chip_all">All</string>

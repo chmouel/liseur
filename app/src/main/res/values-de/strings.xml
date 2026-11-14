@@ -1960,12 +1960,14 @@
     <string name="library_compact_list">Kompakte Zeilen</string>
     <string name="library_compact_list_detail">Kleinere Cover und eine Zeile pro Titel</string>
     <string name="library_bottom_bar">Untere Leiste</string>
-    <string name="library_bottom_bar_detail">Aktuelles Buch sowie Start, Bibliothek und Mehr unten anzeigen</string>
+    <string name="library_bottom_bar_detail">Start, Bibliothek, Reihen, Statistik und Einstellungen unten als Tabs anzeigen</string>
     <string name="library_hero_card">Obere Karte</string>
     <string name="library_hero_card_detail">Aktuelles Buch in einer Karte oben in der Bibliothek anzeigen</string>
     <string name="library_tab_library">Bibliothek</string>
     <string name="home_continue">Weiterlesen</string>
     <string name="home_series_underway">Reihen, die du liest</string>
+    <string name="home_see_all">Alle anzeigen</string>
+    <string name="tab_stats">Statistik</string>
     <string name="shelf_other_books">Weitere Bücher</string>
     <string name="list_new">Neu</string>
     <string name="library_chip_all">Alle</string>
