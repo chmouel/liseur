@@ -146,7 +146,26 @@ class ReadingSessionBackupRepository(
                 sessionDao.reattachImportedSessions(archivedUrl, targetUrl)
             }
             for ((archivedUrl, targetUrl, session) in sittings) {
-                if (importSources.sessionIdFor(archivedUrl, session.startedAt) != null) {
+                val knownId = importSources.sessionIdFor(archivedUrl, session.startedAt)
+                if (knownId != null) {
+                    // The sitting is known, but it may still sit beside a copy the new target holds.
+                    val survivor = sessionDao.idFor(targetUrl, session.startedAt)
+                    if (survivor != null && survivor != knownId) {
+                        val known = sessionDao.rowById(knownId)
+                        val survivorRow = sessionDao.rowById(survivor)
+                        val redundant = when {
+                            known == null || survivorRow == null -> null
+                            known.importedAt == null && survivorRow.importedAt != null -> survivor
+                            survivorRow.importedAt == null && known.importedAt != null -> knownId
+                            known.importedAt != null -> knownId
+                            else -> null
+                        }
+                        if (redundant != null) {
+                            val keeper = if (redundant == knownId) survivor else knownId
+                            importSources.reassign(redundant, keeper)
+                            sessionDao.deleteById(redundant)
+                        }
+                    }
                     alreadyPresent++
                     continue
                 }

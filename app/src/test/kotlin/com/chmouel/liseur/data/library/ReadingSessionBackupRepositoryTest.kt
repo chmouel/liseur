@@ -156,8 +156,58 @@ class ReadingSessionBackupRepositoryTest {
         assertEquals(localUrl, db.readingSessionDao().allOnce().single().bookUrl)
 
         // The merged identities still recognise the sitting when the book stops resolving again.
+        db.bookDao().deleteByUrls(listOf(localUrl))
+        assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(fromA))
+        assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(fromT))
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
+    fun `an address resolved before the target existed is recorded against the existing row`() = runTest {
+        val sitting = listOf(BackedUpSession(5_000, 65_000, 60_000, 0, 0.1, 0.2))
+        val fromA = listOf(BackedUpBookSessions("calibre:a", "A Book", "An Author", sitting))
+        val fromT = listOf(BackedUpBookSessions("calibre:t", "A Book", "An Author", sitting))
+
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(fromT))
+        assertEquals(
+            SessionRestoreResult(alreadyPresent = 1),
+            repository.restore(fromA, aliases = mapOf("calibre:a" to "calibre:t")),
+        )
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+
+        // Both addresses stay recognised once the shared book goes away.
         assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(fromA))
         assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
+    fun `an address kept elsewhere is merged with the copy the target holds`() = runTest {
+        val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/stu.epub"
+        val sitting = listOf(BackedUpSession(6_000, 66_000, 60_000, 0, 0.1, 0.2))
+        val fromA = listOf(BackedUpBookSessions("calibre:a", "A Book", "An Author", sitting))
+        val fromT = listOf(BackedUpBookSessions("calibre:t", "T Book", "T Author", sitting))
+        db.bookDao().upsert(
+            Book(
+                url = localUrl, title = "Local Twin", author = "Local Author", coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, localUri = localUrl,
+            ),
+        )
+
+        // A lands on the local book, T arrives on its own, then A resolves onto T.
+        assertEquals(
+            SessionRestoreResult(added = 1),
+            repository.restore(fromA, aliases = mapOf("calibre:a" to localUrl)),
+        )
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(fromT))
+        assertEquals(
+            SessionRestoreResult(alreadyPresent = 1),
+            repository.restore(fromA, aliases = mapOf("calibre:a" to "calibre:t")),
+        )
+
+        val rows = db.readingSessionDao().allOnce()
+        assertEquals(1, rows.size)
+        assertEquals("calibre:t", rows.single().bookUrl)
+        assertEquals(60_000L, rows.single().durationMs)
     }
 
     @Test
