@@ -171,6 +171,9 @@ interface ReadingSessionDao {
     @Query("SELECT id FROM reading_sessions WHERE book_url = :bookUrl AND started_at = :startedAt ORDER BY id LIMIT 1")
     suspend fun idFor(bookUrl: String, startedAt: Long): Long?
 
+    @Query("SELECT * FROM reading_sessions WHERE id = :id")
+    suspend fun rowById(id: Long): ReadingSession?
+
     @Query("SELECT * FROM reading_sessions WHERE book_url = :bookUrl AND imported_at IS NOT NULL")
     suspend fun importedRowsUnder(bookUrl: String): List<ReadingSession>
 
