@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 75,
-    "identityHash": "2951d41f26fb90ecdd2f60cc5e74e962",
+    "identityHash": "8263725dc8c9a9208269d3e1066605dc",
     "entities": [
       {
         "tableName": "reading_progress",
@@ -1018,7 +1018,7 @@
       },
       {
         "tableName": "reading_sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `book_url` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `last_checkpoint_at` INTEGER NOT NULL, `duration_ms` INTEGER NOT NULL, `start_progression` REAL, `end_progression` REAL, `idle_ms` INTEGER, `uploaded_at` INTEGER, `legacy_evidence_unknown` INTEGER NOT NULL DEFAULT 0, `imported_at` INTEGER, `imported_from` TEXT)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `book_url` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `last_checkpoint_at` INTEGER NOT NULL, `duration_ms` INTEGER NOT NULL, `start_progression` REAL, `end_progression` REAL, `idle_ms` INTEGER, `uploaded_at` INTEGER, `legacy_evidence_unknown` INTEGER NOT NULL DEFAULT 0, `imported_at` INTEGER)",
         "fields": [
           {
             "fieldPath": "id",
@@ -1086,11 +1086,6 @@
             "fieldPath": "importedAt",
             "columnName": "imported_at",
             "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "importedFrom",
-            "columnName": "imported_from",
-            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -2779,11 +2774,66 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "session_import_source",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`archived_url` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `session_id` INTEGER NOT NULL, PRIMARY KEY(`archived_url`, `started_at`), FOREIGN KEY(`session_id`) REFERENCES `reading_sessions`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "archivedUrl",
+            "columnName": "archived_url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "archived_url",
+            "started_at"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_session_import_source_session_id",
+            "unique": false,
+            "columnNames": [
+              "session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_session_import_source_session_id` ON `${TABLE_NAME}` (`session_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "reading_sessions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "session_id"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2951d41f26fb90ecdd2f60cc5e74e962')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8263725dc8c9a9208269d3e1066605dc')"
     ]
   }
 }

@@ -43,6 +43,7 @@ import androidx.sqlite.execSQL
         GlossaryEntry::class,
         BookAiPreferences::class,
         BookMetadata::class,
+        SessionImportSource::class,
     ],
     version = 75,
     exportSchema = true,
@@ -84,12 +85,24 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun glossaryDao(): GlossaryDao
     abstract fun bookMetadataDao(): BookMetadataDao
 
+    abstract fun sessionImportSourceDao(): SessionImportSourceDao
+
     companion object {
         /** Marks sessions restored from a backup so they are never uploaded to liseur-sync. */
         val MIGRATION_74_75 = object : Migration(74, 75) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE `reading_sessions` ADD COLUMN `imported_at` INTEGER")
-                connection.execSQL("ALTER TABLE `reading_sessions` ADD COLUMN `imported_from` TEXT")
+                connection.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `session_import_source` (`archived_url` TEXT NOT NULL, " +
+                        "`started_at` INTEGER NOT NULL, `session_id` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`archived_url`, `started_at`), " +
+                        "FOREIGN KEY(`session_id`) REFERENCES `reading_sessions`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE)",
+                )
+                connection.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_session_import_source_session_id` " +
+                        "ON `session_import_source` (`session_id`)",
+                )
             }
         }
 

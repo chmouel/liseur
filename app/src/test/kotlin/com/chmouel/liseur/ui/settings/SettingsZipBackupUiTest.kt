@@ -340,7 +340,7 @@ class SettingsZipBackupUiTest {
             AnnotationBackupRepository(context, db.annotationDao(), db.bookDao()),
             ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao()),
             companion = CompanionBackupRepository({ companionStore }, db.bookDao(), storeExists = { true }),
-            sessions = ReadingSessionBackupRepository(db.readingSessionDao(), db.bookDao()),
+            sessions = ReadingSessionBackupRepository(db.readingSessionDao(), db.bookDao(), db.sessionImportSourceDao()),
             books = BookBackupRepository(context, db.bookDao()) { _, _ -> ImportResult.Failed },
         )
         return SettingsBackupViewModel(

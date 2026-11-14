@@ -465,6 +465,7 @@ class AppContainer(
                 com.chmouel.liseur.data.library.ReadingSessionBackupRepository(
                     database.readingSessionDao(),
                     database.bookDao(),
+                    database.sessionImportSourceDao(),
                     inTransaction = { work -> database.withTransaction { work() } },
                 ),
             books =
