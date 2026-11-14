@@ -83,6 +83,28 @@ object QuoteRules {
     }
 
     /**
+     * Whether a cached paragraph is inside what the reader has read.
+     *
+     * A mark names where a passage opens, but a cached line is a whole
+     * paragraph: [start] is where it opens, in the scale two clients
+     * share, and [end] is its whole-book fraction, which is where it
+     * closes. A paragraph that opens before the ceiling and closes after
+     * it is not inside it.
+     */
+    fun lineWithinCeiling(
+        start: PassagePlace?,
+        end: Double?,
+        place: PassagePlace?,
+        readPoint: Double,
+    ): Boolean {
+        if (!withinCeiling(end, readPoint)) return false
+        if (start != null && place != null && start.resource == place.resource) {
+            return start.progression.isFinite() && start.progression <= place.progression + SLACK
+        }
+        return true
+    }
+
+    /**
      * Whether a scan recorded under [scanned] still describes the file
      * [current] holds.
      *
