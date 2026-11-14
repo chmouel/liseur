@@ -246,6 +246,33 @@ class SettingsZipBackupUiTest {
     }
 
     @Test
+    fun `export waits for the book list before taking the selection`() = scenario {
+        val epub = folder.newFile("waited.epub").apply { writeBytes("waited-epub-bytes".toByteArray()) }
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(
+            Book(
+                url = url, title = "Waited", author = "Author", coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, downloadState = DownloadState.DOWNLOADED, localUri = url,
+            ),
+        )
+
+        val model = model()
+        model.setIncludeBooks(true)
+        // Export straight away: the list is still loading, so its selection is not ready yet.
+        model.prepareExport(null, includeTranslations = true)
+        await { model.state.value.saveRequest != null }
+        model.saveLaunched(model.state.value.saveRequest!!)
+        val target = File(folder.root, "waited-books.zip")
+        model.writeExport(Uri.fromFile(target))
+        await { model.state.value.status != null }
+
+        val exported = model.state.value.status as SettingsBackupUiStatus.Exported
+        assertEquals(1, exported.books)
+        val sha = MessageDigest.getInstance("SHA-256").digest(epub.readBytes()).joinToString("") { "%02x".format(it) }
+        ZipFile(target).use { zip -> assertNotNull(zip.getEntry("books/$sha.epub")) }
+    }
+
+    @Test
     fun `a restored prepared archive with books is written even when saved counts are missing`() = scenario {
         val epub = folder.newFile("survive.epub").apply { writeBytes("surviving-epub-bytes".toByteArray()) }
         val url = Uri.fromFile(epub).toString()
@@ -310,7 +337,8 @@ class SettingsZipBackupUiTest {
 
     /** Waits for work the screen handed to a background dispatcher; the test scheduler drives Main only. */
     private suspend fun await(condition: () -> Boolean) {
-        repeat(500) {
+        // Real IO keeps running while the whole suite builds; give it more than a test-sized window.
+        repeat(1_000) {
             if (condition()) return
             withContext(Dispatchers.Default) { delay(10) }
         }

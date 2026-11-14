@@ -199,9 +199,12 @@ internal class SettingsBackupViewModel(
         }
         val current = _state.value
         val includeSessions = current.includeSessions
-        val bookUrls = if (current.includeBooks) current.selectedBooks else emptySet()
         runBusy {
             try {
+                // A book list still loading would export an empty selection despite the toggle.
+                if (_state.value.includeBooks) candidatesJob?.join()
+                val chosen = _state.value
+                val bookUrls = if (chosen.includeBooks) chosen.selectedBooks else emptySet()
                 // A prepared archive the picker never consumed is dropped before a new one.
                 takePreparedExport()?.let { repository.discardPreparedExport(it) }
                 when (
