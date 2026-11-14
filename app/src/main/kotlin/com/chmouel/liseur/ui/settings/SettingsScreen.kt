@@ -53,6 +53,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.BuildConfig
@@ -99,8 +100,11 @@ fun SettingsScreen(
     onOpenSettingsBackup: () -> Unit,
     server: Flow<RemoteServer?>,
     onOpenAbout: () -> Unit,
-    onBack: () -> Unit,
+    /** Null when Settings is a tab of the bottom bar, which has no way back. */
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    /** The room the bottom bar covers, navigation bar included. */
+    bottomBarSpace: Dp = 0.dp,
     onOpenSearch: () -> Unit = {},
     /** Rows a build flavor adds to Reading: read aloud, in both builds. */
     flavorReadingRows: @Composable () -> Unit = {},
@@ -117,11 +121,13 @@ fun SettingsScreen(
             LargeTopAppBar(
                 title = { Text(stringResource(R.string.settings)) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -147,7 +153,7 @@ fun SettingsScreen(
                     // nothing after each one, and the switch at the end is a
                     // reach away from the label that explains it.
                     .padding(horizontal = 20.dp)
-                    .padding(bottom = 32.dp),
+                    .padding(bottom = 32.dp + (bottomBarSpace - padding.calculateBottomPadding()).coerceAtLeast(0.dp)),
             ) {
                 SettingsGroup(stringResource(R.string.settings_appearance)) {
                     ChipRow(

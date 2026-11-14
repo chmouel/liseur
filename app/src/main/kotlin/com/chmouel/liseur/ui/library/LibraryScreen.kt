@@ -10,7 +10,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.animation.core.LinearEasing
@@ -35,17 +34,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -61,10 +54,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Close
@@ -72,7 +63,6 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -119,9 +109,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TextButton
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.SnackbarHost
@@ -130,7 +117,10 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -168,7 +158,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -180,6 +169,9 @@ import com.chmouel.liseur.data.remote.CatalogStatus
 import com.chmouel.liseur.data.remote.SyncFailure
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.ui.BusyBar
+import com.chmouel.liseur.ui.navigation.MainTabsState
+import com.chmouel.liseur.ui.navigation.mainTabBarSpace
+import com.chmouel.liseur.ui.navigation.rememberMainTabsState
 import com.chmouel.liseur.ui.messageRes
 import kotlinx.coroutines.CancellationException
 import com.chmouel.liseur.data.db.Book
@@ -276,6 +268,8 @@ fun LibraryScreen(
     onNoticeShown: (Long) -> Unit = {},
     widgetBook: Book? = null,
     onWidgetBookHandled: () -> Boolean = { true },
+    /** The bottom bar's state; the bar itself is drawn above the screens. */
+    tabs: MainTabsState = rememberMainTabsState(),
     modifier: Modifier = Modifier,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -512,8 +506,9 @@ fun LibraryScreen(
     // is one of the styles. A Home style saved from the latter leaves the
     // Library tab on Classic. The tab the reader picked wins over the
     // saved one the app opens on.
-    var pickedTab by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    val homeTab = pickedTab ?: layout.startOnHome
+    SideEffect { tabs.libraryBar = showBottomBar }
+    DisposableEffect(tabs) { onDispose { tabs.libraryBar = false } }
+    val homeTab = tabs.pickedHome ?: layout.startOnHome
     val catalogueStyle = if (layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
     val showHome = !archived && if (layout.bottomBar) homeTab else layout.style == LibraryStyle.HOME
     val activeStyle = if (showHome) LibraryStyle.HOME else catalogueStyle
@@ -532,9 +527,19 @@ fun LibraryScreen(
         }
     }
 
+    // Reselecting the shown tab scrolls it back up. The count seen last is
+    // kept, so coming back to the screen does not replay a request.
+    var seenTopRequest by rememberSaveable { mutableIntStateOf(tabs.topRequest) }
+    LaunchedEffect(tabs.topRequest) {
+        if (tabs.topRequest != seenTopRequest) {
+            seenTopRequest = tabs.topRequest
+            scrollStyleToTop(activeStyle)
+        }
+    }
+
     val showCatalogue: () -> Unit = {
         if (layout.bottomBar) {
-            pickedTab = false
+            tabs.pickedHome = false
         } else {
             onSetLayout(layout.copy(style = LibraryStyle.CLASSIC))
         }
@@ -544,27 +549,10 @@ fun LibraryScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHost) },
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        // The bar floats over the content; this keeps the room it covers
+        // in the insets, so lists scroll out from under it.
         bottomBar = {
-            if (showBottomBar) {
-                LibraryBottomBar(
-                    // The Home hero already shows the book, large.
-                    continueReading = state.continueReading.takeIf { !homeTab },
-                    homeSelected = homeTab,
-                    syncing = syncing,
-                    onOpenBook = { book -> openShelfBook(book) },
-                    onBookActions = { book -> sheetBook = book },
-                    onSelectHome = {
-                        if (homeTab) scrollStyleToTop(LibraryStyle.HOME) else pickedTab = true
-                    },
-                    onSelectLibrary = {
-                        if (!homeTab) scrollStyleToTop(catalogueStyle) else pickedTab = false
-                    },
-                    onOpenStats = onOpenStats,
-                    onSetUpTranslation = onSetUpTranslation,
-                    onSyncNow = syncNow.takeIf { state.canSyncPositions },
-                    onOpenSettings = onOpenSettings,
-                )
-            }
+            if (showBottomBar) Spacer(Modifier.height(mainTabBarSpace()))
         },
         topBar = {
             if (state.isSearchActive) {
@@ -1117,7 +1105,7 @@ fun LibraryScreen(
             books = previewBooks,
             onChange = { chosen ->
                 // Turning the tabs on from the Home style lands on the Home tab.
-                if (chosen.bottomBar && !layout.bottomBar) pickedTab = chosen.style == LibraryStyle.HOME
+                if (chosen.bottomBar && !layout.bottomBar) tabs.pickedHome = chosen.style == LibraryStyle.HOME
                 onSetLayout(chosen)
             },
             onDismiss = { choosingStyle = false },
@@ -3096,219 +3084,6 @@ private fun SortRow(
     }
 }
 
-/**
- * A Kindle-style bottom bar with the book currently being read jutting up
- * on the start side and Home / Library / More tabs across the rest.
- */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun LibraryBottomBar(
-    continueReading: ContinueReading?,
-    homeSelected: Boolean,
-    syncing: Boolean,
-    onOpenBook: (Book) -> Unit,
-    onBookActions: (Book) -> Unit,
-    onSelectHome: () -> Unit,
-    onSelectLibrary: () -> Unit,
-    onOpenStats: () -> Unit,
-    onSetUpTranslation: (() -> Unit)?,
-    onSyncNow: (() -> Unit)?,
-    onOpenSettings: () -> Unit,
-) {
-    val eInk = LocalEInk.current
-    val haptics = LocalHapticFeedback.current
-    var moreOpen by remember { mutableStateOf(false) }
-
-    Box(modifier = Modifier.fillMaxWidth()) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            tonalElevation = if (eInk) 0.dp else 3.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(top = if (continueReading != null) 20.dp else 0.dp),
-        ) {
-            Column(Modifier.navigationBarsPadding()) {
-                HorizontalDivider(
-                    thickness = Dp.Hairline,
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp)
-                        .padding(
-                            start = if (continueReading != null) 88.dp else 8.dp,
-                            end = 8.dp,
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BottomBarTab(
-                        label = stringResource(R.string.library_style_home),
-                        icon = if (homeSelected) Icons.Filled.Home else Icons.Outlined.Home,
-                        selected = homeSelected,
-                        onClick = onSelectHome,
-                        modifier = Modifier.weight(1f),
-                    )
-                    BottomBarTab(
-                        label = stringResource(R.string.library_tab_library),
-                        icon = if (!homeSelected) Icons.Filled.LocalLibrary else Icons.Outlined.LocalLibrary,
-                        selected = !homeSelected,
-                        onClick = onSelectLibrary,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Box(
-                        modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        BottomBarTab(
-                            label = stringResource(R.string.more_options),
-                            icon = Icons.AutoMirrored.Outlined.FormatListBulleted,
-                            selected = moreOpen,
-                            onClick = { moreOpen = true },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        DropdownMenu(
-                            expanded = moreOpen,
-                            onDismissRequest = { moreOpen = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.reading_stats)) },
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.BarChart, contentDescription = null)
-                                },
-                                onClick = {
-                                    moreOpen = false
-                                    onOpenStats()
-                                },
-                            )
-                            onSetUpTranslation?.let { setUp ->
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.translation_setup_menu)) },
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Translate, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        moreOpen = false
-                                        setUp()
-                                    },
-                                )
-                            }
-                            onSyncNow?.let { sync ->
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.server_sync_now)) },
-                                    enabled = !syncing,
-                                    leadingIcon = {
-                                        Icon(Icons.Outlined.Sync, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        moreOpen = false
-                                        sync()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.settings)) },
-                                leadingIcon = {
-                                    Icon(Icons.Outlined.Settings, contentDescription = null)
-                                },
-                                onClick = {
-                                    moreOpen = false
-                                    onOpenSettings()
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        continueReading?.let { entry ->
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))
-                    .padding(start = 20.dp)
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = listOfNotNull(entry.book.title, entry.book.author)
-                            .joinToString(", ")
-                    }
-                    .combinedClickable(
-                        onClick = { onOpenBook(entry.book) },
-                        onLongClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onBookActions(entry.book)
-                        },
-                        onClickLabel = stringResource(R.string.read_book),
-                        onLongClickLabel = stringResource(R.string.book_actions),
-                    ),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                BookCover(
-                    book = entry.book,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier
-                        .width(50.dp)
-                        .height(74.dp)
-                        .then(
-                            if (eInk) Modifier
-                            else Modifier.shadow(6.dp, RoundedCornerShape(4.dp)),
-                        ),
-                )
-                entry.progression?.let { progression ->
-                    LinearProgressIndicator(
-                        progress = { progression.toFloat() },
-                        strokeCap = StrokeCap.Round,
-                        modifier = Modifier
-                            .padding(top = 3.dp)
-                            .width(50.dp)
-                            .height(3.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BottomBarTab(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val tint = if (selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    }
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(24.dp),
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = tint,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-/** "19 books", or "12 of 19" when the filters hide some. */
 @Composable
 private fun shelfCountLine(state: LibraryUiState): String {
     val shown = state.books.size

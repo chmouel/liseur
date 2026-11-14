@@ -1948,12 +1948,14 @@
     <string name="library_compact_list">Lignes compactes</string>
     <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
     <string name="library_bottom_bar">Barre inférieure</string>
-    <string name="library_bottom_bar_detail">Afficher le livre en cours et les onglets Accueil, Bibliothèque et Plus en bas</string>
+    <string name="library_bottom_bar_detail">Afficher les onglets Accueil, Bibliothèque, Séries, Stats et Réglages en bas</string>
     <string name="library_hero_card">Carte supérieure</string>
     <string name="library_hero_card_detail">Afficher le livre en cours dans une carte en haut de la bibliothèque</string>
     <string name="library_tab_library">Bibliothèque</string>
     <string name="home_continue">Continuer</string>
     <string name="home_series_underway">Séries en cours</string>
+    <string name="home_see_all">Tout voir</string>
+    <string name="tab_stats">Stats</string>
     <string name="shelf_other_books">Autres livres</string>
     <string name="list_new">Nouveau</string>
     <string name="library_chip_all">Tous</string>

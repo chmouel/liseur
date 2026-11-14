@@ -2112,12 +2112,14 @@
     <string name="library_compact_list">Úsporné řádky</string>
     <string name="library_compact_list_detail">Menší obálky a názvy knih na jednom řádku</string>
     <string name="library_bottom_bar">Spodní lišta</string>
-    <string name="library_bottom_bar_detail">Dole zobrazovat aktuální knihu a záložky Domů, Knihovna a Další</string>
+    <string name="library_bottom_bar_detail">Dole zobrazovat záložky Domů, Knihovna, Série, Statistiky a Nastavení</string>
     <string name="library_hero_card">Horní karta</string>
     <string name="library_hero_card_detail">Zobrazovat právě rozečtenou knihu na kartě v horní části knihovny</string>
     <string name="library_tab_library">Knihovna</string>
     <string name="home_continue">Pokračovat</string>
     <string name="home_series_underway">Rozečtené série</string>
+    <string name="home_see_all">Zobrazit vše</string>
+    <string name="tab_stats">Statistiky</string>
     <string name="shelf_other_books">Ostatní knihy</string>
     <string name="list_new">Novinka</string>
     <string name="library_chip_all">Vše</string>

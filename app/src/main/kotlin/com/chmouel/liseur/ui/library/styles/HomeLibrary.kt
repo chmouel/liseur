@@ -1,5 +1,6 @@
 package com.chmouel.liseur.ui.library.styles
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -7,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,12 +27,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material.icons.outlined.CollectionsBookmark
-import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -41,11 +45,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
@@ -81,6 +90,9 @@ import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.ContinueReading
 import com.chmouel.liseur.ui.library.HeroDetail
 import com.chmouel.liseur.ui.library.LibraryUiState
+import com.chmouel.liseur.ui.theme.HomePalette
+import com.chmouel.liseur.ui.theme.TileTint
+import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.widthClass
 import kotlin.math.ceil
 
@@ -144,12 +156,12 @@ internal fun HomeLibrary(
             if (wide && hasHero) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = gutter) {
                     heroCard(Modifier.weight(0.55f))
-                    ShelfTiles(desk.tiles, onOpenShelf, Modifier.weight(0.45f))
+                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, Modifier.weight(0.45f))
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(24.dp), modifier = gutter) {
                     if (hasHero) heroCard(Modifier.fillMaxWidth())
-                    ShelfTiles(desk.tiles, onOpenShelf, Modifier.fillMaxWidth())
+                    ShelfTiles(desk.tiles, onOpenShelf, onBrowseAll, Modifier.fillMaxWidth())
                 }
             }
         }
@@ -257,14 +269,25 @@ private fun DeskCard(
     onLongClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     shape: Shape = RoundedCornerShape(16.dp),
+    color: Color? = null,
     content: @Composable () -> Unit,
 ) {
     val eInk = LocalEInk.current
+    val palette = homePalette()
     val haptics = LocalHapticFeedback.current
     Surface(
         shape = shape,
-        color = if (eInk) Color.Transparent else MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        color = when {
+            eInk -> Color.Transparent
+            color != null -> color
+            else -> palette?.card ?: MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        border = when {
+            eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            palette != null -> BorderStroke(1.dp, palette.cardBorder)
+            else -> null
+        },
+        shadowElevation = if (palette != null) 2.dp else 0.dp,
         modifier = modifier
             .clip(shape)
             .combinedClickable(
@@ -342,10 +365,19 @@ private fun QuoteCard(
 @Composable
 private fun Pill(text: String, modifier: Modifier = Modifier) {
     val eInk = LocalEInk.current
+    val palette = homePalette()
     Surface(
         shape = CircleShape,
-        color = if (eInk) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSecondaryContainer,
+        color = when {
+            eInk -> MaterialTheme.colorScheme.surface
+            palette != null -> palette.pill
+            else -> MaterialTheme.colorScheme.secondaryContainer
+        },
+        contentColor = when {
+            eInk -> MaterialTheme.colorScheme.onSurface
+            palette != null -> palette.onPill
+            else -> MaterialTheme.colorScheme.onSecondaryContainer
+        },
         border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
         modifier = modifier,
     ) {
@@ -436,6 +468,7 @@ private fun HeroCard(
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
+    val palette = homePalette()
     val wide = widthClass() != WidthClass.COMPACT
     DeskCard(
         onClick = onOpen,
@@ -444,103 +477,171 @@ private fun HeroCard(
         shape = RoundedCornerShape(24.dp),
         modifier = modifier,
     ) {
-        Row(Modifier.padding(18.dp)) {
-            BookCover(
-                book = book,
-                modifier = Modifier
-                    .width(if (wide) 128.dp else 104.dp)
-                    .height(if (wide) 192.dp else 156.dp)
-                    .then(if (eInk) Modifier else Modifier.shadow(10.dp, RoundedCornerShape(10.dp))),
-            )
-            Column(
-                Modifier
-                    .padding(start = 18.dp)
-                    .weight(1f),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            palette?.let { HeroBackdrop(book, it, Modifier.matchParentSize()) }
+            Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
                         letterSpacing = 0.8.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onActions, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.book_actions))
-                    }
-                }
-                chapter?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = palette?.onPill ?: MaterialTheme.colorScheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                }
-                Text(
-                    text = book.displayTitle,
-                    style = if (wide) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                book.displayAuthor?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-                progression?.let { fraction ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 12.dp),
-                    ) {
-                        LinearProgressIndicator(
-                            progress = { fraction.toFloat() },
-                            strokeCap = StrokeCap.Round,
-                            drawStopIndicator = {},
-                            modifier = Modifier.weight(1f).height(6.dp),
-                        )
+                    chapter?.let {
                         Text(
-                            text = "${(fraction * 100).toInt()}%",
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    Text(
+                        text = book.displayTitle,
+                        style = if (wide) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                    book.displayAuthor?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    progression?.let { fraction ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 14.dp),
+                        ) {
+                            LinearProgressIndicator(
+                                progress = { fraction.toFloat() },
+                                strokeCap = StrokeCap.Round,
+                                drawStopIndicator = {},
+                                color = palette?.progress ?: MaterialTheme.colorScheme.primary,
+                                trackColor = palette?.track ?: MaterialTheme.colorScheme.surfaceVariant,
+                                gapSize = 0.dp,
+                                modifier = Modifier.weight(1f).height(6.dp),
+                            )
+                            Text(
+                                text = "${(fraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 10.dp),
+                            )
+                        }
+                    }
+                    if (facts.isNotEmpty()) {
+                        Text(
+                            text = facts,
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 10.dp),
+                            maxLines = 2,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
+                    // A phone at 360dp leaves the text column about 160dp:
+                    // too little for the icon, the label and the actions button.
+                    BoxWithConstraints(Modifier.padding(top = 16.dp)) {
+                    val roomy = maxWidth >= 200.dp
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (eInk || palette == null) {
+                            FilledTonalButton(
+                                onClick = onOpen,
+                                contentPadding = if (roomy) {
+                                    ButtonDefaults.ButtonWithIconContentPadding
+                                } else {
+                                    ButtonDefaults.TextButtonContentPadding
+                                },
+                                modifier = Modifier.weight(1f, fill = false),
+                            ) { HeroActionLabel(action, icon = roomy) }
+                        } else {
+                            Button(
+                                onClick = onOpen,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = palette.accent,
+                                    contentColor = palette.onAccent,
+                                ),
+                                contentPadding = PaddingValues(horizontal = if (roomy) 20.dp else 16.dp, vertical = 12.dp),
+                                // Measured after the actions button, so a long
+                                // label gives way rather than pushing it out.
+                                modifier = Modifier.weight(1f, fill = false),
+                            ) { HeroActionLabel(action, icon = roomy) }
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = palette?.card ?: Color.Transparent,
+                            border = BorderStroke(1.dp, palette?.cardBorder ?: MaterialTheme.colorScheme.outline),
+                            modifier = Modifier.padding(start = 12.dp).size(44.dp),
+                        ) {
+                            IconButton(onClick = onActions) {
+                                Icon(
+                                    Icons.Outlined.MoreHoriz,
+                                    contentDescription = stringResource(R.string.book_actions),
+                                )
+                            }
+                        }
+                    }
+                    }
                 }
-                if (facts.isNotEmpty()) {
-                    Text(
-                        text = facts,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                FilledTonalButton(
-                    onClick = onOpen,
-                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.MenuBook,
-                        contentDescription = null,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    Text(action, maxLines = 1)
-                }
+                BookCover(
+                    book = book,
+                    modifier = Modifier
+                        .padding(start = 16.dp)
+                        .width(if (wide) 132.dp else 112.dp)
+                        .height(if (wide) 198.dp else 168.dp)
+                        .then(if (eInk) Modifier else Modifier.shadow(12.dp, RoundedCornerShape(10.dp))),
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun HeroActionLabel(action: String, icon: Boolean) {
+    if (icon) {
+        Icon(
+            Icons.AutoMirrored.Outlined.MenuBook,
+            contentDescription = null,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+    }
+    Text(action, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleSmall)
+}
+
+/**
+ * The cover, blurred and washed out behind the hero's text. Blur only
+ * exists from Android 12; before that the card gets the palette's wash
+ * instead of a cover drawn sharp under the title.
+ */
+@Composable
+private fun HeroBackdrop(book: Book, palette: HomePalette, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            BookCover(
+                book = book,
+                shape = RoundedCornerShape(0.dp),
+                modifier = Modifier.matchParentSize().blur(40.dp).alpha(0.55f),
+            )
+        }
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.horizontalGradient(
+                    0f to palette.card.copy(alpha = 0.92f),
+                    0.55f to palette.card.copy(alpha = 0.7f),
+                    1f to palette.heroWash.copy(alpha = 0.35f),
+                ),
+            ),
+        )
     }
 }
 
@@ -564,19 +665,37 @@ private val HomeShelfKind.icon: ImageVector
     get() = when (this) {
         HomeShelfKind.READING -> Icons.Outlined.AutoStories
         HomeShelfKind.TO_READ -> Icons.Outlined.BookmarkBorder
-        HomeShelfKind.SERIES -> Icons.Outlined.CollectionsBookmark
+        HomeShelfKind.SERIES -> Icons.Outlined.Layers
         HomeShelfKind.FINISHED -> Icons.Outlined.TaskAlt
     }
 
-/** The four ways into the Library, two by two. */
+private fun HomePalette.tint(kind: HomeShelfKind): TileTint = when (kind) {
+    HomeShelfKind.READING -> reading
+    HomeShelfKind.TO_READ -> toRead
+    HomeShelfKind.SERIES -> series
+    HomeShelfKind.FINISHED -> finished
+}
+
+/** The four ways into the Library, two by two, and a way to all of it. */
 @Composable
 private fun ShelfTiles(
     tiles: List<HomeShelfTile>,
     onOpenShelf: (HomeShelfKind) -> Unit,
+    onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionHeader(stringResource(R.string.home_your_shelves))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionHeader(stringResource(R.string.home_your_shelves), Modifier.weight(1f))
+            TextButton(onClick = onSeeAll) {
+                Text(stringResource(R.string.home_see_all))
+                Icon(
+                    Icons.AutoMirrored.Outlined.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.padding(start = 6.dp).size(18.dp),
+                )
+            }
+        }
         tiles.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { tile ->
@@ -594,63 +713,68 @@ private fun ShelfTile(
     modifier: Modifier = Modifier,
 ) {
     val note = tile.note.takeIf { it > 0 }?.let { pluralStringResource(tile.kind.note, it, it) }
-    DeskCard(onClick = onClick, modifier = modifier) {
-        Column(Modifier.padding(12.dp)) {
-            CoverFan(covers = tile.covers, icon = tile.kind.icon)
+    val tint = homePalette()?.tint(tile.kind)
+    val accent = tint?.content ?: MaterialTheme.colorScheme.primary
+    DeskCard(
+        onClick = onClick,
+        color = tint?.container,
+        modifier = modifier,
+    ) {
+        Column(
+            Modifier
+                .then(
+                    if (tint == null) {
+                        Modifier
+                    } else {
+                        // A lighter sweep from the top corner, as if the tile caught the light.
+                        Modifier.background(
+                            Brush.linearGradient(
+                                0f to tint.container,
+                                0.55f to tint.container,
+                                1f to tint.glow,
+                                start = Offset(0f, Float.POSITIVE_INFINITY),
+                                end = Offset(Float.POSITIVE_INFINITY, 0f),
+                            ),
+                        )
+                    },
+                )
+                .padding(16.dp),
+        ) {
+            Icon(
+                imageVector = tile.kind.icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(30.dp),
+            )
             Row(
                 verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = 14.dp),
             ) {
-                Text(
-                    text = stringResource(tile.kind.label),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(tile.kind.label),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    // Kept as a line even when empty, so the tiles of a row line up.
+                    Text(
+                        text = note.orEmpty(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     text = tile.count.toString(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accent,
+                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
-            // Kept as a line even when empty, so the tiles of a row line up.
-            Text(
-                text = note.orEmpty(),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/** Up to three covers fanned out; the shelf's icon when it is empty. */
-@Composable
-private fun CoverFan(covers: List<Book>, icon: ImageVector) {
-    val eInk = LocalEInk.current
-    Box(Modifier.height(64.dp).fillMaxWidth()) {
-        if (covers.isEmpty()) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.CenterStart).size(32.dp),
-            )
-        }
-        covers.indices.reversed().forEach { i ->
-            BookCover(
-                book = covers[i],
-                shape = RoundedCornerShape(4.dp),
-                modifier = Modifier
-                    .offset(x = (i * 24).dp)
-                    .width(42.dp)
-                    .fillMaxHeight()
-                    .then(if (eInk) Modifier else Modifier.shadow(4.dp, RoundedCornerShape(4.dp))),
-            )
         }
     }
 }
@@ -665,24 +789,24 @@ private fun SeriesSetCard(
     val eInk = LocalEInk.current
     val total = set.shelf.volumes.size
     DeskCard(onClick = onClick, modifier = modifier) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             BookCover(
                 book = set.next?.book ?: set.shelf.cover,
                 shape = RoundedCornerShape(6.dp),
                 modifier = Modifier
-                    .width(56.dp)
-                    .height(84.dp)
+                    .width(64.dp)
+                    .height(96.dp)
                     .then(if (eInk) Modifier else Modifier.shadow(4.dp, RoundedCornerShape(6.dp))),
             )
             Column(
                 Modifier
-                    .padding(start = 14.dp)
+                    .padding(start = 16.dp)
                     .weight(1f),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = set.shelf.name,
-                        style = MaterialTheme.typography.titleSmall,
+                        style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -698,15 +822,21 @@ private fun SeriesSetCard(
                     val name = if (number != null) "#$number ${next.book.displayTitle}" else next.book.displayTitle
                     Text(
                         text = stringResource(R.string.home_series_next, name),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 4.dp),
+                        modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                VolumeBar(set.volumeProgress, Modifier.padding(top = 10.dp))
+                VolumeBar(set.volumeProgress, Modifier.padding(top = 12.dp))
             }
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = homePalette()?.onPill ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
         }
     }
 }
@@ -717,12 +847,13 @@ private const val MAX_VOLUME_SEGMENTS = 12
 @Composable
 private fun VolumeBar(progress: List<Float>, modifier: Modifier = Modifier) {
     val eInk = LocalEInk.current
+    val palette = homePalette()
     val shape = RoundedCornerShape(3.dp)
-    val fill = MaterialTheme.colorScheme.primary
+    val fill = palette?.progress ?: MaterialTheme.colorScheme.primary
     val segment = if (eInk) {
         Modifier.border(1.dp, MaterialTheme.colorScheme.outline, shape)
     } else {
-        Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+        Modifier.background(palette?.track ?: MaterialTheme.colorScheme.surfaceVariant)
     }
     val read = progress.count { it >= 1f }
     // Past a dozen volumes the segments would shrink to slivers, so the

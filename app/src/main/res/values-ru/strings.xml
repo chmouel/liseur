@@ -2080,12 +2080,14 @@
     <string name="library_compact_list">Компактные строки</string>
     <string name="library_compact_list_detail">Обложки меньше, название в одну строку</string>
     <string name="library_bottom_bar">Нижняя панель</string>
-    <string name="library_bottom_bar_detail">Показывать текущую книгу и вкладки Главная, Библиотека и Ещё внизу</string>
+    <string name="library_bottom_bar_detail">Показывать внизу вкладки Главная, Библиотека, Серии, Статистика и Настройки</string>
     <string name="library_hero_card">Верхняя карточка</string>
     <string name="library_hero_card_detail">Показывать текущую книгу на карточке вверху библиотеки</string>
     <string name="library_tab_library">Библиотека</string>
     <string name="home_continue">Продолжить</string>
     <string name="home_series_underway">Серии, которые вы читаете</string>
+    <string name="home_see_all">Все</string>
+    <string name="tab_stats">Статистика</string>
     <string name="shelf_other_books">Другие книги</string>
     <string name="list_new">Новая</string>
     <string name="library_chip_all">Все</string>
