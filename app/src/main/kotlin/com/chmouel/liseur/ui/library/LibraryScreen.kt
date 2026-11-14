@@ -249,10 +249,12 @@ fun LibraryScreen(
     onSearchQueryChange: (String) -> Unit = {},
     onToggleFilter: (LibraryFilterOption) -> Unit = {},
     onSetGroupBySeries: (Boolean) -> Unit = {},
+    onShowSeries: (Boolean) -> Unit = {},
     /** Narrows the Library to one reading state, or clears that axis with an empty set. */
     onSetReadingFilter: (Set<LibraryFilterOption>) -> Unit = {},
     onClearFilters: () -> Unit = {},
     onSetLayout: (LibraryLayout) -> Unit = {},
+    onSetShelfGrouping: (ShelfGrouping) -> Unit = {},
     /** Today's reading and the day streak, for the Home header. */
     pulse: ReadingPulse? = null,
     /** The chapter and time left of the book the Home hero shows. */
@@ -527,9 +529,10 @@ fun LibraryScreen(
         }
     }
 
-    // Reselecting the shown tab scrolls it back up. The count seen last is
-    // kept, so coming back to the screen does not replay a request.
-    var seenTopRequest by rememberSaveable { mutableIntStateOf(tabs.topRequest) }
+    // Reselecting the shown tab scrolls it back up. Not saved, like the
+    // count itself, and started from the current count, so neither coming
+    // back to the screen nor recreating it replays a request.
+    var seenTopRequest by remember { mutableIntStateOf(tabs.topRequest) }
     LaunchedEffect(tabs.topRequest) {
         if (tabs.topRequest != seenTopRequest) {
             seenTopRequest = tabs.topRequest
@@ -537,9 +540,12 @@ fun LibraryScreen(
         }
     }
 
-    val showCatalogue: () -> Unit = {
+    // From Home to the catalogue: the Series tab for the series tile,
+    // Library for the others.
+    val showCatalogue: (Boolean) -> Unit = { series ->
         if (layout.bottomBar) {
             tabs.pickedHome = false
+            onShowSeries(series)
         } else {
             onSetLayout(layout.copy(style = LibraryStyle.CLASSIC))
         }
@@ -965,18 +971,15 @@ fun LibraryScreen(
                                 HomeShelfKind.FINISHED -> onSetReadingFilter(setOf(LibraryFilterOption.FINISHED))
                                 HomeShelfKind.SERIES -> {
                                     onSetReadingFilter(ALL_READING_STATES)
-                                    onSetGroupBySeries(true)
-                                    // Shelves group by their own setting, not the Series chip.
-                                    if (layout.bottomBar && layout.style == LibraryStyle.SHELVES) {
-                                        onSetLayout(layout.copy(shelfGrouping = ShelfGrouping.SERIES))
-                                    }
+                                    // With the tabs, the Series tab groups them.
+                                    if (!layout.bottomBar) onSetGroupBySeries(true)
                                 }
                             }
-                            showCatalogue()
+                            showCatalogue(kind == HomeShelfKind.SERIES)
                         },
                         onBrowseAll = {
                             onSetReadingFilter(ALL_READING_STATES)
-                            showCatalogue()
+                            showCatalogue(false)
                         },
                         bottomInset = bottomInset,
                         modifier = Modifier.fillMaxSize(),
@@ -1054,6 +1057,7 @@ fun LibraryScreen(
                                 listState = shelvesState,
                                 controls = controls,
                                 onSetLayout = onSetLayout,
+                                onSetShelfGrouping = onSetShelfGrouping,
                                 onBookSelected = openShelfBook,
                                 onBookLongPress = { sheetBook = it },
                                 onSeriesSelected = onSeriesSelected,
@@ -1109,6 +1113,8 @@ fun LibraryScreen(
                 onSetLayout(chosen)
             },
             onDismiss = { choosingStyle = false },
+            shownGrouping = state.shownShelfGrouping,
+            onShelfGrouping = onSetShelfGrouping,
         )
     }
 

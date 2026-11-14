@@ -117,6 +117,9 @@ internal fun LibraryStyleSheet(
     books: List<Book>,
     onChange: (LibraryLayout) -> Unit,
     onDismiss: () -> Unit,
+    /** The grouping the shelves show, which the Series tab overrides. */
+    shownGrouping: ShelfGrouping = layout.shelfGrouping,
+    onShelfGrouping: (ShelfGrouping) -> Unit = { onChange(layout.copy(shelfGrouping = it)) },
 ) {
     // With the tabs, Home is a tab of its own and the sheet styles only the Library.
     val tabs = layout.bottomBar
@@ -225,9 +228,9 @@ internal fun LibraryStyleSheet(
                     ChipRow(
                         title = stringResource(R.string.shelf_grouping),
                         options = ShelfGrouping.entries,
-                        selected = layout.shelfGrouping,
+                        selected = shownGrouping,
                         label = { stringResource(it.label) },
-                        onSelected = { onChange(layout.copy(shelfGrouping = it)) },
+                        onSelected = onShelfGrouping,
                     )
                     ChipRow(
                         title = stringResource(R.string.shelf_tone),

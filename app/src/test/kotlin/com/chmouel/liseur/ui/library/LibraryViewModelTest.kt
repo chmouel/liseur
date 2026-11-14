@@ -2,6 +2,9 @@ package com.chmouel.liseur.ui.library
 
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.LibraryLayout
+import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.domain.ShelfGrouping
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -139,4 +142,14 @@ class LibraryViewModelTest {
             assertEquals(0, recordCalls)
             assertTrue(removed)
         }
+
+    @Test
+    fun theSeriesTabShowsSeriesShelvesWithoutTouchingTheSavedLayout() {
+        val byAuthor = LibraryLayout(style = LibraryStyle.SHELVES, shelfGrouping = ShelfGrouping.AUTHOR)
+        val onSeries = LibraryUiState(layout = byAuthor, seriesView = true)
+        // Anything written back from the screen's layout keeps the reader's grouping.
+        assertEquals(ShelfGrouping.AUTHOR, onSeries.layout.shelfGrouping)
+        assertEquals(ShelfGrouping.SERIES, onSeries.shownShelfGrouping)
+        assertEquals(ShelfGrouping.AUTHOR, onSeries.copy(seriesView = false).shownShelfGrouping)
+    }
 }
