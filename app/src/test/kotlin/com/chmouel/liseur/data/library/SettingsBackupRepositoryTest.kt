@@ -2231,6 +2231,7 @@ class SettingsBackupRepositoryTest {
         sessions = ReadingSessionBackupRepository(
             db.readingSessionDao(),
             db.bookDao(),
+            db.sessionImportSourceDao(),
             inTransaction = { work -> db.withTransaction { work() } },
         ),
         books = BookBackupRepository(context, db.bookDao(), localLibrary::importBackupBook),

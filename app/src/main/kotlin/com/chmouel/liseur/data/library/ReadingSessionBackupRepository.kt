@@ -4,6 +4,8 @@ import android.util.JsonWriter
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.ReadingSessionDao
+import com.chmouel.liseur.data.db.SessionImportSource
+import com.chmouel.liseur.data.db.SessionImportSourceDao
 import com.chmouel.liseur.domain.BackedUpBookSessions
 import com.chmouel.liseur.domain.BackedUpSession
 import com.chmouel.liseur.domain.KnownBook
@@ -30,6 +32,7 @@ data class SessionRestoreResult(
 class ReadingSessionBackupRepository(
     private val sessionDao: ReadingSessionDao,
     private val bookDao: BookDao,
+    private val importSources: SessionImportSourceDao,
     private val inTransaction: suspend (suspend () -> Unit) -> Unit = { it() },
     private val now: () -> Long = System::currentTimeMillis,
 ) {
@@ -130,48 +133,48 @@ class ReadingSessionBackupRepository(
 
         var added = 0
         inTransaction {
-            // Restored sittings can sit under an address they no longer resolve to. Collapse the
-            // copies that would double a sitting already under the target, then move the rest.
+            // Restored sittings can sit under an address they no longer resolve to, and one sitting
+            // may be known under several archived addresses. Merge the copies, then record what is
+            // already here before inserting anything.
             for ((archivedUrl, targetUrl) in targetsByArchived) {
                 if (archivedUrl == targetUrl) continue
-                sessionDao.collapseImportedDuplicates(archivedUrl, targetUrl)
+                for (row in sessionDao.importedRowsUnder(archivedUrl)) {
+                    val survivor = sessionDao.idFor(targetUrl, row.startedAt) ?: continue
+                    importSources.reassign(row.id, survivor)
+                    sessionDao.deleteById(row.id)
+                }
                 sessionDao.reattachImportedSessions(archivedUrl, targetUrl)
             }
-            val startsByTarget = HashMap<String, MutableSet<Long>>()
-            val startsByArchived = HashMap<String, MutableSet<Long>>()
-            val toInsert = mutableListOf<ReadingSession>()
             for ((archivedUrl, targetUrl, session) in sittings) {
-                val targetStarts = startsByTarget.getOrPut(targetUrl) {
-                    sessionDao.startedAtFor(targetUrl).toHashSet()
-                }
-                // A sitting stays the same one for this archive address even when the book it
-                // resolves to changes, so the archived identity is part of the duplicate rule.
-                val archivedStarts = startsByArchived.getOrPut(archivedUrl) {
-                    (sessionDao.startedAtFor(archivedUrl) + sessionDao.importedStartsFor(archivedUrl))
-                        .toHashSet()
-                }
-                if (!targetStarts.add(session.startedAt) || !archivedStarts.add(session.startedAt)) {
+                if (importSources.sessionIdFor(archivedUrl, session.startedAt) != null) {
                     alreadyPresent++
                     continue
                 }
-                toInsert += ReadingSession(
-                    bookUrl = targetUrl,
-                    startedAt = session.startedAt,
-                    endedAt = session.endedAt,
-                    lastCheckpointAt = session.endedAt,
-                    durationMs = session.durationMs,
-                    startProgression = session.startProgression,
-                    endProgression = session.endProgression,
-                    idleMs = session.idleMs,
-                    uploadedAt = null,
-                    legacyEvidenceUnknown = false,
-                    importedAt = importedAt,
-                    importedFrom = archivedUrl,
+                val existing = sessionDao.idFor(targetUrl, session.startedAt)
+                    ?: sessionDao.idFor(archivedUrl, session.startedAt)
+                if (existing != null) {
+                    // This sitting is already here under another address; remember this one too.
+                    importSources.record(SessionImportSource(archivedUrl, session.startedAt, existing))
+                    alreadyPresent++
+                    continue
+                }
+                val id = sessionDao.insert(
+                    ReadingSession(
+                        bookUrl = targetUrl,
+                        startedAt = session.startedAt,
+                        endedAt = session.endedAt,
+                        lastCheckpointAt = session.endedAt,
+                        durationMs = session.durationMs,
+                        startProgression = session.startProgression,
+                        endProgression = session.endProgression,
+                        idleMs = session.idleMs,
+                        uploadedAt = null,
+                        legacyEvidenceUnknown = false,
+                        importedAt = importedAt,
+                    ),
                 )
+                importSources.record(SessionImportSource(archivedUrl, session.startedAt, id))
                 added++
-            }
-            if (toInsert.isNotEmpty()) {
-                sessionDao.insertAll(toInsert)
             }
         }
         return SessionRestoreResult(added = added, alreadyPresent = alreadyPresent)

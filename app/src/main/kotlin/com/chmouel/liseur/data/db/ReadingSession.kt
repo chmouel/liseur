@@ -74,8 +74,6 @@ data class ReadingSession(
     val legacyEvidenceUnknown: Boolean = false,
     /** When this session was restored from a backup archive; imported sessions stay local and are never uploaded. */
     @ColumnInfo(name = "imported_at") val importedAt: Long? = null,
-    /** The book address the archive used, kept so a later restore still recognizes its sittings. */
-    @ColumnInfo(name = "imported_from") val importedFrom: String? = null,
 ) {
     val isOpen: Boolean get() = endedAt == null
 }
@@ -170,23 +168,14 @@ interface ReadingSessionDao {
     @Query("SELECT started_at FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun startedAtFor(bookUrl: String): List<Long>
 
-    /** Starts of sittings this app restored from the archive address [archivedUrl]. */
-    @Query("SELECT started_at FROM reading_sessions WHERE imported_at IS NOT NULL AND imported_from = :archivedUrl")
-    suspend fun importedStartsFor(archivedUrl: String): List<Long>
+    @Query("SELECT id FROM reading_sessions WHERE book_url = :bookUrl AND started_at = :startedAt ORDER BY id LIMIT 1")
+    suspend fun idFor(bookUrl: String, startedAt: Long): Long?
 
-    /**
-     * Removes restored copies that would double a sitting already under the target.
-     *
-     * Only imported rows go; locally recorded history is never touched.
-     */
-    @Query(
-        """
-        DELETE FROM reading_sessions
-        WHERE book_url = :archivedUrl AND imported_at IS NOT NULL
-          AND started_at IN (SELECT started_at FROM reading_sessions WHERE book_url = :targetUrl)
-        """,
-    )
-    suspend fun collapseImportedDuplicates(archivedUrl: String, targetUrl: String)
+    @Query("SELECT * FROM reading_sessions WHERE book_url = :bookUrl AND imported_at IS NOT NULL")
+    suspend fun importedRowsUnder(bookUrl: String): List<ReadingSession>
+
+    @Query("DELETE FROM reading_sessions WHERE id = :id")
+    suspend fun deleteById(id: Long)
 
     /**
      * Reattaches restored sittings once their book resolves to a local URL.

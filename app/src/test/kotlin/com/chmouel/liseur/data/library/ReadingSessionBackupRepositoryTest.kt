@@ -31,6 +31,7 @@ class ReadingSessionBackupRepositoryTest {
         repository = ReadingSessionBackupRepository(
             db.readingSessionDao(),
             db.bookDao(),
+            db.sessionImportSourceDao(),
             inTransaction = { work -> db.withTransaction { work() } },
         )
     }
@@ -127,6 +128,61 @@ class ReadingSessionBackupRepositoryTest {
         // The book is gone now, so the same archive no longer resolves it.
         assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(books))
 
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
+    fun `two archived addresses for one sitting leave one row and keep both identities`() = runTest {
+        val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/mno.epub"
+        val sitting = listOf(BackedUpSession(3_000, 63_000, 60_000, 0, 0.1, 0.2))
+        val fromA = listOf(BackedUpBookSessions("calibre:a", "A Book", "An Author", sitting))
+        val fromT = listOf(BackedUpBookSessions("calibre:t", "A Book", "An Author", sitting))
+
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(fromA))
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(fromT))
+        assertEquals(2, db.readingSessionDao().allOnce().size)
+
+        // Both archived addresses now point at the same local book: keep a single sitting.
+        db.bookDao().upsert(
+            Book(
+                url = localUrl, title = "A Book", author = "An Author", coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, localUri = localUrl,
+            ),
+        )
+        assertEquals(
+            SessionRestoreResult(alreadyPresent = 2),
+            repository.restore(fromA + fromT, aliases = mapOf("calibre:a" to localUrl, "calibre:t" to localUrl)),
+        )
+        assertEquals(localUrl, db.readingSessionDao().allOnce().single().bookUrl)
+
+        // The merged identities still recognise the sitting when the book stops resolving again.
+        assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(fromA))
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
+    fun `a sitting known under a resolved address survives the book going away`() = runTest {
+        val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/pqr.epub"
+        val books = listOf(
+            BackedUpBookSessions(
+                bookId = "calibre:gone",
+                title = "A Book",
+                author = "An Author",
+                sessions = listOf(BackedUpSession(4_000, 64_000, 60_000, 0, 0.1, 0.2)),
+            ),
+        )
+
+        // The book exists for the first restore, then is taken off the shelf.
+        db.bookDao().upsert(
+            Book(
+                url = localUrl, title = "A Book", author = "An Author", coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, localUri = localUrl,
+            ),
+        )
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(books))
+        db.bookDao().deleteByUrls(listOf(localUrl))
+
+        assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(books))
         assertEquals(1, db.readingSessionDao().allOnce().size)
     }
 
