@@ -355,6 +355,19 @@ class HomeQuotesTest {
         // Once an unread reset has started it over, the place is the one
         // that counts, not the peak it kept.
         assertEquals(chapter(0.4), HomeQuotes.ceilingLocator(peaked.copy(unreadResetRevision = 5)))
+
+        // A forward pull can leave the peak behind the place the reader
+        // is on. The ceiling is then the place, not the peak: stopping
+        // at the peak would hide words the count already covers.
+        val forward = pulled.copy(
+            totalProgression = 0.8,
+            locatorJson = chapter(0.8),
+            peakProgression = 0.2,
+            peakLocator = chapter(0.2),
+            peakRevision = 3,
+            localRevision = 5,
+        )
+        assertEquals(chapter(0.8), HomeQuotes.ceilingLocator(forward))
     }
 
     @Test
