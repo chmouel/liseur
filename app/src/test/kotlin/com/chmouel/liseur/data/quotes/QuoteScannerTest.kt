@@ -60,6 +60,38 @@ class QuoteScannerTest {
         assertEquals(emptyList<FoundLine>(), QuoteScanner.walk(publication, 0.0))
     }
 
+    @Test
+    fun `a whole-book ceiling from elsewhere stops at the chapter this device recorded`() = runBlocking {
+        // The reader is in the first chapter. A ceiling written by
+        // another client is on its own scale and says 0.9 here; the walk
+        // must still not reach the second chapter's line.
+        val publication = openPublication(File(folder.root, "book.epub").also(::writeEpub))
+        val here = Locator.fromJSON(
+            JSONObject()
+                .put("href", "OEBPS/one.xhtml")
+                .put("type", "application/xhtml+xml")
+                .put("locations", JSONObject().put("progression", 0.5)),
+        )!!
+
+        val lines = QuoteScanner.walk(publication, 0.9, until = here)
+
+        assertTrue(lines.all { it.chapter == "Morning" })
+        assertFalse(lines.any { it.text == late })
+    }
+
+    @Test
+    fun `a chapter this book does not have leaves the ceiling to the fraction`() = runBlocking {
+        val publication = openPublication(File(folder.root, "book.epub").also(::writeEpub))
+        val elsewhere = Locator.fromJSON(
+            JSONObject()
+                .put("href", "OEBPS/somewhere-else.xhtml")
+                .put("type", "application/xhtml+xml")
+                .put("locations", JSONObject().put("progression", 0.1)),
+        )!!
+
+        assertTrue(QuoteScanner.walk(publication, 1.0, until = elsewhere).any { it.text == late })
+    }
+
     private suspend fun openPublication(epub: File): Publication {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val http = DefaultHttpClient()

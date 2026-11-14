@@ -210,7 +210,6 @@ class HomeQuotes internal constructor(
     ): HomeQuote? {
         val books = database.bookDao().allOnce().filter { it.openableUrl != null }.associateBy { it.url }
         val read = readBooks(books)
-        val scans = store().scans().associateBy { it.bookUrl }
         val highlights = marksWithin(read).flatMap { (bookUrl, marks) ->
             marks.map { mark ->
                 QuoteCandidate(
@@ -223,10 +222,10 @@ class HomeQuotes internal constructor(
             }
         }
         // Lines kept under a work the URL no longer holds are the old
-        // book's words. The sweep drops them a moment later; until then
-        // they are not this book's.
+        // book's words. Each line carries the work it came from, so the
+        // answer does not depend on two reads of two tables agreeing.
         val lines = rows
-            .filter { row -> QuoteRules.stillSameWork(scans[row.bookUrl]?.workId, books[row.bookUrl]?.workId) }
+            .filter { row -> QuoteRules.stillSameWork(row.workId, books[row.bookUrl]?.workId) }
             .filter { row -> read[row.bookUrl]?.let { QuoteRules.withinCeiling(row.totalProgression, it.point) } == true }
             .map { QuoteCandidate(it.bookUrl, it.text, it.locatorJson, it.chapter, it.score) }
         val picked = DailyQuote.pick(highlights + lines, day, nonce, keep = chosen) ?: return null
@@ -329,8 +328,16 @@ class HomeQuotes internal constructor(
 
     private suspend fun scan(dao: QuoteDao, book: Book, point: Double) {
         val url = book.openableUri()?.toUri()?.toAbsoluteUrl() ?: return
+        // Where the ceiling actually is, when this device wrote it down: a
+        // whole-book fraction can have come from a client that interpolates
+        // its own position list, and reading past it would cache lines from
+        // pages the reader has not reached. The chapter stops the walk.
+        val place = database.readingProgressDao().get(book.url)?.let { row ->
+            val from = if (peakStands(row)) row.peakLocator else row.locatorJson
+            from?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+        }
         val found = try {
-            opener().withPublication(url) { publication -> QuoteScanner.walk(publication, point) }
+            opener().withPublication(url) { publication -> QuoteScanner.walk(publication, point, until = place) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: IOException) {
@@ -352,7 +359,7 @@ class HomeQuotes internal constructor(
         val now = database.bookDao().getByUrl(book.url) ?: return
         if (now.workId != book.workId || now.localUri != book.localUri) return
         val rows = found.orEmpty().mapIndexed { ord, line ->
-            QuoteRow(book.url, ord, line.text, line.locatorJson, line.totalProgression, line.chapter, line.score)
+            QuoteRow(book.url, ord, line.text, line.locatorJson, line.totalProgression, line.chapter, line.score, book.workId)
         }
         dao.replace(
             QuoteScanRow(book.url, point, MemorableLines.VERSION, found != null, System.currentTimeMillis(), book.workId),
@@ -444,9 +451,23 @@ internal object QuoteScanner {
 
     private class Block(val text: String, val locator: Locator, val path: String?, val end: Double)
 
-    suspend fun walk(publication: Publication, readPoint: Double): List<FoundLine> {
+    /**
+     * Walks a book's text up to [readPoint], and no further than [until].
+     *
+     * [readPoint] is a whole-book fraction, which another client may have
+     * written on its own scale. [until] is where this device recorded the
+     * ceiling, so the walk can stop at that chapter and say no more than
+     * the reader has read.
+     */
+    suspend fun walk(publication: Publication, readPoint: Double, until: Locator? = null): List<FoundLine> {
         val iterator = publication.content()?.iterator() ?: return emptyList()
         val whole = readPoint >= 1.0
+        val spine = publication.readingOrder.map { ResourceAddress.canonicalPath(it.url().toString()) }
+        val stop = until?.let { locator ->
+            val path = pathOf(locator)
+            val at = spine.indexOf(path).takeIf { it >= 0 } ?: return@let null
+            at to locator.locations.progression?.takeIf { it.isFinite() }
+        }?.takeIf { !whole }
         val blocks = ArrayList<Block>()
         var held: Pair<String, Locator>? = null
         while (true) {
@@ -455,6 +476,13 @@ internal object QuoteScanner {
             val start = element.locator.locations.totalProgression
             // Each block ends where the next begins: one that runs past the read point is left out.
             if (!whole && (start == null || start > readPoint)) break
+            if (stop != null) {
+                val at = spine.indexOf(pathOf(element.locator))
+                if (at > stop.first) break
+                val within = element.locator.locations.progression
+                val edge = stop.second
+                if (at == stop.first && within != null && edge != null && within > edge) break
+            }
             held?.let { (text, locator) -> blocks += Block(text, locator, pathOf(locator), start ?: 1.0) }
             held = (element as? Content.TextElement)
                 ?.takeUnless { it.role is Content.TextElement.Role.Heading || it.role == Content.TextElement.Role.Footnote }

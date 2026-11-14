@@ -1631,8 +1631,15 @@ class ReaderViewModel(
             // chapter being a different page from the quoted line in a
             // long one. The ladder is still what answers when the book
             // no longer has that resource at all.
+            // A quote asked for is why the book was opened, so it is
+            // where the book opens: a position arriving from another
+            // device is a proposal about where to carry on reading, and
+            // this is not that. The peek below keeps the reader's own
+            // place as the way back, and the settlement machinery is
+            // left out of it so the quoted place is never taken for
+            // something a server said.
             val lookTarget = openAt
-                ?.takeIf { stillCurrent && incoming == null && approximateTarget == null && choicePreview == null }
+                ?.takeIf { stillCurrent && choicePreview == null }
                 ?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
                 ?.let { asked ->
                     val chapters = readingOrderPaths()
@@ -1649,16 +1656,17 @@ class ReaderViewModel(
             // still a passage: the beginning is the honest origin then
             // rather than refusing to open the quote.
             val lookOrigin = storedTarget ?: safeFallback
-            val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
+            val initialLocator = lookTarget
+                ?: incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
-                ?: lookTarget
                 ?: storedTarget
             if (lookTarget != null && lookOrigin != null) _peek.value = SourcePeek(lookOrigin)
             val openingPull = pullOffer?.takeIf {
-                choicePreview == null && stillCurrent && incoming != null && initialLocator != null
+                lookTarget == null && choicePreview == null && stillCurrent && incoming != null &&
+                    initialLocator != null
             }?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
             val openingChoice = choicePreview?.takeIf { stillCurrent }?.let { preview ->
-                val checkedOffer = pullOffer?.takeIf { incoming != null && initialLocator != null }
+                val checkedOffer = pullOffer?.takeIf { lookTarget == null && incoming != null && initialLocator != null }
                     ?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
                 if (checkedOffer != null || preview.retryRequired) preview to checkedOffer else null
             }
@@ -1682,7 +1690,7 @@ class ReaderViewModel(
                 navigatorFactory = EpubNavigatorFactory(publication),
                 initialLocator = initialLocator,
                 openedBookOrbit = openedBookOrbit,
-                bookOrbitFallback = safeFallback.takeIf { incoming != null && stillCurrent },
+                bookOrbitFallback = safeFallback.takeIf { lookTarget == null && incoming != null && stillCurrent },
                 bookOrbitChoicePending = bookOrbitOpening.choice?.second != null,
             )
             if (openingChoice != null && openingChoice.second == null) {
