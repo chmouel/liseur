@@ -215,17 +215,23 @@ class AnnotationBackupRepository(
         )
     }
 
-    internal suspend fun previewContents(contents: BackupContents.Readable): BackupPreview =
+    internal suspend fun previewContents(
+        contents: BackupContents.Readable,
+        aliases: Map<String, String> = emptyMap(),
+    ): BackupPreview =
         withContext(Dispatchers.IO) {
             val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
-            BackupPreview.of(previewBackupMatch(contents, known))
+            BackupPreview.of(previewBackupMatch(contents, known, aliases))
         }
 
-    internal suspend fun importContents(contents: BackupContents.Readable): BackupResult.Imported =
+    internal suspend fun importContents(
+        contents: BackupContents.Readable,
+        aliases: Map<String, String> = emptyMap(),
+    ): BackupResult.Imported =
         withContext(Dispatchers.IO) {
             val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
             val incoming = contents.books.flatMap { book ->
-                val bookId = matchBackedUpBook(book, known)
+                val bookId = aliases[book.bookId] ?: matchBackedUpBook(book, known)
                 book.annotations.map { mark ->
                     // Older backups omit the edit timestamp. Use the creation
                     // time in microseconds rather than sending a zero client_ts.

@@ -84,12 +84,12 @@ class CompanionBackupRepository(
     }
 
     /** Adds what [contents] holds for books in the library that are not here yet; returns how many recaps were added. */
-    suspend fun restore(contents: CompanionBackupContents): Int {
+    suspend fun restore(contents: CompanionBackupContents, aliases: Map<String, String> = emptyMap()): Int {
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
         val books = contents.recaps.map { Triple(it.recap.bookUrl, it.title, it.author) } +
             contents.summaries.map { Triple(it.summary.bookUrl, it.title, it.author) }
         val targets = books.distinctBy { it.first }.associate { (url, title, author) ->
-            url to matchBackedUpBookUrl(url, title, author, known)
+            url to (aliases[url] ?: matchBackedUpBookUrl(url, title, author, known))
         }
         val counts = targets.values.filterNotNull().groupingBy { it }.eachCount()
         fun target(url: String) = targets[url]?.takeIf { counts.getValue(it) == 1 }

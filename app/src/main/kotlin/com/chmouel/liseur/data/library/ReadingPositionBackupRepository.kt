@@ -66,9 +66,9 @@ class ReadingPositionBackupRepository(
         }
     }
 
-    suspend fun restore(positions: List<BackedUpReadingPosition>): Int {
+    suspend fun restore(positions: List<BackedUpReadingPosition>, aliases: Map<String, String> = emptyMap()): Int {
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
-        val targets = positions.map { matchBackedUpReadingPosition(it, known) }
+        val targets = positions.map { aliases[it.bookId] ?: matchBackedUpReadingPosition(it, known) }
         val counts = targets.groupingBy { it }.eachCount()
         val changed = linkedSetOf<String>()
         try {

@@ -976,6 +976,88 @@
     <string name="settings_backup_error_storage">Не удалось подготовить копию в хранилище устройства.</string>
     <string name="settings_backup_error_restore">Не удалось восстановить резервную копию.</string>
     <string name="settings_backup_error_partial">Часть копии восстановлена, но остальное применить не удалось. Проверьте настройки, шрифты, аннотации, позиции чтения, сводки помощника, аккаунты и сервисы.</string>
+    <string name="settings_backup_include_stats">Включить статистику чтения</string>
+    <string name="settings_backup_include_stats_detail">Сессии чтения для экрана статистики. Восстановленные сессии остаются на устройстве и никогда не отправляются на сервер синхронизации.</string>
+    <string name="settings_backup_include_books">Включить файлы книг</string>
+    <string name="settings_backup_include_books_detail">Офлайн-файлы EPUB добавляются в копию без шифрования.</string>
+    <string name="settings_backup_books_choose">Выбрать книги</string>
+    <plurals name="settings_backup_books_selected">
+        <item quantity="one">Выбрана %1$d книга, %2$s</item>
+        <item quantity="few">Выбрано %1$d книги, %2$s</item>
+        <item quantity="many">Выбрано %1$d книг, %2$s</item>
+        <item quantity="other">Выбрано %1$d книги, %2$s</item>
+    </plurals>
+    <string name="settings_backup_books_select_all">Выбрать все</string>
+    <string name="settings_backup_books_clear">Очистить</string>
+    <string name="settings_backup_books_size_unknown">Размер неизвестен</string>
+    <string name="settings_backup_books_too_large">Слишком большой файл для резервной копии (более %1$s)</string>
+    <string name="settings_backup_books_over_limit">Выбранные книги превышают %1$s. Общие файлы могут всё ещё уместиться.</string>
+    <string name="settings_backup_books_none">Нет офлайн-книг для включения.</string>
+    <string name="settings_backup_progress_hashing">Проверка файлов книг: %1$d из %2$d</string>
+    <string name="settings_backup_progress_writing">Сохранение резервной копии: %1$s из %2$s</string>
+    <string name="settings_backup_progress_reading">Чтение резервной копии: %1$s</string>
+    <string name="settings_backup_progress_importing">Добавление книг: %1$d из %2$d</string>
+    <string name="settings_backup_cancelled">Резервное копирование отменено.</string>
+    <plurals name="settings_backup_exported_books">
+        <item quantity="one">Включён %1$d файл книги.</item>
+        <item quantity="few">Включено %1$d файла книг.</item>
+        <item quantity="many">Включено %1$d файлов книг.</item>
+        <item quantity="other">Включено %1$d файла книг.</item>
+    </plurals>
+    <plurals name="settings_backup_books_skipped">
+        <item quantity="one">%1$d книгу не удалось прочитать, она пропущена.</item>
+        <item quantity="few">%1$d книги не удалось прочитать, они пропущены.</item>
+        <item quantity="many">%1$d книг не удалось прочитать, они пропущены.</item>
+        <item quantity="other">%1$d книги не удалось прочитать, они пропущены.</item>
+    </plurals>
+    <plurals name="settings_backup_exported_sessions">
+        <item quantity="one">Включена %1$d сессия чтения.</item>
+        <item quantity="few">Включено %1$d сессии чтения.</item>
+        <item quantity="many">Включено %1$d сессий чтения.</item>
+        <item quantity="other">Включено %1$d сессии чтения.</item>
+    </plurals>
+    <plurals name="settings_backup_books_preview">
+        <item quantity="one">%1$d файл книги. Книги, которые уже есть в вашей библиотеке, останутся без изменений.</item>
+        <item quantity="few">%1$d файла книг. Книги, которые уже есть в вашей библиотеке, останутся без изменений.</item>
+        <item quantity="many">%1$d файлов книг. Книги, которые уже есть в вашей библиотеке, останутся без изменений.</item>
+        <item quantity="other">%1$d файла книг. Книги, которые уже есть в вашей библиотеке, останутся без изменений.</item>
+    </plurals>
+    <plurals name="settings_backup_books_to_add">
+        <item quantity="one">%1$d будет добавлена в вашу библиотеку (%2$s).</item>
+        <item quantity="few">%1$d будут добавлены в вашу библиотеку (%2$s).</item>
+        <item quantity="many">%1$d будут добавлены в вашу библиотеку (%2$s).</item>
+        <item quantity="other">%1$d будет добавлено в вашу библиотеку (%2$s).</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_preview">
+        <item quantity="one">%1$d сессия чтения. Уже имеющиеся сессии сохранятся.</item>
+        <item quantity="few">%1$d сессии чтения. Уже имеющиеся сессии сохранятся.</item>
+        <item quantity="many">%1$d сессий чтения. Уже имеющиеся сессии сохранятся.</item>
+        <item quantity="other">%1$d сессии чтения. Уже имеющиеся сессии сохранятся.</item>
+    </plurals>
+    <plurals name="settings_backup_books_restored">
+        <item quantity="one">В вашу библиотеку добавлена %1$d книга.</item>
+        <item quantity="few">В вашу библиотеку добавлено %1$d книги.</item>
+        <item quantity="many">В вашу библиотеку добавлено %1$d книг.</item>
+        <item quantity="other">В вашу библиотеку добавлено %1$d книги.</item>
+    </plurals>
+    <plurals name="settings_backup_books_already_here">
+        <item quantity="one">%1$d книга уже была в вашей библиотеке.</item>
+        <item quantity="few">%1$d книги уже были в вашей библиотеке.</item>
+        <item quantity="many">%1$d книг уже были в вашей библиотеке.</item>
+        <item quantity="other">%1$d книги уже были в вашей библиотеке.</item>
+    </plurals>
+    <plurals name="settings_backup_book_failures">
+        <item quantity="one">Не удалось добавить %1$d книгу.</item>
+        <item quantity="few">Не удалось добавить %1$d книги.</item>
+        <item quantity="many">Не удалось добавить %1$d книг.</item>
+        <item quantity="other">Не удалось добавить %1$d книги.</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_restored">
+        <item quantity="one">Восстановлена %1$d сессия чтения.</item>
+        <item quantity="few">Восстановлено %1$d сессии чтения.</item>
+        <item quantity="many">Восстановлено %1$d сессий чтения.</item>
+        <item quantity="other">Восстановлено %1$d сессии чтения.</item>
+    </plurals>
     <string name="settings_library_help_title">Серверы книг</string>
     <string name="settings_library_help_body" formatted="true">Сервер книг (calibre-web, Komga, liseur-sync или каталог OPDS) хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync также синхронизирует книги, которые есть только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
     <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения (для OPDS через связанный сервер синхронизации KOReader).</string>

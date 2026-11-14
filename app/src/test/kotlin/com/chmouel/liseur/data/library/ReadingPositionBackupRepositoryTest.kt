@@ -136,4 +136,26 @@ class ReadingPositionBackupRepositoryTest {
         assertEquals(saved, db.readingProgressDao().get("book"))
         db.readingProgressDao().openBooks.leave("book")
     }
+
+    @Test
+    fun `an alias target still keeps the original id when two positions collide`() = runTest {
+        db.bookDao().upsert(Book(url = "file:///files/books/shared.epub", title = "Poems", author = "Blake", coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        val local = ReadingProgress("file:///files/books/shared.epub", locator, 0.8, updatedAt = 20)
+        db.readingProgressDao().upsert(local)
+        val aliases = mapOf(
+            "calibre:one" to "file:///files/books/shared.epub",
+            "calibre:two" to "file:///files/books/shared.epub",
+        )
+        assertEquals(2, repository().restore(
+            listOf(
+                BackedUpReadingPosition("calibre:one", "Poems", "Blake", locator, 0.3, 10),
+                BackedUpReadingPosition("calibre:two", "Poems", "Blake", locator, 0.5, 10),
+            ),
+            aliases = aliases,
+        ))
+        assertEquals(local, db.readingProgressDao().get("file:///files/books/shared.epub"))
+        assertEquals(0.3, db.readingProgressDao().get("calibre:one")?.totalProgression)
+        assertEquals(0.5, db.readingProgressDao().get("calibre:two")?.totalProgression)
+    }
 }

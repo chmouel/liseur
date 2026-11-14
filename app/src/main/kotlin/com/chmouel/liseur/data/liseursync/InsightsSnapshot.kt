@@ -12,7 +12,7 @@ import java.time.LocalTime
 
 /** Acknowledgements are bookkeeping, not a change to the captured reading. */
 internal fun statsSessions(sessions: List<ReadingSession>): List<ReadingSession> =
-    sessions.map { it.copy(uploadedAt = null) }.sortedBy { it.id }
+    sessions.filter { it.importedAt == null }.map { it.copy(uploadedAt = null) }.sortedBy { it.id }
 
 internal data class StatsAlias(val bookUrl: String, val workId: String, val editionSha: String?)
 

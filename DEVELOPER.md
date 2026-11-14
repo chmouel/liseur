@@ -113,9 +113,10 @@ keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
 
 A backup is a ZIP with a versioned `manifest.json`, `settings.json`,
 `annotations.json`, `positions.json`, `companion.json`, optional
-`fonts/<sha256>.(ttf|otf)`, (v5) optional `connections.enc.json` and (v6)
-optional `translations.json`. Versions 1-5 stay readable and leave data
-they lack unchanged.
+`fonts/<sha256>.(ttf|otf)`, (v5) optional `connections.enc.json`, (v6)
+optional `translations.json` and (v7) optional `sessions.json`,
+`books.json` with `books/<sha256>.epub`. Versions 1-6 stay readable and
+leave data they lack unchanged.
 
 - Manifest records each entry's size and SHA-256. Reject malformed known
   fields, unsafe or duplicate paths, checksum mismatches, unsupported
@@ -151,10 +152,31 @@ they lack unchanged.
   already be in the library and match like recaps. Imported coverage is
   `restored` (unverified) until checked, and stays exportable. It is
   never encrypted.
+- `sessions.json` (v7, optional) carries closed sittings only: start,
+  end, duration, idle time and progressions, grouped by book. Ids,
+  checkpoints and upload state stay behind. Restore sets
+  `last_checkpoint_at` to the end, marks the rows `imported_at` in the
+  same insert and keeps the archived URL when the book cannot be
+  matched. A sitting is a duplicate when its book and start match,
+  inside the archive and against stored rows.
+- Book files (v7, optional): `books.json` lists `book_id`, title,
+  author, size and SHA-256 per library row, and each distinct digest
+  travels once as `books/<sha256>.epub`, listed after `books.json` and
+  hashed against the manifest like fonts. Export hashes the selection
+  before the picker opens and streams the bytes straight into the chosen
+  document; inspect stages only books the library lacks (checking cache
+  headroom) and only hashes the rest. Limits: 512 MiB per book, 3 GiB
+  of books, 2000 files, so the archive stays under 4 GiB without ZIP64;
+  anything over is `TOO_LARGE`.
 
 Backup and restore previews everything, including matching books, and also
 accepts old annotation-only JSON. Books match by URL or unambiguous title
 and author; ambiguous or duplicate matches never overwrite another book.
+Restore order is settings, connections, fonts, books, then annotations,
+positions, sessions, recaps and translations. Missing books move to
+`files/books/<sha256>.epub` and are indexed before anything is reattached;
+archived URLs resolve through an alias map and no stored URL is rewritten.
+A failed import keeps its data under the archived URL.
 Annotations add missing marks and request sync. Positions replace locator
 and progression (progression alone without an exact locator), keep the
 reading time, update the finished flag in the same transaction and write a
@@ -1051,7 +1073,9 @@ changing reader behavior.
   `remote_server.sync_cursor_seq` in one transaction, never earlier.
 - Op ids derive from device, work, revision; session ids from device and
   stored local session id; payloads from stored state. Retries are
-  byte-identical: no random ids, no `pending_ops` table.
+  byte-identical: no random ids, no `pending_ops` table. Sessions restored
+  from a backup carry `imported_at`, so they are never uploaded and never
+  offered as stats candidates.
 - Reconnect with the stored device id. A pasted token reconnecting as
   another device can get `conflict`; conditionally advance the book's
   revision from the sent one, then retry.

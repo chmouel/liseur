@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.liseursync
 
 import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.data.db.SessionTransmission
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,5 +26,12 @@ class CapturedStatsSessionsTest {
         assertFalse(captured.matches(listOf(sitting, sitting.copy(id = 2)), listOf(evidence)))
         assertFalse(captured.matches(listOf(sitting), listOf(evidence.copy(deviceId = "other"))))
         assertFalse(captured.matches(listOf(sitting), listOf(evidence.copy(payload = "{\"active_ms\":1}"))))
+    }
+
+    @Test
+    fun `imported sittings are not server candidates`() {
+        val imported = sitting.copy(id = 2, startedAt = 10, endedAt = 20, lastCheckpointAt = 20, importedAt = 100)
+        assertEquals(listOf(sitting), statsSessions(listOf(sitting, imported)))
+        assertTrue(captured.matches(listOf(sitting, imported), listOf(evidence)))
     }
 }

@@ -1000,6 +1000,88 @@
     <string name="settings_backup_error_storage">Zálohu se nepodařilo připravit v úložišti zařízení.</string>
     <string name="settings_backup_error_restore">Zálohu se nepodařilo obnovit.</string>
     <string name="settings_backup_error_partial">Část zálohy byla obnovena, ale zbytek se nepodařilo použít. Zkontroluj nastavení, písma, anotace, pozice čtení, shrnutí průvodce, účty a služby.</string>
+    <string name="settings_backup_include_stats">Zahrnout statistiky čtení</string>
+    <string name="settings_backup_include_stats_detail">Relace čtení za obrazovkou statistik. Obnovené relace zůstávají v zařízení a nikdy se neodesílají na synchronizační server.</string>
+    <string name="settings_backup_include_books">Zahrnout soubory knih</string>
+    <string name="settings_backup_include_books_detail">Offline soubory EPUB se uloží do zálohy nešifrovaně.</string>
+    <string name="settings_backup_books_choose">Vybrat knihy</string>
+    <plurals name="settings_backup_books_selected">
+        <item quantity="one">Vybrána %1$d kniha, %2$s</item>
+        <item quantity="few">Vybrány %1$d knihy, %2$s</item>
+        <item quantity="many">Vybráno %1$d knihy, %2$s</item>
+        <item quantity="other">Vybráno %1$d knih, %2$s</item>
+    </plurals>
+    <string name="settings_backup_books_select_all">Vybrat vše</string>
+    <string name="settings_backup_books_clear">Vymazat</string>
+    <string name="settings_backup_books_size_unknown">Neznámá velikost</string>
+    <string name="settings_backup_books_too_large">Příliš velké pro zálohu (nad %1$s)</string>
+    <string name="settings_backup_books_over_limit">Vybrané knihy přesahují %1$s. Sdílené soubory se mohou stále vejít.</string>
+    <string name="settings_backup_books_none">Žádné offline knihy k zahrnutí.</string>
+    <string name="settings_backup_progress_hashing">Kontrola souborů knih: %1$d z %2$d</string>
+    <string name="settings_backup_progress_writing">Ukládání zálohy: %1$s z %2$s</string>
+    <string name="settings_backup_progress_reading">Čtení zálohy: %1$s</string>
+    <string name="settings_backup_progress_importing">Přidávání knih: %1$d z %2$d</string>
+    <string name="settings_backup_cancelled">Záloha zrušena.</string>
+    <plurals name="settings_backup_exported_books">
+        <item quantity="one">Zahrnut %1$d soubor knihy.</item>
+        <item quantity="few">Zahrnuty %1$d soubory knih.</item>
+        <item quantity="many">Zahrnuto %1$d souboru knihy.</item>
+        <item quantity="other">Zahrnuto %1$d souborů knih.</item>
+    </plurals>
+    <plurals name="settings_backup_books_skipped">
+        <item quantity="one">%1$d knihu se nepodařilo přečíst a byla vynechána.</item>
+        <item quantity="few">%1$d knihy se nepodařilo přečíst a byly vynechány.</item>
+        <item quantity="many">%1$d knihy se nepodařilo přečíst a bylo vynecháno.</item>
+        <item quantity="other">%1$d knih se nepodařilo přečíst a bylo vynecháno.</item>
+    </plurals>
+    <plurals name="settings_backup_exported_sessions">
+        <item quantity="one">Zahrnuta %1$d relace čtení.</item>
+        <item quantity="few">Zahrnuty %1$d relace čtení.</item>
+        <item quantity="many">Zahrnuto %1$d relace čtení.</item>
+        <item quantity="other">Zahrnuto %1$d relací čtení.</item>
+    </plurals>
+    <plurals name="settings_backup_books_preview">
+        <item quantity="one">%1$d soubor knihy. Knihy, které už v knihovně máš, zůstanou beze změny.</item>
+        <item quantity="few">%1$d soubory knih. Knihy, které už v knihovně máš, zůstanou beze změny.</item>
+        <item quantity="many">%1$d souboru knihy. Knihy, které už v knihovně máš, zůstanou beze změny.</item>
+        <item quantity="other">%1$d souborů knih. Knihy, které už v knihovně máš, zůstanou beze změny.</item>
+    </plurals>
+    <plurals name="settings_backup_books_to_add">
+        <item quantity="one">%1$d bude přidána do knihovny (%2$s).</item>
+        <item quantity="few">%1$d budou přidány do knihovny (%2$s).</item>
+        <item quantity="many">%1$d bude přidáno do knihovny (%2$s).</item>
+        <item quantity="other">%1$d bude přidáno do knihovny (%2$s).</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_preview">
+        <item quantity="one">%1$d relace čtení. Relace, které už máš, zůstanou zachovány.</item>
+        <item quantity="few">%1$d relace čtení. Relace, které už máš, zůstanou zachovány.</item>
+        <item quantity="many">%1$d relace čtení. Relace, které už máš, zůstanou zachovány.</item>
+        <item quantity="other">%1$d relací čtení. Relace, které už máš, zůstanou zachovány.</item>
+    </plurals>
+    <plurals name="settings_backup_books_restored">
+        <item quantity="one">Do knihovny byla přidána %1$d kniha.</item>
+        <item quantity="few">Do knihovny byly přidány %1$d knihy.</item>
+        <item quantity="many">Do knihovny bylo přidáno %1$d knihy.</item>
+        <item quantity="other">Do knihovny bylo přidáno %1$d knih.</item>
+    </plurals>
+    <plurals name="settings_backup_books_already_here">
+        <item quantity="one">%1$d kniha už v knihovně byla.</item>
+        <item quantity="few">%1$d knihy už v knihovně byly.</item>
+        <item quantity="many">%1$d knihy už v knihovně bylo.</item>
+        <item quantity="other">%1$d knih už v knihovně bylo.</item>
+    </plurals>
+    <plurals name="settings_backup_book_failures">
+        <item quantity="one">%1$d knihu se nepodařilo přidat.</item>
+        <item quantity="few">%1$d knihy se nepodařilo přidat.</item>
+        <item quantity="many">%1$d knihy se nepodařilo přidat.</item>
+        <item quantity="other">%1$d knih se nepodařilo přidat.</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_restored">
+        <item quantity="one">Obnovena %1$d relace čtení.</item>
+        <item quantity="few">Obnoveny %1$d relace čtení.</item>
+        <item quantity="many">Obnoveno %1$d relace čtení.</item>
+        <item quantity="other">Obnoveno %1$d relací čtení.</item>
+    </plurals>
     <string name="settings_library_help_title">Knižní servery</string>
     <string name="settings_library_help_body" formatted="true">Knižní server — calibre-web, Komga, liseur-sync nebo katalog OPDS — uchovává tvoji knihovnu. Liseur umožňuje knihy procházet a stahovat a tam, kde to server podporuje, synchronizuje pozice čtení. Vlastní katalog OPDS lze pro pozice čtení propojit se synchronizačním serverem KOReader. Současně může být připojen jeden server.\n\nliseur-sync navíc synchronizuje také knihy, které pocházejí jen z tohoto telefonu: i pozice v souboru z SD karty se tak přenášejí mezi zařízeními. Vlastní server si můžeš spustit z %1$s.</string>
     <string name="settings_account_detail">Procházej a stahuj knihy ze serveru calibre-web, Komga, liseur-sync nebo OPDS a synchronizuj pozice čtení — u OPDS pomocí připojeného serveru KOReader.</string>

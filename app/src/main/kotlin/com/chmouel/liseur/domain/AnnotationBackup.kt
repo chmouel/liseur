@@ -228,12 +228,13 @@ private fun JSONObject.optLongOrNull(key: String): Long? =
 fun previewBackupMatch(
     contents: BackupContents.Readable,
     known: List<KnownBook>,
+    aliases: Map<String, String> = emptyMap(),
 ): BackupMatch {
     var matchedBooks = 0
     var matchedMarks = 0
     for (book in contents.books) {
-        val target = matchBackedUpBook(book, known)
-        if (target != book.bookId || known.any { it.bookId == book.bookId }) {
+        val target = aliases[book.bookId] ?: matchBackedUpBook(book, known)
+        if (book.bookId in aliases || target != book.bookId || known.any { it.bookId == book.bookId }) {
             matchedBooks += 1
             matchedMarks += book.annotations.size
         }

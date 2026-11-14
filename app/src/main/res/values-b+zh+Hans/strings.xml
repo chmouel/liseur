@@ -95,6 +95,55 @@
     <plurals name="settings_backup_font_failures">
         <item quantity="other">%1$d 个字体无法安装。</item>
     </plurals>
+    <string name="settings_backup_include_stats">包含阅读统计</string>
+    <string name="settings_backup_include_stats_detail">统计页面背后的阅读记录。恢复的记录仅保留在本机，不会发送到同步服务器。</string>
+    <string name="settings_backup_include_books">包含图书文件</string>
+    <string name="settings_backup_include_books_detail">离线 EPUB 文件将以未加密形式放入备份。</string>
+    <string name="settings_backup_books_choose">选择图书</string>
+    <plurals name="settings_backup_books_selected">
+        <item quantity="other">已选 %1$d 本书，%2$s</item>
+    </plurals>
+    <string name="settings_backup_books_select_all">全选</string>
+    <string name="settings_backup_books_clear">清空</string>
+    <string name="settings_backup_books_size_unknown">大小未知</string>
+    <string name="settings_backup_books_too_large">文件过大，无法备份（超过 %1$s）</string>
+    <string name="settings_backup_books_over_limit">所选图书总大小超过 %1$s。共享文件仍可能放得下。</string>
+    <string name="settings_backup_books_none">没有可包含的离线图书。</string>
+    <string name="settings_backup_progress_hashing">正在检查图书文件：%1$d / %2$d</string>
+    <string name="settings_backup_progress_writing">正在保存备份：%1$s / %2$s</string>
+    <string name="settings_backup_progress_reading">正在读取备份：%1$s</string>
+    <string name="settings_backup_progress_importing">正在添加图书：%1$d / %2$d</string>
+    <string name="settings_backup_cancelled">备份已取消。</string>
+    <plurals name="settings_backup_exported_books">
+        <item quantity="other">已包含 %1$d 个图书文件。</item>
+    </plurals>
+    <plurals name="settings_backup_books_skipped">
+        <item quantity="other">%1$d 本书无法读取，已略过。</item>
+    </plurals>
+    <plurals name="settings_backup_exported_sessions">
+        <item quantity="other">已包含 %1$d 条阅读记录。</item>
+    </plurals>
+    <plurals name="settings_backup_books_preview">
+        <item quantity="other">%1$d 个图书文件。书库中已有的图书将保持原样。</item>
+    </plurals>
+    <plurals name="settings_backup_books_to_add">
+        <item quantity="other">将向您的书库添加 %1$d 本（%2$s）。</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_preview">
+        <item quantity="other">%1$d 条阅读记录。您已有的记录将保留。</item>
+    </plurals>
+    <plurals name="settings_backup_books_restored">
+        <item quantity="other">已向您的书库添加 %1$d 本书。</item>
+    </plurals>
+    <plurals name="settings_backup_books_already_here">
+        <item quantity="other">%1$d 本书已在您的书库中。</item>
+    </plurals>
+    <plurals name="settings_backup_book_failures">
+        <item quantity="other">%1$d 本书无法添加。</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_restored">
+        <item quantity="other">已恢复 %1$d 条阅读记录。</item>
+    </plurals>
     <plurals name="annotations_backup_mark_count">
         <item quantity="other">%d 条标注</item>
     </plurals>

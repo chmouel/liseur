@@ -22,16 +22,21 @@ import com.chmouel.liseur.data.settings.VolumeKeyMode
 import com.chmouel.liseur.data.settings.applyBackupJson
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.validateBackupJson
+import com.chmouel.liseur.domain.BackedUpBookFile
+import com.chmouel.liseur.domain.BackedUpBookSessions
 import com.chmouel.liseur.domain.BackedUpReadingPosition
-import com.chmouel.liseur.domain.CompanionBackupContents
-import com.chmouel.liseur.domain.decodeCompanionBackup
-import com.chmouel.liseur.domain.decodeTranslationBackup
 import com.chmouel.liseur.domain.BackedUpTranslation
-import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import com.chmouel.liseur.domain.BackupContents
-import com.chmouel.liseur.domain.decodeAnnotationBackup
+import com.chmouel.liseur.domain.BookRestorePlan
+import com.chmouel.liseur.domain.CompanionBackupContents
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
+import com.chmouel.liseur.domain.decodeAnnotationBackup
+import com.chmouel.liseur.domain.decodeBookBackup
+import com.chmouel.liseur.domain.decodeCompanionBackup
+import com.chmouel.liseur.domain.decodeReadingPositionBackup
+import com.chmouel.liseur.domain.decodeSessionBackup
+import com.chmouel.liseur.domain.decodeTranslationBackup
 import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.data.remote.ServerKind
 import java.io.File
@@ -39,6 +44,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -68,6 +74,25 @@ enum class SettingsBackupFailure {
     UNREADABLE_CREDENTIAL,
 }
 
+data class SettingsBackupProgress(
+    val phase: Phase,
+    val done: Long,
+    val total: Long?,
+) {
+    enum class Phase {
+        HASHING_BOOKS,
+        WRITING,
+        READING,
+        IMPORTING_BOOKS,
+    }
+}
+
+internal data class BookArchiveLimits(
+    val maxBookBytes: Long = SettingsBackupRepository.MAX_BOOK_BYTES,
+    val maxBooksTotalBytes: Long = SettingsBackupRepository.MAX_BOOKS_TOTAL_BYTES,
+    val usableSpace: (File) -> Long = { it.usableSpace },
+)
+
 data class SettingsBackupPreview(
     val settingCount: Int,
     val fontCount: Int,
@@ -78,6 +103,11 @@ data class SettingsBackupPreview(
     val companionRecapCount: Int = 0,
     val includesConnections: Boolean = false,
     val translationBookCount: Int = 0,
+    val bookCount: Int = 0,
+    val booksInLibrary: Int = 0,
+    val booksToImport: Int = 0,
+    val bookImportBytes: Long = 0,
+    val sessionCount: Int = 0,
 )
 
 sealed interface SettingsBackupInspection {
@@ -92,11 +122,15 @@ sealed interface SettingsBackupExportResult {
         val liseurSyncNeedsPairing: Boolean = false,
         val translationBooks: Int = 0,
         val translationBooksSkipped: Int = 0,
+        val books: Int = 0,
+        val booksSkipped: Int = 0,
+        val sessions: Int = 0,
+        val bookBytes: Long = 0,
     ) : SettingsBackupExportResult
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupExportResult
 }
 
-/** A complete archive waiting in app-private cache for a destination chosen by the user. */
+/** A prepared archive waiting in app-private cache; book bytes join it only at save time. */
 data class PreparedExport(
     val file: File,
     val fonts: Int,
@@ -104,6 +138,10 @@ data class PreparedExport(
     val liseurSyncNeedsPairing: Boolean = false,
     val translationBooks: Int = 0,
     val translationBooksSkipped: Int = 0,
+    val books: Int = 0,
+    val booksSkipped: Int = 0,
+    val sessions: Int = 0,
+    val bookBytes: Long = 0,
 )
 
 sealed interface SettingsBackupPreparation {
@@ -123,6 +161,11 @@ sealed interface SettingsBackupRestoreResult {
         val liseurSyncNeedsPairing: Boolean = false,
         val translationBooks: Int = 0,
         val translationBooksSkipped: Int = 0,
+        val booksImported: Int = 0,
+        val booksAlreadyPresent: Int = 0,
+        val bookFailures: Int = 0,
+        val sessionsAdded: Int = 0,
+        val sessionsAlreadyPresent: Int = 0,
     ) : SettingsBackupRestoreResult
 
     data class Failed(val failure: SettingsBackupFailure) : SettingsBackupRestoreResult
@@ -130,7 +173,7 @@ sealed interface SettingsBackupRestoreResult {
 }
 
 /** Versioned archive for reading data, settings, fonts, and optional encrypted connections. */
-class SettingsBackupRepository(
+class SettingsBackupRepository internal constructor(
     private val context: Context,
     private val appSettings: AppSettingsRepository,
     private val readerPreferences: ReaderPreferencesRepository,
@@ -143,16 +186,59 @@ class SettingsBackupRepository(
     private val exportConnections: suspend () -> JSONObject = { error("Connection backup unavailable") },
     private val prepareConnectionRestore: (JSONObject, JSONObject) -> (suspend () -> Unit) = { _, _ -> error("Connection restore unavailable") },
     private val translations: TranslationBackupRepository? = null,
+    private val sessions: ReadingSessionBackupRepository? = null,
+    private val books: BookBackupRepository? = null,
+    internal val bookLimits: BookArchiveLimits = BookArchiveLimits(),
 ) {
+    constructor(
+        context: Context,
+        appSettings: AppSettingsRepository,
+        readerPreferences: ReaderPreferencesRepository,
+        userFonts: UserFontRepository,
+        annotations: AnnotationBackupRepository,
+        positions: ReadingPositionBackupRepository,
+        companion: CompanionBackupRepository,
+        restoreAppSettings: suspend (JSONObject) -> Unit = { appSettings.restoreBackupValues(it) },
+        exportConnections: suspend () -> JSONObject = { error("Connection backup unavailable") },
+        prepareConnectionRestore: (JSONObject, JSONObject) -> (suspend () -> Unit) = { _, _ -> error("Connection restore unavailable") },
+        translations: TranslationBackupRepository? = null,
+        sessions: ReadingSessionBackupRepository? = null,
+        books: BookBackupRepository? = null,
+    ) : this(
+        context = context,
+        appSettings = appSettings,
+        readerPreferences = readerPreferences,
+        userFonts = userFonts,
+        annotations = annotations,
+        positions = positions,
+        companion = companion,
+        restoreAppSettings = restoreAppSettings,
+        exportConnections = exportConnections,
+        prepareConnectionRestore = prepareConnectionRestore,
+        translations = translations,
+        sessions = sessions,
+        books = books,
+        bookLimits = BookArchiveLimits(),
+    )
     private val operationMutex = Mutex()
 
-    suspend fun exportTo(target: Uri, password: CharArray? = null, includeTranslations: Boolean = true): SettingsBackupExportResult = withContext(Dispatchers.IO) {
+    suspend fun bookCandidates(): List<BookBackupCandidate> =
+        books?.candidates() ?: emptyList()
+
+    suspend fun exportTo(
+        target: Uri,
+        password: CharArray? = null,
+        includeTranslations: Boolean = true,
+        includeSessions: Boolean = false,
+        bookUrls: Set<String> = emptySet(),
+        onProgress: (SettingsBackupProgress) -> Unit = {},
+    ): SettingsBackupExportResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
-            when (val preparation = prepareExportLocked(password, includeTranslations)) {
+            when (val preparation = prepareExportLocked(password, includeTranslations, includeSessions, bookUrls, onProgress)) {
                 is SettingsBackupPreparation.Failed ->
                     SettingsBackupExportResult.Failed(preparation.failure)
                 is SettingsBackupPreparation.Prepared -> try {
-                    writePreparedExportLocked(preparation.export, target)
+                    writePreparedExportLocked(preparation.export, target, onProgress)
                 } finally {
                     preparation.export.file.delete()
                 }
@@ -160,16 +246,19 @@ class SettingsBackupRepository(
         }
     }
 
-    /** Builds the whole ZIP in cache so the document picker never creates an empty destination. */
+    /** Builds the archive in cache so the document picker never creates an empty destination. */
     suspend fun prepareExport(
         password: CharArray? = null,
         includeTranslations: Boolean = true,
+        includeSessions: Boolean = false,
+        bookUrls: Set<String> = emptySet(),
+        onProgress: (SettingsBackupProgress) -> Unit = {},
     ): SettingsBackupPreparation {
         var prepared: PreparedExport? = null
         try {
             return withContext(Dispatchers.IO) {
                 operationMutex.withLock {
-                    prepareExportLocked(password, includeTranslations).also {
+                    prepareExportLocked(password, includeTranslations, includeSessions, bookUrls, onProgress).also {
                         if (it is SettingsBackupPreparation.Prepared) prepared = it.export
                     }
                 }
@@ -182,14 +271,18 @@ class SettingsBackupRepository(
     }
 
     /** Copies a prepared archive to the user's document, removing it when the copy fails. */
-    suspend fun writeExport(prepared: PreparedExport, target: Uri): SettingsBackupExportResult {
+    suspend fun writeExport(
+        prepared: PreparedExport,
+        target: Uri,
+        onProgress: (SettingsBackupProgress) -> Unit = {},
+    ): SettingsBackupExportResult {
         var started = false
         try {
             return withContext(Dispatchers.IO) {
                 operationMutex.withLock {
                     started = true
                     try {
-                        writePreparedExportLocked(prepared, target)
+                        writePreparedExportLocked(prepared, target, onProgress)
                     } finally {
                         prepared.file.delete()
                     }
@@ -214,6 +307,9 @@ class SettingsBackupRepository(
     private suspend fun prepareExportLocked(
         password: CharArray?,
         includeTranslations: Boolean,
+        includeSessions: Boolean,
+        bookUrls: Set<String>,
+        onProgress: (SettingsBackupProgress) -> Unit,
     ): SettingsBackupPreparation {
         sweepStaleExports()
         var completed = false
@@ -222,6 +318,8 @@ class SettingsBackupRepository(
         var positionFile: File? = null
         var companionFile: File? = null
         var translationFile: File? = null
+        var sessionFile: File? = null
+        var booksIndexFile: File? = null
         try {
             val settings = JSONObject()
                 .put("app", appSettings.backupValues())
@@ -270,6 +368,7 @@ class SettingsBackupRepository(
             companionFile = stagedCompanion
             companion.writeContents(stagedCompanion, MAX_COMPANION_BYTES)
             val companionMetadata = hashFile(COMPANION_PATH, stagedCompanion)
+
             var translationResult = TranslationBackupResult()
             val translationMetadata = if (includeTranslations && translations != null) {
                 val staged = File.createTempFile("translations-export-", ".json", context.cacheDir)
@@ -278,19 +377,63 @@ class SettingsBackupRepository(
                 hashFile(TRANSLATIONS_PATH, staged)
             } else null
 
+            var sessionCount = 0
+            val sessionMetadata = if (includeSessions && sessions != null) {
+                val staged = File.createTempFile("sessions-export-", ".json", context.cacheDir)
+                sessionFile = staged
+                sessionCount = try {
+                    sessions.writeContents(staged, MAX_SESSIONS_BYTES)
+                } catch (e: ReadingSessionBackupTooLarge) {
+                    throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                }
+                hashFile(SESSIONS_PATH, staged)
+            } else null
+
+            var preparedBooks = PreparedBooksResult()
+            val booksIndexMetadata = if (bookUrls.isNotEmpty() && books != null) {
+                val staged = File.createTempFile("books-export-", ".json", context.cacheDir)
+                booksIndexFile = staged
+                preparedBooks = try {
+                    books.prepareContents(
+                        selectedUrls = bookUrls,
+                        file = staged,
+                        maxIndexBytes = MAX_BOOK_INDEX_BYTES,
+                        maxBookBytes = bookLimits.maxBookBytes,
+                        maxBooksTotalBytes = bookLimits.maxBooksTotalBytes,
+                        maxBookFiles = MAX_BOOK_FILES,
+                    ) { done, total ->
+                        onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.HASHING_BOOKS, done, total))
+                    }
+                } catch (e: BookBackupTooLarge) {
+                    throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+                }
+                if (preparedBooks.books > 0) hashFile(BOOKS_PATH, staged) else null
+            } else null
+
             val fonts = userFonts.backupFonts()
             if (fonts.size > MAX_FONT_FILES) {
                 return SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE)
             }
 
-            val listed = ArrayList<EntryMetadata>(fonts.size + 4)
+            val listed = ArrayList<EntryMetadata>(fonts.size + preparedBooks.entries.size + 8)
             listed += EntryMetadata(SETTINGS_PATH, settingsBytes.size.toLong(), sha256(settingsBytes))
             listed += annotationMetadata
             listed += positionMetadata
             listed += companionMetadata
             translationMetadata?.let { listed += it }
             connectionBytes?.let { listed += EntryMetadata(CONNECTIONS_PATH, it.size.toLong(), sha256(it)) }
-            var totalBytes = settingsBytes.size.toLong() + annotationMetadata.size + positionMetadata.size + companionMetadata.size + (connectionBytes?.size ?: 0) + (translationMetadata?.size ?: 0)
+            sessionMetadata?.let { listed += it }
+            booksIndexMetadata?.let { listed += it }
+
+            var totalBytes = settingsBytes.size.toLong() +
+                annotationMetadata.size +
+                positionMetadata.size +
+                companionMetadata.size +
+                (connectionBytes?.size ?: 0) +
+                (translationMetadata?.size ?: 0) +
+                (sessionMetadata?.size ?: 0) +
+                (booksIndexMetadata?.size ?: 0)
+
             val fontMetadata = ArrayList<EntryMetadata>(fonts.size)
             val fontNames = fonts.associate { "fonts/${it.fileName}" to it.displayName }
             for (font in fonts) {
@@ -308,6 +451,10 @@ class SettingsBackupRepository(
                 }
                 fontMetadata += metadata
                 listed += metadata
+            }
+
+            for (bookEntry in preparedBooks.entries) {
+                listed += EntryMetadata(bookEntry.path, bookEntry.size, bookEntry.sha256)
             }
 
             val manifest = JSONObject()
@@ -342,6 +489,10 @@ class SettingsBackupRepository(
                 writeFileEntry(zip, COMPANION_PATH, stagedCompanion)
                 translationFile?.let { writeFileEntry(zip, TRANSLATIONS_PATH, it) }
                 connectionBytes?.let { writeEntry(zip, CONNECTIONS_PATH, it) }
+                sessionFile?.let { writeFileEntry(zip, SESSIONS_PATH, it) }
+                if (booksIndexMetadata != null && booksIndexFile != null) {
+                    writeFileEntry(zip, BOOKS_PATH, booksIndexFile)
+                }
                 fonts.zip(fontMetadata).forEach { (font, expected) ->
                     currentCoroutineContext().ensureActive()
                     val actual = writeFileEntry(zip, expected.path, font.file)
@@ -352,8 +503,18 @@ class SettingsBackupRepository(
             }
             completed = true
             return SettingsBackupPreparation.Prepared(
-                PreparedExport(archive, fonts.size, annotationCount, liseurSyncNeedsPairing,
-                    translationResult.books, translationResult.skipped),
+                PreparedExport(
+                    file = archive,
+                    fonts = fonts.size,
+                    annotations = annotationCount,
+                    liseurSyncNeedsPairing = liseurSyncNeedsPairing,
+                    translationBooks = translationResult.books,
+                    translationBooksSkipped = translationResult.skipped,
+                    books = preparedBooks.books,
+                    booksSkipped = preparedBooks.skipped,
+                    sessions = sessionCount,
+                    bookBytes = preparedBooks.bookBytes,
+                ),
             )
         } catch (e: CancellationException) {
             throw e
@@ -371,6 +532,8 @@ class SettingsBackupRepository(
             positionFile?.delete()
             companionFile?.delete()
             translationFile?.delete()
+            sessionFile?.delete()
+            booksIndexFile?.delete()
             if (!completed) archiveFile?.delete()
         }
     }
@@ -378,27 +541,86 @@ class SettingsBackupRepository(
     private suspend fun writePreparedExportLocked(
         prepared: PreparedExport,
         target: Uri,
+        onProgress: (SettingsBackupProgress) -> Unit,
     ): SettingsBackupExportResult {
         var completed = false
         try {
+            val booksJsonText = readBooksJsonFromPreparedZip(prepared.file)
             val output = context.contentResolver.openOutputStream(target, "wt")
                 ?: return SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
-            output.use { sink ->
-                prepared.file.inputStream().use { source ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val count = source.read(buffer)
-                        if (count < 0) break
-                        sink.write(buffer, 0, count)
+            if (booksJsonText == null) {
+                val totalBytes = prepared.file.length().takeIf { it > 0 }
+                var writtenBytes = 0L
+                output.use { sink ->
+                    prepared.file.inputStream().use { source ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val count = source.read(buffer)
+                            if (count < 0) break
+                            sink.write(buffer, 0, count)
+                            writtenBytes += count
+                            onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.WRITING, writtenBytes, totalBytes))
+                        }
                     }
                 }
+                completed = true
+                return SettingsBackupExportResult.Exported(
+                    fonts = prepared.fonts,
+                    annotations = prepared.annotations,
+                    liseurSyncNeedsPairing = prepared.liseurSyncNeedsPairing,
+                    translationBooks = prepared.translationBooks,
+                    translationBooksSkipped = prepared.translationBooksSkipped,
+                    books = prepared.books,
+                    booksSkipped = prepared.booksSkipped,
+                    sessions = prepared.sessions,
+                    bookBytes = prepared.bookBytes,
+                )
+            } else {
+                val bookBackup = books ?: return SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
+                val records = decodeBookBackup(booksJsonText)
+                val distinctBookBytes = records.distinctBy { it.sha256 }.sumOf { it.size }
+                val totalExpectedBytes = prepared.file.length() + distinctBookBytes
+                var writtenBytes = 0L
+                onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.WRITING, 0L, totalExpectedBytes))
+                ZipOutputStream(output.buffered()).use { zip ->
+                    ZipInputStream(prepared.file.inputStream().buffered()).use { sourceZip ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val entry = sourceZip.nextEntry ?: break
+                            zip.putNextEntry(ZipEntry(entry.name))
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val count = sourceZip.read(buffer)
+                                if (count < 0) break
+                                zip.write(buffer, 0, count)
+                                writtenBytes += count
+                                onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.WRITING, writtenBytes, totalExpectedBytes))
+                            }
+                            zip.closeEntry()
+                            sourceZip.closeEntry()
+                        }
+                    }
+                    zip.setLevel(Deflater.NO_COMPRESSION)
+                    bookBackup.streamBooksToZip(records, zip) { delta ->
+                        writtenBytes += delta
+                        onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.WRITING, writtenBytes, totalExpectedBytes))
+                    }
+                }
+                completed = true
+                return SettingsBackupExportResult.Exported(
+                    fonts = prepared.fonts,
+                    annotations = prepared.annotations,
+                    liseurSyncNeedsPairing = prepared.liseurSyncNeedsPairing,
+                    translationBooks = prepared.translationBooks,
+                    translationBooksSkipped = prepared.translationBooksSkipped,
+                    books = records.size,
+                    booksSkipped = prepared.booksSkipped,
+                    sessions = prepared.sessions,
+                    bookBytes = distinctBookBytes,
+                )
             }
-            completed = true
-            return SettingsBackupExportResult.Exported(
-                prepared.fonts, prepared.annotations, prepared.liseurSyncNeedsPairing,
-                prepared.translationBooks, prepared.translationBooksSkipped,
-            )
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -406,6 +628,20 @@ class SettingsBackupRepository(
             return SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS)
         } finally {
             if (!completed) discardExport(target)
+        }
+    }
+
+    private fun readBooksJsonFromPreparedZip(file: File): String? {
+        ZipInputStream(file.inputStream().buffered()).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: return null
+                if (entry.name == BOOKS_PATH) {
+                    val bytes = zip.readBytes()
+                    if (bytes.size > MAX_BOOK_INDEX_BYTES) throw IOException("Prepared books.json exceeds limit")
+                    return bytes.toString(Charsets.UTF_8)
+                }
+                zip.closeEntry()
+            }
         }
     }
 
@@ -419,223 +655,316 @@ class SettingsBackupRepository(
         Unit
     }
 
-    suspend fun inspect(source: Uri): SettingsBackupInspection = withContext(Dispatchers.IO) {
+    suspend fun inspect(
+        source: Uri,
+        onProgress: (SettingsBackupProgress) -> Unit = {},
+    ): SettingsBackupInspection = withContext(Dispatchers.IO) {
         operationMutex.withLock {
-        sweepStaleStaging()
-        when (val result = readArchive(source)) {
-            is ArchiveResult.Error -> SettingsBackupInspection.Failed(result.failure)
-            is ArchiveResult.Valid -> {
-                var retained = false
-                try {
-                    val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
-                    validateSettings(settings)
-                    val annotationPreview = annotations.previewContents(decodeAnnotations(result.entries))
-                    val positionContents = decodePositions(result.entries)
-                    val companionContents = decodeCompanion(result.entries)
-                    val translationContents = decodeTranslations(result.entries)
-                    result.entries[CONNECTIONS_PATH]?.let {
-                        BackupEncryption.validate(readStagedBytes(it.file, BackupEncryption.MAX_BYTES))
-                    }
-                    val index = JSONObject().put(
-                        "entries",
-                        JSONArray().also { values ->
-                            result.entries.forEach { (path, entry) ->
-                                val value = JSONObject().put("path", path).put("file", entry.file.name)
-                                entry.displayName?.let { value.put("displayName", it) }
-                                values.put(value)
-                            }
-                        },
-                    )
+            sweepStaleStaging()
+            when (val result = readArchive(source, onProgress)) {
+                is ArchiveResult.Error -> SettingsBackupInspection.Failed(result.failure)
+                is ArchiveResult.Valid -> {
+                    var retained = false
                     try {
-                        File(result.stagingDirectory, INDEX_PATH).writeText(index.toString())
+                        val settings = decodeSettings(result.entries.getValue(SETTINGS_PATH).file)
+                        validateSettings(settings)
+                        val bookFiles = decodeBooks(result.entries)
+                        val bookPlan = if (bookFiles.isNotEmpty() && books != null) {
+                            books.planRestore(bookFiles)
+                        } else {
+                            BookRestorePlan(emptyMap(), emptyList())
+                        }
+                        val previewAliases = buildMap {
+                            putAll(bookPlan.matched)
+                            for (missing in bookPlan.missing) {
+                                put(missing.bookId, missing.bookId)
+                            }
+                        }
+                        val annotationPreview = annotations.previewContents(decodeAnnotations(result.entries), previewAliases)
+                        val positionContents = decodePositions(result.entries)
+                        val companionContents = decodeCompanion(result.entries)
+                        val translationContents = decodeTranslations(result.entries)
+                        val sessionContents = decodeSessions(result.entries)
+                        result.entries[CONNECTIONS_PATH]?.let {
+                            BackupEncryption.validate(readStagedBytes(it.file, BackupEncryption.MAX_BYTES))
+                        }
+                        val index = JSONObject().put(
+                            "entries",
+                            JSONArray().also { values ->
+                                result.entries.forEach { (path, entry) ->
+                                    val value = JSONObject().put("path", path).put("file", entry.file.name)
+                                    entry.displayName?.let { value.put("displayName", it) }
+                                    values.put(value)
+                                }
+                            },
+                        )
+                        try {
+                            File(result.stagingDirectory, INDEX_PATH).writeText(index.toString())
+                        } catch (e: IOException) {
+                            throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
+                        }
+                        val distinctMissingStaged = bookPlan.missing
+                            .distinctBy { it.sha256 }
+                            .filter { "books/${it.sha256}.epub" in result.entries }
+                        retained = true
+                        SettingsBackupInspection.Ready(
+                            SettingsBackupPreview(
+                                settingCount = countKnownSettings(settings),
+                                fontCount = result.entries.keys.count { it.startsWith("fonts/") },
+                                annotationCount = annotationPreview.marks,
+                                annotationBookCount = annotationPreview.books,
+                                matchedAnnotationBooks = annotationPreview.matchedBooks,
+                                positionCount = positionContents.size,
+                                companionRecapCount = companionContents.recaps.size,
+                                includesConnections = CONNECTIONS_PATH in result.entries,
+                                translationBookCount = translationContents.size,
+                                bookCount = bookFiles.size,
+                                booksInLibrary = bookPlan.matched.size,
+                                booksToImport = distinctMissingStaged.size,
+                                bookImportBytes = distinctMissingStaged.sumOf { it.size },
+                                sessionCount = sessionContents.sumOf { it.sessions.size },
+                            ),
+                            result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: BackupFailureException) {
+                        SettingsBackupInspection.Failed(e.failure)
                     } catch (e: IOException) {
-                        throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
+                        Log.w(TAG, "Could not save settings backup inspection", e)
+                        SettingsBackupInspection.Failed(SettingsBackupFailure.STORAGE)
+                    } catch (e: Exception) {
+                        SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+                    } finally {
+                        if (!retained) removeStaging(result.stagingDirectory)
                     }
-                    retained = true
-                    SettingsBackupInspection.Ready(
-                        SettingsBackupPreview(
-                            settingCount = countKnownSettings(settings),
-                            fontCount = result.entries.keys.count { it.startsWith("fonts/") },
-                            annotationCount = annotationPreview.marks,
-                            annotationBookCount = annotationPreview.books,
-                            matchedAnnotationBooks = annotationPreview.matchedBooks,
-                            positionCount = positionContents.size,
-                            companionRecapCount = companionContents.recaps.size,
-                            includesConnections = CONNECTIONS_PATH in result.entries,
-                            translationBookCount = translationContents.size,
-                        ),
-                        result.stagingDirectory.name.removePrefix(PROCESS_STAGING_PREFIX),
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: BackupFailureException) {
-                    SettingsBackupInspection.Failed(e.failure)
-                } catch (e: IOException) {
-                    Log.w(TAG, "Could not save settings backup inspection", e)
-                    SettingsBackupInspection.Failed(SettingsBackupFailure.STORAGE)
-                } catch (e: Exception) {
-                    SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
-                } finally {
-                    if (!retained) removeStaging(result.stagingDirectory)
                 }
             }
-        }
         }
     }
 
-    suspend fun restore(archiveId: String, password: CharArray? = null): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
+    suspend fun restore(
+        archiveId: String,
+        password: CharArray? = null,
+        onProgress: (SettingsBackupProgress) -> Unit = {},
+    ): SettingsBackupRestoreResult = withContext(Dispatchers.IO) {
         operationMutex.withLock {
-        val archive = readStagedArchive(archiveId)
-            ?: return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
-        var retainForRetry = false
-        try {
-            val settings = try {
-                decodeSettings(archive.entries.getValue(SETTINGS_PATH).file).also(::validateSettings)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: BackupFailureException) {
-                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
-            } catch (e: Exception) {
-                return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
-            }
-
-            val annotationContents = try {
-                decodeAnnotations(archive.entries)
-            } catch (e: BackupFailureException) {
-                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
-            }
-
-            val positionContents = try {
-                decodePositions(archive.entries)
-            } catch (e: BackupFailureException) {
-                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
-            }
-
-            val companionContents = try {
-                decodeCompanion(archive.entries)
-            } catch (e: BackupFailureException) {
-                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
-            }
-
-            val translationContents = try {
-                decodeTranslations(archive.entries)
-            } catch (e: BackupFailureException) {
-                return@withContext SettingsBackupRestoreResult.Failed(e.failure)
-            }
-
-            val connections = archive.entries[CONNECTIONS_PATH]?.let { entry ->
-                val plaintext = try {
-                    if (password == null) throw IllegalArgumentException("Password required")
-                    BackupEncryption.decrypt(readStagedBytes(entry.file, BackupEncryption.MAX_BYTES), password)
-                } catch (e: Exception) {
-                    retainForRetry = true
-                    return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD)
-                }
-                try {
-                    JSONObject(plaintext.toString(Charsets.UTF_8)).also {
-                        ConnectionBackupRepository.validate(it, settings.getJSONObject("app"))
-                    }
+            val archive = readStagedArchive(archiveId)
+                ?: return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+            var retainForRetry = false
+            try {
+                val settings = try {
+                    decodeSettings(archive.entries.getValue(SETTINGS_PATH).file).also(::validateSettings)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
                 } catch (e: Exception) {
                     return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
-                } finally { plaintext.fill(0) }
-            }
-            val liseurSyncNeedsPairing =
-                connections?.optJSONObject("account")?.optString("kind") == ServerKind.LISEUR_SYNC.name
+                }
 
-            val applyConnections = try {
-                connections?.let { prepareConnectionRestore(it, settings.getJSONObject("app")) }
-            } catch (e: Exception) {
-                return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
-            }
-            var appSettingsRestored = false
-            try {
-                // Once a connection restore begins, any failure may follow durable writes.
-                if (applyConnections != null) {
+                val annotationContents = try {
+                    decodeAnnotations(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val positionContents = try {
+                    decodePositions(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val companionContents = try {
+                    decodeCompanion(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val translationContents = try {
+                    decodeTranslations(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val sessionContents = try {
+                    decodeSessions(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val bookContents = try {
+                    decodeBooks(archive.entries)
+                } catch (e: BackupFailureException) {
+                    return@withContext SettingsBackupRestoreResult.Failed(e.failure)
+                }
+
+                val connections = archive.entries[CONNECTIONS_PATH]?.let { entry ->
+                    val plaintext = try {
+                        if (password == null) throw IllegalArgumentException("Password required")
+                        BackupEncryption.decrypt(readStagedBytes(entry.file, BackupEncryption.MAX_BYTES), password)
+                    } catch (e: Exception) {
+                        retainForRetry = true
+                        return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.PASSWORD)
+                    }
+                    try {
+                        JSONObject(plaintext.toString(Charsets.UTF_8)).also {
+                            ConnectionBackupRepository.validate(it, settings.getJSONObject("app"))
+                        }
+                    } catch (e: Exception) {
+                        return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.INVALID_ARCHIVE)
+                    } finally { plaintext.fill(0) }
+                }
+                val liseurSyncNeedsPairing =
+                    connections?.optJSONObject("account")?.optString("kind") == ServerKind.LISEUR_SYNC.name
+
+                val applyConnections = try {
+                    connections?.let { prepareConnectionRestore(it, settings.getJSONObject("app")) }
+                } catch (e: Exception) {
+                    return@withContext SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
+                }
+                var appSettingsRestored = false
+                try {
+                    // Once a connection restore begins, any failure may follow durable writes.
+                    if (applyConnections != null) {
+                        appSettingsRestored = true
+                        applyConnections()
+                    } else {
+                        restoreAppSettings(settings.getJSONObject("app"))
+                    }
                     appSettingsRestored = true
-                    applyConnections()
-                } else {
-                    restoreAppSettings(settings.getJSONObject("app"))
+                    readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Settings restore failed", e)
+                    return@withContext if (appSettingsRestored) {
+                        SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                    } else {
+                        SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
+                    }
                 }
-                appSettingsRestored = true
-                readerPreferences.restoreBackupValues(settings.getJSONObject("reader"))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Settings restore failed", e)
-                return@withContext if (appSettingsRestored) {
-                    SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
-                } else {
-                    SettingsBackupRestoreResult.Failed(SettingsBackupFailure.RESTORE)
-                }
-            }
 
-            var imported = 0
-            var present = 0
-            var failures = 0
-            try {
-                val fontImports = archive.entries
-                    .filterKeys { it.startsWith("fonts/") }
-                    .map { (path, entry) ->
-                        currentCoroutineContext().ensureActive()
-                        val name = path.removePrefix("fonts/")
-                        val pickedName = entry.displayName?.let {
-                            "$it.${name.substringAfterLast('.', "")}"
-                        } ?: name
-                        UserFontImport(Uri.fromFile(entry.file), pickedName)
+                var imported = 0
+                var present = 0
+                var failures = 0
+                try {
+                    val fontImports = archive.entries
+                        .filterKeys { it.startsWith("fonts/") }
+                        .map { (path, entry) ->
+                            currentCoroutineContext().ensureActive()
+                            val name = path.removePrefix("fonts/")
+                            val pickedName = entry.displayName?.let {
+                                "$it.${name.substringAfterLast('.', "")}"
+                            } ?: name
+                            UserFontImport(Uri.fromFile(entry.file), pickedName)
+                        }
+                    userFonts.importAll(fontImports).forEach { result ->
+                        when (result) {
+                            is FontImportResult.Imported -> imported++
+                            is FontImportResult.AlreadyPresent -> present++
+                            else -> failures++
+                        }
                     }
-                userFonts.importAll(fontImports).forEach { result ->
-                    when (result) {
-                        is FontImportResult.Imported -> imported++
-                        is FontImportResult.AlreadyPresent -> present++
-                        else -> failures++
-                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Font restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Font restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+
+                val bookOutcome = try {
+                    if (bookContents.isEmpty()) {
+                        BookRestoreOutcome()
+                    } else if (books != null) {
+                        val stagedBookFiles = archive.entries
+                            .filterKeys { it.startsWith("books/") }
+                            .mapValues { (_, entry) -> entry.file }
+                        books.restore(bookContents, stagedBookFiles) { done, total ->
+                            onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.IMPORTING_BOOKS, done, total))
+                        }
+                    } else {
+                        BookRestoreOutcome(failures = bookContents.size)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Book restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                val aliases = bookOutcome.aliases
+
+                val annotationResult = try {
+                    annotations.importContents(annotationContents, aliases)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Annotation restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                val restoredPositions = try {
+                    positions.restore(positionContents, aliases)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Reading position restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                val sessionResult = try {
+                    if (sessionContents.isEmpty()) {
+                        SessionRestoreResult()
+                    } else {
+                        sessions?.restore(sessionContents, aliases) ?: SessionRestoreResult()
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Reading session restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                val companionRecapsAdded = try {
+                    if (companionContents.isEmpty()) 0 else companion.restore(companionContents, aliases)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Companion restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                val translationResult = try {
+                    if (translationContents.isEmpty()) TranslationBackupResult()
+                    else translations?.restore(translationContents, aliases) ?: TranslationBackupResult(0, translationContents.size)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "Translation restore stopped after settings were restored", e)
+                    return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
+                }
+
+                SettingsBackupRestoreResult.Restored(
+                    fontsImported = imported,
+                    fontsAlreadyPresent = present,
+                    fontFailures = failures,
+                    annotationsAdded = annotationResult.added,
+                    annotationsAlreadyPresent = annotationResult.alreadyHere,
+                    positionsRestored = restoredPositions,
+                    companionRecapsAdded = companionRecapsAdded,
+                    liseurSyncNeedsPairing = liseurSyncNeedsPairing,
+                    translationBooks = translationResult.books,
+                    translationBooksSkipped = translationResult.skipped,
+                    booksImported = bookOutcome.imported,
+                    booksAlreadyPresent = bookOutcome.alreadyPresent,
+                    bookFailures = bookOutcome.failures,
+                    sessionsAdded = sessionResult.added,
+                    sessionsAlreadyPresent = sessionResult.alreadyPresent,
+                )
+            } finally {
+                if (!retainForRetry) removeStaging(archive.stagingDirectory)
             }
-            val annotationResult = try {
-                annotations.importContents(annotationContents)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Annotation restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
-            }
-            val restoredPositions = try {
-                positions.restore(positionContents)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Reading position restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
-            }
-            val companionRecapsAdded = try {
-                if (companionContents.isEmpty()) 0 else companion.restore(companionContents)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Companion restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
-            }
-            val translationResult = try {
-                if (translationContents.isEmpty()) TranslationBackupResult()
-                else translations?.restore(translationContents) ?: TranslationBackupResult(0, translationContents.size)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Translation restore stopped after settings were restored", e)
-                return@withContext SettingsBackupRestoreResult.PartiallyRestored(liseurSyncNeedsPairing)
-            }
-            SettingsBackupRestoreResult.Restored(
-                imported, present, failures, annotationResult.added, annotationResult.alreadyHere, restoredPositions,
-                companionRecapsAdded, liseurSyncNeedsPairing, translationResult.books, translationResult.skipped,
-            )
-        } finally {
-            if (!retainForRetry) removeStaging(archive.stagingDirectory)
-        }
         }
     }
 
@@ -685,13 +1014,30 @@ class SettingsBackupRepository(
             if (!file.isFile) return null
             entries[path] = StagedEntry(file, file.length(), "", displayName)
         }
-        if (SETTINGS_PATH !in entries || entries.keys.any { it !in setOf(SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH, TRANSLATIONS_PATH) && !it.startsWith("fonts/") }) {
+        if (
+            SETTINGS_PATH !in entries ||
+            entries.keys.any {
+                it !in setOf(
+                    SETTINGS_PATH,
+                    ANNOTATIONS_PATH,
+                    POSITIONS_PATH,
+                    COMPANION_PATH,
+                    CONNECTIONS_PATH,
+                    TRANSLATIONS_PATH,
+                    SESSIONS_PATH,
+                    BOOKS_PATH,
+                ) && !it.startsWith("fonts/") && !BOOK_ENTRY_PATH.matches(it)
+            }
+        ) {
             return null
         }
         return ArchiveResult.Valid(directory, entries)
     }
 
-    private suspend fun readArchive(source: Uri): ArchiveResult {
+    private suspend fun readArchive(
+        source: Uri,
+        onProgress: (SettingsBackupProgress) -> Unit,
+    ): ArchiveResult {
         val staging = try {
             File(context.cacheDir, "$PROCESS_STAGING_PREFIX${UUID.randomUUID()}").also {
                 if (!it.mkdirs()) throw IOException("Could not create staging directory")
@@ -742,48 +1088,136 @@ class SettingsBackupRepository(
             }
 
             val entries = linkedMapOf<String, StagedEntry>()
+            val hashedOnlyEntries = linkedMapOf<String, StagedEntry>()
             var totalBytes = 0L
             var readingDataBytes = 0L
+            var bookBytes = 0L
+            var totalReadProgressBytes = 0L
+            var cachedBooksPlan: Pair<Map<String, List<BackedUpBookFile>>, Set<String>>? = null
+
             ZipInputStream(buffered).use { zip ->
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val entry = zip.nextEntry ?: break
                     val path = entry.name
+                    val isBookEntry = path.startsWith("books/")
+                    val isKnownNonBook = path in setOf(
+                        MANIFEST_PATH,
+                        SETTINGS_PATH,
+                        ANNOTATIONS_PATH,
+                        POSITIONS_PATH,
+                        COMPANION_PATH,
+                        CONNECTIONS_PATH,
+                        TRANSLATIONS_PATH,
+                        SESSIONS_PATH,
+                        BOOKS_PATH,
+                    ) || path.startsWith("fonts/")
                     if (
                         entry.isDirectory ||
                         !safePath(path) ||
-                        path !in setOf(MANIFEST_PATH, SETTINGS_PATH, ANNOTATIONS_PATH, POSITIONS_PATH, COMPANION_PATH, CONNECTIONS_PATH, TRANSLATIONS_PATH) && !path.startsWith("fonts/") ||
+                        (!isKnownNonBook && !BOOK_ENTRY_PATH.matches(path)) ||
                         path in entries ||
-                        entries.size >= MAX_ARCHIVE_ENTRIES
+                        path in hashedOnlyEntries ||
+                        (entries.size + hashedOnlyEntries.size) >= MAX_ARCHIVE_ENTRIES
                     ) {
                         return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                     }
-                    val sizeLimit = when (path) {
-                        MANIFEST_PATH -> MAX_MANIFEST_BYTES
-                        SETTINGS_PATH -> MAX_SETTINGS_BYTES
-                        ANNOTATIONS_PATH -> MAX_ANNOTATIONS_BYTES
-                        POSITIONS_PATH -> MAX_POSITIONS_BYTES
-                        COMPANION_PATH -> MAX_COMPANION_BYTES
-                        TRANSLATIONS_PATH -> TranslationBackupRepository.MAX_BYTES
-                        CONNECTIONS_PATH -> BackupEncryption.MAX_BYTES
-                        else -> MAX_ENTRY_BYTES
-                    }
-                    val staged = stageEntry(
-                        input = zip,
-                        file = File(staging, "entry-${entries.size}"),
-                        sizeLimit = minOf(sizeLimit, MAX_TOTAL_BYTES - totalBytes),
-                    )
-                    if (path == ANNOTATIONS_PATH || path == POSITIONS_PATH) {
-                        readingDataBytes += staged.size
-                        if (readingDataBytes > MAX_READING_DATA_BYTES) {
+
+                    if (isBookEntry) {
+                        if (BOOKS_PATH !in entries) {
+                            return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                        }
+                        val (recordsBySha, missingShas) = cachedBooksPlan ?: run {
+                            val decoded = decodeBooks(entries)
+                            val plan = books?.planRestore(decoded)
+                                ?: BookRestorePlan(emptyMap(), decoded)
+                            val grouped = decoded.groupBy { it.sha256 }
+                            val missing = plan.missing.mapTo(mutableSetOf()) { it.sha256 }
+                            (grouped to missing).also { cachedBooksPlan = it }
+                        }
+                        val sha = path.removePrefix("books/").removeSuffix(".epub")
+                        val recordsForSha = recordsBySha[sha]
+                            ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                        val declaredSizes = recordsForSha.map { it.size }.distinct()
+                        if (declaredSizes.size != 1) {
+                            return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                        }
+                        val declaredSize = declaredSizes.single()
+                        val sizeLimit = minOf(bookLimits.maxBookBytes, bookLimits.maxBooksTotalBytes - bookBytes)
+                        if (sizeLimit < 0 || declaredSize > sizeLimit) {
                             return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
                         }
+                        if (sha in missingShas) {
+                            if (bookLimits.usableSpace(staging) - declaredSize < CACHE_HEADROOM_BYTES) {
+                                return ArchiveResult.Error(SettingsBackupFailure.STORAGE)
+                            }
+                            // Read no further than the declared size, so a book understating
+                            // its size cannot exhaust the headroom this check just saved.
+                            val staged = try {
+                                stageEntry(
+                                    input = zip,
+                                    file = File(staging, "entry-${entries.size}"),
+                                    sizeLimit = declaredSize,
+                                ) { delta ->
+                                    totalReadProgressBytes += delta
+                                    onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.READING, totalReadProgressBytes, null))
+                                }
+                            } catch (e: BackupFailureException) {
+                                if (e.failure == SettingsBackupFailure.TOO_LARGE) {
+                                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                                }
+                                throw e
+                            }
+                            if (staged.size != declaredSize) {
+                                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                            }
+                            bookBytes += staged.size
+                            entries[path] = staged
+                        } else {
+                            val hashed = try {
+                                hashEntry(
+                                    input = zip,
+                                    sizeLimit = declaredSize,
+                                ) { delta ->
+                                    totalReadProgressBytes += delta
+                                    onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.READING, totalReadProgressBytes, null))
+                                }
+                            } catch (e: BackupFailureException) {
+                                if (e.failure == SettingsBackupFailure.TOO_LARGE) {
+                                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                                }
+                                throw e
+                            }
+                            if (hashed.size != declaredSize) {
+                                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                            }
+                            bookBytes += hashed.size
+                            hashedOnlyEntries[path] = hashed
+                        }
+                    } else {
+                        val sizeLimit = minOf(entryLimit(path), MAX_TOTAL_BYTES - totalBytes)
+                        val staged = stageEntry(
+                            input = zip,
+                            file = File(staging, "entry-${entries.size}"),
+                            sizeLimit = sizeLimit,
+                        ) { delta ->
+                            totalReadProgressBytes += delta
+                            onProgress(SettingsBackupProgress(SettingsBackupProgress.Phase.READING, totalReadProgressBytes, null))
+                        }
+                        if (path == ANNOTATIONS_PATH || path == POSITIONS_PATH) {
+                            readingDataBytes += staged.size
+                            if (readingDataBytes > MAX_READING_DATA_BYTES) {
+                                return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
+                            }
+                        }
+                        totalBytes += staged.size
+                        entries[path] = staged
                     }
-                    totalBytes += staged.size
-                    entries[path] = staged
                     zip.closeEntry()
                 }
             }
+
+            val allSeenEntries = entries + hashedOnlyEntries
 
             val manifestEntry = entries[MANIFEST_PATH]
                 ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
@@ -793,6 +1227,10 @@ class SettingsBackupRepository(
                 return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
             }
             if (entries.keys.count { it.startsWith("fonts/") } > MAX_FONT_FILES) {
+                return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
+            }
+            val bookEntryPaths = allSeenEntries.keys.filter { it.startsWith("books/") }
+            if (bookEntryPaths.size > MAX_BOOK_FILES) {
                 return ArchiveResult.Error(SettingsBackupFailure.TOO_LARGE)
             }
 
@@ -808,24 +1246,46 @@ class SettingsBackupRepository(
             if (manifest.opt("application") != "liseur") {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.opt("format") !in setOf(1, 2, 3, 4, 5, FORMAT)) {
+            if (manifest.opt("format") !in setOf(1, 2, 3, 4, 5, 6, FORMAT)) {
                 return ArchiveResult.Error(SettingsBackupFailure.UNSUPPORTED_VERSION)
             }
-            if ((manifest.optInt("format") >= 2) != (ANNOTATIONS_PATH in entries)) {
+            val formatVersion = manifest.optInt("format")
+            if ((formatVersion >= 2) != (ANNOTATIONS_PATH in entries)) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if ((manifest.optInt("format") >= 3) != (POSITIONS_PATH in entries)) {
+            if ((formatVersion >= 3) != (POSITIONS_PATH in entries)) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if ((manifest.optInt("format") >= 4) != (COMPANION_PATH in entries)) {
+            if ((formatVersion >= 4) != (COMPANION_PATH in entries)) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.optInt("format") < 5 && CONNECTIONS_PATH in entries) {
+            if (formatVersion < 5 && CONNECTIONS_PATH in entries) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
-            if (manifest.optInt("format") < 6 && TRANSLATIONS_PATH in entries) {
+            if (formatVersion < 6 && TRANSLATIONS_PATH in entries) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
+            if (formatVersion < 7 && (SESSIONS_PATH in entries || BOOKS_PATH in entries || bookEntryPaths.isNotEmpty())) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            if ((BOOKS_PATH in entries) != bookEntryPaths.isNotEmpty()) {
+                return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+            }
+            if (BOOKS_PATH in entries) {
+                val decodedBooks = decodeBooks(entries)
+                val expectedBookPaths = decodedBooks.mapTo(mutableSetOf()) { "books/${it.sha256}.epub" }
+                if (expectedBookPaths.isEmpty() || expectedBookPaths != bookEntryPaths.toSet()) {
+                    return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                }
+                for (record in decodedBooks) {
+                    val bookEntry = allSeenEntries["books/${record.sha256}.epub"]
+                        ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    if (record.size != bookEntry.size) {
+                        return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    }
+                }
+            }
+
             val listed = manifest.optJSONArray("entries")
                 ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             val expected = mutableMapOf<String, ExpectedEntry>()
@@ -834,11 +1294,12 @@ class SettingsBackupRepository(
                     ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 val path = item.opt("path") as? String
                     ?: return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                val limit = entryLimit(path)
                 val size = (item.opt("size") as? Number)?.toDouble()?.let { rawSize ->
                     if (
                         rawSize.isFinite() &&
                         rawSize % 1.0 == 0.0 &&
-                        rawSize in 0.0..entryLimit(path).toDouble()
+                        rawSize in 0.0..limit.toDouble()
                     ) {
                         rawSize.toLong()
                     } else {
@@ -859,18 +1320,18 @@ class SettingsBackupRepository(
                 if (
                     !safePath(path) ||
                     path == MANIFEST_PATH ||
-                    size !in 0..entryLimit(path) ||
+                    size !in 0..limit ||
                     !SHA256.matches(digest) ||
                     expected.put(path, ExpectedEntry(size, digest, displayName)) != null
                 ) {
                     return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 }
             }
-            if (expected.keys != entries.keys - MANIFEST_PATH) {
+            if (expected.keys != allSeenEntries.keys - MANIFEST_PATH) {
                 return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
             }
             expected.forEach { (path, check) ->
-                val entry = entries.getValue(path)
+                val entry = allSeenEntries.getValue(path)
                 if (entry.size != check.size || entry.sha256 != check.sha256) {
                     return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                 }
@@ -879,6 +1340,12 @@ class SettingsBackupRepository(
                     val digest = name.substringBefore('.')
                     val extension = name.substringAfter('.', "")
                     if (UserFont.fileNameFor(digest, extension) != name || digest != entry.sha256) {
+                        return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
+                    }
+                }
+                if (path.startsWith("books/")) {
+                    val expectedName = "${entry.sha256}.epub"
+                    if (!BOOK_ENTRY_PATH.matches(path) || path.removePrefix("books/") != expectedName) {
                         return ArchiveResult.Error(SettingsBackupFailure.INVALID_ARCHIVE)
                     }
                 }
@@ -907,6 +1374,7 @@ class SettingsBackupRepository(
         input: InputStream,
         file: File,
         sizeLimit: Long,
+        onBytes: (Long) -> Unit = {},
     ): StagedEntry {
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
@@ -929,6 +1397,7 @@ class SettingsBackupRepository(
                         throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
                     }
                     digest.update(buffer, 0, count)
+                    onBytes(count.toLong())
                 }
             }
         } catch (e: BackupFailureException) {
@@ -937,6 +1406,52 @@ class SettingsBackupRepository(
             throw BackupFailureException(SettingsBackupFailure.STORAGE, e)
         }
         return StagedEntry(file, size, digest.hexDigest())
+    }
+
+    private suspend fun hashEntry(
+        input: InputStream,
+        sizeLimit: Long,
+        onBytes: (Long) -> Unit = {},
+    ): StagedEntry {
+        val digest = MessageDigest.getInstance("SHA-256")
+        var size = 0L
+        val buffer = ByteArray(BUFFER_SIZE)
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val count = try {
+                input.read(buffer)
+            } catch (e: IOException) {
+                throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+            }
+            if (count < 0) break
+            size += count
+            if (size > sizeLimit) throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+            digest.update(buffer, 0, count)
+            onBytes(count.toLong())
+        }
+        return StagedEntry(File(""), size, digest.hexDigest())
+    }
+
+    private fun decodeBooks(entries: Map<String, StagedEntry>): List<BackedUpBookFile> {
+        val entry = entries[BOOKS_PATH] ?: return emptyList()
+        val text = readStagedBytes(entry.file, MAX_BOOK_INDEX_BYTES).toString(Charsets.UTF_8)
+        return try {
+            decodeBookBackup(text)
+        } catch (e: Exception) {
+            throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+        }
+    }
+
+    private fun decodeSessions(entries: Map<String, StagedEntry>): List<BackedUpBookSessions> {
+        val entry = entries[SESSIONS_PATH] ?: return emptyList()
+        if (!entry.file.isFile || entry.file.length() > MAX_SESSIONS_BYTES) {
+            throw BackupFailureException(SettingsBackupFailure.TOO_LARGE)
+        }
+        return try {
+            entry.file.reader(Charsets.UTF_8).buffered().use(::decodeSessionBackup)
+        } catch (e: Exception) {
+            throw BackupFailureException(SettingsBackupFailure.INVALID_ARCHIVE, e)
+        }
     }
 
     private fun decodeTranslations(entries: Map<String, StagedEntry>): List<BackedUpTranslation> {
@@ -1212,6 +1727,14 @@ class SettingsBackupRepository(
         zip.closeEntry()
     }
 
+    private fun entryLimit(path: String): Long = when {
+        path.startsWith("books/") -> bookLimits.maxBookBytes
+        path == SESSIONS_PATH -> MAX_SESSIONS_BYTES
+        path == BOOKS_PATH -> MAX_BOOK_INDEX_BYTES
+        path == TRANSLATIONS_PATH -> TranslationBackupRepository.MAX_BYTES
+        else -> MAX_ENTRY_BYTES
+    }
+
     private data class EntryMetadata(val path: String, val size: Long, val sha256: String)
     private data class ExpectedEntry(val size: Long, val sha256: String, val displayName: String?)
     private data class StagedEntry(
@@ -1245,7 +1768,7 @@ class SettingsBackupRepository(
         private const val INDEX_PATH = "inspection.json"
         private val ARCHIVE_ID = Regex("[0-9a-f-]{36}")
         private val ENTRY_FILE = Regex("entry-[0-9]+")
-        private const val FORMAT = 6
+        internal const val FORMAT = 7
         private const val MANIFEST_PATH = "manifest.json"
         private const val SETTINGS_PATH = "settings.json"
         private const val ANNOTATIONS_PATH = "annotations.json"
@@ -1253,30 +1776,45 @@ class SettingsBackupRepository(
         private const val CONNECTIONS_PATH = "connections.enc.json"
         private const val COMPANION_PATH = "companion.json"
         private const val TRANSLATIONS_PATH = "translations.json"
+        private const val SESSIONS_PATH = "sessions.json"
+        private const val BOOKS_PATH = "books.json"
         // JSON trees expand well beyond their file size during inspection and restore.
         private const val MAX_READING_DATA_BYTES = 4L * 1024 * 1024
         private const val MAX_POSITIONS_BYTES = MAX_READING_DATA_BYTES
         private const val MAX_ANNOTATIONS_BYTES = MAX_READING_DATA_BYTES
         private const val MAX_COMPANION_BYTES = 16L * 1024 * 1024
+        internal const val MAX_SESSIONS_BYTES = 16L * 1024 * 1024
+        internal const val MAX_BOOK_INDEX_BYTES = 2L * 1024 * 1024
+        internal const val MAX_BOOK_BYTES = 512L * 1024 * 1024
+        internal const val MAX_BOOK_FILES = 2_000
+        internal const val MAX_BOOKS_TOTAL_BYTES = 3L * 1024 * 1024 * 1024
+        internal const val CACHE_HEADROOM_BYTES = 128L * 1024 * 1024
         private const val MAX_SETTINGS_BYTES = 1024L * 1024
         private const val MAX_MANIFEST_BYTES = 1024L * 1024
         private const val MAX_FONT_FILES = UserFontRepository.MAX_FONTS
         private const val MAX_ENTRY_BYTES = UserFontRepository.MAX_BYTES
-        private const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 7
-        private const val MAX_TOTAL_BYTES =
-            MAX_FONT_FILES * MAX_ENTRY_BYTES + MAX_SETTINGS_BYTES + MAX_MANIFEST_BYTES + MAX_ANNOTATIONS_BYTES + MAX_POSITIONS_BYTES + MAX_COMPANION_BYTES + BackupEncryption.MAX_BYTES + TranslationBackupRepository.MAX_BYTES
+        internal const val MAX_ARCHIVE_ENTRIES = MAX_FONT_FILES + 9 + MAX_BOOK_FILES
+        internal const val MAX_TOTAL_BYTES =
+            MAX_FONT_FILES * MAX_ENTRY_BYTES +
+                MAX_SETTINGS_BYTES +
+                MAX_MANIFEST_BYTES +
+                MAX_ANNOTATIONS_BYTES +
+                MAX_POSITIONS_BYTES +
+                MAX_COMPANION_BYTES +
+                BackupEncryption.MAX_BYTES +
+                TranslationBackupRepository.MAX_BYTES +
+                MAX_SESSIONS_BYTES +
+                MAX_BOOK_INDEX_BYTES
         private const val BUFFER_SIZE = 32 * 1024
         // A picker left open in another window or during doze can stay unanswered for
         // hours, so only a day-old staging file counts as one no live picker waits on.
         private const val STALE_EXPORT_AGE_MS = 24L * 60 * 60 * 1000
         private val EXPORT_TEMP_FILE =
-            Regex("(settings|annotations|positions|companion|translations)-export-[0-9]+\\.[a-z]+")
+            Regex("(settings|annotations|positions|companion|translations|sessions|books)-export-[0-9]+\\.[a-z]+")
         private val PREPARED_EXPORT_FILE = Regex("settings-export-[0-9]+\\.zip")
         private const val NUMBER_EPSILON = 0.000001
         private val SHA256 = Regex("[0-9a-f]{64}")
-
-        private fun entryLimit(path: String) =
-            if (path == TRANSLATIONS_PATH) TranslationBackupRepository.MAX_BYTES else MAX_ENTRY_BYTES
+        private val BOOK_ENTRY_PATH = Regex("books/[0-9a-f]{64}\\.epub")
 
         private fun safePath(path: String) = path.isNotBlank() && !path.startsWith('/') &&
             '\\' !in path && path.split('/').none { it.isEmpty() || it == "." || it == ".." }

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import androidx.room.Room
+import androidx.room.withTransaction
 import com.chmouel.liseur.companion.ChapterRecap
 import com.chmouel.liseur.companion.ChapterRecapRow
 import com.chmouel.liseur.companion.CompanionDatabase
@@ -32,6 +33,8 @@ import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.BookAnnotationDao
 import com.chmouel.liseur.data.db.AnnotationKind
+import com.chmouel.liseur.data.db.DownloadState
+import com.chmouel.liseur.data.db.ReadingSession
 import com.chmouel.liseur.domain.BackedUpBook
 import com.chmouel.liseur.domain.encodeAnnotationBackup
 import com.chmouel.liseur.data.remote.AccountBackup
@@ -50,9 +53,14 @@ import com.chmouel.liseur.data.settings.fonts.SfntFixtures
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.util.zip.CRC32
 import java.util.zip.ZipFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.readium.r2.shared.util.asset.AssetRetriever
+import org.readium.r2.shared.util.http.DefaultHttpClient
+import org.readium.r2.streamer.PublicationOpener
+import org.readium.r2.streamer.parser.DefaultPublicationParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -79,19 +87,52 @@ class SettingsBackupRepositoryTest {
     private lateinit var db: LiseurDatabase
     private lateinit var companionDb: CompanionDatabase
     private lateinit var companionStore: CompanionStore
+    private lateinit var localLibrary: LocalLibraryRepository
     private val requested = mutableListOf<String>()
 
     @Before
     fun open() {
+        File(context.filesDir, "books").deleteRecursively()
         db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).build()
         companionDb = Room.inMemoryDatabaseBuilder(context, CompanionDatabase::class.java).build()
         companionStore = CompanionStore(companionDb, present = { db.bookDao().presentUrls(it) })
+        val removal = BookRemoval(
+            bookDao = db.bookDao(),
+            sessionDao = db.readingSessionDao(),
+            peerStateDao = db.syncPeerStateDao(),
+            identityDao = db.workIdentityDao(),
+            progressDao = db.readingProgressDao(),
+            annotationDao = db.annotationDao(),
+            annotationSyncDao = db.annotationSyncDao(),
+            inTransaction = { work -> db.withTransaction { work() } },
+            metadataDao = db.bookMetadataDao(),
+        )
+        val httpClient = DefaultHttpClient()
+        val assetRetriever = AssetRetriever(context.contentResolver, httpClient)
+        val opener = PublicationOpener(
+            DefaultPublicationParser(
+                context,
+                httpClient = httpClient,
+                assetRetriever = assetRetriever,
+                pdfFactory = null,
+            ),
+        )
+        localLibrary = LocalLibraryRepository(
+            context = context,
+            assetRetriever = assetRetriever,
+            publicationOpener = opener,
+            bookDao = db.bookDao(),
+            folderDao = db.libraryFolderDao(),
+            bookRemoval = removal,
+            fingerprints = BookFingerprintStore(context, db.workIdentityDao()),
+        )
     }
 
     @After
     fun close() {
         db.close()
         companionDb.close()
+        File(context.filesDir, "books").deleteRecursively()
     }
 
     @Test
@@ -1094,7 +1135,7 @@ class SettingsBackupRepositoryTest {
         ZipFile(File(uri.path!!)).use { zip ->
             assertTrue(zip.getEntry("annotations.json") != null)
             val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
-            assertEquals(6, manifest.getInt("format"))
+            assertEquals(7, manifest.getInt("format"))
         }
 
         db.annotationDao().deleteForBook("source-book")
@@ -1436,15 +1477,764 @@ class SettingsBackupRepositoryTest {
         assertEquals(ThemeMode.SYSTEM, app.settings.first().themeMode)
     }
 
+    @Test
+    fun `format seven round trip adds a missing book and reattaches its position, marks and sessions`() = runTest {
+        val epubFile = folder.newFile("roundtrip.epub").also { writeEpub(it, title = "Roundtrip Book", author = "Roundtrip Author") }
+        val sha = sha256(epubFile.readBytes())
+        val archivedUrl = "calibre:uuid-roundtrip"
+        db.bookDao().upsert(
+            Book(
+                url = archivedUrl,
+                title = "Roundtrip Book",
+                author = "Roundtrip Author",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                localUri = Uri.fromFile(epubFile).toString(),
+            ),
+        )
+        val locator = """{"href":"OEBPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"progression":0.5,"totalProgression":0.5}}"""
+        db.readingProgressDao().upsert(ReadingProgress(archivedUrl, locator, 0.5, updatedAt = 100, readAt = 90))
+        val mark = BookAnnotation("mark-1", archivedUrl, AnnotationKind.BOOK_NOTE.name, "", note = "Note on roundtrip", createdAt = 50)
+        db.annotationDao().upsert(mark)
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = archivedUrl,
+                startedAt = 1000,
+                endedAt = 2000,
+                lastCheckpointAt = 2000,
+                durationMs = 900,
+                idleMs = 100,
+                startProgression = 0.1,
+                endProgression = 0.5,
+            ),
+        )
+
+        val app = AppSettingsRepository(store("v7-roundtrip-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("v7-roundtrip-reader.preferences_pb"))
+        val repo = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val zipFile = File(folder.root, "v7-roundtrip.zip")
+        val uri = Uri.fromFile(zipFile)
+
+        val exportResult = repo.exportTo(uri, includeSessions = true, bookUrls = setOf(archivedUrl))
+        assertEquals(
+            SettingsBackupExportResult.Exported(
+                fonts = 0,
+                annotations = 1,
+                books = 1,
+                sessions = 1,
+                bookBytes = epubFile.length(),
+            ),
+            exportResult,
+        )
+
+        // Wipe DB and source file
+        db.bookDao().deleteByUrls(listOf(archivedUrl))
+        db.readingProgressDao().forget(archivedUrl)
+        db.annotationDao().delete(mark)
+        db.readingSessionDao().deleteForBook(archivedUrl)
+        assertTrue(epubFile.delete())
+
+        val preview = (repo.inspect(uri) as SettingsBackupInspection.Ready).preview
+        assertEquals(1, preview.bookCount)
+        assertEquals(0, preview.booksInLibrary)
+        assertEquals(1, preview.booksToImport)
+        assertEquals(1, preview.matchedAnnotationBooks)
+        assertEquals(1, preview.sessionCount)
+
+        val inspectReady = repo.inspect(uri) as SettingsBackupInspection.Ready
+        val restored = repo.restore(inspectReady.archiveId) as SettingsBackupRestoreResult.Restored
+        assertEquals(1, restored.booksImported)
+        assertEquals(0, restored.booksAlreadyPresent)
+        assertEquals(0, restored.bookFailures)
+        assertEquals(1, restored.annotationsAdded)
+        assertEquals(1, restored.positionsRestored)
+        assertEquals(1, restored.sessionsAdded)
+
+        val targetBookFile = File(File(context.filesDir, "books"), "$sha.epub")
+        assertTrue(targetBookFile.isFile)
+        val expectedUrl = Uri.fromFile(targetBookFile).toString()
+        assertEquals(listOf(expectedUrl), db.bookDao().allOnce().map { it.url })
+        assertEquals(0.5, db.readingProgressDao().get(expectedUrl)?.totalProgression)
+        assertEquals(expectedUrl, db.annotationDao().byId("mark-1")?.bookId)
+        val session = db.readingSessionDao().allOnce().single()
+        assertEquals(expectedUrl, session.bookUrl)
+        assertTrue(session.importedAt != null)
+    }
+
+    @Test
+    fun `a failed book import keeps its data under the archived URL`() = runTest {
+        val twin = folder.newFile("twin.epub").also {
+            writeEpub(it, title = "Twin", author = "Twin Author", id = "urn:uuid:twin")
+        }
+        val broken = folder.newFile("broken-twin.epub").also { it.writeText("not an epub") }
+        val twinUrl = "calibre:twin"
+        val brokenUrl = "calibre:broken-twin"
+        db.bookDao().upsert(
+            book(twinUrl).copy(
+                title = "Twin", author = "Twin Author",
+                downloadState = DownloadState.DOWNLOADED, localUri = Uri.fromFile(twin).toString(),
+            ),
+        )
+        db.bookDao().upsert(
+            book(brokenUrl).copy(
+                title = "Twin", author = "Twin Author",
+                downloadState = DownloadState.DOWNLOADED, localUri = Uri.fromFile(broken).toString(),
+            ),
+        )
+        val locator = """{"href":"OEBPS/chapter.xhtml","type":"application/xhtml+xml","locations":{"progression":%s,"totalProgression":%s}}"""
+        db.readingProgressDao().upsert(ReadingProgress(twinUrl, locator.format(0.25, 0.25), 0.25, updatedAt = 100, readAt = 90))
+        db.readingProgressDao().upsert(ReadingProgress(brokenUrl, locator.format(0.75, 0.75), 0.75, updatedAt = 100, readAt = 90))
+
+        val repo = repository(
+            AppSettingsRepository(store("failed-claim-app.preferences_pb")),
+            ReaderPreferencesRepository(store("failed-claim-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val zipUri = Uri.fromFile(File(folder.root, "failed-claim.zip"))
+        repo.exportTo(zipUri, bookUrls = setOf(twinUrl, brokenUrl))
+
+        // The destination has the exact twin only, and the other book will not open.
+        db.bookDao().deleteByUrls(listOf(brokenUrl))
+        assertTrue(broken.delete())
+
+        val ready = repo.inspect(zipUri) as SettingsBackupInspection.Ready
+        assertEquals(1, ready.preview.booksInLibrary)
+        assertEquals(1, ready.preview.booksToImport)
+        val restored = repo.restore(ready.archiveId) as SettingsBackupRestoreResult.Restored
+        assertEquals(0, restored.booksImported)
+        assertEquals(1, restored.bookFailures)
+        assertEquals(0.25, db.readingProgressDao().get(twinUrl)?.totalProgression)
+        assertEquals(0.75, db.readingProgressDao().get(brokenUrl)?.totalProgression)
+    }
+
+    @Test
+    fun `a book entry larger than its declared size is rejected before it fills the cache`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("under-declared-app.preferences_pb")),
+            ReaderPreferencesRepository(store("under-declared-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val epubBytes = "epub-bytes".toByteArray()
+        val sha = sha256(epubBytes)
+        val file = archive(
+            "under-declared.zip",
+            settings,
+            linkedMapOf(
+                "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+                "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+                "books.json" to """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$sha","size":0}]}""".toByteArray(),
+                "books/$sha.epub" to epubBytes,
+            ),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(file)))
+    }
+
+    @Test
+    fun `a book already in the library by URL or title and author is matched and never imported`() = runTest {
+        val epub1 = folder.newFile("match1.epub").also { writeEpub(it, title = "Book One", author = "Author One", id = "id-1") }
+        val epub2 = folder.newFile("match2.epub").also { writeEpub(it, title = "Book Two", author = "Author Two", id = "id-2") }
+        db.bookDao().upsert(
+            Book(
+                url = "calibre:1",
+                title = "Book One",
+                author = "Author One",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                localUri = Uri.fromFile(epub1).toString(),
+            ),
+        )
+        db.bookDao().upsert(
+            Book(
+                url = "calibre:2",
+                title = "Book Two",
+                author = "Author Two",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                localUri = Uri.fromFile(epub2).toString(),
+            ),
+        )
+
+        val app = AppSettingsRepository(store("match-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("match-reader.preferences_pb"))
+        val repo = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val uri = Uri.fromFile(File(folder.root, "matched.zip"))
+        repo.exportTo(uri, bookUrls = setOf("calibre:1", "calibre:2"))
+
+        // Replace calibre:2 with a local URL having the same title & author
+        db.bookDao().deleteByUrls(listOf("calibre:2"))
+        db.bookDao().upsert(
+            Book(
+                url = "file:///different/book2.epub",
+                title = "Book Two",
+                author = "Author Two",
+                coverPath = null,
+                source = null,
+                addedAt = 2,
+                lastOpenedAt = null,
+            ),
+        )
+
+        val ready = repo.inspect(uri) as SettingsBackupInspection.Ready
+        assertEquals(2, ready.preview.bookCount)
+        assertEquals(2, ready.preview.booksInLibrary)
+        assertEquals(0, ready.preview.booksToImport)
+
+        val restored = repo.restore(ready.archiveId) as SettingsBackupRestoreResult.Restored
+        assertEquals(0, restored.booksImported)
+        assertEquals(2, restored.booksAlreadyPresent)
+        assertFalse(File(context.filesDir, "books").exists() && File(context.filesDir, "books").listFiles().orEmpty().isNotEmpty())
+    }
+
+    @Test
+    fun `restoring the same archive twice adds no book and no session`() = runTest {
+        val epub = folder.newFile("twice.epub").also { writeEpub(it, title = "Twice Book", author = "Author") }
+        val archivedUrl = "calibre:twice"
+        db.bookDao().upsert(
+            Book(
+                url = archivedUrl,
+                title = "Twice Book",
+                author = "Author",
+                coverPath = null,
+                source = null,
+                addedAt = 1,
+                lastOpenedAt = null,
+                downloadState = DownloadState.DOWNLOADED,
+                localUri = Uri.fromFile(epub).toString(),
+            ),
+        )
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = archivedUrl,
+                startedAt = 500,
+                endedAt = 1000,
+                lastCheckpointAt = 1000,
+                durationMs = 500,
+                startProgression = 0.0,
+                endProgression = 0.2,
+            ),
+        )
+
+        val app = AppSettingsRepository(store("twice-app.preferences_pb"))
+        val reader = ReaderPreferencesRepository(store("twice-reader.preferences_pb"))
+        val repo = repository(app, reader, UserFontRepository(context, this, loadCheck = { true }))
+        val uri = Uri.fromFile(File(folder.root, "twice.zip"))
+        repo.exportTo(uri, includeSessions = true, bookUrls = setOf(archivedUrl))
+
+        db.bookDao().deleteByUrls(listOf(archivedUrl))
+        db.readingSessionDao().deleteForBook(archivedUrl)
+        assertTrue(epub.delete())
+
+        val first = restore(repo, uri) as SettingsBackupRestoreResult.Restored
+        assertEquals(1, first.booksImported)
+        assertEquals(1, first.sessionsAdded)
+
+        val second = restore(repo, uri) as SettingsBackupRestoreResult.Restored
+        assertEquals(0, second.booksImported)
+        assertEquals(1, second.booksAlreadyPresent)
+        assertEquals(0, second.sessionsAdded)
+        assertEquals(1, second.sessionsAlreadyPresent)
+        assertEquals(1, db.bookDao().allOnce().size)
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
+    fun `books and sessions are rejected in archives older than format seven`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("v6-reject-app.preferences_pb")),
+            ReaderPreferencesRepository(store("v6-reject-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val base = mapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+            "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+        )
+        val sessionsJson = """{"format":1,"application":"liseur","books":[]}""".toByteArray()
+        val epubBytes = "epub-bytes".toByteArray()
+        val sha = sha256(epubBytes)
+        val booksJson = """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$sha","size":${epubBytes.size}}]}""".toByteArray()
+
+        val sessionsInV6 = archive("sessions-v6.zip", settings, base + ("sessions.json" to sessionsJson), format = 6)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(sessionsInV6)))
+
+        val booksInV6 = archive("books-v6.zip", settings, base + ("books.json" to booksJson) + ("books/$sha.epub" to epubBytes), format = 6)
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(booksInV6)))
+    }
+
+    @Test
+    fun `a book entry whose name is not its digest is rejected`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("bad-book-digest-app.preferences_pb")),
+            ReaderPreferencesRepository(store("bad-book-digest-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val epubBytes = "epub-bytes".toByteArray()
+        val wrongSha = "f".repeat(64)
+        val booksJson = """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$wrongSha","size":${epubBytes.size}}]}""".toByteArray()
+        val file = archive(
+            "bad-book-digest.zip",
+            settings,
+            linkedMapOf(
+                "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+                "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+                "books.json" to booksJson,
+                "books/$wrongSha.epub" to epubBytes,
+            ),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(file)))
+    }
+
+    @Test
+    fun `a book file without a record, or a record without its file, is rejected`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("orphan-book-app.preferences_pb")),
+            ReaderPreferencesRepository(store("orphan-book-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val epubBytes = "epub-bytes".toByteArray()
+        val sha = sha256(epubBytes)
+        val otherSha = "e".repeat(64)
+        val base = linkedMapOf(
+            "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+            "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+            "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+        )
+        val recordWithoutFile = archive(
+            "record-without-file.zip",
+            settings,
+            base + ("books.json" to """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$sha","size":${epubBytes.size}}]}""".toByteArray()),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(recordWithoutFile)))
+
+        val fileWithoutRecord = archive(
+            "file-without-record.zip",
+            settings,
+            base + ("books.json" to """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$otherSha","size":${epubBytes.size}}]}""".toByteArray()) +
+                ("books/$sha.epub" to epubBytes),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(fileWithoutRecord)))
+    }
+
+    @Test
+    fun `a book entry before books json is rejected`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("order-book-app.preferences_pb")),
+            ReaderPreferencesRepository(store("order-book-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val epubBytes = "epub-bytes".toByteArray()
+        val sha = sha256(epubBytes)
+        val booksJson = """{"format":1,"application":"liseur","books":[{"book_id":"b1","title":"T","author":null,"sha256":"$sha","size":${epubBytes.size}}]}""".toByteArray()
+        val file = archive(
+            "book-before-index.zip",
+            settings,
+            linkedMapOf(
+                "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+                "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+                "books/$sha.epub" to epubBytes,
+                "books.json" to booksJson,
+            ),
+            format = 7,
+        )
+        assertEquals(SettingsBackupInspection.Failed(SettingsBackupFailure.INVALID_ARCHIVE), repo.inspect(Uri.fromFile(file)))
+    }
+
+    @Test
+    fun `a book over the per-book limit is too large`() = runTest {
+        val epub = folder.newFile("big.epub").also { writeEpub(it) }
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = url))
+
+        val repo = repository(
+            AppSettingsRepository(store("limit-book-app.preferences_pb")),
+            ReaderPreferencesRepository(store("limit-book-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+            bookLimits = BookArchiveLimits(maxBookBytes = 100L),
+        )
+        assertEquals(
+            SettingsBackupPreparation.Failed(SettingsBackupFailure.TOO_LARGE),
+            repo.prepareExport(bookUrls = setOf(url)),
+        )
+
+        // Also during inspection
+        val fullRepo = repository(
+            AppSettingsRepository(store("limit-book-full-app.preferences_pb")),
+            ReaderPreferencesRepository(store("limit-book-full-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val zipUri = Uri.fromFile(File(folder.root, "big.zip"))
+        fullRepo.exportTo(zipUri, bookUrls = setOf(url))
+        assertEquals(
+            SettingsBackupInspection.Failed(SettingsBackupFailure.TOO_LARGE),
+            repo.inspect(zipUri),
+        )
+    }
+
+    @Test
+    fun `too little cache space for a missing book is a storage failure`() = runTest {
+        val epub = folder.newFile("space.epub").also { writeEpub(it) }
+        val url = "calibre:space"
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = Uri.fromFile(epub).toString()))
+        val fullRepo = repository(
+            AppSettingsRepository(store("space-full-app.preferences_pb")),
+            ReaderPreferencesRepository(store("space-full-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val zipUri = Uri.fromFile(File(folder.root, "space.zip"))
+        fullRepo.exportTo(zipUri, bookUrls = setOf(url))
+
+        db.bookDao().deleteByUrls(listOf(url))
+
+        val lowSpaceRepo = repository(
+            AppSettingsRepository(store("space-low-app.preferences_pb")),
+            ReaderPreferencesRepository(store("space-low-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+            bookLimits = BookArchiveLimits(usableSpace = { 1024L }),
+        )
+        assertEquals(
+            SettingsBackupInspection.Failed(SettingsBackupFailure.STORAGE),
+            lowSpaceRepo.inspect(zipUri),
+        )
+    }
+
+    @Test
+    fun `matched books are hashed but not staged during inspection`() = runTest {
+        val epub = folder.newFile("matched-not-staged.epub").also { writeEpub(it) }
+        val sha = sha256(epub.readBytes())
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = url))
+
+        val repo = repository(
+            AppSettingsRepository(store("nostage-app.preferences_pb")),
+            ReaderPreferencesRepository(store("nostage-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val zipUri = Uri.fromFile(File(folder.root, "nostage.zip"))
+        repo.exportTo(zipUri, bookUrls = setOf(url))
+
+        val ready = repo.inspect(zipUri) as SettingsBackupInspection.Ready
+        assertEquals(1, ready.preview.bookCount)
+        assertEquals(1, ready.preview.booksInLibrary)
+        assertEquals(0, ready.preview.booksToImport)
+
+        val stagingDirs = context.cacheDir.listFiles().orEmpty().filter { it.isDirectory && it.name.endsWith(ready.archiveId) }
+        val indexJson = JSONObject(File(stagingDirs.single(), "inspection.json").readText()).getJSONArray("entries")
+        val stagedPaths = List(indexJson.length()) { indexJson.getJSONObject(it).getString("path") }
+        assertTrue("books.json" in stagedPaths)
+        assertFalse("books/$sha.epub" in stagedPaths)
+        repo.discardInspection(ready.archiveId)
+    }
+
+    @Test
+    fun `prepared archive lists books without holding their bytes and the destination receives them`() = runTest {
+        val epub = folder.newFile("streamed.epub").also { writeEpub(it) }
+        val sha = sha256(epub.readBytes())
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = url))
+
+        val repo = repository(
+            AppSettingsRepository(store("stream-app.preferences_pb")),
+            ReaderPreferencesRepository(store("stream-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val prepared = (repo.prepareExport(bookUrls = setOf(url)) as SettingsBackupPreparation.Prepared).export
+        assertEquals(1, prepared.books)
+        assertEquals(epub.length(), prepared.bookBytes)
+
+        ZipFile(prepared.file).use { zip ->
+            assertTrue(zip.getEntry("books.json") != null)
+            assertEquals(null, zip.getEntry("books/$sha.epub"))
+            val manifest = JSONObject(zip.getInputStream(zip.getEntry("manifest.json")).bufferedReader().readText())
+            val entries = manifest.getJSONArray("entries")
+            val paths = List(entries.length()) { entries.getJSONObject(it).getString("path") }
+            assertTrue("books/$sha.epub" in paths)
+        }
+
+        val target = File(folder.root, "streamed-out.zip")
+        val exported = repo.writeExport(prepared, Uri.fromFile(target))
+        assertEquals(
+            SettingsBackupExportResult.Exported(0, books = 1, bookBytes = epub.length()),
+            exported,
+        )
+        ZipFile(target).use { zip ->
+            val bookEntry = zip.getEntry("books/$sha.epub")
+            assertTrue(bookEntry != null)
+            assertEquals(epub.readBytes().toList(), zip.getInputStream(bookEntry).readBytes().toList())
+        }
+    }
+
+    @Test
+    fun `a book changed between preparing and saving fails the save and removes the destination`() = runTest {
+        val epub = folder.newFile("changing.epub").also { writeEpub(it) }
+        val url = Uri.fromFile(epub).toString()
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = url))
+
+        val repo = repository(
+            AppSettingsRepository(store("changed-app.preferences_pb")),
+            ReaderPreferencesRepository(store("changed-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val prepared = (repo.prepareExport(bookUrls = setOf(url)) as SettingsBackupPreparation.Prepared).export
+        epub.writeText("tampered bytes after prepare")
+
+        val docs = BookExportRepositoryTest.FakeDocs
+        docs.directory = folder.newFolder("changed-book-save")
+        docs.names.clear()
+        docs.deleted.clear()
+        docs.failWrites.clear()
+        docs.names["backup"] = "backup.zip"
+        File(docs.directory, "backup").writeText("partial")
+        org.robolectric.Robolectric.buildContentProvider(BookExportRepositoryTest.FakeDocs::class.java)
+            .create("test.bookexport.documents")
+        val target = DocumentsContract.buildDocumentUri("test.bookexport.documents", "backup")
+
+        assertEquals(
+            SettingsBackupExportResult.Failed(SettingsBackupFailure.FILE_ACCESS),
+            repo.writeExport(prepared, target),
+        )
+        assertFalse(prepared.file.exists())
+        assertEquals(listOf("backup"), docs.deleted)
+    }
+
+    @Test
+    fun `an unreadable selected book is skipped and counted`() = runTest {
+        val missingFile = File(folder.root, "does-not-exist.epub")
+        val url = Uri.fromFile(missingFile).toString()
+        db.bookDao().upsert(book(url).copy(downloadState = DownloadState.DOWNLOADED, localUri = url))
+
+        val repo = repository(
+            AppSettingsRepository(store("skip-app.preferences_pb")),
+            ReaderPreferencesRepository(store("skip-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val prepared = (repo.prepareExport(bookUrls = setOf(url)) as SettingsBackupPreparation.Prepared).export
+        assertEquals(0, prepared.books)
+        assertEquals(1, prepared.booksSkipped)
+        ZipFile(prepared.file).use { zip ->
+            assertEquals(null, zip.getEntry("books.json"))
+        }
+        repo.discardPreparedExport(prepared)
+    }
+
+    @Test
+    fun `sessions export carries only closed sessions without ids or upload state`() = runTest {
+        db.bookDao().upsert(book("b1"))
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "b1",
+                startedAt = 100,
+                endedAt = 200,
+                lastCheckpointAt = 200,
+                durationMs = 90,
+                idleMs = 10,
+                startProgression = 0.1,
+                endProgression = 0.2,
+                uploadedAt = 999,
+            ),
+        )
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "b1",
+                startedAt = 300,
+                endedAt = null,
+                lastCheckpointAt = 350,
+                durationMs = 50,
+            ),
+        )
+
+        val repo = repository(
+            AppSettingsRepository(store("sessions-export-app.preferences_pb")),
+            ReaderPreferencesRepository(store("sessions-export-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        val zipFile = File(folder.root, "sessions-export.zip")
+        val result = repo.exportTo(Uri.fromFile(zipFile), includeSessions = true)
+        assertEquals(SettingsBackupExportResult.Exported(0, sessions = 1), result)
+
+        ZipFile(zipFile).use { zip ->
+            val text = zip.getInputStream(zip.getEntry("sessions.json")).bufferedReader().readText()
+            assertFalse(text.contains("uploaded_at"))
+            assertFalse(text.contains("last_checkpoint_at"))
+            val books = JSONObject(text).getJSONArray("books")
+            assertEquals(1, books.length())
+            val sessions = books.getJSONObject(0).getJSONArray("sessions")
+            assertEquals(1, sessions.length())
+            val s = sessions.getJSONObject(0)
+            assertEquals(100L, s.getLong("started_at"))
+            assertEquals(200L, s.getLong("ended_at"))
+            assertEquals(90L, s.getLong("duration_ms"))
+            assertEquals(10L, s.getLong("idle_ms"))
+            assertFalse(s.has("id"))
+        }
+    }
+
+    @Test
+    fun `restored sessions are marked imported and dedupe on book and start`() = runTest {
+        val repo = repository(
+            AppSettingsRepository(store("sessions-dedupe-app.preferences_pb")),
+            ReaderPreferencesRepository(store("sessions-dedupe-reader.preferences_pb")),
+            UserFontRepository(context, this, loadCheck = { true }),
+        )
+        db.bookDao().upsert(book("b1"))
+        db.readingSessionDao().insert(
+            ReadingSession(
+                bookUrl = "b1",
+                startedAt = 100,
+                endedAt = 200,
+                lastCheckpointAt = 200,
+                durationMs = 80,
+            ),
+        )
+        val settings = JSONObject().put("app", JSONObject()).put("reader", JSONObject())
+        val sessionsJson = """{
+            "format":1,
+            "application":"liseur",
+            "books":[{
+                "book_id":"b1",
+                "title":"A book",
+                "author":"An author",
+                "sessions":[
+                    {"started_at":100,"ended_at":250,"duration_ms":100},
+                    {"started_at":500,"ended_at":600,"duration_ms":90},
+                    {"started_at":500,"ended_at":700,"duration_ms":150}
+                ]
+            }]
+        }""".toByteArray()
+        val file = archive(
+            "sessions-dedupe.zip",
+            settings,
+            mapOf(
+                "annotations.json" to encodeAnnotationBackup(emptyList()).toByteArray(),
+                "positions.json" to """{"format":1,"application":"liseur","positions":[]}""".toByteArray(),
+                "companion.json" to """{"format":1,"application":"liseur","recaps":[]}""".toByteArray(),
+                "sessions.json" to sessionsJson,
+            ),
+            format = 7,
+        )
+        val restored = restore(repo, Uri.fromFile(file)) as SettingsBackupRestoreResult.Restored
+        assertEquals(1, restored.sessionsAdded)
+        assertEquals(2, restored.sessionsAlreadyPresent)
+        val all = db.readingSessionDao().allOnce().sortedBy { it.startedAt }
+        assertEquals(2, all.size)
+        assertEquals(80L, all[0].durationMs)
+        assertEquals(null, all[0].importedAt)
+        assertEquals(90L, all[1].durationMs)
+        assertTrue(all[1].importedAt != null)
+    }
+
+    @Test
+    fun `archive limits stay under four GiB without ZIP64`() {
+        val maxArchiveBytes = SettingsBackupRepository.MAX_TOTAL_BYTES + SettingsBackupRepository.MAX_BOOKS_TOTAL_BYTES
+        assertTrue(maxArchiveBytes < 4L * 1024 * 1024 * 1024)
+        assertTrue(SettingsBackupRepository.MAX_ARCHIVE_ENTRIES < 65_535)
+    }
+
+    private fun writeEpub(
+        target: File,
+        title: String = "A Test Book",
+        author: String = "An Author",
+        id: String = "urn:uuid:0f6a7e2c-1111-4222-8333-444455556666",
+    ) {
+        ZipOutputStream(target.outputStream()).use { zip ->
+            val mimetype = "application/epub+zip".toByteArray()
+            zip.setMethod(ZipOutputStream.STORED)
+            zip.putNextEntry(
+                ZipEntry("mimetype").apply {
+                    size = mimetype.size.toLong()
+                    compressedSize = mimetype.size.toLong()
+                    crc = CRC32().apply { update(mimetype) }.value
+                },
+            )
+            zip.write(mimetype)
+            zip.closeEntry()
+            zip.setMethod(ZipOutputStream.DEFLATED)
+            fun put(name: String, body: String) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(body.toByteArray())
+                zip.closeEntry()
+            }
+            put(
+                "META-INF/container.xml",
+                """<?xml version="1.0" encoding="UTF-8"?>
+                <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+                  <rootfiles>
+                    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+                  </rootfiles>
+                </container>""",
+            )
+            put(
+                "OEBPS/content.opf",
+                """<?xml version="1.0" encoding="UTF-8"?>
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id" xml:lang="en-US">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                    <dc:identifier id="id">$id</dc:identifier>
+                    <dc:creator>$author</dc:creator>
+                    <dc:title>$title</dc:title>
+                    <dc:language>en</dc:language>
+                    <meta property="dcterms:modified">2020-01-01T00:00:00Z</meta>
+                  </metadata>
+                  <manifest>
+                    <item id="c1" href="chapter.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine>
+                    <itemref idref="c1"/>
+                  </spine>
+                </package>""",
+            )
+            put(
+                "OEBPS/chapter.xhtml",
+                """<?xml version="1.0" encoding="UTF-8"?>
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <head><title>One</title></head>
+                  <body><p>Words.</p></body>
+                </html>""",
+            )
+        }
+    }
+
     private fun repository(
         app: AppSettingsRepository,
         reader: ReaderPreferencesRepository,
         fonts: UserFontRepository,
+        bookLimits: BookArchiveLimits = BookArchiveLimits(),
     ) = SettingsBackupRepository(
         context, app, reader, fonts,
         AnnotationBackupRepository(context, db.annotationDao(), db.bookDao(), requested::add),
-        ReadingPositionBackupRepository(db.readingProgressDao(), db.bookDao(), requested::add),
+        ReadingPositionBackupRepository(
+            db.readingProgressDao(),
+            db.bookDao(),
+            requested::add,
+            inTransaction = { work -> db.withTransaction { work() } },
+        ),
         companion = companionBackup(),
+        sessions = ReadingSessionBackupRepository(
+            db.readingSessionDao(),
+            db.bookDao(),
+            inTransaction = { work -> db.withTransaction { work() } },
+        ),
+        books = BookBackupRepository(context, db.bookDao(), localLibrary::importBackupBook),
+        bookLimits = bookLimits,
     )
 
     private suspend fun restore(

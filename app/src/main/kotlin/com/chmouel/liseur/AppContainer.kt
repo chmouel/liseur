@@ -461,6 +461,18 @@ class AppContainer(
             translations =
                 com.chmouel.liseur.data.library
                     .TranslationBackupRepository({ savedTranslations }, database.bookDao()),
+            sessions =
+                com.chmouel.liseur.data.library.ReadingSessionBackupRepository(
+                    database.readingSessionDao(),
+                    database.bookDao(),
+                    inTransaction = { work -> database.withTransaction { work() } },
+                ),
+            books =
+                com.chmouel.liseur.data.library.BookBackupRepository(
+                    context.applicationContext,
+                    database.bookDao(),
+                    libraryRepository::importBackupBook,
+                ),
             restoreAppSettings = { values -> serverConnections.restore(values) { appSettings.restoreBackupValues(values) } },
             exportConnections = { connectionBackup.export() },
             prepareConnectionRestore = { payload, values -> connectionBackup.prepareRestore(payload, values) },

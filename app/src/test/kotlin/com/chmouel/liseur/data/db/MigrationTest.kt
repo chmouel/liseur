@@ -165,7 +165,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -242,7 +242,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
             .allowMainThreadQueries()
             .build()
         try {
@@ -277,7 +277,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1815,10 +1815,30 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `migration 74 to 75 adds imported_at as null and keeps sessions`() {
+        helper.createDatabase(TEST_DB, 74).use { db ->
+            db.execSQL(
+                "INSERT INTO reading_sessions (id, book_url, started_at, ended_at, last_checkpoint_at, duration_ms, start_progression, end_progression, idle_ms, uploaded_at, legacy_evidence_unknown) " +
+                    "VALUES (1, 'book:1', 100, 200, 200, 90, 0.1, 0.2, 10, NULL, 0)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, 75, true, LiseurDatabase.MIGRATION_74_75).use { db ->
+            db.query("SELECT book_url, started_at, ended_at, duration_ms, imported_at FROM reading_sessions WHERE id = 1").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("book:1", it.getString(0))
+                assertEquals(100L, it.getLong(1))
+                assertEquals(200L, it.getLong(2))
+                assertEquals(90L, it.getLong(3))
+                assertTrue(it.isNull(4))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 74
+        const val LATEST = 75
     }
 }

@@ -59,10 +59,17 @@ class TranslationBackupRepository(
         return TranslationBackupResult(count, skipped)
     }
 
-    suspend fun restore(contents: List<BackedUpTranslation>): TranslationBackupResult {
+    suspend fun restore(
+        contents: List<BackedUpTranslation>,
+        aliases: Map<String, String> = emptyMap(),
+    ): TranslationBackupResult {
         val known = bookDao.allOnce().map { KnownBook(it.url, it.title, it.author) }
+        val onShelf = known.mapTo(mutableSetOf()) { it.bookId }
         val targets = contents.associate { entry ->
-            entry.record.bookUrl to matchBackedUpBookUrl(entry.record.bookUrl, entry.title, entry.author, known)
+            // A self-alias marks a book whose import failed, so the store must not take it.
+            entry.record.bookUrl to ((aliases[entry.record.bookUrl]
+                ?: matchBackedUpBookUrl(entry.record.bookUrl, entry.title, entry.author, known))
+                ?.takeIf { it in onShelf })
         }
         val counts = targets.values.filterNotNull().groupingBy { it }.eachCount()
         var restored = 0

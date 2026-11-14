@@ -22,6 +22,7 @@ import com.chmouel.liseur.domain.isSameWork
 import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.security.MessageDigest
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -264,6 +265,63 @@ class LocalLibraryRepository(
         indexBook(url, source = null)
             ?.let { ImportResult.Added(it) }
             ?: ImportResult.Failed
+    }
+
+    /**
+     * Imports a staged EPUB from a backup archive into `filesDir/books/<sha256>.epub`.
+     *
+     * Existing rows (including hidden ones) are reported as [ImportResult.AlreadyShelved]
+     * without unhiding them, and unreadable files are removed unless they already existed.
+     */
+    suspend fun importBackupBook(staged: File, sha256: String): ImportResult = importLock.withLock {
+        val dir = File(context.filesDir, "books").apply { mkdirs() }
+        val target = File(dir, "$sha256.epub")
+        val existedBefore = target.exists()
+        var url: AbsoluteUrl? = null
+        var kept = false
+        try {
+            // The move and the URL it owns are recorded inside the non-cancellable block: a caller
+            // cancelled while the block returns discards the result, and only this assignment keeps
+            // the new file traceable for the cleanup below.
+            withContext(NonCancellable + Dispatchers.IO) {
+                url = if (existedBefore) {
+                    staged.delete()
+                    Uri.fromFile(target).toAbsoluteUrl()
+                } else if (staged.renameTo(target)) {
+                    Uri.fromFile(target).toAbsoluteUrl()
+                } else {
+                    try {
+                        copyIntoLibrary(Uri.fromFile(staged))
+                    } finally {
+                        staged.delete()
+                    }
+                }
+            }
+            val moved = url ?: return@withLock ImportResult.Failed
+
+            alreadyShelved(moved)?.let { shelved ->
+                // A same-content book under another URL leaves this copy referenced by nothing.
+                if (!existedBefore && shelved.url != moved.toString()) dropCopiedFile(moved)
+                kept = true
+                return@withLock ImportResult.AlreadyShelved(shelved)
+            }
+            val added = indexBook(moved, source = null)
+            if (added == null) {
+                ImportResult.Failed
+            } else {
+                kept = true
+                ImportResult.Added(added)
+            }
+        } finally {
+            // A failure or cancellation after the move must not leave an EPUB nothing points at.
+            if (!kept && !existedBefore) {
+                url?.let { moved ->
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        if (bookDao.getByUrl(moved.toString()) == null) dropCopiedFile(moved)
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -1316,22 +1374,8 @@ class LocalLibraryRepository(
      * The file's size as this device sees it, or null when the provider
      * will not say. A provider query blocks, so it runs on IO here.
      */
-    private suspend fun measuredSize(url: AbsoluteUrl): Long? = withContext(Dispatchers.IO) {
-        val uri = Uri.parse(url.toString())
-        runCatching {
-            when (uri.scheme) {
-                "file" -> uri.path?.let(::File)?.takeIf { it.isFile }?.length()
-                "content" -> context.contentResolver.query(
-                    uri,
-                    arrayOf(DocumentsContract.Document.COLUMN_SIZE),
-                    null,
-                    null,
-                    null,
-                )?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
-                else -> null
-            }
-        }.getOrNull()
-    }
+    private suspend fun measuredSize(url: AbsoluteUrl): Long? =
+        measuredFileSize(context, Uri.parse(url.toString()))
 
     /**
      * Opens a book only far enough to ask it what series it is in.
@@ -1630,6 +1674,22 @@ internal fun sha1Hex(value: String): String =
  */
 internal fun importedFileName(digest: ByteArray): String =
     digest.joinToString("", postfix = ".epub") { "%02x".format(it) }
+
+internal suspend fun measuredFileSize(context: Context, uri: Uri): Long? = withContext(Dispatchers.IO) {
+    runCatching {
+        when (uri.scheme) {
+            "file" -> uri.path?.let(::File)?.takeIf { it.isFile }?.length()
+            "content" -> context.contentResolver.query(
+                uri,
+                arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                null,
+                null,
+                null,
+            )?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null }
+            else -> null
+        }
+    }.getOrNull()
+}
 
 /**
  * Whether a file inside a book is named as its cover.

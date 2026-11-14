@@ -72,6 +72,8 @@ data class ReadingSession(
     /** Earlier app versions may have attempted this sitting without retaining its identity. */
     @ColumnInfo(name = "legacy_evidence_unknown", defaultValue = "0")
     val legacyEvidenceUnknown: Boolean = false,
+    /** When this session was restored from a backup archive; imported sessions stay local and are never uploaded. */
+    @ColumnInfo(name = "imported_at") val importedAt: Long? = null,
 ) {
     val isOpen: Boolean get() = endedAt == null
 }
@@ -81,6 +83,9 @@ interface ReadingSessionDao {
 
     @Insert
     suspend fun insert(session: ReadingSession): Long
+
+    @Insert
+    suspend fun insertAll(sessions: List<ReadingSession>)
 
     /**
      * Stores the total reached by an open session and moves its checkpoint
@@ -157,6 +162,12 @@ interface ReadingSessionDao {
     @Query("SELECT * FROM reading_sessions ORDER BY id")
     suspend fun allOnce(): List<ReadingSession>
 
+    @Query("SELECT * FROM reading_sessions WHERE ended_at IS NOT NULL ORDER BY book_url, started_at")
+    suspend fun closedForBackup(): List<ReadingSession>
+
+    @Query("SELECT started_at FROM reading_sessions WHERE book_url = :bookUrl")
+    suspend fun startedAtFor(bookUrl: String): List<Long>
+
     /** Local reading time for one book, including its current open session. */
     @Query(
         """
@@ -178,7 +189,7 @@ interface ReadingSessionDao {
     @Query(
         """
         SELECT * FROM reading_sessions
-        WHERE ended_at IS NOT NULL AND uploaded_at IS NULL
+        WHERE ended_at IS NOT NULL AND uploaded_at IS NULL AND imported_at IS NULL
           AND start_progression IS NOT NULL AND end_progression IS NOT NULL
         ORDER BY started_at
         LIMIT :limit
@@ -202,7 +213,7 @@ interface ReadingSessionDao {
         SELECT s.* FROM reading_sessions s
         JOIN work_alias a ON a.book_url = s.book_url AND a.peer_id = :peerId
           AND (a.confirmed = 1 OR a.confidence = 'high')
-        WHERE s.ended_at IS NOT NULL AND s.uploaded_at IS NULL
+        WHERE s.ended_at IS NOT NULL AND s.uploaded_at IS NULL AND s.imported_at IS NULL
           AND s.start_progression IS NOT NULL AND s.end_progression IS NOT NULL
           AND NOT EXISTS (
             SELECT 1 FROM session_refusal r WHERE r.peer_id = :peerId AND r.session_id = s.id
