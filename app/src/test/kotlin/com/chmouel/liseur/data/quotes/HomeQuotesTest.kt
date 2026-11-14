@@ -417,6 +417,21 @@ class HomeQuotesTest {
         assertNull(quotes.quote.first())
     }
 
+    @Test
+    fun `a cached paragraph that runs past the ceiling is not quoted`() = runTest {
+        // The paragraph opens at 20% of the chapter and closes at 70% of
+        // the book, and the reader is at 30% of it. Where it opens is not
+        // where it ends.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.3)))
+        dao().replace(
+            scan(workId = "work-one"),
+            listOf(line().copy(locatorJson = chapter(0.2), totalProgression = 0.7)),
+        )
+
+        assertNull(quotes.quote.first())
+    }
+
     private fun dao(): QuoteDao = quoteDb.quotes()
 
     private fun book(url: String = this.url) = Book(

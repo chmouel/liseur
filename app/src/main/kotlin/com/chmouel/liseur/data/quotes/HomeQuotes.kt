@@ -241,13 +241,12 @@ class HomeQuotes internal constructor(
             .filter { row -> QuoteRules.stillSameWork(row.workId, books[row.bookUrl]?.workId) }
             .filter { row ->
                 val book = read[row.bookUrl] ?: return@filter false
-                // A line is checked exactly as a mark is, and for the same
-                // reason: the fraction it carries was written by whoever
-                // walked the book, and the one it is compared with may be
-                // on another client's scale.
-                QuoteRules.markWithinCeiling(
-                    mark = placeIn(row.locatorJson),
-                    markTotalProgression = row.totalProgression,
+                // A line is checked by where it closes as well as where
+                // it opens: a paragraph that runs past the ceiling is
+                // past it even when it starts inside.
+                QuoteRules.lineWithinCeiling(
+                    start = placeIn(row.locatorJson),
+                    end = row.totalProgression,
                     place = book.place,
                     readPoint = book.point,
                 )
