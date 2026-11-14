@@ -393,7 +393,7 @@ private fun LiseurApp(
         else -> MainTab.LIBRARY
     }
     val shownTab = backStack.mainTab(libraryTab)?.takeIf {
-        libraryLayout.bottomBar && (it != libraryTab || tabs.libraryBar)
+        libraryLayout.tabs && (it != libraryTab || tabs.libraryBar)
     }
     val selectTab: (MainTab) -> Unit = { tab ->
         if (tab == shownTab) {
@@ -595,7 +595,11 @@ private fun LiseurApp(
                             dynamicColorAvailable = dynamicColorAvailable,
                             onThemeMode = { scope.launch { repository.setThemeMode(it) } },
                             onDynamicColor = { scope.launch { repository.setDynamicColor(it) } },
-                            onLibraryStyle = { scope.launch { repository.setLibraryStyle(it) } },
+                            onLibraryLayout = library::setLayout,
+                            books = libraryState.books,
+                            onLibraryScope = { chosen ->
+                                library.setLayout(settings.libraryLayout.copy(scope = chosen))
+                            },
                             appLanguage = remember { AppLocales.current(context) },
                             onAppLanguage = { language -> activity?.let { AppLocales.apply(it, language) } },
                             onOpenAccount = { openPage(Route.ServerAccount) },

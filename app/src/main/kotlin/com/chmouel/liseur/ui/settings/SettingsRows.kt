@@ -3,6 +3,7 @@ package com.chmouel.liseur.ui.settings
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
@@ -24,6 +25,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +33,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -284,7 +287,7 @@ internal fun InfoDialog(title: String, body: String, onDismiss: () -> Unit) {
  * A row whose answer is one of a few chips — the theme, the e-ink
  * behaviour. Shaped like the other rows so it sits on the same axis:
  * the label where a headline would be, the chips where supporting
- * text would go.
+ * text would go, and the same leading icon when given one.
  */
 @Composable
 internal fun <T> ChipRow(
@@ -295,32 +298,49 @@ internal fun <T> ChipRow(
     label: @Composable (T) -> String,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
+    icon: (@Composable () -> Unit)? = null,
 ) {
-    Column(
+    Row(
         modifier.padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge)
-        subtitle?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (icon != null) {
+            // The same 24 dp leading slot and tint a ListItem gives its
+            // icon, so both kinds of row share one left axis.
+            CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Box(
+                    Modifier
+                        .padding(top = 2.dp, end = 16.dp)
+                        .size(24.dp),
+                    contentAlignment = Alignment.Center,
+                ) { icon() }
+            }
         }
-        // Wraps rather than squeezing the last chips when the labels are
-        // long or the text is large.
-        FlowRow(
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .selectableGroup(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            options.forEach { option ->
-                FilterChip(
-                    selected = selected == option,
-                    onClick = { onSelected(option) },
-                    label = { Text(label(option)) },
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            subtitle?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            // Wraps rather than squeezing the last chips when the labels are
+            // long or the text is large.
+            FlowRow(
+                modifier = Modifier
+                    .padding(top = 8.dp)
+                    .selectableGroup(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                options.forEach { option ->
+                    FilterChip(
+                        selected = selected == option,
+                        onClick = { onSelected(option) },
+                        label = { Text(label(option)) },
+                    )
+                }
             }
         }
     }

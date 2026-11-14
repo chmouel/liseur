@@ -1979,7 +1979,15 @@ separate from translation's, moved and forgotten with server edits in
   progress, search, empty states and e-ink rules; derive their groupings
   in `domain/LibraryLayout.kt`
   ([ADR 0070](docs/adr/0070-library-styles-are-fixed-layouts.md)).
-  Home (`HomeDesk`) is built from the unfiltered shelf; Library filters
+  Home is a tab in both scopes and never a style to pick; a stored Home
+  style draws Classic. The style is picked in one place only,
+  `LibraryStyleSheet`, opened from the library's button and from the
+  Library style row in Settings › Library, so the previews and the
+  per-style options never split in two.
+  `LibraryScope` (`SIMPLE`, `DETAILED`) decides
+  whether the app draws its five-tab bar or is the library alone, and
+  `LibraryLayout.tabs` is how the rest of the code asks. Home
+  (`HomeDesk`) is built from the unfiltered shelf; Library filters
   must never reach it.
 - The Home quote (`data/quotes/HomeQuotes.kt`) only uses text before the
   book's furthest read point, offline and without AI — the reader's own

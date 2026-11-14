@@ -1932,6 +1932,7 @@
     <string name="book_details_read_more">Mehr anzeigen</string>
     <string name="book_details_show_less">Weniger anzeigen</string>
     <string name="library_style">Bibliotheksstil</string>
+    <string name="settings_library_style_current">%1$s. Auch über die Stil-Schaltfläche in der Bibliothek.</string>
     <string name="library_style_classic">Klassisch</string>
     <string name="library_style_classic_detail">Das Cover-Raster, oben das Buch, das du gerade liest</string>
     <string name="library_style_home">Start</string>
@@ -1960,10 +1961,10 @@
     <string name="shelf_tone_brass">Messing</string>
     <string name="library_compact_list">Kompakte Zeilen</string>
     <string name="library_compact_list_detail">Kleinere Cover und eine Zeile pro Titel</string>
-    <string name="library_bottom_bar">Untere Leiste</string>
-    <string name="library_bottom_bar_detail">Start, Bibliothek, Reihen, Statistik und Einstellungen unten als Tabs anzeigen</string>
-    <string name="library_hero_card">Obere Karte</string>
-    <string name="library_hero_card_detail">Aktuelles Buch in einer Karte oben in der Bibliothek anzeigen</string>
+    <string name="settings_library_layout">App-Aufbau</string>
+    <string name="settings_library_layout_detail">Einfach ist nur die Bibliothek; Ausführlich ergänzt die Tabs Start, Reihen und Statistik</string>
+    <string name="settings_library_layout_simple">Einfach</string>
+    <string name="settings_library_layout_detailed">Ausführlich</string>
     <string name="library_tab_library">Bibliothek</string>
     <string name="home_continue">Weiterlesen</string>
     <string name="home_series_underway">Reihen, die du liest</string>
@@ -1997,7 +1998,6 @@
     <string name="home_pick_next_in_series">Nächster Band</string>
     <string name="library_shown_of">%1$d von %2$d</string>
     <string name="home_pulse_today">Heute %d Min.</string>
-    <string name="library_view_title">Bibliotheksansicht</string>
     <string name="library_opens_on">Startet mit</string>
     <string name="library_columns">Spalten</string>
     <string name="library_columns_comfortable">Bequem</string>

@@ -19,8 +19,8 @@ enum class LibraryStyle(val id: String) {
 
     /**
      * The reading desk: the current book, shelf tiles, series under way and
-     * what to pick up next. With the bottom bar it is a tab rather than a
-     * style of the library.
+     * what to pick up next. With [LibraryScope.DETAILED] it is a tab of the
+     * app rather than a style of the library, and this style is not offered.
      */
     HOME("home"),
 
@@ -35,6 +35,26 @@ enum class LibraryStyle(val id: String) {
         val Default = CLASSIC
 
         fun fromId(id: String?): LibraryStyle = entries.firstOrNull { it.id == id } ?: Default
+    }
+}
+
+/**
+ * How much app the reader wants around the books (ADR-0070).
+ *
+ * [DETAILED] is the five-tab app: Home, Library, Series, Stats and Settings
+ * along the bottom. [SIMPLE] is the library alone, opening straight onto the
+ * books, with the statistics, translation, sync and Settings in its overflow
+ * menu.
+ */
+enum class LibraryScope(val id: String) {
+    SIMPLE("simple"),
+    DETAILED("detailed"),
+    ;
+
+    companion object {
+        val Default = DETAILED
+
+        fun fromId(id: String?): LibraryScope = entries.firstOrNull { it.id == id } ?: Default
     }
 }
 
@@ -96,12 +116,15 @@ data class LibraryLayout(
     val shelfTone: ShelfTone = ShelfTone.Default,
     val compactList: Boolean = false,
     val compactGrid: Boolean = false,
-    val bottomBar: Boolean = true,
+    val scope: LibraryScope = LibraryScope.Default,
     /** With the bottom bar, whether the app opens on the Home tab or the Library tab. */
     val startOnHome: Boolean = true,
     /** Whether Home shows a quote from what has been read. */
     val homeQuote: Boolean = true,
-)
+) {
+    /** Whether the app draws its five-tab bar around the library, as opposed to the library alone. */
+    val tabs: Boolean get() = scope == LibraryScope.DETAILED
+}
 
 /** What a shelf in [LibraryStyle.SHELVES] is labelled with. */
 sealed interface ShelfLabel {

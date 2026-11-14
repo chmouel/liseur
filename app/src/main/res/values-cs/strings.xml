@@ -2084,6 +2084,7 @@
     <string name="book_details_read_more">Zobrazit více</string>
     <string name="book_details_show_less">Zobrazit méně</string>
     <string name="library_style">Vzhled knihovny</string>
+    <string name="settings_library_style_current">%1$s. Také na tlačítku vzhledu v knihovně.</string>
     <string name="library_style_classic">Klasický</string>
     <string name="library_style_classic_detail">Mřížka obálek s právě rozečtenou knihou nahoře</string>
     <string name="library_style_home">Domů</string>
@@ -2112,10 +2113,10 @@
     <string name="shelf_tone_brass">Mosaz</string>
     <string name="library_compact_list">Úsporné řádky</string>
     <string name="library_compact_list_detail">Menší obálky a názvy knih na jednom řádku</string>
-    <string name="library_bottom_bar">Spodní lišta</string>
-    <string name="library_bottom_bar_detail">Dole zobrazovat záložky Domů, Knihovna, Série, Statistiky a Nastavení</string>
-    <string name="library_hero_card">Horní karta</string>
-    <string name="library_hero_card_detail">Zobrazovat právě rozečtenou knihu na kartě v horní části knihovny</string>
+    <string name="settings_library_layout">Rozvržení aplikace</string>
+    <string name="settings_library_layout_detail">Jednoduché je jen knihovna; Podrobné přidá záložky Domů, Série a Statistiky</string>
+    <string name="settings_library_layout_simple">Jednoduché</string>
+    <string name="settings_library_layout_detailed">Podrobné</string>
     <string name="library_tab_library">Knihovna</string>
     <string name="home_continue">Pokračovat</string>
     <string name="home_series_underway">Rozečtené série</string>
@@ -2149,7 +2150,6 @@
     <string name="home_pick_next_in_series">Další v sérii</string>
     <string name="library_shown_of">%1$d z %2$d</string>
     <string name="home_pulse_today">%d min dnes</string>
-    <string name="library_view_title">Zobrazení knihovny</string>
     <string name="library_opens_on">Otevírá se na</string>
     <string name="library_columns">Sloupce</string>
     <string name="library_columns_comfortable">Pohodlné</string>

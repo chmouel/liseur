@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.chmouel.liseur.domain.LibraryLayout
+import com.chmouel.liseur.domain.LibraryScope
 import com.chmouel.liseur.reader.dictionary.ALT_LANGUAGE_OFF
 import com.chmouel.liseur.reader.annotations.SelectionAction
 import com.chmouel.liseur.reader.annotations.SelectionActionIcon
@@ -339,15 +340,25 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
-    fun `bottom bar is on by default`() = runTest {
+    fun `the tabs are on by default`() = runTest {
         val store = store()
         val repo = AppSettingsRepository(store)
-        assertTrue(repo.settings.first().libraryLayout.bottomBar)
+        assertEquals(LibraryScope.DETAILED, repo.settings.first().libraryLayout.scope)
 
         store.edit { it[stringPreferencesKey("theme_mode")] = "DARK" }
-        assertTrue(repo.settings.first().libraryLayout.bottomBar)
+        assertEquals(LibraryScope.DETAILED, repo.settings.first().libraryLayout.scope)
 
-        repo.setLibraryLayout(LibraryLayout(bottomBar = false))
-        assertFalse(repo.settings.first().libraryLayout.bottomBar)
+        repo.setLibraryLayout(LibraryLayout(scope = LibraryScope.SIMPLE))
+        assertEquals(LibraryScope.SIMPLE, repo.settings.first().libraryLayout.scope)
+    }
+
+    @Test
+    fun `the stored bar of an older version reads as a scope`() = runTest {
+        val store = store()
+        store.edit { it[booleanPreferencesKey("library_bottom_bar")] = false }
+        assertEquals(LibraryScope.SIMPLE, AppSettingsRepository(store).settings.first().libraryLayout.scope)
+
+        store.edit { it[booleanPreferencesKey("library_bottom_bar")] = true }
+        assertEquals(LibraryScope.DETAILED, AppSettingsRepository(store).settings.first().libraryLayout.scope)
     }
 }

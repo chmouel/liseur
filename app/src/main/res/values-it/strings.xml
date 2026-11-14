@@ -1920,6 +1920,7 @@
     <string name="book_details_read_more">Mostra altro</string>
     <string name="book_details_show_less">Mostra meno</string>
     <string name="library_style">Stile della libreria</string>
+    <string name="settings_library_style_current">%1$s. Anche sul pulsante dello stile nella libreria.</string>
     <string name="library_style_classic">Classico</string>
     <string name="library_style_classic_detail">La griglia delle copertine, con il libro che stai leggendo in alto</string>
     <string name="library_style_home">Home</string>
@@ -1948,10 +1949,10 @@
     <string name="shelf_tone_brass">Ottone</string>
     <string name="library_compact_list">Righe compatte</string>
     <string name="library_compact_list_detail">Copertine più piccole e una riga per titolo</string>
-    <string name="library_bottom_bar">Barra inferiore</string>
-    <string name="library_bottom_bar_detail">Mostra in basso le schede Home, Libreria, Serie, Statistiche e Impostazioni</string>
-    <string name="library_hero_card">Scheda superiore</string>
-    <string name="library_hero_card_detail">Mostra il libro in lettura in una scheda in cima alla libreria</string>
+    <string name="settings_library_layout">Layout dell\'app</string>
+    <string name="settings_library_layout_detail">Semplice è solo la libreria; Dettagliato aggiunge le schede Home, Serie e Statistiche</string>
+    <string name="settings_library_layout_simple">Semplice</string>
+    <string name="settings_library_layout_detailed">Dettagliato</string>
     <string name="library_tab_library">Libreria</string>
     <string name="home_continue">Continua</string>
     <string name="home_series_underway">Serie che stai leggendo</string>
@@ -1985,7 +1986,6 @@
     <string name="home_pick_next_in_series">Prossimo della serie</string>
     <string name="library_shown_of">%1$d di %2$d</string>
     <string name="home_pulse_today">%d min oggi</string>
-    <string name="library_view_title">Vista della libreria</string>
     <string name="library_opens_on">Apre su</string>
     <string name="library_columns">Colonne</string>
     <string name="library_columns_comfortable">Comoda</string>

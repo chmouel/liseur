@@ -1994,6 +1994,7 @@
     <string name="book_details_read_more">Read more</string>
     <string name="book_details_show_less">Show less</string>
     <string name="library_style">Library style</string>
+    <string name="settings_library_style_current">%1$s. Also on the style button in the library.</string>
     <string name="library_style_classic">Classic</string>
     <string name="library_style_classic_detail">The cover grid, with the book you are reading on top</string>
     <string name="library_style_home">Home</string>
@@ -2022,10 +2023,10 @@
     <string name="shelf_tone_brass">Brass</string>
     <string name="library_compact_list">Compact rows</string>
     <string name="library_compact_list_detail">Smaller covers and one line per title</string>
-    <string name="library_bottom_bar">Bottom bar</string>
-    <string name="library_bottom_bar_detail">Show Home, Library, Series, Stats and Settings tabs at the bottom</string>
-    <string name="library_hero_card">Top card</string>
-    <string name="library_hero_card_detail">Show the current book in a card at the top of the library</string>
+    <string name="settings_library_layout">App layout</string>
+    <string name="settings_library_layout_detail">Simple is the library alone; Detailed adds the Home, Series and Stats tabs</string>
+    <string name="settings_library_layout_simple">Simple</string>
+    <string name="settings_library_layout_detailed">Detailed</string>
     <string name="library_tab_library">Library</string>
     <string name="home_continue">Continue</string>
     <string name="home_series_underway">Series you are reading</string>
@@ -2059,7 +2060,6 @@
     <string name="home_pick_next_in_series">Next in series</string>
     <string name="library_shown_of">%1$d of %2$d</string>
     <string name="home_pulse_today">%d min today</string>
-    <string name="library_view_title">Library view</string>
     <string name="library_opens_on">Opens on</string>
     <string name="library_columns">Columns</string>
     <string name="library_columns_comfortable">Comfortable</string>
