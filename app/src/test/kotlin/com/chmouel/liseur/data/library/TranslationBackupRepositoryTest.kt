@@ -102,6 +102,23 @@ class TranslationBackupRepositoryTest {
         assertTrue(store.keptRecords().isEmpty())
     }
 
+    @Test fun `a self alias for a book whose import failed is skipped`() = runTest {
+        library.bookDao().upsert(book("source"))
+        val record = store.begin("source", null, "fr", "identity", 1)
+        store.saveSuccess("source", record.generation, "one", "un", 1, 0)
+        store.complete("source", record.generation)
+        val file = File(folder.root, "translations.json")
+        repository.writeContents(file, TranslationBackupRepository.MAX_BYTES)
+        val contents = file.reader().use(::decodeTranslationBackup)
+        store.remove("source")
+        library.bookDao().deleteByUrls(listOf("source"))
+        assertEquals(
+            TranslationBackupResult(0, 1),
+            repository.restore(contents, aliases = mapOf("source" to "source")),
+        )
+        assertTrue(store.keptRecords().isEmpty())
+    }
+
     @Test fun `decoder rejects duplicate keys and malformed counts before restore`() = runTest {
         library.bookDao().upsert(book("source"))
         val record = store.begin("source", null, "fr", "identity", 1)

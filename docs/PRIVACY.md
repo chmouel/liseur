@@ -513,7 +513,10 @@ the network.
 ## Manual ZIP backups
 
 Backups exported from Settings include reading data, companion recaps, fonts,
-settings and service addresses. They exclude passwords, tokens and API keys by
+settings and service addresses. If you tick “Include reading stats”, the ZIP
+also carries your reading sessions, and if you tick “Include book files” it
+carries the offline EPUBs you select. Both travel unencrypted, even when a
+backup password is set: only the connection payload is encrypted. They exclude passwords, tokens and API keys by
 default. If you check “Include accounts, services and passwords”, Liseur also
 includes your library account, KOReader pairing, service API keys and, in the
 Google Play build, your Gemini key. These credentials are encrypted with a

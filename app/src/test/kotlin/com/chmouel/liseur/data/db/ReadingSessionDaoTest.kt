@@ -582,4 +582,51 @@ class ReadingSessionDaoTest {
 
         assertEquals(listOf(book), dao.openSessions().map { it.bookUrl })
     }
+
+    @Test
+    fun `imported sessions never wait for upload, even after uploads are forgotten`() = runTest {
+        db.workIdentityDao().upsert(
+            WorkAlias(
+                bookUrl = book,
+                peerId = "peer",
+                workId = "work-1",
+                confidence = "high",
+                confirmed = true,
+                editionSha = null,
+                resolvedAt = 1L,
+            ),
+        )
+        val localId = dao.insert(
+            ReadingSession(
+                bookUrl = book,
+                startedAt = 100L,
+                endedAt = 200L,
+                lastCheckpointAt = 200L,
+                durationMs = 100L,
+                startProgression = 0.1,
+                endProgression = 0.2,
+                uploadedAt = 300L,
+            ),
+        )
+        dao.insert(
+            ReadingSession(
+                bookUrl = book,
+                startedAt = 400L,
+                endedAt = 500L,
+                lastCheckpointAt = 500L,
+                durationMs = 100L,
+                startProgression = 0.2,
+                endProgression = 0.3,
+                importedAt = 600L,
+            ),
+        )
+
+        assertTrue(dao.awaitingUpload(10).isEmpty())
+        assertTrue(dao.awaitingUploadTo("peer", 10).isEmpty())
+
+        dao.forgetUploads()
+
+        assertEquals(listOf(localId), dao.awaitingUpload(10).map { it.id })
+        assertEquals(listOf(localId), dao.awaitingUploadTo("peer", 10).map { it.id })
+    }
 }

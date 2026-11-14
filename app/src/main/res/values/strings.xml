@@ -949,6 +949,66 @@
     <string name="settings_backup_error_storage">The backup could not be prepared in device storage.</string>
     <string name="settings_backup_error_restore">The backup could not be restored.</string>
     <string name="settings_backup_error_partial">Part of the backup was restored, but the rest could not be applied. Check your settings, fonts, annotations, reading positions, companion recaps, accounts and services.</string>
+    <string name="settings_backup_include_stats">Include reading stats</string>
+    <string name="settings_backup_include_stats_detail">Reading sessions behind the statistics screen. Restored sessions stay on the device and are never sent to a sync server.</string>
+    <string name="settings_backup_include_books">Include book files</string>
+    <string name="settings_backup_include_books_detail">Offline EPUBs go inside the backup, unencrypted.</string>
+    <string name="settings_backup_books_choose">Choose books</string>
+    <plurals name="settings_backup_books_selected">
+        <item quantity="one">%1$d book selected, %2$s</item>
+        <item quantity="other">%1$d books selected, %2$s</item>
+    </plurals>
+    <string name="settings_backup_books_select_all">Select all</string>
+    <string name="settings_backup_books_clear">Clear</string>
+    <string name="settings_backup_books_size_unknown">Size unknown</string>
+    <string name="settings_backup_books_too_large">Too large for a backup (over %1$s)</string>
+    <string name="settings_backup_books_over_limit">The selected books add up to more than %1$s. Shared copies may still fit.</string>
+    <string name="settings_backup_books_none">No offline books to include.</string>
+    <string name="settings_backup_progress_hashing">Checking book files: %1$d of %2$d</string>
+    <string name="settings_backup_progress_writing">Saving backup: %1$s of %2$s</string>
+    <string name="settings_backup_progress_reading">Reading backup: %1$s</string>
+    <string name="settings_backup_progress_importing">Adding books: %1$d of %2$d</string>
+    <string name="settings_backup_cancelled">Backup cancelled.</string>
+    <plurals name="settings_backup_exported_books">
+        <item quantity="one">%1$d book file included.</item>
+        <item quantity="other">%1$d book files included.</item>
+    </plurals>
+    <plurals name="settings_backup_books_skipped">
+        <item quantity="one">%1$d book could not be read and was left out.</item>
+        <item quantity="other">%1$d books could not be read and were left out.</item>
+    </plurals>
+    <plurals name="settings_backup_exported_sessions">
+        <item quantity="one">%1$d reading session included.</item>
+        <item quantity="other">%1$d reading sessions included.</item>
+    </plurals>
+    <plurals name="settings_backup_books_preview">
+        <item quantity="one">%1$d book file. Books already in your library are kept as they are.</item>
+        <item quantity="other">%1$d book files. Books already in your library are kept as they are.</item>
+    </plurals>
+    <plurals name="settings_backup_books_to_add">
+        <item quantity="one">%1$d will be added to your library (%2$s).</item>
+        <item quantity="other">%1$d will be added to your library (%2$s).</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_preview">
+        <item quantity="one">%1$d reading session. Sessions you already have are kept.</item>
+        <item quantity="other">%1$d reading sessions. Sessions you already have are kept.</item>
+    </plurals>
+    <plurals name="settings_backup_books_restored">
+        <item quantity="one">%1$d book added to your library.</item>
+        <item quantity="other">%1$d books added to your library.</item>
+    </plurals>
+    <plurals name="settings_backup_books_already_here">
+        <item quantity="one">%1$d book was already in your library.</item>
+        <item quantity="other">%1$d books were already in your library.</item>
+    </plurals>
+    <plurals name="settings_backup_book_failures">
+        <item quantity="one">%1$d book could not be added.</item>
+        <item quantity="other">%1$d books could not be added.</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_restored">
+        <item quantity="one">%1$d reading session restored.</item>
+        <item quantity="other">%1$d reading sessions restored.</item>
+    </plurals>
     <string name="settings_library_help_title">Book servers</string>
     <string name="settings_library_help_body" formatted="true">A book server (calibre-web, Komga, liseur-sync or an OPDS catalog) holds your library: Liseur browses it and downloads from it, and keeps your place in step where the server supports it. A Custom OPDS connection can pair with a KOReader sync server for reading positions. One server is connected at a time.\n\nliseur-sync also keeps books that exist only on this phone in step: a file off an SD card syncs its position too. Run your own from %1$s.</string>
     <string name="settings_account_detail">Browse and download from a calibre-web, Komga, liseur-sync or OPDS server, and keep your place in step (for OPDS, through a paired KOReader sync server).</string>

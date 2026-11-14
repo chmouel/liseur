@@ -923,6 +923,66 @@
     <string name="settings_backup_error_storage">Die Sicherung konnte nicht im Gerätespeicher vorbereitet werden.</string>
     <string name="settings_backup_error_restore">Die Sicherung konnte nicht wiederhergestellt werden.</string>
     <string name="settings_backup_error_partial">Ein Teil der Sicherung wurde wiederhergestellt, aber der Rest konnte nicht angewendet werden. Prüfe Einstellungen, Schriftarten, Anmerkungen, Lesepositionen, Begleiter-Zusammenfassungen, Konten und Dienste.</string>
+    <string name="settings_backup_include_stats">Lesestatistiken einschließen</string>
+    <string name="settings_backup_include_stats_detail">Lesesitzungen hinter dem Statistikbildschirm. Wiederhergestellte Sitzungen bleiben auf dem Gerät und werden nie an einen Synchronisierungsserver gesendet.</string>
+    <string name="settings_backup_include_books">Buchdateien einschließen</string>
+    <string name="settings_backup_include_books_detail">Offline-EPUBs werden unverschlüsselt in die Sicherung aufgenommen.</string>
+    <string name="settings_backup_books_choose">Bücher auswählen</string>
+    <plurals name="settings_backup_books_selected">
+        <item quantity="one">%1$d Buch ausgewählt, %2$s</item>
+        <item quantity="other">%1$d Bücher ausgewählt, %2$s</item>
+    </plurals>
+    <string name="settings_backup_books_select_all">Alle auswählen</string>
+    <string name="settings_backup_books_clear">Auswahl aufheben</string>
+    <string name="settings_backup_books_size_unknown">Größe unbekannt</string>
+    <string name="settings_backup_books_too_large">Zu groß für eine Sicherung (über %1$s)</string>
+    <string name="settings_backup_books_over_limit">Die ausgewählten Bücher überschreiten %1$s. Gemeinsame Dateien passen möglicherweise noch.</string>
+    <string name="settings_backup_books_none">Keine Offline-Bücher zum Einschließen.</string>
+    <string name="settings_backup_progress_hashing">Buchdateien werden geprüft: %1$d von %2$d</string>
+    <string name="settings_backup_progress_writing">Sicherung wird gespeichert: %1$s von %2$s</string>
+    <string name="settings_backup_progress_reading">Sicherung wird gelesen: %1$s</string>
+    <string name="settings_backup_progress_importing">Bücher werden hinzugefügt: %1$d von %2$d</string>
+    <string name="settings_backup_cancelled">Sicherung abgebrochen.</string>
+    <plurals name="settings_backup_exported_books">
+        <item quantity="one">%1$d Buchdatei eingeschlossen.</item>
+        <item quantity="other">%1$d Buchdateien eingeschlossen.</item>
+    </plurals>
+    <plurals name="settings_backup_books_skipped">
+        <item quantity="one">%1$d Buch konnte nicht gelesen werden und wurde ausgelassen.</item>
+        <item quantity="other">%1$d Bücher konnten nicht gelesen werden und wurden ausgelassen.</item>
+    </plurals>
+    <plurals name="settings_backup_exported_sessions">
+        <item quantity="one">%1$d Lesesitzung eingeschlossen.</item>
+        <item quantity="other">%1$d Lesesitzungen eingeschlossen.</item>
+    </plurals>
+    <plurals name="settings_backup_books_preview">
+        <item quantity="one">%1$d Buchdatei. Bücher, die bereits in deiner Bibliothek sind, bleiben unverändert.</item>
+        <item quantity="other">%1$d Buchdateien. Bücher, die bereits in deiner Bibliothek sind, bleiben unverändert.</item>
+    </plurals>
+    <plurals name="settings_backup_books_to_add">
+        <item quantity="one">%1$d wird zu deiner Bibliothek hinzugefügt (%2$s).</item>
+        <item quantity="other">%1$d werden zu deiner Bibliothek hinzugefügt (%2$s).</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_preview">
+        <item quantity="one">%1$d Lesesitzung. Bereits vorhandene Sitzungen bleiben erhalten.</item>
+        <item quantity="other">%1$d Lesesitzungen. Bereits vorhandene Sitzungen bleiben erhalten.</item>
+    </plurals>
+    <plurals name="settings_backup_books_restored">
+        <item quantity="one">%1$d Buch zu deiner Bibliothek hinzugefügt.</item>
+        <item quantity="other">%1$d Bücher zu deiner Bibliothek hinzugefügt.</item>
+    </plurals>
+    <plurals name="settings_backup_books_already_here">
+        <item quantity="one">%1$d Buch war bereits in deiner Bibliothek.</item>
+        <item quantity="other">%1$d Bücher waren bereits in deiner Bibliothek.</item>
+    </plurals>
+    <plurals name="settings_backup_book_failures">
+        <item quantity="one">%1$d Buch konnte nicht hinzugefügt werden.</item>
+        <item quantity="other">%1$d Bücher konnten nicht hinzugefügt werden.</item>
+    </plurals>
+    <plurals name="settings_backup_sessions_restored">
+        <item quantity="one">%1$d Lesesitzung wiederhergestellt.</item>
+        <item quantity="other">%1$d Lesesitzungen wiederhergestellt.</item>
+    </plurals>
     <string name="settings_library_help_title">Buchserver</string>
     <string name="settings_library_help_body" formatted="true">Ein Buchserver (calibre-web, Komga, liseur-sync oder ein OPDS-Katalog) hält deine Bibliothek: Liseur durchsucht ihn und lädt davon herunter und hält deine Stelle im Einklang, wo der Server das unterstützt. Eine benutzerdefinierte OPDS-Verbindung kann für Lesepositionen mit einem KOReader-Sync-Server gekoppelt werden. Es ist jeweils ein Server verbunden.\n\nliseur-sync hält auch Bücher im Einklang, die es nur auf diesem Handy gibt: eine Datei von einer SD-Karte synchronisiert ihre Position ebenfalls. Betreibe deinen eigenen von %1$s.</string>
     <string name="settings_account_detail">Durchsuchen und Herunterladen von einem calibre-web-, Komga-, liseur-sync- oder OPDS-Server und deine Stelle im Einklang halten (bei OPDS über einen gekoppelten KOReader-Sync-Server).</string>

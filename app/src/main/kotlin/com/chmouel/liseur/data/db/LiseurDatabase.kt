@@ -44,7 +44,7 @@ import androidx.sqlite.execSQL
         BookAiPreferences::class,
         BookMetadata::class,
     ],
-    version = 74,
+    version = 75,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -85,6 +85,13 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun bookMetadataDao(): BookMetadataDao
 
     companion object {
+        /** Marks sessions restored from a backup so they are never uploaded to liseur-sync. */
+        val MIGRATION_74_75 = object : Migration(74, 75) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `reading_sessions` ADD COLUMN `imported_at` INTEGER")
+            }
+        }
+
         /** Remembers an unread reset by revision, so reading on does not hide that it is still owed. */
         val MIGRATION_73_74 = object : Migration(73, 74) {
             override fun migrate(connection: SQLiteConnection) {
@@ -2035,6 +2042,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_71_72,
             MIGRATION_72_73,
             MIGRATION_73_74,
+            MIGRATION_74_75,
         )
     }
 }

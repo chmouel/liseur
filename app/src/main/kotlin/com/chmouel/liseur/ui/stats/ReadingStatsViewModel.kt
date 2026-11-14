@@ -934,7 +934,7 @@ private fun sessionSpans(sessions: List<ReadingSession>): List<SessionSpan> = se
         startedAt = it.startedAt,
         durationMs = it.durationMs,
         lastReadAt = it.endedAt ?: it.lastCheckpointAt,
-        uploaded = it.uploadedAt != null,
+        uploaded = it.uploadedAt != null || it.importedAt != null,
         startProgression = it.startProgression,
         endProgression = it.endProgression,
     )
