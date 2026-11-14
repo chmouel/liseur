@@ -1977,6 +1977,16 @@ separate from translation's, moved and forgotten with server edits in
   ([ADR 0070](docs/adr/0070-library-styles-are-fixed-layouts.md)).
   Home (`HomeDesk`) is built from the unfiltered shelf; Library filters
   must never reach it.
+- The Home quote (`data/quotes/HomeQuotes.kt`) only uses text before the
+  book's furthest read point, offline and without AI — the reader's own
+  highlights included, since one can arrive from another device that
+  read further. A book with an eligible highlight is not walked for
+  lines, which the pick could never show. Bump `MemorableLines.VERSION`
+  when the scoring changes; a scan records `books.work_id`, so a file
+  replaced under the same URL drops its lines and its watermark rather
+  than quoting the old book under the new title. `quotes.db` is a cache,
+  kept out of backups
+  ([ADR 0071](docs/adr/0071-home-quotes-come-from-what-was-read.md)).
 - UI strings go into English and all shipped locales together.
   Russian plurals need `one`, `few`, `many`, `other`; escape apostrophes.
 - Dependencies and bundled fonts must stay FOSS and reproducible;

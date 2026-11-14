@@ -108,7 +108,35 @@ object ResourceAnchor {
      * is saved (#372).
      */
     fun exactIn(locator: Locator?, readingOrder: Collection<String>): Locator? =
-        locator?.takeIf { ExactLocatorAnchor.isExact(it) && inSpine(it, readingOrder) }
+        locator?.takeIf(ExactLocatorAnchor::isExact)?.let { passageIn(it, readingOrder) }
+
+    /**
+     * [locator] whole — the words it was found by included — if the
+     * resource it names is one this publication has.
+     *
+     * A quote is not a saved place. Its `text` is the only thing that
+     * says *which* passage it is, so running it through [sanitize] would
+     * leave the chapter and send the reader to the top of it: in a long
+     * chapter that is a different page from the one quoted. What the
+     * spine is asked here is only whether the passage can be looked for
+     * at all, which is the one question a locator from another edition
+     * fails.
+     *
+     * Unlike [targetIn] this does not demand a single reading-order
+     * entry for the resource: a spine that lists the same file twice
+     * still contains the passage.
+     */
+    fun passageIn(locator: Locator?, readingOrder: Collection<String>): Locator? {
+        val locator = locator ?: return null
+        val local = spineMatches(locator, readingOrder).firstOrNull() ?: return null
+        return locator.copy(href = spineHref(local, locator.href.fragment) ?: return null)
+    }
+
+    /** [path] as the spine spells it, keeping the id an anchor points at inside it. */
+    private fun spineHref(path: String, fragment: String?): Url? {
+        val base = Url(path) ?: Url("/$path") ?: return null
+        return fragment?.takeIf { it.isNotBlank() }?.let { Url("$base#$it") } ?: base
+    }
 
     private fun spineMatches(locator: Locator, readingOrder: Collection<String>): List<String> {
         val target = ResourceAddress.canonicalPath(locator.href.toString()) ?: return emptyList()

@@ -519,6 +519,8 @@ class LibraryViewModel(
     private val requestAccountTranslationClear: suspend (String) -> Boolean = { false },
     /** This device's reading sessions, for the Home header and the hero's time left. */
     readingSessions: Flow<List<ReadingSession>> = flowOf(emptyList()),
+    /** Quotes from what has been read, for Home; null leaves the card out. */
+    private val homeQuotes: com.chmouel.liseur.data.quotes.HomeQuotes? = null,
 ) : ViewModel() {
     private val sessions = readingSessions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -1100,6 +1102,25 @@ class LibraryViewModel(
                 }
             }.flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** A quote from what has been read, while Home asks for one. */
+    val homeQuote: StateFlow<com.chmouel.liseur.data.quotes.HomeQuote?> =
+        appSettings.settings
+            .map { it.libraryLayout.homeQuote }
+            .distinctUntilChanged()
+            .flatMapLatest { on ->
+                val quotes = homeQuotes
+                if (!on || quotes == null) {
+                    flowOf(null)
+                } else {
+                    quotes.scanSoon()
+                    quotes.quote
+                }
+            }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    fun anotherQuote() {
+        viewModelScope.launch { homeQuotes?.another() }
+    }
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
@@ -1881,6 +1902,7 @@ class LibraryViewModel(
                         accountTranslationBookUrls = container.accountTranslationClears.observeBooks(),
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),
+                        homeQuotes = container.homeQuotes,
                     )
                 }
             }

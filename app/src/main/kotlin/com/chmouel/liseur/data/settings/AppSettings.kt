@@ -574,6 +574,7 @@ class AppSettingsRepository(
         val LIBRARY_GRID_COMPACT = booleanPreferencesKey("library_grid_compact")
         val LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
         val LIBRARY_START_HOME = booleanPreferencesKey("library_start_home")
+        val LIBRARY_HOME_QUOTE = booleanPreferencesKey("library_home_quote")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
@@ -684,6 +685,7 @@ class AppSettingsRepository(
                 compactGrid = p[Keys.LIBRARY_GRID_COMPACT] ?: false,
                 bottomBar = p[Keys.LIBRARY_BOTTOM_BAR] ?: true,
                 startOnHome = p[Keys.LIBRARY_START_HOME] ?: true,
+                homeQuote = p[Keys.LIBRARY_HOME_QUOTE] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
@@ -883,6 +885,7 @@ class AppSettingsRepository(
             it[Keys.LIBRARY_GRID_COMPACT] = layout.compactGrid
             it[Keys.LIBRARY_BOTTOM_BAR] = layout.bottomBar
             it[Keys.LIBRARY_START_HOME] = layout.startOnHome
+            it[Keys.LIBRARY_HOME_QUOTE] = layout.homeQuote
         }
     }
 
@@ -1427,6 +1430,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_compact_list" to BackupValueType.BOOLEAN,
     "library_grid_compact" to BackupValueType.BOOLEAN,
     "library_start_home" to BackupValueType.BOOLEAN,
+    "library_home_quote" to BackupValueType.BOOLEAN,
     "library_bottom_bar" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,

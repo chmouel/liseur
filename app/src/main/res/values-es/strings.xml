@@ -1964,6 +1964,14 @@
     <string name="home_your_shelves">Tus estanterías</string>
     <string name="home_pick_up_next">Para seguir</string>
     <string name="home_recently_added">Añadidos recientemente</string>
+    <string name="home_quote_title">De tus lecturas</string>
+    <string name="home_quote_highlight">Tu subrayado</string>
+    <string name="home_quote_another">Otra cita</string>
+    <string name="home_quote_open">abrir el pasaje</string>
+    <string name="home_quote_text">«%1$s»</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Cita de tus lecturas</string>
+    <string name="home_quote_setting_detail">Muestra una frase de un libro leído, tomada solo de las páginas que ya has leído</string>
     <string name="home_time_left_minutes">Quedan ~%d min</string>
     <string name="home_time_left_hours">Quedan ~%1$d h %2$d min</string>
     <string name="home_page_of">Página %1$d de %2$d</string>

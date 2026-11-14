@@ -2025,6 +2025,14 @@
     <string name="home_your_shelves">Suas estantes</string>
     <string name="home_pick_up_next">Para continuar</string>
     <string name="home_recently_added">Adicionados recentemente</string>
+    <string name="home_quote_title">Das suas leituras</string>
+    <string name="home_quote_highlight">Seu destaque</string>
+    <string name="home_quote_another">Outra citação</string>
+    <string name="home_quote_open">abrir o trecho</string>
+    <string name="home_quote_text">“%1$s”</string>
+    <string name="home_quote_source">— %1$s</string>
+    <string name="home_quote_setting">Citação das suas leituras</string>
+    <string name="home_quote_setting_detail">Mostra uma frase de um livro lido, tirada só das páginas que você já leu</string>
     <string name="home_time_left_minutes">Faltam ~%d min</string>
     <string name="home_time_left_hours">Faltam ~%1$d h %2$d min</string>
     <string name="home_page_of">Página %1$d de %2$d</string>

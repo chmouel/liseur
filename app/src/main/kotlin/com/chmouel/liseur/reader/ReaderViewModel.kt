@@ -162,6 +162,8 @@ class ReaderViewModel(
      * to survives the download being removed and fetched again.
      */
     private val bookId: String,
+    /** A passage to open at for a look, such as a quote from Home; the saved place stays put. */
+    private val openAt: String? = null,
     private val assetRetriever: AssetRetriever,
     private val publicationOpener: PublicationOpener,
     private val progressDao: ReadingProgressDao,
@@ -1619,9 +1621,39 @@ class ReaderViewModel(
             approximateOpening = approximate?.takeIf { approximateTarget != null }
             approximateOpeningSettlementPending = false
             val storedTarget = if (stillCurrent) localTarget else localTargetFor(latestStored)
+            // A passage asked for is a look, like a profile's source:
+            // the saved place is where Return goes and stays saved.
+            //
+            // The passage itself is kept whole rather than resumed to:
+            // a quote's locator carries the words it was found by and
+            // no app-owned anchor, and the resuming ladder would strip
+            // them for the chapter's own progression — the top of a
+            // chapter being a different page from the quoted line in a
+            // long one. The ladder is still what answers when the book
+            // no longer has that resource at all.
+            val lookTarget = openAt
+                ?.takeIf { stillCurrent && incoming == null && approximateTarget == null && choicePreview == null }
+                ?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
+                ?.let { asked ->
+                    val chapters = readingOrderPaths()
+                    ResourceAnchor.passageIn(asked, chapters)
+                        ?: ResourceAnchor.resumeTarget(
+                            saved = asked,
+                            totalProgression = null,
+                            readingOrder = chapters,
+                            byProgression = positions::locatorAtOrBeforeProgression,
+                        )
+                }?.let(::prepareLocator)
+            // Where Return goes. A book marked read before it was ever
+            // opened has no saved place at all, and the passage is
+            // still a passage: the beginning is the honest origin then
+            // rather than refusing to open the quote.
+            val lookOrigin = storedTarget ?: safeFallback
             val initialLocator = incoming?.takeIf { stillCurrent }?.let(::prepareLocator)
                 ?: approximateTarget
+                ?: lookTarget
                 ?: storedTarget
+            if (lookTarget != null && lookOrigin != null) _peek.value = SourcePeek(lookOrigin)
             val openingPull = pullOffer?.takeIf {
                 choicePreview == null && stillCurrent && incoming != null && initialLocator != null
             }?.copy(locatorJson = checkNotNull(initialLocator).toJSON().toString())
@@ -1660,6 +1692,7 @@ class ReaderViewModel(
             // onResume arrives before a publication has necessarily
             // opened. Only now can foreground time be reading time.
             sessions.onReaderReady()
+            if (lookTarget != null) sessions.suspendForPeek()
             lastLocator?.let { _progress.value = progressAt(it) }
             (lastLocator ?: publication.readingOrder.firstOrNull()?.let { publication.locatorFromLink(it) })
                 ?.let { placeShown(it, false) }
@@ -3204,13 +3237,14 @@ class ReaderViewModel(
          */
         private const val MAX_SEARCH_HITS = 500
 
-        fun factory(bookUrl: AbsoluteUrl, bookId: String): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(bookUrl: AbsoluteUrl, bookId: String, openAt: String? = null): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = checkNotNull(this[APPLICATION_KEY])
                 val container = application.container
                 ReaderViewModel(
                     bookUrl = bookUrl,
                     bookId = bookId,
+                    openAt = openAt,
                     assetRetriever = container.assetRetriever,
                     publicationOpener = container.publicationOpener,
                     progressDao = container.database.readingProgressDao(),
