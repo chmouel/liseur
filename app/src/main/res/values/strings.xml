@@ -1093,6 +1093,7 @@
     <string name="reading_stats">Reading stats</string>
     <string name="reading_stats_books_read">Books read from</string>
     <string name="reading_stats_books_finished">Books finished</string>
+    <string name="reading_stats_books_finished_note">Of the books read from in this period</string>
     <string name="reading_stats_by_book">By book</string>
     <string name="reading_stats_joined" translatable="false">%1$s · %2$s</string>
     <string name="reading_stats_scope_all_devices">all your devices</string>

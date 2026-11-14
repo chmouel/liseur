@@ -1035,6 +1035,7 @@
     <string name="reading_stats">阅读统计</string>
     <string name="reading_stats_books_read">阅读过的书</string>
     <string name="reading_stats_books_finished">已读完的书</string>
+    <string name="reading_stats_books_finished_note">在此期间阅读过的书中</string>
     <string name="reading_stats_by_book">按图书</string>
     <string name="reading_stats_scope_all_devices">所有设备</string>
     <string name="reading_stats_scope_this_device">仅本设备</string>

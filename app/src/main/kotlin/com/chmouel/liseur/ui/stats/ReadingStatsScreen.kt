@@ -358,7 +358,13 @@ private fun overviewLines(
     provenance: StatsProvenance,
 ): List<StatLine> = buildList {
     add(StatLine(stringResource(R.string.reading_stats_books_read), stats.booksRead.toString()))
-    add(StatLine(stringResource(R.string.reading_stats_books_finished), stats.booksFinished.toString()))
+    add(
+        StatLine(
+            stringResource(R.string.reading_stats_books_finished),
+            stats.booksFinished.toString(),
+            supporting = stringResource(R.string.reading_stats_books_finished_note),
+        ),
+    )
     add(StatLine(stringResource(R.string.reading_stats_streak), headline.streakDays.toString()))
     add(StatLine(stringResource(R.string.reading_stats_sessions), headline.sessions.toString()))
     headline.progressionPerHour?.let { pace ->
