@@ -311,18 +311,27 @@ class HomeQuotes internal constructor(
         val quotedFromMarks = marksWithin(read).keys
         val due = all
             .filter { it.url !in quotedFromMarks }
-            .mapNotNull { book -> read[book.url]?.takeIf { it.point >= MIN_READ }?.let { book to it.point } }
+            .mapNotNull { book -> read[book.url]?.takeIf { it.point >= MIN_READ }?.let { book to it } }
+            // A walk needs somewhere in the book to stop. A whole-book
+            // fraction is all that is left when the position came from
+            // another client with no locator of its own, and that
+            // fraction is on that client's scale: walking to it would
+            // cache words this device has no reading for. Such a book is
+            // left alone until a page is turned here, which writes the
+            // locator that makes the walk checkable. A book marked read
+            // needs no stop, since its ceiling is the whole of it.
+            .filter { (_, read) -> read.point >= 1.0 || read.place != null }
             // A recorded work that is not the one there now is due
             // whatever the watermark says: the lines and the watermark
             // belong to a book that has been replaced.
-            .filter { (book, point) ->
-                isDue(scans[book.url], point) ||
+            .filter { (book, _) ->
+                isDue(scans[book.url], read.getValue(book.url).point) ||
                     !QuoteRules.stillSameWork(scans[book.url]?.workId, book.workId)
             }
             .sortedByDescending { (book, _) -> book.lastOpenedAt ?: 0L }
-        for ((book, point) in due) {
+        for ((book, _) in due) {
             currentCoroutineContext().ensureActive()
-            scan(dao, book, point)
+            scan(dao, book, read.getValue(book.url).point)
         }
     }
 
