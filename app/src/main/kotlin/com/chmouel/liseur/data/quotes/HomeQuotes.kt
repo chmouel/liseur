@@ -167,7 +167,7 @@ class HomeQuotes internal constructor(
                 // the count no longer covers. A finished book has no
                 // part-way chapter, so its whole-book ceiling is all
                 // there is.
-                val from = if (peakStands(row)) row.peakLocator else row.locatorJson
+                val from = ceilingLocator(row)
                 val furthest = placeIn(from).takeIf { point < 1.0 }
                 row.bookUrl to ReadBook(point, furthest)
             }
@@ -332,10 +332,9 @@ class HomeQuotes internal constructor(
         // whole-book fraction can have come from a client that interpolates
         // its own position list, and reading past it would cache lines from
         // pages the reader has not reached. The chapter stops the walk.
-        val place = database.readingProgressDao().get(book.url)?.let { row ->
-            val from = if (peakStands(row)) row.peakLocator else row.locatorJson
-            from?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
-        }
+        val place = database.readingProgressDao().get(book.url)
+            ?.let(::ceilingLocator)
+            ?.let { json -> runCatching { Locator.fromJSON(JSONObject(json)) }.getOrNull() }
         val found = try {
             opener().withPublication(url) { publication -> QuoteScanner.walk(publication, point, until = place) }
         } catch (e: CancellationException) {
@@ -427,6 +426,19 @@ class HomeQuotes internal constructor(
             progress.unreadResetRevision?.let { reset ->
                 (progress.peakRevision ?: 0) > reset
             } ?: true
+
+        /**
+         * The locator the ceiling was read from.
+         *
+         * The furthest place while the peak still stands, and the place
+         * the reader is on when it does not. A position pulled from
+         * another device fills the place and not the peak, so a row with
+         * no peak locator has to answer with the place it does have:
+         * answering null would leave a foreign whole-book fraction
+         * standing as the ceiling with nothing to check it against.
+         */
+        fun ceilingLocator(progress: ReadingProgress): String? =
+            progress.peakLocator?.takeIf { peakStands(progress) } ?: progress.locatorJson
 
         fun isDue(scan: QuoteScanRow?, point: Double): Boolean =
             scan == null || scan.version != MemorableLines.VERSION ||

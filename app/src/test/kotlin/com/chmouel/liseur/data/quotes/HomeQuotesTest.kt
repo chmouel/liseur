@@ -339,6 +339,24 @@ class HomeQuotesTest {
         assertEquals(1.0, quoteDb.quotes().scans().single().scannedThrough, 0.0)
     }
 
+    @Test
+    fun `a position pulled from another device still says where the ceiling is`() {
+        // A pull fills the place and not the peak. The fraction may come
+        // from a client that measures the book differently, so the walk
+        // needs the place it does have rather than nothing.
+        val pulled = progress(total = 0.6, locator = chapter(0.4))
+        assertNull(pulled.peakLocator)
+        assertEquals(chapter(0.4), HomeQuotes.ceilingLocator(pulled))
+
+        // A peak that stands speaks for the ceiling.
+        val peaked = pulled.copy(peakProgression = 0.8, peakLocator = chapter(0.7), peakRevision = 3, localRevision = 4)
+        assertEquals(chapter(0.7), HomeQuotes.ceilingLocator(peaked))
+
+        // Once an unread reset has started it over, the place is the one
+        // that counts, not the peak it kept.
+        assertEquals(chapter(0.4), HomeQuotes.ceilingLocator(peaked.copy(unreadResetRevision = 5)))
+    }
+
     private fun dao(): QuoteDao = quoteDb.quotes()
 
     private fun book(url: String = this.url) = Book(
