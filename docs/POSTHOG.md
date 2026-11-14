@@ -11,7 +11,7 @@ so no Android automatic capture integrations are installed. The license is
 shipped in Play assets and listed in About. Re-audit SDK queue and transport
 behavior when upgrading: SDK opt-out does not erase the queue, and close flushes.
 
-Only the five `UsageEvent` values and sanitized JVM exceptions may enter the
+Only the fixed `UsageEvent` values and sanitized JVM exceptions may enter the
 queue. Events omit `$geoip_disable` so ingestion can add a location. The
 before-send allowlist removes SDK context enrichment. A transport gate rejects
 all paths except batch ingestion. Disable closes that gate,
@@ -76,6 +76,12 @@ signed for the production organization (listed under Settings > Legal
 documents), so nothing is declared as shared.
 Keep the ML Kit answers when editing these. No book content or account
 identity is collected by this feature.
+
+Companion reports record profile, Connections and Story openings; manual recap
+and summary requests; automatic recap completions; and profile lookup starts
+and outcomes. Failure events carry only fixed broad categories. Automatic recap
+completions and manual requests measure different things, not a conversion.
+No request, response, title, name, server or error detail is included.
 
 Each project has a "Liseur usage" dashboard: daily and weekly active
 installations from `app_foregrounded`, total and unique counts of the four

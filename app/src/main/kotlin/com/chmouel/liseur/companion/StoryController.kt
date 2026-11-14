@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import android.util.Log
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.data.settings.CompanionDetail
 import java.net.URI
 import kotlinx.coroutines.CancellationException
@@ -36,6 +37,7 @@ internal class StoryController(
     private val allowed: StateFlow<Boolean>,
     /** Allows at once, so [allowed] is true before this returns; storing it may finish later. */
     private val setAllowed: () -> Unit,
+    private val report: (UsageEvent) -> Unit = {},
 ) {
     private val events = StoryEvents()
     private val stages = MutableStateFlow(0)
@@ -176,6 +178,7 @@ internal class StoryController(
     fun write() {
         if (shown == null) return
         val step = top?.takeIf(StorySummaries::writable) ?: return
+        report(UsageEvent.COMPANION_SUMMARY_REQUESTED)
         write(step, automatic = false)
     }
 
@@ -197,6 +200,7 @@ internal class StoryController(
                 automatic = automatic,
             )
         }
+        if (!automatic && requests.isNotEmpty()) report(UsageEvent.COMPANION_RECAP_REQUESTED)
         scheduler.request(requests)
     }
 

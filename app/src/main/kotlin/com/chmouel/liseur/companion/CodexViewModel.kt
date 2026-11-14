@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.settings.AppSettingsRepository
@@ -99,6 +100,7 @@ class CodexViewModel(
     profilesFlow: Flow<Boolean> = flowOf(false),
     foregroundFlow: Flow<Boolean>? = null,
     private val clock: () -> Long = android.os.SystemClock::elapsedRealtime,
+    private val report: (UsageEvent) -> Unit = {},
 ) : ViewModel() {
     val enabled: StateFlow<Boolean> = settings.settings.map { it.codexEnabled }.distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -181,6 +183,7 @@ class CodexViewModel(
     fun open(place: Locator, translated: Boolean, selection: String? = null, story: Boolean = false) {
         val opened = catalog ?: return
         val tab = if (story && selection == null || !enabled.value) CodexTab.STORY else CodexTab.NAMES
+        if (tab == CodexTab.STORY) report(UsageEvent.COMPANION_STORY_OPENED)
         start(List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection, tab, CharacterPane.MENTIONS) {
             opened.scopeOf(place, translated)
         }
@@ -190,6 +193,7 @@ class CodexViewModel(
     fun openCharacter(place: Locator, translated: Boolean, selection: String, pane: CharacterPane, note: NoteTarget<Locator>? = null) {
         val opened = catalog ?: return
         val tab = if (enabled.value) CodexTab.NAMES else CodexTab.STORY
+        if (pane == CharacterPane.PROFILE) report(UsageEvent.COMPANION_PROFILE_OPENED)
         start(List(opened.map.chapterCount) { opened.map.titleOf(it) }, selection, tab, pane, note) { opened.scopeOf(place, translated) }
     }
 
@@ -328,13 +332,19 @@ class CodexViewModel(
     }
 
     fun showGraph() {
+        val panel = _panel.value ?: return
+        if (panel.tab != CodexTab.RELATIONSHIPS) report(UsageEvent.COMPANION_RELATIONSHIPS_OPENED)
         _panel.update { it?.copy(tab = CodexTab.RELATIONSHIPS, graphFailed = false) }
         rebuildGraph()
     }
 
     fun showNames() = _panel.update { it?.copy(tab = CodexTab.NAMES) }
 
-    fun showStory() = _panel.update { it?.copy(tab = CodexTab.STORY, detail = null) }
+    fun showStory() {
+        val panel = _panel.value ?: return
+        if (panel.tab != CodexTab.STORY) report(UsageEvent.COMPANION_STORY_OPENED)
+        _panel.update { it?.copy(tab = CodexTab.STORY, detail = null) }
+    }
 
     fun search(text: String) = _panel.update { it?.copy(search = text) }
 
@@ -370,11 +380,18 @@ class CodexViewModel(
     fun detail(name: String, other: String? = null) {
         detailJob?.cancel()
         val pane = codexViews(profiles.value, enabled.value).opening
+        if (pane == CharacterPane.PROFILE) report(UsageEvent.COMPANION_PROFILE_OPENED)
         _panel.update { it?.copy(detail = CodexDetail(name, other, pane = pane, loading = enabled.value)) }
         if (enabled.value) loadMore()
     }
 
-    fun showPane(pane: CharacterPane) = _panel.update { panel -> panel?.copy(detail = panel.detail?.copy(pane = pane)) }
+    fun showPane(pane: CharacterPane) {
+        val current = _panel.value?.detail ?: return
+        if (pane == CharacterPane.PROFILE && current.pane != CharacterPane.PROFILE) {
+            report(UsageEvent.COMPANION_PROFILE_OPENED)
+        }
+        _panel.update { panel -> panel?.copy(detail = panel.detail?.copy(pane = pane)) }
+    }
 
     /** Lists the mentions of [alias], another name for the character shown, or of the character again when null. */
     fun focus(alias: String?) {
@@ -462,6 +479,7 @@ class CodexViewModel(
                     container.database.bookDao(),
                     container.bookFingerprints,
                     profilesFlow = container.companionServer.choice.map { it != null },
+                    report = container.usageReporting::capture,
                 )
             }
         }

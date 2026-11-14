@@ -1,5 +1,7 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.insights.UsageEvent
+
 import android.util.Log
 import com.chmouel.liseur.data.settings.CompanionDetail
 import com.chmouel.liseur.translate.TranslationError
@@ -97,6 +99,7 @@ class RecapScheduler<P>(
     private val foreground: StateFlow<Boolean>,
     /** Whether Story may send on its own; read live, so work offered on a stale value is refused. */
     private val automatic: StateFlow<Boolean> = MutableStateFlow(true),
+    private val report: (UsageEvent) -> Unit = {},
     /** Read as each batch is sent, so a change applies to the next one without stopping the work. */
     private val detail: () -> CompanionDetail = { CompanionDetail.NORMAL },
 ) {
@@ -302,12 +305,14 @@ class RecapScheduler<P>(
         fun allowed(g: Gate) = g.runnable && g.enabled && g.setup == setup && unit.index < g.current()!!
         guarded({ allowed(it) }) {
             try {
+                val counted = CountedChat(setup.chat)
                 val worker = RecapWorker(book, catalog, detail)
-                val done = worker.recap(unit, setup, onBatch = progress(unit)) {
+                val done = worker.recap(unit, setup.copy(chat = counted), onBatch = progress(unit)) {
                     val g = gateNow()
                     allowed(g) && g.requested() == null && !g.summarizes()
                 }
                 if (!done) failed += unit.key
+                else if (counted.requests > 0) report(UsageEvent.COMPANION_AUTO_RECAP_COMPLETED)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -337,6 +342,7 @@ class RecapScheduler<P>(
             }
         }
         if (!finished) return
+        if (failure == null && request.automatic && counted.requests > 0) report(UsageEvent.COMPANION_AUTO_RECAP_COMPLETED)
         lane.update { lane -> lane.filterNot { it.unit.key == request.unit.key } }
         failure?.let { f -> _activity.update { it.copy(failed = it.failed + (request.unit.index to f)) } }
         syncWaiting()

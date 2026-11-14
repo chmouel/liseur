@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.chmouel.liseur.container
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.settings.CompanionDetail
@@ -53,6 +54,7 @@ class CompanionViewModel(
     private val store: CompanionStore,
     private val books: BookDao,
     private val fingerprints: BookFingerprintStore,
+    private val report: (UsageEvent) -> Unit = {},
 ) : ViewModel() {
     private val catalog = CompletableDeferred<PublicationCatalog>()
     // The same book, its passages read from Codex's scan when that holds them.
@@ -113,6 +115,7 @@ class CompanionViewModel(
         aside = { block -> scheduler?.aside(block) ?: block() },
         log = { Log.w(TAG, "Character lookup failed: ${CompanionError.describe(it)}") },
         detail = { server.detail.first() },
+        report = report,
     )
 
     val panel: StateFlow<CompanionPanel<Locator>?> = lookups.panel
@@ -220,10 +223,11 @@ class CompanionViewModel(
                 return@launch
             }
             contentSha.value = sha
-            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), scanned, recapSettings, foreground, storyAllowed) { detail.value }
+            val started = RecapScheduler(viewModelScope, store.forBook(bookUrl, sha), scanned, recapSettings, foreground, storyAllowed, report) { detail.value }
                 .also { it.start() }
             storyController.value = StoryController(
                 viewModelScope, store.forBook(bookUrl, sha), opened, started, choice, detail, storyAllowed,
+                report = report,
                 setAllowed = {
                     storyAllowed.value = true
                     viewModelScope.launch { quietly { server.setStoryAutoOk(true) } }
@@ -414,6 +418,7 @@ class CompanionViewModel(
                     store = container.companionStore,
                     books = container.database.bookDao(),
                     fingerprints = container.bookFingerprints,
+                    report = container.usageReporting::capture,
                 )
             }
         }

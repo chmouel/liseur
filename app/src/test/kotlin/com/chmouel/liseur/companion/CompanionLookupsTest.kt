@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.data.settings.CompanionDetail
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -54,6 +55,7 @@ class CompanionLookupsTest {
     private var replies: suspend (List<ChatMessage>) -> String = { profileFor(it) }
     private val requests = mutableListOf<List<ChatMessage>>()
     private var detail = CompanionDetail.NORMAL
+    private val events = mutableListOf<UsageEvent>()
 
     private fun TestScope.lookups(bookCatalog: BookCatalog<Int> = catalog) = CompanionLookups(
         scope = this,
@@ -70,6 +72,7 @@ class CompanionLookupsTest {
         hints = { _, _, _ -> emptyList() },
         aside = { it() },
         detail = { detail },
+        report = { events.add(it) },
     )
 
     private fun refs(messages: List<ChatMessage>): List<String> =
@@ -94,6 +97,38 @@ class CompanionLookupsTest {
     private fun failure(lookups: CompanionLookups<Int>) = (view(lookups) as? CompanionView.Failed)?.failure
 
     private fun details(lookups: CompanionLookups<Int>) = (view(lookups) as CompanionView.Failed).details!!
+
+    @Test
+    fun `lookup reports one outcome per request and ignores cached answers`() = runTest {
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertEquals(listOf(UsageEvent.COMPANION_LOOKUP_STARTED, UsageEvent.COMPANION_LOOKUP_SUCCEEDED), events)
+        events.clear()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun `lookup reports only a fixed category when a request fails`() = runTest {
+        replies = { throw TranslationError.Network(IOException("private book text")) }
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        advanceUntilIdle()
+        assertEquals(listOf(UsageEvent.COMPANION_LOOKUP_STARTED, UsageEvent.COMPANION_LOOKUP_NETWORK_FAILED), events)
+    }
+
+    @Test
+    fun `cancelling a running lookup is not reported as a failure`() = runTest {
+        replies = { awaitCancellation() }
+        val lookups = lookups()
+        lookups.open("Mira", place = 400, translated = false)
+        runCurrent()
+        lookups.cancel()
+        advanceUntilIdle()
+        assertEquals(listOf(UsageEvent.COMPANION_LOOKUP_STARTED, UsageEvent.COMPANION_LOOKUP_CANCELLED), events)
+    }
 
     @Test
     fun `a name asked in chapter 5 is answered from chapters 1 to 4 only`() = runTest {

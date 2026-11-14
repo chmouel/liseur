@@ -1,6 +1,7 @@
 package com.chmouel.liseur.companion
 
 import com.chmouel.liseur.data.settings.CompanionDetail
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -149,6 +150,7 @@ class CompanionLookups<P>(
     private val aside: suspend (suspend () -> CompanionAnswer<P>) -> CompanionAnswer<P>,
     private val log: (Throwable) -> Unit = {},
     private val detail: suspend () -> CompanionDetail = { CompanionDetail.NORMAL },
+    private val report: (UsageEvent) -> Unit = {},
 ) {
     // The scope is kept without its read point: within a chapter, the
     // mentions the answer was seeded with stand for where it was asked.
@@ -269,14 +271,21 @@ class CompanionLookups<P>(
     private suspend fun ask(asked: AskingScope, name: String, also: String?, useCache: Boolean) {
         // A server changed between choosing and asking is asked again
         // from the start, once, so no lookup mixes two of them.
+        var started = false
         repeat(2) { attempt ->
             val chosen = choice()
             if (chosen == null) {
+                if (started) report(UsageEvent.COMPANION_LOOKUP_SERVICE_FAILED)
                 show(CompanionView.Setup)
                 return
             }
             show(CompanionView.Loading(CompanionView.Stage.READING))
-            val recorded = Recorded { chatFor(chosen) }
+            val recorded = Recorded({ chatFor(chosen) }) {
+                if (!started) {
+                    started = true
+                    report(UsageEvent.COMPANION_LOOKUP_STARTED)
+                }
+            }
             try {
                 val book = catalog()
                 val passages = book.passagesBefore(asked)
@@ -313,6 +322,7 @@ class CompanionLookups<P>(
                         synchronized(cache) { cache[key] = Cached(asked.until, fresh) }
                     }
                 }
+                if (started) report(UsageEvent.COMPANION_LOOKUP_SUCCEEDED)
                 show(
                     when (answer) {
                         is CompanionAnswer.Profile -> CompanionView.Profile(answer)
@@ -323,14 +333,24 @@ class CompanionLookups<P>(
                 )
                 return
             } catch (e: CancellationException) {
+                if (started) report(UsageEvent.COMPANION_LOOKUP_CANCELLED)
                 throw e
             } catch (e: TranslationError.Changed) {
-                if (attempt == 1) show(CompanionView.Failed(CompanionFailure.SERVER, FailureDetails.of(e, chosen, recorded.requests)))
+                if (attempt == 1) {
+                    if (started) report(UsageEvent.COMPANION_LOOKUP_SERVICE_FAILED)
+                    show(CompanionView.Failed(CompanionFailure.SERVER, FailureDetails.of(e, chosen, recorded.requests)))
+                }
             } catch (e: TranslationError.NotSetUp) {
+                if (started) report(UsageEvent.COMPANION_LOOKUP_SERVICE_FAILED)
                 show(CompanionView.Setup)
                 return
             } catch (e: Exception) {
                 log(e)
+                if (started) report(when (CompanionError.failureOf(e)) {
+                    CompanionFailure.NETWORK, CompanionFailure.LOCAL_NETWORK -> UsageEvent.COMPANION_LOOKUP_NETWORK_FAILED
+                    CompanionFailure.MALFORMED -> UsageEvent.COMPANION_LOOKUP_INVALID_RESPONSE
+                    else -> UsageEvent.COMPANION_LOOKUP_SERVICE_FAILED
+                })
                 show(CompanionView.Failed(CompanionError.failureOf(e), FailureDetails.of(e, chosen, recorded.requests, recorded.last)))
                 return
             }
@@ -338,7 +358,7 @@ class CompanionLookups<P>(
     }
 
     /** A chat that counts the requests it lets go and keeps its last reply, for [FailureDetails]. */
-    private class Recorded(make: () -> CompanionChat) : CompanionChat {
+    private class Recorded(make: () -> CompanionChat, private val onRequest: () -> Unit) : CompanionChat {
         private val chat by lazy(make)
 
         @Volatile var requests = 0
@@ -352,6 +372,7 @@ class CompanionLookups<P>(
             return chat.reply(messages) {
                 beforeRequest()
                 requests++
+                onRequest()
             }.also { last = it }
         }
     }

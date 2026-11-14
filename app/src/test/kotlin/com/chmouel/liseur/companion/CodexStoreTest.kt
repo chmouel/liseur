@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.db.BookFingerprintRow
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.settings.AppSettingsRepository
+import com.chmouel.liseur.insights.UsageEvent
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -248,6 +249,7 @@ class CodexStoreTest {
         chapters: List<String>,
         clock: () -> Long = { 1_000L },
         profiles: MutableStateFlow<Boolean> = MutableStateFlow(false),
+        report: (UsageEvent) -> Unit = {},
         block: suspend (CodexViewModel, AppSettingsRepository) -> Unit,
     ) = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Application>()
@@ -275,6 +277,7 @@ class CodexStoreTest {
                             profilesFlow = profiles,
                             foregroundFlow = MutableStateFlow(true),
                             clock = clock,
+                            report = report,
                         )
                     }
                 },
@@ -289,6 +292,28 @@ class CodexStoreTest {
     }
 
     private fun chapter(name: String) = checkNotNull(Locator.fromJSON(JSONObject().put("href", "OEBPS/$name.xhtml").put("type", "application/xhtml+xml")))
+
+    @Test fun `companion screen events count transitions rather than retries`() {
+        val events = mutableListOf<UsageEvent>()
+        withViewModel(
+            listOf("<p>Mira met Tobin.</p>", "<p>Mira returned.</p>"),
+            profiles = MutableStateFlow(true),
+            report = { events.add(it) },
+        ) { vm, _ ->
+            vm.open(chapter("two"), translated = false)
+            awaitCondition { vm.profiles.value && vm.panel.value?.ceiling == 1 }
+            vm.showGraph()
+            vm.showGraph()
+            vm.showStory()
+            vm.showStory()
+            vm.detail("Mira")
+            vm.showPane(CharacterPane.PROFILE)
+            assertEquals(
+                listOf(UsageEvent.COMPANION_RELATIONSHIPS_OPENED, UsageEvent.COMPANION_STORY_OPENED, UsageEvent.COMPANION_PROFILE_OPENED),
+                events,
+            )
+        }
+    }
 
     @Test fun `a relationship opened mid-scan gains the chapters committed after it`() {
         val pair = "<p>At dawn, Mira greeted Tobin.</p><p>Mira left alone.</p>"

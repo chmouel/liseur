@@ -1,5 +1,6 @@
 package com.chmouel.liseur.companion
 
+import com.chmouel.liseur.insights.UsageEvent
 import com.chmouel.liseur.translate.TranslationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -549,6 +550,21 @@ class RecapTest {
         assertEquals(listOf(1), h.scheduler.activity.value.waiting)
     }
 
+    @Test
+    fun `only automatic recap completion is reported as automatic`() = runTest {
+        val events = mutableListOf<UsageEvent>()
+        val h = harness(report = { events.add(it) })
+        h.book.queue += h.unit(0)
+        h.scheduler.moved(3, movement = false)
+        runCurrent()
+        assertEquals(listOf(UsageEvent.COMPANION_AUTO_RECAP_COMPLETED), events)
+        events.clear()
+        h.scheduler.request(listOf(RecapRequest(h.unit(1), ceiling = 3)))
+        runCurrent()
+        assertTrue(events.isEmpty())
+        h.close()
+    }
+
     // -- Fixtures --------------------------------------------------------------
 
     private class Harness(
@@ -576,6 +592,7 @@ class RecapTest {
         longChapter: List<String>? = null,
         truncateFirst: Boolean = false,
         consent: StateFlow<Boolean> = MutableStateFlow(true),
+        report: (UsageEvent) -> Unit = {},
     ): Harness {
         val catalog = FakeCatalog(8, longChapter)
         val chat = RecapChat(hold, malformed, truncateFirst)
@@ -583,7 +600,7 @@ class RecapTest {
         val settings = MutableStateFlow(RecapSettings(enabled, setup))
         val foreground = MutableStateFlow(true)
         val scope = CoroutineScope(backgroundScope.coroutineContext + kotlinx.coroutines.Job(backgroundScope.coroutineContext[kotlinx.coroutines.Job]))
-        val scheduler = RecapScheduler(scope, book, catalog, settings, foreground, consent)
+        val scheduler = RecapScheduler(scope, book, catalog, settings, foreground, consent, report)
         scheduler.start()
         return Harness(scheduler, book, chat, settings, foreground, setup, catalog, scope)
     }
