@@ -24,6 +24,7 @@ import com.chmouel.liseur.domain.quotes.QuoteParagraph
 import com.chmouel.liseur.domain.quotes.QuoteRules
 import com.chmouel.liseur.reader.ResourceAddress
 import com.chmouel.liseur.translate.TranslationPublicationOpener
+import java.io.IOException
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.atomic.AtomicBoolean
@@ -154,8 +155,17 @@ class HomeQuotes internal constructor(
     private suspend fun readBooks(books: Map<String, Book>): Map<String, ReadBook> =
         database.readingProgressDao().getAll()
             .filter { it.bookUrl in books }
-            .map { it.bookUrl to ReadBook(readPoint(it), placeIn(it.locatorJson)) }
-            .filter { (_, read) -> read.point > 0.0 }
+            .mapNotNull { row ->
+                val point = readPoint(row)
+                if (point <= 0.0) return@mapNotNull null
+                // The furthest place is where the ceiling is, not the
+                // place the reader happens to be on: someone who went
+                // back to the top of a chapter has still read the rest
+                // of it. A finished book has no part-way chapter, so
+                // its whole-book ceiling is all there is.
+                val furthest = placeIn(row.peakLocator).takeIf { point < 1.0 }
+                row.bookUrl to ReadBook(point, furthest)
+            }
             .toMap()
 
     /**
@@ -318,6 +328,14 @@ class HomeQuotes internal constructor(
             opener().withPublication(url) { publication -> QuoteScanner.walk(publication, point) }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: IOException) {
+            // The file could not be read this time — a card unmounted, a
+            // grant lost, storage busy. Nothing is written, so the lines
+            // already kept for this book stay and the walk is tried
+            // again later; recording it as scanned would keep a book
+            // marked read from ever being looked at again.
+            Log.i(TAG, "Could not open a book for quotes: ${e.javaClass.simpleName}")
+            return
         } catch (e: Exception) {
             // Not an EPUB, fixed layout or unreadable: not opened again until read on.
             Log.i(TAG, "No quotes from a book: ${e.javaClass.simpleName}")
@@ -378,21 +396,25 @@ class HomeQuotes internal constructor(
         /** What the reader marked on a passage; a book note has no passage to quote. */
         private val MARK_KINDS = setOf(AnnotationKind.HIGHLIGHT.name, AnnotationKind.NOTE.name)
 
-        /** How far the reader has got: the furthest point reached, or all of it once marked read. */
-        fun readPoint(progress: ReadingProgress): Double {
+    /**
+     * The point the lines of a book were walked to, which is a cache and
+     * not a reading: an unread mark starts it over, and the furthest
+     * point recorded before it describes a reading the reader has since
+     * put back on the pile.
+     */
+    fun readPoint(progress: ReadingProgress): Double {
             if (progress.finishedOverride == FinishedOverride.FINISHED.ordinal) return 1.0
             val total = progress.totalProgression ?: 0.0
             val peak = progress.peakProgression ?: 0.0
-            // An unread mark starts the reading over. The furthest point
-            // recorded before it describes a reading the reader has
-            // since put back on the pile, so it does not count until
-            // reading past it again gives the peak a newer revision.
-            val peakStands = progress.unreadResetRevision?.let { reset ->
-                (progress.peakRevision ?: 0) > reset
-            } ?: true
-            val furthest = if (peakStands) maxOf(total, peak) else total
+            val furthest = if (peakStands(progress)) maxOf(total, peak) else total
             return if (furthest.isFinite()) furthest.coerceIn(0.0, 1.0) else 0.0
         }
+
+        /** Whether the furthest point recorded still describes what is being read now. */
+        fun peakStands(progress: ReadingProgress): Boolean =
+            progress.unreadResetRevision?.let { reset ->
+                (progress.peakRevision ?: 0) > reset
+            } ?: true
 
         fun isDue(scan: QuoteScanRow?, point: Double): Boolean =
             scan == null || scan.version != MemorableLines.VERSION ||
