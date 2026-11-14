@@ -1181,6 +1181,11 @@ class LibraryViewModel(
         editFilters { it.copy(groupBySeries = grouped) }
     }
 
+    /** Steps out of the archive, if in it, keeping every other filter. */
+    fun leaveArchive() {
+        editFilters { it.copy(options = it.options - LibraryFilterOption.ARCHIVED) }
+    }
+
     /** Shows or leaves the Series tab. */
     fun showSeries(shown: Boolean) {
         _seriesView.value = shown
