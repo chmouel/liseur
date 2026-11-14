@@ -49,15 +49,21 @@ class HomeQuotesTest {
         context = ApplicationProvider.getApplicationContext()
         db = Room.inMemoryDatabaseBuilder(context, LiseurDatabase::class.java).build()
         quoteDb = Room.inMemoryDatabaseBuilder(context, QuoteDatabase::class.java).build()
-        quotes = HomeQuotes(
-            context = context,
-            database = db,
-            store = { quoteDb.quotes() },
-            opener = { error("no book is opened to answer a quote") },
-            scope = CoroutineScope(Job()),
-            today = { LocalDate.of(2024, 5, 1) },
-        )
+        quotes = homeQuotes()
     }
+
+    private fun homeQuotes(
+        opener: () -> com.chmouel.liseur.translate.TranslationPublicationOpener = {
+            error("no book is opened to answer a quote")
+        },
+    ) = HomeQuotes(
+        context = context,
+        database = db,
+        store = { quoteDb.quotes() },
+        opener = opener,
+        scope = CoroutineScope(Job()),
+        today = { LocalDate.of(2024, 5, 1) },
+    )
 
     @After
     fun tearDown() {
@@ -250,6 +256,65 @@ class HomeQuotesTest {
         assertEquals(first, quotes.quote.first()?.text)
     }
 
+    @Test
+    fun `a mark in the chapter the reader left behind is still read`() = runTest {
+        // The reader read to 80% of the chapter and came back to 20%.
+        // The furthest place, not the current one, is where the ceiling
+        // is: the rest of that chapter has been read.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(
+            progress(total = 0.2, locator = chapter(0.2)).copy(
+                peakProgression = 0.8,
+                peakLocator = chapter(0.8),
+                peakRevision = 4,
+                localRevision = 5,
+            ),
+        )
+        db.annotationDao().upsert(
+            highlight("read", progression = null, at = null).copy(locatorJson = chapter(0.6)),
+        )
+
+        assertEquals("read", quotes.quote.first()?.text)
+    }
+
+    @Test
+    fun `a finished book may be quoted anywhere`() = runTest {
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(
+            progress(total = 0.2, locator = chapter(0.2)).copy(
+                finishedOverride = com.chmouel.liseur.domain.FinishedOverride.FINISHED.ordinal,
+                peakProgression = 0.3,
+                peakLocator = chapter(0.3),
+                peakRevision = 4,
+                localRevision = 5,
+            ),
+        )
+        // The same chapter as the furthest place, further into it than
+        // the recorded peak: only the finished mark vouches for it.
+        db.annotationDao().upsert(
+            highlight("read", progression = 0.95, at = 0.95).copy(locatorJson = chapter(0.9)),
+        )
+
+        assertEquals("read", quotes.quote.first()?.text)
+    }
+
+    @Test
+    fun `a book that could not be opened keeps its lines and is tried again`() = runTest {
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 1.0).copy(
+            finishedOverride = com.chmouel.liseur.domain.FinishedOverride.FINISHED.ordinal,
+        ))
+        dao().replace(scan(workId = "work-one", scannedThrough = 1.0), listOf(line()))
+        val storage = homeQuotes(opener = { throw java.io.IOException("card removed") })
+
+        storage.scanDue()
+
+        // A walk that never happened is not a scan: recording it would
+        // keep a book marked read from ever being looked at again.
+        assertEquals(listOf("a line worth keeping"), quoteDb.quotes().observeAll().first().map { it.text })
+        assertEquals(1.0, quoteDb.quotes().scans().single().scannedThrough, 0.0)
+    }
+
     private fun dao(): QuoteDao = quoteDb.quotes()
 
     private fun book(url: String = this.url) = Book(
@@ -263,12 +328,19 @@ class HomeQuotesTest {
         workId = "work-one",
     )
 
-    private fun progress(total: Double, url: String = this.url) = ReadingProgress(
+    private fun progress(total: Double, url: String = this.url, locator: String = "{}") = ReadingProgress(
         bookUrl = url,
-        locatorJson = "{}",
+        locatorJson = locator,
         totalProgression = total,
         updatedAt = 1L,
     )
+
+    /** A locator in a chapter, as this device writes one. */
+    private fun chapter(progression: Double, href: String = "/chapter-1.xhtml") = JSONObject()
+        .put("href", href)
+        .put("type", "application/xhtml+xml")
+        .put("locations", JSONObject().put("progression", progression))
+        .toString()
 
     private fun highlight(text: String, progression: Double?, at: Double?) = BookAnnotation(
         id = "id-$text",

@@ -44,8 +44,13 @@ object DailyQuote {
      * shown can be asked for again: the candidate set changes under a
      * scan finishing or a book becoming eligible, and the same day and
      * nonce would otherwise pick a different line out of it.
+     *
+     * A digest rather than the words: what Home remembers must not be
+     * the quote itself, because the store that holds it is carried by
+     * Android's backup.
      */
-    fun key(candidate: QuoteCandidate): String = "${candidate.bookUrl}\u0000${candidate.text}"
+    fun key(candidate: QuoteCandidate): String =
+        QuoteRules.digest("${candidate.bookUrl}\u0000${candidate.text}")
 
     fun pick(
         candidates: List<QuoteCandidate>,

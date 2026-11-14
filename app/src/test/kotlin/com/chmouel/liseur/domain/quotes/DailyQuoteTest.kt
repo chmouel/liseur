@@ -1,6 +1,7 @@
 package com.chmouel.liseur.domain.quotes
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -49,6 +50,20 @@ class DailyQuoteTest {
             DailyQuote.pick(candidates, 20_000, 0),
             DailyQuote.pick(candidates, 20_000, 0, keep = kept),
         )
+    }
+
+    @Test
+    fun `what Home remembers is not the words of the quote`() {
+        val secret = QuoteCandidate("file:///books/moby-dick.epub", "Call me Ishmael.", null, null)
+        val key = DailyQuote.key(secret)
+
+        // The store that holds this is carried by Android's backup, and
+        // a quote is meant to stay on the device.
+        assertFalse(key.contains("Ishmael"))
+        assertFalse(key.contains("moby-dick"))
+        assertTrue(key.length >= 32)
+        assertEquals(key, DailyQuote.key(secret.copy()))
+        assertNotEquals(key, DailyQuote.key(secret.copy(text = "Call me Jonah.")))
     }
 
     @Test

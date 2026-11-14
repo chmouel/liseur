@@ -1,5 +1,6 @@
 package com.chmouel.liseur.domain.quotes
 
+import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -30,6 +31,20 @@ object QuoteRules {
     data class PassagePlace(val resource: String, val progression: Double)
 
     /**
+     * A short, stable name for [value].
+     *
+     * Used for what Home remembers about the line it is showing. The
+     * text and the book's address must not be written into the store
+     * that holds it: `files/datastore` is carried by Android's backup,
+     * and a quote is the one thing here that is meant to stay on the
+     * device.
+     */
+    fun digest(value: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(value.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(byte) }
+
+    /**
      * Whether a mark at [progression] is inside what the reader has
      * read, [readPoint].
      *
@@ -44,12 +59,16 @@ object QuoteRules {
      * Whether a mark is inside what the reader has read, said in terms
      * that survive a mark arriving from another device.
      *
-     * [mark] and [place] are where the mark and this device's own saved
-     * place are. When they name the same resource both fractions are of
-     * the same file and are compared directly: a whole-book fraction
+     * [mark] and [place] are where the mark and the furthest place the
+     * reader reached are — not the place they are on now, which can be
+     * behind it. When the two name the same resource both fractions are
+     * of the same file and are compared directly: a whole-book fraction
      * written elsewhere is on that device's scale, and could otherwise
      * sit on the wrong side of the ceiling by a few pages. When they do
      * not, the whole-book fractions are all there is.
+     *
+     * A caller with no chapter to speak of — a book marked read, whose
+     * whole-book ceiling already covers all of it — passes no place.
      */
     fun markWithinCeiling(
         mark: PassagePlace?,
