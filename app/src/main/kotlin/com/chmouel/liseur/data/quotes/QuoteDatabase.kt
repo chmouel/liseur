@@ -23,6 +23,15 @@ data class QuoteRow(
     @ColumnInfo(name = "total_progression") val totalProgression: Double,
     val chapter: String?,
     val score: Double,
+    /**
+     * The work these words were walked from, carried on the line itself.
+     *
+     * The scan row says it too, but the two are read at different
+     * moments: a line emitted before a replacement and a scan record
+     * written after it would otherwise be taken for each other, and the
+     * old book's words shown under the new title.
+     */
+    @ColumnInfo(name = "work_id") val workId: String? = null,
 )
 
 /** How far a book has been looked through for lines, and by which scorer. */
@@ -89,7 +98,7 @@ abstract class QuoteDao {
  * the books, so it stays out of backups and sync and needs no migration
  * when the scorer changes.
  */
-@Database(entities = [QuoteRow::class, QuoteScanRow::class], version = 2, exportSchema = true)
+@Database(entities = [QuoteRow::class, QuoteScanRow::class], version = 3, exportSchema = true)
 abstract class QuoteDatabase : RoomDatabase() {
     abstract fun quotes(): QuoteDao
 

@@ -393,7 +393,11 @@ class HomeQuotesTest {
         workId = workId,
     )
 
-    private fun line(text: String = "a line worth keeping", url: String = this.url) = QuoteRow(
+    private fun line(
+        text: String = "a line worth keeping",
+        url: String = this.url,
+        workId: String? = "work-one",
+    ) = QuoteRow(
         bookUrl = url,
         ord = 0,
         text = text,
@@ -401,5 +405,6 @@ class HomeQuotesTest {
         totalProgression = 0.2,
         chapter = null,
         score = 1.0,
+        workId = workId,
     )
 }
