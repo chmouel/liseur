@@ -400,6 +400,9 @@ private fun LiseurApp(
             // Only the library screen scrolls back up; Stats and Settings stay put.
             if (tab != MainTab.STATS && tab != MainTab.SETTINGS) tabs.topRequest++
         } else {
+            // The archive hides the bar, so a library tab picked from
+            // Stats or Settings means its own view, not the archive.
+            if (tab != MainTab.STATS && tab != MainTab.SETTINGS) library.leaveArchive()
             when (tab) {
                 MainTab.HOME -> tabs.pickedHome = true
                 MainTab.LIBRARY -> {
