@@ -17,6 +17,7 @@ import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.DownloadState
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.library.AnnotationBackupRepository
+import com.chmouel.liseur.data.library.BookBackupCandidate
 import com.chmouel.liseur.data.library.BookBackupRepository
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.CompanionBackupRepository
@@ -31,6 +32,7 @@ import com.chmouel.liseur.data.settings.UserFontRepository
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancelAndJoin
@@ -255,11 +257,21 @@ class SettingsZipBackupUiTest {
                 addedAt = 1, lastOpenedAt = null, downloadState = DownloadState.DOWNLOADED, localUri = url,
             ),
         )
+        val gate = CompletableDeferred<Unit>()
+        val model = model(
+            loadBookCandidates = {
+                gate.await()
+                listOf(BookBackupCandidate(url, "Waited", "Author", epub.length()))
+            },
+        )
 
-        val model = model()
         model.setIncludeBooks(true)
         // Export straight away: the list is still loading, so its selection is not ready yet.
         model.prepareExport(null, includeTranslations = true)
+        withContext(Dispatchers.Default) { delay(50) }
+        assertNull(model.state.value.saveRequest)
+
+        gate.complete(Unit)
         await { model.state.value.saveRequest != null }
         model.saveLaunched(model.state.value.saveRequest!!)
         val target = File(folder.root, "waited-books.zip")
@@ -316,7 +328,10 @@ class SettingsZipBackupUiTest {
         }
     }
 
-    private fun TestScope.model(savedState: SavedStateHandle = SavedStateHandle()): SettingsBackupViewModel {
+    private fun TestScope.model(
+        savedState: SavedStateHandle = SavedStateHandle(),
+        loadBookCandidates: (suspend () -> List<BookBackupCandidate>)? = null,
+    ): SettingsBackupViewModel {
         val repository = SettingsBackupRepository(
             context,
             AppSettingsRepository(PreferenceDataStoreFactory.create { folder.newFile("zip-app-${System.nanoTime()}.preferences_pb") }),
@@ -332,6 +347,7 @@ class SettingsZipBackupUiTest {
             repository,
             BookExportRepository(context, db.bookDao()),
             savedState,
+            loadBookCandidates ?: repository::bookCandidates,
         ).also { models += it }
     }
 

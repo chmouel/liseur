@@ -79,6 +79,58 @@ class ReadingSessionBackupRepositoryTest {
     }
 
     @Test
+    fun `a collision after the book is found keeps one sitting, not two`() = runTest {
+        val archivedUrl = "calibre:collision"
+        val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/ghi.epub"
+        val books = listOf(
+            BackedUpBookSessions(
+                bookId = archivedUrl,
+                title = "A Book",
+                author = "An Author",
+                sessions = listOf(BackedUpSession(1_000, 61_000, 60_000, 0, 0.1, 0.2)),
+            ),
+        )
+
+        // The sitting arrives once under the archived address, then the same archive resolves it.
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(books))
+        db.bookDao().upsert(
+            Book(
+                url = localUrl, title = "A Book", author = "An Author", coverPath = null, source = null,
+                addedAt = 1, lastOpenedAt = null, localUri = localUrl,
+            ),
+        )
+        assertEquals(
+            SessionRestoreResult(alreadyPresent = 1),
+            repository.restore(books, aliases = mapOf(archivedUrl to localUrl)),
+        )
+
+        val rows = db.readingSessionDao().allOnce()
+        assertEquals(1, rows.size)
+        assertEquals(localUrl, rows.single().bookUrl)
+        assertEquals(60_000L, rows.single().durationMs)
+    }
+
+    @Test
+    fun `a sitting stays single when its book stops resolving to the same address`() = runTest {
+        val archivedUrl = "calibre:forgotten"
+        val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/jkl.epub"
+        val books = listOf(
+            BackedUpBookSessions(
+                bookId = archivedUrl,
+                title = "A Book",
+                author = "An Author",
+                sessions = listOf(BackedUpSession(2_000, 62_000, 60_000, 0, 0.1, 0.2)),
+            ),
+        )
+
+        assertEquals(SessionRestoreResult(added = 1), repository.restore(books, aliases = mapOf(archivedUrl to localUrl)))
+        // The book is gone now, so the same archive no longer resolves it.
+        assertEquals(SessionRestoreResult(alreadyPresent = 1), repository.restore(books))
+
+        assertEquals(1, db.readingSessionDao().allOnce().size)
+    }
+
+    @Test
     fun `a locally recorded sitting under the same address never moves`() = runTest {
         val archivedUrl = "calibre:local-book"
         val localUrl = "file:///data/user/0/com.chmouel.liseur/files/books/def.epub"
