@@ -439,15 +439,20 @@ class HomeQuotes internal constructor(
         /**
          * The locator the ceiling was read from.
          *
-         * The furthest place while the peak still stands, and the place
-         * the reader is on when it does not. A position pulled from
-         * another device fills the place and not the peak, so a row with
-         * no peak locator has to answer with the place it does have:
-         * answering null would leave a foreign whole-book fraction
-         * standing as the ceiling with nothing to check it against.
+         * The furthest place while the peak still stands and is still the
+         * furthest point, and the place the reader is on otherwise: a
+         * position pulled from another device fills the place and not the
+         * peak, and a forward pull can leave the peak behind the place
+         * the reader is on. Either way the locator has to be the one the
+         * ceiling itself was taken from, or a walk stops short of words
+         * the count covers and a mark inside it is refused.
          */
-        fun ceilingLocator(progress: ReadingProgress): String? =
-            progress.peakLocator?.takeIf { peakStands(progress) } ?: progress.locatorJson
+        fun ceilingLocator(progress: ReadingProgress): String? {
+            val total = progress.totalProgression ?: 0.0
+            val peak = progress.peakProgression ?: 0.0
+            val peakIsCeiling = peakStands(progress) && peak >= total
+            return (if (peakIsCeiling) progress.peakLocator else null) ?: progress.locatorJson
+        }
 
         fun isDue(scan: QuoteScanRow?, point: Double): Boolean =
             scan == null || scan.version != MemorableLines.VERSION ||
