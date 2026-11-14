@@ -1170,6 +1170,7 @@
     <string name="reading_stats">Statistiky čtení</string>
     <string name="reading_stats_books_read">Knihy, ve kterých se četlo</string>
     <string name="reading_stats_books_finished">Dočtené knihy</string>
+    <string name="reading_stats_books_finished_note">Z knih, ve kterých se v tomto období četlo</string>
     <string name="reading_stats_by_book">Podle knih</string>
     <string name="reading_stats_scope_all_devices">všechna tvoje zařízení</string>
     <string name="reading_stats_scope_this_device">pouze toto zařízení</string>

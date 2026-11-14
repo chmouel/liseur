@@ -97,6 +97,7 @@ class BookOrbitStatusSync(
                             context.request.accountKey,
                             mapped.override,
                             mapped.status,
+                            finishedAt = remote?.finishedAt,
                         )
                         if (!applied) return@withLock SyncOutcome.Failure(SyncFailure.StaleIdentity)
                         val adoptedRevision = (local?.statusRevision ?: 0L) + 1

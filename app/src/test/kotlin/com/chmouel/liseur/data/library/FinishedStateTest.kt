@@ -399,6 +399,52 @@ class FinishedStateTest {
             assertEquals(FinishedOverride.UNREAD, db.readingProgressDao().get(BOOK)!!.override)
         }
 
+    @Test
+    fun `a book finished on another device is dated by that reading, not by the sync`() =
+        runTest {
+            db.bookDao().upsert(
+                Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+            )
+            val state = FinishedState(db.bookDao(), db.readingProgressDao(), now = { 5_000 })
+
+            db.readingProgressDao().applyPeerPull(
+                bookUrl = BOOK,
+                expectedRevision = 0,
+                progression = 1.0,
+                status = ReadingStatus.FINISHED.wireName,
+                now = 5_000,
+                remoteUpdatedAt = 1_000,
+            )
+            state.refreshFromProgress(BOOK)
+
+            assertEquals(1_000L, db.bookDao().getByUrl(BOOK)!!.finishedAt)
+        }
+
+    @Test
+    fun `a partner's finish date is kept, but never one from the future`() =
+        runTest {
+            for ((sent, kept) in listOf(1_000L to 1_000L, 9_000L to 5_000L, null to 5_000L)) {
+                db.bookDao().upsert(
+                    Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+                )
+                val state = FinishedState(db.bookDao(), db.readingProgressDao(), now = { 5_000 })
+                state.setFinished(BOOK, false)
+
+                assertTrue(
+                    state.adoptRemoteStatus(
+                        BOOK,
+                        expectedStatusRevision = db.readingProgressDao().get(BOOK)!!.statusRevision,
+                        account = "",
+                        override = FinishedOverride.FINISHED,
+                        status = ReadingStatus.FINISHED,
+                        finishedAt = sent,
+                    ),
+                )
+
+                assertEquals(kept, db.bookDao().getByUrl(BOOK)!!.finishedAt)
+            }
+        }
+
     private fun publisherFor(
         scope: CoroutineScope,
         state: FinishedState,
