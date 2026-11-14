@@ -776,6 +776,10 @@ step "Light"
 # what the app looks like.
 open_library
 open_settings
+# The shelves view is the one the tour is written for. A wiped app starts on
+# Classic, so pick Shelves under Library view before anything is shot.
+tap_on "Shelves" exact
+sleep 1
 set_switch "Colours from your wallpaper" off
 
 # The definition card is the one picture that needs a setting turned on:
@@ -1040,20 +1044,22 @@ step "Series"
 # the plain shelf twice would publish a picture of a feature that is not
 # in it.
 open_library
-# The filter button carries a summary of what is in force rather than a
-# fixed word, so the way in is whatever it reads now: grouping is a view
-# mode rather than a narrowing, is not counted in that summary, and with
-# nothing ticked it reads the bare "Filter". The menu stays open under a
-# tap -- boxes are meant to be ticked several at a time -- so Back is
-# what closes it.
-toggle_grouping() {
+# Grouping is a choice in the shelf's own dropdown (Series, Author or
+# Reading state), not a box in the filter menu. Series is the default, so
+# picking it is a no-op on a fresh device and a way back on one that was
+# left on another grouping.
+group_shelf_by() {
     shelf_to_top
-    tap_on "Filter"
+    local current
+    for current in "Series" "Author" "Reading state"; do
+        if on_screen "$current" exact; then
+            tap_on "$current" exact
+            break
+        fi
+    done
     sleep 1
-    tap_on "Group by series"
-    sleep 1
-    back
-    sleep 3
+    tap_on "$1" exact
+    sleep 2
 }
 
 # Nothing on screen says whether the grouping is on, and the menu row is
@@ -1071,7 +1077,7 @@ toggle_grouping() {
 # its newest volume was last opened rather than at the top.
 grouped=0
 for attempt in 1 2; do
-    toggle_grouping
+    group_shelf_by "Series"
     if scroll_to "Sherlock Holmes" exact; then
         grouped=1
         break
@@ -1090,12 +1096,7 @@ shot 14-series-detail
 back
 sleep 2
 # Back to the whole shelf, so the screens after this start where the
-# earlier ones did. The grouping is written down now and survives a
-# restart, so leaving this on would quietly put every later shelf into
-# series view. It is not a filter, so it is not in the button's summary
-# and "Clear filters" does not reach it: the way back off is the way it
-# went on.
-toggle_grouping
+# earlier ones did. The grouping stays on Series, as the app's default.
 
 step "Reading stats"
 

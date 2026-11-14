@@ -206,6 +206,12 @@ set_switch() {
 # The dictionary switch sits on the reading and navigation screen, not
 # on Settings itself.
 open_dictionary_settings() {
+    # The switch above scrolled the list down to Advanced; scroll_to only
+    # swipes one way, so go back to the top before looking for the row.
+    for _ in 1 2 3 4 5 6; do
+        adb shell input swipe "$(x 0.5)" "$(y 0.35)" "$(x 0.5)" "$(y 0.8)" 300
+        sleep 1
+    done
     scroll_to "$READING_SETTINGS" exact || die "no \"$READING_SETTINGS\" row in Settings"
     tap_on "$READING_SETTINGS" exact
     scroll_to "$DICTIONARY_SWITCH" ||
