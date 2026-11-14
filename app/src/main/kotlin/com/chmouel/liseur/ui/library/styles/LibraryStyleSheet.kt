@@ -38,6 +38,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.LibraryLayout
+import com.chmouel.liseur.domain.LibraryScope
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
@@ -60,6 +62,15 @@ import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** Covers the style previews cycle through, at most one screenful's worth. */
+private const val PREVIEW_BOOK_COUNT = 9
+
+internal val LibraryScope.label: Int
+    get() = when (this) {
+        LibraryScope.SIMPLE -> R.string.settings_library_layout_simple
+        LibraryScope.DETAILED -> R.string.settings_library_layout_detailed
+    }
 
 internal val LibraryStyle.label: Int
     get() = when (this) {
@@ -121,9 +132,15 @@ internal fun LibraryStyleSheet(
     shownGrouping: ShelfGrouping = layout.shelfGrouping,
     onShelfGrouping: (ShelfGrouping) -> Unit = { onChange(layout.copy(shelfGrouping = it)) },
 ) {
-    // With the tabs, Home is a tab of its own and the sheet styles only the Library.
-    val tabs = layout.bottomBar
-    val shown = if (tabs && layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
+    // Home is a tab of its own, never a style to choose here.
+    val tabs = layout.tabs
+    val shown = if (layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
+    // The previews want covers before blanks, and never more than a
+    // screenful; whichever screen opens the sheet gets the same ones.
+    val previewBooks = remember(books) {
+        val (withArt, without) = books.partition { (it.coverPath ?: it.coverUrl) != null }
+        (withArt + without).take(PREVIEW_BOOK_COUNT)
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pickBackdrop = rememberLauncherForActivityResult(
@@ -149,7 +166,7 @@ internal fun LibraryStyleSheet(
                 modifier = Modifier.padding(start = 24.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
             ) {
                 Text(
-                    text = stringResource(if (tabs) R.string.library_view_title else R.string.library_style),
+                    text = stringResource(R.string.library_style),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
@@ -161,12 +178,12 @@ internal fun LibraryStyleSheet(
                 }
             }
             Column(Modifier.selectableGroup()) {
-                LibraryStyle.entries.filter { !tabs || it != LibraryStyle.HOME }.forEach { style ->
+                LibraryStyle.entries.filter { it != LibraryStyle.HOME }.forEach { style ->
                     val selected = style == shown
                     ListItem(
                         headlineContent = { Text(stringResource(style.label)) },
                         supportingContent = { Text(stringResource(style.detail)) },
-                        leadingContent = { StylePreview(style = style, books = books, selected = selected) },
+                        leadingContent = { StylePreview(style = style, books = previewBooks, selected = selected) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         modifier = Modifier
                             .padding(horizontal = 8.dp)
@@ -179,41 +196,7 @@ internal fun LibraryStyleSheet(
                 }
             }
             HorizontalDivider(Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            Column(Modifier.selectableGroup()) {
-                listOf(false, true).forEach { useBottomBar ->
-                    val selected = layout.bottomBar == useBottomBar
-                    val title = if (useBottomBar) {
-                        R.string.library_bottom_bar
-                    } else {
-                        R.string.library_hero_card
-                    }
-                    val detail = if (useBottomBar) {
-                        R.string.library_bottom_bar_detail
-                    } else {
-                        R.string.library_hero_card_detail
-                    }
-                    ListItem(
-                        headlineContent = { Text(stringResource(title)) },
-                        supportingContent = { Text(stringResource(detail)) },
-                        leadingContent = {
-                            CurrentBookPreview(
-                                bottomBar = useBottomBar,
-                                books = books,
-                                selected = selected,
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp)
-                            .selectable(
-                                selected = selected,
-                                role = Role.RadioButton,
-                                onClick = { onChange(layout.copy(bottomBar = useBottomBar)) },
-                            ),
-                    )
-                }
-            }
-            if (tabs || layout.style == LibraryStyle.HOME) {
+            if (tabs) {
                 Column(Modifier.padding(horizontal = 8.dp)) {
                     SwitchRow(
                         title = stringResource(R.string.home_quote_setting),

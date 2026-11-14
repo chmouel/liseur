@@ -2,6 +2,7 @@ package com.chmouel.liseur.domain
 
 import com.chmouel.liseur.data.db.Book
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -308,6 +309,10 @@ class LibraryLayoutTest {
         assertEquals(ShelfTone.THEME, ShelfTone.fromId("bogus"))
         assertEquals(ShelfBackdrop.BRICKS, LibraryLayout().shelfBackdrop)
         assertEquals(ShelfTone.THEME, LibraryLayout().shelfTone)
-        assertEquals(true, LibraryLayout().bottomBar)
+        assertEquals(LibraryScope.DETAILED, LibraryLayout().scope)
+        assertTrue(LibraryLayout().tabs)
+        assertEquals(LibraryScope.SIMPLE, LibraryScope.fromId("simple"))
+        assertEquals(LibraryScope.DETAILED, LibraryScope.fromId("bogus"))
+        assertFalse(LibraryLayout(scope = LibraryScope.SIMPLE).tabs)
     }
 }

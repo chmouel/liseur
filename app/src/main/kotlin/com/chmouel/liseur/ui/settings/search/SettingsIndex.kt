@@ -66,10 +66,11 @@ object SettingsEntries {
     ) = entry(key, page, title, summary, R.string.settings_advanced, advanced = true, shown = shown)
 
     // Settings
-    val Theme = entry("theme", Route.Settings, R.string.settings_theme, section = R.string.settings_appearance)
-    val LibraryStyle = entry(
-        "library_style", Route.Settings, R.string.library_style, section = R.string.settings_appearance,
+    val LibraryScope = entry(
+        "library_scope", Route.Settings, R.string.settings_library_layout,
+        R.string.settings_library_layout_detail, section = R.string.settings_appearance,
     )
+    val Theme = entry("theme", Route.Settings, R.string.settings_theme, section = R.string.settings_appearance)
     val ReadingAppearance = entry(
         "reading_appearance", Route.Settings, R.string.settings_reading_appearance, section = R.string.settings_reading,
     )
@@ -78,6 +79,9 @@ object SettingsEntries {
     )
     val ReadAloud = entry(
         "read_aloud", Route.Settings, R.string.read_aloud_settings_title, section = R.string.settings_reading,
+    )
+    val LibraryStyle = entry(
+        "library_style", Route.Settings, R.string.library_style, section = R.string.settings_library,
     )
     val ServerAccount = entry(
         "server_account", Route.Settings, R.string.server_account, R.string.settings_account_detail,

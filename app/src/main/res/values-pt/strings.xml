@@ -1981,6 +1981,7 @@
     <string name="book_details_read_more">Ler mais</string>
     <string name="book_details_show_less">Mostrar menos</string>
     <string name="library_style">Estilo da biblioteca</string>
+    <string name="settings_library_style_current">%1$s. Também no botão de estilo da biblioteca.</string>
     <string name="library_style_classic">Clássico</string>
     <string name="library_style_classic_detail">Grade de capas, com o livro em leitura no topo</string>
     <string name="library_style_home">Início</string>
@@ -2009,10 +2010,10 @@
     <string name="shelf_tone_brass">Latão</string>
     <string name="library_compact_list">Linhas compactas</string>
     <string name="library_compact_list_detail">Capas menores e uma linha por título</string>
-    <string name="library_bottom_bar">Barra inferior</string>
-    <string name="library_bottom_bar_detail">Mostrar as abas Início, Biblioteca, Séries, Estatísticas e Configurações na parte inferior</string>
-    <string name="library_hero_card">Cartão superior</string>
-    <string name="library_hero_card_detail">Mostrar o livro atual em um cartão no topo da biblioteca</string>
+    <string name="settings_library_layout">Layout do app</string>
+    <string name="settings_library_layout_detail">Simples é só a biblioteca; Detalhado acrescenta as abas Início, Séries e Estatísticas</string>
+    <string name="settings_library_layout_simple">Simples</string>
+    <string name="settings_library_layout_detailed">Detalhado</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
     <string name="home_series_underway">Séries que você está lendo</string>
@@ -2046,7 +2047,6 @@
     <string name="home_pick_next_in_series">Próximo da série</string>
     <string name="library_shown_of">%1$d de %2$d</string>
     <string name="home_pulse_today">%d min hoje</string>
-    <string name="library_view_title">Visualização da biblioteca</string>
     <string name="library_opens_on">Abre em</string>
     <string name="library_columns">Colunas</string>
     <string name="library_columns_comfortable">Confortável</string>

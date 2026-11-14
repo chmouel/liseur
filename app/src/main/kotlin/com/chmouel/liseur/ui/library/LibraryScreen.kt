@@ -502,17 +502,15 @@ fun LibraryScreen(
     // gets the whole screen. Still shown while loading, so a stocked
     // library does not have the bar pop in on every launch.
     val onboarding = !state.loading && state.libraryIsEmpty && !state.hasArchived
-    val showBottomBar = layout.bottomBar && !state.isSearchActive && !archived && !onboarding
-    // With the bottom bar, Home is a tab of its own and the style only
-    // chooses how the Library tab draws the catalogue; without it, Home
-    // is one of the styles. A Home style saved from the latter leaves the
-    // Library tab on Classic. The tab the reader picked wins over the
-    // saved one the app opens on.
+    val showBottomBar = layout.tabs && !state.isSearchActive && !archived && !onboarding
+    // Home is a tab of the app rather than a style of the library, so a
+    // style saved as Home draws the catalogue as Classic instead. The tab
+    // the reader picked wins over the saved one the app opens on.
     SideEffect { tabs.libraryBar = showBottomBar }
     DisposableEffect(tabs) { onDispose { tabs.libraryBar = false } }
     val homeTab = tabs.pickedHome ?: layout.startOnHome
     val catalogueStyle = if (layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
-    val showHome = !archived && if (layout.bottomBar) homeTab else layout.style == LibraryStyle.HOME
+    val showHome = !archived && layout.tabs && homeTab
     val activeStyle = if (showHome) LibraryStyle.HOME else catalogueStyle
     val scrollStyleToTop: (LibraryStyle) -> Unit = { target ->
         scope.launch {
@@ -543,12 +541,8 @@ fun LibraryScreen(
     // From Home to the catalogue: the Series tab for the series tile,
     // Library for the others.
     val showCatalogue: (Boolean) -> Unit = { series ->
-        if (layout.bottomBar) {
-            tabs.pickedHome = false
-            onShowSeries(series)
-        } else {
-            onSetLayout(layout.copy(style = LibraryStyle.CLASSIC))
-        }
+        tabs.pickedHome = false
+        onShowSeries(series)
         scrollStyleToTop(catalogueStyle)
     }
 
@@ -653,7 +647,7 @@ fun LibraryScreen(
                                     // Home and Library never look like one screen.
                                     Text(
                                         text = when {
-                                            !layout.bottomBar || onboarding -> stringResource(R.string.library_title)
+                                            !layout.tabs || onboarding -> stringResource(R.string.library_title)
                                             showHome -> stringResource(R.string.library_style_home)
                                             else -> stringResource(R.string.library_tab_library)
                                         },
@@ -972,7 +966,7 @@ fun LibraryScreen(
                                 HomeShelfKind.SERIES -> {
                                     onSetReadingFilter(ALL_READING_STATES)
                                     // With the tabs, the Series tab groups them.
-                                    if (!layout.bottomBar) onSetGroupBySeries(true)
+                                    if (!layout.tabs) onSetGroupBySeries(true)
                                 }
                             }
                             showCatalogue(kind == HomeShelfKind.SERIES)
@@ -1100,18 +1094,10 @@ fun LibraryScreen(
     }
 
     if (choosingStyle) {
-        val previewBooks = remember(state.books) {
-            val (withArt, without) = state.books.partition { (it.coverPath ?: it.coverUrl) != null }
-            (withArt + without).take(9)
-        }
         LibraryStyleSheet(
             layout = state.layout,
-            books = previewBooks,
-            onChange = { chosen ->
-                // Turning the tabs on from the Home style lands on the Home tab.
-                if (chosen.bottomBar && !layout.bottomBar) tabs.pickedHome = chosen.style == LibraryStyle.HOME
-                onSetLayout(chosen)
-            },
+            books = state.books,
+            onChange = { chosen -> onSetLayout(chosen) },
             onDismiss = { choosingStyle = false },
             shownGrouping = state.shownShelfGrouping,
             onShelfGrouping = onSetShelfGrouping,
@@ -1916,7 +1902,7 @@ private fun BookGrid(
         val results = state.searchResults
         val onShelf = !state.isSearchActive && !state.filters.archived
         state.continueReading
-            ?.takeIf { onShelf && !state.layout.bottomBar }
+            ?.takeIf { onShelf && !state.layout.tabs }
             ?.let { recent ->
                 item(key = "classic:hero", span = { GridItemSpan(maxLineSpan) }) {
                     ContinueReadingCard(

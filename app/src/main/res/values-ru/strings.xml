@@ -2052,6 +2052,7 @@
     <string name="book_details_read_more">Читать дальше</string>
     <string name="book_details_show_less">Свернуть</string>
     <string name="library_style">Вид библиотеки</string>
+    <string name="settings_library_style_current">%1$s. Также на кнопке вида в библиотеке.</string>
     <string name="library_style_classic">Классический</string>
     <string name="library_style_classic_detail">Сетка обложек, сверху книга, которую вы читаете</string>
     <string name="library_style_home">Главная</string>
@@ -2080,10 +2081,10 @@
     <string name="shelf_tone_brass">Латунь</string>
     <string name="library_compact_list">Компактные строки</string>
     <string name="library_compact_list_detail">Обложки меньше, название в одну строку</string>
-    <string name="library_bottom_bar">Нижняя панель</string>
-    <string name="library_bottom_bar_detail">Показывать внизу вкладки Главная, Библиотека, Серии, Статистика и Настройки</string>
-    <string name="library_hero_card">Верхняя карточка</string>
-    <string name="library_hero_card_detail">Показывать текущую книгу на карточке вверху библиотеки</string>
+    <string name="settings_library_layout">Вид приложения</string>
+    <string name="settings_library_layout_detail">Простой — только библиотека; Подробный добавляет вкладки Главная, Серии и Статистика</string>
+    <string name="settings_library_layout_simple">Простой</string>
+    <string name="settings_library_layout_detailed">Подробный</string>
     <string name="library_tab_library">Библиотека</string>
     <string name="home_continue">Продолжить</string>
     <string name="home_series_underway">Серии, которые вы читаете</string>
@@ -2117,7 +2118,6 @@
     <string name="home_pick_next_in_series">Следующая в серии</string>
     <string name="library_shown_of">%1$d из %2$d</string>
     <string name="home_pulse_today">%d мин сегодня</string>
-    <string name="library_view_title">Вид библиотеки</string>
     <string name="library_opens_on">Открывать</string>
     <string name="library_columns">Столбцы</string>
     <string name="library_columns_comfortable">Свободно</string>

@@ -93,7 +93,7 @@ internal fun ListLibrary(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         state.continueReading
-            ?.takeIf { !state.layout.bottomBar && !state.isSearchActive && !state.filters.archived }
+            ?.takeIf { !state.layout.tabs && !state.isSearchActive && !state.filters.archived }
             ?.let { recent ->
                 item(key = "list:hero", span = { GridItemSpan(maxLineSpan) }) {
                     ContinueReadingCard(

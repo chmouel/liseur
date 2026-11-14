@@ -1920,6 +1920,7 @@
     <string name="book_details_read_more">Leer más</string>
     <string name="book_details_show_less">Mostrar menos</string>
     <string name="library_style">Estilo de la biblioteca</string>
+    <string name="settings_library_style_current">%1$s. También en el botón de estilo de la biblioteca.</string>
     <string name="library_style_classic">Clásico</string>
     <string name="library_style_classic_detail">La cuadrícula de portadas, con el libro que estás leyendo arriba</string>
     <string name="library_style_home">Inicio</string>
@@ -1948,10 +1949,10 @@
     <string name="shelf_tone_brass">Latón</string>
     <string name="library_compact_list">Filas compactas</string>
     <string name="library_compact_list_detail">Portadas más pequeñas y una línea por título</string>
-    <string name="library_bottom_bar">Barra inferior</string>
-    <string name="library_bottom_bar_detail">Mostrar abajo las pestañas Inicio, Biblioteca, Series, Estadísticas y Ajustes</string>
-    <string name="library_hero_card">Tarjeta superior</string>
-    <string name="library_hero_card_detail">Mostrar el libro actual en una tarjeta en la parte superior de la biblioteca</string>
+    <string name="settings_library_layout">Disposición de la aplicación</string>
+    <string name="settings_library_layout_detail">Simple es solo la biblioteca; Detallado añade las pestañas Inicio, Series y Estadísticas</string>
+    <string name="settings_library_layout_simple">Simple</string>
+    <string name="settings_library_layout_detailed">Detallado</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
     <string name="home_series_underway">Series que estás leyendo</string>
@@ -1985,7 +1986,6 @@
     <string name="home_pick_next_in_series">Siguiente de la serie</string>
     <string name="library_shown_of">%1$d de %2$d</string>
     <string name="home_pulse_today">%d min hoy</string>
-    <string name="library_view_title">Vista de la biblioteca</string>
     <string name="library_opens_on">Abre en</string>
     <string name="library_columns">Columnas</string>
     <string name="library_columns_comfortable">Cómoda</string>

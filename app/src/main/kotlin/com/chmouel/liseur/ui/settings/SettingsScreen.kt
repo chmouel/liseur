@@ -16,10 +16,13 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.Contrast
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SpaceDashboard
 import androidx.compose.material.icons.outlined.TextFormat
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -64,7 +67,10 @@ import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
 import com.chmouel.liseur.data.settings.ThemeMode
+import com.chmouel.liseur.domain.LibraryLayout
+import com.chmouel.liseur.domain.LibraryScope
 import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.ui.library.styles.LibraryStyleSheet
 import com.chmouel.liseur.ui.library.styles.label
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.label
@@ -87,7 +93,10 @@ fun SettingsScreen(
     dynamicColorAvailable: Boolean,
     onThemeMode: (ThemeMode) -> Unit,
     onDynamicColor: (Boolean) -> Unit,
-    onLibraryStyle: (LibraryStyle) -> Unit = {},
+    onLibraryScope: (LibraryScope) -> Unit = {},
+    onLibraryLayout: (LibraryLayout) -> Unit = {},
+    /** A few of the reader's books, whose covers fill the style previews. */
+    books: List<Book> = emptyList(),
     appLanguage: AppLanguage = AppLanguage.SYSTEM,
     onAppLanguage: (AppLanguage) -> Unit = {},
     onOpenAccount: () -> Unit,
@@ -114,6 +123,7 @@ fun SettingsScreen(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val folders by libraryFolders.collectAsStateWithLifecycle(emptyList())
     val hidden by hiddenBooks.collectAsStateWithLifecycle(emptyList())
+    var choosingStyle by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -163,18 +173,18 @@ fun SettingsScreen(
                         label = { stringResource(it.label) },
                         onSelected = onThemeMode,
                         modifier = Modifier.settingsAnchor(SettingsEntries.Theme),
+                        icon = { Icon(Icons.Outlined.Contrast, contentDescription = null) },
                     )
                     RowDivider()
-                    // With the tabs, Home is a tab and this picks the Library's look.
-                    val tabs = settings.libraryLayout.bottomBar
                     ChipRow(
-                        title = stringResource(if (tabs) R.string.library_view_title else R.string.library_style),
-                        options = LibraryStyle.entries.filter { !tabs || it != LibraryStyle.HOME },
-                        selected = settings.libraryLayout.style
-                            .takeUnless { tabs && it == LibraryStyle.HOME } ?: LibraryStyle.CLASSIC,
+                        title = stringResource(R.string.settings_library_layout),
+                        subtitle = stringResource(R.string.settings_library_layout_detail),
+                        options = LibraryScope.entries,
+                        selected = settings.libraryLayout.scope,
                         label = { stringResource(it.label) },
-                        onSelected = onLibraryStyle,
-                        modifier = Modifier.settingsAnchor(SettingsEntries.LibraryStyle),
+                        onSelected = onLibraryScope,
+                        modifier = Modifier.settingsAnchor(SettingsEntries.LibraryScope),
+                        icon = { Icon(Icons.Outlined.SpaceDashboard, contentDescription = null) },
                     )
                 }
 
@@ -284,6 +294,22 @@ fun SettingsScreen(
                     helpDescription = stringResource(R.string.settings_library_help_title),
                 ) {
                     val catalog by server.collectAsStateWithLifecycle(null)
+                    ConnectionRow(
+                        icon = { Icon(Icons.Outlined.Dashboard, contentDescription = null) },
+                        title = stringResource(R.string.library_style),
+                        subtitle = stringResource(
+                            R.string.settings_library_style_current,
+                            stringResource(
+                                (
+                                    settings.libraryLayout.style.takeUnless { it == LibraryStyle.HOME }
+                                        ?: LibraryStyle.CLASSIC
+                                    ).label,
+                            ),
+                        ),
+                        onClick = { choosingStyle = true },
+                        modifier = Modifier.settingsAnchor(SettingsEntries.LibraryStyle),
+                    )
+                    RowDivider()
                     ConnectionRow(
                         icon = { Icon(Icons.Outlined.CloudDownload, contentDescription = null) },
                         title = stringResource(R.string.server_account),
@@ -402,6 +428,18 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // The one place a style can be judged: the library's own sheet, with
+    // its previews and the options each style carries, rather than a row
+    // of chips that only turns the style over.
+    if (choosingStyle) {
+        LibraryStyleSheet(
+            layout = settings.libraryLayout,
+            books = books,
+            onChange = onLibraryLayout,
+            onDismiss = { choosingStyle = false },
+        )
     }
 }
 

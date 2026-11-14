@@ -1920,6 +1920,7 @@
     <string name="book_details_read_more">Lire la suite</string>
     <string name="book_details_show_less">Réduire</string>
     <string name="library_style">Style de la bibliothèque</string>
+    <string name="settings_library_style_current">%1$s. Aussi sur le bouton de style dans la bibliothèque.</string>
     <string name="library_style_classic">Classique</string>
     <string name="library_style_classic_detail">La grille de couvertures, avec le livre en cours en haut</string>
     <string name="library_style_home">Accueil</string>
@@ -1948,10 +1949,10 @@
     <string name="shelf_tone_brass">Laiton</string>
     <string name="library_compact_list">Lignes compactes</string>
     <string name="library_compact_list_detail">Couvertures plus petites et une ligne par titre</string>
-    <string name="library_bottom_bar">Barre inférieure</string>
-    <string name="library_bottom_bar_detail">Afficher les onglets Accueil, Bibliothèque, Séries, Stats et Réglages en bas</string>
-    <string name="library_hero_card">Carte supérieure</string>
-    <string name="library_hero_card_detail">Afficher le livre en cours dans une carte en haut de la bibliothèque</string>
+    <string name="settings_library_layout">Disposition de l\'application</string>
+    <string name="settings_library_layout_detail">Simple, c\'est la bibliothèque seule ; Détaillé ajoute les onglets Accueil, Séries et Stats</string>
+    <string name="settings_library_layout_simple">Simple</string>
+    <string name="settings_library_layout_detailed">Détaillé</string>
     <string name="library_tab_library">Bibliothèque</string>
     <string name="home_continue">Continuer</string>
     <string name="home_series_underway">Séries en cours</string>
@@ -1985,7 +1986,6 @@
     <string name="home_pick_next_in_series">Suite de la série</string>
     <string name="library_shown_of">%1$d sur %2$d</string>
     <string name="home_pulse_today">%d min aujourd\'hui</string>
-    <string name="library_view_title">Vue de la bibliothèque</string>
     <string name="library_opens_on">Ouvre sur</string>
     <string name="library_columns">Colonnes</string>
     <string name="library_columns_comfortable">Confortable</string>

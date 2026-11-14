@@ -16,6 +16,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.domain.DictionaryUrl
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
+import com.chmouel.liseur.domain.LibraryScope
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfBackdrop
@@ -572,7 +573,8 @@ class AppSettingsRepository(
         val LIBRARY_SHELF_TONE = stringPreferencesKey("library_shelf_tone")
         val LIBRARY_COMPACT_LIST = booleanPreferencesKey("library_compact_list")
         val LIBRARY_GRID_COMPACT = booleanPreferencesKey("library_grid_compact")
-        val LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
+        val LIBRARY_SCOPE = stringPreferencesKey("library_scope")
+        val LEGACY_LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
         val LIBRARY_START_HOME = booleanPreferencesKey("library_start_home")
         val LIBRARY_HOME_QUOTE = booleanPreferencesKey("library_home_quote")
         val EINK_MODE = stringPreferencesKey("eink_mode")
@@ -618,6 +620,14 @@ class AppSettingsRepository(
                 if (it) VolumeKeyMode.ON else VolumeKeyMode.OFF
             }
             ?: VolumeKeyMode.Default
+
+    /** The scope, from the bar an older version stored as a yes or a no. */
+    private fun Preferences.libraryScope(): LibraryScope =
+        this[Keys.LIBRARY_SCOPE]?.let { LibraryScope.fromId(it) }
+            ?: this[Keys.LEGACY_LIBRARY_BOTTOM_BAR]?.let {
+                if (it) LibraryScope.DETAILED else LibraryScope.SIMPLE
+            }
+            ?: LibraryScope.Default
 
     /**
      * The catalog address whose part-read notice has been put away.
@@ -683,7 +693,7 @@ class AppSettingsRepository(
                 shelfTone = ShelfTone.fromId(p[Keys.LIBRARY_SHELF_TONE]),
                 compactList = p[Keys.LIBRARY_COMPACT_LIST] ?: false,
                 compactGrid = p[Keys.LIBRARY_GRID_COMPACT] ?: false,
-                bottomBar = p[Keys.LIBRARY_BOTTOM_BAR] ?: true,
+                scope = p.libraryScope(),
                 startOnHome = p[Keys.LIBRARY_START_HOME] ?: true,
                 homeQuote = p[Keys.LIBRARY_HOME_QUOTE] ?: true,
             ),
@@ -744,12 +754,21 @@ class AppSettingsRepository(
         val stored = store.data.first()
         val storedMode = stored[Keys.VOLUME_KEY_MODE]
         val legacyEnabled = stored[Keys.LEGACY_VOLUME_KEYS]
+        val storedScope = stored[Keys.LIBRARY_SCOPE]
+        val legacyTabs = stored[Keys.LEGACY_LIBRARY_BOTTOM_BAR]
         return stored.backupJson(APP_BACKUP_TYPES.keys).apply {
             remove("volume_keys_turn_pages")
             if (storedMode == null && legacyEnabled != null) {
                 put(
                     "volume_keys_mode",
                     if (legacyEnabled) VolumeKeyMode.ON.id else VolumeKeyMode.OFF.id,
+                )
+            }
+            remove("library_bottom_bar")
+            if (storedScope == null && legacyTabs != null) {
+                put(
+                    "library_scope",
+                    if (legacyTabs) LibraryScope.DETAILED.id else LibraryScope.SIMPLE.id,
                 )
             }
         }
@@ -782,6 +801,16 @@ class AppSettingsRepository(
                         }
                 }
                 it.remove(Keys.LEGACY_VOLUME_KEYS)
+            }
+            if (values.has("library_scope") || values.has("library_bottom_bar")) {
+                if (!values.has("library_scope")) {
+                    it[Keys.LIBRARY_SCOPE] = if (it[Keys.LEGACY_LIBRARY_BOTTOM_BAR] == true) {
+                        LibraryScope.DETAILED.id
+                    } else {
+                        LibraryScope.SIMPLE.id
+                    }
+                }
+                it.remove(Keys.LEGACY_LIBRARY_BOTTOM_BAR)
             }
             ServerSettings.restoreLegacy(it, values, serverName)
             ServerSettings.settleRestore(it, values)
@@ -883,7 +912,8 @@ class AppSettingsRepository(
             it[Keys.LIBRARY_SHELF_TONE] = layout.shelfTone.id
             it[Keys.LIBRARY_COMPACT_LIST] = layout.compactList
             it[Keys.LIBRARY_GRID_COMPACT] = layout.compactGrid
-            it[Keys.LIBRARY_BOTTOM_BAR] = layout.bottomBar
+            it[Keys.LIBRARY_SCOPE] = layout.scope.id
+            it.remove(Keys.LEGACY_LIBRARY_BOTTOM_BAR)
             it[Keys.LIBRARY_START_HOME] = layout.startOnHome
             it[Keys.LIBRARY_HOME_QUOTE] = layout.homeQuote
         }
@@ -1431,6 +1461,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_grid_compact" to BackupValueType.BOOLEAN,
     "library_start_home" to BackupValueType.BOOLEAN,
     "library_home_quote" to BackupValueType.BOOLEAN,
+    "library_scope" to BackupValueType.STRING,
     "library_bottom_bar" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,
     "vendor_refresh" to BackupValueType.BOOLEAN, "definition_target" to BackupValueType.STRING,

@@ -18,26 +18,33 @@ e-ink.
 
 ## Decision
 
-Four styles, picked in Settings › Appearance or from the button beside
-the sort above the books: Classic (the grid, still the default), Home,
-Shelves and List.
+Four styles, picked in Settings › Library or from the button beside
+the sort above the books, both opening the same sheet: Classic (the
+grid, still the default), Home, Shelves and List.
 Each is a fixed layout with at most a few options of its own:
-any style can choose between a top card for the current book and a
-bottom bar with the current book's cover on the left and Home, Library
-and More tabs beside it (the bottom bar is the default); Shelves chooses
-series, author or reading state for its shelves, a shelf colour (theme
+Shelves chooses series, author or reading state for its shelves, a
+shelf colour (theme
 accent, stone, oak, walnut or brass) and a backdrop behind them (plain,
 wood, plaster, bricks, the Marigold, Willow Bough or Daisy wallpapers by
 William Morris, or a custom image); Classic can fit one more
 column with one-line titles; and List can use compact rows.
 Nothing is reorderable.
 
-With the bottom bar, Home is a tab rather than a style: the app opens
+A separate choice, Settings › Appearance › App layout, sets the scope
+rather than the look. Detailed, the default, is the five-tab app:
+Home, Library, Series, Stats and Settings in a floating bar along the
+bottom. Simple is the library alone: it opens on the books, with the
+statistics, translation, sync and Settings in its top bar's overflow
+menu, and series reachable as a grouping instead of a tab. The scope
+does not change what the reader can do, only how many doors the app
+has.
+
+Home is a tab rather than a style in both scopes. With Detailed the
+app opens
 on Home or Library as the reader chooses, and the style sheet, titled
 Library view, picks only how the Library tab looks (Classic, Shelves or
-List). Without the bottom bar,
-Home is the fourth style. A saved Home style needs no migration: with
-the bottom bar it reads as Classic for the Library tab.
+List). A style saved as Home from a version where it was a style draws
+the catalogue as Classic; the stored value is left alone.
 
 Only the library screen changes. Every style keeps the same book
 actions, badges, download progress, search results, empty states and
@@ -72,10 +79,12 @@ E-ink keeps a flat plank and no decoration.
 
 Eight DataStore keys (`library_style`, `library_shelf_grouping`,
 `library_shelf_backdrop`, `library_shelf_tone`, `library_compact_list`,
-`library_grid_compact`, `library_bottom_bar`, `library_start_home`) are
+`library_grid_compact`, `library_scope`, `library_start_home`) are
 backed up with the other settings; a ninth
 (`library_shelf_backdrop_uri`) points to the copied custom image in
-local app storage. No database change.
+local app storage. No database change. `library_scope` reads a stored
+`library_bottom_bar` boolean from an older version as Detailed or
+Simple, and backups of that version are converted the same way.
 
 Search and the empty and loading states are shared, so they look the
 same in every style.

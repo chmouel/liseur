@@ -821,7 +821,7 @@ class LibraryViewModel(
             val refreshing = baseValues[5] as Boolean
             val settings = baseValues[6] as AppSettings
             // Only with the tab bar, which is the only way to leave it.
-            val seriesView = baseValues[14] as Boolean && settings.libraryLayout.bottomBar
+            val seriesView = baseValues[14] as Boolean && settings.libraryLayout.tabs
 
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
@@ -1069,7 +1069,7 @@ class LibraryViewModel(
                         emptyList()
                     },
                 home =
-                    if (layout.style == LibraryStyle.HOME || layout.bottomBar) {
+                    if (layout.tabs) {
                         val zone = ZoneId.systemDefault()
                         homeDeskOf(
                             books = books,
@@ -1284,7 +1284,7 @@ class LibraryViewModel(
      */
     fun setLayout(layout: LibraryLayout) {
         // Without the tabs there is no Series tab to be on.
-        if (!layout.bottomBar) _seriesView.value = false
+        if (!layout.tabs) _seriesView.value = false
         viewModelScope.launch { appSettings.setLibraryLayout(layout) }
     }
 
