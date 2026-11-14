@@ -187,6 +187,7 @@ locale:
 # or with PHONE= naming an emulator, they fail rather than fall back.
 dev:
 	$(GRADLE) assemble$(FLAVOR_TASK)Dev
+	@printf '%s\n' '$(DEV_APK)'
 
 dev-phone:
 	@case '$(PHONE)' in \
