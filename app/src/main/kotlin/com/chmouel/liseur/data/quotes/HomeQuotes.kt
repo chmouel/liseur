@@ -8,9 +8,11 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.chmouel.liseur.data.db.AnnotationKind
 import com.chmouel.liseur.data.db.Book
+import com.chmouel.liseur.data.db.BookAnnotation
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.library.openableUri
@@ -80,6 +82,9 @@ class HomeQuotes internal constructor(
 ) {
     private val scanning = AtomicBoolean(false)
 
+    /** A change that arrived while a scan was running, so the loop runs again. */
+    private val scanAgain = AtomicBoolean(false)
+
     /**
      * Today's number, and again when the date turns over.
      *
@@ -96,10 +101,17 @@ class HomeQuotes internal constructor(
         }
     }.distinctUntilChanged()
 
-    private val daily: Flow<Pair<Long, Int>> =
+    private val daily: Flow<Daily> =
         combine(context.homeQuoteStore.data, dayRollover) { prefs, day ->
-            day to if (prefs[DAY] == day) prefs[NONCE] ?: 0 else 0
+            // The line already chosen for this day, when it is this
+            // day's: another day or a shuffle makes it null, so the
+            // pick is made again.
+            val nonce = if (prefs[DAY] == day) prefs[NONCE] ?: 0 else 0
+            Daily(day, nonce, prefs[CHOSEN]?.takeIf { prefs[DAY] == day && nonce == prefs[NONCE] })
         }.distinctUntilChanged()
+
+    /** The day, the shuffle count, and the line those two chose. */
+    private data class Daily(val day: Long, val nonce: Int, val chosen: String?)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val quote: Flow<HomeQuote?> =
@@ -109,7 +121,7 @@ class HomeQuotes internal constructor(
             daily,
         ) { _, rows, day -> rows to day }
             .conflate()
-            .mapLatest { (rows, day) -> pick(rows, day.first, day.second) }
+            .mapLatest { (rows, day) -> pick(rows, day) }
             .distinctUntilChanged()
             .flowOn(Dispatchers.IO)
 
@@ -120,40 +132,118 @@ class HomeQuotes internal constructor(
             val nonce = if (prefs[DAY] == day) prefs[NONCE] ?: 0 else 0
             prefs[DAY] = day
             prefs[NONCE] = nonce + 1
+            prefs.remove(CHOSEN)
         }
     }
 
-    private suspend fun pick(rows: List<QuoteRow>, day: Long, nonce: Int): HomeQuote? {
-        val books = database.bookDao().allOnce().filter { it.openableUrl != null }.associateBy { it.url }
-        val points = database.readingProgressDao().getAll()
+    private suspend fun pick(rows: List<QuoteRow>, day: Daily): HomeQuote? {
+        // Whether anything has moved since the lines were last looked
+        // at is exactly what Home asks when it recomputes, so the scan
+        // is scheduled here rather than only when Home is first shown:
+        // a book marked read from the shelf, or a highlight arriving
+        // from another device, has to be able to bring a quote with it
+        // without the reader going away and coming back.
+        scanSoon()
+        return pick(rows, day.day, day.nonce, day.chosen)
+    }
+
+    /** One book the reader has got somewhere in, and where that is. */
+    private class ReadBook(val point: Double, val place: QuoteRules.PassagePlace?)
+
+    /** The books that have been read, by URL. */
+    private suspend fun readBooks(books: Map<String, Book>): Map<String, ReadBook> =
+        database.readingProgressDao().getAll()
             .filter { it.bookUrl in books }
-            .associate { it.bookUrl to readPoint(it) }
-            .filterValues { it > 0.0 }
-        // The same ceiling the found lines obey. A highlight can be
-        // imported, synced in from another device or copied from a copy
-        // that was read further, so being on a book with some progress
-        // does not put it inside what was read here.
-        val highlights = database.annotationDao().all()
+            .map { it.bookUrl to ReadBook(readPoint(it), placeIn(it.locatorJson)) }
+            .filter { (_, read) -> read.point > 0.0 }
+            .toMap()
+
+    /**
+     * The marks Home may quote, grouped by the book they are in.
+     *
+     * The ceiling the found lines obey applies here too. A highlight can
+     * be imported, synced in from another device or copied from a copy
+     * that was read further, so being on a book with some progress does
+     * not put it inside what was read here. Both the pick and the scan
+     * ask this one question, so a book cannot be skipped for being
+     * highlighted and then have none of its highlights eligible.
+     */
+    private suspend fun marksWithin(read: Map<String, ReadBook>): Map<String, List<BookAnnotation>> =
+        database.annotationDao().all()
             .filter {
-                it.kind == AnnotationKind.HIGHLIGHT.name &&
-                    !it.text.isNullOrBlank() &&
-                    it.bookId in points
+                // A note on a passage is still that passage: writing
+                // about a highlight turns it into one, and the words the
+                // reader chose do not stop being theirs.
+                it.kind in MARK_KINDS && !it.text.isNullOrBlank() && it.bookId in read
             }
-            .mapNotNull { mark ->
-                val point = points.getValue(mark.bookId)
-                val at = mark.totalProgression ?: locatorProgression(mark.locatorJson)
-                // A mark nobody placed cannot be shown to be behind the
-                // reader, and this is the one screen that would show it
-                // to them out of the book's own order.
-                if (!QuoteRules.withinCeiling(at, point)) return@mapNotNull null
-                QuoteCandidate(mark.bookId, mark.text.orEmpty(), mark.locatorJson.takeIf(String::isNotBlank), mark.chapter, highlight = true)
+            .filter { mark ->
+                val book = read.getValue(mark.bookId)
+                QuoteRules.markWithinCeiling(
+                    mark = placeIn(mark.locatorJson),
+                    markTotalProgression = mark.totalProgression ?: locatorProgression(mark.locatorJson),
+                    place = book.place,
+                    readPoint = book.point,
+                )
             }
+            .groupBy { it.bookId }
+
+    private suspend fun pick(
+        rows: List<QuoteRow>,
+        day: Long,
+        nonce: Int,
+        chosen: String?,
+    ): HomeQuote? {
+        val books = database.bookDao().allOnce().filter { it.openableUrl != null }.associateBy { it.url }
+        val read = readBooks(books)
+        val scans = store().scans().associateBy { it.bookUrl }
+        val highlights = marksWithin(read).flatMap { (bookUrl, marks) ->
+            marks.map { mark ->
+                QuoteCandidate(
+                    bookUrl,
+                    mark.text.orEmpty(),
+                    mark.locatorJson.takeIf(String::isNotBlank),
+                    mark.chapter,
+                    highlight = true,
+                )
+            }
+        }
+        // Lines kept under a work the URL no longer holds are the old
+        // book's words. The sweep drops them a moment later; until then
+        // they are not this book's.
         val lines = rows
-            .filter { row -> points[row.bookUrl]?.let { QuoteRules.withinCeiling(row.totalProgression, it) } == true }
+            .filter { row -> QuoteRules.stillSameWork(scans[row.bookUrl]?.workId, books[row.bookUrl]?.workId) }
+            .filter { row -> read[row.bookUrl]?.let { QuoteRules.withinCeiling(row.totalProgression, it.point) } == true }
             .map { QuoteCandidate(it.bookUrl, it.text, it.locatorJson, it.chapter, it.score) }
-        val picked = DailyQuote.pick(highlights + lines, day, nonce) ?: return null
+        val picked = DailyQuote.pick(highlights + lines, day, nonce, keep = chosen) ?: return null
+        remember(picked, day, nonce)
         val book = books[picked.bookUrl] ?: return null
         return HomeQuote(book, DailyQuote.shorten(picked.text), picked.chapter, picked.locatorJson, picked.highlight)
+    }
+
+    /** Keeps today's line the same while anything else on the screen moves. */
+    private suspend fun remember(picked: QuoteCandidate, day: Long, nonce: Int) {
+        val key = DailyQuote.key(picked)
+        context.homeQuoteStore.edit { prefs ->
+            if (prefs[DAY] != day || prefs[NONCE] != nonce || prefs[CHOSEN] != key) {
+                prefs[DAY] = day
+                prefs[NONCE] = nonce
+                prefs[CHOSEN] = key
+            }
+        }
+    }
+
+    /**
+     * Where a locator says it is, in the one scale two clients measure
+     * the same way.
+     */
+    private fun placeIn(locatorJson: String?): QuoteRules.PassagePlace? {
+        val locator = locatorJson
+            ?.takeIf(String::isNotBlank)
+            ?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
+            ?: return null
+        val resource = ResourceAddress.canonicalPath(locator.href.toString()) ?: return null
+        val progression = locator.locations.progression?.takeIf { it.isFinite() } ?: return null
+        return QuoteRules.PassagePlace(resource, progression)
     }
 
     /**
@@ -173,16 +263,25 @@ class HomeQuotes internal constructor(
 
     /** Looks through the books read on since they were last looked at, one at a time, in the background. */
     fun scanSoon() {
-        if (!scanning.compareAndSet(false, true)) return
+        if (!scanning.compareAndSet(false, true)) {
+            // A walk takes seconds. Whatever asked for one while it ran
+            // is answered by another pass rather than dropped.
+            scanAgain.set(true)
+            return
+        }
         scope.launch {
             try {
-                scanDue()
+                do {
+                    scanAgain.set(false)
+                    scanDue()
+                } while (scanAgain.get())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Could not look for quotes: ${e.javaClass.simpleName}")
             } finally {
                 scanning.set(false)
+                if (scanAgain.getAndSet(false)) scanSoon()
             }
         }
     }
@@ -190,25 +289,22 @@ class HomeQuotes internal constructor(
     internal suspend fun scanDue() {
         val dao = store()
         val scans = dao.scans().associateBy { it.bookUrl }
-        val progress = database.readingProgressDao().getAll().associateBy { it.bookUrl }
-        val points = progress.mapValues { (_, row) -> readPoint(row) }
-        // A book the reader highlighted is quoted from its highlights,
-        // which the pick prefers, so walking its text would be work
-        // whose result cannot be shown — and it would be repeated on
-        // every advance. Only highlights inside the read point count:
-        // one from further on leaves the text worth walking.
-        val quotedFromHighlights = database.annotationDao().all()
-            .filter { it.kind == AnnotationKind.HIGHLIGHT.name && !it.text.isNullOrBlank() }
-            .groupBy({ it.bookId }, { it.totalProgression ?: locatorProgression(it.locatorJson) })
-            .mapNotNull { (url, marks) ->
-                val point = points[url] ?: return@mapNotNull null
-                url.takeIf { marks.any { at -> QuoteRules.withinCeiling(at, point) } }
+        val all = database.bookDao().allOnce().filter { it.openableUrl != null }
+        val read = readBooks(all.associateBy { it.url })
+        // A book the reader marked on is quoted from its marks, which
+        // the pick prefers, so walking its text would be work whose
+        // result cannot be shown, repeated on every advance.
+        val quotedFromMarks = marksWithin(read).keys
+        val due = all
+            .filter { it.url !in quotedFromMarks }
+            .mapNotNull { book -> read[book.url]?.takeIf { it.point >= MIN_READ }?.let { book to it.point } }
+            // A recorded work that is not the one there now is due
+            // whatever the watermark says: the lines and the watermark
+            // belong to a book that has been replaced.
+            .filter { (book, point) ->
+                isDue(scans[book.url], point) ||
+                    !QuoteRules.stillSameWork(scans[book.url]?.workId, book.workId)
             }
-            .toSet()
-        val due = database.bookDao().allOnce()
-            .filter { it.openableUrl != null && it.url !in quotedFromHighlights }
-            .mapNotNull { book -> progress[book.url]?.let(::readPoint)?.takeIf { it >= MIN_READ }?.let { book to it } }
-            .filter { (book, point) -> isDue(scans[book.url], point) }
             .sortedByDescending { (book, _) -> book.lastOpenedAt ?: 0L }
         for ((book, point) in due) {
             currentCoroutineContext().ensureActive()
@@ -227,6 +323,11 @@ class HomeQuotes internal constructor(
             Log.i(TAG, "No quotes from a book: ${e.javaClass.simpleName}")
             null
         }
+        // The walk takes seconds, and the book can be removed or
+        // replaced under it meanwhile. Writing then would put the old
+        // book's lines and watermark back after the sweep cleared them.
+        val now = database.bookDao().getByUrl(book.url) ?: return
+        if (now.workId != book.workId || now.localUri != book.localUri) return
         val rows = found.orEmpty().mapIndexed { ord, line ->
             QuoteRow(book.url, ord, line.text, line.locatorJson, line.totalProgression, line.chapter, line.score)
         }
@@ -267,14 +368,29 @@ class HomeQuotes internal constructor(
         private const val TAG = "home-quote"
         private val DAY = longPreferencesKey("day")
         private val NONCE = intPreferencesKey("nonce")
+
+        /** The line the day and nonce chose, kept so a recompute does not move it. */
+        private val CHOSEN = stringPreferencesKey("chosen")
         private const val MIN_READ = 0.01
         private const val STEP = 0.02
         private const val BATCH = 500
 
+        /** What the reader marked on a passage; a book note has no passage to quote. */
+        private val MARK_KINDS = setOf(AnnotationKind.HIGHLIGHT.name, AnnotationKind.NOTE.name)
+
         /** How far the reader has got: the furthest point reached, or all of it once marked read. */
         fun readPoint(progress: ReadingProgress): Double {
             if (progress.finishedOverride == FinishedOverride.FINISHED.ordinal) return 1.0
-            val furthest = maxOf(progress.totalProgression ?: 0.0, progress.peakProgression ?: 0.0)
+            val total = progress.totalProgression ?: 0.0
+            val peak = progress.peakProgression ?: 0.0
+            // An unread mark starts the reading over. The furthest point
+            // recorded before it describes a reading the reader has
+            // since put back on the pile, so it does not count until
+            // reading past it again gives the peak a newer revision.
+            val peakStands = progress.unreadResetRevision?.let { reset ->
+                (progress.peakRevision ?: 0) > reset
+            } ?: true
+            val furthest = if (peakStands) maxOf(total, peak) else total
             return if (furthest.isFinite()) furthest.coerceIn(0.0, 1.0) else 0.0
         }
 

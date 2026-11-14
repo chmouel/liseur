@@ -19,7 +19,18 @@ object QuoteRules {
     private const val MIN_ROLLOVER_MS = 60_000L
 
     /**
-     * Whether something at [progression] is inside what the reader has
+     * Where a locator says it is: the resource, and how far into it.
+     *
+     * The resource-relative fraction is the one measurement two clients
+     * take the same way, because it is a fraction of one file. The
+     * whole-book fractions are not: each app interpolates its own
+     * position list, and they disagree
+     * ([com.chmouel.liseur.reader.progress.ResourceAnchor]).
+     */
+    data class PassagePlace(val resource: String, val progression: Double)
+
+    /**
+     * Whether a mark at [progression] is inside what the reader has
      * read, [readPoint].
      *
      * A progression nobody wrote down is not evidence of having read
@@ -28,6 +39,29 @@ object QuoteRules {
      */
     fun withinCeiling(progression: Double?, readPoint: Double): Boolean =
         progression != null && progression.isFinite() && progression <= readPoint + SLACK
+
+    /**
+     * Whether a mark is inside what the reader has read, said in terms
+     * that survive a mark arriving from another device.
+     *
+     * [mark] and [place] are where the mark and this device's own saved
+     * place are. When they name the same resource both fractions are of
+     * the same file and are compared directly: a whole-book fraction
+     * written elsewhere is on that device's scale, and could otherwise
+     * sit on the wrong side of the ceiling by a few pages. When they do
+     * not, the whole-book fractions are all there is.
+     */
+    fun markWithinCeiling(
+        mark: PassagePlace?,
+        markTotalProgression: Double?,
+        place: PassagePlace?,
+        readPoint: Double,
+    ): Boolean {
+        if (mark != null && place != null && mark.resource == place.resource) {
+            return mark.progression.isFinite() && mark.progression <= place.progression + SLACK
+        }
+        return withinCeiling(markTotalProgression, readPoint)
+    }
 
     /**
      * Whether a scan recorded under [scanned] still describes the file

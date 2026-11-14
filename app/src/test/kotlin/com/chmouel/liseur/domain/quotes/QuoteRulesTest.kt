@@ -32,6 +32,37 @@ class QuoteRulesTest {
     }
 
     @Test
+    fun `a mark in the reader's own resource is compared where both are measured the same way`() {
+        val chapter = QuoteRules.PassagePlace("chapter-7.xhtml", 0.8)
+        val here = QuoteRules.PassagePlace("chapter-7.xhtml", 0.5)
+
+        // The whole-book fractions could say anything: another client
+        // interpolates its own position list. Inside one resource both
+        // are fractions of the same file.
+        assertFalse(QuoteRules.markWithinCeiling(chapter, 0.1, here, 0.9))
+        assertTrue(
+            QuoteRules.markWithinCeiling(
+                QuoteRules.PassagePlace("chapter-7.xhtml", 0.4),
+                0.95,
+                here,
+                0.2,
+            ),
+        )
+    }
+
+    @Test
+    fun `a mark elsewhere in the book falls back to the read ceiling`() {
+        val mark = QuoteRules.PassagePlace("chapter-2.xhtml", 0.9)
+        val here = QuoteRules.PassagePlace("chapter-9.xhtml", 0.1)
+
+        assertTrue(QuoteRules.markWithinCeiling(mark, 0.3, here, 0.5))
+        assertFalse(QuoteRules.markWithinCeiling(mark, 0.7, here, 0.5))
+        // Nothing placed locally: the ceiling is all there is.
+        assertTrue(QuoteRules.markWithinCeiling(mark, 0.3, null, 0.5))
+        assertFalse(QuoteRules.markWithinCeiling(null, null, here, 0.5))
+    }
+
+    @Test
     fun `a scan still describes the book only while the work is the same`() {
         assertTrue(QuoteRules.stillSameWork("urn:isbn:1", "urn:isbn:1"))
         assertTrue(QuoteRules.stillSameWork(null, null))

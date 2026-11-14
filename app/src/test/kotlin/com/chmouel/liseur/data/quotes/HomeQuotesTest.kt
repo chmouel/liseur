@@ -16,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -41,6 +42,7 @@ class HomeQuotesTest {
     private lateinit var quotes: HomeQuotes
 
     private val url = "file:///books/moby-dick.epub"
+    private val walked = "file:///books/another.epub"
 
     @Before
     fun setUp() {
@@ -141,16 +143,16 @@ class HomeQuotesTest {
     @Test
     fun `a book with a highlight inside the read point is not walked for lines`() = runTest {
         val highlighted = book()
-        val walked = book(url = "file:///books/another.epub")
-        db.bookDao().upsertAll(listOf(highlighted, walked))
+        val other = book(url = walked)
+        db.bookDao().upsertAll(listOf(highlighted, other))
         db.readingProgressDao().upsert(progress(total = 0.3))
-        db.readingProgressDao().upsert(progress(total = 0.3, url = walked.url))
+        db.readingProgressDao().upsert(progress(total = 0.3, url = other.url))
         db.annotationDao().upsert(highlight("read", progression = 0.1, at = 0.1))
 
         quotes.scanDue()
 
         // The opener throws, so an attempted walk would leave a row behind.
-        assertEquals(listOf(walked.url), quoteDb.quotes().scans().map { it.bookUrl })
+        assertEquals(listOf(other.url), quoteDb.quotes().scans().map { it.bookUrl })
     }
 
     @Test
@@ -162,6 +164,90 @@ class HomeQuotesTest {
         quotes.scanDue()
 
         assertEquals(listOf(url), quoteDb.quotes().scans().map { it.bookUrl })
+    }
+
+    @Test
+    fun `a note on a passage is still that passage`() = runTest {
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.2))
+        db.annotationDao().upsert(
+            highlight("read", progression = 0.1, at = 0.1).copy(kind = AnnotationKind.NOTE.name, note = "about it"),
+        )
+
+        assertEquals("read", quotes.quote.first()?.text)
+    }
+
+    @Test
+    fun `a book marked unread starts the ceiling over`() = runTest {
+        // Marking unread clears the place but leaves the furthest point
+        // recorded before it. What was read then is not what the reader
+        // is reading now.
+        val unread = progress(total = 0.0).copy(
+            peakProgression = 0.8,
+            peakRevision = 3,
+            localRevision = 4,
+            unreadResetRevision = 4,
+            finishedOverride = com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal,
+        )
+        assertEquals(0.0, HomeQuotes.readPoint(unread), 0.0)
+
+        // Reading on past the old peak gives the peak a newer revision,
+        // and it speaks for the reading again.
+        val readOn = unread.copy(
+            totalProgression = 0.82,
+            peakProgression = 0.85,
+            peakRevision = 6,
+            localRevision = 6,
+        )
+        assertEquals(0.85, HomeQuotes.readPoint(readOn), 0.0)
+
+        // Before that it is the place the reader is at, and no further.
+        assertEquals(
+            0.02,
+            HomeQuotes.readPoint(unread.copy(totalProgression = 0.02, localRevision = 5)),
+            0.0,
+        )
+    }
+
+    @Test
+    fun `a book whose file was replaced is walked again even before its place moves`() = runTest {
+        // The watermark says 0.5 and the reader is at 0.3, so nothing is
+        // due by progress alone. The recorded work is not the book's,
+        // though, and those lines are not its words.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.3))
+        dao().replace(scan(workId = "work-previous"), listOf(line()))
+
+        quotes.scanDue()
+
+        // The opener throws, so the row is rewritten as unusable and the
+        // old work's lines are cleared with it: proof the walk ran.
+        val scan = quoteDb.quotes().scans().single()
+        assertEquals(url, scan.bookUrl)
+        assertEquals("work-one", scan.workId)
+        assertFalse(scan.usable)
+        assertTrue(quoteDb.quotes().observeAll().first().isEmpty())
+    }
+
+    @Test
+    fun `the day's line survives another book becoming eligible`() = runTest {
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.3))
+        db.readingProgressDao().upsert(progress(total = 0.3, url = walked))
+        dao().replace(scan(workId = "work-one"), listOf(line()))
+
+        val first = quotes.quote.first()?.text
+        assertNotNull(first)
+
+        // A second book arrives with a line of its own. The day seeded a
+        // different book before it existed, and must not now.
+        db.bookDao().upsert(book(url = walked))
+        dao().replace(
+            scan(workId = "work-one", url = walked, scannedThrough = 0.3),
+            listOf(line(url = walked, text = "another line")),
+        )
+
+        assertEquals(first, quotes.quote.first()?.text)
     }
 
     private fun dao(): QuoteDao = quoteDb.quotes()
@@ -202,19 +288,19 @@ class HomeQuotesTest {
         createdAt = 1L,
     )
 
-    private fun scan(workId: String?) = QuoteScanRow(
+    private fun scan(workId: String?, url: String = this.url, scannedThrough: Double = 0.5) = QuoteScanRow(
         bookUrl = url,
-        scannedThrough = 0.5,
+        scannedThrough = scannedThrough,
         version = com.chmouel.liseur.domain.quotes.MemorableLines.VERSION,
         usable = true,
         scannedAt = 1L,
         workId = workId,
     )
 
-    private fun line() = QuoteRow(
+    private fun line(text: String = "a line worth keeping", url: String = this.url) = QuoteRow(
         bookUrl = url,
         ord = 0,
-        text = "a line worth keeping",
+        text = text,
         locatorJson = "{}",
         totalProgression = 0.2,
         chapter = null,

@@ -23,6 +23,12 @@ data class QuoteCandidate(
  * another to show. A book with highlights is quoted from them, since the
  * reader chose those; otherwise from its best lines, the better ones
  * more often.
+ *
+ * [pick] also takes the key of the line it chose last time, because the
+ * candidates are not fixed: a scan finishing, a book becoming eligible
+ * or a highlight arriving from another device all change the set under a
+ * day and nonce that did not move, and the reader would watch the line
+ * be replaced for no reason they could see.
  */
 object DailyQuote {
     const val MAX_LENGTH = 280
@@ -31,7 +37,25 @@ object DailyQuote {
     private val INVISIBLE = Regex("[\u00AD\u200B\u2060\uFEFF]")
     private const val TOP = 12
 
-    fun pick(candidates: List<QuoteCandidate>, epochDay: Long, nonce: Int): QuoteCandidate? {
+    /**
+     * A stable name for a candidate.
+     *
+     * What Home keeps beside the day and the nonce, so the line already
+     * shown can be asked for again: the candidate set changes under a
+     * scan finishing or a book becoming eligible, and the same day and
+     * nonce would otherwise pick a different line out of it.
+     */
+    fun key(candidate: QuoteCandidate): String = "${candidate.bookUrl}\u0000${candidate.text}"
+
+    fun pick(
+        candidates: List<QuoteCandidate>,
+        epochDay: Long,
+        nonce: Int,
+        keep: String? = null,
+    ): QuoteCandidate? {
+        // The day's line stays the day's line while it is still there
+        // to be shown.
+        keep?.let { chosen -> candidates.firstOrNull { key(it) == chosen }?.let { return it } }
         val byBook = candidates.groupBy { it.bookUrl }
         if (byBook.isEmpty()) return null
         val order = byBook.keys.sorted().shuffled(Random(epochDay))
