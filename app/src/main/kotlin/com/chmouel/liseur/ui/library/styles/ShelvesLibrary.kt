@@ -87,6 +87,7 @@ import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.library.ArchivedBadge
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.ContinueReadingCard
+import com.chmouel.liseur.ui.library.shownShelfGrouping
 import com.chmouel.liseur.ui.library.DownloadOverlay
 import com.chmouel.liseur.ui.library.LibraryControls
 import com.chmouel.liseur.ui.library.LibraryUiState
@@ -113,6 +114,7 @@ internal fun ShelvesLibrary(
     listState: LazyListState,
     controls: LibraryControls,
     onSetLayout: (LibraryLayout) -> Unit,
+    onSetShelfGrouping: (ShelfGrouping) -> Unit,
     onBookSelected: (Book) -> Unit,
     onBookLongPress: (Book) -> Unit,
     onSeriesSelected: (SeriesShelf) -> Unit,
@@ -120,7 +122,7 @@ internal fun ShelvesLibrary(
     bottomInset: Dp = 0.dp,
 ) {
     val columns = booksPerPlank(windowWidth())
-    val packAuthors = state.layout.shelfGrouping == ShelfGrouping.AUTHOR
+    val packAuthors = state.shownShelfGrouping == ShelfGrouping.AUTHOR
     val planks = remember(state.styleShelves, columns, packAuthors) {
         planksOf(
             shelves = state.styleShelves,
@@ -134,7 +136,7 @@ internal fun ShelvesLibrary(
     val finished = state.framedCovers
     // The hero comes and goes with the grouping; without this the list
     // stays anchored on the first shelf and the hero lands off-screen.
-    val grouping = state.layout.shelfGrouping
+    val grouping = state.shownShelfGrouping
     var shownGrouping by remember { mutableStateOf(grouping) }
     LaunchedEffect(grouping) {
         if (grouping != shownGrouping) {
@@ -172,7 +174,7 @@ internal fun ShelvesLibrary(
                 // Grouped by reading state, the Reading shelf comes first and
                 // already shows the book; with the bottom bar on, its cover is
                 // already sitting in the bar.
-                ?.takeIf { onShelf && !state.layout.bottomBar && state.layout.shelfGrouping != ShelfGrouping.STATUS }
+                ?.takeIf { onShelf && !state.layout.bottomBar && state.shownShelfGrouping != ShelfGrouping.STATUS }
                 ?.let { recent ->
                     item(key = "shelves:hero") {
                         ContinueReadingCard(
@@ -204,8 +206,8 @@ internal fun ShelvesLibrary(
                         if (onShelf) {
                             {
                                 ShelfGroupingMenu(
-                                    selected = state.layout.shelfGrouping,
-                                    onSelect = { onSetLayout(state.layout.copy(shelfGrouping = it)) },
+                                    selected = state.shownShelfGrouping,
+                                    onSelect = onSetShelfGrouping,
                                 )
                             }
                         } else {

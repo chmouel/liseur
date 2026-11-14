@@ -137,8 +137,6 @@ import com.chmouel.liseur.ui.navigation.mainTab
 import com.chmouel.liseur.ui.navigation.mainTabBarSpace
 import com.chmouel.liseur.ui.navigation.rememberMainTabsState
 import com.chmouel.liseur.ui.navigation.selectTab
-import com.chmouel.liseur.domain.LibraryStyle
-import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.ui.navigation.Route
 import com.chmouel.liseur.ui.navigation.RouteBackStackSaver
 import com.chmouel.liseur.ui.navigation.closeSettings
@@ -391,7 +389,7 @@ private fun LiseurApp(
     val libraryLayout = libraryState.layout
     val libraryTab = when {
         tabs.pickedHome ?: libraryLayout.startOnHome -> MainTab.HOME
-        libraryState.filters.groupBySeries -> MainTab.SERIES
+        libraryState.seriesView -> MainTab.SERIES
         else -> MainTab.LIBRARY
     }
     val shownTab = backStack.mainTab(libraryTab)?.takeIf {
@@ -406,17 +404,12 @@ private fun LiseurApp(
                 MainTab.HOME -> tabs.pickedHome = true
                 MainTab.LIBRARY -> {
                     tabs.pickedHome = false
-                    // Also when coming from Home: Series may have left the grouping on.
-                    if (libraryState.filters.groupBySeries) library.setGroupBySeries(false)
+                    library.showSeries(false)
                 }
                 MainTab.SERIES -> {
                     tabs.pickedHome = false
                     library.setReadingFilter(com.chmouel.liseur.ui.library.ALL_READING_STATES)
-                    library.setGroupBySeries(true)
-                    // Shelves group by their own setting, not the Series chip.
-                    if (libraryLayout.style == LibraryStyle.SHELVES) {
-                        library.setLayout(libraryLayout.copy(shelfGrouping = ShelfGrouping.SERIES))
-                    }
+                    library.showSeries(true)
                 }
                 MainTab.STATS, MainTab.SETTINGS -> Unit
             }
@@ -424,11 +417,15 @@ private fun LiseurApp(
             Snapshot.withMutableSnapshot { backStack.selectTab(tab) }
         }
     }
+    // Back from the Stats or Settings tab goes Home, however it was opened.
+    val backOrHome: () -> Unit = {
+        if (shownTab == MainTab.STATS || shownTab == MainTab.SETTINGS) selectTab(MainTab.HOME) else back()
+    }
 
     Box(Modifier.fillMaxSize()) {
     NavDisplay(
         backStack = backStack,
-        onBack = back,
+        onBack = backOrHome,
         sceneStrategies = listOf(listDetail),
         entryDecorators = listOf(
             rememberSaveableStateHolderNavEntryDecorator(),
@@ -1374,6 +1371,8 @@ private fun LibraryRoute(
         onSearchQueryChange = viewModel::setSearchQuery,
         onToggleFilter = viewModel::toggleFilter,
         onSetGroupBySeries = viewModel::setGroupBySeries,
+        onShowSeries = viewModel::showSeries,
+        onSetShelfGrouping = viewModel::setShelfGrouping,
         onSetReadingFilter = viewModel::setReadingFilter,
         onSetLayout = viewModel::setLayout,
         tabs = tabs,

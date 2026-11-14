@@ -4,7 +4,9 @@ import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -51,6 +53,7 @@ import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
 import com.chmouel.liseur.domain.LibraryStyle
+import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.SeriesExtras
 import com.chmouel.liseur.domain.SeriesPickOption
 import com.chmouel.liseur.domain.SeriesShelf
@@ -341,6 +344,12 @@ data class LibraryUiState(
     /** Whether any book knows what series it is in, so the chip is worth offering. */
     val hasSeries: Boolean = false,
     /**
+     * The Series tab is showing: series grouping forced on, without being
+     * saved. [layout] stays the saved one, so nothing written from it
+     * carries the override; [shownShelfGrouping] is what the shelves use.
+     */
+    val seriesView: Boolean = false,
+    /**
      * Every series in the library, for filing a book into one by hand.
      *
      * Taken from the whole shelf rather than from what a search left
@@ -521,6 +530,7 @@ class LibraryViewModel(
     readingSessions: Flow<List<ReadingSession>> = flowOf(emptyList()),
     /** Quotes from what has been read, for Home; null leaves the card out. */
     private val homeQuotes: com.chmouel.liseur.data.quotes.HomeQuotes? = null,
+    savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     private val sessions = readingSessions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -737,6 +747,10 @@ class LibraryViewModel(
     private val _searchQuery = MutableStateFlow("")
     private val _isSearchActive = MutableStateFlow(false)
 
+    // The Series tab groups by series without saving it, so the grouping
+    // and the shelves the reader chose are still there on the Library tab.
+    private val _seriesView = savedState.getMutableStateFlow(SERIES_VIEW_KEY, false)
+
     private val refresher =
         LibraryRefresh(
             scope = viewModelScope,
@@ -781,6 +795,7 @@ class LibraryViewModel(
                 appSettings.catalogPartialDismissedFor,
                 account.browseServers,
                 kosyncPeer,
+                _seriesView,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -805,6 +820,8 @@ class LibraryViewModel(
             val browseServers = baseValues[12] as List<RemoteServer>
             val refreshing = baseValues[5] as Boolean
             val settings = baseValues[6] as AppSettings
+            // Only with the tab bar, which is the only way to leave it.
+            val seriesView = baseValues[14] as Boolean && settings.libraryLayout.bottomBar
 
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
@@ -880,7 +897,7 @@ class LibraryViewModel(
                     // series in the archive to group: an archived book is out
                     // of its series card as much as it is out of the shelf.
                     groupBySeries =
-                        stored.groupBySeries &&
+                        (stored.groupBySeries || seriesView) &&
                             shelves.isNotEmpty() &&
                             LibraryFilterOption.ARCHIVED !in stored.options,
                 )
@@ -1028,6 +1045,7 @@ class LibraryViewModel(
                                 RemoteUrl.sameAddress(server.catalogUrl, partialDismissedFor)
                         ),
                 hasSeries = shelves.isNotEmpty(),
+                seriesView = seriesView,
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
                 inProgressBooks = inProgressBooks,
@@ -1035,7 +1053,8 @@ class LibraryViewModel(
                 progressions = progressions.filterKeys { it in inProgressBooks },
                 styleShelves =
                     if (layout.style == LibraryStyle.SHELVES) {
-                        shelvesOf(filteredBooks, layout.shelfGrouping, shownSeries) { book ->
+                        val grouping = if (seriesView) ShelfGrouping.SERIES else layout.shelfGrouping
+                        shelvesOf(filteredBooks, grouping, shownSeries) { book ->
                             shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
                         }
                     } else {
@@ -1157,7 +1176,14 @@ class LibraryViewModel(
     }
 
     fun setGroupBySeries(grouped: Boolean) {
+        // Ungrouping by hand is leaving the Series tab too.
+        if (!grouped) _seriesView.value = false
         editFilters { it.copy(groupBySeries = grouped) }
+    }
+
+    /** Shows or leaves the Series tab. */
+    fun showSeries(shown: Boolean) {
+        _seriesView.value = shown
     }
 
     fun clearFilters() {
@@ -1252,7 +1278,17 @@ class LibraryViewModel(
      * menu is nearly always meant to do.
      */
     fun setLayout(layout: LibraryLayout) {
+        // Without the tabs there is no Series tab to be on.
+        if (!layout.bottomBar) _seriesView.value = false
         viewModelScope.launch { appSettings.setLibraryLayout(layout) }
+    }
+
+    /** The reader's own shelf grouping, which leaves the Series tab. */
+    fun setShelfGrouping(grouping: ShelfGrouping) {
+        _seriesView.value = false
+        viewModelScope.launch {
+            appSettings.setLibraryLayout(appSettings.settings.first().libraryLayout.copy(shelfGrouping = grouping))
+        }
     }
 
     fun setSort(sort: LibrarySort) {
@@ -1877,6 +1913,7 @@ class LibraryViewModel(
 
     companion object {
         private const val TAG = "LibraryViewModel"
+        private const val SERIES_VIEW_KEY = "seriesView"
 
         val Factory: ViewModelProvider.Factory =
             viewModelFactory {
@@ -1903,6 +1940,7 @@ class LibraryViewModel(
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),
                         homeQuotes = container.homeQuotes,
+                        savedState = createSavedStateHandle(),
                     )
                 }
             }
@@ -2068,3 +2106,8 @@ internal fun List<Book>.awaitingUpload(
  * opposite of what they asked for.
  */
 internal fun Book.mayGoUp(): Boolean = livesOnlyOnThisDevice() && archivedAt == null && hiddenAt == null
+
+/** The grouping the shelves are drawn with: series on the Series tab, the saved one otherwise. */
+val LibraryUiState.shownShelfGrouping: ShelfGrouping
+    get() = if (seriesView) ShelfGrouping.SERIES else layout.shelfGrouping
+
