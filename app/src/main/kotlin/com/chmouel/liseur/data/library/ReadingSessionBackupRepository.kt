@@ -108,6 +108,7 @@ class ReadingSessionBackupRepository(
         val importedAt = now()
         val seenInArchive = mutableSetOf<Pair<String, Long>>()
         val candidatesByBook = LinkedHashMap<String, MutableList<ReadingSession>>()
+        val archivedByTarget = LinkedHashMap<String, MutableSet<String>>()
         var alreadyPresent = 0
 
         for (book in books) {
@@ -115,6 +116,9 @@ class ReadingSessionBackupRepository(
             val targetUrl = aliases[book.bookId]
                 ?: matchBackedUpBookUrl(book.bookId, book.title, book.author, known)
                 ?: book.bookId
+            if (targetUrl != book.bookId) {
+                archivedByTarget.getOrPut(targetUrl) { linkedSetOf() } += book.bookId
+            }
             for (session in book.sessions) {
                 if (!seenInArchive.add(targetUrl to session.startedAt)) {
                     alreadyPresent++
@@ -138,9 +142,20 @@ class ReadingSessionBackupRepository(
 
         var added = 0
         inTransaction {
+            // Sittings restored earlier stay under the URL they had then; move them to the
+            // book they now resolve to before deciding what is already here.
+            for ((targetUrl, archivedUrls) in archivedByTarget) {
+                for (archivedUrl in archivedUrls) {
+                    sessionDao.reattachImportedSessions(archivedUrl, targetUrl)
+                }
+            }
             val toInsert = mutableListOf<ReadingSession>()
             for ((bookUrl, candidates) in candidatesByBook) {
                 val existingStarts = sessionDao.startedAtFor(bookUrl).toHashSet()
+                // Sittings still under an archived address, imported or recorded here, already count.
+                for (archivedUrl in archivedByTarget[bookUrl].orEmpty()) {
+                    existingStarts += sessionDao.startedAtFor(archivedUrl)
+                }
                 for (candidate in candidates) {
                     if (existingStarts.add(candidate.startedAt)) {
                         toInsert += candidate

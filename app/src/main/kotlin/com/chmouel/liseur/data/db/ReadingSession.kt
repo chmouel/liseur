@@ -168,6 +168,22 @@ interface ReadingSessionDao {
     @Query("SELECT started_at FROM reading_sessions WHERE book_url = :bookUrl")
     suspend fun startedAtFor(bookUrl: String): List<Long>
 
+    /**
+     * Reattaches restored sittings once their book resolves to a local URL.
+     *
+     * Only imported rows move, and only when the target does not already hold a
+     * sitting that started at the same moment, so a second restore of the same
+     * archive cannot count that time twice.
+     */
+    @Query(
+        """
+        UPDATE reading_sessions SET book_url = :targetUrl
+        WHERE book_url = :archivedUrl AND imported_at IS NOT NULL
+          AND started_at NOT IN (SELECT started_at FROM reading_sessions WHERE book_url = :targetUrl)
+        """,
+    )
+    suspend fun reattachImportedSessions(archivedUrl: String, targetUrl: String)
+
     /** Local reading time for one book, including its current open session. */
     @Query(
         """
