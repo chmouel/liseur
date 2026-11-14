@@ -299,6 +299,30 @@ class HomeQuotesTest {
     }
 
     @Test
+    fun `an unread reset gives the old peak no say over a chapter`() = runTest {
+        // The reader marked the book unread and has read 2% of it since.
+        // The ceiling starts over, and the place that speaks for it has
+        // to be the one that ceiling was read from: a highlight at 60%
+        // of the chapter is past where they are now.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(
+            progress(total = 0.02, locator = chapter(0.02)).copy(
+                peakProgression = 0.8,
+                peakLocator = chapter(0.8),
+                peakRevision = 3,
+                localRevision = 5,
+                unreadResetRevision = 4,
+                finishedOverride = com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal,
+            ),
+        )
+        db.annotationDao().upsert(
+            highlight("unread", progression = 0.6, at = 0.6).copy(locatorJson = chapter(0.6)),
+        )
+
+        assertNull(quotes.quote.first())
+    }
+
+    @Test
     fun `a book that could not be opened keeps its lines and is tried again`() = runTest {
         db.bookDao().upsert(book())
         db.readingProgressDao().upsert(progress(total = 1.0).copy(

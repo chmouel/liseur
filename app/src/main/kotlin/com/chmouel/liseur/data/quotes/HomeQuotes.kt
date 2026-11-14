@@ -161,9 +161,14 @@ class HomeQuotes internal constructor(
                 // The furthest place is where the ceiling is, not the
                 // place the reader happens to be on: someone who went
                 // back to the top of a chapter has still read the rest
-                // of it. A finished book has no part-way chapter, so
-                // its whole-book ceiling is all there is.
-                val furthest = placeIn(row.peakLocator).takeIf { point < 1.0 }
+                // of it. Which locator says where that is has to be the
+                // one the ceiling itself was read from, or an unread
+                // reset would leave the old peak vouching for a chapter
+                // the count no longer covers. A finished book has no
+                // part-way chapter, so its whole-book ceiling is all
+                // there is.
+                val from = if (peakStands(row)) row.peakLocator else row.locatorJson
+                val furthest = placeIn(from).takeIf { point < 1.0 }
                 row.bookUrl to ReadBook(point, furthest)
             }
             .toMap()
