@@ -32,6 +32,26 @@ class DailyQuoteTest {
     }
 
     @Test
+    fun `the line already shown is kept when the candidates change under it`() {
+        val kept = QuoteCandidate("book3", "The line on screen.", null, null, score = 1.0)
+        val withKept = candidates + kept
+        val key = DailyQuote.key(kept)
+
+        // A scan finishing or a book becoming eligible changes the set
+        // the day seeds; the reader should not watch the line swap.
+        repeat(5) { assertEquals(kept, DailyQuote.pick(withKept, 20_000L + it, 0, keep = key)) }
+    }
+
+    @Test
+    fun `a kept line that is gone leaves the day's own pick`() {
+        val kept = DailyQuote.key(QuoteCandidate("book1", "A line since removed.", null, null))
+        assertEquals(
+            DailyQuote.pick(candidates, 20_000, 0),
+            DailyQuote.pick(candidates, 20_000, 0, keep = kept),
+        )
+    }
+
+    @Test
     fun `nothing to quote gives nothing`() {
         assertNull(DailyQuote.pick(emptyList(), 20_000, 0))
     }
