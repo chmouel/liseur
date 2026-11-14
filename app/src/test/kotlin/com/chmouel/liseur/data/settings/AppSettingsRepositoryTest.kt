@@ -22,6 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.json.JSONObject
 
 class AppSettingsRepositoryTest {
 
@@ -30,6 +31,9 @@ class AppSettingsRepositoryTest {
 
     private fun store(name: String = "app.preferences_pb") =
         PreferenceDataStoreFactory.create { folder.newFile(name) }
+
+    private fun LibraryScope.opposite(): LibraryScope =
+        if (this == LibraryScope.SIMPLE) LibraryScope.DETAILED else LibraryScope.SIMPLE
 
     @Test
     fun `concurrent selection toolbar edits preserve every change`() = runTest {
@@ -360,5 +364,62 @@ class AppSettingsRepositoryTest {
 
         store.edit { it[booleanPreferencesKey("library_bottom_bar")] = true }
         assertEquals(LibraryScope.DETAILED, AppSettingsRepository(store).settings.first().libraryLayout.scope)
+    }
+
+    @Test
+    fun `a legacy bar is exported as a scope`() = runTest {
+        val store = store()
+        store.edit { it[booleanPreferencesKey("library_bottom_bar")] = false }
+
+        val backup = AppSettingsRepository(store).backupValues()
+
+        assertEquals(LibraryScope.SIMPLE.id, backup.getString("library_scope"))
+        assertFalse(backup.has("library_bottom_bar"))
+    }
+
+    @Test
+    fun `the scope round trips through a backup`() = runTest {
+        LibraryScope.entries.forEach { scope ->
+            val repo = AppSettingsRepository(store("scope-${scope.id}.preferences_pb"))
+            repo.setLibraryLayout(LibraryLayout(scope = scope))
+
+            val restored = AppSettingsRepository(store("scope-restored-${scope.id}.preferences_pb"))
+            restored.restoreBackupValues(repo.backupValues())
+
+            assertEquals(scope, restored.settings.first().libraryLayout.scope)
+        }
+    }
+
+    @Test
+    fun `a restored legacy bar replaces the saved scope, and is then gone`() = runTest {
+        listOf(
+            false to LibraryScope.SIMPLE,
+            true to LibraryScope.DETAILED,
+        ).forEach { (legacyTabs, expected) ->
+            val store = store("legacy-restore-$legacyTabs.preferences_pb")
+            val repo = AppSettingsRepository(store)
+            // Saved the other way round, so the backup has to win.
+            repo.setLibraryLayout(LibraryLayout(scope = expected.opposite()))
+            val backup = JSONObject().put("library_bottom_bar", legacyTabs)
+
+            repo.restoreBackupValues(backup)
+
+            assertEquals(expected, repo.settings.first().libraryLayout.scope)
+            assertNull(store.data.first()[booleanPreferencesKey("library_bottom_bar")])
+        }
+    }
+
+    @Test
+    fun `a backup that carries both keys takes the scope and drops the bar`() = runTest {
+        val store = store()
+        val repo = AppSettingsRepository(store)
+        val backup = JSONObject()
+            .put("library_scope", LibraryScope.SIMPLE.id)
+            .put("library_bottom_bar", true)
+
+        repo.restoreBackupValues(backup)
+
+        assertEquals(LibraryScope.SIMPLE, repo.settings.first().libraryLayout.scope)
+        assertNull(store.data.first()[booleanPreferencesKey("library_bottom_bar")])
     }
 }
