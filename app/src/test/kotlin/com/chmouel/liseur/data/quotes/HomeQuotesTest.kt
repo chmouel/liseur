@@ -151,8 +151,8 @@ class HomeQuotesTest {
         val highlighted = book()
         val other = book(url = walked)
         db.bookDao().upsertAll(listOf(highlighted, other))
-        db.readingProgressDao().upsert(progress(total = 0.3))
-        db.readingProgressDao().upsert(progress(total = 0.3, url = other.url))
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.1)))
+        db.readingProgressDao().upsert(progress(total = 0.3, url = other.url, locator = chapter(0.1)))
         db.annotationDao().upsert(highlight("read", progression = 0.1, at = 0.1))
 
         quotes.scanDue()
@@ -164,7 +164,7 @@ class HomeQuotesTest {
     @Test
     fun `a highlight past the read point leaves the text worth walking`() = runTest {
         db.bookDao().upsert(book())
-        db.readingProgressDao().upsert(progress(total = 0.3))
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.1)))
         db.annotationDao().upsert(highlight("unread", progression = 0.9, at = 0.9))
 
         quotes.scanDue()
@@ -221,7 +221,7 @@ class HomeQuotesTest {
         // due by progress alone. The recorded work is not the book's,
         // though, and those lines are not its words.
         db.bookDao().upsert(book())
-        db.readingProgressDao().upsert(progress(total = 0.3))
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.1)))
         dao().replace(scan(workId = "work-previous"), listOf(line()))
 
         quotes.scanDue()
@@ -238,8 +238,8 @@ class HomeQuotesTest {
     @Test
     fun `the day's line survives another book becoming eligible`() = runTest {
         db.bookDao().upsert(book())
-        db.readingProgressDao().upsert(progress(total = 0.3))
-        db.readingProgressDao().upsert(progress(total = 0.3, url = walked))
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.1)))
+        db.readingProgressDao().upsert(progress(total = 0.3, url = walked, locator = chapter(0.1)))
         dao().replace(scan(workId = "work-one"), listOf(line()))
 
         val first = quotes.quote.first()?.text
@@ -355,6 +355,29 @@ class HomeQuotesTest {
         // Once an unread reset has started it over, the place is the one
         // that counts, not the peak it kept.
         assertEquals(chapter(0.4), HomeQuotes.ceilingLocator(peaked.copy(unreadResetRevision = 5)))
+    }
+
+    @Test
+    fun `a book whose ceiling is a percentage nobody can point at is left unread`() = runTest {
+        // A position pulled from a client that sent no locator: the
+        // fraction is on that client's scale, and there is no chapter to
+        // stop a walk at. Nothing is cached until a page is turned here.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.6, locator = "{}"))
+
+        quotes.scanDue()
+
+        assertTrue(quoteDb.quotes().scans().isEmpty())
+    }
+
+    @Test
+    fun `a book whose place is written down here is walked to it`() = runTest {
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.6, locator = chapter(0.4)))
+
+        quotes.scanDue()
+
+        assertEquals(listOf(url), quoteDb.quotes().scans().map { it.bookUrl })
     }
 
     private fun dao(): QuoteDao = quoteDb.quotes()
