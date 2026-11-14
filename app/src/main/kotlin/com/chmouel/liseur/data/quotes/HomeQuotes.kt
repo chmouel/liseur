@@ -151,6 +151,19 @@ class HomeQuotes internal constructor(
     /** One book the reader has got somewhere in, and where that is. */
     private class ReadBook(val point: Double, val place: QuoteRules.PassagePlace?)
 
+    /**
+     * The books Home may quote from, by URL.
+     *
+     * A hidden book is one the reader took off the shelf: its file and its
+     * marks are kept, but it is not in the library any more, and the shelf
+     * itself leaves it out (`LibraryLayout`). Quoting it, or walking it in
+     * the background, would put it back on Home by another door.
+     */
+    private suspend fun quoteableBooks(): Map<String, Book> =
+        database.bookDao().allOnce()
+            .filter { it.openableUrl != null && !it.hidden }
+            .associateBy { it.url }
+
     /** The books that have been read, by URL. */
     private suspend fun readBooks(books: Map<String, Book>): Map<String, ReadBook> =
         database.readingProgressDao().getAll()
@@ -208,7 +221,7 @@ class HomeQuotes internal constructor(
         nonce: Int,
         chosen: String?,
     ): HomeQuote? {
-        val books = database.bookDao().allOnce().filter { it.openableUrl != null }.associateBy { it.url }
+        val books = quoteableBooks()
         val read = readBooks(books)
         val highlights = marksWithin(read).flatMap { (bookUrl, marks) ->
             marks.map { mark ->
@@ -226,7 +239,19 @@ class HomeQuotes internal constructor(
         // answer does not depend on two reads of two tables agreeing.
         val lines = rows
             .filter { row -> QuoteRules.stillSameWork(row.workId, books[row.bookUrl]?.workId) }
-            .filter { row -> read[row.bookUrl]?.let { QuoteRules.withinCeiling(row.totalProgression, it.point) } == true }
+            .filter { row ->
+                val book = read[row.bookUrl] ?: return@filter false
+                // A line is checked exactly as a mark is, and for the same
+                // reason: the fraction it carries was written by whoever
+                // walked the book, and the one it is compared with may be
+                // on another client's scale.
+                QuoteRules.markWithinCeiling(
+                    mark = placeIn(row.locatorJson),
+                    markTotalProgression = row.totalProgression,
+                    place = book.place,
+                    readPoint = book.point,
+                )
+            }
             .map { QuoteCandidate(it.bookUrl, it.text, it.locatorJson, it.chapter, it.score) }
         val picked = DailyQuote.pick(highlights + lines, day, nonce, keep = chosen) ?: return null
         remember(picked, day, nonce)
@@ -303,13 +328,13 @@ class HomeQuotes internal constructor(
     internal suspend fun scanDue() {
         val dao = store()
         val scans = dao.scans().associateBy { it.bookUrl }
-        val all = database.bookDao().allOnce().filter { it.openableUrl != null }
-        val read = readBooks(all.associateBy { it.url })
+        val all = quoteableBooks()
+        val read = readBooks(all)
         // A book the reader marked on is quoted from its marks, which
         // the pick prefers, so walking its text would be work whose
         // result cannot be shown, repeated on every advance.
         val quotedFromMarks = marksWithin(read).keys
-        val due = all
+        val due = all.values
             .filter { it.url !in quotedFromMarks }
             .mapNotNull { book -> read[book.url]?.takeIf { it.point >= MIN_READ }?.let { book to it } }
             // A walk needs somewhere in the book to stop. A whole-book
@@ -491,6 +516,12 @@ internal object QuoteScanner {
         val spine = publication.readingOrder.map { ResourceAddress.canonicalPath(it.url().toString()) }
         val stop = until?.let { locator ->
             val path = pathOf(locator)
+            // A spine that lists the same resource twice makes "which A"
+            // unanswerable here, and guessing one would stop the walk in
+            // the wrong place and still record the whole ceiling as
+            // walked. The fraction is then all there is, as it was
+            // before this clamp existed.
+            if (spine.count { it == path } != 1) return@let null
             val at = spine.indexOf(path).takeIf { it >= 0 } ?: return@let null
             at to locator.locations.progression?.takeIf { it.isFinite() }
         }?.takeIf { !whole }

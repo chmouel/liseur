@@ -393,6 +393,30 @@ class HomeQuotesTest {
         assertEquals(listOf(url), quoteDb.quotes().scans().map { it.bookUrl })
     }
 
+    @Test
+    fun `a book taken off the shelf is neither quoted nor walked`() = runTest {
+        db.bookDao().upsert(book().copy(hiddenAt = 1L))
+        db.readingProgressDao().upsert(progress(total = 0.3, locator = chapter(0.1)))
+        dao().replace(scan(workId = "work-one"), listOf(line()))
+
+        quotes.scanDue()
+
+        assertEquals(0.5, quoteDb.quotes().scans().single().scannedThrough, 0.0)
+        assertNull(quotes.quote.first())
+    }
+
+    @Test
+    fun `a cached line in the reader's own chapter is checked where both are measured`() = runTest {
+        // The ceiling is the whole-book fraction a peer wrote (0.9 is
+        // past everything locally), and the line sits later in the same
+        // chapter than the place this device recorded.
+        db.bookDao().upsert(book())
+        db.readingProgressDao().upsert(progress(total = 0.9, locator = chapter(0.3)))
+        dao().replace(scan(workId = "work-one"), listOf(line().copy(locatorJson = chapter(0.7))))
+
+        assertNull(quotes.quote.first())
+    }
+
     private fun dao(): QuoteDao = quoteDb.quotes()
 
     private fun book(url: String = this.url) = Book(
