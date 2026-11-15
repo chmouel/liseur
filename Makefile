@@ -29,7 +29,7 @@ DEV_PACKAGE := $(PACKAGE).dev
 DEV_ACTIVITY := $(DEV_PACKAGE)/$(PACKAGE).MainActivity
 DEV_APK := app/build/outputs/apk/$(FLAVOR)/dev/app-$(FLAVOR)-dev.apk
 
-.PHONY: help build build-all debug release bundle test test-fast lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-clear dev-uninstall dev-logcat dev-locale
+.PHONY: help build build-all debug release bundle test test-fast lint check verify-release-tools verify-fdroid-tags e2e ai-stub clean emulator stop shutdown install run run-bg reset locale screenshots screenshots-stale promo-video promo-clips icon feature-graphic store-status dev dev-phone dev-install dev-run dev-reset dev-clear dev-uninstall dev-logcat dev-locale
 
 help:
 	@printf '%s\n' \
@@ -62,6 +62,7 @@ help:
 		'make dev-logcat        Tail its logs' \
 		'make dev-locale        Show or set dev app locale with LOCALE=xx' \
 		'make screenshots       Capture the UI screenshots' \
+		'make screenshots-stale List the screenshots older than app/src/main (STRICT=1 to fail)' \
 		'make promo-clips       Capture emulator footage (SERIAL=emulator-...)' \
 		'make promo-video       Render the promo (PROMO_ARGS="--stills --silent" for review)' \
 		'make icon              Generate the store icon' \
@@ -278,6 +279,9 @@ dev-logcat: dev-phone
 
 screenshots:
 	./hack/screenshots
+
+screenshots-stale:
+	./hack/screenshots-stale $(if $(STRICT),--strict)
 
 icon:
 	./hack/icon

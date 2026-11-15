@@ -40,6 +40,11 @@
 #
 # Nothing here writes to a calibre-web server. Sign out of one before
 # running if your server holds books you would not publish a picture of.
+#
+# The two companion pictures want an AI service: if nothing answers on
+# the ai-stub's port this run starts one (`hack/ai-stub --realistic`, see
+# DEVELOPER.md), points the app's Companion at it through the app's own
+# settings, and puts the app's settings file back when it is done.
 
 set -euo pipefail
 
@@ -66,6 +71,22 @@ readonly FIRST_CHAPTER="I: Loomings"
 readonly DICTIONARY_SWITCH="Look up definitions online"
 readonly READING_SETTINGS="Reading & navigation"
 
+# The two companion pictures are taken in other books of the shelf, jumped
+# into at a percentage the reader's own "Go to" dialog takes: Huckleberry
+# Finn's last chapter for the relationship map, and the middle of Pride and
+# Prejudice for a character profile, by which point Bingley and Jane have
+# long been in each other's way.
+readonly MAP_BOOK="The Adventures of Huckleberry Finn"
+readonly MAP_AT=96
+readonly PROFILE_BOOK="Pride and Prejudice"
+readonly PROFILE_AT=40
+readonly PROFILE_NAME="Bingley"
+# The ai-stub answers the profile below, and only that one, in prose: see
+# --realistic in hack/ai-stub.
+readonly AI_STUB_HOST="10.0.2.2:8765"
+readonly AI_STUB_URL="http://$AI_STUB_HOST/v1"
+readonly AI_STUB="$(dirname "${BASH_SOURCE[0]}")/ai-stub"
+
 # Read aloud is captured with the device's own voices: they need no
 # server and no key, so every emulator has them. The service the device
 # was on before is put back at the end, like the dictionary switch.
@@ -82,6 +103,10 @@ empty_only=0
 want_dictionary=1
 serial=""
 shot_class=""
+# Set while the companion pictures are taken: where the app's settings
+# were copied to, and the pid of an ai-stub this run started.
+settings_before=""
+stub_pid=""
 while [[ $# -gt 0 ]]; do
     case $1 in
         --setup) setup=1 ;;
@@ -138,6 +163,7 @@ cleanup() {
     adb shell am broadcast -a com.android.systemui.demo -e command exit >/dev/null 2>&1 || true
     adb shell cmd uimode night no >/dev/null 2>&1 || true
     adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
+    [[ -z $stub_pid ]] || kill "$stub_pid" 2>/dev/null || true
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -695,6 +721,202 @@ seed_sessions() {
     note "recorded $count sittings"
 }
 
+# ------------------------------------------------------------ companion
+
+# The app's settings, kept whole while the companion pictures are taken.
+# Pointing Companion at a service is a decision about who reads the book,
+# like the dictionary switch, and the AI hint can only be dismissed once:
+# putting the file back is what makes a rerun start where this one did.
+save_app_settings() {
+    settings_before=""
+    adb exec-out "run-as $APP_ID cat files/datastore/app_settings.preferences_pb" \
+        >"$work/app_settings.pb" 2>/dev/null || true
+    if [[ -s $work/app_settings.pb ]]; then
+        settings_before=$work/app_settings.pb
+    fi
+}
+
+restore_app_settings() {
+    [[ -n $settings_before ]] || return 0
+    # DataStore holds the file it read at startup, so a running app would
+    # write over the restored one.
+    adb shell am force-stop "$APP_ID"
+    adb shell "run-as $APP_ID sh -c 'cat > files/datastore/app_settings.preferences_pb'" \
+        <"$settings_before" || die "could not put the app's settings back"
+    note "put the app's settings back"
+}
+
+stub_answers() {
+    python3 - <<'PY'
+import sys, urllib.request
+
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8765/v1/models", timeout=2) as reply:
+        sys.exit(0 if reply.status == 200 else 1)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+# The companion pictures are made of what a model answers, and a real one
+# would answer something else every run. The stub answers the profile
+# below the same way every time, in prose, citing the passages the app
+# sent it.
+start_ai_stub() {
+    if stub_answers; then
+        note "using the ai-stub already on 8765"
+        return 0
+    fi
+    "$AI_STUB" --realistic --quiet --log "$work/ai-stub.jsonl" \
+        >"$work/ai-stub.log" 2>&1 &
+    stub_pid=$!
+    local i
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+        stub_answers && return 0
+        sleep 1
+    done
+    die "the ai-stub did not come up on 127.0.0.1:8765; see $work/ai-stub.log"
+}
+
+# Where the reader's footer says how far in the book it is, as "x y".
+# The chip is a percentage while the chrome is up and only a label while it
+# is down, and it is the chrome-up one that opens the Go to dialog.
+percent_chip() {
+    dump_ui || return 1
+    python3 -c '
+import re, sys, xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+floor = int(sys.argv[2]) * 85 // 100
+for node in root.iter("node"):
+    label = (node.get("text") or node.get("content-desc") or "").strip()
+    box = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds") or "")
+    if not (box and re.fullmatch(r"\d{1,3} ?(?:%|percent read)", label)):
+        continue
+    x1, y1, x2, y2 = (int(g) for g in box.groups())
+    if y1 < floor:
+        continue
+    print((x1 + x2) // 2, (y1 + y2) // 2)
+    sys.exit(0)
+sys.exit(1)
+' "$work/ui.xml" "$height"
+}
+
+# Jump to a place in the book with the reader's own dialog, which the
+# footer's percentage chip opens. That dialog asks for a percentage in one
+# book and for a page in another, so the page is worked out from the range
+# the dialog itself states.
+#
+#   jump_to_percent <0-100>
+jump_to_percent() {
+    local percent=$1 total wanted at
+    reader_chrome_up
+    at=$(percent_chip) || die "no percentage in the reader's footer"
+    # shellcheck disable=SC2086
+    adb shell input tap $at
+    wait_for "Go to" 10 contains >/dev/null || die "the Go to dialog never opened"
+    if on_screen "Go to page" exact; then
+        total=$(python3 -c '
+import re, sys, xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+for node in root.iter("node"):
+    found = re.search(r"page from 1 to (\d+)", node.get("text") or "")
+    if found:
+        print(found.group(1))
+        sys.exit(0)
+sys.exit(1)
+' "$work/ui.xml") ||
+            die "the Go to dialog did not say how many pages the book has"
+        wanted=$((total * percent / 100))
+    else
+        wanted=$percent
+    fi
+    # The field keeps what it was showing, so the digits it holds go first.
+    if on_screen "Percentage read" exact; then
+        tap_on "Percentage read" exact
+    else
+        tap_on "Page shown in the footer" exact
+    fi
+    adb shell input keyevent KEYCODE_MOVE_END
+    for _ in 1 2 3 4; do adb shell input keyevent KEYCODE_DEL; done
+    adb shell input text "$wanted"
+    sleep 1
+    tap_on "Go" exact
+    sleep 4
+    note "jumped to $percent% of the book (entry $wanted)"
+}
+
+# The sheet the reader's overflow menu opens, with the on-device scan
+# run to its end: a picture of what the scan found is no picture at all
+# while chapters are still being read.
+open_companion() {
+    reader_chrome_up
+    tap_on "More" exact
+    tap_on "Companion" exact
+    wait_for "Search names" 60 exact >/dev/null || die "the Companion sheet never opened"
+    local waited=0
+    while ((waited < 240)); do
+        on_screen "Pause scan" exact || return 0
+        sleep 5
+        waited=$((waited + 5))
+    done
+    die "the on-device scan did not finish"
+}
+
+# Point Companion at the ai-stub, through the app's own screens: the
+# server first, then the service and the model the companion asks.
+# The top of the Settings form, which scroll_to cannot reach: it only
+# swipes one way, and a screen left scrolled down is a row above the fold.
+settings_top() {
+    local i
+    for i in 1 2 3 4 5 6; do
+        adb shell input swipe "$(x 0.5)" "$(y 0.35)" "$(x 0.5)" "$(y 0.8)" 300
+        sleep 1
+    done
+}
+
+point_companion_at_the_stub() {
+    open_library
+    open_settings
+    settings_top
+    scroll_to "External services and API keys" exact ||
+        die "no External services row in Settings"
+    tap_on "External services and API keys" exact
+    wait_for "Add server" 15 exact >/dev/null || die "the services screen never opened"
+    if ! on_screen "$AI_STUB_HOST" contains; then
+        tap_on "Add server" exact
+        tap_on "http://192.168.1.10:8880" exact
+        adb shell input text "$AI_STUB_URL"
+        sleep 1
+        # Back leaves the field, then the form, which saves the server.
+        back
+        sleep 2
+        on_screen "$AI_STUB_HOST" contains || die "the ai-stub's server was not saved"
+    fi
+    back
+    sleep 2
+    # That row sits below this one, and scroll_to only swipes one way.
+    settings_top
+    scroll_to "Reading companion" exact || die "no Reading companion row in Settings"
+    tap_on "Reading companion" exact
+    tap_on "Change the reading companion's service" exact
+    wait_for "$AI_STUB_HOST" 15 contains >/dev/null ||
+        die "the ai-stub's server is not among the companion's services"
+    tap_on "$AI_STUB_HOST" contains
+    sleep 2
+    tap_on "Choose a model" exact
+    adb shell input text "stub-chat"
+    sleep 1
+    # The list of models is a popup uiautomator cannot see, so the name is
+    # typed and taken with Enter.
+    adb shell input keyevent KEYCODE_ENTER
+    sleep 3
+    on_screen "stub-chat" exact || die "the companion did not take the stub's model"
+    note "the reading companion now asks the ai-stub"
+    open_library
+}
+
 # ------------------------------------------------------------- capture
 
 mkdir -p "$OUT_DIR" "$FASTLANE_DIR"
@@ -1145,6 +1367,54 @@ tap_on "Change the kind of server" exact
 wait_for "Custom" 15 >/dev/null || die "the server kind sheet never opened"
 shot 22-server-kind
 dismiss_sheet "Custom"
+
+step "Companion"
+save_app_settings
+
+# The map first, while no AI service is chosen: that is the state a
+# reader who has not set one up is in, and the card offering one is the
+# first thing the sheet says to them. "Don't show again" puts it away for
+# good, so the settings file is what puts it back for the next run.
+open_library
+open_first_book "$MAP_BOOK"
+jump_to_percent "$MAP_AT"
+open_companion
+tap_if_there "show again" contains || note "the AI hint was already dismissed"
+sleep 2
+tap_on "Connections" exact
+wait_for "Show map" 20 exact >/dev/null ||
+    die "no connection map to show; is there enough of the book scanned?"
+tap_on "Show map" exact
+wait_for "Hide map" 30 exact >/dev/null || die "the connection map never opened"
+sleep 2
+shot 26-codex-relationships
+
+# Then a profile, from the one book and one character the ai-stub answers
+# in prose. Without the stub there is nothing to photograph, so this is
+# where a machine with no way to run it has to say so rather than file a
+# picture of an error.
+step "A companion profile"
+start_ai_stub
+point_companion_at_the_stub
+
+open_first_book "$PROFILE_BOOK"
+jump_to_percent "$PROFILE_AT"
+open_companion
+# A sheet with a service chosen opens on Story; the names are behind the
+# other tab.
+tap_if_there "Names" exact || true
+tap_on "Search names" exact
+adb shell input text "$PROFILE_NAME"
+sleep 3
+tap_on "Person · Mentions" contains
+wait_for "Profile" 20 exact >/dev/null || die "the character page never opened"
+tap_on "Ask companion" exact
+wait_for "Who they are" 120 exact >/dev/null ||
+    die "no profile came back from the ai-stub"
+sleep 2
+shot 25-companion-profile
+
+restore_app_settings
 
 step "Dark"
 

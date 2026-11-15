@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#
+# List the screenshots that are older than the app's own code.
+#
+#   hack/screenshots-stale            # say what has fallen behind
+#   hack/screenshots-stale --strict   # fail when anything has
+#
+# A picture is only as good as the run that took it: after a change to
+# app/src/main, the ones captured before that change may be showing a
+# screen that no longer looks like that. This compares each picture's last
+# commit with the last commit that touched app/src/main and says which came
+# first. It changes nothing and needs no device.
+#
+# The phone set only. The tablet set is three pictures of a wide screen,
+# filed under docs/screenshots/tablet, and the same comparison applies.
+
+set -euo pipefail
+
+# Pictures no script takes: a stale date on one of these is a picture to
+# retake by hand, not a run to repeat. See the hand-captured list in
+# DEVELOPER.md.
+readonly -a HAND_CAPTURED=(15-upload-offer 22-widgets-light 23-widgets-dark)
+readonly SHOT_DIR="docs/screenshots"
+readonly APP_DIR="app/src/main"
+
+strict=0
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --strict) strict=1 ;;
+        -h | --help)
+            awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"
+            exit 0
+            ;;
+        *)
+            printf 'error: unknown argument %s\n' "$1" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+cd "$(git rev-parse --show-toplevel)"
+
+app_date=$(git log -1 --format=%cs -- "$APP_DIR")
+app_stamp=$(git log -1 --format=%ct -- "$APP_DIR")
+if [[ -z $app_stamp ]]; then
+    printf 'No commit touches %s: nothing to compare against.\n' "$APP_DIR"
+    exit 0
+fi
+
+printf '%s last changed on %s: "%s"\n\n' \
+    "$APP_DIR" "$app_date" "$(git log -1 --format=%s -- "$APP_DIR")"
+
+stale=0
+total=0
+rows=()
+while IFS= read -r file; do
+    total=$((total + 1))
+    stamp=$(git log -1 --format=%ct -- "$file")
+    name=$(basename "$file" .png)
+    ((stamp < app_stamp)) || continue
+    stale=$((stale + 1))
+    by="hack/screenshots"
+    for hand in "${HAND_CAPTURED[@]}"; do
+        [[ $name == "$hand" ]] && by="hand"
+    done
+    rows+=("$(printf '  %-32s %-12s %s' "$name.png" "$(git log -1 --format=%cs -- "$file")" "$by")")
+# Git's pathspec globs cross directories, so the tablet set is filtered
+# out by depth rather than by the pattern.
+done < <(git ls-files "$SHOT_DIR/*.png" | awk -F/ 'NF == 3' | sort)
+
+if ((stale == 0)); then
+    printf 'All %d pictures in %s are newer than %s.\n' "$total" "$SHOT_DIR" "$APP_DIR"
+    exit 0
+fi
+
+printf 'Older than %s (%d of %d in %s):\n' "$APP_DIR" "$stale" "$total" "$SHOT_DIR"
+printf '%s\n' "${rows[@]}"
+printf '\n'
+if ((strict)); then
+    printf 'Retake them, or say why they are still right: run hack/screenshots,\n'
+    printf 'or retake the ones marked "hand" by hand.\n'
+    exit 1
+fi
+printf 'Run hack/screenshots to retake the ones it takes; the rest by hand.\n'
+exit 0

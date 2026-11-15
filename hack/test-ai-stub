@@ -105,6 +105,33 @@ def main() -> int:
               and answer["connections"][0]["refs"] == ["S1"], answer)
     finally:
         long.stop()
+    realistic = Stub("--realistic")
+    try:
+        def asked(name: str) -> dict:
+            user = (
+                f"<name>{name}</name>\n"
+                '<book ref="S1" chapter="3">\nMr. Bingley was good-looking and gentlemanlike.\n</book>\n'
+                '<book ref="S2" chapter="18">\nBingley danced with Jane twice that evening.\n</book>'
+            )
+            code, reply = realistic.json("POST", "/v1/chat/completions", {"messages": [
+                {"role": "system", "content": "You describe one character, or one other term."},
+                {"role": "user", "content": user},
+            ]})
+            return code, json.loads(reply["choices"][0]["message"]["content"])
+
+        code, answer = asked("Bingley")
+        check("--realistic answers a character it has a fixture for in prose",
+              code == 200 and answer["answer"] == "profile"
+              and "Stub:" not in json.dumps(answer)
+              and answer["identity"][0]["refs"] == ["S1"], answer)
+        check("--realistic cites only refs the request showed, and only names its passages carry",
+              [r["name"] for r in answer["relationships"]] == ["Jane"]
+              and answer["relationships"][0]["refs"] == ["S2"], answer)
+        code, answer = asked("Bingley's sister")
+        check("--realistic leaves the canned answers to every other name",
+              answer["answer"] == "term" and answer["what"][0]["text"].startswith("Stub:"), answer)
+    finally:
+        realistic.stop()
     stub = Stub()
     try:
         code, models = stub.json("GET", "/v1/models")
