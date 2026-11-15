@@ -20,6 +20,8 @@ set -euo pipefail
 # retake by hand, not a run to repeat. See the hand-captured list in
 # DEVELOPER.md.
 readonly -a HAND_CAPTURED=(15-upload-offer 22-widgets-light 23-widgets-dark)
+# Pictures hack/promo-clips renders.
+readonly -a PROMO_CLIPS=(27-translation-original 27-translation 28-reading-sepia)
 readonly SHOT_DIR="docs/screenshots"
 readonly APP_DIR="app/src/main"
 
@@ -64,6 +66,9 @@ while IFS= read -r file; do
     for hand in "${HAND_CAPTURED[@]}"; do
         [[ $name == "$hand" ]] && by="hand"
     done
+    for clip in "${PROMO_CLIPS[@]}"; do
+        [[ $name == "$clip" ]] && by="hack/promo-clips"
+    done
     rows+=("$(printf '  %-32s %-12s %s' "$name.png" "$(git log -1 --format=%cs -- "$file")" "$by")")
 # Git's pathspec globs cross directories, so the tablet set is filtered
 # out by depth rather than by the pattern.
@@ -78,9 +83,9 @@ printf 'Older than %s (%d of %d in %s):\n' "$APP_DIR" "$stale" "$total" "$SHOT_D
 printf '%s\n' "${rows[@]}"
 printf '\n'
 if ((strict)); then
-    printf 'Retake them, or say why they are still right: run hack/screenshots,\n'
-    printf 'or retake the ones marked "hand" by hand.\n'
+    printf 'Retake them, or say why they are still right: run hack/screenshots or\n'
+    printf 'hack/promo-clips, or retake the ones marked "hand" by hand.\n'
     exit 1
 fi
-printf 'Run hack/screenshots to retake the ones it takes; the rest by hand.\n'
+printf 'Run the tool in the last column for each; the "hand" ones are retaken by hand.\n'
 exit 0

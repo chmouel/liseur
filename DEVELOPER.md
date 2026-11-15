@@ -811,7 +811,7 @@ make feature-graphic        # fastlane featureGraphic.png per locale, from promo
   a place where it has something to draw. `26-codex-relationships` is taken
   first, with no AI service chosen, so its card offering one is dismissed
   there; `25-companion-profile` needs a service, so the run starts
-  `hack/ai-stub --realistic` when nothing answers on 8765, points Companion
+  `hack/ai-stub --realistic` on port 8766 (it stops if something already answers there), points Companion
   at it through the app's own screens, and puts the app's settings file back
   at the end of the step.
 - `hack/screenshots-stale` (`make screenshots-stale`) lists the pictures
