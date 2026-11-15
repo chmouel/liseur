@@ -909,10 +909,15 @@ point_companion_at_the_stub() {
         tap_on "http://192.168.1.10:8880" exact
         adb shell input text "$AI_STUB_URL"
         sleep 1
-        # Back leaves the field, then the form, which saves the server.
+        # Back leaves the field, then the form, which saves the server. The
+        # address is still on screen while the form is, so the list has to
+        # be what is showing before it counts.
+        back
+        sleep 1
         back
         sleep 2
-        on_screen "$AI_STUB_HOST" contains || die "the ai-stub's server was not saved"
+        wait_for "Add server" 10 exact >/dev/null && on_screen "$AI_STUB_HOST" contains ||
+            die "the ai-stub's server was not saved"
     fi
     back
     sleep 2
@@ -1021,8 +1026,12 @@ step "Light"
 open_library
 open_settings
 # The shelves view is the one the tour is written for. A wiped app starts on
-# Classic, so pick Shelves under Library view before anything is shot.
-tap_on "Shelves" exact
+# Classic, so pick Shelves in the Library style sheet before anything is shot.
+scroll_to "Library style" exact || die "no Library style row in Settings"
+tap_on "Library style" exact
+tap_on "Shelves"
+sleep 1
+back
 sleep 1
 set_switch "Colours from your wallpaper" off
 
@@ -1378,6 +1387,8 @@ shot 08-settings
 # information button described as "Book servers", and a prefix match
 # reaches that first: the tap opens the explainer over the settings form
 # and the picture is of a dialog rather than of a server.
+# The new Appearance section pushes it below the fold.
+scroll_to "Book server" exact || die "no Book server row in Settings"
 tap_on "Book server" exact
 sleep 3
 shot 09-server
