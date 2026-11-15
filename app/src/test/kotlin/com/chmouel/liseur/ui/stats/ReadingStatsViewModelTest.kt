@@ -799,6 +799,31 @@ class ReadingStatsViewModelTest {
         assertEquals(50 * 60_000L, merged.totalMs)
     }
 
+    @Test
+    fun `moved book uses current library status even when old url has more reading`() {
+        val local = ReadingStats(
+            totalMs = 50_000,
+            booksRead = 2,
+            booksFinished = 1,
+            books = listOf(
+                BookReadingStats("old", "Old", null, 40_000, lastReadAt = 100, progression = null, finished = false),
+                BookReadingStats("new", "Book", null, 10_000, lastReadAt = 200, progression = 1.0, finished = true),
+            ),
+            recent = emptyList(),
+        )
+        val work = WorkInsights(sessions = 2, activeMinutes = 1.0, etaSeconds = null, lastReadAt = 200, workId = "w")
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = local,
+            knownBooks = mapOf("new" to StatsBook("new", "Book", null, 1.0, finished = true)),
+            serverRecent = null,
+            serverBooks = WorkTotals(mapOf("old" to work, "new" to work), emptyList()),
+        )
+
+        assertEquals("new", merged.books.single().bookUrl)
+        assertEquals(1.0, merged.books.single().progression!!, 0.0)
+        assertEquals(1, merged.booksFinished)
+    }
+
     /**
      * A reinstalled phone's history starts at the reinstall, so a book
      * begun before it would claim to have been started that day. The

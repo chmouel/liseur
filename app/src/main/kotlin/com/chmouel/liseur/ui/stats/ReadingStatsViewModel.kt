@@ -737,13 +737,14 @@ class ReadingStatsViewModel(
                 val urls = entries.map { it.key }
                 val insight = entries.first().value
                 val rows = urls.mapNotNull { mergedBooks[it] }
-                // The row the reader has put the most time into is
-                // the one the merged figure belongs on; the rest are
-                // the same book under a URL it used to have.
-                val canonical = rows.maxWithOrNull(
+                // Prefer a book still in the library over an old URL that
+                // only has sessions, so its current status and file survive.
+                val libraryUrls = urls.filter { knownBooks.containsKey(it) }
+                val candidates = libraryUrls.ifEmpty { urls }
+                val canonical = rows.filter { it.bookUrl in candidates }.maxWithOrNull(
                     compareBy<BookReadingStats> { it.totalMs }
                         .thenByDescending { it.bookUrl.orEmpty() },
-                )?.bookUrl ?: urls.min()
+                )?.bookUrl ?: candidates.min()
                 // A row with no library entry keeps what its sittings
                 // already said about it, which is all this device knows.
                 val metadata = knownBooks[canonical]
