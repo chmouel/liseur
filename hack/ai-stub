@@ -128,20 +128,25 @@ def realistic_profile(text: str, name: str) -> dict | None:
     def folded(ref: str) -> str:
         return passage(text, ref).lower()
 
+    def mentions(ref: str, word: str) -> bool:
+        return re.search(rf"\b{re.escape(word.lower())}\b", folded(ref)) is not None
+
     def cite(names: tuple[str, ...]) -> list[str]:
         """The first ref whose passage names every one of [names], else the first ref at all."""
-        return next(([ref] for ref in refs if all(n.lower() in folded(ref) for n in names)), refs[:1])
+        return next(([ref] for ref in refs if all(mentions(ref, n) for n in names)), refs[:1])
+
+    def relationship(other: str, claim: str) -> list[dict]:
+        """The claim, cited to a passage naming [other] whole, or nothing when none does."""
+        ref = next((r for r in refs if mentions(r, name) and mentions(r, other)),
+                   next((r for r in refs if mentions(r, other)), None))
+        return [{"name": other, "text": claim, "refs": [ref]}] if ref else []
 
     return {
         "answer": "profile",
         "aliases": [],
         "identity": [{"text": claim, "refs": cite((name,))} for claim in fixture["identity"]],
         "backstory": [{"text": claim, "refs": cite((name,))} for claim in fixture["backstory"]],
-        "relationships": [
-            {"name": other, "text": claim, "refs": cite((name, other))}
-            for other, claim in fixture["relationships"]
-            if any(other.lower() in folded(ref) for ref in refs)
-        ],
+        "relationships": [entry for other, claim in fixture["relationships"] for entry in relationship(other, claim)],
     }
 
 

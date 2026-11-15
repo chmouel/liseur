@@ -83,7 +83,8 @@ readonly PROFILE_AT=40
 readonly PROFILE_NAME="Bingley"
 # The ai-stub answers the profile below, and only that one, in prose: see
 # --realistic in hack/ai-stub.
-readonly AI_STUB_HOST="10.0.2.2:8765"
+readonly AI_STUB_PORT=8766
+readonly AI_STUB_HOST="10.0.2.2:$AI_STUB_PORT"
 readonly AI_STUB_URL="http://$AI_STUB_HOST/v1"
 readonly AI_STUB="$(dirname "${BASH_SOURCE[0]}")/ai-stub"
 
@@ -164,6 +165,12 @@ cleanup() {
     adb shell cmd uimode night no >/dev/null 2>&1 || true
     adb shell rm -f /sdcard/liseur-ui.xml >/dev/null 2>&1 || true
     [[ -z $stub_pid ]] || kill "$stub_pid" 2>/dev/null || true
+    # A run cut short between save_app_settings and its restore would leave
+    # the app pointed at a stub that is gone.
+    if [[ -n $settings_before ]] && ! restore_app_settings; then
+        echo "could not put the app's settings back; the copy is $settings_before" >&2
+        return
+    fi
     rm -rf "$work"
 }
 trap cleanup EXIT
@@ -742,16 +749,17 @@ restore_app_settings() {
     # write over the restored one.
     adb shell am force-stop "$APP_ID"
     adb shell "run-as $APP_ID sh -c 'cat > files/datastore/app_settings.preferences_pb'" \
-        <"$settings_before" || die "could not put the app's settings back"
+        <"$settings_before" || return 1
+    settings_before=""
     note "put the app's settings back"
 }
 
 stub_answers() {
-    python3 - <<'PY'
+    python3 - "$AI_STUB_PORT" <<'PY'
 import sys, urllib.request
 
 try:
-    with urllib.request.urlopen("http://127.0.0.1:8765/v1/models", timeout=2) as reply:
+    with urllib.request.urlopen(f"http://127.0.0.1:{sys.argv[1]}/v1/models", timeout=2) as reply:
         sys.exit(0 if reply.status == 200 else 1)
 except Exception:
     sys.exit(1)
@@ -761,13 +769,12 @@ PY
 # The companion pictures are made of what a model answers, and a real one
 # would answer something else every run. The stub answers the profile
 # below the same way every time, in prose, citing the passages the app
-# sent it.
+# sent it. It gets a port of its own: whatever already answers on the
+# default one may not be running --realistic, and a reply to /v1/models
+# does not say.
 start_ai_stub() {
-    if stub_answers; then
-        note "using the ai-stub already on 8765"
-        return 0
-    fi
-    "$AI_STUB" --realistic --quiet --log "$work/ai-stub.jsonl" \
+    ! stub_answers || die "something already answers on 127.0.0.1:$AI_STUB_PORT; stop it, this run starts its own ai-stub there"
+    "$AI_STUB" --realistic --quiet --port "$AI_STUB_PORT" --log "$work/ai-stub.jsonl" \
         >"$work/ai-stub.log" 2>&1 &
     stub_pid=$!
     local i
@@ -775,7 +782,7 @@ start_ai_stub() {
         stub_answers && return 0
         sleep 1
     done
-    die "the ai-stub did not come up on 127.0.0.1:8765; see $work/ai-stub.log"
+    die "the ai-stub did not come up on 127.0.0.1:$AI_STUB_PORT; see $work/ai-stub.log"
 }
 
 # Where the reader's footer says how far in the book it is, as "x y".
@@ -854,10 +861,23 @@ open_companion() {
     reader_chrome_up
     tap_on "More" exact
     tap_on "Companion" exact
+    sleep 2
+    # With a service chosen the sheet opens on Story, which has no name
+    # search; the names are behind the other tab.
+    tap_if_there "Names" exact || true
     wait_for "Search names" 60 exact >/dev/null || die "the Companion sheet never opened"
-    local waited=0
+    # A finished scan shows no progress row at all. A paused or failed one
+    # shows a button to pick it up again, which is not a finished scan.
+    local waited=0 restarts=0
     while ((waited < 240)); do
-        on_screen "Pause scan" exact || return 0
+        if on_screen "Pause scan" exact; then
+            :
+        elif on_screen "Resume scan" exact || on_screen "Retry" exact; then
+            ((restarts++ < 3)) || die "the on-device scan keeps stopping"
+            tap_if_there "Resume scan" exact || tap_if_there "Retry" exact || true
+        else
+            return 0
+        fi
         sleep 5
         waited=$((waited + 5))
     done
@@ -900,7 +920,9 @@ point_companion_at_the_stub() {
     settings_top
     scroll_to "Reading companion" exact || die "no Reading companion row in Settings"
     tap_on "Reading companion" exact
-    tap_on "Change the reading companion's service" exact
+    # The label depends on how many kinds of service this flavor offers.
+    tap_if_there "Change the reading companion's service" exact ||
+        tap_on "Change the reading companion's server" exact
     wait_for "$AI_STUB_HOST" 15 contains >/dev/null ||
         die "the ai-stub's server is not among the companion's services"
     tap_on "$AI_STUB_HOST" contains
@@ -1400,9 +1422,6 @@ point_companion_at_the_stub
 open_first_book "$PROFILE_BOOK"
 jump_to_percent "$PROFILE_AT"
 open_companion
-# A sheet with a service chosen opens on Story; the names are behind the
-# other tab.
-tap_if_there "Names" exact || true
 tap_on "Search names" exact
 adb shell input text "$PROFILE_NAME"
 sleep 3
@@ -1414,7 +1433,7 @@ wait_for "Who they are" 120 exact >/dev/null ||
 sleep 2
 shot 25-companion-profile
 
-restore_app_settings
+restore_app_settings || die "could not put the app's settings back"
 
 step "Dark"
 
