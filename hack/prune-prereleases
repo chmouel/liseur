@@ -5,7 +5,8 @@
 # Every legacy vX.Y.Z-test.N release is removed. For vX.Y.Z-rc.N releases,
 # only the highest numeric iteration for each X.Y.Z base is retained. Of
 # the vX.Y.Z-nightly.YYYYMMDD[.N] releases only the newest build is kept,
-# whatever its base: the newest date, and the highest N within that date.
+# whatever its base: the newest date, then the highest version, then the
+# highest N, because the counter starts again for each version.
 
 set -euo pipefail
 
@@ -80,7 +81,8 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
             base: $parsed.base,
             series: $parsed.series,
             iteration: ($parsed.iteration | tonumber),
-            build: (($parsed.build // "1") | tonumber)
+            build: (($parsed.build // "1") | tonumber),
+            version: ($parsed.base | split(".") | map(tonumber))
           }
       ] as $prereleases
     | (
@@ -98,7 +100,7 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
         [
           $prereleases
           | map(select(.series == "nightly"))
-          | sort_by([.iteration, .build])
+          | sort_by([.iteration, .version, .build])
           | .[0:-1][]
           | .tag
         ]

@@ -46,6 +46,7 @@ cat > "$fixture" <<'EOF'
   {"tag_name":"v0.15.1-nightly.20261110.2","prerelease":true},
   {"tag_name":"v0.15.1-nightly.20261110.10","prerelease":true},
   {"tag_name":"v0.15.1-nightly.20261109.7","prerelease":true},
+  {"tag_name":"v0.15.2-nightly.20261110","prerelease":true},
   {"tag_name":"v0.15.0-rc.4.2","prerelease":true},
   {"tag_name":"not-a-release","prerelease":true}
 ]]
@@ -72,7 +73,8 @@ expected=$(printf '%s\n' \
     v0.16.0-nightly.20261109 \
     v0.15.1-nightly.20261109.7 \
     v0.15.1-nightly.20261110 \
-    v0.15.1-nightly.20261110.2 | sort)
+    v0.15.1-nightly.20261110.2 \
+    v0.15.1-nightly.20261110.10 | sort)
 [[ "$actual" == "$expected" ]] || {
     printf 'unexpected releases deleted:\n%s\n' "$actual" >&2
     exit 1
@@ -82,9 +84,11 @@ expected=$(printf '%s\n' \
 ! grep -q 'release delete v0.15.0 ' "$calls"
 ! grep -q 'release delete v0.15.0-rc.10 ' "$calls"
 ! grep -q 'release delete v0.14.0-rc.2 ' "$calls"
-# The newest build of the newest day survives, and so does a "numbered rc",
-# which is not a series this script understands.
-! grep -q 'release delete v0.15.1-nightly.20261110.10 ' "$calls"
+# The counter starts again for each version, so on one day the newer
+# version wins even though its counter is lower: v0.15.2 (no counter)
+# outranks v0.15.1 build .10, which is deleted. A "numbered rc" is not a
+# series this script understands and is left alone.
+! grep -q 'release delete v0.15.2-nightly.20261110 ' "$calls"
 ! grep -q 'release delete v0.15.0-rc.4.2 ' "$calls"
 
 : > "$calls"
