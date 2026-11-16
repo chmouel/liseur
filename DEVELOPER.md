@@ -510,9 +510,14 @@ gh workflow run nightly.yml -f force=true
   workflow token starts no run of its own). It runs no Gradle checks;
   the nightly workflow's checks and the release build cover that.
 - Tags are `vX.Y.Z-nightly.YYYYMMDD` (UTC date), where X.Y.Z is the
-  next patch or a newer version that already has RCs. One per day; a
-  second run that day fails on an existing published tag. An unpublished
+  next patch or a newer version that already has RCs. A further nightly
+  of the same version on the same UTC day adds a counter:
+  `vX.Y.Z-nightly.YYYYMMDD.2`, then `.3`. Nothing re-uses a name, and a
+  forced run after a change simply takes the next one. An unpublished
   nightly is retried when its shipping files match the checked source.
+  `release.yml` and `hack/prune-prereleases` read this exact shape: a
+  tag that does not match is refused, never published as a final
+  release.
 - Like an RC, it takes the next `versionCode` from the highest across
   `main` and every tag, signs with the release key, and lands nothing on
   `main`. Each nightly therefore uses up a `versionCode`, and the next RC

@@ -72,7 +72,9 @@ jobs:
           # RCs and nightlies are built and signed like final releases, but
           # skip F-Droid. The legacy test spelling remains recognizable so
           # an old tag cannot accidentally be treated as final.
-          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|test|nightly)\.[0-9]+$ ]]; then
+          # A nightly is dated, and a later one the same day adds .2, .3...
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(rc|test)\.[0-9]+$ ||
+                "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(nightly)\.[0-9]{8}(\.[0-9]+)?$ ]]; then
             printf 'prerelease=true\n' >> "$GITHUB_OUTPUT"
             printf 'prerelease_kind=%s\n' "${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
           elif [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then

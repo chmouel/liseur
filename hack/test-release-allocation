@@ -61,4 +61,24 @@ if (export GH_TEST_FAIL=true; create_nightly_release false) >/dev/null 2>&1; the
 fi
 export GH_TEST_RELEASES=v1.0.1-nightly.20260101
 [[ -z $(create_nightly_release false) ]]
+# A second nightly the same UTC day needs its own name. The date is pinned so
+# the test does not depend on when it runs.
+cat > "$tmp/bin/date" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-u +%Y%m%d" ]]; then printf '20260101\n'; else exec /bin/date "$@"; fi
+EOF
+chmod +x "$tmp/bin/date"
+cd "$tmp/one"
+# v1.0.1-nightly.20260101 already exists from above.
+[[ $(next_nightly_name 1.0.1) == 1.0.1-nightly.20260101.2 ]]
+git tag v1.0.1-nightly.20260101.2
+[[ $(next_nightly_name 1.0.1) == 1.0.1-nightly.20260101.3 ]]
+# A different target version on the same day starts again at the date alone.
+[[ $(next_nightly_name 1.0.2) == 1.0.2-nightly.20260101 ]]
+# A new day starts again too.
+cat > "$tmp/bin/date" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "-u +%Y%m%d" ]]; then printf '20260102\n'; else exec /bin/date "$@"; fi
+EOF
+[[ $(next_nightly_name 1.0.1) == 1.0.1-nightly.20260102 ]]
 printf 'Release allocation and nightly retry checks passed.\n'

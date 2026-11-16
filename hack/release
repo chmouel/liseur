@@ -99,7 +99,9 @@ and the release stops if it would discover this non-final tag.
 gradle/ or the Gradle build files changed since the last nightly (or the
 last final release, whichever is newer), it commits a version bump in a
 detached worktree, tags it vX.Y.Z-nightly.YYYYMMDD (UTC) and pushes the
-tag, then prints the tag on stdout. With no change it prints nothing.
+tag, then prints the tag on stdout. A second nightly on the same UTC day
+and version is vX.Y.Z-nightly.YYYYMMDD.2, then .3 and so on. With no
+change it prints nothing.
 X.Y.Z is the next patch, or a newer version that already has release
 candidates. It takes a versionCode like an RC does, asks nothing, runs no
 local checks (the nightly workflow and the release workflow do) and
@@ -847,6 +849,20 @@ nightly_target_version() {
     printf '%s' "$target"
 }
 
+# The name a nightly of this version gets today (UTC): the first is
+# X.Y.Z-nightly.YYYYMMDD and a later one the same day adds .2, .3 and so
+# on, so a second build never needs a tag that is already taken. Tags are
+# never deleted, so counting up past every existing one is safe.
+next_nightly_name() {
+    local target=$1 stamp version n=1
+    stamp=$(date -u +%Y%m%d)
+    version="$target-nightly.$stamp"
+    while git rev-parse -q --verify "refs/tags/v$version" >/dev/null; do
+        n=$((n + 1))
+        version="$target-nightly.$stamp.$n"
+    done
+    printf '%s' "$version"
+}
 # Everything here goes to stderr except the tag, so the workflow can read
 # what was cut from stdout.
 create_nightly_release() {
@@ -879,7 +895,7 @@ create_nightly_release() {
     fi
 
     target=$(nightly_target_version)
-    version="$target-nightly.$(date -u +%Y%m%d)"
+    version=$(next_nightly_name "$target")
     tag="v$version"
     ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null ||
         die "tag $tag already exists"
@@ -1550,7 +1566,7 @@ if [[ "$fdroid_only" == true ]]; then
     [[ "$tag_version" == "$version" && -n "$tag_version_code" ]] ||
         die "$tag does not contain app version $version"
 
-    "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101"
+    "./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101" "$tag-nightly.20260101.2"
     trap fdroid_resume_hint EXIT
     update_fdroid_submission "$version" "$tag_version_code" "$commit_sha"
     exit
@@ -1580,7 +1596,7 @@ fi
 
 # F-Droid scans public tags independently of the submission step. Check
 # both sides of the policy before changing secrets or pushing a release.
-"./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101"
+"./$FDROID_TAG_POLICY_SCRIPT" "$tag" "$tag-rc.1" "$tag-test.1" "$tag-nightly.20260101" "$tag-nightly.20260101.2"
 
 sync_release_secrets
 ensure_local_release_signing
