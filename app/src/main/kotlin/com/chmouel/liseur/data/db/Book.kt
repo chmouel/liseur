@@ -2,12 +2,17 @@ package com.chmouel.liseur.data.db
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.NarrativeCoverage
+import com.chmouel.liseur.domain.isNextUp
+import com.chmouel.liseur.domain.readingStatusFor
 import kotlinx.coroutines.flow.Flow
 
 /** Where a book's file is, from the library's point of view. */
@@ -263,6 +268,13 @@ data class BookWork(
     @ColumnInfo(name = "work_id") val workId: String?,
 )
 
+data class ContinuationBookCandidate(
+    @Embedded val book: Book,
+    @ColumnInfo(name = "candidate_progression") val progression: Double?,
+    @ColumnInfo(name = "candidate_coverage") val coverage: String?,
+    @ColumnInfo(name = "candidate_override") val override: Int,
+)
+
 @Dao
 interface BookDao {
     /**
@@ -297,13 +309,14 @@ interface BookDao {
 
     /** A placeholder progress row's timestamp records its creation, not reading, so it is not ranked. */
     @Query("""
-        SELECT books.* FROM books
+        SELECT books.*, reading_progress.total_progression AS candidate_progression,
+               reading_progress.coverage AS candidate_coverage,
+               COALESCE(reading_progress.finished_override, 0) AS candidate_override
+        FROM books
         LEFT JOIN reading_progress ON reading_progress.book_url = books.url
         WHERE books.archived_at IS NULL AND books.hidden_at IS NULL
           AND books.finished_at IS NULL
           AND (books.local_uri IS NOT NULL OR books.download_state = 'DOWNLOADED')
-          AND (reading_progress.total_progression IS NULL
-               OR reading_progress.total_progression < :finishedProgression)
           AND (books.last_opened_at IS NOT NULL
                OR reading_progress.total_progression IS NOT NULL
                OR reading_progress.locator_json != '{}')
@@ -314,9 +327,16 @@ interface BookDao {
                  THEN COALESCE(reading_progress.read_at, reading_progress.updated_at, 0)
                  ELSE 0 END
         ) DESC, books.url
-        LIMIT 1
     """)
-    suspend fun continuationBook(finishedProgression: Double): Book?
+    suspend fun continuationCandidates(): List<ContinuationBookCandidate>
+
+    suspend fun continuationBook(): Book? = continuationCandidates().firstOrNull { candidate ->
+        readingStatusFor(
+            candidate.progression,
+            FinishedOverride.fromStored(candidate.override),
+            NarrativeCoverage.fromWire(candidate.coverage) == NarrativeCoverage.PARTIAL,
+        ).isNextUp()
+    }?.book
 
     @Query("SELECT * FROM books WHERE url = :url")
     suspend fun getByUrl(url: String): Book?

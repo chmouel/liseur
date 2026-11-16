@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.ExactPositionDecision
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.sync.PositionUpdate
 import java.net.InetAddress
@@ -312,6 +313,50 @@ class BookOrbitStatusSyncTest {
         assertEquals("reading", agreement.agreedRemoteStatus)
         assertEquals(local.statusRevision, agreement.agreedLocalStatusRevision)
         assertNull(agreement.outgoingBytes)
+    }
+
+    @Test
+    fun `automatic withdraws richer choices on BookOrbit`() = runBlocking {
+        val progress = database.readingProgressDao()
+        val finished = FinishedState(database.bookDao(), progress)
+        var revision = 10L
+        for (remote in listOf("want_to_read", "on_hold", "abandoned", "reading")) {
+            for ((position, expected) in listOf(0.0 to "unread", 0.5 to "reading", 0.99 to "read")) {
+                if (remote == expected) continue
+                revision += 10
+                progress.upsert(ReadingProgress(bookUrl, "{\"href\":\"chapter.xhtml\"}", position,
+                    updatedAt = 12, status = "Reading", finishedOverride = FinishedOverride.PAUSED.ordinal,
+                    statusRevision = revision))
+                finished.setReadingChoice(bookUrl, ReadingStatusChoice.AUTOMATIC)
+                web.enqueue(MockResponse(body = detail(remote, "manual")))
+                web.enqueue(MockResponse(code = 204))
+                web.enqueue(MockResponse(body = detail(expected, "manual")))
+
+                assertEquals(SyncOutcome.Success, runSync())
+                assertEquals("GET", web.takeRequest().method)
+                val patch = web.takeRequest()
+                assertEquals("PATCH", patch.method)
+                assertEquals(expected, JSONObject(patch.body!!.utf8()).getString("status"))
+                assertEquals("GET", web.takeRequest().method)
+            }
+        }
+    }
+
+    @Test
+    fun `automatic withdrawal uses partial coverage when updating BookOrbit`() = runBlocking {
+        val progress = database.readingProgressDao()
+        progress.upsert(ReadingProgress(bookUrl, "{\"href\":\"chapter.xhtml\"}", 0.99,
+            updatedAt = 12, coverage = "partial", finishedOverride = FinishedOverride.PAUSED.ordinal,
+            statusRevision = 1))
+        FinishedState(database.bookDao(), progress).setReadingChoice(bookUrl, ReadingStatusChoice.AUTOMATIC)
+        web.enqueue(MockResponse(body = detail("on_hold", "manual")))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = detail("reading", "manual")))
+
+        assertEquals(SyncOutcome.Success, runSync())
+        assertEquals("GET", web.takeRequest().method)
+        assertEquals("reading", JSONObject(web.takeRequest().body!!.utf8()).getString("status"))
+        assertEquals("GET", web.takeRequest().method)
     }
 
     @Test

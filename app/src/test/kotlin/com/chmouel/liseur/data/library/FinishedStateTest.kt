@@ -87,6 +87,23 @@ class FinishedStateTest {
     }
 
     @Test
+    fun `choosing automatic records a withdrawal even when already automatic`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val progress = db.readingProgressDao()
+        progress.upsert(ReadingProgress(BOOK, "{}", null, updatedAt = 20))
+        db.syncPeerStateDao().persistPendingStatus(BOOK, "peer", "future_choice", 1, 1)
+
+        state().setReadingChoice(BOOK, ReadingStatusChoice.AUTOMATIC)
+
+        val row = progress.get(BOOK)!!
+        assertEquals(FinishedOverride.NONE, row.override)
+        assertEquals(1L, row.statusRevision)
+        assertEquals("future_choice", db.syncPeerStateDao().get(BOOK, "peer")!!.pendingStatusChoice)
+    }
+
+    @Test
     fun `changing a choice leaves the place and unread reset debt intact`() = runTest {
         db.bookDao().upsert(
             Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),

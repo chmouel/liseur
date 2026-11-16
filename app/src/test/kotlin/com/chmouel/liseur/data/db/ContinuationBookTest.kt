@@ -2,7 +2,7 @@ package com.chmouel.liseur.data.db
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
-import com.chmouel.liseur.domain.FINISHED_PROGRESSION
+import com.chmouel.liseur.domain.FinishedOverride
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -33,7 +33,7 @@ class ContinuationBookTest {
         addedAt = 0, lastOpenedAt = opened,
     )
 
-    private suspend fun selected() = db.bookDao().continuationBook(FINISHED_PROGRESSION)?.url
+    private suspend fun selected() = db.bookDao().continuationBook()?.url
 
     @Test
     fun `skips newer ineligible books without changing ordinary most recent`() = runTest {
@@ -61,6 +61,24 @@ class ContinuationBookTest {
         db.readingProgressDao().recordLocal("recent", """{"href":"chapter"}""", 0.969, null, null, 2)
         assertEquals("recent", selected())
         db.readingProgressDao().recordLocal("recent", """{"href":"chapter"}""", null, null, null, 3)
+        assertEquals("recent", selected())
+    }
+
+    @Test
+    fun `explicit choices and partial coverage decide which book can continue`() = runTest {
+        db.bookDao().upsert(book("recent"))
+        db.bookDao().upsert(book("older", 50))
+        val progress = db.readingProgressDao()
+        for (choice in listOf(FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH)) {
+            progress.upsert(ReadingProgress("recent", "{\"href\":\"chapter\"}", 0.4, updatedAt = 1,
+                finishedOverride = choice.ordinal))
+            assertEquals("older", selected())
+        }
+        progress.upsert(ReadingProgress("recent", "{\"href\":\"chapter\"}", 0.99, updatedAt = 1,
+            finishedOverride = FinishedOverride.READING.ordinal))
+        assertEquals("recent", selected())
+        progress.upsert(ReadingProgress("recent", "{\"href\":\"chapter\"}", 0.99, updatedAt = 1,
+            coverage = "partial"))
         assertEquals("recent", selected())
     }
 

@@ -10,7 +10,6 @@ import com.chmouel.liseur.AppContainer
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.library.openableUri
-import com.chmouel.liseur.domain.FINISHED_PROGRESSION
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,7 +85,7 @@ class LaunchViewModel(
                 savedState = extras.createSavedStateHandle(),
                 requests = LaunchRequests.shared,
                 flushReader = container.readingPositions::flushLastReader,
-                continuation = { container.database.bookDao().continuationBook(FINISHED_PROGRESSION) },
+                continuation = { container.database.bookDao().continuationBook() },
                 reportError = { android.util.Log.e("launcher-shortcut", "Could not open shortcut", it) },
             ) as T
         }

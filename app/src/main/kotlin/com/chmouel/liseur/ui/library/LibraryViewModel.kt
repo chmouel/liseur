@@ -1509,7 +1509,7 @@ class LibraryViewModel(
 
     fun setSeriesReadingChoice(shelf: SeriesShelf, choice: ReadingStatusChoice) {
         viewModelScope.launch {
-            shelf.volumes.filter { it.override != choice.override }.forEach {
+            shelf.volumes.forEach {
                 finishedState.setReadingChoice(it.book.url, choice)
             }
             positionSync.request(SyncScope.Full, System.currentTimeMillis())
