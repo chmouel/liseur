@@ -1499,9 +1499,7 @@ step "Dark"
 adb shell cmd uimode night yes >/dev/null
 sleep 3
 
-open_library
-shelf_to_top
-shot 10-library-dark
+take_hero
 
 open_first_book "Moby Dick"
 choose_reading_theme "Dark"
