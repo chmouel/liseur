@@ -384,6 +384,22 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `choosing automatic sends a withdrawal despite an unknown pending choice`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.upsert(com.chmouel.liseur.data.db.ReadingProgress(LOCAL, LOCATOR, 0.4, updatedAt = NOW))
+        db.syncPeerStateDao().persistPendingStatus(LOCAL, peer(), "future_choice", NOW, 9)
+        FinishedState(db.bookDao(), progress).setReadingChoice(LOCAL, com.chmouel.liseur.domain.ReadingStatusChoice.AUTOMATIC)
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertEquals("automatic", sent.single { it.optString("kind") == "status" }.getString("reading_status"))
+    }
+
+    @Test
     fun `a stored status is adopted when this version understands it`() = runTest {
         connect()
         db.bookDao().upsert(local())
