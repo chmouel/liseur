@@ -467,6 +467,7 @@ class AppContainer(
             // Written in the position queue, so a page turn accepted after the
             // tap is ordered after the choice instead of under it.
             inWriteOrder = { action -> readingPositions.inOrder(action) },
+            hasPendingStatus = { database.syncPeerStateDao().hasPendingStatusForBook(it) },
         )
 
     val readerPreferences = ReaderPreferencesRepository(context.applicationContext)

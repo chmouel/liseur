@@ -200,6 +200,14 @@ class LibraryFiltersTest {
     }
 
     @Test
+    fun `richer choices select the existing unread or started shelf`() {
+        assertEquals(LibraryFilterOption.UNREAD, shelfStateFor(book(), 0.99, FinishedOverride.WANT_TO_READ))
+        for (choice in listOf(FinishedOverride.READING, FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH)) {
+            assertEquals(LibraryFilterOption.IN_PROGRESS, shelfStateFor(book(), 0.0, choice))
+        }
+    }
+
+    @Test
     fun `shelfStateFor classifies finished, unread overrides and the started threshold`() {
         assertEquals(
             LibraryFilterOption.UNREAD,

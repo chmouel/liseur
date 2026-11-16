@@ -421,6 +421,9 @@ internal fun Double.validMinutes(): Boolean =
 internal fun serverReadingStatus(value: String?): ReadingStatus? = when (value) {
     "finished" -> ReadingStatus.FINISHED
     "reading" -> ReadingStatus.READING
+    "want_to_read" -> ReadingStatus.WANT_TO_READ
+    "paused" -> ReadingStatus.PAUSED
+    "did_not_finish" -> ReadingStatus.DID_NOT_FINISH
     // An explicit unread and a book nobody opened are the same shelf
     // here, and only the server keeps the difference on the wire.
     "unread", "ready_to_read" -> ReadingStatus.READY_TO_READ

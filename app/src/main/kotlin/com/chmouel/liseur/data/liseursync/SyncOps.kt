@@ -24,12 +24,13 @@ data class SyncOp(
     val originalJson: String? = null,
     val readingStatus: ReadingStatusChoice? = null,
     val coverage: NarrativeCoverage? = null,
+    val rawReadingStatus: String? = null,
 ) {
     /**
      * A status act is not a move: it carries the sender's own place so
      * that the payload is complete, and no position query reads it.
      */
-    val isStatus: Boolean get() = readingStatus != null
+    val isStatus: Boolean get() = readingStatus != null || rawReadingStatus != null
 }
 
 /**
@@ -110,9 +111,9 @@ object SyncOps {
         op.editionSha?.let { put("edition_sha", it) }
         put("client_ts", formatTime(op.clientTs))
         put("progression", op.progression)
-        op.readingStatus?.let {
+        (op.rawReadingStatus ?: op.readingStatus?.wireName)?.let {
             put("kind", STATUS_KIND)
-            put("reading_status", it.wireName)
+            put("reading_status", it)
         }
         op.coverage?.let { put("coverage", it.wireName) }
         locatorFor(op.locatorJson)?.let { put("locator", it) }
@@ -139,8 +140,8 @@ object SyncOps {
             ?: return null
         val kind = json.optString("kind").takeIf { it.isNotEmpty() }
         if (kind != null && kind != STATUS_KIND) return null
-        val readingStatus = if (kind == STATUS_KIND) {
-            ReadingStatusChoice.fromWire(json.optString("reading_status")) ?: return null
+        val rawReadingStatus = if (kind == STATUS_KIND) {
+            json.optString("reading_status").takeIf { it.isNotEmpty() } ?: return null
         } else {
             null
         }
@@ -156,7 +157,8 @@ object SyncOps {
             deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
             seq = json.optLong("seq"),
             originalJson = json.toString(),
-            readingStatus = readingStatus,
+            readingStatus = ReadingStatusChoice.fromWire(rawReadingStatus),
+            rawReadingStatus = rawReadingStatus?.takeIf { ReadingStatusChoice.fromWire(it) == null },
             coverage = NarrativeCoverage.fromWire(json.optString("coverage")),
         )
     }

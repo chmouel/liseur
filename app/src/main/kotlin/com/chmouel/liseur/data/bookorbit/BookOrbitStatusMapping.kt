@@ -34,5 +34,7 @@ object BookOrbitStatusMapping {
         FinishedOverride.FINISHED -> "read"
         FinishedOverride.UNREAD -> "unread"
         FinishedOverride.NONE -> null
+        FinishedOverride.WANT_TO_READ -> "unread"
+        FinishedOverride.READING, FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH -> "reading"
     }
 }

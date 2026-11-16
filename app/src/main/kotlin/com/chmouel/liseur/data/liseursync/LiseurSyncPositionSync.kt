@@ -1524,7 +1524,7 @@ class LiseurSyncPositionSync(
 
     private suspend fun land(account: Account, bookUrl: String, op: SyncOp) {
         observe(account, op)
-        val readingStatus = op.readingStatus
+        val readingStatus = op.rawReadingStatus ?: op.readingStatus?.wireName
         if (readingStatus != null) {
             // A status act is not a move, so its progression is not
             // landed as one: the sender's place is theirs, not ours
@@ -1533,7 +1533,7 @@ class LiseurSyncPositionSync(
             peerStateDao.persistPendingStatus(
                 bookUrl = bookUrl,
                 peerId = account.peerId,
-                choice = readingStatus.wireName,
+                choice = readingStatus,
                 remoteUpdatedAt = op.clientTs.takeIf { it > 0 },
                 seq = op.seq,
             )
@@ -1802,6 +1802,10 @@ class LiseurSyncPositionSync(
         when (choice) {
             ReadingStatusChoice.FINISHED -> ReadingStatus.FINISHED
             ReadingStatusChoice.UNREAD -> ReadingStatus.READY_TO_READ
+            ReadingStatusChoice.WANT_TO_READ -> ReadingStatus.WANT_TO_READ
+            ReadingStatusChoice.READING -> ReadingStatus.READING
+            ReadingStatusChoice.PAUSED -> ReadingStatus.PAUSED
+            ReadingStatusChoice.DID_NOT_FINISH -> ReadingStatus.DID_NOT_FINISH
             ReadingStatusChoice.AUTOMATIC ->
                 readingStatusFor(
                     stored?.totalProgression,

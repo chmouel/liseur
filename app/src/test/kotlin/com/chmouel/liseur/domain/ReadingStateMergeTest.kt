@@ -6,6 +6,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReadingStateMergeTest {
+    @Test
+    fun `explicit choices override every position and coverage`() {
+        val choices = mapOf(
+            FinishedOverride.WANT_TO_READ to ReadingStatus.WANT_TO_READ,
+            FinishedOverride.READING to ReadingStatus.READING,
+            FinishedOverride.PAUSED to ReadingStatus.PAUSED,
+            FinishedOverride.DID_NOT_FINISH to ReadingStatus.DID_NOT_FINISH,
+            FinishedOverride.UNREAD to ReadingStatus.READY_TO_READ,
+            FinishedOverride.FINISHED to ReadingStatus.FINISHED,
+        )
+        for ((choice, expected) in choices) {
+            for (position in listOf(0.0, 0.5, 0.99, 1.0)) {
+                for (partial in listOf(false, true)) {
+                    assertEquals(expected, readingStatusFor(position, choice, partial))
+                }
+            }
+        }
+        assertEquals(FinishedOverride.NONE, ReadingStatusChoice.AUTOMATIC.override)
+        assertEquals(ReadingStatus.READING, readingStatusFor(0.99, partialCoverage = true))
+        assertEquals(ReadingStatus.FINISHED, readingStatusFor(0.99))
+    }
+
 
     private fun state(
         progression: Double?,

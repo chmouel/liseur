@@ -218,7 +218,7 @@ class ReadingPositionPublisherTest {
             overrideFor = { FinishedOverride.UNREAD },
             persist = { _, status ->
                 writes++
-                assertEquals("Reading", status)
+                assertEquals("ReadyToRead", status)
             },
             refreshFinished = {
                 refreshes++

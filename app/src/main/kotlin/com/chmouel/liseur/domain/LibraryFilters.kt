@@ -107,7 +107,9 @@ fun shelfStateFor(
 ): LibraryFilterOption =
     when {
         book.finished -> LibraryFilterOption.FINISHED
-        override == FinishedOverride.UNREAD -> LibraryFilterOption.UNREAD
+        override == FinishedOverride.UNREAD || override == FinishedOverride.WANT_TO_READ -> LibraryFilterOption.UNREAD
+        override == FinishedOverride.READING || override == FinishedOverride.PAUSED ||
+            override == FinishedOverride.DID_NOT_FINISH -> LibraryFilterOption.IN_PROGRESS
         (progression ?: 0.0) >= startedAfter(book.remotePageCount) -> LibraryFilterOption.IN_PROGRESS
         else -> LibraryFilterOption.UNREAD
     }

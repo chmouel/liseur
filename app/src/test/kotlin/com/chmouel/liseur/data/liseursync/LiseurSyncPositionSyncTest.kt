@@ -307,6 +307,65 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `an unknown status stays pending when the cursor advances`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "future_choice", deviceId = "other")}],
+                "has_more":false,"high_water":9}""".trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        val pending = db.syncPeerStateDao().get(LOCAL, peer())!!
+        assertEquals("future_choice", pending.pendingStatusChoice)
+        assertEquals(9L, pending.pendingStatusSeq)
+        assertTrue(pending.hasPendingStatus)
+    }
+
+    @Test
+    fun `a stored status is adopted when this version understands it`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.syncPeerStateDao().persistPendingStatus(LOCAL, peer(), "paused", NOW, 9)
+        server.dispatcher = opsAndChanges()
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertEquals(FinishedOverride.PAUSED, db.readingProgressDao().get(LOCAL)!!.override)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer())!!.hasPendingStatus)
+    }
+
+    @Test
+    fun `richer choices and withdrawal preserve the local place`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.99, null, ReadingStatus.READING.wireName, NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer(), 1, 0.99, ReadingStatus.READING.wireName, NOW)
+        val choices = listOf(
+            "want_to_read" to FinishedOverride.WANT_TO_READ,
+            "reading" to FinishedOverride.READING,
+            "paused" to FinishedOverride.PAUSED,
+            "did_not_finish" to FinishedOverride.DID_NOT_FINISH,
+            "automatic" to FinishedOverride.NONE,
+        )
+        for ((index, item) in choices.withIndex()) {
+            val seq = 9L + index
+            server.dispatcher = opsAndChanges(
+                page = """{"ops":[${statusOp(seq = seq, progression = 0.2, status = item.first, deviceId = "other")}],
+                    "has_more":false,"high_water":$seq}""".trimIndent(),
+            )
+            assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+            val row = progress.get(LOCAL)!!
+            assertEquals(item.second, row.override)
+            assertEquals(0.99, row.totalProgression!!, 0.0001)
+            assertEquals(item.second == FinishedOverride.NONE, db.bookDao().getByUrl(LOCAL)!!.finishedAt != null)
+        }
+    }
+
+    @Test
     fun `a choice about a book never opened here still arrives`() = runTest {
         connect()
         db.bookDao().upsert(local())

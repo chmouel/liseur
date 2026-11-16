@@ -59,6 +59,33 @@ class FinishedStateTest {
     private fun state() = FinishedState(db.bookDao(), db.readingProgressDao(), onFinished = { finished += it })
 
     @Test
+    fun `automatic completion leaves explicit and pending choices alone`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val progress = db.readingProgressDao()
+        val state = FinishedState(
+            db.bookDao(), progress,
+            hasPendingStatus = { db.syncPeerStateDao().hasPendingStatusForBook(it) },
+            onFinished = { finished += it },
+        )
+        for (choice in listOf(FinishedOverride.WANT_TO_READ, FinishedOverride.READING,
+            FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH)) {
+            val row = progress.get(BOOK)
+            assertTrue(state.adoptRemoteStatus(BOOK, row?.statusRevision ?: 0, "peer", choice, ReadingStatus.READING))
+            state.recordFinished(BOOK)
+            assertEquals(choice, progress.get(BOOK)!!.override)
+            assertNull(db.bookDao().getByUrl(BOOK)!!.finishedAt)
+        }
+        val row = progress.get(BOOK)!!
+        assertTrue(state.adoptRemoteStatus(BOOK, row.statusRevision, "peer", FinishedOverride.NONE, ReadingStatus.READING))
+        db.syncPeerStateDao().persistPendingStatus(BOOK, "peer", "future_choice", 1L, 1L)
+        state.recordFinished(BOOK)
+        assertEquals(FinishedOverride.NONE, progress.get(BOOK)!!.override)
+        assertEquals(emptyList<String>(), finished)
+    }
+
+    @Test
     fun `an unread reset survives reading on and is dropped by marking finished`() =
         runTest {
             db.bookDao().upsert(
