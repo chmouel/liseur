@@ -63,6 +63,10 @@ class FinishedState(
      *
      * [finishedAt] is when the partner says the book was finished; without
      * it the book counts as finished now.
+     *
+     * [expectedLocalRevision] pins the whole row: a page turn that landed
+     * since the caller looked makes this a refusal, because the reading it
+     * would then settle was never weighed against the partner.
      */
     suspend fun adoptRemoteStatus(
         bookUrl: String,
@@ -71,6 +75,7 @@ class FinishedState(
         override: FinishedOverride,
         status: ReadingStatus,
         finishedAt: Long? = null,
+        expectedLocalRevision: Long? = null,
     ): Boolean {
         val at = now()
         var applied = false
@@ -84,6 +89,7 @@ class FinishedState(
                 status = status.wireName,
                 progression = progression,
                 now = at,
+                expectedLocalRevision = expectedLocalRevision,
             )
             if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, readAtFor(finishedAt, at))
         }

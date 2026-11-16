@@ -45,7 +45,7 @@ import androidx.sqlite.execSQL
         BookMetadata::class,
         SessionImportSource::class,
     ],
-    version = 76,
+    version = 77,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -127,6 +127,17 @@ abstract class LiseurDatabase : RoomDatabase() {
                     "UPDATE `reading_progress` SET `status_revision` = 1 " +
                         "WHERE `finished_override` != 0 AND `status_revision` = 0",
                 )
+            }
+        }
+
+        /**
+         * The coverage a peak was recorded with, kept beside the peak
+         * because the current position's coverage stops describing it
+         * once the reader turns back.
+         */
+        val MIGRATION_76_77 = object : Migration(76, 77) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `reading_progress` ADD COLUMN `peak_coverage` TEXT")
             }
         }
 
@@ -2100,6 +2111,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_73_74,
             MIGRATION_74_75,
             MIGRATION_75_76,
+            MIGRATION_76_77,
         )
     }
 }
