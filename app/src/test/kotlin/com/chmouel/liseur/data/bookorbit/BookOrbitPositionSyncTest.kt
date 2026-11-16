@@ -157,6 +157,81 @@ class BookOrbitPositionSyncTest {
     }
 
     @Test
+    fun `progress push restores a paused choice changed automatically by BookOrbit`() = runBlocking {
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        com.chmouel.liseur.data.library.FinishedState(database.bookDao(), database.readingProgressDao())
+            .setReadingChoice(bookUrl, com.chmouel.liseur.domain.ReadingStatusChoice.PAUSED)
+        val paused = """{"id":12,"readStatus":{"status":"on_hold","source":"manual"}}"""
+        val reading = """{"id":12,"readStatus":{"status":"reading","source":"auto"}}"""
+        web.enqueue(MockResponse(body = paused))
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", cfi).put("percentage", 25.0).toString()))
+        web.enqueue(MockResponse(body = reading))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = paused))
+
+        assertEquals(SyncOutcome.Success, provider(manual = true, syncStatuses = true).syncBook(bookUrl))
+        val requests = (1..9).map { web.takeRequest() }
+        assertEquals(listOf("GET", "GET", "GET", "GET", "POST", "GET", "GET", "PATCH", "GET"),
+            requests.map { it.method })
+        assertEquals("""{"status":"on_hold"}""", requests[7].body!!.utf8())
+        assertEquals(com.chmouel.liseur.domain.FinishedOverride.PAUSED,
+            database.readingProgressDao().get(bookUrl)!!.override)
+    }
+
+    @Test
+    fun `recovered progress push restores a paused choice`() = runBlocking {
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        com.chmouel.liseur.data.library.FinishedState(database.bookDao(), database.readingProgressDao())
+            .setReadingChoice(bookUrl, com.chmouel.liseur.domain.ReadingStatusChoice.PAUSED)
+        val paused = """{"id":12,"readStatus":{"status":"on_hold","source":"manual"}}"""
+        web.enqueue(MockResponse(body = paused))
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(code = 503))
+        val sync = provider(manual = true, syncStatuses = true)
+        assertEquals(SyncOutcome.Failure(SyncFailure.ServerError(503)), sync.syncBook(bookUrl))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", cfi).put("percentage", 25.0).toString()))
+        web.enqueue(MockResponse(body = """{"id":12,"readStatus":{"status":"reading","source":"auto"}}"""))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = paused))
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+        val requests = (1..10).map { web.takeRequest() }
+        assertEquals(1, requests.count { it.method == "POST" })
+        assertEquals("""{"status":"on_hold"}""", requests.single { it.method == "PATCH" }.body!!.utf8())
+    }
+
+    @Test
+    fun `server choice is adopted before a progress push`() = runBlocking {
+        val finished = com.chmouel.liseur.data.library.FinishedState(database.bookDao(), database.readingProgressDao())
+        finished.setReadingChoice(bookUrl, com.chmouel.liseur.domain.ReadingStatusChoice.PAUSED)
+        val sync = provider(accountSync = true, automaticPush = true, syncStatuses = true)
+        web.enqueue(MockResponse(body = """{"id":12,"readStatus":{"status":"on_hold","source":"manual"}}"""))
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+        val cfi = "epubcfi(/6/4!/4/2:3)"
+        saveExact(cfi)
+        val abandoned = """{"id":12,"readStatus":{"status":"abandoned","source":"manual"}}"""
+        web.enqueue(MockResponse(body = abandoned))
+        repeat(3) { web.enqueue(MockResponse(body = fixture("progress-unopened.json"))) }
+        web.enqueue(MockResponse(code = 201))
+        web.enqueue(MockResponse(body = JSONObject(fixture("progress-saved.json"))
+            .put("cfi", cfi).put("percentage", 25.0).toString()))
+        web.enqueue(MockResponse(body = """{"id":12,"readStatus":{"status":"reading","source":"auto"}}"""))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = abandoned))
+        assertEquals(SyncOutcome.Success, sync.syncBook(bookUrl))
+        val requests = (1..10).map { web.takeRequest() }
+        assertEquals("""{"status":"abandoned"}""", requests.single { it.method == "PATCH" }.body!!.utf8())
+        assertEquals(com.chmouel.liseur.domain.FinishedOverride.DID_NOT_FINISH,
+            database.readingProgressDao().get(bookUrl)!!.override)
+    }
+
+    @Test
     fun `unconfigured provider never dials or exposes unresolved choices`(): Unit = runBlocking {
         val provider = provider()
         assertNull(provider.dialledAddress())

@@ -22,7 +22,7 @@ class BookOrbitStatusSync(
     private val agreements get() = database.bookOrbitStatusAgreementDao()
     private val progress get() = database.readingProgressDao()
 
-    suspend fun sync(context: BookOrbitCfiContext): SyncOutcome =
+    suspend fun sync(context: BookOrbitCfiContext, restoreAfterPosition: Boolean = false): SyncOutcome =
         database.bookOrbitStatusMutex.withLock {
             cfis.check(context)
             uploadedBytesChanged(context)?.let { return@withLock it }
@@ -76,7 +76,12 @@ class BookOrbitStatusSync(
             val target = BookOrbitStatusMapping.toRemote(FinishedOverride.fromStored(localOverride))
                 ?: automaticStatusTarget(local, remote)
 
-            if (localChanged && target != null) {
+            val positionChangedStatus = restoreAfterPosition && target != null &&
+                localOverride != FinishedOverride.NONE.ordinal && remote?.source == "auto" &&
+                (agreement?.agreedRemoteStatus == target ||
+                    target == "reading" && agreement?.agreedRemoteStatus == "rereading") &&
+                agreement?.agreedRemoteSource == MANUAL_SOURCE
+            if ((localChanged || positionChangedStatus) && target != null) {
                 if (isAcknowledged(remote, target)) {
                     settle(context, agreement, remote, localRevision, localOverride)
                     return@withLock SyncOutcome.Success
@@ -278,7 +283,8 @@ class BookOrbitStatusSync(
         this?.ownerAccount?.let { it != context.request.accountKey } == true
 
     private fun isAcknowledged(remote: BookOrbitStatus?, target: String): Boolean =
-        remote?.status == target && remote.source == MANUAL_SOURCE
+        remote?.source == MANUAL_SOURCE &&
+            (remote.status == target || target == "reading" && remote.status == "rereading")
 
     private fun automaticStatusTarget(local: ReadingProgress?, remote: BookOrbitStatus?): String? {
         if (remote?.source != MANUAL_SOURCE) return null

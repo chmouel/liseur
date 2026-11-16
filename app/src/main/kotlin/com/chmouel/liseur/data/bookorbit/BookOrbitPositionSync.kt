@@ -12,6 +12,7 @@ import com.chmouel.liseur.data.remote.SyncIdentity
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.data.remote.SyncPreview
 import com.chmouel.liseur.data.remote.SyncSnapshot
+import com.chmouel.liseur.domain.FinishedOverride
 import java.io.IOException
 import java.net.SocketTimeoutException
 import kotlinx.coroutines.CancellationException
@@ -173,8 +174,25 @@ class BookOrbitPositionSync(
         }?.let(BookOrbitRequestContext::from)
 
     private suspend fun sync(context: BookOrbitCfiContext, allowPush: Boolean): SyncOutcome {
-        val position = syncPosition(context, allowPush)
-        val status = statusSync?.let { syncStatus(context, it) } ?: SyncOutcome.NotApplicable
+        val explicit = database.readingProgressDao().get(context.bookUrl)?.finishedOverride
+            ?.let { it != FinishedOverride.NONE.ordinal } == true
+        val recovering = explicit && statusSync != null && database.bookOrbitPositionAgreementDao()
+            .get(context.request.accountKey, context.bookUrl)?.attemptState in setOf(
+            BookOrbitAttempt.MAY_HAVE_BEEN_SENT.name,
+            BookOrbitAttempt.UNCERTAIN.name,
+            BookOrbitAttempt.RETRY_REQUIRED.name,
+        )
+        val before = if (allowPush && explicit && statusSync != null && !recovering) {
+            syncStatus(context, statusSync)
+        } else null
+        if (before is SyncOutcome.Failure) return before
+        var pushed = false
+        val position = syncPosition(context, allowPush) { pushed = true }
+        if (recovering && position is SyncOutcome.Failure) return position
+        val status = if (before != null && !pushed) before else {
+            statusSync?.let { syncStatus(context, it, restoreAfterPosition = pushed && (before != null || recovering)) }
+                ?: SyncOutcome.NotApplicable
+        }
         return when {
             position is SyncOutcome.Failure && status is SyncOutcome.Failure ->
                 when {
@@ -193,6 +211,7 @@ class BookOrbitPositionSync(
     private suspend fun syncPosition(
         context: BookOrbitCfiContext,
         allowPush: Boolean,
+        onPushed: () -> Unit,
     ): SyncOutcome = outcome {
         cfis.check(context)
         val position = database.readingProgressDao().get(context.bookUrl)
@@ -208,6 +227,9 @@ class BookOrbitPositionSync(
             BookOrbitPositionExchange.Result.Agreed,
             BookOrbitPositionExchange.Result.Pushed,
             BookOrbitPositionExchange.Result.Recovered -> database.withTransaction {
+                if (result == BookOrbitPositionExchange.Result.Pushed ||
+                    result == BookOrbitPositionExchange.Result.Recovered
+                ) onPushed()
                 cfis.check(context)
                 val local = database.readingProgressDao().get(context.bookUrl)
                 val agreed = database.bookOrbitPositionAgreementDao()
@@ -230,9 +252,10 @@ class BookOrbitPositionSync(
     private suspend fun syncStatus(
         context: BookOrbitCfiContext,
         sync: BookOrbitStatusSync,
+        restoreAfterPosition: Boolean = false,
     ): SyncOutcome = outcome {
         cfis.check(context)
-        sync.sync(context)
+        sync.sync(context, restoreAfterPosition)
     }
 
     private suspend fun outcome(block: suspend () -> SyncOutcome): SyncOutcome =
