@@ -141,7 +141,11 @@ class RemoteAccountRepositoryTest {
 
         val kept = progress.get(bookUrl)!!
         assertEquals(FinishedOverride.FINISHED, kept.override)
-        assertEquals(0L, kept.statusRevision)
+        // The revision names the op ids already sent, so it only moves
+        // forward: the debt is retired beside it instead.
+        assertEquals(1L, kept.statusRevision)
+        assertEquals(1L, kept.statusRetiredRevision)
+        assertTrue(kept.statusRetired)
     }
 
     @Test
@@ -179,7 +183,8 @@ class RemoteAccountRepositoryTest {
 
         val row = progress.get(bookUrl)!!
         assertEquals(FinishedOverride.UNREAD, row.override)
-        assertEquals(1L, row.statusRevision)
+        assertEquals(2L, row.statusRevision)
+        assertFalse(row.statusRetired)
     }
 
     @Test

@@ -925,7 +925,7 @@ class LiseurSyncPositionSyncTest {
                     "VALUES ('$LOCAL', '{\"href\":\"/c1.xhtml\"}', 0.4, $NOW, 1)",
             )
         }
-        helper.runMigrationsAndValidate(name, 77, true, *LiseurDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate(name, 78, true, *LiseurDatabase.MIGRATIONS).close()
         val migrated = Room.databaseBuilder(context, LiseurDatabase::class.java, name).build()
         try {
             connect(database = migrated)
@@ -1110,6 +1110,8 @@ class LiseurSyncPositionSyncTest {
             0.4,
             NOW + 1,
         )
+        val retired = progress.get(LOCAL)!!.statusRevision
+        assertTrue(retired > 0)
         // What a new login leaves behind: the old peer's agreements go,
         // and nothing is left looking unsaid to whoever connects next.
         db.syncPeerStateDao().forgetPeer(peer())
@@ -1119,6 +1121,9 @@ class LiseurSyncPositionSyncTest {
 
         assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
         assertEquals(0, sent.count { it.optString("kind") == "status" })
+        // The revision names the op ids already sent, so retirement
+        // leaves it alone rather than handing it back out again.
+        assertEquals(retired, progress.get(LOCAL)!!.statusRevision)
 
         // What the reader decides under the new account is theirs to hear.
         progress.setFinishedOverride(
@@ -1132,6 +1137,62 @@ class LiseurSyncPositionSyncTest {
 
         val act = sent.single { it.optString("kind") == "status" }
         assertEquals("unread", act.getString("reading_status"))
+        val chosen = progress.get(LOCAL)!!
+        assertTrue(chosen.statusRevision > retired)
+        assertEquals(
+            SyncOps.statusOpIdFor("device-a", "w-1", chosen.statusRevision),
+            act.getString("op_id"),
+        )
+    }
+
+    @Test
+    fun `a choice a disconnect retired is not uploaded after reconnecting`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.UNREAD.ordinal,
+            ReadingStatus.READY_TO_READ.wireName,
+            0.0,
+            NOW + 1,
+        )
+        val retired = progress.get(LOCAL)!!.statusRevision
+        assertTrue(retired > 0)
+        // A disconnect: the server row and the peer's agreements go, and
+        // the choice stops being owed to anyone.
+        db.syncPeerStateDao().forgetPeer(peer())
+        progress.retireStatusDebt()
+        db.remoteServerDao().delete()
+        connect()
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertEquals(0, sent.count { it.optString("kind") == "status" })
+        assertEquals(retired, progress.get(LOCAL)!!.statusRevision)
+
+        // A decision taken after reconnecting is owed, under a revision
+        // the server cannot already hold an op for.
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            1.0,
+            NOW + 2,
+        )
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val act = sent.single { it.optString("kind") == "status" }
+        assertEquals("finished", act.getString("reading_status"))
+        val chosen = progress.get(LOCAL)!!
+        assertTrue(chosen.statusRevision > retired)
+        assertEquals(
+            SyncOps.statusOpIdFor("device-a", "w-1", chosen.statusRevision),
+            act.getString("op_id"),
+        )
     }
 
     @Test
