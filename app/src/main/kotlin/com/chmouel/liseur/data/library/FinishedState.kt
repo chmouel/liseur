@@ -124,7 +124,8 @@ class FinishedState(
         inTransaction {
             val row = progressDao.get(bookUrl) ?: return@inTransaction
             val finished =
-                readingStatusFor(row.totalProgression, row.override) == ReadingStatus.FINISHED
+                readingStatusFor(row.totalProgression, row.override, row.partialCoverage) ==
+                    ReadingStatus.FINISHED
             applyFlag(bookUrl, finished, readAtFor(row.readAt, at))
         }
     }

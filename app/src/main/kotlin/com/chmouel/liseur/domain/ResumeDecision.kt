@@ -9,6 +9,8 @@ data class ResumeCandidate(
     val totalProgression: Double?,
     /** Marked read, by hand or by having been finished. */
     val finished: Boolean = false,
+    /** The recording this place came from covers only part of the book. */
+    val partialCoverage: Boolean = false,
 )
 
 /**
@@ -18,12 +20,18 @@ data class ResumeCandidate(
  * again every single time; ones that always resume trap you in a book you
  * have finished. So: resume when you were last reading, and stop when you
  * either left from the library or reached the end.
+ *
+ * Whether that end was reached is [readingStatusFor]'s answer rather than
+ * a bare threshold here: a partial recording stops short of `1.0` by
+ * design, and the library already calls such a book unfinished.
  */
 fun shouldResume(candidate: ResumeCandidate?, leftFromReader: Boolean): Boolean {
     if (candidate == null || !leftFromReader) return false
     if (candidate.finished) return false
     val progression = candidate.totalProgression ?: return true
-    return progression < FINISHED_PROGRESSION
+    if (progression <= 0.0) return true
+    return readingStatusFor(progression, partialCoverage = candidate.partialCoverage) !=
+        ReadingStatus.FINISHED
 }
 
 /**

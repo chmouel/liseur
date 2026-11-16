@@ -7,6 +7,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.db.WorkAlias
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.StatsRange
 import java.net.InetAddress
 import java.time.Instant
@@ -542,6 +543,37 @@ class LiseurSyncInsightsTest {
 
         assertEquals(0.985, elsewhere.getValue("w-9").currentProgression!!, 0.0001)
         assertNull(elsewhere.getValue("w-8").currentProgression)
+    }
+
+    /**
+     * A server that resolves a work's status says so beside the place
+     * (ADR-0066), and says whether the recording behind it covers the
+     * whole narrative. An older one sends neither.
+     */
+    @Test
+    fun `a work carries the status the server resolved`() = runTest {
+        connect()
+        server.enqueue(
+            ok(
+                """{"from":"2026-08-10","to":"2026-08-11","works":[""" +
+                    """{"work_id":"w-9","title":"Dune","sessions":3,"total_active_minutes":50,""" +
+                    """"current_progression":0.4,"status":"finished","covers_narrative":true},""" +
+                    """{"work_id":"w-8","title":"Les Misérables I","sessions":2,""" +
+                    """"total_active_minutes":20,"current_progression":0.998,""" +
+                    """"status":"reading","covers_narrative":false},""" +
+                    """{"work_id":"w-7","title":"Emma","sessions":1,"total_active_minutes":5,""" +
+                    """"current_progression":0.5}]}""",
+            ),
+        )
+
+        val elsewhere = insights().allBooks(today = TODAY)!!.elsewhere.associateBy { it.workId }
+
+        assertEquals(ReadingStatus.FINISHED, elsewhere.getValue("w-9").status)
+        assertEquals(true, elsewhere.getValue("w-9").coversNarrative)
+        assertEquals(ReadingStatus.READING, elsewhere.getValue("w-8").status)
+        assertEquals(false, elsewhere.getValue("w-8").coversNarrative)
+        assertNull(elsewhere.getValue("w-7").status)
+        assertNull(elsewhere.getValue("w-7").coversNarrative)
     }
 
     private fun insights() = LiseurSyncInsights(

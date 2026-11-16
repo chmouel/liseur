@@ -6,11 +6,16 @@ import org.junit.Test
 
 class ResumeDecisionTest {
 
-    private fun candidate(progression: Double?, finished: Boolean = false) = ResumeCandidate(
+    private fun candidate(
+        progression: Double?,
+        finished: Boolean = false,
+        partialCoverage: Boolean = false,
+    ) = ResumeCandidate(
         identity = "calibre:abc",
         fileUrl = "file:///books/abc.epub",
         totalProgression = progression,
         finished = finished,
+        partialCoverage = partialCoverage,
     )
 
     @Test
@@ -48,5 +53,18 @@ class ResumeDecisionTest {
     @Test
     fun `a book opened but never placed still resumes`() {
         assertTrue(shouldResume(candidate(null), leftFromReader = true))
+    }
+
+    /**
+     * A recording that covers part of the narrative stops short of the
+     * end by design (ADR-0055, ADR-0066), so the library calls such a
+     * book unfinished and resume must agree with it rather than refuse
+     * the reader their place.
+     */
+    @Test
+    fun `a partial recording near its end is not a finished book`() {
+        assertFalse(shouldResume(candidate(0.99), leftFromReader = true))
+        assertTrue(shouldResume(candidate(0.99, partialCoverage = true), leftFromReader = true))
+        assertTrue(shouldResume(candidate(0.998, partialCoverage = true), leftFromReader = true))
     }
 }

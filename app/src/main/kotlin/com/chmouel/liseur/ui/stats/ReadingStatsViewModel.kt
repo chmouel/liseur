@@ -805,6 +805,13 @@ class ReadingStatsViewModel(
                 // one when the reading it has is all outside the span.
                 .filter { it.activeMinutes > 0 || it.sessions > 0 }
                 .map { insight ->
+                    val finished = insight.status?.let { it == ReadingStatus.FINISHED }
+                        ?: (
+                            readingStatusFor(
+                                insight.currentProgression,
+                                partialCoverage = insight.coversNarrative == false,
+                            ) == ReadingStatus.FINISHED
+                            )
                     BookReadingStats(
                         bookUrl = null,
                         workId = insight.workId,
@@ -816,14 +823,12 @@ class ReadingStatsViewModel(
                         // no first sitting on record here. The place in
                         // the book is the server's, because nobody else
                         // has one, and whether that place is the end is
-                        // decided by the one threshold position sync
-                        // applies when the same reading arrives as a
-                        // peer's position — so a book finished on the
-                        // laptop is finished here too, and by the same
-                        // rule.
+                        // the server's own resolution of it (ADR-0066),
+                        // or for an older server the same rule position
+                        // sync applies when that reading arrives as a
+                        // peer's position.
                         progression = insight.currentProgression,
-                        finished = readingStatusFor(insight.currentProgression) ==
-                            ReadingStatus.FINISHED,
+                        finished = finished,
                         sessions = insight.sessions,
                     )
                 }

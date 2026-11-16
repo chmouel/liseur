@@ -1,7 +1,9 @@
 package com.chmouel.liseur.data.liseursync
 
 import androidx.room.Room
+import androidx.room.testing.MigrationTestHelper
 import androidx.room.withTransaction
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.calibre.CredentialCipher
 import com.chmouel.liseur.data.db.Book
@@ -13,6 +15,9 @@ import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.RemoteHttp
 import com.chmouel.liseur.data.library.BookFingerprintStore
 import com.chmouel.liseur.data.library.FinishedState
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.NarrativeCoverage
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.data.remote.PreviewOutcome
 import com.chmouel.liseur.data.remote.ResumeConfidence
 import com.chmouel.liseur.data.remote.ResolveOutcome
@@ -194,6 +199,617 @@ class LiseurSyncPositionSyncTest {
         assertEquals(listOf("/v1/changes?since=0&limit=500"), requests().map { it.target })
     }
 
+    // -- An explicit reading status (ADR-0066) -----------------------------
+    //
+    // Whether a book is finished is a fact the reader can state, not
+    // something a threshold infers: a book marked read at 0.4 is read,
+    // and a partial recording at 0.998 is not over. It travels beside the
+    // position, is owed and acknowledged on its own, and is never landed
+    // as a move.
+
+    @Test
+    fun `a book marked read away from its end is sent as a status act`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        db.readingProgressDao().setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val statusRevision = db.readingProgressDao().get(LOCAL)!!.statusRevision
+        val status = sent.single { it.optString("kind") == "status" }
+        assertEquals(
+            SyncOps.statusOpIdFor("device-a", "w-1", statusRevision),
+            status.getString("op_id"),
+        )
+        assertEquals("finished", status.getString("reading_status"))
+        assertEquals(0.4, status.getDouble("progression"), 0.0001)
+        // Acknowledged by its own revision, so the position beside it can
+        // still be owed, retried or turned without touching it.
+        assertEquals(
+            statusRevision,
+            db.syncPeerStateDao().get(LOCAL, peer())!!.ackedStatusRevision,
+        )
+    }
+
+    @Test
+    fun `a choice made on one device is a choice on the next`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+        db.readingProgressDao().setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        var act = ""
+        var page = """{"ops":[],"high_water":0}"""
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) {
+                    return json(if (request.target.startsWith("/v1/changes")) page else """{"ops":[]}""")
+                }
+                val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+                for (index in 0 until ops.length()) {
+                    val op = ops.getJSONObject(index)
+                    if (op.optString("kind") == "status") act = op.toString()
+                }
+                return applied(request)
+            }
+        }
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertTrue(act.isNotEmpty())
+
+        // A second device, its own library, the same book at the same
+        // place, reading only what the first one sent.
+        val second = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext<android.app.Application>(),
+            LiseurDatabase::class.java,
+        ).build()
+        try {
+            second.remoteServerDao().upsert(db.remoteServerDao().get()!!)
+            second.bookDao().upsert(local())
+            second.workIdentityDao().upsert(
+                com.chmouel.liseur.data.db.WorkAlias(
+                    bookUrl = LOCAL,
+                    peerId = peer(),
+                    workId = "w-1",
+                    confidence = "high",
+                    confirmed = true,
+                    seeded = true,
+                    resolvedAt = NOW,
+                ),
+            )
+            second.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.4, null, "reading", NOW)
+            page = """{"ops":[$act],"has_more":false,"high_water":9}"""
+
+            assertEquals(SyncOutcome.Success, sync(database = second).syncBook(LOCAL))
+
+            val there = second.readingProgressDao().get(LOCAL)!!
+            assertEquals(FinishedOverride.FINISHED, there.override)
+            assertEquals(0.4, there.totalProgression!!, 0.0001)
+            assertNotNull(second.bookDao().getByUrl(LOCAL)!!.finishedAt)
+        } finally {
+            second.close()
+        }
+    }
+
+    @Test
+    fun `a choice about a book never opened here still arrives`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4)}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        assertNotNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(FinishedOverride.FINISHED, row.override)
+        // Nothing says where the reader is, so nothing invents a place
+        assertNull(row.totalProgression)
+    }
+
+    @Test
+    fun `resuming reading is delivered as a withdrawal, not as silence`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.3, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.UNREAD.ordinal,
+            ReadingStatus.READY_TO_READ.wireName,
+            0.0,
+            NOW + 1,
+        )
+        // The unread mark already reached the server; only the reading on
+        // that withdrew it is still owed.
+        db.syncPeerStateDao().settleStatus(LOCAL, peer(), progress.get(LOCAL)!!.statusRevision)
+        progress.recordLocal(
+            bookUrl = LOCAL,
+            locatorJson = LOCATOR,
+            progression = 0.1,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = ReadingStatus.READING.wireName,
+            updatedAt = NOW + 2,
+            resumesReading = true,
+        )
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val status = sent.single { it.optString("kind") == "status" }
+        assertEquals("automatic", status.getString("reading_status"))
+    }
+
+    @Test
+    fun `a status act never moves the reader to the sender's place`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao()
+            .recordLocal(LOCAL, LOCATOR, 0.9, null, ReadingStatus.READING.wireName, NOW)
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.2, status = "unread")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(0.9, row.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.UNREAD, row.override)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a partial recording at the end of its range does not finish the book`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${op(seq = 9, progression = 0.998, coverage = "partial")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(0.998, row.totalProgression!!, 0.0001)
+        assertEquals(NarrativeCoverage.PARTIAL, row.narrativeCoverage)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a full recording at the same place finishes the book`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${op(seq = 9, progression = 0.998, coverage = "full")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        assertNotNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a choice made here and never delivered outranks the one that arrived`() = runTest {
+        // ADR-0066: an act the server has not acknowledged is sent
+        // afterwards, so it gets the higher sequence and wins. Adopting
+        // the arrival instead would throw away what the reader last did.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        db.syncPeerStateDao().settle(LOCAL, peer(), progress.get(LOCAL)!!.localRevision, 0.4, "reading", NOW)
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "unread", deviceId = "other")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+            ops = { sent += it },
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        assertEquals(FinishedOverride.FINISHED, db.readingProgressDao().get(LOCAL)!!.override)
+        val act = sent.single { it.optString("kind") == "status" }
+        assertEquals("finished", act.getString("reading_status"))
+        // Left waiting rather than settled: this device's own act is
+        // what settles it, when it comes back around.
+        assertTrue(db.syncPeerStateDao().get(LOCAL, peer())!!.hasPendingStatus)
+    }
+
+    @Test
+    fun `a choice that already reached the server is replaced rather than re-sent`() = runTest {
+        // The other device made its choice after this one's had been
+        // acknowledged, so its act is the later fact. Nothing is sent
+        // back over it.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        db.syncPeerStateDao().settle(LOCAL, peer(), progress.get(LOCAL)!!.localRevision, 0.4, "reading", NOW)
+        db.syncPeerStateDao().settleStatus(LOCAL, peer(), progress.get(LOCAL)!!.statusRevision)
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 12, progression = 0.4, status = "unread", deviceId = "other")}],
+                "has_more":false,"high_water":12}
+            """.trimIndent(),
+            ops = { sent += it },
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(FinishedOverride.UNREAD, row.override)
+    }
+
+    @Test
+    fun `a stale position does not undo a newer choice, and neither is lost`() = runTest {
+        // One page of the feed, two kinds of op. An older position beside
+        // a newer act must not erase the act, and the act must not erase
+        // the place.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${op(seq = 9, progression = 0.5, deviceId = "other")},
+                ${statusOp(seq = 10, progression = 0.5, status = "finished", deviceId = "other")}],
+                "has_more":false,"high_water":10}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(0.5, row.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.FINISHED, row.override)
+        assertNotNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a position arriving after a choice leaves the choice alone`() = runTest {
+        // Only `automatic` withdraws a choice; a page turned afterwards
+        // says where the reader is, not what they decided.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.2, status = "unread", deviceId = "other")},
+                ${op(seq = 10, progression = 0.7, deviceId = "other")}],
+                "has_more":false,"high_water":10}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(0.7, row.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.UNREAD, row.override)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a withdrawal lets the stored place decide, not the act's own place`() = runTest {
+        // ADR-0066 excludes the act's progression from resolution: the
+        // newest position and the coverage that came with it decide.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.3, null, ReadingStatus.READING.wireName, NOW)
+        FinishedState(db.bookDao(), progress).recordFinished(LOCAL)
+        db.syncPeerStateDao().settle(LOCAL, peer(), progress.get(LOCAL)!!.localRevision, 0.3, "reading", NOW)
+        db.syncPeerStateDao().settleStatus(LOCAL, peer(), progress.get(LOCAL)!!.statusRevision)
+        assertNotNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 12, progression = 0.99, status = "automatic", deviceId = "other")}],
+                "has_more":false,"high_water":12}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(FinishedOverride.NONE, row.override)
+        assertEquals(0.3, row.totalProgression!!, 0.0001)
+        // The act said 0.99 and the stored place is 0.3: the place wins.
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `taking a choice does not leave a clean book owing its position`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        db.syncPeerStateDao().settle(LOCAL, peer(), 1, 0.4, ReadingStatus.READING.wireName, NOW)
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "finished", deviceId = "other")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+            ops = { sent += it },
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        assertEquals(FinishedOverride.FINISHED, db.readingProgressDao().get(LOCAL)!!.override)
+        // Adopting a status is not a move, so there is nothing to send.
+        assertTrue(sent.isEmpty())
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(row.localRevision, db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
+
+        // And the run after it has nothing to say either.
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun `a book never opened here does not stay owing a position it does not have`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "finished", deviceId = "other")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertNull(row.totalProgression)
+        assertEquals(row.localRevision, db.syncPeerStateDao().get(LOCAL, peer())!!.ackedRevision)
+
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun `an unanswered act is replayed as the same bytes after a page is turned`() = runTest {
+        // The act reached the server and the answer did not reach us. The
+        // reader then turned a page, which changes the payload a rebuilt
+        // act would carry — the server would refuse it as a conflict on a
+        // name it already holds.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        db.syncPeerStateDao().settle(LOCAL, peer(), progress.get(LOCAL)!!.localRevision, 0.4, "reading", NOW)
+        val sent = mutableListOf<JSONObject>()
+        var attempts = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) {
+                    val body = if (request.target.startsWith("/v1/changes")) {
+                        """{"ops":[],"high_water":0}"""
+                    } else {
+                        """{"ops":[]}"""
+                    }
+                    return json(body)
+                }
+                val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+                for (index in 0 until ops.length()) sent += ops.getJSONObject(index)
+                attempts++
+                return if (attempts == 1) MockResponse(code = 500, body = "") else applied(request)
+            }
+        }
+
+        sync().syncBook(LOCAL)
+        progress.recordLocal(LOCAL, LOCATOR, 0.6, null, ReadingStatus.READING.wireName, NOW + 5)
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val acts = sent.filter { it.optString("kind") == "status" }
+        assertEquals(2, acts.size)
+        assertEquals(acts[0].toString(), acts[1].toString())
+        assertEquals(
+            progress.get(LOCAL)!!.statusRevision,
+            db.syncPeerStateDao().get(LOCAL, peer())!!.ackedStatusRevision,
+        )
+    }
+
+    @Test
+    fun `the same act answered twice is settled once, and never appended again`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        progress.setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            NOW + 1,
+        )
+        db.syncPeerStateDao().settle(LOCAL, peer(), progress.get(LOCAL)!!.localRevision, 0.4, "reading", NOW)
+        val sent = mutableListOf<JSONObject>()
+        var attempts = 0
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (!request.target.startsWith("/v1/ops")) {
+                    val body = if (request.target.startsWith("/v1/changes")) {
+                        """{"ops":[],"high_water":0}"""
+                    } else {
+                        """{"ops":[]}"""
+                    }
+                    return json(body)
+                }
+                val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+                for (index in 0 until ops.length()) sent += ops.getJSONObject(index)
+                attempts++
+                if (attempts == 1) return MockResponse(code = 500, body = "")
+                val results = (0 until ops.length()).joinToString(",") {
+                    """{"op_id":"${ops.getJSONObject(it).getString("op_id")}","status":"duplicate"}"""
+                }
+                return json("""{"results":[$results]}""")
+            }
+        }
+
+        sync().syncBook(LOCAL)
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val revision = progress.get(LOCAL)!!.statusRevision
+        assertEquals(revision, db.syncPeerStateDao().get(LOCAL, peer())!!.ackedStatusRevision)
+        assertNull(db.syncPeerStateDao().get(LOCAL, peer())!!.statusSentOp)
+
+        sent.clear()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+        sync().syncBook(LOCAL)
+        assertEquals(0, sent.count { it.optString("kind") == "status" })
+    }
+
+    @Test
+    fun `a partial recording taken from a disagreement does not finish the book`() = runTest {
+        // Accepting a preserved conflict must carry the coverage that came
+        // with the place, or 0.998 of a partial recording finishes the
+        // ebook the moment it lands.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        db.readingProgressDao().recordLocal(LOCAL, LOCATOR, 0.5, null, ReadingStatus.READING.wireName, NOW)
+        server.enqueue(
+            json(
+                """{"ops":[${op(seq = 7, progression = 0.998, coverage = "partial")}]}""",
+            ),
+        )
+
+        val sync = sync()
+        assertTrue(sync.previewBook(LOCAL) is PreviewOutcome.Ready)
+        assertEquals(ResolveOutcome.Done, sync.takeRemotePosition(LOCAL, 1))
+
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(0.998, row.totalProgression!!, 0.0001)
+        assertEquals(NarrativeCoverage.PARTIAL, row.narrativeCoverage)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a position sent on carries the coverage that came with it`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${op(seq = 9, progression = 0.5, coverage = "partial")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        // Marking it read is this device's own act, so the place travels
+        // again — and it still came from a partial recording.
+        db.readingProgressDao().setFinishedOverride(
+            LOCAL,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.5,
+            NOW + 2,
+        )
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val position = sent.single { it.optString("kind") != "status" }
+        assertEquals("partial", position.optString("coverage"))
+    }
+
+    @Test
+    fun `a choice made before status revisions existed is still uploaded`() = runTest {
+        // Migration 58→59 left a historical override at revision zero, so
+        // nothing ever owed it. A migrated choice has to reach the server.
+        val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val name = "migrated-status.db"
+        context.deleteDatabase(name)
+        val helper = MigrationTestHelper(
+            InstrumentationRegistry.getInstrumentation(),
+            LiseurDatabase::class.java,
+        )
+        helper.createDatabase(name, 75).use { old ->
+            old.execSQL(
+                "INSERT INTO reading_progress " +
+                    "(book_url, locator_json, total_progression, updated_at, finished_override) " +
+                    "VALUES ('$LOCAL', '{\"href\":\"/c1.xhtml\"}', 0.4, $NOW, 1)",
+            )
+        }
+        helper.runMigrationsAndValidate(name, 76, true, *LiseurDatabase.MIGRATIONS).close()
+        val migrated = Room.databaseBuilder(context, LiseurDatabase::class.java, name).build()
+        try {
+            connect(database = migrated)
+            migrated.bookDao().upsert(local())
+            alias(database = migrated)
+            val sent = mutableListOf<JSONObject>()
+            server.dispatcher = opsAndChanges(ops = { sent += it })
+
+            assertEquals(SyncOutcome.Success, sync(database = migrated).syncBook(LOCAL))
+
+            val act = sent.single { it.optString("kind") == "status" }
+            assertEquals("finished", act.getString("reading_status"))
+            assertEquals(0.4, act.getDouble("progression"), 0.0001)
+        } finally {
+            migrated.close()
+            context.deleteDatabase(name)
+        }
+    }
+
     // -- Records this device cannot read -----------------------------------
     //
     // A server that writes a null progression — as one did, four times
@@ -372,6 +988,38 @@ class LiseurSyncPositionSyncTest {
 
         assertTrue(requests().any { it.target.startsWith("/v1/works/w-1/positions") })
         assertEquals(0.33, db.readingProgressDao().get(LOCAL)?.totalProgression!!, 0.0001)
+    }
+
+    @Test
+    fun `a book named for the first time is asked what was said about it too`() = runTest {
+        // The choice is behind the cursor like the position is, and it
+        // travels in its own array: `ops` never carries a status act
+        // because a status act is not a move. Landing it is owed to the
+        // next reconcile, which is what the second run is for.
+        connect()
+        db.bookDao().upsert(local())
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val target = request.target
+                return when {
+                    target.startsWith("/v1/works/resolve") ->
+                        json("""{"work_id":"w-1","confidence":"high","created":false}""")
+                    target.startsWith("/v1/works/w-1/positions") -> json(
+                        """{"ops":[${op(seq = 2, progression = 0.2)}],
+                            "status":[${statusOp(seq = 3, progression = 0.2, status = "unread")}]}
+                        """.trimIndent(),
+                    )
+                    target.startsWith("/v1/changes") -> json("""{"ops":[],"high_water":3}""")
+                    target.startsWith("/v1/ops") -> applied(request)
+                    else -> json("""{"ops":[]}""")
+                }
+            }
+        }
+        sync().syncAll(null)
+        sync().syncAll(null)
+        val row = db.readingProgressDao().get(LOCAL)!!
+        assertEquals(FinishedOverride.UNREAD, row.override)
+        assertEquals(0.2, row.totalProgression!!, 0.0001)
     }
 
     @Test
@@ -2765,37 +3413,38 @@ class LiseurSyncPositionSyncTest {
         online: Boolean = true, withAnnotations: Boolean = false, measured: Boolean = false,
         furthest: Boolean = false,
         http: LiseurSyncHttp = LiseurSyncHttp(),
+        database: LiseurDatabase = db,
     ): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
             http = http,
-            serverDao = db.remoteServerDao(),
-            bookDao = db.bookDao(),
-            progressDao = db.readingProgressDao(),
-            peerStateDao = db.syncPeerStateDao(),
-            furthestDao = if (furthest) db.furthestPositionDao() else null,
-            identityDao = db.workIdentityDao(),
-            sessionDao = db.readingSessionDao(),
-            sessionRefusalDao = db.sessionRefusalDao(),
-            sessionTransmissionDao = db.sessionTransmissionDao(),
+            serverDao = database.remoteServerDao(),
+            bookDao = database.bookDao(),
+            progressDao = database.readingProgressDao(),
+            peerStateDao = database.syncPeerStateDao(),
+            furthestDao = if (furthest) database.furthestPositionDao() else null,
+            identityDao = database.workIdentityDao(),
+            sessionDao = database.readingSessionDao(),
+            sessionRefusalDao = database.sessionRefusalDao(),
+            sessionTransmissionDao = database.sessionTransmissionDao(),
             supportsMeasuredSessions = { measured },
             works = WorkResolver(
-                dao = db.workIdentityDao(),
-                fingerprints = BookFingerprintStore(context, db.workIdentityDao()) { NOW },
+                dao = database.workIdentityDao(),
+                fingerprints = BookFingerprintStore(context, database.workIdentityDao()) { NOW },
                 now = { NOW },
             ),
             deviceKey = { "device-a" },
-            finishedState = FinishedState(db.bookDao(), db.readingProgressDao()),
+            finishedState = FinishedState(database.bookDao(), database.readingProgressDao()),
             networkAvailability = { online },
             annotations = if (withAnnotations) LiseurSyncAnnotations(
-                serverDao = db.remoteServerDao(),
-                annotationDao = db.annotationDao(),
-                syncDao = db.annotationSyncDao(),
-                identityDao = db.workIdentityDao(),
+                serverDao = database.remoteServerDao(),
+                annotationDao = database.annotationDao(),
+                syncDao = database.annotationSyncDao(),
+                identityDao = database.workIdentityDao(),
                 now = { NOW },
             ) else null,
             now = { NOW },
-            inTransaction = { work -> db.withTransaction { work() } },
+            inTransaction = { work -> database.withTransaction { work() } },
         )
     }
 
@@ -2809,8 +3458,9 @@ class LiseurSyncPositionSyncTest {
         deviceId: String? = null,
         baseUrl: String = "http://127.0.0.1:${server.port}",
         stableAccountId: String? = null,
+        database: LiseurDatabase = db,
     ) {
-        db.remoteServerDao().upsert(
+        database.remoteServerDao().upsert(
             RemoteServer(
                 kind = ServerKind.LISEUR_SYNC,
                 baseUrl = baseUrl,
@@ -3333,8 +3983,9 @@ class LiseurSyncPositionSyncTest {
         editionSha: String? = null,
         confirmed: Boolean = true,
         peerId: String = peer(deviceId),
+        database: LiseurDatabase = db,
     ) =
-        db.workIdentityDao().upsert(
+        database.workIdentityDao().upsert(
             com.chmouel.liseur.data.db.WorkAlias(
                 bookUrl = bookUrl,
                 peerId = peerId,
@@ -3354,14 +4005,50 @@ class LiseurSyncPositionSyncTest {
         locatorJson: String? = null,
         editionSha: String? = null,
         clientTs: Long = NOW,
+        coverage: String? = null,
     ): String {
         val device = deviceId?.let { ""","device_id":"$it"""" } ?: ""
         val locator = locatorJson?.let { ""","locator":$it""" } ?: ""
         val edition = editionSha?.let { ""","edition_sha":"$it"""" } ?: ""
+        val narrative = coverage?.let { ""","coverage":"$it"""" } ?: ""
         return """{"op_id":"o-$seq","work_id":"w-1","seq":$seq,
             "progression":$progression,
-            "client_ts":"${SyncOps.formatTime(clientTs)}"$device$locator$edition}
+            "client_ts":"${SyncOps.formatTime(clientTs)}"$device$locator$edition$narrative}
         """.trimIndent()
+    }
+
+    /** A status act, as a device that said something outright sends it. */
+    private fun statusOp(
+        seq: Long,
+        progression: Double,
+        status: String = "finished",
+        deviceId: String? = null,
+        clientTs: Long = NOW,
+    ): String {
+        val device = deviceId?.let { ""","device_id":"$it"""" } ?: ""
+        return """{"op_id":"s-$seq","work_id":"w-1","seq":$seq,
+            "progression":$progression,
+            "client_ts":"${SyncOps.formatTime(clientTs)}",
+            "kind":"status","reading_status":"$status"$device}
+        """.trimIndent()
+    }
+
+    /**
+     * Answers the feed with [page] and takes whatever the run sends,
+     * naming each op back as the server must.
+     */
+    private fun opsAndChanges(
+        page: String = """{"ops":[],"high_water":0}""",
+        ops: (JSONObject) -> Unit = {},
+    ) = object : Dispatcher() {
+        override fun dispatch(request: RecordedRequest): MockResponse {
+            if (!request.target.startsWith("/v1/ops")) {
+                return json(if (request.target.startsWith("/v1/changes")) page else """{"ops":[]}""")
+            }
+            val sent = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+            for (index in 0 until sent.length()) ops(sent.getJSONObject(index))
+            return applied(request)
+        }
     }
 
     private fun json(body: String) = MockResponse(code = 200, body = body)

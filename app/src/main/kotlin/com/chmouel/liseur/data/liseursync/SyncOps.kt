@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
+import com.chmouel.liseur.domain.NarrativeCoverage
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.text.SimpleDateFormat
@@ -9,7 +11,7 @@ import java.util.TimeZone
 import java.util.UUID
 import org.json.JSONObject
 
-/** A position, as liseur-sync exchanges it. */
+/** A position or a status act, as liseur-sync exchanges them. */
 data class SyncOp(
     val opId: String,
     val workId: String,
@@ -20,7 +22,15 @@ data class SyncOp(
     val deviceId: String? = null,
     val seq: Long = 0,
     val originalJson: String? = null,
-)
+    val readingStatus: ReadingStatusChoice? = null,
+    val coverage: NarrativeCoverage? = null,
+) {
+    /**
+     * A status act is not a move: it carries the sender's own place so
+     * that the payload is complete, and no position query reads it.
+     */
+    val isStatus: Boolean get() = readingStatus != null
+}
 
 /**
  * One record from the server's feed: a sequence number, and a position
@@ -69,6 +79,8 @@ object SyncOps {
     /** The most ops the server will take in one request. */
     const val MAX_BATCH = 500
 
+    private const val STATUS_KIND = "status"
+
     /**
      * A name for this position that this device will always agree with
      * itself about.
@@ -84,12 +96,25 @@ object SyncOps {
             "$deviceKey|$workId|$revision".toByteArray(StandardCharsets.UTF_8),
         ).toString()
 
+    /**
+     * A name for a status act, from the status revision rather than the
+     * position revision: two acts of one choice would otherwise collide
+     * and the second be refused as a conflict.
+     */
+    fun statusOpIdFor(deviceKey: String, workId: String, statusRevision: Long): String =
+        opIdFor("$deviceKey|status", workId, statusRevision)
+
     fun toJson(op: SyncOp): JSONObject = JSONObject().apply {
         put("op_id", op.opId)
         put("work_id", op.workId)
         op.editionSha?.let { put("edition_sha", it) }
         put("client_ts", formatTime(op.clientTs))
         put("progression", op.progression)
+        op.readingStatus?.let {
+            put("kind", STATUS_KIND)
+            put("reading_status", it.wireName)
+        }
+        op.coverage?.let { put("coverage", it.wireName) }
         locatorFor(op.locatorJson)?.let { put("locator", it) }
     }
 
@@ -112,6 +137,13 @@ object SyncOps {
         val opId = json.optString("op_id").takeIf { it.isNotEmpty() } ?: return null
         val progression = (fractionAt(json, "progression") as? Fraction.Present)?.value
             ?: return null
+        val kind = json.optString("kind").takeIf { it.isNotEmpty() }
+        if (kind != null && kind != STATUS_KIND) return null
+        val readingStatus = if (kind == STATUS_KIND) {
+            ReadingStatusChoice.fromWire(json.optString("reading_status")) ?: return null
+        } else {
+            null
+        }
         val locator = json.optJSONObject("locator")
         if (locator != null && !locatorReadable(locator)) return null
         return SyncOp(
@@ -124,6 +156,8 @@ object SyncOps {
             deviceId = json.optString("device_id").takeIf { it.isNotEmpty() },
             seq = json.optLong("seq"),
             originalJson = json.toString(),
+            readingStatus = readingStatus,
+            coverage = NarrativeCoverage.fromWire(json.optString("coverage")),
         )
     }
 

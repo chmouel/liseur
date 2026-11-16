@@ -45,7 +45,7 @@ import androidx.sqlite.execSQL
         BookMetadata::class,
         SessionImportSource::class,
     ],
-    version = 75,
+    version = 76,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -88,6 +88,48 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
 
     companion object {
+        /**
+         * Carries an explicit reading status and the coverage of a
+         * recording beside the position (ADR-0066).
+         */
+        val MIGRATION_75_76 = object : Migration(75, 76) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("ALTER TABLE `reading_progress` ADD COLUMN `coverage` TEXT")
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `acked_status_revision` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_coverage` TEXT",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `has_pending_status` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_status_choice` TEXT",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_status_seq` INTEGER",
+                )
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `pending_status_updated_at` INTEGER",
+                )
+                connection.execSQL("ALTER TABLE `sync_peer_state` ADD COLUMN `status_sent_op` TEXT")
+                connection.execSQL(
+                    "ALTER TABLE `sync_peer_state` ADD COLUMN `status_sent_revision` INTEGER",
+                )
+                // Status revisions arrived with a default of zero and
+                // nothing backfilled them, so a choice made before then
+                // looks owed to nobody and is never sent. One is the
+                // first revision that can be delivered.
+                connection.execSQL(
+                    "UPDATE `reading_progress` SET `status_revision` = 1 " +
+                        "WHERE `finished_override` != 0 AND `status_revision` = 0",
+                )
+            }
+        }
+
         /** Marks sessions restored from a backup so they are never uploaded to liseur-sync. */
         val MIGRATION_74_75 = object : Migration(74, 75) {
             override fun migrate(connection: SQLiteConnection) {
@@ -2057,6 +2099,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_72_73,
             MIGRATION_73_74,
             MIGRATION_74_75,
+            MIGRATION_75_76,
         )
     }
 }

@@ -9,6 +9,7 @@ import com.chmouel.liseur.data.remote.LiveIdentity
 import com.chmouel.liseur.data.remote.RemoteHttpFailure
 import com.chmouel.liseur.data.remote.ServerKind
 import com.chmouel.liseur.data.remote.SyncFailure
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.StatsRange
 import java.io.IOException
 import java.time.DayOfWeek
@@ -73,6 +74,13 @@ data class WorkInsights(
      * for one that is not, this is the only account of it there is.
      */
     val currentProgression: Double? = null,
+    /**
+     * The server's own resolution of the work's reading status (ADR-0066),
+     * or null from a server too old to resolve one.
+     */
+    val status: ReadingStatus? = null,
+    /** The coverage that resolution used: false for a partial recording. */
+    val coversNarrative: Boolean? = null,
 )
 
 /** One server-timezone calendar day, added up across every device. */
@@ -409,6 +417,16 @@ private fun JSONObject.covers(from: LocalDate?, to: LocalDate): Boolean =
 internal fun Double.validMinutes(): Boolean =
     isFinite() && this >= 0 && this < Long.MAX_VALUE.toDouble() / 60_000.0
 
+/** The reading status a liseur-sync answer resolves a work to (ADR-0066). */
+internal fun serverReadingStatus(value: String?): ReadingStatus? = when (value) {
+    "finished" -> ReadingStatus.FINISHED
+    "reading" -> ReadingStatus.READING
+    // An explicit unread and a book nobody opened are the same shelf
+    // here, and only the server keeps the difference on the wire.
+    "unread", "ready_to_read" -> ReadingStatus.READY_TO_READ
+    else -> null
+}
+
 internal fun JSONObject.nonnegativeCount(name: String): Int? {
     val value = optDouble(name, 0.0)
     return value.takeIf { it.isFinite() && it >= 0 && it <= Int.MAX_VALUE && it % 1.0 == 0.0 }
@@ -427,6 +445,12 @@ internal fun parseWorkInsights(answer: JSONObject): WorkInsights? = try {
         author = answer.optString("author").takeIf { it.isNotEmpty() },
         currentProgression = answer.optDouble("current_progression")
             .takeIf { it.isFinite() && it > 0.0 }?.coerceAtMost(1.0),
+        status = serverReadingStatus(answer.optString("status")),
+        coversNarrative = if (answer.has("covers_narrative")) {
+            answer.optBoolean("covers_narrative")
+        } else {
+            null
+        },
     )
 } catch (_: JSONException) {
     null

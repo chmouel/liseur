@@ -27,9 +27,16 @@ enum class ReadingStatus {
          * said otherwise. [FINISHED_PROGRESSION] is the one threshold —
          * the same number decides whether a book is worth resuming, so
          * two answers to "is this finished?" cannot drift apart.
+         *
+         * A recording that covers part of the narrative never finishes
+         * the book, however far into that part it goes.
          */
-        fun forProgression(progression: Double?): ReadingStatus = when {
+        fun forProgression(
+            progression: Double?,
+            partialCoverage: Boolean = false,
+        ): ReadingStatus = when {
             progression == null || progression <= 0.0 -> READY_TO_READ
+            partialCoverage -> READING
             progression >= FINISHED_PROGRESSION -> FINISHED
             else -> READING
         }
@@ -71,6 +78,7 @@ enum class FinishedOverride {
 fun readingStatusFor(
     progression: Double?,
     override: FinishedOverride = FinishedOverride.NONE,
+    partialCoverage: Boolean = false,
 ): ReadingStatus = when (override) {
     FinishedOverride.FINISHED -> ReadingStatus.FINISHED
     FinishedOverride.UNREAD ->
@@ -80,7 +88,64 @@ fun readingStatusFor(
             ReadingStatus.READING
         }
 
-    FinishedOverride.NONE -> ReadingStatus.forProgression(progression)
+    FinishedOverride.NONE -> ReadingStatus.forProgression(progression, partialCoverage)
+}
+
+/**
+ * What someone said about a book, as a liseur-sync status act says it.
+ *
+ * [AUTOMATIC] is a withdrawal rather than a choice: resuming reading
+ * sends it so the position decides again.
+ */
+enum class ReadingStatusChoice {
+    FINISHED,
+    UNREAD,
+    AUTOMATIC,
+    ;
+
+    val wireName: String
+        get() = when (this) {
+            FINISHED -> "finished"
+            UNREAD -> "unread"
+            AUTOMATIC -> "automatic"
+        }
+
+    val override: FinishedOverride
+        get() = when (this) {
+            FINISHED -> FinishedOverride.FINISHED
+            UNREAD -> FinishedOverride.UNREAD
+            AUTOMATIC -> FinishedOverride.NONE
+        }
+
+    companion object {
+        fun fromWire(value: String?): ReadingStatusChoice? =
+            entries.firstOrNull { it.wireName == value }
+
+        fun forOverride(override: FinishedOverride): ReadingStatusChoice = when (override) {
+            FinishedOverride.FINISHED -> FINISHED
+            FinishedOverride.UNREAD -> UNREAD
+            FinishedOverride.NONE -> AUTOMATIC
+        }
+    }
+}
+
+/**
+ * Whether the recording a position came from covers the whole narrative.
+ *
+ * A missing value is "unknown", which is every position from an ebook
+ * and every one recorded before coverage travelled at all.
+ */
+enum class NarrativeCoverage {
+    FULL,
+    PARTIAL,
+    ;
+
+    val wireName: String get() = name.lowercase()
+
+    companion object {
+        fun fromWire(value: String?): NarrativeCoverage? =
+            entries.firstOrNull { it.wireName == value }
+    }
 }
 
 /** Where a book was left, on this device or on the server. */
