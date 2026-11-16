@@ -151,6 +151,11 @@ fi
 
 adb() { command adb -s "$serial" "$@"; }
 
+# The run seeds the library, rewrites the app's settings and reaches the
+# ai-stub at 10.0.2.2, which only an emulator maps to this machine. A real
+# phone holds someone's library, so it is refused rather than tried.
+[[ $serial == emulator-* ]] || die "$serial is not an emulator; this script seeds and rewrites app data"
+
 adb shell pm path "$APP_ID" >/dev/null 2>&1 ||
     die "$APP_ID is not installed on $serial"
 
@@ -897,6 +902,10 @@ settings_top() {
 }
 
 point_companion_at_the_stub() {
+    # Android 17 asks before an app talks to a local-network address, and
+    # the dialog would hide the model field. Older releases have no such
+    # permission, so a refusal to grant it is fine.
+    adb shell pm grant "$APP_ID" android.permission.ACCESS_LOCAL_NETWORK >/dev/null 2>&1 || true
     open_library
     open_settings
     settings_top
@@ -1403,6 +1412,20 @@ dismiss_sheet "Custom"
 
 step "Companion"
 save_app_settings
+
+# The map is taken with the book open on a sheet that, with a service
+# chosen, starts recap requests of its own, which would send the book to
+# whoever that service is. Stop before opening anything unless the device
+# has no service.
+open_library
+open_settings
+settings_top
+scroll_to "Reading companion" exact || die "no Reading companion row in Settings"
+# The row can stop at the very edge, with its second line under the bar.
+adb shell input swipe "$(x 0.5)" "$(y 0.75)" "$(x 0.5)" "$(y 0.55)" 300
+sleep 1
+on_screen "Offline only" contains ||
+    die "a reading companion service is already chosen; clear it first so no book text is sent to it"
 
 # The map first, while no AI service is chosen: that is the state a
 # reader who has not set one up is in, and the card offering one is the
