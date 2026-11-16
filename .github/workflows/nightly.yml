@@ -46,11 +46,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6
 
-      - name: Verify the source commit
-        run: >-
-          ./gradlew testFossDebugUnitTest testPlayDebugUnitTest
-          lintFossDebug lintPlayDebug assembleFossDebug assemblePlayDebug
-          assembleFossRelease assemblePlayRelease --console=plain
+      # Kept in separate invocations, like build.yml: AGP 9 compiles
+      # Kotlin inside the Gradle daemon's heap, and asking for all four
+      # variants at once runs out of memory on a runner here.
+      - name: Unit tests
+        run: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain
+
+      - name: Lint
+        run: ./gradlew lintFossDebug lintPlayDebug --console=plain
+
+      - name: Assemble debug APKs
+        run: ./gradlew assembleFossDebug assemblePlayDebug --console=plain
+
+      - name: Assemble release APKs
+        run: ./gradlew assembleFossRelease assemblePlayRelease --console=plain
 
       - name: Tag it
         id: cut
