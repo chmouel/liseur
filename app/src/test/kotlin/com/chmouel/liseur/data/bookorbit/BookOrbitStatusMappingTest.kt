@@ -2,6 +2,7 @@ package com.chmouel.liseur.data.bookorbit
 
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.readingStatusFor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -14,10 +15,31 @@ class BookOrbitStatusMappingTest {
     }
 
     @Test
-    fun `local states map only explicit finished and unread intent`() {
+    fun `local states map only explicit intent`() {
         assertEquals("read", BookOrbitStatusMapping.toRemote(FinishedOverride.FINISHED))
         assertEquals("unread", BookOrbitStatusMapping.toRemote(FinishedOverride.UNREAD))
+        assertEquals("want_to_read", BookOrbitStatusMapping.toRemote(FinishedOverride.WANT_TO_READ))
+        assertEquals("reading", BookOrbitStatusMapping.toRemote(FinishedOverride.READING))
+        assertEquals("on_hold", BookOrbitStatusMapping.toRemote(FinishedOverride.PAUSED))
+        assertEquals("abandoned", BookOrbitStatusMapping.toRemote(FinishedOverride.DID_NOT_FINISH))
         assertNull(BookOrbitStatusMapping.toRemote(FinishedOverride.NONE))
+    }
+
+    @Test
+    fun `richer manual statuses map back to the choice and its merged status`() {
+        mapOf(
+            "want_to_read" to FinishedOverride.WANT_TO_READ,
+            "on_hold" to FinishedOverride.PAUSED,
+            "abandoned" to FinishedOverride.DID_NOT_FINISH,
+        ).forEach { (remote, override) ->
+            listOf(null, 0.0, 0.42, 0.99).forEach { progression ->
+                assertEquals(
+                    MappedBookOrbitStatus(readingStatusFor(progression, override), override),
+                    BookOrbitStatusMapping.fromRemote(remote, "manual", progression),
+                )
+            }
+            assertEquals(remote, BookOrbitStatusMapping.toRemote(override))
+        }
     }
 
     @Test
@@ -40,9 +62,9 @@ class BookOrbitStatusMappingTest {
 
     @Test
     fun `statuses without a safe local equivalent are preserved remotely`() {
-        listOf("want_to_read", "on_hold", "rereading", "skimmed", "abandoned", "future_status")
+        listOf("rereading", "skimmed", "future_status")
             .forEach { assertNull(BookOrbitStatusMapping.fromRemote(it, "manual", 0.42)) }
-        listOf("read", "unread", "reading")
+        listOf("read", "unread", "reading", "want_to_read", "on_hold", "abandoned")
             .forEach { assertNull(BookOrbitStatusMapping.fromRemote(it, "auto", 0.42)) }
     }
 }

@@ -18,6 +18,7 @@ import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.ExactPositionDecision
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.sync.PositionUpdate
 import java.net.InetAddress
 import javax.crypto.KeyGenerator
@@ -384,7 +385,7 @@ class BookOrbitStatusSyncTest {
         database.readingProgressDao().upsert(
             ReadingProgress(bookUrl, """{"href":"chapter.xhtml"}""", 0.73, updatedAt = 12),
         )
-        web.enqueue(MockResponse(body = detail("abandoned", "manual")))
+        web.enqueue(MockResponse(body = detail("skimmed", "manual")))
 
         assertEquals(SyncOutcome.Success, runSync())
 
@@ -392,8 +393,85 @@ class BookOrbitStatusSyncTest {
         assertEquals(0, local.finishedOverride)
         assertEquals(0, local.statusRevision)
         assertEquals(0, local.localRevision)
-        assertEquals("abandoned",
+        assertEquals("skimmed",
             database.bookOrbitStatusAgreementDao().get(account.accountKey, bookUrl)?.agreedRemoteStatus)
+    }
+
+    @Test
+    fun `local richer choices patch their native BookOrbit status`() = runBlocking {
+        mapOf(
+            FinishedOverride.WANT_TO_READ to "want_to_read",
+            FinishedOverride.READING to "reading",
+            FinishedOverride.PAUSED to "on_hold",
+            FinishedOverride.DID_NOT_FINISH to "abandoned",
+        ).entries.forEachIndexed { index, (override, target) ->
+            database.readingProgressDao().upsert(
+                ReadingProgress(
+                    bookUrl, """{"href":"chapter.xhtml"}""", 0.42, updatedAt = 12,
+                    status = readingStatusFor(0.42, override).wireName,
+                    finishedOverride = override.ordinal,
+                    statusRevision = index + 1L,
+                ),
+            )
+            web.enqueue(MockResponse(body = detail("unread", "auto")))
+            web.enqueue(MockResponse(code = 204))
+            web.enqueue(MockResponse(body = detail(target, "manual")))
+
+            assertEquals(SyncOutcome.Success, runSync())
+
+            assertEquals("GET", web.takeRequest().method)
+            val patch = web.takeRequest()
+            assertEquals("PATCH", patch.method)
+            assertEquals("""{"status":"$target"}""", patch.body!!.utf8())
+            assertEquals("GET", web.takeRequest().method)
+            assertEquals(override, database.readingProgressDao().get(bookUrl)!!.override)
+        }
+    }
+
+    @Test
+    fun `local want to read agrees with a manual want_to_read without a write`() = runBlocking {
+        database.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl, """{"href":"chapter.xhtml"}""", 0.42, updatedAt = 12,
+                status = ReadingStatus.WANT_TO_READ.wireName,
+                finishedOverride = FinishedOverride.WANT_TO_READ.ordinal,
+                statusRevision = 1,
+            ),
+        )
+        web.enqueue(MockResponse(body = detail("want_to_read", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        web.enqueue(MockResponse(body = detail("want_to_read", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+
+        assertEquals(listOf("GET", "GET"), (1..2).map { web.takeRequest().method })
+        assertEquals(2, web.requestCount)
+        val local = database.readingProgressDao().get(bookUrl)!!
+        assertEquals(FinishedOverride.WANT_TO_READ, local.override)
+        assertEquals(1, local.statusRevision)
+        val agreement = database.bookOrbitStatusAgreementDao().get(account.accountKey, bookUrl)!!
+        assertEquals("want_to_read", agreement.agreedRemoteStatus)
+        assertEquals(FinishedOverride.WANT_TO_READ.ordinal, agreement.agreedLocalOverride)
+    }
+
+    @Test
+    fun `remote manual abandoned is adopted once as did not finish`() = runBlocking {
+        val locator = """{"href":"chapter.xhtml","locations":{"progression":0.42}}"""
+        database.readingProgressDao().upsert(
+            ReadingProgress(bookUrl, locator, 0.42, updatedAt = 12),
+        )
+        web.enqueue(MockResponse(body = detail("abandoned", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        val adopted = database.readingProgressDao().get(bookUrl)!!
+        assertEquals(FinishedOverride.DID_NOT_FINISH, adopted.override)
+        assertEquals(ReadingStatus.DID_NOT_FINISH.wireName, adopted.status)
+        assertEquals(locator, adopted.locatorJson)
+        assertEquals(1, adopted.statusRevision)
+
+        web.enqueue(MockResponse(body = detail("abandoned", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        assertEquals(listOf("GET", "GET"), (1..2).map { web.takeRequest().method })
+        assertEquals(2, web.requestCount)
+        assertEquals(1, database.readingProgressDao().get(bookUrl)!!.statusRevision)
     }
 
     @Test

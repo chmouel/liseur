@@ -1004,10 +1004,12 @@ changing reader behavior.
   `ServerKind`.
 - Positions are Readium `Locator`s locally (calibre-web exchanges
   percentage; Komga and liseur-sync full locators). All providers merge
-  through `domain/ReadingStateMerge.kt`. Kobo, Komga and BookOrbit cannot
-  represent the richer choices: want-to-read maps to ready or unread, and
-  paused and did-not-finish map to reading. The peer loses the original
-  choice. kosync exchanges positions only.
+  through `domain/ReadingStateMerge.kt`. BookOrbit carries the richer
+  choices natively ([status mapping](#status-mapping)). Kobo cannot:
+  want-to-read goes as ready to read, and paused and did-not-finish as
+  reading. Komga has no status of its own, so a richer choice only pushes
+  the saved position and Komga derives progress from it. Either way the
+  peer loses the original choice. kosync exchanges positions only.
 - A renewable credential belongs to one published connection.
   `BookOrbitSession` serialises renewal and writes it only if the row still
   has the epoch and refresh token it started from; otherwise drops it.
@@ -2431,12 +2433,15 @@ declined so the next move pushes.
 
 ### Status mapping
 
-Liseur's explicit finished and unread marks map to BookOrbit `read` and
-`unread`, and manual BookOrbit `read` and `unread` map back. A manual
-`reading` maps only when the local passage is already in Liseur's reading
-range. Automatic statuses stay derived from position. `want_to_read`,
-`on_hold`, `rereading`, `skimmed`, `abandoned` and unknown values are
-preserved on BookOrbit.
+Liseur's explicit choices map to BookOrbit natively, and the manual
+BookOrbit status maps back: finished is `read`, unread is `unread`,
+want-to-read is `want_to_read`, paused is `on_hold` and did-not-finish is
+`abandoned`. An explicit reading choice is sent as `reading`, but a manual
+`reading` maps back only as position-derived reading, and only when the
+local passage is already in Liseur's reading range: Liseur sends `reading`
+for a resumed book too, and a pinned choice would stop it finishing.
+Automatic statuses stay derived from position. `rereading`, `skimmed` and
+unknown values are preserved on BookOrbit.
 
 ### BookOrbit fixtures
 
