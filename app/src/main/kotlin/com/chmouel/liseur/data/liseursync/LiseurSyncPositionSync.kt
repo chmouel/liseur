@@ -1497,11 +1497,10 @@ class LiseurSyncPositionSync(
             for (op in newest(ops, status = true)) {
                 for (alias in byWork[op.workId].orEmpty()) {
                     if (!op.shouldLandStatus(account)) {
-                        // Our own act coming back: the partner holds it,
-                        // so there is nothing here left to adopt.
                         val pending = peerStateDao.get(alias.bookUrl, account.peerId)
+                        // An equal-sequence pending act may have become readable after an upgrade
                         if (pending?.pendingStatusSeq == null ||
-                            pending.pendingStatusSeq <= op.seq
+                            pending.pendingStatusSeq < op.seq
                         ) {
                             peerStateDao.clearPendingStatus(alias.bookUrl, account.peerId)
                         }

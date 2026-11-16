@@ -400,6 +400,37 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `cursor recovery adopts a saved choice from this device at the same sequence`() = runTest {
+        connect(cursor = 5, deviceId = "device-a")
+        db.bookDao().upsert(local())
+        alias(deviceId = "device-a")
+        db.syncPeerStateDao().persistPendingStatus(LOCAL, peer("device-a"), "paused", NOW, 9)
+        server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))
+        server.enqueue(json("""{"ops":[${statusOp(seq = 9, progression = 0.4, status = "paused", deviceId = "device-a")}],"snapshot_seq":9}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertEquals(FinishedOverride.PAUSED, db.readingProgressDao().get(LOCAL)!!.override)
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("device-a"))!!.hasPendingStatus)
+        assertEquals(9L, db.remoteServerDao().get()!!.syncCursorSeq)
+    }
+
+    @Test
+    fun `cursor recovery clears a saved choice superseded by a newer own act`() = runTest {
+        connect(cursor = 5, deviceId = "device-a")
+        db.bookDao().upsert(local())
+        alias(deviceId = "device-a")
+        db.syncPeerStateDao().persistPendingStatus(LOCAL, peer("device-a"), "paused", NOW, 8)
+        server.enqueue(MockResponse(code = 410, body = """{"error":"resync_required"}"""))
+        server.enqueue(json("""{"ops":[${statusOp(seq = 9, progression = 0.4, status = "automatic", deviceId = "device-a")}],"snapshot_seq":9}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+
+        assertFalse(db.syncPeerStateDao().get(LOCAL, peer("device-a"))!!.hasPendingStatus)
+        assertNull(db.readingProgressDao().get(LOCAL))
+    }
+
+    @Test
     fun `a stored status is adopted when this version understands it`() = runTest {
         connect()
         db.bookDao().upsert(local())

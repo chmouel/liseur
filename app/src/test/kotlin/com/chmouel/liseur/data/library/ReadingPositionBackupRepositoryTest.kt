@@ -104,6 +104,41 @@ class ReadingPositionBackupRepositoryTest {
     }
 
     @Test
+    fun `a status-only finished restore keeps its original completion time`() = runTest {
+        db.bookDao().upsert(Book(url = "book", title = "Book", author = null, coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        repository().restore(listOf(BackedUpReadingPosition("book", null, null, "{}", null, 123_000,
+            readingStatus = "finished")))
+
+        assertEquals(123_000L, db.readingProgressDao().get("book")!!.readAt)
+        assertEquals(123_000L, db.bookDao().getByUrl("book")!!.finishedAt)
+    }
+
+    @Test
+    fun `a status-only restore dates a placeholder with no reading time`() = runTest {
+        db.bookDao().upsert(Book(url = "book", title = "Book", author = null, coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        db.readingProgressDao().upsert(ReadingProgress("book", "{}", null, updatedAt = 30))
+        repository().restore(listOf(BackedUpReadingPosition("book", null, null, "{}", null, 123_000,
+            readingStatus = "finished")))
+
+        assertEquals(123_000L, db.readingProgressDao().get("book")!!.readAt)
+        assertEquals(123_000L, db.bookDao().getByUrl("book")!!.finishedAt)
+    }
+
+    @Test
+    fun `a status-only restore leaves an existing reading time alone`() = runTest {
+        db.bookDao().upsert(Book(url = "book", title = "Book", author = null, coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        db.readingProgressDao().upsert(ReadingProgress("book", locator, 0.4, updatedAt = 30, readAt = 20))
+        repository().restore(listOf(BackedUpReadingPosition("book", null, null, "{}", null, 123_000,
+            readingStatus = "finished")))
+
+        assertEquals(20L, db.readingProgressDao().get("book")!!.readAt)
+        assertEquals(20L, db.bookDao().getByUrl("book")!!.finishedAt)
+    }
+
+    @Test
     fun `restoring an unread choice does not reset the existing position`() = runTest {
         val progress = db.readingProgressDao()
         progress.upsert(ReadingProgress("book", locator, 0.7, updatedAt = 30))

@@ -95,6 +95,9 @@ class ReadingPositionBackupRepository(
                             val status = readingStatusFor(row?.totalProgression, choice.override, row?.partialCoverage == true)
                             progressDao.setFinishedOverride(url, choice.override.ordinal, status.wireName,
                                 row?.totalProgression, at, resetPosition = false, keepUnreadReset = true)
+                            if (row == null || (row.readAt == null && row.totalProgression == null && row.locatorJson == "{}")) {
+                                progressDao.restoreBackupReadAt(url, position.readAt.coerceAtMost(at))
+                            }
                         }
                         finishedState.refreshFromProgress(url)
                     }
