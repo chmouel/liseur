@@ -29,6 +29,7 @@ class FinishedState(
     private val onFinished: suspend (String) -> Unit = {},
     /** Runs a status choice in the same line as queued position writes. */
     private val inWriteOrder: suspend (suspend () -> Unit) -> Unit = { it() },
+    private val hasPendingStatus: suspend (String) -> Boolean = { false },
 ) {
 
     /**
@@ -53,8 +54,17 @@ class FinishedState(
      * the same reason it is reported by [setFinished].
      */
     suspend fun recordFinished(bookUrl: String) {
-        writeStatus(bookUrl, FinishedOverride.FINISHED, null)
-        onFinished(bookUrl)
+        var written = false
+        inTransaction {
+            val override = progressDao.get(bookUrl)?.override
+            if (override == FinishedOverride.WANT_TO_READ || override == FinishedOverride.READING ||
+                override == FinishedOverride.PAUSED || override == FinishedOverride.DID_NOT_FINISH ||
+                hasPendingStatus(bookUrl)
+            ) return@inTransaction
+            writeStatus(bookUrl, FinishedOverride.FINISHED, null)
+            written = true
+        }
+        if (written) onFinished(bookUrl)
     }
 
     /**

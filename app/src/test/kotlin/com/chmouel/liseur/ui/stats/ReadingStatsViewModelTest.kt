@@ -593,13 +593,25 @@ class ReadingStatsViewModelTest {
                         status = ReadingStatus.READING,
                         coversNarrative = false,
                     ),
+                    WorkInsights(
+                        workId = "w-paused", sessions = 1, activeMinutes = 5.0,
+                        etaSeconds = null, lastReadAt = 700, title = "Paused",
+                        currentProgression = 0.99, status = ReadingStatus.PAUSED,
+                    ),
+                    WorkInsights(
+                        workId = "w-dnf", sessions = 1, activeMinutes = 5.0,
+                        etaSeconds = null, lastReadAt = 600, title = "Unfinished",
+                        currentProgression = 0.99, status = ReadingStatus.DID_NOT_FINISH,
+                    ),
                 ),
             ),
         )
 
-        assertEquals(2, merged.booksRead)
+        assertEquals(4, merged.booksRead)
         assertEquals(1, merged.booksFinished)
         assertTrue(merged.books.first { it.workId == "w-read" }.finished)
+        assertEquals(false, merged.books.first { it.workId == "w-paused" }.finished)
+        assertEquals(false, merged.books.first { it.workId == "w-dnf" }.finished)
         assertEquals(false, merged.books.first { it.workId == "w-partial" }.finished)
     }
 

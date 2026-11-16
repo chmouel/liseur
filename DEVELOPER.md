@@ -1004,7 +1004,10 @@ changing reader behavior.
   `ServerKind`.
 - Positions are Readium `Locator`s locally (calibre-web exchanges
   percentage; Komga and liseur-sync full locators). All providers merge
-  through `domain/ReadingStateMerge.kt`.
+  through `domain/ReadingStateMerge.kt`. Kobo, Komga and BookOrbit cannot
+  represent the richer choices: want-to-read maps to ready or unread, and
+  paused and did-not-finish map to reading. The peer loses the original
+  choice. kosync exchanges positions only.
 - A renewable credential belongs to one published connection.
   `BookOrbitSession` serialises renewal and writes it only if the row still
   has the epoch and refresh token it started from; otherwise drops it.

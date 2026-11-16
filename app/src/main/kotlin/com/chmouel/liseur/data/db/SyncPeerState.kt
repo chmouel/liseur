@@ -103,6 +103,9 @@ abstract class SyncPeerStateDao {
     @Query("SELECT * FROM sync_peer_state WHERE book_url = :bookUrl AND peer_id = :peerId")
     abstract suspend fun get(bookUrl: String, peerId: String): SyncPeerState?
 
+    @Query("SELECT EXISTS(SELECT 1 FROM sync_peer_state WHERE book_url = :bookUrl AND has_pending_status = 1)")
+    abstract suspend fun hasPendingStatusForBook(bookUrl: String): Boolean
+
     @Query("SELECT * FROM sync_peer_state WHERE peer_id = :peerId")
     abstract suspend fun forPeer(peerId: String): List<SyncPeerState>
 

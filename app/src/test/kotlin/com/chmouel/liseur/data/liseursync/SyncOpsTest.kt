@@ -317,6 +317,22 @@ class SyncOpsTest {
     }
 
     @Test
+    fun `known and future choices survive status parsing`() {
+        for (choice in ReadingStatusChoice.entries) {
+            val json = wire().put("kind", "status").put("reading_status", choice.wireName)
+            val parsed = SyncOps.fromJson(json)!!
+            assertTrue(parsed.isStatus)
+            assertEquals(choice, parsed.readingStatus)
+            assertEquals(choice.wireName, SyncOps.toJson(parsed).getString("reading_status"))
+        }
+        val json = wire().put("kind", "status").put("reading_status", "future_choice")
+        val parsed = SyncOps.fromJson(json)!!
+        assertTrue(parsed.isStatus)
+        assertNull(parsed.readingStatus)
+        assertEquals("future_choice", SyncOps.toJson(parsed).getString("reading_status"))
+    }
+
+    @Test
     fun `a status act with no choice is refused`() {
         assertNull(SyncOps.fromJson(wire().put("kind", "status")))
     }

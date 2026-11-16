@@ -37,6 +37,14 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = android.app.Application::class)
 @RunWith(RobolectricTestRunner::class)
 class LiseurSyncInsightsTest {
+    @Test
+    fun `richer server statuses retain their meaning`() {
+        assertEquals(ReadingStatus.WANT_TO_READ, serverReadingStatus("want_to_read"))
+        assertEquals(ReadingStatus.PAUSED, serverReadingStatus("paused"))
+        assertEquals(ReadingStatus.DID_NOT_FINISH, serverReadingStatus("did_not_finish"))
+        assertEquals(ReadingStatus.READY_TO_READ, serverReadingStatus("unread"))
+    }
+
 
     private lateinit var server: MockWebServer
     private lateinit var db: LiseurDatabase

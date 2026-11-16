@@ -124,7 +124,7 @@ class ReadingPositionBackupRepositoryTest {
         FinishedState(db.bookDao(), db.readingProgressDao()).setFinished(url, false)
         repository().restore(listOf(backedUp.copy(progression = 1.0)))
         assertEquals(null, db.bookDao().getByUrl(url)?.finishedAt)
-        assertEquals("Reading", db.readingProgressDao().get(url)?.status)
+        assertEquals("ReadyToRead", db.readingProgressDao().get(url)?.status)
     }
 
     @Test

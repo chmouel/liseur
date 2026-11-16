@@ -48,7 +48,7 @@ class FinishedRuleTest {
     @Test
     fun `marking a book unread survives it sitting at the last page`() {
         assertEquals(
-            ReadingStatus.READING,
+            ReadingStatus.READY_TO_READ,
             readingStatusFor(1.0, FinishedOverride.UNREAD),
         )
     }
@@ -91,6 +91,10 @@ class FinishedRuleTest {
         assertEquals(0, FinishedOverride.NONE.ordinal)
         assertEquals(1, FinishedOverride.FINISHED.ordinal)
         assertEquals(2, FinishedOverride.UNREAD.ordinal)
+        assertEquals(3, FinishedOverride.WANT_TO_READ.ordinal)
+        assertEquals(4, FinishedOverride.READING.ordinal)
+        assertEquals(5, FinishedOverride.PAUSED.ordinal)
+        assertEquals(6, FinishedOverride.DID_NOT_FINISH.ordinal)
     }
 
     /** A deliberate "not read after all" beats a leftover flag on the server. */

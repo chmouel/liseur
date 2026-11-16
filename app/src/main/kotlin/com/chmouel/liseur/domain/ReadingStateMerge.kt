@@ -1,10 +1,12 @@
 package com.chmouel.liseur.domain
 
-/** How far through a book the reader is, as calibre-web's Kobo sync sees it. */
 enum class ReadingStatus {
     READY_TO_READ,
     READING,
     FINISHED,
+    WANT_TO_READ,
+    PAUSED,
+    DID_NOT_FINISH,
     ;
 
     /** The spelling the Kobo protocol uses on the wire. */
@@ -13,6 +15,8 @@ enum class ReadingStatus {
             READY_TO_READ -> "ReadyToRead"
             READING -> "Reading"
             FINISHED -> "Finished"
+            WANT_TO_READ -> "ReadyToRead"
+            PAUSED, DID_NOT_FINISH -> "Reading"
         }
 
     companion object {
@@ -61,6 +65,10 @@ enum class FinishedOverride {
 
     /** Put back on the pile by hand, even though the position is at the end. */
     UNREAD,
+    WANT_TO_READ,
+    READING,
+    PAUSED,
+    DID_NOT_FINISH,
     ;
 
     companion object {
@@ -81,26 +89,27 @@ fun readingStatusFor(
     partialCoverage: Boolean = false,
 ): ReadingStatus = when (override) {
     FinishedOverride.FINISHED -> ReadingStatus.FINISHED
-    FinishedOverride.UNREAD ->
-        if ((progression ?: 0.0) <= 0.0) {
-            ReadingStatus.READY_TO_READ
-        } else {
-            ReadingStatus.READING
-        }
-
+    FinishedOverride.UNREAD -> ReadingStatus.READY_TO_READ
+    FinishedOverride.WANT_TO_READ -> ReadingStatus.WANT_TO_READ
+    FinishedOverride.READING -> ReadingStatus.READING
+    FinishedOverride.PAUSED -> ReadingStatus.PAUSED
+    FinishedOverride.DID_NOT_FINISH -> ReadingStatus.DID_NOT_FINISH
     FinishedOverride.NONE -> ReadingStatus.forProgression(progression, partialCoverage)
 }
 
 /**
  * What someone said about a book, as a liseur-sync status act says it.
  *
- * [AUTOMATIC] is a withdrawal rather than a choice: resuming reading
- * sends it so the position decides again.
+ * [AUTOMATIC] withdraws the explicit choice so the position decides again.
  */
 enum class ReadingStatusChoice {
     FINISHED,
     UNREAD,
     AUTOMATIC,
+    WANT_TO_READ,
+    READING,
+    PAUSED,
+    DID_NOT_FINISH,
     ;
 
     val wireName: String
@@ -108,6 +117,10 @@ enum class ReadingStatusChoice {
             FINISHED -> "finished"
             UNREAD -> "unread"
             AUTOMATIC -> "automatic"
+            WANT_TO_READ -> "want_to_read"
+            READING -> "reading"
+            PAUSED -> "paused"
+            DID_NOT_FINISH -> "did_not_finish"
         }
 
     val override: FinishedOverride
@@ -115,6 +128,10 @@ enum class ReadingStatusChoice {
             FINISHED -> FinishedOverride.FINISHED
             UNREAD -> FinishedOverride.UNREAD
             AUTOMATIC -> FinishedOverride.NONE
+            WANT_TO_READ -> FinishedOverride.WANT_TO_READ
+            READING -> FinishedOverride.READING
+            PAUSED -> FinishedOverride.PAUSED
+            DID_NOT_FINISH -> FinishedOverride.DID_NOT_FINISH
         }
 
     companion object {
@@ -125,6 +142,10 @@ enum class ReadingStatusChoice {
             FinishedOverride.FINISHED -> FINISHED
             FinishedOverride.UNREAD -> UNREAD
             FinishedOverride.NONE -> AUTOMATIC
+            FinishedOverride.WANT_TO_READ -> WANT_TO_READ
+            FinishedOverride.READING -> READING
+            FinishedOverride.PAUSED -> PAUSED
+            FinishedOverride.DID_NOT_FINISH -> DID_NOT_FINISH
         }
     }
 }
