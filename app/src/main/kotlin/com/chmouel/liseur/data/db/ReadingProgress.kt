@@ -1166,6 +1166,7 @@ abstract class ReadingProgressDao {
         progression: Double?,
         now: Long,
         expectedLocalRevision: Long? = null,
+        keepUnreadReset: Boolean = false,
     ): Boolean {
         val existing = get(bookUrl)
         if (existing == null) {
@@ -1193,6 +1194,7 @@ abstract class ReadingProgressDao {
             status,
             now,
             expectedLocalRevision,
+            keepUnreadReset,
         ) > 0
     }
 
@@ -1202,7 +1204,9 @@ abstract class ReadingProgressDao {
             status = :status,
             finished_override = :override,
             status_revision = status_revision + 1,
-            unread_reset_revision = CASE WHEN :override = 2 THEN unread_reset_revision ELSE NULL END,
+            unread_reset_revision = CASE
+                WHEN :override = 2 OR :keepUnreadReset THEN unread_reset_revision
+                ELSE NULL END,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl AND status_revision = :expectedStatusRevision
@@ -1218,6 +1222,7 @@ abstract class ReadingProgressDao {
         status: String,
         now: Long,
         expectedLocalRevision: Long?,
+        keepUnreadReset: Boolean = false,
     ): Int
 
     @Query(

@@ -773,6 +773,58 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a partial place is acknowledged as reading, not as finished`() = runTest {
+        // The agreed status has to be the one the pushed position
+        // resolves to. Calling a partial 0.998 agreed-finished would make
+        // the next comparison of the same place look like two moves.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "edition")
+        db.readingProgressDao().restoreBackupPosition(
+            LOCAL, LOCATOR, 0.998, NOW, NOW, coverage = "partial",
+        )
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertTrue(sent.any { it.optString("coverage") == "partial" })
+        val state = db.syncPeerStateDao().get(LOCAL, peer())!!
+        assertEquals(ReadingStatus.READING.wireName, state.agreedStatus)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
+    fun `a choice taken while the unread reset is owed keeps it owed`() = runTest {
+        // The reset is a position debt with its own acknowledgement.
+        // Adopting somebody else's finished act must not retire it, or
+        // the server keeps the old place the reset was meant to clear.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.8, null, ReadingStatus.READING.wireName, NOW)
+        FinishedState(db.bookDao(), progress).setFinished(LOCAL, false)
+        val reset = progress.get(LOCAL)!!
+        assertNotNull(reset.unreadResetRevision)
+        // The unread act itself was delivered; the place it reset is
+        // what is still owed, so the peer acknowledges the status only.
+        db.syncPeerStateDao().settle(LOCAL, peer(), 0, 0.8, ReadingStatus.READING.wireName, NOW)
+        val owed = db.syncPeerStateDao().get(LOCAL, peer())!!
+        db.syncPeerStateDao().upsert(owed.copy(ackedStatusRevision = reset.statusRevision))
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4)}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+        )
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        val after = progress.get(LOCAL)!!
+        assertEquals(FinishedOverride.FINISHED, after.override)
+        // The reset is still owed: nothing but a position acknowledgement
+        // may clear it.
+        assertEquals(reset.unreadResetRevision, after.unreadResetRevision)
+        assertTrue(after.hasPendingUnreadReset(after.ackedRevision))
+    }
+
+    @Test
     fun `a peak keeps the coverage of the partial recording it came from`() = runTest {
         // The 0.998 arrived as a partial recording and became this
         // device's peak. Reading back to 0.5 leaves the peak as the only

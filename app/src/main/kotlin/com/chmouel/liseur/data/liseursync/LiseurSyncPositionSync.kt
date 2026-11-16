@@ -1824,6 +1824,9 @@ class LiseurSyncPositionSync(
                 status = status,
                 finishedAt = finishedAt,
                 expectedLocalRevision = expected,
+                // A reset this device still owes the server is a position
+                // debt: only its position acknowledgement may retire it.
+                keepUnreadReset = true,
             )
             if (adopted) {
                 val after = progressDao.get(book.url)
@@ -1953,7 +1956,15 @@ class LiseurSyncPositionSync(
                                 peerId = account.peerId,
                                 ackedRevision = item.revision,
                                 progression = item.op.progression,
-                                status = readingStatusFor(item.op.progression).wireName,
+                                // The agreed status must be the one this
+                                // position resolves to, coverage included:
+                                // a partial recording at 0.998 is still
+                                // reading, and calling it agreed-finished
+                                // would manufacture a conflict later.
+                                status = readingStatusFor(
+                                    item.op.progression,
+                                    partialCoverage = item.op.partialCoverage,
+                                ).wireName,
                                 now = now(),
                             )
                             val local = progressDao.get(item.bookUrl)
