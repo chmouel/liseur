@@ -1040,8 +1040,14 @@ class RemoteAccountRepository(
         // row on its own, which left every scrap of per-account state
         // behind — work names, sync agreements, a cursor — for whoever
         // paired next to inherit.
-        forgetSyncPeer(server)
-        dao.delete()
+        inTransaction {
+            forgetSyncPeer(server)
+            // Same reason as a disconnect: nothing will trigger account
+            // retirement for the books that stay, so a choice they still
+            // owed this account must not travel to the next one.
+            progressDao.retireStatusDebt()
+            dao.delete()
+        }
         true
     }
 

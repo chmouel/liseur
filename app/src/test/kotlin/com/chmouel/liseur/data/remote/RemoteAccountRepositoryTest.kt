@@ -149,6 +149,44 @@ class RemoteAccountRepositoryTest {
     }
 
     @Test
+    fun `forgetting an unreadable account also retires what a book owed it`() = runTest {
+        // The row that triggers retirement on a reconnect is gone here
+        // too, so the same debt has to be retired in the same breath.
+        connectKomga()
+        val bookUrl = "$BASE/book.epub"
+        val progress = db.readingProgressDao()
+        progress.recordLocal(
+            bookUrl = bookUrl,
+            locatorJson = """{"at":0.4}""",
+            progression = 0.4,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = ReadingStatus.READING.wireName,
+            updatedAt = 1_000,
+        )
+        progress.setFinishedOverride(
+            bookUrl,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            2_000,
+        )
+        // The secret cannot be read any more, which is what makes this
+        // path refuse to sign anything in.
+        CredentialCipher.keyForTesting =
+            KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+
+        assertTrue(account.forgetUnreadableAccount())
+
+        val kept = progress.get(bookUrl)!!
+        assertEquals(FinishedOverride.FINISHED, kept.override)
+        assertEquals(1L, kept.statusRevision)
+        assertTrue(kept.statusRetired)
+    }
+
+    @Test
     fun `a choice made after disconnecting is owed to the next account`() = runTest {
         connectKomga()
         val bookUrl = "$BASE/book.epub"
