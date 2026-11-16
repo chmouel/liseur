@@ -160,7 +160,13 @@ class LiseurSyncPositionSync(
                 // An alias can be confirmed after an earlier page skipped it.
                 // Leave that seed to a book run instead of hashing or naming here.
                 if (!alias.seeded) owed += book.url
-                if (reconcile(account, book to alias) is Reconciled.Owed) owed += book.url
+                // A book whose place is settled can still owe a choice: a
+                // status push that failed is not retried by an unrelated
+                // sync, so this is what puts it back in the queue.
+                val stillOwed = owedStatus(account, book.url, alias) != null
+                if (reconcile(account, book to alias) is Reconciled.Owed || stillOwed) {
+                    owed += book.url
+                }
             }
             if (caughtUp && trouble.first == null) completed += LiveTopic.POSITIONS
         }
@@ -1609,7 +1615,16 @@ class LiseurSyncPositionSync(
         // nothing and settles nothing.
         if (adopted == Reconciled.Abandoned) return Reconciled.Abandoned
         val statusAdopted = adopted == Reconciled.Pulled
-        if (statusAdopted) stored = progressDao.get(book.url) ?: stored
+        if (statusAdopted) {
+            val after = progressDao.get(book.url)
+            // Adoption bumps the local revision exactly once. A larger
+            // jump is a page turn that landed after the choice was
+            // weighed, and acknowledging it here would mark an unsent
+            // place as delivered.
+            val expected = (stored?.localRevision ?: 0) + 1
+            if (after != null && after.localRevision != expected) return Reconciled.Abandoned
+            stored = after ?: stored
+        }
 
         // Where the reader is and what they decided are two facts, and
         // this one comparison is about the place only: a choice rides in
