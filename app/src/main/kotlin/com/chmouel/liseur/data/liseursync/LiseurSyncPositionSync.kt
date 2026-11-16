@@ -228,9 +228,7 @@ class LiseurSyncPositionSync(
         // read before it was ever opened has an act and no position, and
         // returning on the missing place would drop what it says.
         window.status?.let { status ->
-            // An act that names no device is nobody's echo, so it is
-            // always news. Only an act this device signed is its own.
-            if (status.deviceId == null || status.deviceId != account.deviceId) {
+            if (status.shouldLandStatus(account)) {
                 forAccount(account) { land(account, bookUrl, status) }
             }
         }
@@ -1261,7 +1259,7 @@ class LiseurSyncPositionSync(
                             // echo: a choice this device has no name on
                             // is still news, exactly as it is when a
                             // single book is seeded or previewed.
-                            if (it.deviceId == null || it.deviceId != account.deviceId) {
+                            if (it.shouldLandStatus(account)) {
                                 land(account, book.url, it)
                             }
                         }
@@ -1378,7 +1376,7 @@ class LiseurSyncPositionSync(
         forAccount(account) {
             window.op?.let { land(account, book.url, it) }
             window.status?.let {
-                if (it.deviceId == null || it.deviceId != account.deviceId) land(account, book.url, it)
+                if (it.shouldLandStatus(account)) land(account, book.url, it)
             }
             // An empty answer is still an answer: the server has heard
             // nothing about this book, and there is nothing to recover.
@@ -1498,7 +1496,7 @@ class LiseurSyncPositionSync(
             // neither stands in for the other.
             for (op in newest(ops, status = true)) {
                 for (alias in byWork[op.workId].orEmpty()) {
-                    if (op.deviceId != null && op.deviceId == account.deviceId) {
+                    if (!op.shouldLandStatus(account)) {
                         // Our own act coming back: the partner holds it,
                         // so there is nothing here left to adopt.
                         val pending = peerStateDao.get(alias.bookUrl, account.peerId)
@@ -1521,6 +1519,10 @@ class LiseurSyncPositionSync(
         ops.filter { it.isStatus == status }
             .groupBy(SyncOp::workId)
             .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
+
+    // Keep unknown choices sent by this device for a version that can adopt them
+    private fun SyncOp.shouldLandStatus(account: Account): Boolean =
+        rawReadingStatus != null || deviceId == null || deviceId != account.deviceId
 
     private suspend fun land(account: Account, bookUrl: String, op: SyncOp) {
         observe(account, op)
