@@ -20,6 +20,14 @@ object BookOrbitStatusMapping {
             "read" -> MappedBookOrbitStatus(ReadingStatus.FINISHED, FinishedOverride.FINISHED)
             "unread" ->
                 MappedBookOrbitStatus(ReadingStatus.READY_TO_READ, FinishedOverride.UNREAD)
+            "want_to_read" ->
+                MappedBookOrbitStatus(ReadingStatus.WANT_TO_READ, FinishedOverride.WANT_TO_READ)
+            "on_hold" -> MappedBookOrbitStatus(ReadingStatus.PAUSED, FinishedOverride.PAUSED)
+            "abandoned" ->
+                MappedBookOrbitStatus(ReadingStatus.DID_NOT_FINISH, FinishedOverride.DID_NOT_FINISH)
+            // Liseur itself says `reading` for a resumed book with no
+            // choice made, so it stays derived from the position rather
+            // than pinning a READING choice that would stop it finishing.
             "reading" ->
                 if (progression != null &&
                     progression > 0.0 && ReadingStatus.forProgression(progression) == ReadingStatus.READING
@@ -34,7 +42,9 @@ object BookOrbitStatusMapping {
         FinishedOverride.FINISHED -> "read"
         FinishedOverride.UNREAD -> "unread"
         FinishedOverride.NONE -> null
-        FinishedOverride.WANT_TO_READ -> "unread"
-        FinishedOverride.READING, FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH -> "reading"
+        FinishedOverride.WANT_TO_READ -> "want_to_read"
+        FinishedOverride.READING -> "reading"
+        FinishedOverride.PAUSED -> "on_hold"
+        FinishedOverride.DID_NOT_FINISH -> "abandoned"
     }
 }
