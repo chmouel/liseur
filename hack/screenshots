@@ -6,6 +6,7 @@
 #   hack/screenshots              # capture from a device already set up
 #   hack/screenshots --setup-only # build the shelf and stop, to check it
 #   hack/screenshots --empty      # capture the empty library, and nothing else
+#   hack/screenshots --hero       # retake the dark Home and Library pictures only
 #   hack/screenshots -s SERIAL    # pick a device when several are attached
 #   hack/screenshots --class tablet   # file the captures as a tablet set
 #   hack/screenshots --no-dictionary  # skip the definition card
@@ -101,6 +102,7 @@ readonly ADVANCED_MARKER="Hyphenation"
 setup=0
 setup_only=0
 empty_only=0
+hero_only=0
 want_dictionary=1
 serial=""
 shot_class=""
@@ -116,6 +118,7 @@ while [[ $# -gt 0 ]]; do
             setup_only=1
             ;;
         --empty) empty_only=1 ;;
+        --hero) hero_only=1 ;;
         -s | --serial)
             serial=${2:-}
             shift
@@ -966,7 +969,7 @@ adb shell am broadcast -a com.android.systemui.demo -e command enter >/dev/null
 adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 1000 >/dev/null
 adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false >/dev/null
 adb shell am broadcast -a com.android.systemui.demo -e command network \
-    -e wifi show -e level 4 -e mobile hide >/dev/null
+    -e wifi show -e level 4 -e fully true -e mobile hide >/dev/null
 adb shell am broadcast -a com.android.systemui.demo -e command battery \
     -e level 100 -e plugged false >/dev/null
 
@@ -1043,6 +1046,28 @@ sleep 1
 back
 sleep 1
 set_switch "Colours from your wallpaper" off
+
+# The README opens on these two: the Home and Library tabs, in the dark
+# theme, which is the one the app looks best in. Taken on their own so a
+# change to either tab does not cost a whole tour.
+take_hero() {
+    adb shell cmd uimode night yes >/dev/null
+    sleep 3
+    open_library
+    tap_on "Home" exact
+    sleep 3
+    shot 30-home-dark
+    tap_on "Library" exact
+    sleep 2
+    shelf_to_top
+    shot 10-library-dark
+}
+if ((hero_only)); then
+    step "Dark Home and Library"
+    take_hero
+    printf '\nDone. Look at the images before committing.\n'
+    exit 0
+fi
 
 # The definition card is the one picture that needs a setting turned on:
 # a lookup is off until someone asks for it, and Define otherwise offers
