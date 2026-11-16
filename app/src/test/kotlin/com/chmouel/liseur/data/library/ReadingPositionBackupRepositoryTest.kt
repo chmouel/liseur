@@ -8,10 +8,12 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.domain.BackedUpReadingPosition
+import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -123,6 +125,36 @@ class ReadingPositionBackupRepositoryTest {
         repository().restore(listOf(backedUp.copy(progression = 1.0)))
         assertEquals(null, db.bookDao().getByUrl(url)?.finishedAt)
         assertEquals("Reading", db.readingProgressDao().get(url)?.status)
+    }
+
+    @Test
+    fun `a partial recording survives the backup and does not finish the book on restore`() = runTest {
+        // ADR-0066: a recording that covers part of the narrative never
+        // finishes the ebook, and the coverage has to travel with the
+        // place or a restored 0.998 is the end of the book.
+        db.bookDao().upsert(Book(url = "book", title = "Book", author = null, coverPath = null,
+            source = null, addedAt = 0, lastOpenedAt = null))
+        db.readingProgressDao().upsert(
+            ReadingProgress("book", locator, 0.998, updatedAt = 20, coverage = "partial"),
+        )
+        val file = folder.newFile()
+        repository().writeContents(file, 4096)
+        val positions = decodeReadingPositionBackup(file.readText())
+        assertEquals(
+            listOf(BackedUpReadingPosition("book", "Book", null, locator, 0.998, 20, "partial")),
+            positions,
+        )
+
+        db.readingProgressDao().forget("book")
+        assertEquals(1, repository().restore(positions))
+
+        val row = db.readingProgressDao().get("book")!!
+        assertEquals(NarrativeCoverage.PARTIAL, row.narrativeCoverage)
+        assertNull(db.bookDao().getByUrl("book")?.finishedAt)
+
+        // Reading on here is an ebook's place again, and says so.
+        db.readingProgressDao().recordLocal("book", locator, 0.5, null, null, null, null, null, 30)
+        assertNull(db.readingProgressDao().get("book")!!.narrativeCoverage)
     }
 
     @Test

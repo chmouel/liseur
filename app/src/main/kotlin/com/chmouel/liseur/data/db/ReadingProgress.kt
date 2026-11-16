@@ -259,6 +259,19 @@ abstract class ReadingProgressDao {
         readAt: Long,
     )
 
+    /**
+     * Puts back the coverage a restored position was recorded with.
+     *
+     * Written after [recordLocal] rather than through it: a place read
+     * here is an ebook's, and clears any coverage it inherited. A place
+     * restored from a backup is the one it was backed up as.
+     */
+    @Query("UPDATE reading_progress SET coverage = :coverage WHERE book_url = :bookUrl")
+    abstract suspend fun restoreBackupCoverage(
+        bookUrl: String,
+        coverage: String?,
+    )
+
     @Transaction
     open suspend fun restoreBackupPosition(
         bookUrl: String,
@@ -266,15 +279,19 @@ abstract class ReadingProgressDao {
         progression: Double?,
         readAt: Long,
         now: Long,
+        coverage: String? = null,
     ) {
         val previous = get(bookUrl)
+        val partial = NarrativeCoverage.fromWire(coverage) == NarrativeCoverage.PARTIAL
         val status =
             com.chmouel.liseur.domain
                 .readingStatusFor(
                     progression,
                     previous?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE,
+                    partialCoverage = partial,
                 ).wireName
         recordLocal(bookUrl, locatorJson, progression, null, null, null, null, status, now)
+        restoreBackupCoverage(bookUrl, coverage)
         restoreBackupReadAt(bookUrl, readAt.coerceAtMost(now))
     }
 
@@ -1202,6 +1219,12 @@ abstract class ReadingProgressDao {
      * counts as dirty. Leaving rows dirty would quietly upload the
      * previous user's reading into the new account on the very next sync,
      * which is worse than the bug this fixes.
+     *
+     * A choice is the same debt in its own slot, and is retired the same
+     * way: `status_revision` goes back to zero so the new account is not
+     * handed what the reader said under the old one. The choice itself
+     * stays, because it is about this reader's book; only the claim that
+     * somebody has yet to hear it goes.
      */
     @Query(
         """
@@ -1210,7 +1233,8 @@ abstract class ReadingProgressDao {
             pending_progression = NULL, pending_locator_json = NULL, pending_status = NULL,
             pending_updated_at = NULL, pending_account = NULL,
             synced_at = NULL,
-            acked_revision = local_revision
+            acked_revision = local_revision,
+            status_revision = 0
         """,
     )
     abstract suspend fun retireAccountState()

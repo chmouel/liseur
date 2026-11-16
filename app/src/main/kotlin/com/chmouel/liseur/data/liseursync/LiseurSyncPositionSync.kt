@@ -218,6 +218,16 @@ class LiseurSyncPositionSync(
             val known = knownPreview(account, bookUrl, alias)
             return if (known is PreviewOutcome.Ready) known else PreviewOutcome.Failed(reasonFor(e))
         }
+        // A choice lands before any place is looked for. A book marked
+        // read before it was ever opened has an act and no position, and
+        // returning on the missing place would drop what it says.
+        window.status?.let { status ->
+            // An act that names no device is nobody's echo, so it is
+            // always news. Only an act this device signed is its own.
+            if (status.deviceId == null || status.deviceId != account.deviceId) {
+                forAccount(account) { land(account, bookUrl, status) }
+            }
+        }
         val head = window.op ?: return knownPreview(account, bookUrl, alias, window.seen)
 
         // This device's own op is an echo, not news: landing it would
@@ -226,13 +236,6 @@ class LiseurSyncPositionSync(
         val ours = head.deviceId != null && head.deviceId == account.deviceId
         if (!ours) {
             forAccount(account) { land(account, bookUrl, head) }
-        }
-        window.status?.let { status ->
-            // An act that names no device is nobody's echo, so it is
-            // always news. Only an act this device signed is its own.
-            if (status.deviceId == null || status.deviceId != account.deviceId) {
-                forAccount(account) { land(account, bookUrl, status) }
-            }
         }
 
         val stored = progressDao.get(bookUrl)
@@ -1243,7 +1246,13 @@ class LiseurSyncPositionSync(
                     for ((book, alias) in plain) {
                         heads.newest[alias.workId]?.let { land(account, book.url, it) }
                         heads.newestStatus[alias.workId]?.let {
-                            if (it.deviceId != account.deviceId) land(account, book.url, it)
+                            // An act that names no device is nobody's
+                            // echo: a choice this device has no name on
+                            // is still news, exactly as it is when a
+                            // single book is seeded or previewed.
+                            if (it.deviceId == null || it.deviceId != account.deviceId) {
+                                land(account, book.url, it)
+                            }
                         }
                         // An empty answer is still an answer, exactly as
                         // it is for a single seed: the server has heard
@@ -1581,12 +1590,15 @@ class LiseurSyncPositionSync(
         )
         if (statusAdopted) stored = progressDao.get(book.url) ?: stored
 
+        // Where the reader is and what they decided are two facts, and
+        // this one comparison is about the place only: a choice rides in
+        // its own slot above, so letting one colour the statuses here
+        // would make a clean position look like a move.
         val decision = reconcileReadingState(
             local = stored?.asReadingState(),
             remote = state?.pendingState(),
             baseline = state?.baseline(),
             localDirty = dirty,
-            localUnreadOverride = stored?.override == FinishedOverride.UNREAD,
             unreadResetUndelivered = stored?.hasPendingUnreadReset(state?.ackedRevision ?: 0) == true,
             exactPositionAgreement = ExactLocatorAnchor.agreement(
                 stored?.locatorJson,
@@ -1630,7 +1642,7 @@ class LiseurSyncPositionSync(
                         peerId = account.peerId,
                         ackedRevision = stored?.localRevision ?: 0,
                         progression = stored?.totalProgression,
-                        status = stored?.statusOrDerived()?.wireName,
+                        status = stored?.positionStatus()?.wireName,
                         now = at,
                     )
                 }
@@ -2235,19 +2247,48 @@ class LiseurSyncPositionSync(
         }
 
         val replacement = when (val refreshed = refreshStaleIdentity(account, stale.bookUrl, workId, trouble)) {
-            is IdentityRefresh.Refreshed ->
-                (reconcile(account, refreshed.book to refreshed.alias) as? Reconciled.Owed)?.push
+            is IdentityRefresh.Refreshed -> rebuiltPush(account, refreshed.book, refreshed.alias)
 
             is IdentityRefresh.Failed -> {
                 trouble.failed(refreshed.cause, reasonFor(refreshed.cause))
-                null
+                emptyList()
             }
 
-            IdentityRefresh.Unnameable -> null
+            IdentityRefresh.Unnameable -> emptyList()
         }
-        return PushRecovery.Retry(
-            listOf(batch.mapNotNull { if (it.bookUrl == stale.bookUrl) replacement else it }),
-        )
+        // One rebuilt pair stands for every op of that book the batch
+        // carried, however many kinds of debt it had.
+        val rebuilt = mutableSetOf<String>()
+        val retried = batch.flatMap { item ->
+            when {
+                item.bookUrl != stale.bookUrl -> listOf(item)
+                rebuilt.add(item.bookUrl) -> replacement
+                else -> emptyList()
+            }
+        }
+        return PushRecovery.Retry(listOf(retried))
+    }
+
+    /**
+     * What one book owes, derived again under the name the server has
+     * just given it.
+     *
+     * A place and a choice are two debts with two slots, so both are
+     * rebuilt and neither stands in for the other. The act the server
+     * refused was written down in bytes that named the deleted work, and
+     * replaying those would only refuse again: they are dropped first,
+     * and the act derives its payload from stored state like any other.
+     */
+    private suspend fun rebuiltPush(
+        account: Account,
+        book: Book,
+        alias: WorkAlias,
+    ): List<PendingPush> {
+        forAccount(account) {
+            peerStateDao.clearStatusSent(book.url, account.peerId)
+        }
+        val position = (reconcile(account, book to alias) as? Reconciled.Owed)?.push
+        return listOfNotNull(position) + listOfNotNull(owedStatus(account, book.url, alias))
     }
 
     /**
@@ -2807,12 +2848,20 @@ class LiseurSyncPositionSync(
 
     private fun ReadingProgress.asReadingState() = ReadingState(
         progression = totalProgression,
-        status = statusOrDerived(),
+        status = positionStatus(),
         updatedAt = updatedAt,
     )
 
-    private fun ReadingProgress.statusOrDerived(): ReadingStatus =
-        status?.let(ReadingStatus::fromWire) ?: readingStatusFor(totalProgression, override)
+    /**
+     * What the stored place implies, on its own.
+     *
+     * Never what someone said about the book: a choice is a separate
+     * op with a separate slot, and reading it into a position
+     * comparison would make a book whose place did not move look like
+     * one that had.
+     */
+    private fun ReadingProgress.positionStatus(): ReadingStatus =
+        readingStatusFor(totalProgression, partialCoverage = partialCoverage)
 
     private fun SyncPeerState.pendingState(): ReadingState? {
         if (!hasPending) return null

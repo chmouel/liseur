@@ -55,6 +55,7 @@ class ReadingPositionBackupRepository(
                         book?.author?.let { writer.name("author").value(it) }
                         if (exact) writer.name("locator").value(position.locatorJson)
                         progression?.let { writer.name("progression").value(it) }
+                        position.narrativeCoverage?.let { writer.name("coverage").value(it.wireName) }
                         writer.name("read_at").value((position.readAt ?: position.updatedAt).coerceAtLeast(0))
                             .endObject()
                         writer.flush()
@@ -78,7 +79,7 @@ class ReadingPositionBackupRepository(
                 progressDao.openBooks.unlessOpen(url) {
                     inTransaction {
                         progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
-                            position.readAt, System.currentTimeMillis())
+                            position.readAt, System.currentTimeMillis(), position.coverage)
                         finishedState.refreshFromProgress(url)
                     }
                 } ?: throw IOException("Cannot replace the position of an open book")
