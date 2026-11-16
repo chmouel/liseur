@@ -535,15 +535,47 @@ class ReadingProgressDaoTest {
             0.4,
             now = 2_000,
         )
-        assertTrue(row().statusRevision > 0)
+        val chosen = row().statusRevision
+        assertTrue(chosen > 0)
 
         dao.retireAccountState()
 
         // Nothing is left claiming the new account has yet to hear a
         // choice made under the old one; the choice itself stays, since
-        // it is about this reader's book.
-        assertEquals(0L, row().statusRevision)
+        // it is about this reader's book. The revision does not go back
+        // down, because an op id derives from it.
+        assertEquals(chosen, row().statusRevision)
+        assertEquals(chosen, row().statusRetiredRevision)
+        assertTrue(row().statusRetired)
         assertEquals(com.chmouel.liseur.domain.FinishedOverride.FINISHED, row().override)
+    }
+
+    @Test
+    fun `a choice made after a retirement is owed above it`() = runTest {
+        read(0.4)
+        dao.setFinishedOverride(
+            book,
+            com.chmouel.liseur.domain.FinishedOverride.FINISHED.ordinal,
+            "Finished",
+            0.4,
+            now = 2_000,
+        )
+        dao.retireStatusDebt()
+        val retired = row()
+        assertEquals(retired.statusRevision, retired.statusRetiredRevision)
+        assertTrue(retired.statusRetired)
+
+        dao.setFinishedOverride(
+            book,
+            com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal,
+            "Reading",
+            0.0,
+            now = 3_000,
+        )
+
+        val again = row()
+        assertTrue(again.statusRevision > retired.statusRetiredRevision)
+        assertFalse(again.statusRetired)
     }
 
     @Test

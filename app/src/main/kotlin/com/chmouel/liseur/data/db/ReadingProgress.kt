@@ -133,6 +133,17 @@ data class ReadingProgress(
      * as a full recording finishes the book on whichever device takes it.
      */
     @ColumnInfo(name = "peak_coverage") val peakCoverage: String? = null,
+    /**
+     * The highest status revision this device no longer expects anybody
+     * to hear.
+     *
+     * Retirement raises it to the choice in force and never lowers it, so
+     * the revision itself stays monotonic: a status op id derives from it,
+     * and reusing one would name an op the server may already hold. A
+     * choice made after a retirement lands above it and is owed normally.
+     */
+    @ColumnInfo(name = "status_retired_revision", defaultValue = "0")
+    val statusRetiredRevision: Long = 0,
 ) {
     val narrativeCoverage: NarrativeCoverage?
         get() = NarrativeCoverage.fromWire(coverage)
@@ -145,6 +156,9 @@ data class ReadingProgress(
 
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
+
+    /** True when the choice in force was retired rather than delivered. */
+    val statusRetired: Boolean get() = statusRevision <= statusRetiredRevision
 
     /** True when a remote state is waiting to be settled. */
     val hasPending: Boolean get() = pendingAccount != null
@@ -1271,10 +1285,12 @@ abstract class ReadingProgressDao {
      * which is worse than the bug this fixes.
      *
      * A choice is the same debt in its own slot, and is retired the same
-     * way: `status_revision` goes back to zero so the new account is not
-     * handed what the reader said under the old one. The choice itself
-     * stays, because it is about this reader's book; only the claim that
-     * somebody has yet to hear it goes.
+     * way: `status_retired_revision` moves up to `status_revision` so the
+     * new account is not handed what the reader said under the old one.
+     * The choice itself stays, because it is about this reader's book; only
+     * the claim that somebody has yet to hear it goes. The revision does
+     * not go back down: an op id derives from it, so a fresh choice under
+     * the new account would otherwise reuse an id the server may hold.
      */
     @Query(
         """
@@ -1284,7 +1300,7 @@ abstract class ReadingProgressDao {
             pending_updated_at = NULL, pending_account = NULL,
             synced_at = NULL,
             acked_revision = local_revision,
-            status_revision = 0
+            status_retired_revision = status_revision
         """,
     )
     abstract suspend fun retireAccountState()
@@ -1294,8 +1310,11 @@ abstract class ReadingProgressDao {
      * account that is being left. The choice itself stays: it describes
      * this reader's book, and a reader who decides again afterwards owes
      * the next account that decision.
+     *
+     * `status_revision` is left alone for the same reason: it names the op
+     * ids already sent, so it only ever moves forward.
      */
-    @Query("UPDATE reading_progress SET status_revision = 0")
+    @Query("UPDATE reading_progress SET status_retired_revision = status_revision")
     abstract suspend fun retireStatusDebt()
 
     /**

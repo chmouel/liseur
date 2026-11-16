@@ -1762,7 +1762,11 @@ class LiseurSyncPositionSync(
         hadPositionDebt: Boolean,
     ): Reconciled {
         val choice = state.pendingChoice() ?: return Reconciled.Nothing
-        if (stored != null && stored.statusRevision > state.ackedStatusRevision) return Reconciled.Nothing
+        if (stored != null && !stored.statusRetired &&
+            stored.statusRevision > state.ackedStatusRevision
+        ) {
+            return Reconciled.Nothing
+        }
         return adopt(
             account,
             book,
@@ -2171,6 +2175,10 @@ class LiseurSyncPositionSync(
      * up as the same bytes, or the server would take it for a different
      * op under a name it already holds. Only one act is tracked, never a
      * queue.
+     *
+     * A choice retired when an account was left is owed to nobody: its
+     * revision sits at or below the retirement marker, so it is neither
+     * sent to the next account nor rebuilt into a new op id.
      */
     private suspend fun owedStatus(
         account: Account,
@@ -2179,7 +2187,7 @@ class LiseurSyncPositionSync(
     ): PendingPush? {
         val stored = progressDao.get(book) ?: return null
         val statusRevision = stored.statusRevision
-        if (statusRevision <= 0) return null
+        if (statusRevision <= 0 || stored.statusRetired) return null
         val state = peerStateDao.get(book, account.peerId)
         if (state != null && !state.owesStatus(statusRevision)) return null
         val replay = state?.statusSentOp

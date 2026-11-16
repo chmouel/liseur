@@ -1098,7 +1098,11 @@ changing reader behavior.
   (liseur-sync ADR-0066). A status op carries `kind`, `reading_status` and
   its own revision-derived id (`acked_status_revision` per peer), is
   adopted through `FinishedState.adoptRemoteStatus` so "read at 0.4"
-  survives, and is never a furthest candidate.
+  survives, and is never a furthest candidate. `status_revision` only ever
+  moves forward, because the op id derives from it: leaving an account
+  retires the debt by raising `status_retired_revision` to it, so a choice
+  made afterwards is owed under a revision no server can already hold an
+  op for.
 - A status act's bytes are written down before they are sent
   (`sync_peer_state.status_sent_op`) and replayed until they are
   acknowledged, then never again: a page turned while the answer was lost

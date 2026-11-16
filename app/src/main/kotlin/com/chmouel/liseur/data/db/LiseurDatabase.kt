@@ -45,7 +45,7 @@ import androidx.sqlite.execSQL
         BookMetadata::class,
         SessionImportSource::class,
     ],
-    version = 77,
+    version = 78,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
@@ -138,6 +138,20 @@ abstract class LiseurDatabase : RoomDatabase() {
         val MIGRATION_76_77 = object : Migration(76, 77) {
             override fun migrate(connection: SQLiteConnection) {
                 connection.execSQL("ALTER TABLE `reading_progress` ADD COLUMN `peak_coverage` TEXT")
+            }
+        }
+
+        /**
+         * Keeps the status revision monotonic, so a choice left behind
+         * with an account is retired by a marker of its own rather than
+         * by rewriting the counter an op id derives from.
+         */
+        val MIGRATION_77_78 = object : Migration(77, 78) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE `reading_progress` ADD COLUMN `status_retired_revision` " +
+                        "INTEGER NOT NULL DEFAULT 0",
+                )
             }
         }
 
@@ -2112,6 +2126,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_74_75,
             MIGRATION_75_76,
             MIGRATION_76_77,
+            MIGRATION_77_78,
         )
     }
 }
