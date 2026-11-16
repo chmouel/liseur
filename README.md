@@ -22,23 +22,31 @@ An open-source ebook reader for Android, and a client for [calibre-web](https://
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/01-library.png" alt="Library"></td>
+    <td width="50%"><img src="docs/screenshots/30-home-dark.png" alt="Home: the book you are reading, your shelves and a quote from your reading"></td>
+    <td width="50%"><img src="docs/screenshots/10-library-dark.png" alt="Library: covers standing on shelves, one shelf per series"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Home: pick up where you left off.</sub></td>
+    <td align="center"><sub>Library: the shelf, sorted by what you are currently reading.</sub></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
     <td width="33%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
     <td width="33%"><img src="docs/screenshots/24-read-aloud.png" alt="Read aloud"></td>
+    <td width="33%"><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
   </tr>
   <tr>
-    <td align="center"><sub>The shelf, sorted by what you are currently reading.</sub></td>
     <td align="center"><sub>Distraction-free page with notes and bookmarks.</sub></td>
     <td align="center"><sub>Read aloud with device voices or your own speech server.</sub></td>
+    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
     <td><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
     <td><img src="docs/screenshots/26-codex-relationships.png" alt="Companion map of character relationships across chapters"></td>
-    <td></td>
   </tr>
   <tr>
-    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
     <td align="center"><sub>Character profiles grounded in earlier passages.</sub></td>
     <td align="center"><sub>See which characters appear together across chapters.</sub></td>
   </tr>

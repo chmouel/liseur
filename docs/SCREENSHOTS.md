@@ -142,12 +142,14 @@ guessed about reading you did before Liseur arrived.
 
 <table>
   <tr>
-    <td width="33%"><img src="screenshots/10-library-dark.png" alt="Library, dark"></td>
-    <td width="33%"><img src="screenshots/11-reading-dark.png" alt="Reading, dark"></td>
-    <td width="33%"><img src="screenshots/17-empty-library-dark.png" alt="An empty library, dark"></td>
+    <td width="25%"><img src="screenshots/30-home-dark.png" alt="Home, dark"></td>
+    <td width="25%"><img src="screenshots/10-library-dark.png" alt="Library, dark"></td>
+    <td width="25%"><img src="screenshots/11-reading-dark.png" alt="Reading, dark"></td>
+    <td width="25%"><img src="screenshots/17-empty-library-dark.png" alt="An empty library, dark"></td>
   </tr>
   <tr>
-    <td align="center"><sub>The shelf follows the system theme.</sub></td>
+    <td align="center"><sub>Home follows the system theme.</sub></td>
+    <td align="center"><sub>So does the shelf.</sub></td>
     <td align="center"><sub>The reading theme does not have to: Light, Sepia, Dark and OLED Black are the book's own.</sub></td>
     <td align="center"><sub>A new shelf, after dark.</sub></td>
   </tr>
