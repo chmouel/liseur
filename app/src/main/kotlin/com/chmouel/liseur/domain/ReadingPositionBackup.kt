@@ -12,6 +12,13 @@ data class BackedUpReadingPosition(
     val locatorJson: String,
     val progression: Double?,
     val readAt: Long,
+    /**
+     * Whether the recording this place came from covers the whole
+     * narrative. Null is "unknown", which is every ebook's place, and
+     * the reason a partial recording at 0.998 must travel as such: a
+     * restored one would otherwise finish the book.
+     */
+    val coverage: String? = null,
 )
 
 fun decodeReadingPositionBackup(text: String): List<BackedUpReadingPosition> {
@@ -38,8 +45,13 @@ fun decodeReadingPositionBackup(text: String): List<BackedUpReadingPosition> {
             if (entry.isNull(key)) return null
             return entry.opt(key) as? String ?: error("Invalid book metadata")
         }
+        val coverage = if (entry.isNull("coverage")) null else {
+            val wire = entry.opt("coverage") as? String ?: error("Invalid coverage")
+            require(NarrativeCoverage.fromWire(wire) != null)
+            wire
+        }
         BackedUpReadingPosition(bookId, metadata("title"), metadata("author"), locator,
-            progression, (readAt as Number).toLong())
+            progression, (readAt as Number).toLong(), coverage)
     }
 }
 

@@ -526,6 +526,27 @@ class ReadingProgressDaoTest {
     }
 
     @Test
+    fun `switching account does not hand the new one the old one's choice`() = runTest {
+        read(0.4)
+        dao.setFinishedOverride(
+            book,
+            com.chmouel.liseur.domain.FinishedOverride.FINISHED.ordinal,
+            "Finished",
+            0.4,
+            now = 2_000,
+        )
+        assertTrue(row().statusRevision > 0)
+
+        dao.retireAccountState()
+
+        // Nothing is left claiming the new account has yet to hear a
+        // choice made under the old one; the choice itself stays, since
+        // it is about this reader's book.
+        assertEquals(0L, row().statusRevision)
+        assertEquals(com.chmouel.liseur.domain.FinishedOverride.FINISHED, row().override)
+    }
+
+    @Test
     fun `who did the reading survives the switch`() = runTest {
         read(0.6)
         dao.ackPush(book, 1, 0.6, "Reading", account, now = 5_000)
