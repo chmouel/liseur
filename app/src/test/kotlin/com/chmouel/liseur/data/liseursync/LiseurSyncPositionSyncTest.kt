@@ -773,6 +773,31 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a peak keeps the coverage of the partial recording it came from`() = runTest {
+        // The 0.998 arrived as a partial recording and became this
+        // device's peak. Reading back to 0.5 leaves the peak as the only
+        // thing still pointing at it, and a peak forwarded without its
+        // marker finishes the book on the device that takes it.
+        connect()
+        db.bookDao().upsert(local())
+        alias(editionSha = "edition")
+        val progress = db.readingProgressDao()
+        progress.restoreBackupPosition(LOCAL, LOCATOR, 0.998, NOW, NOW, coverage = "partial")
+        progress.recordLocal(LOCAL, LOCATOR, 0.5, null, ReadingStatus.READING.wireName, NOW + 1)
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(ops = { sent += it })
+
+        assertEquals(SyncOutcome.Success, sync(furthest = true).syncBook(LOCAL))
+
+        val peak = sent.single { it.optDouble("progression") > 0.99 }
+        assertEquals("partial", peak.optString("coverage"))
+        val row = progress.get(LOCAL)!!
+        assertEquals(0.998, row.peakProgression!!, 0.0001)
+        assertEquals(NarrativeCoverage.PARTIAL, row.peakNarrativeCoverage)
+        assertNull(db.bookDao().getByUrl(LOCAL)!!.finishedAt)
+    }
+
+    @Test
     fun `a choice made before status revisions existed is still uploaded`() = runTest {
         // Migration 58→59 left a historical override at revision zero, so
         // nothing ever owed it. A migrated choice has to reach the server.
@@ -790,7 +815,7 @@ class LiseurSyncPositionSyncTest {
                     "VALUES ('$LOCAL', '{\"href\":\"/c1.xhtml\"}', 0.4, $NOW, 1)",
             )
         }
-        helper.runMigrationsAndValidate(name, 76, true, *LiseurDatabase.MIGRATIONS).close()
+        helper.runMigrationsAndValidate(name, 77, true, *LiseurDatabase.MIGRATIONS).close()
         val migrated = Room.databaseBuilder(context, LiseurDatabase::class.java, name).build()
         try {
             connect(database = migrated)
@@ -843,6 +868,68 @@ class LiseurSyncPositionSyncTest {
         val row = progress.get(LOCAL)!!
         assertEquals(0.98, row.totalProgression!!, 1e-9)
         assertEquals(FinishedOverride.UNREAD, row.override)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun `a page turned while a choice is adopted leaves the book owed`() = runTest {
+        // The status revision says nothing about where the reader is, so a
+        // page turn committed between reading the row and adopting the
+        // partner's choice used to be acknowledged unsent, and the pass
+        // went on to weigh the newer row against a cleanliness it had read
+        // before it. A row that moved abandons the pass instead.
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        db.syncPeerStateDao().settle(
+            LOCAL,
+            peer(),
+            progress.get(LOCAL)!!.localRevision,
+            0.4,
+            ReadingStatus.READING.wireName,
+            NOW,
+        )
+        var turned = false
+        val adopting = FinishedState(
+            db.bookDao(),
+            progress,
+            inTransaction = { work ->
+                if (!turned) {
+                    turned = true
+                    progress.recordLocal(
+                        LOCAL,
+                        LOCATOR,
+                        0.5,
+                        null,
+                        ReadingStatus.READING.wireName,
+                        NOW + 1,
+                    )
+                }
+                work()
+            },
+        )
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "finished", deviceId = "other")}],
+                "has_more":false,"high_water":9}
+            """.trimIndent(),
+            ops = { sent += it },
+        )
+
+        assertEquals(SyncOutcome.Success, sync(finishedState = adopting).syncBook(LOCAL))
+
+        val row = progress.get(LOCAL)!!
+        assertEquals(0.5, row.totalProgression!!, 0.0001)
+        assertEquals(FinishedOverride.NONE, row.override)
+        assertEquals(ReadingStatus.READING.wireName, row.status)
+        // The page turn was never weighed against the partner, so it is
+        // still owed rather than acknowledged by an adoption that never
+        // saw it, and nothing was pushed on its behalf.
+        val state = db.syncPeerStateDao().get(LOCAL, peer())!!
+        assertEquals(1L, state.ackedRevision)
+        assertTrue(state.isDirty(row.localRevision))
         assertTrue(sent.isEmpty())
     }
 
@@ -3599,6 +3686,7 @@ class LiseurSyncPositionSyncTest {
         furthest: Boolean = false,
         http: LiseurSyncHttp = LiseurSyncHttp(),
         database: LiseurDatabase = db,
+        finishedState: FinishedState = FinishedState(database.bookDao(), database.readingProgressDao()),
     ): LiseurSyncPositionSync {
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         return LiseurSyncPositionSync(
@@ -3619,7 +3707,7 @@ class LiseurSyncPositionSyncTest {
                 now = { NOW },
             ),
             deviceKey = { "device-a" },
-            finishedState = FinishedState(database.bookDao(), database.readingProgressDao()),
+            finishedState = finishedState,
             networkAvailability = { online },
             annotations = if (withAnnotations) LiseurSyncAnnotations(
                 serverDao = database.remoteServerDao(),

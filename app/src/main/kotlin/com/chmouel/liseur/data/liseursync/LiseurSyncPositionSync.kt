@@ -319,6 +319,7 @@ class LiseurSyncPositionSync(
             ),
             workId = alias.workId, editionSha = edition,
             clientTs = at, progression = progression, locatorJson = stored.peakLocator,
+            coverage = stored.peakNarrativeCoverage,
         )
     }
 
@@ -755,6 +756,10 @@ class LiseurSyncPositionSync(
                     is Reconciled.Owed -> pushes += outcome.push
                     Reconciled.Nothing ->
                         pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
+                    // A page turn landed under this book's pass, so nothing
+                    // it decided can be sent or settled. It stays owed for
+                    // the next run, which reads the row as it now stands.
+                    Reconciled.Abandoned -> continue
                 }
                 owedStatus(account, candidate.first.url, candidate.second)?.let(pushes::add)
             }
@@ -1552,6 +1557,13 @@ class LiseurSyncPositionSync(
         data object Nothing : Reconciled
         data object Pulled : Reconciled
         data class Owed(val push: PendingPush) : Reconciled
+
+        /**
+         * The row moved under this pass, so nothing it read still
+         * describes it. Nothing is settled: the book stays owed until a
+         * run that reads the row it is working on.
+         */
+        data object Abandoned : Reconciled
     }
 
     /** A position this device owes the server, ready to be sent. */
@@ -1581,13 +1593,22 @@ class LiseurSyncPositionSync(
         // The explicit choice is weighed first and on its own: it is a
         // fact about the book, not about where the reader is, and
         // adopting one moves the row this re-reads below.
-        val statusAdopted = statusWaiting && adoptWaitingStatus(
-            account,
-            book,
-            stored,
-            state,
-            dirty,
-        )
+        val adopted = if (statusWaiting) {
+            adoptWaitingStatus(
+                account,
+                book,
+                stored,
+                state,
+                dirty,
+            )
+        } else {
+            Reconciled.Nothing
+        }
+        // A page turned while the choice was being adopted. Every reading
+        // this pass holds is now a reading of an older row, so it decides
+        // nothing and settles nothing.
+        if (adopted == Reconciled.Abandoned) return Reconciled.Abandoned
+        val statusAdopted = adopted == Reconciled.Pulled
         if (statusAdopted) stored = progressDao.get(book.url) ?: stored
 
         // Where the reader is and what they decided are two facts, and
@@ -1739,9 +1760,9 @@ class LiseurSyncPositionSync(
         stored: ReadingProgress?,
         state: SyncPeerState,
         hadPositionDebt: Boolean,
-    ): Boolean {
-        val choice = state.pendingChoice() ?: return false
-        if (stored != null && stored.statusRevision > state.ackedStatusRevision) return false
+    ): Reconciled {
+        val choice = state.pendingChoice() ?: return Reconciled.Nothing
+        if (stored != null && stored.statusRevision > state.ackedStatusRevision) return Reconciled.Nothing
         return adopt(
             account,
             book,
@@ -1750,7 +1771,7 @@ class LiseurSyncPositionSync(
             resolvedStatus(choice, stored),
             hadPositionDebt,
             finishedAt = state.pendingStatusUpdatedAt,
-        ) == Reconciled.Pulled
+        )
     }
 
     /**
@@ -1776,8 +1797,11 @@ class LiseurSyncPositionSync(
      *
      * Written through the same guarded path a hand-made choice takes, so
      * "read at 0.4" survives: re-deriving it from the position afterwards
-     * would undo it. The status revision is the guard, so a choice made
-     * here while this was being decided is what stays.
+     * would undo it. The row is guarded on both counters: the status
+     * revision, so a choice made here while this was being decided is what
+     * stays, and the local revision, so a page turned meanwhile is not
+     * acknowledged as if it had been weighed. A refusal for the latter
+     * abandons the pass rather than settling it.
      */
     private suspend fun adopt(
         account: Account,
@@ -1788,7 +1812,9 @@ class LiseurSyncPositionSync(
         hadPositionDebt: Boolean,
         finishedAt: Long?,
     ): Reconciled {
+        val expected = stored?.localRevision ?: 0
         var adopted = false
+        var moved = false
         forAccount(account) {
             adopted = finishedState.adoptRemoteStatus(
                 bookUrl = book.url,
@@ -1797,6 +1823,7 @@ class LiseurSyncPositionSync(
                 override = override,
                 status = status,
                 finishedAt = finishedAt,
+                expectedLocalRevision = expected,
             )
             if (adopted) {
                 val after = progressDao.get(book.url)
@@ -1815,9 +1842,15 @@ class LiseurSyncPositionSync(
                         after.localRevision,
                     )
                 }
+            } else {
+                moved = (progressDao.get(book.url)?.localRevision ?: 0) != expected
             }
         }
-        return if (adopted) Reconciled.Pulled else Reconciled.Nothing
+        return when {
+            adopted -> Reconciled.Pulled
+            moved -> Reconciled.Abandoned
+            else -> Reconciled.Nothing
+        }
     }
 
     /**

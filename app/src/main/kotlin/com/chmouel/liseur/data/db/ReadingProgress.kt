@@ -124,12 +124,24 @@ data class ReadingProgress(
      * ebook. A partial recording never finishes the book.
      */
     @ColumnInfo(name = "coverage") val coverage: String? = null,
+    /**
+     * Whether the recording the peak came from covered the whole
+     * narrative.
+     *
+     * Kept apart from [coverage] because the two stop describing the same
+     * reading as soon as the reader turns back: a peak of 0.998 forwarded
+     * as a full recording finishes the book on whichever device takes it.
+     */
+    @ColumnInfo(name = "peak_coverage") val peakCoverage: String? = null,
 ) {
     val narrativeCoverage: NarrativeCoverage?
         get() = NarrativeCoverage.fromWire(coverage)
 
     val partialCoverage: Boolean
         get() = narrativeCoverage == NarrativeCoverage.PARTIAL
+
+    val peakNarrativeCoverage: NarrativeCoverage?
+        get() = NarrativeCoverage.fromWire(peakCoverage)
 
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
@@ -211,7 +223,8 @@ abstract class ReadingProgressDao {
             peak_locator = CASE WHEN total_progression IS NULL THEN NULL ELSE locator_json END,
             peak_at = CASE WHEN total_progression IS NULL THEN NULL ELSE updated_at END,
             peak_revision = CASE WHEN total_progression IS NULL THEN NULL ELSE local_revision END,
-            peak_edition = CASE WHEN total_progression IS NULL THEN NULL ELSE :edition END
+            peak_edition = CASE WHEN total_progression IS NULL THEN NULL ELSE :edition END,
+            peak_coverage = CASE WHEN total_progression IS NULL THEN NULL ELSE coverage END
         WHERE book_url = :bookUrl
         """,
     )
@@ -264,7 +277,8 @@ abstract class ReadingProgressDao {
      *
      * Written after [recordLocal] rather than through it: a place read
      * here is an ebook's, and clears any coverage it inherited. A place
-     * restored from a backup is the one it was backed up as.
+     * restored from a backup is the one it was backed up as, and the peak
+     * it becomes keeps that too — see [recordLocal].
      */
     @Query("UPDATE reading_progress SET coverage = :coverage WHERE book_url = :bookUrl")
     abstract suspend fun restoreBackupCoverage(
@@ -290,7 +304,7 @@ abstract class ReadingProgressDao {
                     previous?.override ?: com.chmouel.liseur.domain.FinishedOverride.NONE,
                     partialCoverage = partial,
                 ).wireName
-        recordLocal(bookUrl, locatorJson, progression, null, null, null, null, status, now)
+        recordLocal(bookUrl, locatorJson, progression, null, null, null, null, status, now, peakCoverage = coverage)
         restoreBackupCoverage(bookUrl, coverage)
         restoreBackupReadAt(bookUrl, readAt.coerceAtMost(now))
     }
@@ -359,6 +373,10 @@ abstract class ReadingProgressDao {
      * statement failed and every page turn raised "the reading position
      * could not be saved". The two statements share one transaction, so
      * they are still indivisible.
+     *
+     * [peakCoverage] is the coverage of the recording this place came
+     * from, and rides on the peak when this place becomes one. A page
+     * turned here is an ebook's and says nothing, so it defaults to none.
      */
     @Query(
         """
@@ -396,6 +414,9 @@ abstract class ReadingProgressDao {
             peak_progression = CASE WHEN :progression BETWEEN 0 AND 1 AND
                 (peak_progression IS NULL OR :progression > peak_progression)
                 THEN :progression ELSE peak_progression END,
+            peak_coverage = CASE WHEN :progression BETWEEN 0 AND 1 AND
+                (peak_progression IS NULL OR :progression > peak_progression)
+                THEN :peakCoverage ELSE peak_coverage END,
             local_revision = local_revision + 1,
             position_revision = position_revision + 1
         WHERE book_url = :bookUrl
@@ -412,6 +433,7 @@ abstract class ReadingProgressDao {
         status: String?,
         updatedAt: Long,
         readAt: Long,
+        peakCoverage: String? = null,
     ): Int
 
     @Query(
@@ -421,7 +443,8 @@ abstract class ReadingProgressDao {
             reading_seconds_per_position, reading_pace_samples,
             reading_pace_elapsed_ms, reading_pace_evidence,
             updated_at, read_at, status, synced_at, local_revision, acked_revision,
-            position_revision, peak_progression, peak_locator, peak_revision, peak_at, peak_edition
+            position_revision, peak_progression, peak_locator, peak_revision, peak_at, peak_edition,
+            peak_coverage
         )
         VALUES (:bookUrl, :locatorJson, :progression, NULL,
                 :readingSecondsPerPosition, COALESCE(:readingPaceSamples, 0),
@@ -435,7 +458,8 @@ abstract class ReadingProgressDao {
                     (SELECT sha256 FROM book_fingerprint WHERE book_url = :bookUrl),
                     (SELECT MIN(edition_sha) FROM work_alias WHERE book_url = :bookUrl
                         AND (confirmed = 1 OR confidence = 'high')
-                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1)))
+                        GROUP BY book_url HAVING COUNT(DISTINCT edition_sha) = 1)),
+                CASE WHEN :progression BETWEEN 0 AND 1 THEN :peakCoverage END)
         """,
     )
     abstract suspend fun insertLocal(
@@ -449,6 +473,7 @@ abstract class ReadingProgressDao {
         status: String?,
         updatedAt: Long,
         readAt: Long,
+        peakCoverage: String? = null,
     )
 
     @Query(
@@ -473,6 +498,7 @@ abstract class ReadingProgressDao {
         // When the reading happened, if not when it is written.
         readAt: Long = updatedAt,
         resumesReading: Boolean = false,
+        peakCoverage: String? = null,
     ) {
         val savedStatus = if (resumesReading) {
             clearUnreadOverride(bookUrl)
@@ -490,6 +516,7 @@ abstract class ReadingProgressDao {
                 status = savedStatus,
                 updatedAt = updatedAt,
                 readAt = readAt,
+                peakCoverage = peakCoverage,
             )
         if (updated == 0) {
             insertLocal(
@@ -503,6 +530,7 @@ abstract class ReadingProgressDao {
                 status = savedStatus,
                 updatedAt = updatedAt,
                 readAt = readAt,
+                peakCoverage = peakCoverage,
             )
         }
     }
@@ -1137,10 +1165,12 @@ abstract class ReadingProgressDao {
         status: String,
         progression: Double?,
         now: Long,
+        expectedLocalRevision: Long? = null,
     ): Boolean {
         val existing = get(bookUrl)
         if (existing == null) {
             if (expectedStatusRevision != 0L) return false
+            if (expectedLocalRevision != null && expectedLocalRevision != 0L) return false
             return insertRemoteFinishedOverride(
                 bookUrl,
                 override,
@@ -1149,7 +1179,12 @@ abstract class ReadingProgressDao {
                 now,
             ) != -1L
         }
+        // The status revision alone says nothing about where the reader is:
+        // a page turn moves the local revision and leaves this one alone.
+        // Adopting against a row that moved would take the newer reading for
+        // the one that was weighed, so both counters guard the write.
         if (existing.statusRevision != expectedStatusRevision) return false
+        if (expectedLocalRevision != null && existing.localRevision != expectedLocalRevision) return false
         return updateFinishedOverrideIfUnchanged(
             bookUrl,
             expectedStatusRevision,
@@ -1157,6 +1192,7 @@ abstract class ReadingProgressDao {
             override,
             status,
             now,
+            expectedLocalRevision,
         ) > 0
     }
 
@@ -1171,6 +1207,7 @@ abstract class ReadingProgressDao {
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl AND status_revision = :expectedStatusRevision
             AND (owner_account IS NULL OR owner_account = :account)
+            AND (:expectedLocalRevision IS NULL OR local_revision = :expectedLocalRevision)
         """,
     )
     protected abstract suspend fun updateFinishedOverrideIfUnchanged(
@@ -1180,6 +1217,7 @@ abstract class ReadingProgressDao {
         override: Int,
         status: String,
         now: Long,
+        expectedLocalRevision: Long?,
     ): Int
 
     @Query(

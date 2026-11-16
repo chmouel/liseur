@@ -622,4 +622,84 @@ class ReadingProgressDaoTest {
         assertEquals(1L, row.ackedRevision)
         assertTrue(row.isDirty)
     }
+
+    // -- The coverage a peak keeps -----------------------------------------
+
+    @Test
+    fun `a restored partial place keeps its coverage on the peak it becomes`() = runTest {
+        dao.restoreBackupPosition(
+            bookUrl = book,
+            locatorJson = """{"at":0.998}""",
+            progression = 0.998,
+            readAt = 1_000,
+            now = 1_000,
+            coverage = "partial",
+        )
+        // Reading on from there is reading an ebook, but the peak still
+        // records where that partial place was and what it was.
+        read(0.5, 2_000)
+
+        val row = row()
+        assertEquals(0.5, row.totalProgression!!, 0.0)
+        assertNull(row.coverage)
+        assertEquals(0.998, row.peakProgression!!, 0.0)
+        assertEquals("partial", row.peakCoverage)
+    }
+
+    @Test
+    fun `a peak this device read itself records no coverage`() = runTest {
+        read(0.7)
+        read(0.3)
+
+        val row = row()
+        assertEquals(0.7, row.peakProgression!!, 0.0)
+        assertNull(row.peakCoverage)
+    }
+
+    @Test
+    fun `resetting the peak from a restored place carries its coverage`() = runTest {
+        dao.restoreBackupPosition(
+            bookUrl = book,
+            locatorJson = """{"at":0.998}""",
+            progression = 0.998,
+            readAt = 1_000,
+            now = 1_000,
+            coverage = "partial",
+        )
+        read(0.5, 2_000)
+        dao.resetPeak(book, edition = null)
+
+        val row = row()
+        assertEquals(0.5, row.peakProgression!!, 0.0)
+        assertNull(row.peakCoverage)
+    }
+
+    // -- The choice, guarded on the whole row -------------------------------
+
+    @Test
+    fun `a page turned while a choice is adopted refuses the choice`() = runTest {
+        read(0.4)
+        val statusRevision = row().statusRevision
+        // A page turn committed after reconciliation read the row. The
+        // status revision said nothing about it, so on its own it would
+        // let the adoption acknowledge a position never sent.
+        read(0.5)
+
+        val adopted = dao.adoptFinishedOverride(
+            bookUrl = book,
+            expectedStatusRevision = statusRevision,
+            account = account,
+            override = com.chmouel.liseur.domain.FinishedOverride.FINISHED.ordinal,
+            status = "Finished",
+            progression = 0.4,
+            now = 3_000,
+            expectedLocalRevision = 1L,
+        )
+
+        assertFalse(adopted)
+        val after = row()
+        assertEquals(0.5, after.totalProgression!!, 0.0)
+        assertEquals(0, after.finishedOverride)
+        assertEquals(2L, after.localRevision)
+    }
 }
