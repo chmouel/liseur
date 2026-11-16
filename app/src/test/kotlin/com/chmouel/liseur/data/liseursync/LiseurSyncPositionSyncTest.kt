@@ -324,6 +324,66 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `an unknown status from this device stays pending`() = runTest {
+        connect(deviceId = "device-a")
+        db.bookDao().upsert(local())
+        alias(deviceId = "device-a")
+        server.dispatcher = opsAndChanges(
+            page = """{"ops":[${statusOp(seq = 9, progression = 0.4, status = "future_choice", deviceId = "device-a")}],
+                "has_more":false,"high_water":9}""".trimIndent(),
+        )
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        val pending = db.syncPeerStateDao().get(LOCAL, peer("device-a"))!!
+        assertEquals("future_choice", pending.pendingStatusChoice)
+        assertEquals(9L, pending.pendingStatusSeq)
+        assertTrue(pending.hasPendingStatus)
+    }
+
+    @Test
+    fun `preview retains an unknown choice from this device`() = runTest {
+        connect(deviceId = "device-a")
+        db.bookDao().upsert(local())
+        alias(deviceId = "device-a")
+        server.enqueue(json("""{"ops":[],"status":[${statusOp(seq = 9, progression = 0.4, status = "future_choice", deviceId = "device-a")}]}"""))
+
+        sync().previewBook(LOCAL)
+
+        assertEquals("future_choice", db.syncPeerStateDao().get(LOCAL, peer("device-a"))!!.pendingStatusChoice)
+    }
+
+    @Test
+    fun `seeding retains an unknown choice from this device`() = runTest {
+        connect(deviceId = "device-a")
+        db.bookDao().upsert(local())
+        alias(deviceId = "device-a", seeded = false)
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when {
+                request.target.startsWith("/v1/works/w-1/positions") ->
+                    json("""{"ops":[],"status":[${statusOp(seq = 9, progression = 0.4, status = "future_choice", deviceId = "device-a")}]}""")
+                request.target.startsWith("/v1/changes") -> json("""{"ops":[],"high_water":9}""")
+                else -> json("""{"ops":[]}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertEquals("future_choice", db.syncPeerStateDao().get(LOCAL, peer("device-a"))!!.pendingStatusChoice)
+    }
+
+    @Test
+    fun `account heads retain an unknown choice from this device`() = runTest {
+        connect(deviceId = "device-a")
+        val catalog = (1..2).map { "liseur-sync:book-$it" }
+        catalog.forEach { url -> db.bookDao().upsert(local().copy(url = url, localUri = null, lastOpenedAt = null)) }
+        namedTogether("book-1" to "w-1", "book-2" to "w-2")
+        server.enqueue(json("""{"ops":[${statusOp(seq = 9, progression = 0.4, status = "future_choice", deviceId = "device-a")}],"snapshot_seq":9}"""))
+        server.enqueue(json("""{"ops":[],"has_more":false,"high_water":9}"""))
+
+        assertEquals(SyncOutcome.Success, sync().syncAll(null))
+        assertEquals("future_choice", db.syncPeerStateDao().get(catalog.first(), peer("device-a"))!!.pendingStatusChoice)
+    }
+
+    @Test
     fun `a stored status is adopted when this version understands it`() = runTest {
         connect()
         db.bookDao().upsert(local())
