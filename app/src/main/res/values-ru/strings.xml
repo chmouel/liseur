@@ -2158,4 +2158,14 @@
         <item quantity="many">%d дней подряд</item>
         <item quantity="other">%d дня подряд</item>
     </plurals>
+    <string name="reading_status_label">Статус чтения: %1$s</string>
+    <string name="reading_status_automatic">Автоматически</string>
+    <string name="reading_status_want_to_read">Хочу прочитать</string>
+    <string name="reading_status_reading">Читаю</string>
+    <string name="reading_status_paused">На паузе</string>
+    <string name="reading_status_did_not_finish">Не дочитано</string>
+    <string name="reading_status_empty_want_to_read">Нет книг для чтения</string>
+    <string name="reading_status_empty_paused">Нет книг на паузе</string>
+    <string name="reading_status_empty_did_not_finish">Нет недочитанных книг</string>
+    <string name="series_set_status">Изменить статус серии</string>
 </resources>

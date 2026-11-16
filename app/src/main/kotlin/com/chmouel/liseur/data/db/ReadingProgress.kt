@@ -1104,6 +1104,7 @@ abstract class ReadingProgressDao {
             position_revision = position_revision + CASE WHEN :resetPosition THEN 1 ELSE 0 END,
             unread_reset_revision = CASE
                 WHEN :resetPosition THEN local_revision + 1
+                WHEN :keepUnreadReset THEN unread_reset_revision
                 WHEN :override = 2 THEN unread_reset_revision
                 ELSE NULL
             END,
@@ -1118,6 +1119,7 @@ abstract class ReadingProgressDao {
         status: String,
         now: Long,
         resetPosition: Boolean,
+        keepUnreadReset: Boolean,
     ): Int
 
     @Query(
@@ -1129,7 +1131,7 @@ abstract class ReadingProgressDao {
         )
         VALUES (
             :bookUrl, '{}', :progression, :now, :status, :override, 1, 1, 0, :positionRevision,
-            CASE WHEN :override = 2 THEN 1 ELSE NULL END
+            CASE WHEN :positionRevision > 0 THEN 1 ELSE NULL END
         )
         """,
     )
@@ -1149,8 +1151,9 @@ abstract class ReadingProgressDao {
         status: String,
         progression: Double?,
         now: Long,
+        resetPosition: Boolean = override == com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal,
+        keepUnreadReset: Boolean = false,
     ) {
-        val resetPosition = override == com.chmouel.liseur.domain.FinishedOverride.UNREAD.ordinal
         val updated =
             updateFinishedOverride(
                 bookUrl = bookUrl,
@@ -1158,6 +1161,7 @@ abstract class ReadingProgressDao {
                 status = status,
                 now = now,
                 resetPosition = resetPosition,
+                keepUnreadReset = keepUnreadReset,
             )
         if (updated == 0) {
             insertFinishedOverride(

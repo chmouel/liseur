@@ -1943,4 +1943,14 @@
     <plurals name="home_pulse_streak">
         <item quantity="other">连续 %d 天</item>
     </plurals>
+    <string name="reading_status_label">阅读状态：%1$s</string>
+    <string name="reading_status_automatic">自动</string>
+    <string name="reading_status_want_to_read">想读</string>
+    <string name="reading_status_reading">在读</string>
+    <string name="reading_status_paused">已暂停</string>
+    <string name="reading_status_did_not_finish">未读完</string>
+    <string name="reading_status_empty_want_to_read">没有标记为想读的书</string>
+    <string name="reading_status_empty_paused">没有暂停的书</string>
+    <string name="reading_status_empty_did_not_finish">没有未读完的书</string>
+    <string name="series_set_status">设置丛书状态</string>
 </resources>

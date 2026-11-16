@@ -2081,4 +2081,14 @@
         <item quantity="many">%d dias seguidos</item>
         <item quantity="other">%d dias seguidos</item>
     </plurals>
+    <string name="reading_status_label">Estado de leitura: %1$s</string>
+    <string name="reading_status_automatic">Automático</string>
+    <string name="reading_status_want_to_read">Quero ler</string>
+    <string name="reading_status_reading">Lendo</string>
+    <string name="reading_status_paused">Em pausa</string>
+    <string name="reading_status_did_not_finish">Não terminei</string>
+    <string name="reading_status_empty_want_to_read">Nenhum livro marcado para ler</string>
+    <string name="reading_status_empty_paused">Nenhum livro em pausa</string>
+    <string name="reading_status_empty_did_not_finish">Nenhum livro não terminado</string>
+    <string name="series_set_status">Definir estado da série</string>
 </resources>

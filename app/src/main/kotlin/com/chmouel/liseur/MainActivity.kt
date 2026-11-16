@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.lifecycleScope
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ResumeCandidate
 import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.providers.ServicesEntry
@@ -275,6 +276,7 @@ class MainActivity : ComponentActivity() {
                 totalProgression = stored?.totalProgression,
                 finished = book.finished,
                 partialCoverage = stored?.partialCoverage == true,
+                override = stored?.override ?: FinishedOverride.NONE,
             )
         }
         if (!shouldResume(candidate, leftFromReader) || candidate == null ||
@@ -583,6 +585,7 @@ private fun LiseurApp(
                                 }
                             },
                             onChooseFormat = { format -> detailsBook?.let { model.chooseFormat(it, format) } },
+                            onSetReadingChoice = { choice -> detailsBook?.let { library.setReadingChoice(it, choice) } },
                         )
                     }
 
@@ -1164,6 +1167,7 @@ private fun LibraryRoute(
             onVolumeLongPress = { seriesSheetBook = it },
             onDownloadMissing = { viewModel.downloadMissing(openSeries) },
             onMarkSeriesRead = { viewModel.setSeriesFinished(openSeries, true) },
+            onSetSeriesStatus = { viewModel.setSeriesReadingChoice(openSeries, it) },
             onArchiveSeries = {
                 viewModel.setSeriesArchived(openSeries, true)
                 openSeriesKey = null

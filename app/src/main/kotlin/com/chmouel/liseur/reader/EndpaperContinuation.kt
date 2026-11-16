@@ -99,15 +99,16 @@ internal fun endpaperContinuation(
     canDownload: Boolean,
     extras: SeriesExtras?,
     timeSpentMs: Long = 0,
+    overrides: Map<String, com.chmouel.liseur.domain.FinishedOverride> = emptyMap(),
 ): EndpaperContinuation? {
     if (!current.finished || !endpaperReached) return null
     val seriesName = current.seriesName?.takeIf { it.isNotBlank() }
     val finishedVolume = seriesName?.let { seriesIndexLabel(current.seriesIndex) }
-    val shelf = library.groupedIntoSeries(progressions).firstOrNull {
+    val shelf = library.groupedIntoSeries(progressions, overrides).firstOrNull {
         seriesKey(it.name) == seriesKey(current.seriesName)
     }
     val completion = shelf?.let { seriesCompletion(it, extras) } ?: SeriesCompletion.IN_PROGRESS
-    val offer = seriesContinuation(current, library, extras)
+    val offer = seriesContinuation(current, library, extras, overrides)
     val nextUp = offer.next?.let { nextBook ->
         val snapshot = downloads[nextBook.url]
         NextUp(

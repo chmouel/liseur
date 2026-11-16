@@ -146,7 +146,7 @@ class LibraryLayoutTest {
         progress: Map<String, Double> = emptyMap(),
         now: Long = 100,
         monthFrom: Long = 0,
-    ) = homeDeskOf(books, series, current, progress, now, monthFrom, stateFrom(progress))
+    ) = homeDeskOf(books, series, current, progress, now, monthFrom, stateOf = stateFrom(progress))
 
     @Test
     fun `home desk counts the shelf tiles from the whole shelf with their notes`() {

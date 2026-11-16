@@ -12,6 +12,7 @@ import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import com.chmouel.liseur.domain.shelfStateFor
 import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.reader.OpenBookHandle
@@ -83,6 +84,32 @@ class FinishedStateTest {
         state.recordFinished(BOOK)
         assertEquals(FinishedOverride.NONE, progress.get(BOOK)!!.override)
         assertEquals(emptyList<String>(), finished)
+    }
+
+    @Test
+    fun `changing a choice leaves the place and unread reset debt intact`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val progress = db.readingProgressDao()
+        val state = state()
+        state.setFinished(BOOK, false)
+        val reset = progress.get(BOOK)!!.unreadResetRevision
+        progress.recordLocal(BOOK, "{\"href\":\"a.xhtml\"}", 0.99, null, null, null, null, "Reading", 20)
+        progress.restoreBackupCoverage(BOOK, "partial")
+        val before = progress.get(BOOK)!!
+        state.setReadingChoice(BOOK, ReadingStatusChoice.PAUSED)
+        val paused = progress.get(BOOK)!!
+        assertEquals(FinishedOverride.PAUSED, paused.override)
+        assertEquals(before.locatorJson, paused.locatorJson)
+        assertEquals(before.totalProgression, paused.totalProgression)
+        assertEquals(reset, paused.unreadResetRevision)
+        state.setReadingChoice(BOOK, ReadingStatusChoice.AUTOMATIC)
+        val automatic = progress.get(BOOK)!!
+        assertEquals(FinishedOverride.NONE, automatic.override)
+        assertEquals("Reading", automatic.status)
+        assertEquals(reset, automatic.unreadResetRevision)
+        assertNull(db.bookDao().getByUrl(BOOK)!!.finishedAt)
     }
 
     @Test

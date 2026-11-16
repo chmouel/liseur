@@ -5,6 +5,7 @@ import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -35,6 +36,8 @@ import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,6 +79,7 @@ import com.chmouel.liseur.domain.BookAccessibility
 import com.chmouel.liseur.domain.BookDetailsBounds
 import com.chmouel.liseur.domain.ContributorRoles
 import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.domain.shelfStateFor
@@ -116,6 +120,7 @@ fun BookDetailsScreen(
     onDownload: () -> Unit,
     onOpenStats: () -> Unit,
     onChooseFormat: (DownloadFormat) -> Unit = {},
+    onSetReadingChoice: (ReadingStatusChoice) -> Unit = {},
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
@@ -156,7 +161,7 @@ fun BookDetailsScreen(
             }
             val wide = maxWidth >= WIDE_LAYOUT
             val actions = @Composable {
-                BookActions(details, canDownload, download, onRead, onDownload, onOpenStats, onChooseFormat)
+                BookActions(details, canDownload, download, onRead, onDownload, onOpenStats, onChooseFormat, onSetReadingChoice)
             }
             val status = readingStatus(details, etaSeconds)
             val section = Modifier.widthIn(max = MAX_CONTENT_WIDTH).fillMaxWidth()
@@ -293,6 +298,7 @@ private fun BookActions(
     onDownload: () -> Unit,
     onOpenStats: () -> Unit,
     onChooseFormat: (DownloadFormat) -> Unit,
+    onSetReadingChoice: (ReadingStatusChoice) -> Unit,
 ) {
     val book = details.book
     val tall = Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -374,11 +380,35 @@ private fun BookActions(
                 onChoose = onChooseFormat,
             )
         }
+        var choosingStatus by remember { mutableStateOf(false) }
+        Box {
+            OutlinedButton(onClick = { choosingStatus = true }, modifier = tall) {
+                Text(stringResource(R.string.reading_status_label, stringResource(details.override.statusLabel())))
+            }
+            DropdownMenu(expanded = choosingStatus, onDismissRequest = { choosingStatus = false }) {
+                ReadingStatusChoice.entries.forEach { choice ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(choice.override.statusLabel())) },
+                        onClick = { choosingStatus = false; onSetReadingChoice(choice) },
+                    )
+                }
+            }
+        }
         OutlinedButton(onClick = onOpenStats, modifier = tall) {
             ButtonIcon(Icons.Outlined.Insights)
             Text(stringResource(R.string.reading_stats))
         }
     }
+}
+
+internal fun com.chmouel.liseur.domain.FinishedOverride.statusLabel(): Int = when (this) {
+    com.chmouel.liseur.domain.FinishedOverride.NONE -> R.string.reading_status_automatic
+    com.chmouel.liseur.domain.FinishedOverride.FINISHED -> R.string.state_finished
+    com.chmouel.liseur.domain.FinishedOverride.UNREAD -> R.string.filter_unread
+    com.chmouel.liseur.domain.FinishedOverride.WANT_TO_READ -> R.string.reading_status_want_to_read
+    com.chmouel.liseur.domain.FinishedOverride.READING -> R.string.reading_status_reading
+    com.chmouel.liseur.domain.FinishedOverride.PAUSED -> R.string.reading_status_paused
+    com.chmouel.liseur.domain.FinishedOverride.DID_NOT_FINISH -> R.string.reading_status_did_not_finish
 }
 
 @Composable

@@ -394,12 +394,13 @@ fun homeDeskOf(
     progressions: Map<String, Double>,
     now: Long,
     thisMonthFrom: Long,
+    nextUpEligible: (Book) -> Boolean = { true },
     stateOf: (Book) -> LibraryFilterOption,
 ): HomeDesk {
     val shelf = books.filter { !it.archived && !it.hidden }
     val states = shelf.associate { it.url to stateOf(it) }
     val reading = shelf
-        .filter { states[it.url] == LibraryFilterOption.IN_PROGRESS }
+        .filter { states[it.url] == LibraryFilterOption.IN_PROGRESS && nextUpEligible(it) }
         .sortedWith(compareByDescending(nullsFirst()) { it.lastOpenedAt })
     val unread = shelf
         .filter { states[it.url] == LibraryFilterOption.UNREAD }

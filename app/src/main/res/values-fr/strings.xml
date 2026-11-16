@@ -2014,4 +2014,14 @@
         <item quantity="one">%d jour d\'affilée</item>
         <item quantity="other">%d jours d\'affilée</item>
     </plurals>
+    <string name="reading_status_label">Statut de lecture : %1$s</string>
+    <string name="reading_status_automatic">Automatique</string>
+    <string name="reading_status_want_to_read">À lire</string>
+    <string name="reading_status_reading">En cours</string>
+    <string name="reading_status_paused">En pause</string>
+    <string name="reading_status_did_not_finish">Abandonné</string>
+    <string name="reading_status_empty_want_to_read">Aucun livre à lire</string>
+    <string name="reading_status_empty_paused">Aucun livre en pause</string>
+    <string name="reading_status_empty_did_not_finish">Aucun livre abandonné</string>
+    <string name="series_set_status">Définir le statut de la série</string>
 </resources>

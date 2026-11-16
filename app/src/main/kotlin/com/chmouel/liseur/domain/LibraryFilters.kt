@@ -42,6 +42,9 @@ enum class LibraryFilterOption(
     /** Started and not finished. */
     IN_PROGRESS("in_progress", FilterGroup.READING),
     FINISHED("finished", FilterGroup.READING),
+    WANT_TO_READ("want_to_read", FilterGroup.READING),
+    PAUSED("paused", FilterGroup.READING),
+    DID_NOT_FINISH("did_not_finish", FilterGroup.READING),
 
     /** The books archived. */
     ARCHIVED("archived", FilterGroup.PLACE),
@@ -191,7 +194,16 @@ data class LibraryFilters(
         val state = shelfStateFor(book, progression, override)
         val reading = group(FilterGroup.READING)
         if (reading.isNotEmpty()) {
-            if (state !in reading) return false
+            val resolved = readingStatusFor(null, override)
+            val special = when (override) {
+                FinishedOverride.WANT_TO_READ -> LibraryFilterOption.WANT_TO_READ
+                FinishedOverride.PAUSED -> LibraryFilterOption.PAUSED
+                FinishedOverride.DID_NOT_FINISH -> LibraryFilterOption.DID_NOT_FINISH
+                else -> null
+            }
+            val baseMatch = state in reading &&
+                (state != LibraryFilterOption.IN_PROGRESS || resolved.isNextUp())
+            if (!baseMatch && special !in reading) return false
         } else if (hidesFinished && state == LibraryFilterOption.FINISHED) {
             // The one asymmetry in the menu, and a deliberate one. An
             // untouched axis narrows nothing everywhere else, but a
@@ -217,23 +229,31 @@ data class LibraryFilters(
      * selection always writes the same string and a rewrite of an
      * unchanged filter does not wake every reader of the settings flow.
      */
-    fun serialise(): String =
-        LibraryFilterOption.entries
-            .filter { it in options }
-            .joinToString(",") { it.id }
+    fun serialise(): String {
+        val ids = LibraryFilterOption.entries.filter { it in options }.map { it.id }
+        val reading = options.filter { it.group == FilterGroup.READING }.toSet()
+        // Distinguish an explicit selection from the older all-states filter
+        return (ids + if (reading == LEGACY_ALL_READING) listOf("reading_v2") else emptyList()).joinToString(",")
+    }
 
     companion object {
         val None = LibraryFilters()
+        private val LEGACY_ALL_READING = setOf(LibraryFilterOption.UNREAD, LibraryFilterOption.IN_PROGRESS, LibraryFilterOption.FINISHED)
 
         /**
          * Reads back what [serialise] wrote, dropping anything it does
          * not recognise. A filter written by a newer version has to
          * degrade into a wider shelf, never into a crash.
          */
-        fun parse(stored: String?): Set<LibraryFilterOption> =
-            stored
-                ?.split(",")
+        fun parse(stored: String?): Set<LibraryFilterOption> {
+            val options = stored?.split(",")
                 ?.mapNotNullTo(mutableSetOf()) { LibraryFilterOption.fromId(it.trim()) }
-                ?: emptySet()
+                ?: mutableSetOf()
+            val reading = options.filter { it.group == FilterGroup.READING }.toSet()
+            if (reading == LEGACY_ALL_READING && "reading_v2" !in stored.orEmpty().split(",")) {
+                options += setOf(LibraryFilterOption.WANT_TO_READ, LibraryFilterOption.PAUSED, LibraryFilterOption.DID_NOT_FINISH)
+            }
+            return options
+        }
     }
 }

@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.data.db.readAtFor
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import com.chmouel.liseur.domain.readingStatusFor
 
 /**
@@ -45,6 +46,11 @@ class FinishedState(
         val override = if (finished) FinishedOverride.FINISHED else FinishedOverride.UNREAD
         inWriteOrder { writeStatus(bookUrl, override, null) }
         if (finished) onFinished(bookUrl)
+    }
+
+    suspend fun setReadingChoice(bookUrl: String, choice: ReadingStatusChoice) {
+        inWriteOrder { writeStatus(bookUrl, choice.override, null, keepUnreadReset = choice != ReadingStatusChoice.UNREAD) }
+        if (choice == ReadingStatusChoice.FINISHED) onFinished(bookUrl)
     }
 
     /**
@@ -123,18 +129,20 @@ class FinishedState(
         bookUrl: String,
         override: FinishedOverride,
         requestedStatus: ReadingStatus?,
+        keepUnreadReset: Boolean = false,
     ) {
         val at = now()
         inTransaction {
-            val progression =
-                if (override == FinishedOverride.UNREAD) 0.0 else progressDao.get(bookUrl)?.totalProgression
-            val status = requestedStatus ?: readingStatusFor(progression, override)
+            val row = progressDao.get(bookUrl)
+            val progression = if (override == FinishedOverride.UNREAD) 0.0 else row?.totalProgression
+            val status = requestedStatus ?: readingStatusFor(progression, override, row?.partialCoverage == true)
             progressDao.setFinishedOverride(
                 bookUrl = bookUrl,
                 override = override.ordinal,
                 status = status.wireName,
                 progression = progression,
                 now = at,
+                keepUnreadReset = keepUnreadReset,
             )
             applyFlag(bookUrl, status == ReadingStatus.FINISHED, at)
         }

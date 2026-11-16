@@ -8,6 +8,7 @@ import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.domain.BackedUpReadingPosition
+import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.decodeReadingPositionBackup
 import kotlinx.coroutines.test.runTest
@@ -42,7 +43,7 @@ class ReadingPositionBackupRepositoryTest {
         db.readingProgressDao().upsert(ReadingProgress("b", "{}", null, updatedAt = 30))
         val file = folder.newFile()
         repository().writeContents(file, 4096)
-        assertEquals(listOf(BackedUpReadingPosition("a", null, null, locator, 0.2, 10)), decodeReadingPositionBackup(file.readText()))
+        assertEquals(listOf(BackedUpReadingPosition("a", null, null, locator, 0.2, 10, readingStatus = "automatic")), decodeReadingPositionBackup(file.readText()))
         assertTrue(runCatching { repository().writeContents(file, 100) }.exceptionOrNull() is ReadingPositionBackupTooLarge)
         assertTrue(file.length() <= 100)
     }
@@ -50,7 +51,7 @@ class ReadingPositionBackupRepositoryTest {
     @Test
     fun `export carries every position across several pages`() = runTest {
         val expected = List(75) { index ->
-            BackedUpReadingPosition("book-${index.toString().padStart(3, '0')}", null, null, locator, 0.2, 10)
+            BackedUpReadingPosition("book-${index.toString().padStart(3, '0')}", null, null, locator, 0.2, 10, readingStatus = "automatic")
         }
         expected.forEach {
             db.readingProgressDao().upsert(ReadingProgress(it.bookId, it.locatorJson, it.progression, updatedAt = it.readAt))
@@ -79,12 +80,49 @@ class ReadingPositionBackupRepositoryTest {
     }
 
     @Test
+    fun `a status-only automatic withdrawal is backed up`() = runTest {
+        db.readingProgressDao().upsert(ReadingProgress("book", "{}", null, updatedAt = 20, statusRevision = 1))
+        val file = folder.newFile()
+        repository().writeContents(file, 4096)
+        assertEquals("automatic", decodeReadingPositionBackup(file.readText()).single().readingStatus)
+    }
+
+    @Test
+    fun `status-only choice survives backup without moving a restored position`() = runTest {
+        val progress = db.readingProgressDao()
+        progress.upsert(ReadingProgress("book", "{}", null, updatedAt = 20, finishedOverride = FinishedOverride.PAUSED.ordinal))
+        val file = folder.newFile()
+        repository().writeContents(file, 4096)
+        val positions = decodeReadingPositionBackup(file.readText())
+        assertEquals("paused", positions.single().readingStatus)
+        progress.upsert(ReadingProgress("book", locator, 0.7, updatedAt = 30))
+        repository().restore(positions)
+        val restored = progress.get("book")!!
+        assertEquals(FinishedOverride.PAUSED, restored.override)
+        assertEquals(0.7, restored.totalProgression!!, 0.0)
+        assertEquals(locator, restored.locatorJson)
+    }
+
+    @Test
+    fun `restoring an unread choice does not reset the existing position`() = runTest {
+        val progress = db.readingProgressDao()
+        progress.upsert(ReadingProgress("book", locator, 0.7, updatedAt = 30))
+        repository().restore(listOf(BackedUpReadingPosition("book", null, null, "{}", null, 20,
+            readingStatus = "unread")))
+        val restored = progress.get("book")!!
+        assertEquals(FinishedOverride.UNREAD, restored.override)
+        assertEquals(0.7, restored.totalProgression!!, 0.0)
+        assertEquals(locator, restored.locatorJson)
+        assertNull(restored.unreadResetRevision)
+    }
+
+    @Test
     fun `percentage-only positions survive export and restore`() = runTest {
         db.readingProgressDao().upsert(ReadingProgress("book", "{}", 0.6, updatedAt = 20))
         val file = folder.newFile()
         repository().writeContents(file, 4096)
         val positions = decodeReadingPositionBackup(file.readText())
-        assertEquals(listOf(BackedUpReadingPosition("book", null, null, "{}", 0.6, 20)), positions)
+        assertEquals(listOf(BackedUpReadingPosition("book", null, null, "{}", 0.6, 20, readingStatus = "automatic")), positions)
         db.readingProgressDao().forget("book")
         assertEquals(1, repository().restore(positions))
         assertEquals(0.6, db.readingProgressDao().get("book")?.totalProgression)
@@ -141,7 +179,7 @@ class ReadingPositionBackupRepositoryTest {
         repository().writeContents(file, 4096)
         val positions = decodeReadingPositionBackup(file.readText())
         assertEquals(
-            listOf(BackedUpReadingPosition("book", "Book", null, locator, 0.998, 20, "partial")),
+            listOf(BackedUpReadingPosition("book", "Book", null, locator, 0.998, 20, "partial", "automatic")),
             positions,
         )
 

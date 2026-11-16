@@ -2014,4 +2014,14 @@
         <item quantity="one">%d giorno di fila</item>
         <item quantity="other">%d giorni di fila</item>
     </plurals>
+    <string name="reading_status_label">Stato di lettura: %1$s</string>
+    <string name="reading_status_automatic">Automatico</string>
+    <string name="reading_status_want_to_read">Da leggere</string>
+    <string name="reading_status_reading">In lettura</string>
+    <string name="reading_status_paused">In pausa</string>
+    <string name="reading_status_did_not_finish">Non terminato</string>
+    <string name="reading_status_empty_want_to_read">Nessun libro da leggere</string>
+    <string name="reading_status_empty_paused">Nessun libro in pausa</string>
+    <string name="reading_status_empty_did_not_finish">Nessun libro non terminato</string>
+    <string name="series_set_status">Imposta stato della serie</string>
 </resources>

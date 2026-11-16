@@ -10,12 +10,14 @@ class ResumeDecisionTest {
         progression: Double?,
         finished: Boolean = false,
         partialCoverage: Boolean = false,
+        override: FinishedOverride = FinishedOverride.NONE,
     ) = ResumeCandidate(
         identity = "calibre:abc",
         fileUrl = "file:///books/abc.epub",
         totalProgression = progression,
         finished = finished,
         partialCoverage = partialCoverage,
+        override = override,
     )
 
     @Test
@@ -48,6 +50,18 @@ class ResumeDecisionTest {
     @Test
     fun `a book marked read never pulls you back in`() {
         assertFalse(shouldResume(candidate(0.1, finished = true), leftFromReader = true))
+    }
+
+    @Test
+    fun `a book still marked unfinished at the back matter resumes`() {
+        assertTrue(shouldResume(candidate(0.99, override = FinishedOverride.READING), leftFromReader = true))
+        listOf(FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH).forEach { override ->
+            assertFalse(shouldResume(candidate(0.99, override = override), leftFromReader = true))
+            assertFalse(shouldResume(candidate(null, override = override), leftFromReader = true))
+        }
+        assertFalse(
+            shouldResume(candidate(0.5, override = FinishedOverride.FINISHED), leftFromReader = true),
+        )
     }
 
     @Test
