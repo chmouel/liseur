@@ -76,6 +76,7 @@ class FinishedState(
         status: ReadingStatus,
         finishedAt: Long? = null,
         expectedLocalRevision: Long? = null,
+        keepUnreadReset: Boolean = false,
     ): Boolean {
         val at = now()
         var applied = false
@@ -90,6 +91,11 @@ class FinishedState(
                 progression = progression,
                 now = at,
                 expectedLocalRevision = expectedLocalRevision,
+                // An undelivered unread reset is a position debt, and only
+                // a position acknowledgement retires it: taking a choice
+                // from elsewhere must not silence the reset this device
+                // still owes.
+                keepUnreadReset = keepUnreadReset,
             )
             if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, readAtFor(finishedAt, at))
         }
