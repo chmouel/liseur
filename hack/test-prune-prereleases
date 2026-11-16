@@ -43,6 +43,10 @@ cat > "$fixture" <<'EOF'
   {"tag_name":"v0.15.1-nightly.20261108","prerelease":true},
   {"tag_name":"v0.16.0-nightly.20261109","prerelease":true},
   {"tag_name":"v0.15.1-nightly.20261110","prerelease":true},
+  {"tag_name":"v0.15.1-nightly.20261110.2","prerelease":true},
+  {"tag_name":"v0.15.1-nightly.20261110.10","prerelease":true},
+  {"tag_name":"v0.15.1-nightly.20261109.7","prerelease":true},
+  {"tag_name":"v0.15.0-rc.4.2","prerelease":true},
   {"tag_name":"not-a-release","prerelease":true}
 ]]
 EOF
@@ -65,7 +69,10 @@ expected=$(printf '%s\n' \
     v0.15.0-test.4 \
     v0.13.0-test.1 \
     v0.15.1-nightly.20261108 \
-    v0.16.0-nightly.20261109 | sort)
+    v0.16.0-nightly.20261109 \
+    v0.15.1-nightly.20261109.7 \
+    v0.15.1-nightly.20261110 \
+    v0.15.1-nightly.20261110.2 | sort)
 [[ "$actual" == "$expected" ]] || {
     printf 'unexpected releases deleted:\n%s\n' "$actual" >&2
     exit 1
@@ -75,6 +82,10 @@ expected=$(printf '%s\n' \
 ! grep -q 'release delete v0.15.0 ' "$calls"
 ! grep -q 'release delete v0.15.0-rc.10 ' "$calls"
 ! grep -q 'release delete v0.14.0-rc.2 ' "$calls"
+# The newest build of the newest day survives, and so does a "numbered rc",
+# which is not a series this script understands.
+! grep -q 'release delete v0.15.1-nightly.20261110.10 ' "$calls"
+! grep -q 'release delete v0.15.0-rc.4.2 ' "$calls"
 
 : > "$calls"
 cat > "$fixture" <<'EOF'

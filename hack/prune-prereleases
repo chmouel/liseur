@@ -4,8 +4,8 @@
 #
 # Every legacy vX.Y.Z-test.N release is removed. For vX.Y.Z-rc.N releases,
 # only the highest numeric iteration for each X.Y.Z base is retained. Of
-# the vX.Y.Z-nightly.YYYYMMDD releases only the newest date is kept,
-# whatever its base.
+# the vX.Y.Z-nightly.YYYYMMDD[.N] releases only the newest build is kept,
+# whatever its base: the newest date, and the highest N within that date.
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ Usage:
 
 Deletes every legacy vX.Y.Z-test.N GitHub prerelease, all but the newest
 vX.Y.Z-rc.N prerelease for each base version, and all but the newest
-vX.Y.Z-nightly.YYYYMMDD prerelease. Git tags are never deleted.
+vX.Y.Z-nightly.YYYYMMDD[.N] prerelease. Git tags are never deleted.
 EOF
 }
 
@@ -69,15 +69,18 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
         | (
             $tag
             | try capture(
-                "^v(?<base>[0-9]+\\.[0-9]+\\.[0-9]+)-(?<series>rc|test|nightly)\\.(?<iteration>[0-9]+)$"
+                "^v(?<base>[0-9]+\\.[0-9]+\\.[0-9]+)-(?<series>rc|test|nightly)\\.(?<iteration>[0-9]+)(\\.(?<build>[0-9]+))?$"
             ) catch null
           ) as $parsed
         | select($parsed != null)
+        # Only a nightly can be built more than once under one date.
+        | select($parsed.build == null or $parsed.series == "nightly")
         | {
             tag: $tag,
             base: $parsed.base,
             series: $parsed.series,
-            iteration: ($parsed.iteration | tonumber)
+            iteration: ($parsed.iteration | tonumber),
+            build: (($parsed.build // "1") | tonumber)
           }
       ] as $prereleases
     | (
@@ -95,7 +98,7 @@ obsolete=$(printf '%s' "$release_pages" | jq -r '
         [
           $prereleases
           | map(select(.series == "nightly"))
-          | sort_by(.iteration)
+          | sort_by([.iteration, .build])
           | .[0:-1][]
           | .tag
         ]

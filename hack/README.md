@@ -51,7 +51,8 @@ target wrapping them. Run `make help` for the short list. See
   tags, builds, publishes the GitHub release, and submits the F-Droid
   update. `--rc` publishes only to a GitHub prerelease and Google Play's
   testing tracks. `--nightly` (run by the Nightly workflow) tags a dated
-  prerelease when something that ships changed. Final releases are also published to Google Play
+  prerelease when something that ships changed; a second one the same
+  UTC day is `.2`, then `.3`. Final releases are also published to Google Play
   production. With no version given, it drafts the F-Droid changelog
   with `pi -p` (model `openai/$LISEUR_NOTES_MODEL`, default `gpt-6-luna`),
   falling back to `copilot -p` (model `LISEUR_NOTES_COPILOT_MODEL`, default
@@ -59,7 +60,7 @@ target wrapping them. Run `make help` for the short list. See
   See `DEVELOPER.md` for the full workflow and flags.
 - `prune-prereleases`: Deletes every legacy `vX.Y.Z-test.N` GitHub release
   page, all but the newest `vX.Y.Z-rc.N` page for each target version, and
-  all but the newest `vX.Y.Z-nightly.YYYYMMDD` page.
+  all but the newest `vX.Y.Z-nightly.YYYYMMDD[.N]` page.
   It never deletes tags. The release workflow runs it after publishing a
   prerelease.
 - `test-prune-prereleases`: Runs the deterministic mocked-GitHub tests for
