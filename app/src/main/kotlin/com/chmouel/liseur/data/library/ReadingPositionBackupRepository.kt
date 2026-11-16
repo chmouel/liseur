@@ -5,6 +5,8 @@ import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.ReadingProgressDao
 import com.chmouel.liseur.domain.BackedUpReadingPosition
 import com.chmouel.liseur.domain.KnownBook
+import com.chmouel.liseur.domain.ReadingStatusChoice
+import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.matchBackedUpReadingPosition
 import java.io.File
 import java.io.IOException
@@ -48,7 +50,10 @@ class ReadingPositionBackupRepository(
                         lastUrl = position.bookUrl
                         val exact = runCatching { Locator.fromJSON(JSONObject(position.locatorJson)) }.getOrNull() != null
                         val progression = position.totalProgression?.takeIf { it.isFinite() && it in 0.0..1.0 }
-                        if (!exact && progression == null) continue
+                        if (!exact && progression == null &&
+                            position.override == com.chmouel.liseur.domain.FinishedOverride.NONE &&
+                            position.statusRevision == 0L
+                        ) continue
                         val book = bookDao.getByUrl(position.bookUrl)
                         writer.beginObject().name("book_id").value(position.bookUrl)
                         book?.title?.let { writer.name("title").value(it) }
@@ -56,6 +61,7 @@ class ReadingPositionBackupRepository(
                         if (exact) writer.name("locator").value(position.locatorJson)
                         progression?.let { writer.name("progression").value(it) }
                         position.narrativeCoverage?.let { writer.name("coverage").value(it.wireName) }
+                        writer.name("reading_status").value(ReadingStatusChoice.forOverride(position.override).wireName)
                         writer.name("read_at").value((position.readAt ?: position.updatedAt).coerceAtLeast(0))
                             .endObject()
                         writer.flush()
@@ -78,8 +84,18 @@ class ReadingPositionBackupRepository(
                 val url = if (counts.getValue(target) > 1) position.bookId else target
                 progressDao.openBooks.unlessOpen(url) {
                     inTransaction {
-                        progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
-                            position.readAt, System.currentTimeMillis(), position.coverage)
+                        val at = System.currentTimeMillis()
+                        if (position.locatorJson != "{}" || position.progression != null) {
+                            progressDao.restoreBackupPosition(url, position.locatorJson, position.progression,
+                                position.readAt, at, position.coverage)
+                        }
+                        position.readingStatus?.let { value ->
+                            val choice = requireNotNull(ReadingStatusChoice.fromWire(value))
+                            val row = progressDao.get(url)
+                            val status = readingStatusFor(row?.totalProgression, choice.override, row?.partialCoverage == true)
+                            progressDao.setFinishedOverride(url, choice.override.ordinal, status.wireName,
+                                row?.totalProgression, at, resetPosition = false, keepUnreadReset = true)
+                        }
                         finishedState.refreshFromProgress(url)
                     }
                 } ?: throw IOException("Cannot replace the position of an open book")

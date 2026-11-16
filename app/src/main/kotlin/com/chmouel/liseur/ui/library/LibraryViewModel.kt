@@ -49,6 +49,9 @@ import com.chmouel.liseur.domain.FilterGroup
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.HomeDesk
 import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.ReadingStatusChoice
+import com.chmouel.liseur.domain.readingStatusFor
+import com.chmouel.liseur.domain.isNextUp
 import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibrarySort
@@ -416,10 +419,11 @@ internal fun continueReadingFor(
     progression: Double?,
     override: FinishedOverride?,
 ): ContinueReading? {
-    val unread =
-        override != null &&
-            shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
-    return ContinueReading(book, progression).takeIf { !unread }
+    val eligible = override == null || (
+        shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD &&
+            !book.finished && readingStatusFor(null, override).isNextUp()
+        )
+    return ContinueReading(book, progression).takeIf { eligible }
 }
 
 /**
@@ -1078,6 +1082,9 @@ class LibraryViewModel(
                             progressions = progressions,
                             now = System.currentTimeMillis(),
                             thisMonthFrom = LocalDate.now(zone).withDayOfMonth(1).atStartOfDay(zone).toInstant().toEpochMilli(),
+                            nextUpEligible = { book ->
+                                readingStatusFor(null, overrides[book.url] ?: FinishedOverride.NONE).isNextUp()
+                            },
                         ) { book ->
                             shelfStateFor(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE)
                         }
@@ -1090,7 +1097,11 @@ class LibraryViewModel(
                         .let { states ->
                             QuickFilterCounts(
                                 all = states.size,
-                                reading = states.count { it == LibraryFilterOption.IN_PROGRESS },
+                                reading = onTheShelf.count { book ->
+                                    LibraryFilters(setOf(LibraryFilterOption.IN_PROGRESS)).accepts(
+                                        book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE,
+                                    )
+                                },
                                 toRead = states.count { it == LibraryFilterOption.UNREAD },
                                 finished = states.count { it == LibraryFilterOption.FINISHED },
                             )
@@ -1421,6 +1432,13 @@ class LibraryViewModel(
         }
     }
 
+    fun setReadingChoice(book: Book, choice: ReadingStatusChoice) {
+        viewModelScope.launch {
+            finishedState.setReadingChoice(book.url, choice)
+            positionSync.request(SyncScope.Book(book.url), System.currentTimeMillis())
+        }
+    }
+
     /**
      * Puts a book away, or brings it back. Nothing is deleted and nothing
      * stops syncing: the book is simply not on the shelf.
@@ -1486,6 +1504,15 @@ class LibraryViewModel(
             if (changed.isNotEmpty()) {
                 positionSync.request(SyncScope.Full, System.currentTimeMillis())
             }
+        }
+    }
+
+    fun setSeriesReadingChoice(shelf: SeriesShelf, choice: ReadingStatusChoice) {
+        viewModelScope.launch {
+            shelf.volumes.filter { it.override != choice.override }.forEach {
+                finishedState.setReadingChoice(it.book.url, choice)
+            }
+            positionSync.request(SyncScope.Full, System.currentTimeMillis())
         }
     }
 

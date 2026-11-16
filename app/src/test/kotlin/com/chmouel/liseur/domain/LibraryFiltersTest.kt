@@ -200,6 +200,31 @@ class LibraryFiltersTest {
     }
 
     @Test
+    fun `saved all-reading filter includes the new states`() {
+        val filters = LibraryFilters(LibraryFilters.parse("unread,in_progress,finished"))
+        assertTrue(filters.accepts(book(), 0.5, FinishedOverride.PAUSED))
+        assertTrue(filters.accepts(book(), 0.5, FinishedOverride.DID_NOT_FINISH))
+        val selected = LibraryFilters(setOf(LibraryFilterOption.UNREAD, LibraryFilterOption.IN_PROGRESS, LibraryFilterOption.FINISHED))
+        assertEquals(selected.options, LibraryFilters.parse(selected.serialise()))
+        assertFalse(LibraryFilters(LibraryFilters.parse(selected.serialise())).accepts(book(), 0.5, FinishedOverride.PAUSED))
+    }
+
+    @Test
+    fun `explicit choices have filters and paused books are excluded from reading`() {
+        val want = LibraryFilters(setOf(LibraryFilterOption.WANT_TO_READ))
+        val reading = LibraryFilters(setOf(LibraryFilterOption.IN_PROGRESS))
+        val paused = LibraryFilters(setOf(LibraryFilterOption.PAUSED))
+        val dnf = LibraryFilters(setOf(LibraryFilterOption.DID_NOT_FINISH))
+        assertTrue(want.accepts(book(), 0.99, FinishedOverride.WANT_TO_READ))
+        assertTrue(paused.accepts(book(), 0.99, FinishedOverride.PAUSED))
+        assertTrue(dnf.accepts(book(), 0.99, FinishedOverride.DID_NOT_FINISH))
+        assertFalse(reading.accepts(book(), 0.5, FinishedOverride.PAUSED))
+        assertFalse(reading.accepts(book(), 0.5, FinishedOverride.DID_NOT_FINISH))
+        assertTrue(reading.accepts(book(), 0.99, FinishedOverride.READING))
+        assertTrue(reading.accepts(book(), 0.99, FinishedOverride.NONE))
+    }
+
+    @Test
     fun `richer choices select the existing unread or started shelf`() {
         assertEquals(LibraryFilterOption.UNREAD, shelfStateFor(book(), 0.99, FinishedOverride.WANT_TO_READ))
         for (choice in listOf(FinishedOverride.READING, FinishedOverride.PAUSED, FinishedOverride.DID_NOT_FINISH)) {

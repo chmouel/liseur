@@ -363,10 +363,11 @@ internal fun NothingMatched(
     searching: Boolean,
     onClear: () -> Unit,
     modifier: Modifier = Modifier,
+    titleRes: Int? = null,
 ) {
     LibraryEmptyState(
         title = stringResource(
-            if (searching) R.string.no_books_match else R.string.no_books_in_filter,
+            titleRes ?: if (searching) R.string.no_books_match else R.string.no_books_in_filter,
         ),
         art = { LibraryEmptyIcon(Icons.Outlined.Search) },
         modifier = modifier,

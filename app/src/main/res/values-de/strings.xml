@@ -2026,4 +2026,14 @@
         <item quantity="one">%d Tag am Stück</item>
         <item quantity="other">%d Tage am Stück</item>
     </plurals>
+    <string name="reading_status_label">Lesestatus: %1$s</string>
+    <string name="reading_status_automatic">Automatisch</string>
+    <string name="reading_status_want_to_read">Möchte ich lesen</string>
+    <string name="reading_status_reading">Wird gelesen</string>
+    <string name="reading_status_paused">Pausiert</string>
+    <string name="reading_status_did_not_finish">Nicht beendet</string>
+    <string name="reading_status_empty_want_to_read">Keine Bücher auf der Leseliste</string>
+    <string name="reading_status_empty_paused">Keine pausierten Bücher</string>
+    <string name="reading_status_empty_did_not_finish">Keine nicht beendeten Bücher</string>
+    <string name="series_set_status">Status der Reihe festlegen</string>
 </resources>

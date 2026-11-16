@@ -404,6 +404,7 @@ class ReaderViewModel(
                 progressions = progressions
                     .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                     .toMap(),
+                overrides = progressions.associate { it.bookUrl to it.override },
                 endpaperReached = endpaper,
                 downloads = running.mapValues { (_, progress) ->
                     DownloadSnapshot(
@@ -428,6 +429,7 @@ class ReaderViewModel(
             canDownload = allowed,
             extras = extras,
             timeSpentMs = totalMs,
+            overrides = inputs.overrides,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -483,6 +485,7 @@ class ReaderViewModel(
     private data class ContinuationInputs(
         val books: List<Book>,
         val progressions: Map<String, Double>,
+        val overrides: Map<String, com.chmouel.liseur.domain.FinishedOverride>,
         val endpaperReached: Boolean,
         val downloads: Map<String, DownloadSnapshot>,
     )

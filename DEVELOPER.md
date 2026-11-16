@@ -1102,6 +1102,10 @@ changing reader behavior.
   byte-identical: no random ids, no `pending_ops` table. Sessions restored
   from a backup carry `imported_at`, so they are never uploaded and never
   offered as stats candidates.
+- Explicit choices override the position until changed; paused and
+  did-not-finish are excluded from next-up and automatic resume. Backups
+  carry the choice without moving a position when it is restored
+  ([ADR 0072](docs/adr/0072-reading-status-choices.md)).
 - A reading status is a fact beside the position, not a threshold
   (liseur-sync ADR-0066). A status op carries `kind`, `reading_status` and
   its own revision-derived id (`acked_status_revision` per peer), is

@@ -11,6 +11,8 @@ data class ResumeCandidate(
     val finished: Boolean = false,
     /** The recording this place came from covers only part of the book. */
     val partialCoverage: Boolean = false,
+    /** What someone said about the book, which outranks its position. */
+    val override: FinishedOverride = FinishedOverride.NONE,
 )
 
 /**
@@ -28,10 +30,12 @@ data class ResumeCandidate(
 fun shouldResume(candidate: ResumeCandidate?, leftFromReader: Boolean): Boolean {
     if (candidate == null || !leftFromReader) return false
     if (candidate.finished) return false
-    val progression = candidate.totalProgression ?: return true
-    if (progression <= 0.0) return true
-    return readingStatusFor(progression, partialCoverage = candidate.partialCoverage) !=
-        ReadingStatus.FINISHED
+    return readingStatusFor(candidate.totalProgression, candidate.override, candidate.partialCoverage).isNextUp()
+}
+
+fun ReadingStatus.isNextUp(): Boolean = when (this) {
+    ReadingStatus.READY_TO_READ, ReadingStatus.WANT_TO_READ, ReadingStatus.READING -> true
+    ReadingStatus.FINISHED, ReadingStatus.PAUSED, ReadingStatus.DID_NOT_FINISH -> false
 }
 
 /**

@@ -2088,4 +2088,14 @@
         <item quantity="one">%d-day streak</item>
         <item quantity="other">%d-day streak</item>
     </plurals>
+    <string name="reading_status_label">Reading status: %1$s</string>
+    <string name="reading_status_automatic">Automatic</string>
+    <string name="reading_status_want_to_read">Want to read</string>
+    <string name="reading_status_reading">Reading</string>
+    <string name="reading_status_paused">Paused</string>
+    <string name="reading_status_did_not_finish">Did not finish</string>
+    <string name="reading_status_empty_want_to_read">No books marked want to read</string>
+    <string name="reading_status_empty_paused">No paused books</string>
+    <string name="reading_status_empty_did_not_finish">No books marked did not finish</string>
+    <string name="series_set_status">Set status for series</string>
 </resources>

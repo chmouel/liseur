@@ -122,6 +122,7 @@ fun SeriesScreen(
     onVolumeLongPress: (Book) -> Unit,
     onDownloadMissing: () -> Unit,
     onMarkSeriesRead: () -> Unit,
+    onSetSeriesStatus: (com.chmouel.liseur.domain.ReadingStatusChoice) -> Unit,
     onArchiveSeries: () -> Unit,
     /** The draft order, or null when the shelf is only being read. */
     reorder: SeriesReorder?,
@@ -147,6 +148,7 @@ fun SeriesScreen(
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     var menuOpen by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var choosingStatus by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }
     val snackbarHost = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -273,6 +275,10 @@ fun SeriesScreen(
                                         onMarkSeriesRead()
                                     },
                                 )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.series_set_status)) },
+                                    onClick = { menuOpen = false; choosingStatus = true },
+                                )
                                 if (canRename) {
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.series_rename)) },
@@ -394,6 +400,30 @@ fun SeriesScreen(
                 renaming = false
                 onResetSeriesName()
             },
+        )
+    }
+
+    if (choosingStatus) {
+        AlertDialog(
+            onDismissRequest = { choosingStatus = false },
+            title = { Text(stringResource(R.string.series_set_status)) },
+            text = {
+                Column {
+                    listOf(
+                        com.chmouel.liseur.domain.ReadingStatusChoice.AUTOMATIC,
+                        com.chmouel.liseur.domain.ReadingStatusChoice.WANT_TO_READ,
+                        com.chmouel.liseur.domain.ReadingStatusChoice.READING,
+                        com.chmouel.liseur.domain.ReadingStatusChoice.PAUSED,
+                        com.chmouel.liseur.domain.ReadingStatusChoice.DID_NOT_FINISH,
+                    ).forEach { choice ->
+                        TextButton(onClick = { choosingStatus = false; onSetSeriesStatus(choice) }) {
+                            Text(stringResource(choice.override.statusLabel()))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { choosingStatus = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
 

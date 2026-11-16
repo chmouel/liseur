@@ -1022,6 +1022,12 @@ fun LibraryScreen(
                         NothingMatched(
                             searching = false,
                             onClear = onClearFilters,
+                            titleRes = when (state.filters.options.singleOrNull()) {
+                                LibraryFilterOption.WANT_TO_READ -> R.string.reading_status_empty_want_to_read
+                                LibraryFilterOption.PAUSED -> R.string.reading_status_empty_paused
+                                LibraryFilterOption.DID_NOT_FINISH -> R.string.reading_status_empty_did_not_finish
+                                else -> null
+                            },
                             modifier = Modifier.fillMaxWidth().weight(1f),
                         )
                     }
@@ -2054,6 +2060,9 @@ internal val ALL_READING_STATES = setOf(
     LibraryFilterOption.UNREAD,
     LibraryFilterOption.IN_PROGRESS,
     LibraryFilterOption.FINISHED,
+    LibraryFilterOption.WANT_TO_READ,
+    LibraryFilterOption.PAUSED,
+    LibraryFilterOption.DID_NOT_FINISH,
 )
 
 /**
@@ -2100,6 +2109,15 @@ private fun QuickFilterChips(
                         )
                     },
                     label = { Text("${stringResource(label)} $count") },
+                )
+            }
+        }
+        listOf(LibraryFilterOption.WANT_TO_READ, LibraryFilterOption.PAUSED, LibraryFilterOption.DID_NOT_FINISH).forEach { option ->
+            item(key = option.id) {
+                androidx.compose.material3.FilterChip(
+                    selected = reading == setOf(option),
+                    onClick = { onSetReadingFilter(if (reading == setOf(option)) emptySet() else setOf(option)) },
+                    label = { Text(option.label()) },
                 )
             }
         }
@@ -2799,6 +2817,9 @@ private fun LibraryFilterOption.label(): String = stringResource(
         LibraryFilterOption.UNREAD -> R.string.filter_unread
         LibraryFilterOption.IN_PROGRESS -> R.string.filter_in_progress
         LibraryFilterOption.FINISHED -> R.string.filter_finished
+        LibraryFilterOption.WANT_TO_READ -> R.string.reading_status_want_to_read
+        LibraryFilterOption.PAUSED -> R.string.reading_status_paused
+        LibraryFilterOption.DID_NOT_FINISH -> R.string.reading_status_did_not_finish
         LibraryFilterOption.ARCHIVED -> R.string.filter_archived
     },
 )
@@ -2898,6 +2919,9 @@ private fun FilterMenu(
                     LibraryFilterOption.UNREAD,
                     LibraryFilterOption.IN_PROGRESS,
                     LibraryFilterOption.FINISHED,
+                    LibraryFilterOption.WANT_TO_READ,
+                    LibraryFilterOption.PAUSED,
+                    LibraryFilterOption.DID_NOT_FINISH,
                 ),
                 filters = filters,
                 onToggleFilter = onToggleFilter,

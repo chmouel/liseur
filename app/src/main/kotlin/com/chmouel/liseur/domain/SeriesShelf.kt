@@ -15,7 +15,7 @@ data class SeriesVolume(
 
     /** Begun but not done: what "continue the series" is really asking after. */
     val inProgress: Boolean
-        get() = shelfStateFor(book, progression, override) == LibraryFilterOption.IN_PROGRESS
+        get() = shelfStateFor(book, progression, override) == LibraryFilterOption.IN_PROGRESS && nextUpEligible
 
     /**
      * How far in the reader got, when the shelf files this volume as
@@ -27,6 +27,9 @@ data class SeriesVolume(
             progression?.takeIf {
                 it > 0.0 && shelfStateFor(book, progression, override) == LibraryFilterOption.UNREAD
             }
+
+    val nextUpEligible: Boolean
+        get() = !finished && readingStatusFor(null, override).isNextUp()
 
     val onDevice: Boolean
         get() = book.openableUrl != null || book.downloadState == DownloadState.DOWNLOADED
@@ -151,7 +154,7 @@ fun List<Book>.groupedIntoSeries(
                 volumes = volumes,
                 nextUp =
                     volumes.firstOrNull { it.inProgress }
-                        ?: volumes.firstOrNull { !it.finished },
+                        ?: volumes.firstOrNull { it.nextUpEligible },
                 gaps = gapsBetween(volumes),
             )
         }.sortedWith(compareBy({ sortKey(it.name) }, { it.key }))
@@ -226,6 +229,7 @@ fun seriesContinuation(
     finished: Book,
     library: List<Book>,
     extras: SeriesExtras? = null,
+    overrides: Map<String, FinishedOverride> = emptyMap(),
 ): SeriesContinuation {
     val key = seriesKey(finished.seriesName)
     if (key.isEmpty()) return SeriesContinuation()
@@ -256,7 +260,10 @@ fun seriesContinuation(
                     ?.let { total -> expected.takeIf { it <= total } }
             }
         }
-    val next = later.firstOrNull { (_, book) -> !book.archived && !book.finished }?.second
+    val next = later.firstOrNull { (_, book) ->
+        !book.archived && !book.finished &&
+            readingStatusFor(null, overrides[book.url] ?: FinishedOverride.NONE).isNextUp()
+    }?.second
     return SeriesContinuation(missingIndex = missing, next = next)
 }
 

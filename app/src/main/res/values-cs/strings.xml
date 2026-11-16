@@ -2190,4 +2190,14 @@
         <item quantity="many">%d dne v řadě</item>
         <item quantity="other">%d dní v řadě</item>
     </plurals>
+    <string name="reading_status_label">Stav čtení: %1$s</string>
+    <string name="reading_status_automatic">Automaticky</string>
+    <string name="reading_status_want_to_read">Chci číst</string>
+    <string name="reading_status_reading">Rozečteno</string>
+    <string name="reading_status_paused">Pozastaveno</string>
+    <string name="reading_status_did_not_finish">Nedočteno</string>
+    <string name="reading_status_empty_want_to_read">Žádné knihy k přečtení</string>
+    <string name="reading_status_empty_paused">Žádné pozastavené knihy</string>
+    <string name="reading_status_empty_did_not_finish">Žádné nedočtené knihy</string>
+    <string name="series_set_status">Nastavit stav série</string>
 </resources>

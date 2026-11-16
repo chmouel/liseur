@@ -44,6 +44,9 @@ class LibraryViewModelTest {
         val started = book()
         assertEquals(0.4, continueReadingFor(started, 0.4, FinishedOverride.NONE)?.progression)
         assertNull(continueReadingFor(started, 0.4, FinishedOverride.UNREAD))
+        assertNull(continueReadingFor(started, 0.4, FinishedOverride.PAUSED))
+        assertNull(continueReadingFor(started, 0.4, FinishedOverride.DID_NOT_FINISH))
+        assertNotNull(continueReadingFor(started, 0.99, FinishedOverride.NONE))
         assertNull(continueReadingFor(started, 0.001, FinishedOverride.NONE))
         // No row yet: the card it had while the row loads is the card it keeps.
         assertNotNull(continueReadingFor(started, null, null))

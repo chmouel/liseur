@@ -33,6 +33,20 @@ class SeriesShelfTest {
         seriesIndex = index,
     )
 
+    @Test
+    fun `paused and unfinished volumes are not offered next`() {
+        val one = book("One", index = 1.0)
+        val two = book("Two", index = 2.0)
+        val three = book("Three", index = 3.0)
+        val overrides = mapOf(one.url to FinishedOverride.PAUSED, two.url to FinishedOverride.DID_NOT_FINISH)
+        val shelf = listOf(one, two, three).groupedIntoSeries(overrides = overrides).single()
+        assertEquals(three.url, shelf.nextUp?.book?.url)
+        assertEquals(0, shelf.inProgressCount)
+        val partial = listOf(one, two).groupedIntoSeries(progressions = mapOf(one.url to 0.99)).single()
+        assertEquals(one.url, partial.nextUp?.book?.url)
+        assertEquals(three.url, seriesContinuation(one, listOf(one, two, three), overrides = overrides).next?.url)
+    }
+
     // A server-side merge (liseur-sync ADR-0021) reaches the app as
     // nothing more than the books' series name having changed, because
     // shelves are folded here rather than sent. This pins that: no
