@@ -474,6 +474,26 @@ class BookOrbitStatusSyncTest {
     }
 
     @Test
+    fun `reading choice accepts BookOrbit rereading after a completed attempt`() = runBlocking {
+        database.readingProgressDao().upsert(
+            ReadingProgress(
+                bookUrl, """{"href":"chapter.xhtml"}""", 0.42, updatedAt = 12,
+                status = ReadingStatus.READING.wireName,
+                finishedOverride = FinishedOverride.READING.ordinal,
+                statusRevision = 1,
+            ),
+        )
+        web.enqueue(MockResponse(body = detail("read", "manual")))
+        web.enqueue(MockResponse(code = 204))
+        web.enqueue(MockResponse(body = detail("rereading", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        web.enqueue(MockResponse(body = detail("rereading", "manual")))
+        assertEquals(SyncOutcome.Success, runSync())
+        assertEquals(listOf("GET", "PATCH", "GET", "GET"), (1..4).map { web.takeRequest().method })
+        assertEquals(FinishedOverride.READING, database.readingProgressDao().get(bookUrl)!!.override)
+    }
+
+    @Test
     fun `local want to read agrees with a manual want_to_read without a write`() = runBlocking {
         database.readingProgressDao().upsert(
             ReadingProgress(

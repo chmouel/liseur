@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -408,7 +409,7 @@ fun SeriesScreen(
             onDismissRequest = { choosingStatus = false },
             title = { Text(stringResource(R.string.series_set_status)) },
             text = {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     listOf(
                         com.chmouel.liseur.domain.ReadingStatusChoice.AUTOMATIC,
                         com.chmouel.liseur.domain.ReadingStatusChoice.WANT_TO_READ,
