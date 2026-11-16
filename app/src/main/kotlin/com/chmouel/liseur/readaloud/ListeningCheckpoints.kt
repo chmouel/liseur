@@ -51,6 +51,9 @@ class ListeningCheckpoints(
                 bookOrbitDeclined = settles?.declined,
                 readAt = spokenAt,
                 signalSync = share,
+                // Listening is reading on, so it withdraws an unread choice
+                // the way a page turn does.
+                resumesReading = true,
             ),
         )
         if (accepted) {

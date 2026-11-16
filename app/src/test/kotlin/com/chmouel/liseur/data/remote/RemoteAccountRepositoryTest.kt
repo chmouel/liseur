@@ -19,6 +19,8 @@ import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.kosync.KosyncAccountRepository
 import com.chmouel.liseur.data.kosync.KosyncCredentials
 import com.chmouel.liseur.data.library.BookRemoval
+import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.ReadingStatus
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -101,6 +103,83 @@ class RemoteAccountRepositoryTest {
         account.disconnect()
 
         assertNull(account.credentialsForUrl("$BASE/cover"))
+    }
+
+    @Test
+    fun `disconnecting retires the choice a retained book still owed`() = runTest {
+        connectKomga()
+        val bookUrl = "$BASE/book.epub"
+        db.bookDao().upsert(
+            Book(
+                url = bookUrl, title = "Downloaded", author = null, coverPath = null,
+                source = null, addedAt = 1, lastOpenedAt = null,
+                localUri = "file:///downloaded.epub",
+            ),
+        )
+        val progress = db.readingProgressDao()
+        progress.recordLocal(
+            bookUrl = bookUrl,
+            locatorJson = """{"at":0.4}""",
+            progression = 0.4,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = ReadingStatus.READING.wireName,
+            updatedAt = 1_000,
+        )
+        progress.setFinishedOverride(
+            bookUrl,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            2_000,
+        )
+        assertEquals(1L, progress.get(bookUrl)!!.statusRevision)
+
+        account.disconnect()
+
+        val kept = progress.get(bookUrl)!!
+        assertEquals(FinishedOverride.FINISHED, kept.override)
+        assertEquals(0L, kept.statusRevision)
+    }
+
+    @Test
+    fun `a choice made after disconnecting is owed to the next account`() = runTest {
+        connectKomga()
+        val bookUrl = "$BASE/book.epub"
+        val progress = db.readingProgressDao()
+        progress.recordLocal(
+            bookUrl = bookUrl,
+            locatorJson = """{"at":0.4}""",
+            progression = 0.4,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = ReadingStatus.READING.wireName,
+            updatedAt = 1_000,
+        )
+        progress.setFinishedOverride(
+            bookUrl,
+            FinishedOverride.FINISHED.ordinal,
+            ReadingStatus.FINISHED.wireName,
+            0.4,
+            2_000,
+        )
+        account.disconnect()
+
+        progress.setFinishedOverride(
+            bookUrl,
+            FinishedOverride.UNREAD.ordinal,
+            ReadingStatus.READY_TO_READ.wireName,
+            0.0,
+            3_000,
+        )
+
+        val row = progress.get(bookUrl)!!
+        assertEquals(FinishedOverride.UNREAD, row.override)
+        assertEquals(1L, row.statusRevision)
     }
 
     @Test

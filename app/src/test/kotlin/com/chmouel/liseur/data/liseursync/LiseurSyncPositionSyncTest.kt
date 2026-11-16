@@ -327,6 +327,64 @@ class LiseurSyncPositionSyncTest {
     }
 
     @Test
+    fun `a status act takes over a book pulled from another account`() = runTest {
+        connect()
+        db.bookDao().upsert(local())
+        alias()
+        val progress = db.readingProgressDao()
+        progress.recordLocal(LOCAL, LOCATOR, 0.4, null, ReadingStatus.READING.wireName, NOW)
+        val library = "komga|https://komga.example|7"
+        progress.ackPush(
+            LOCAL,
+            progress.get(LOCAL)!!.localRevision,
+            0.4,
+            ReadingStatus.READING.wireName,
+            library,
+            NOW,
+        )
+        assertEquals(library, progress.get(LOCAL)!!.ownerAccount)
+        var changes = 0
+        val sent = mutableListOf<JSONObject>()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.target.startsWith("/v1/ops")) {
+                    val ops = JSONObject(request.body!!.utf8()).getJSONArray("ops")
+                    for (index in 0 until ops.length()) sent += ops.getJSONObject(index)
+                    return applied(request)
+                }
+                if (request.target.startsWith("/v1/changes")) {
+                    changes++
+                    return json(
+                        if (changes == 1) {
+                            """{"ops":[${statusOp(seq = 9, progression = 0.4)}],
+                                "has_more":false,"high_water":9}""".trimIndent()
+                        } else {
+                            """{"ops":[],"high_water":9}"""
+                        },
+                    )
+                }
+                return json("""{"ops":[]}""")
+            }
+        }
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+
+        val adopted = progress.get(LOCAL)!!
+        assertEquals(FinishedOverride.FINISHED, adopted.override)
+        assertEquals(peer(), adopted.ownerAccount)
+        assertEquals(0, sent.count { it.optString("kind") == "status" })
+        assertEquals(
+            adopted.statusRevision,
+            db.syncPeerStateDao().get(LOCAL, peer())!!.ackedStatusRevision,
+        )
+        assertTrue(progress.ownedByOther(peer()).isEmpty())
+
+        assertEquals(SyncOutcome.Success, sync().syncBook(LOCAL))
+        assertEquals(FinishedOverride.FINISHED, progress.get(LOCAL)!!.override)
+        assertEquals(0, sent.count { it.optString("kind") == "status" })
+    }
+
+    @Test
     fun `resuming reading is delivered as a withdrawal, not as silence`() = runTest {
         connect()
         db.bookDao().upsert(local())

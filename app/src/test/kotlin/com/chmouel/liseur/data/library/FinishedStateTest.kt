@@ -13,6 +13,9 @@ import com.chmouel.liseur.domain.LibraryFilterOption
 import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.shelfStateFor
+import com.chmouel.liseur.readaloud.ListeningCheckpoints
+import com.chmouel.liseur.reader.OpenBookHandle
+import com.chmouel.liseur.reader.progress.BookPositions
 import com.chmouel.liseur.sync.LatestPositionSync
 import com.chmouel.liseur.sync.PositionUpdate
 import com.chmouel.liseur.sync.ReadingPositionPublisher
@@ -23,6 +26,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -32,6 +36,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.readium.r2.shared.publication.LocalizedString
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.Manifest
+import org.readium.r2.shared.publication.Metadata
+import org.readium.r2.shared.publication.Publication
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -488,6 +497,67 @@ class FinishedStateTest {
         state().refreshFromProgress(BOOK)
 
         assertNull(db.bookDao().getByUrl(BOOK)!!.finishedAt)
+    }
+
+    @Test
+    fun `a listening checkpoint withdraws an unread choice but leaves a finished one`() = runTest {
+        db.bookDao().upsert(
+            Book(
+                url = BOOK, title = "Book", author = null, coverPath = null,
+                source = null, addedAt = 0, lastOpenedAt = null,
+            ),
+        )
+        val state = state()
+        lateinit var publisher: ReadingPositionPublisher
+        publisher = publisherFor(backgroundScope, state) { update, status ->
+            BookOrbitLocalPositionWriter(db).save(update, status)
+        }
+        val checkpoints = ListeningCheckpoints(publisher, now = { 20 })
+        val handle = listeningHandle()
+        val heard = locator("one.xhtml", 0.2)
+
+        state.setFinished(BOOK, false)
+        val unread = db.readingProgressDao().get(BOOK)!!
+        assertEquals(FinishedOverride.UNREAD, unread.override)
+        assertTrue(checkpoints.save(handle, handle.claimForListening(), heard, spokenAt = 10, share = false))
+        assertTrue(publisher.flush(BOOK))
+
+        val afterUnread = db.readingProgressDao().get(BOOK)!!
+        assertEquals(FinishedOverride.NONE, afterUnread.override)
+        assertTrue(afterUnread.statusRevision > unread.statusRevision)
+
+        state.setFinished(BOOK, true)
+        val finished = db.readingProgressDao().get(BOOK)!!
+        assertTrue(checkpoints.save(handle, handle.claimForListening(), heard, spokenAt = 30, share = false))
+        assertTrue(publisher.flush(BOOK))
+
+        val afterFinished = db.readingProgressDao().get(BOOK)!!
+        assertEquals(FinishedOverride.FINISHED, afterFinished.override)
+        assertEquals(finished.statusRevision, afterFinished.statusRevision)
+    }
+
+    private fun listeningHandle(): OpenBookHandle {
+        val pages = listOf(
+            listOf(locator("one.xhtml", 0.0, 1), locator("one.xhtml", 0.5, 2)),
+            listOf(locator("two.xhtml", 0.0, 3), locator("two.xhtml", 0.75, 4)),
+        )
+        val positions = BookPositions(pages.flatten(), emptyList(), emptyMap(), pages)
+        val publication =
+            Publication(Manifest(metadata = Metadata(localizedTitle = LocalizedString("Book"))))
+        return OpenBookHandle(BOOK, publication, positions) {}
+    }
+
+    private fun locator(href: String, progression: Double, position: Int? = null): Locator {
+        val locations = JSONObject().put("progression", progression)
+        position?.let { locations.put("position", it) }
+        return requireNotNull(
+            Locator.fromJSON(
+                JSONObject()
+                    .put("href", "https://example.com/$href")
+                    .put("type", "application/xhtml+xml")
+                    .put("locations", locations),
+            ),
+        )
     }
 
     private fun publisherFor(
