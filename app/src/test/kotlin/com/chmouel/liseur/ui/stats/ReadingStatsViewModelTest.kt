@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.LiseurDatabase
 import com.chmouel.liseur.data.db.ReadingSession
+import com.chmouel.liseur.data.library.FinishedState
 import com.chmouel.liseur.data.liseursync.InsightDay
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.liseursync.WorkTotals
@@ -17,6 +18,7 @@ import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
+import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import java.time.DayOfWeek
@@ -554,6 +556,78 @@ class ReadingStatsViewModelTest {
         val going = merged.books.first { it.workId == "w-going" }
         assertEquals(false, going.finished)
         assertEquals(0.4, going.progression!!, 0.0001)
+    }
+
+    /**
+     * Once the server resolves a work's status itself (ADR-0066), its
+     * answer is what the row shows: a book finished by hand at 0.4 is
+     * finished, and a partial recording at 0.998 is not.
+     */
+    @Test
+    fun `a work only the server knows keeps the status the server resolved`() {
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats.Empty,
+            knownBooks = emptyMap(),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = emptyMap(),
+                elsewhere = listOf(
+                    WorkInsights(
+                        workId = "w-read",
+                        sessions = 3,
+                        activeMinutes = 30.0,
+                        etaSeconds = null,
+                        lastReadAt = 900,
+                        title = "Dune",
+                        currentProgression = 0.4,
+                        status = ReadingStatus.FINISHED,
+                    ),
+                    WorkInsights(
+                        workId = "w-partial",
+                        sessions = 2,
+                        activeMinutes = 20.0,
+                        etaSeconds = null,
+                        lastReadAt = 800,
+                        title = "Les Misérables I",
+                        currentProgression = 0.998,
+                        status = ReadingStatus.READING,
+                        coversNarrative = false,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(2, merged.booksRead)
+        assertEquals(1, merged.booksFinished)
+        assertTrue(merged.books.first { it.workId == "w-read" }.finished)
+        assertEquals(false, merged.books.first { it.workId == "w-partial" }.finished)
+    }
+
+    /** A server too old to resolve a status still says how far a recording goes. */
+    @Test
+    fun `a partial recording is not finished without the server's status`() {
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats.Empty,
+            knownBooks = emptyMap(),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = emptyMap(),
+                elsewhere = listOf(
+                    WorkInsights(
+                        workId = "w-partial",
+                        sessions = 2,
+                        activeMinutes = 20.0,
+                        etaSeconds = null,
+                        lastReadAt = 800,
+                        title = "Les Misérables I",
+                        currentProgression = 0.998,
+                        coversNarrative = false,
+                    ),
+                ),
+            ),
+        )
+
+        assertEquals(0, merged.booksFinished)
     }
 
     /**
@@ -1175,6 +1249,76 @@ class ReadingStatsViewModelTest {
             models.clear()
             Dispatchers.resetMain()
         }
+    }
+
+    /**
+     * A local position at the end of the book is a finished book, and the
+     * merged dashboard counts it as one (ADR-0066). The library flag comes
+     * from the same resolution the reader uses, not a threshold of its
+     * own.
+     */
+    @Test
+    fun `a local position at the end counts as finished, here and merged`() = runTest {
+        val url = "content://sd/finished.epub"
+        val at = today.atTime(LocalTime.NOON).atZone(zone).toInstant().toEpochMilli()
+        db.bookDao().upsert(book(url))
+        db.readingProgressDao().recordLocal(
+            bookUrl = url,
+            locatorJson = """{"href":"/c1.xhtml"}""",
+            progression = 1.0,
+            readingSecondsPerPosition = null,
+            readingPaceSamples = null,
+            readingPaceElapsedMs = null,
+            readingPaceEvidence = null,
+            status = ReadingStatus.READING.wireName,
+            updatedAt = at,
+        )
+        FinishedState(db.bookDao(), db.readingProgressDao()).refreshFromProgress(url)
+
+        val stored = db.bookDao().getByUrl(url)!!
+        assertTrue(stored.finished)
+
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats(
+                totalMs = 60 * 60_000L,
+                booksRead = 1,
+                booksFinished = if (stored.finished) 1 else 0,
+                books = listOf(
+                    BookReadingStats(
+                        bookUrl = url,
+                        title = stored.title,
+                        author = stored.author,
+                        totalMs = 60 * 60_000L,
+                        lastReadAt = at,
+                        progression = 1.0,
+                        finished = stored.finished,
+                        sessions = 1,
+                    ),
+                ),
+                recent = emptyList(),
+            ),
+            knownBooks = mapOf(
+                url to StatsBook(url, stored.title, stored.author, 1.0, finished = stored.finished),
+            ),
+            serverRecent = null,
+            serverBooks = WorkTotals(
+                byBookUrl = mapOf(
+                    url to WorkInsights(
+                        workId = "w-1",
+                        sessions = 1,
+                        activeMinutes = 60.0,
+                        etaSeconds = null,
+                        lastReadAt = at,
+                    ),
+                ),
+                elsewhere = emptyList(),
+            ),
+            zone = zone,
+        )
+
+        assertEquals(1, merged.booksRead)
+        assertEquals(1, merged.booksFinished)
+        assertTrue(merged.books.single().finished)
     }
 
     private fun session(

@@ -1094,6 +1094,34 @@ changing reader behavior.
   byte-identical: no random ids, no `pending_ops` table. Sessions restored
   from a backup carry `imported_at`, so they are never uploaded and never
   offered as stats candidates.
+- A reading status is a fact beside the position, not a threshold
+  (liseur-sync ADR-0066). A status op carries `kind`, `reading_status` and
+  its own revision-derived id (`acked_status_revision` per peer), is
+  adopted through `FinishedState.adoptRemoteStatus` so "read at 0.4"
+  survives, and is never a furthest candidate.
+- A status act's bytes are written down before they are sent
+  (`sync_peer_state.status_sent_op`) and replayed until they are
+  acknowledged, then never again: a page turned while the answer was lost
+  must not rebuild the act into a different payload. Positions and status
+  acts have separate pending slots, sequence guards and clearing paths; one
+  kind never stands in for the other, in a page, in `heads` or on disk.
+- An act this device has not delivered outranks one that arrived, because
+  it is appended later and the server orders by `seq`; an acknowledged one
+  is replaced by a newer act and not re-sent. Nothing but a push answer
+  acknowledges a status: agreeing about positions is not agreeing about a
+  choice. `automatic` withdraws a choice (`FinishedOverride.NONE`) and lets
+  the newest position and its coverage decide, never the act's own place.
+  Adoption settles the position revision it bumped, so taking a status
+  leaves a clean book clean.
+- `coverage` (`reading_progress.coverage`, `sync_peer_state.pending_coverage`)
+  marks a partial recording, which `readingStatusFor` never finishes. It
+  travels with every position this device adopts or forwards, and is
+  cleared only when a new ebook-origin position is recorded.
+- A newly named book is seeded from one `GET /v1/works/{id}/positions`,
+  which now also returns the work's newest status act in its `status`
+  array (`ops` never carries one). Seed and preview land both, so a choice
+  made before this device had a name for the book still arrives; an act
+  that names no device is news, never this device's own echo.
 - Reconnect with the stored device id. A pasted token reconnecting as
   another device can get `conflict`; conditionally advance the book's
   revision from the sent one, then retry.

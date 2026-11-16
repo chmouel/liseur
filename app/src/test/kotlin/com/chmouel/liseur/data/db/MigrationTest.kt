@@ -165,7 +165,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 66, true, LiseurDatabase.MIGRATION_65_66).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
+            .addMigrations(LiseurDatabase.MIGRATION_66_67, LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76)
             .build()
         try {
             val dao = db.readingProgressDao()
@@ -242,7 +242,7 @@ class MigrationTest {
         helper.runMigrationsAndValidate(TEST_DB, 67, true, LiseurDatabase.MIGRATION_66_67).close()
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76)
             .allowMainThreadQueries()
             .build()
         try {
@@ -277,7 +277,7 @@ class MigrationTest {
         }
         val context = ApplicationProvider.getApplicationContext<android.app.Application>()
         val db = Room.databaseBuilder(context, LiseurDatabase::class.java, TEST_DB)
-            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75)
+            .addMigrations(LiseurDatabase.MIGRATION_67_68, LiseurDatabase.MIGRATION_68_69, LiseurDatabase.MIGRATION_69_70, LiseurDatabase.MIGRATION_70_71, LiseurDatabase.MIGRATION_71_72, LiseurDatabase.MIGRATION_72_73, LiseurDatabase.MIGRATION_73_74, LiseurDatabase.MIGRATION_74_75, LiseurDatabase.MIGRATION_75_76)
             .allowMainThreadQueries()
             .build()
         try {
@@ -1695,7 +1695,9 @@ class MigrationTest {
                 ).use {
                     assertTrue(it.moveToFirst())
                     assertEquals(9L, it.getLong(0))
-                    assertEquals(0L, it.getLong(1))
+                    // The explicit choice is given a revision of its own, so
+                    // it is owed to a sync partner rather than stranded.
+                    assertEquals(1L, it.getLong(1))
                     assertEquals(9L, it.getLong(2))
                 }
                 db.query(
@@ -1835,10 +1837,56 @@ class MigrationTest {
         }
     }
 
+    @Test
+    fun `reading status upgrade keeps every position and leaves its status unsaid`() {
+        helper.createDatabase(TEST_DB, 75).use { db ->
+            db.execSQL(
+                "INSERT INTO reading_progress (book_url, locator_json, total_progression, updated_at, finished_override) " +
+                    "VALUES ('book:1', '{}', 0.4, 100, 1)",
+            )
+            db.execSQL(
+                "INSERT INTO reading_progress (book_url, locator_json, total_progression, updated_at, finished_override) " +
+                    "VALUES ('book:2', '{}', 0.6, 100, 0)",
+            )
+            db.execSQL(
+                "INSERT INTO sync_peer_state (book_url, peer_id, acked_revision) " +
+                    "VALUES ('book:1', 'peer', 7)",
+            )
+        }
+        helper.runMigrationsAndValidate(TEST_DB, LATEST, true, LiseurDatabase.MIGRATION_75_76).use { db ->
+            db.query(
+                "SELECT total_progression, finished_override, coverage, status_revision " +
+                    "FROM reading_progress ORDER BY book_url",
+            ).use {
+                assertTrue(it.moveToFirst())
+                assertEquals(0.4, it.getDouble(0), 0.0)
+                assertEquals(1, it.getInt(1))
+                assertTrue(it.isNull(2))
+                // A choice made before status revisions existed is owed
+                // to a partner, so it gets the first one there is.
+                assertEquals(1L, it.getLong(3))
+                assertTrue(it.moveToNext())
+                assertEquals(0.6, it.getDouble(0), 0.0)
+                assertEquals(0, it.getInt(1))
+                assertEquals(0L, it.getLong(3))
+            }
+            db.query(
+                "SELECT acked_revision, acked_status_revision, pending_coverage, has_pending_status " +
+                    "FROM sync_peer_state",
+            ).use {
+                assertTrue(it.moveToFirst())
+                assertEquals(7L, it.getLong(0))
+                assertEquals(0L, it.getLong(1))
+                assertTrue(it.isNull(2))
+                assertEquals(0, it.getInt(3))
+            }
+        }
+    }
+
     private companion object {
         const val TEST_DB = "migration-test.db"
 
         /** Kept in step with the `version` on [LiseurDatabase]. */
-        const val LATEST = 75
+        const val LATEST = 76
     }
 }

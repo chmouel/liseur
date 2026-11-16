@@ -1,5 +1,7 @@
 package com.chmouel.liseur.data.liseursync
 
+import com.chmouel.liseur.domain.NarrativeCoverage
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -253,6 +255,71 @@ class SyncOpsTest {
         progression = 0.5,
         locatorJson = """{"href":"/c1.xhtml"}""",
     )
+
+    // -- Reading status beside the position (ADR-0066) ----------------------
+
+    @Test
+    fun `a position op says nothing about kind`() {
+        val json = SyncOps.toJson(op())
+
+        assertNull(json.opt("kind"))
+        assertNull(json.opt("reading_status"))
+    }
+
+    @Test
+    fun `a status act carries its choice and is not a move`() {
+        val json = SyncOps.toJson(
+            op().copy(readingStatus = ReadingStatusChoice.FINISHED, locatorJson = null),
+        )
+
+        assertEquals("status", json.getString("kind"))
+        assertEquals("finished", json.getString("reading_status"))
+        assertEquals(0.5, json.getDouble("progression"), 0.0)
+    }
+
+    @Test
+    fun `kind reading status and coverage survive the round trip`() {
+        val status = SyncOps.fromJson(
+            SyncOps.toJson(op().copy(readingStatus = ReadingStatusChoice.AUTOMATIC)),
+        )!!
+        assertEquals(ReadingStatusChoice.AUTOMATIC, status.readingStatus)
+        assertTrue(status.isStatus)
+
+        val partial = SyncOps.fromJson(
+            SyncOps.toJson(op().copy(coverage = NarrativeCoverage.PARTIAL)),
+        )!!
+        assertEquals(NarrativeCoverage.PARTIAL, partial.coverage)
+        assertNull(partial.readingStatus)
+    }
+
+    @Test
+    fun `a retried status act sends the same bytes`() {
+        val op = op().copy(readingStatus = ReadingStatusChoice.UNREAD)
+
+        assertEquals(SyncOps.toJson(op).toString(), SyncOps.toJson(op).toString())
+    }
+
+    @Test
+    fun `a status op id comes from the status revision, not the position one`() {
+        assertEquals(
+            SyncOps.statusOpIdFor("device-a", "w-1", 3),
+            SyncOps.opIdFor("device-a|status", "w-1", 3),
+        )
+        assertNotEquals(
+            SyncOps.statusOpIdFor("device-a", "w-1", 3),
+            SyncOps.opIdFor("device-a", "w-1", 3),
+        )
+    }
+
+    @Test
+    fun `a kind this app does not know is refused rather than read as a move`() {
+        assertNull(SyncOps.fromJson(wire().put("kind", "bookmark")))
+    }
+
+    @Test
+    fun `a status act with no choice is refused`() {
+        assertNull(SyncOps.fromJson(wire().put("kind", "status")))
+    }
 
     private companion object {
         const val CLIENT_TS = 1_700_000_000_000L

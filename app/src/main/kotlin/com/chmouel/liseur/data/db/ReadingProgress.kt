@@ -9,6 +9,7 @@ import androidx.room.Transaction
 import androidx.room.Upsert
 import com.chmouel.liseur.data.remote.OpenBooks
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.reader.progress.ReadingPace
 
@@ -117,7 +118,19 @@ data class ReadingProgress(
      * peer that has not acknowledged this revision still owes the reset.
      */
     @ColumnInfo(name = "unread_reset_revision") val unreadResetRevision: Long? = null,
+    /**
+     * Whether the recording [totalProgression] came from covers the whole
+     * narrative. Null means unknown, which is every position read as an
+     * ebook. A partial recording never finishes the book.
+     */
+    @ColumnInfo(name = "coverage") val coverage: String? = null,
 ) {
+    val narrativeCoverage: NarrativeCoverage?
+        get() = NarrativeCoverage.fromWire(coverage)
+
+    val partialCoverage: Boolean
+        get() = narrativeCoverage == NarrativeCoverage.PARTIAL
+
     /** True when this device has read on since the server last confirmed. */
     val isDirty: Boolean get() = localRevision > ackedRevision
 
@@ -345,6 +358,7 @@ abstract class ReadingProgressDao {
             updated_at = :updatedAt,
             read_at = :readAt,
             status = :status,
+            coverage = NULL,
             peak_locator = CASE WHEN :progression BETWEEN 0 AND 1 AND
                 (peak_progression IS NULL OR :progression > peak_progression)
                 THEN :locatorJson ELSE peak_locator END,
@@ -630,6 +644,7 @@ abstract class ReadingProgressDao {
             total_progression = :progression,
             locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
+            coverage = NULL,
             updated_at = :now,
             read_at = :readAt,
             synced_at = :now,
@@ -766,6 +781,21 @@ abstract class ReadingProgressDao {
     ): Int
 
     /**
+     * [renameRevision] for a status act, whose op id derives from the
+     * status revision instead.
+     */
+    @Query(
+        """
+        UPDATE reading_progress SET status_revision = status_revision + 1
+        WHERE book_url = :bookUrl AND status_revision = :sentRevision
+        """,
+    )
+    abstract suspend fun renameStatusRevision(
+        bookUrl: String,
+        sentRevision: Long,
+    ): Int
+
+    /**
      * Takes a status the server reported on its own, leaving the position
      * alone — someone marked the book read elsewhere without opening it.
      *
@@ -855,6 +885,7 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
         remoteUpdatedAt: Long? = null,
+        coverage: String? = null,
     ): Boolean =
         openBooks.unlessOpen(bookUrl) {
             applyPeerPull(
@@ -865,6 +896,7 @@ abstract class ReadingProgressDao {
                 now = now,
                 locatorJson = locatorJson,
                 remoteUpdatedAt = remoteUpdatedAt,
+                coverage = coverage,
             )
         } ?: false
 
@@ -897,6 +929,7 @@ abstract class ReadingProgressDao {
         now: Long,
         locatorJson: String? = null,
         remoteUpdatedAt: Long? = null,
+        coverage: String? = null,
     ): Boolean {
         // The row is made to exist first, because a book first read on
         // another device has never been opened here and there is nothing
@@ -913,6 +946,7 @@ abstract class ReadingProgressDao {
             readAt = readAtFor(remoteUpdatedAt, now),
             locatorJson = locatorJson,
             remoteUpdatedAt = remoteUpdatedAt,
+            coverage = coverage,
         ) > 0
     }
 
@@ -936,6 +970,7 @@ abstract class ReadingProgressDao {
             total_progression = :progression,
             locator_json = COALESCE(:locatorJson, '{}'),
             status = :status,
+            coverage = :coverage,
             updated_at = :now,
             read_at = :readAt,
             synced_at = :now,
@@ -954,6 +989,7 @@ abstract class ReadingProgressDao {
         readAt: Long,
         locatorJson: String?,
         remoteUpdatedAt: Long?,
+        coverage: String?,
     ): Int
 
     /**

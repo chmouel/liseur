@@ -1,6 +1,7 @@
 package com.chmouel.liseur.data.remote
 
 import com.chmouel.liseur.domain.EPSILON
+import com.chmouel.liseur.domain.NarrativeCoverage
 
 /** How the last attempt to sync reading positions went. */
 sealed interface PositionSyncStatus {
@@ -201,6 +202,8 @@ data class FurthestDestination(
     val confidence: ResumeConfidence,
     /** Null for pre-upgrade observations whose author is unknown. */
     val locallyAuthored: Boolean? = false,
+    /** Whether the recording the candidate came from covers the narrative. */
+    val coverage: NarrativeCoverage? = null,
 )
 
 /** The identity of one server-side answer; see [SyncPreview.fingerprint]. */

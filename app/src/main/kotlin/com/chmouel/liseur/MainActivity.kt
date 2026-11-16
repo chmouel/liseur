@@ -267,14 +267,14 @@ class MainActivity : ComponentActivity() {
         if (!container.appSettings.current().resumeLastBook) return
         val leftFromReader = container.sessionState.leftFromReader()
         val book = container.database.bookDao().mostRecentlyOpened()
+        val stored = book?.let { container.database.readingProgressDao().get(it.url) }
         val candidate = book?.openableUri()?.let { fileUrl ->
             ResumeCandidate(
                 identity = book.url,
                 fileUrl = fileUrl,
-                totalProgression = container.database.readingProgressDao()
-                    .get(book.url)
-                    ?.totalProgression,
+                totalProgression = stored?.totalProgression,
                 finished = book.finished,
+                partialCoverage = stored?.partialCoverage == true,
             )
         }
         if (!shouldResume(candidate, leftFromReader) || candidate == null ||

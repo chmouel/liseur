@@ -105,4 +105,43 @@ class FinishedRuleTest {
         )
         assertEquals(ReadingStatus.READING, (decision as SyncDecision.Push).state.status)
     }
+
+    /**
+     * A recording that covers part of the narrative is not the book, so
+     * reaching its end is not reaching the end of the book (ADR-0066).
+     */
+    @Test
+    fun `a partial recording never finishes the book`() {
+        assertEquals(ReadingStatus.READING, readingStatusFor(0.998, partialCoverage = true))
+        assertEquals(ReadingStatus.READING, readingStatusFor(1.0, partialCoverage = true))
+        assertEquals(ReadingStatus.FINISHED, readingStatusFor(0.998, partialCoverage = false))
+    }
+
+    @Test
+    fun `a book marked read is finished whatever the coverage was`() {
+        assertEquals(
+            ReadingStatus.FINISHED,
+            readingStatusFor(0.4, FinishedOverride.FINISHED, partialCoverage = true),
+        )
+    }
+
+    @Test
+    fun `a choice spells itself the way the server does`() {
+        assertEquals("finished", ReadingStatusChoice.FINISHED.wireName)
+        assertEquals("unread", ReadingStatusChoice.UNREAD.wireName)
+        assertEquals("automatic", ReadingStatusChoice.AUTOMATIC.wireName)
+        assertEquals(
+            ReadingStatusChoice.UNREAD,
+            ReadingStatusChoice.fromWire("unread"),
+        )
+        assertEquals(null, ReadingStatusChoice.fromWire("read"))
+        assertEquals(
+            FinishedOverride.UNREAD,
+            ReadingStatusChoice.forOverride(FinishedOverride.UNREAD).override,
+        )
+        assertEquals(
+            FinishedOverride.NONE,
+            ReadingStatusChoice.AUTOMATIC.override,
+        )
+    }
 }

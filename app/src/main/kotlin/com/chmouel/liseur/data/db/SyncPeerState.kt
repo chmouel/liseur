@@ -7,6 +7,7 @@ import androidx.room.Index
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.chmouel.liseur.domain.ReadingStatusChoice
 
 /**
  * How one book's position stands with one sync partner.
@@ -38,6 +39,13 @@ data class SyncPeerState(
     @ColumnInfo(name = "peer_id") val peerId: String,
     /** The highest local revision this partner has confirmed receiving. */
     @ColumnInfo(name = "acked_revision", defaultValue = "0") val ackedRevision: Long = 0,
+    /**
+     * The highest status revision this partner has confirmed. Kept apart
+     * from [ackedRevision] so a stale position update can never stand
+     * for a newer explicit choice, or the reverse.
+     */
+    @ColumnInfo(name = "acked_status_revision", defaultValue = "0")
+    val ackedStatusRevision: Long = 0,
     @ColumnInfo(name = "agreed_progression") val agreedProgression: Double? = null,
     @ColumnInfo(name = "agreed_status") val agreedStatus: String? = null,
     /** Reported by the partner and not yet settled. */
@@ -46,16 +54,47 @@ data class SyncPeerState(
     @ColumnInfo(name = "pending_locator_json") val pendingLocatorJson: String? = null,
     @ColumnInfo(name = "pending_edition_sha") val pendingEditionSha: String? = null,
     @ColumnInfo(name = "pending_status") val pendingStatus: String? = null,
+    /** Coverage that came with [pendingProgression]. */
+    @ColumnInfo(name = "pending_coverage") val pendingCoverage: String? = null,
     @ColumnInfo(name = "pending_updated_at") val pendingUpdatedAt: Long? = null,
     @ColumnInfo(name = "pending_seq") val pendingSeq: Long? = null,
     /** True once a partner has reported something waiting to be settled. */
     @ColumnInfo(name = "has_pending", defaultValue = "0") val hasPending: Boolean = false,
+    /**
+     * The status act a partner reported, waiting to be settled. Kept in
+     * its own slot with its own sequence guard: one kind of op must never
+     * stand in for the other, or a page and a choice arriving together
+     * would lose whichever came first.
+     */
+    @ColumnInfo(name = "has_pending_status", defaultValue = "0")
+    val hasPendingStatus: Boolean = false,
+    /** The choice that act states, as `ReadingStatusChoice` spells it. */
+    @ColumnInfo(name = "pending_status_choice") val pendingStatusChoice: String? = null,
+    @ColumnInfo(name = "pending_status_seq") val pendingStatusSeq: Long? = null,
+    @ColumnInfo(name = "pending_status_updated_at") val pendingStatusUpdatedAt: Long? = null,
+    /**
+     * The exact bytes of a status act this device sent and was never
+     * answered about. Replayed until it is acknowledged, so a page turned
+     * in the meantime cannot rebuild it into a different payload.
+     */
+    @ColumnInfo(name = "status_sent_op") val statusSentOp: String? = null,
+    @ColumnInfo(name = "status_sent_revision") val statusSentRevision: Long? = null,
     /** The partner's own timestamp, for display. Never compared with ours. */
     @ColumnInfo(name = "remote_updated_at") val remoteUpdatedAt: Long? = null,
     @ColumnInfo(name = "synced_at") val syncedAt: Long? = null,
 ) {
     /** True when this device has read on since this partner last confirmed. */
     fun isDirty(localRevision: Long): Boolean = localRevision > ackedRevision
+
+    /** True when a status choice has not reached this partner yet. */
+    fun owesStatus(statusRevision: Long): Boolean = statusRevision > ackedStatusRevision
+
+    /** The choice a waiting status act states, as a choice rather than a status. */
+    fun pendingChoice(): ReadingStatusChoice? =
+        if (hasPendingStatus) ReadingStatusChoice.fromWire(pendingStatusChoice) else null
+
+    /** Whether a partner's pending status act still needs this device's answer. */
+    val hasPendingStatusAct: Boolean get() = hasPendingStatus && pendingChoice() != null
 }
 
 @Dao
@@ -98,6 +137,7 @@ abstract class SyncPeerStateDao {
             pending_locator_json = :locatorJson,
             pending_edition_sha = :editionSha,
             pending_status = :status,
+            pending_coverage = :coverage,
             pending_updated_at = :remoteUpdatedAt,
             pending_seq = :seq,
             has_pending = 1,
@@ -114,6 +154,7 @@ abstract class SyncPeerStateDao {
         locatorJson: String? = null,
         editionSha: String? = null,
         seq: Long? = null,
+        coverage: String? = null,
     ): Int
 
     @Query(
@@ -121,11 +162,11 @@ abstract class SyncPeerStateDao {
         INSERT OR IGNORE INTO sync_peer_state (
             book_url, peer_id, acked_revision,
             pending_progression, pending_locator_json, pending_edition_sha,
-            pending_status, pending_updated_at, pending_seq,
+            pending_status, pending_coverage, pending_updated_at, pending_seq,
             has_pending, remote_updated_at
         )
         VALUES (:bookUrl, :peerId, 0, :progression, :locatorJson, :editionSha,
-                :status, :remoteUpdatedAt, :seq, 1,
+                :status, :coverage, :remoteUpdatedAt, :seq, 1,
                 :remoteUpdatedAt)
         """,
     )
@@ -138,6 +179,7 @@ abstract class SyncPeerStateDao {
         locatorJson: String? = null,
         editionSha: String? = null,
         seq: Long? = null,
+        coverage: String? = null,
     )
 
     @Transaction
@@ -150,6 +192,7 @@ abstract class SyncPeerStateDao {
         locatorJson: String? = null,
         editionSha: String? = null,
         seq: Long? = null,
+        coverage: String? = null,
     ) {
         val updated = updatePending(
             bookUrl = bookUrl,
@@ -160,6 +203,7 @@ abstract class SyncPeerStateDao {
             locatorJson = locatorJson,
             editionSha = editionSha,
             seq = seq,
+            coverage = coverage,
         )
         if (updated == 0) {
             insertPending(
@@ -171,6 +215,7 @@ abstract class SyncPeerStateDao {
                 locatorJson = locatorJson,
                 editionSha = editionSha,
                 seq = seq,
+                coverage = coverage,
             )
         }
     }
@@ -180,11 +225,212 @@ abstract class SyncPeerStateDao {
         UPDATE sync_peer_state SET
             pending_progression = NULL, pending_locator_json = NULL,
             pending_edition_sha = NULL, pending_status = NULL,
+            pending_coverage = NULL,
             pending_updated_at = NULL, pending_seq = NULL, has_pending = 0
         WHERE book_url = :bookUrl AND peer_id = :peerId
         """,
     )
     abstract suspend fun clearPending(bookUrl: String, peerId: String)
+
+    /**
+     * Lands a status act a partner reported, in the status slot alone.
+     *
+     * The position pending state is a different debt and is left exactly
+     * as it was: one op of either kind must not overwrite the other.
+     */
+    @Query(
+        """
+        UPDATE sync_peer_state SET
+            pending_status_choice = :choice,
+            pending_status_seq = :seq,
+            pending_status_updated_at = :remoteUpdatedAt,
+            has_pending_status = 1,
+            remote_updated_at = :remoteUpdatedAt
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun updatePendingStatus(
+        bookUrl: String,
+        peerId: String,
+        choice: String,
+        remoteUpdatedAt: Long?,
+        seq: Long? = null,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (
+            book_url, peer_id, acked_revision,
+            has_pending_status, pending_status_choice, pending_status_seq,
+            pending_status_updated_at, remote_updated_at
+        )
+        VALUES (:bookUrl, :peerId, 0, 1, :choice, :seq, :remoteUpdatedAt, :remoteUpdatedAt)
+        """,
+    )
+    abstract suspend fun insertPendingStatus(
+        bookUrl: String,
+        peerId: String,
+        choice: String,
+        remoteUpdatedAt: Long?,
+        seq: Long? = null,
+    )
+
+    @Transaction
+    open suspend fun persistPendingStatus(
+        bookUrl: String,
+        peerId: String,
+        choice: String,
+        remoteUpdatedAt: Long?,
+        seq: Long? = null,
+    ) {
+        val updated = updatePendingStatus(bookUrl, peerId, choice, remoteUpdatedAt, seq)
+        if (updated == 0) insertPendingStatus(bookUrl, peerId, choice, remoteUpdatedAt, seq)
+    }
+
+    @Query(
+        """
+        UPDATE sync_peer_state SET
+            pending_status_choice = NULL, pending_status_seq = NULL,
+            pending_status_updated_at = NULL, has_pending_status = 0
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun clearPendingStatus(bookUrl: String, peerId: String)
+
+    /**
+     * Writes down the exact bytes of a status act before they are sent,
+     * so an unanswered attempt is replayed rather than rebuilt. Only ever
+     * tracks one act, never a queue.
+     */
+    @Query(
+        """
+        UPDATE sync_peer_state SET status_sent_op = :sentOp, status_sent_revision = :revision
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun updateStatusSent(
+        bookUrl: String,
+        peerId: String,
+        revision: Long,
+        sentOp: String?,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (
+            book_url, peer_id, acked_revision, status_sent_op, status_sent_revision, has_pending
+        )
+        VALUES (:bookUrl, :peerId, 0, :sentOp, :revision, 0)
+        """,
+    )
+    abstract suspend fun insertStatusSent(
+        bookUrl: String,
+        peerId: String,
+        revision: Long,
+        sentOp: String?,
+    )
+
+    @Transaction
+    open suspend fun rememberStatusSent(
+        bookUrl: String,
+        peerId: String,
+        revision: Long,
+        sentOp: String?,
+    ) {
+        if (updateStatusSent(bookUrl, peerId, revision, sentOp) == 0) {
+            insertStatusSent(bookUrl, peerId, revision, sentOp)
+        }
+    }
+
+    @Query(
+        """
+        UPDATE sync_peer_state SET status_sent_op = NULL, status_sent_revision = NULL
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+        """,
+    )
+    abstract suspend fun clearStatusSent(bookUrl: String, peerId: String)
+
+    /**
+     * Records a position acknowledgement that is not an agreement about
+     * anything: a revision that moved without the reading moving.
+     */
+    @Query(
+        """
+        UPDATE sync_peer_state SET acked_revision = :revision
+        WHERE book_url = :bookUrl AND peer_id = :peerId AND acked_revision < :revision
+        """,
+    )
+    abstract suspend fun acknowledgePositionRevision(
+        bookUrl: String,
+        peerId: String,
+        revision: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (book_url, peer_id, acked_revision, has_pending)
+        VALUES (:bookUrl, :peerId, :revision, 0)
+        """,
+    )
+    abstract suspend fun insertPositionAcknowledgement(
+        bookUrl: String,
+        peerId: String,
+        revision: Long,
+    )
+
+    @Transaction
+    open suspend fun settlePositionRevision(bookUrl: String, peerId: String, revision: Long) {
+        if (acknowledgePositionRevision(bookUrl, peerId, revision) == 0) {
+            insertPositionAcknowledgement(bookUrl, peerId, revision)
+        }
+    }
+
+    /**
+     * Records that this partner holds the status choice at [statusRevision].
+     * Only the status side of the row moves: the position is a separate
+     * debt and keeps its own acknowledgement. An acknowledgement is also
+     * what retires the act's remembered bytes, so it is never sent again.
+     */
+    @Query(
+        """
+        UPDATE sync_peer_state SET
+            acked_status_revision = :statusRevision,
+            status_sent_op = NULL,
+            status_sent_revision = NULL
+        WHERE book_url = :bookUrl AND peer_id = :peerId
+            AND acked_status_revision < :statusRevision
+        """,
+    )
+    abstract suspend fun acknowledgeStatus(
+        bookUrl: String,
+        peerId: String,
+        statusRevision: Long,
+    ): Int
+
+    @Query(
+        """
+        INSERT OR IGNORE INTO sync_peer_state (
+            book_url, peer_id, acked_revision, acked_status_revision, has_pending
+        )
+        VALUES (:bookUrl, :peerId, 0, :statusRevision, 0)
+        """,
+    )
+    abstract suspend fun insertStatusAcknowledgement(
+        bookUrl: String,
+        peerId: String,
+        statusRevision: Long,
+    )
+
+    /**
+     * [acknowledgeStatus], creating the row when this book has never been
+     * weighed against this partner.
+     */
+    @Transaction
+    open suspend fun settleStatus(bookUrl: String, peerId: String, statusRevision: Long) {
+        if (acknowledgeStatus(bookUrl, peerId, statusRevision) == 0) {
+            insertStatusAcknowledgement(bookUrl, peerId, statusRevision)
+        }
+    }
 
     /**
      * Records what this partner and this device now both hold.
@@ -204,6 +450,7 @@ abstract class SyncPeerStateDao {
             pending_locator_json = NULL,
             pending_edition_sha = NULL,
             pending_status = NULL,
+            pending_coverage = NULL,
             pending_updated_at = NULL, pending_seq = NULL,
             has_pending = 0,
             synced_at = :now

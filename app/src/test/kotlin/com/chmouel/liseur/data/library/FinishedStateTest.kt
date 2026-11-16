@@ -10,6 +10,7 @@ import com.chmouel.liseur.data.db.ReadingProgress
 import com.chmouel.liseur.data.remote.SyncOutcome
 import com.chmouel.liseur.domain.FinishedOverride
 import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.ReadingStatus
 import com.chmouel.liseur.domain.shelfStateFor
 import com.chmouel.liseur.sync.LatestPositionSync
@@ -444,6 +445,50 @@ class FinishedStateTest {
                 assertEquals(kept, db.bookDao().getByUrl(BOOK)!!.finishedAt)
             }
         }
+
+    @Test
+    fun `a book read to the end counts as finished`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val progress = db.readingProgressDao()
+        progress.recordLocal(BOOK, """{"href":"a.xhtml"}""", 1.0, null, null, null, null, "Reading", 10)
+
+        state().refreshFromProgress(BOOK)
+
+        assertTrue(db.bookDao().getByUrl(BOOK)!!.finished)
+    }
+
+    @Test
+    fun `a book past the threshold counts as finished`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        db.readingProgressDao()
+            .recordLocal(BOOK, """{"href":"a.xhtml"}""", 0.98, null, null, null, null, "Reading", 10)
+
+        state().refreshFromProgress(BOOK)
+
+        assertTrue(db.bookDao().getByUrl(BOOK)!!.finished)
+    }
+
+    /**
+     * A recording that covers part of the narrative ends well before the
+     * book does, so its last minute is not the last page.
+     */
+    @Test
+    fun `a partial recording at the end of its range does not finish the book`() = runTest {
+        db.bookDao().upsert(
+            Book(url = BOOK, title = "Book", author = null, coverPath = null, source = null, addedAt = 0, lastOpenedAt = null),
+        )
+        val progress = db.readingProgressDao()
+        progress.recordLocal(BOOK, """{"href":"a.xhtml"}""", 0.998, null, null, null, null, "Reading", 10)
+        progress.upsert(progress.get(BOOK)!!.copy(coverage = NarrativeCoverage.PARTIAL.wireName))
+
+        state().refreshFromProgress(BOOK)
+
+        assertNull(db.bookDao().getByUrl(BOOK)!!.finishedAt)
+    }
 
     private fun publisherFor(
         scope: CoroutineScope,

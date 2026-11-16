@@ -41,9 +41,11 @@ import com.chmouel.liseur.data.remote.SyncReport
 import com.chmouel.liseur.data.remote.SyncReporting
 import com.chmouel.liseur.data.remote.SyncSnapshot
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.NarrativeCoverage
 import com.chmouel.liseur.domain.ReadingBaseline
 import com.chmouel.liseur.domain.ReadingState
 import com.chmouel.liseur.domain.ReadingStatus
+import com.chmouel.liseur.domain.ReadingStatusChoice
 import com.chmouel.liseur.domain.SyncDecision
 import com.chmouel.liseur.domain.needsReconciling
 import com.chmouel.liseur.domain.readingStatusFor
@@ -225,6 +227,13 @@ class LiseurSyncPositionSync(
         if (!ours) {
             forAccount(account) { land(account, bookUrl, head) }
         }
+        window.status?.let { status ->
+            // An act that names no device is nobody's echo, so it is
+            // always news. Only an act this device signed is its own.
+            if (status.deviceId == null || status.deviceId != account.deviceId) {
+                forAccount(account) { land(account, bookUrl, status) }
+            }
+        }
 
         val stored = progressDao.get(bookUrl)
         val exact = head.locatorJson.takeIf {
@@ -326,6 +335,7 @@ class LiseurSyncPositionSync(
             accountKey = account.peerId, workId = alias.workId, localEdition = alias.editionSha,
             candidateId = peak.opId, progression = peak.progression, locatorJson = locator,
             at = peak.clientTs,
+            coverage = peak.coverage,
             confidence = if ((local || sameEdition(peak.editionSha, alias)) &&
                 ExactLocatorAnchor.isExactJson(locator)
             ) ResumeConfidence.EXACT else ResumeConfidence.APPROXIMATE,
@@ -348,8 +358,13 @@ class LiseurSyncPositionSync(
             ) return@inTransaction
             applied = progressDao.applyPeerPull(
                 bookUrl, atRevision, destination.progression,
-                readingStatusFor(destination.progression).wireName, now(),
+                readingStatusFor(
+                    destination.progression,
+                    partialCoverage = destination.coverage == NarrativeCoverage.PARTIAL,
+                ).wireName,
+                now(),
                 destination.locatorJson, destination.at,
+                coverage = destination.coverage?.wireName,
             )
             if (applied) peerStateDao.clearPending(bookUrl, account.peerId)
         }
@@ -506,7 +521,10 @@ class LiseurSyncPositionSync(
 
         var applied = false
         var accountMatches = false
-        val status = ReadingStatus.fromWire(state.pendingStatus)
+        // The place a partner left is resolved against the coverage that
+        // came with it, or a partial recording finishes the ebook.
+        val partial = state.pendingCoverage == NarrativeCoverage.PARTIAL.wireName
+        val status = readingStatusFor(progression, partialCoverage = partial)
         inTransaction {
             if (!sameAccount(account)) return@inTransaction
             accountMatches = true
@@ -518,6 +536,7 @@ class LiseurSyncPositionSync(
                 now = now(),
                 locatorJson = locator,
                 remoteUpdatedAt = state.pendingUpdatedAt,
+                coverage = state.pendingCoverage,
             )
             if (applied) {
                 peerStateDao.settle(
@@ -734,6 +753,7 @@ class LiseurSyncPositionSync(
                     Reconciled.Nothing ->
                         pendingPeak(account, candidate.first.url, candidate.second)?.let(pushes::add)
                 }
+                owedStatus(account, candidate.first.url, candidate.second)?.let(pushes::add)
             }
         }
 
@@ -1164,6 +1184,8 @@ class LiseurSyncPositionSync(
     /** What the account's heads answered, and what it answered unreadably. */
     private data class Heads(
         val newest: Map<String, SyncOp>,
+        /** The newest status act per work, kept beside the position. */
+        val newestStatus: Map<String, SyncOp>,
         val unreadable: Set<String>,
     )
 
@@ -1220,6 +1242,9 @@ class LiseurSyncPositionSync(
                 forAccount(account) {
                     for ((book, alias) in plain) {
                         heads.newest[alias.workId]?.let { land(account, book.url, it) }
+                        heads.newestStatus[alias.workId]?.let {
+                            if (it.deviceId != account.deviceId) land(account, book.url, it)
+                        }
                         // An empty answer is still an answer, exactly as
                         // it is for a single seed: the server has heard
                         // nothing about this work.
@@ -1283,6 +1308,10 @@ class LiseurSyncPositionSync(
         observeResponse(account, response)
         val array = response.optJSONArray("ops")
         val newest = mutableMapOf<String, SyncOp>()
+        // A status act is one of the newest ops per work and device too,
+        // so the snapshot carries both kinds and neither may stand in
+        // for the other.
+        val newestStatus = mutableMapOf<String, SyncOp>()
         val unreadable = mutableSetOf<String>()
         for (index in 0 until (array?.length() ?: 0)) {
             val json = array?.optJSONObject(index) ?: continue
@@ -1294,10 +1323,12 @@ class LiseurSyncPositionSync(
                 json.optString("work_id").takeIf { it.isNotEmpty() }?.let(unreadable::add)
                 continue
             }
-            val held = newest[op.workId]
-            if (held == null || op.seq > held.seq) newest[op.workId] = op
+            val held = if (op.isStatus) newestStatus[op.workId] else newest[op.workId]
+            if (held == null || op.seq > held.seq) {
+                if (op.isStatus) newestStatus[op.workId] = op else newest[op.workId] = op
+            }
         }
-        return Heads(newest = newest, unreadable = unreadable)
+        return Heads(newest = newest, newestStatus = newestStatus, unreadable = unreadable)
     }
 
     /**
@@ -1314,8 +1345,8 @@ class LiseurSyncPositionSync(
         book: Book,
         alias: WorkAlias,
     ): IOException? {
-        val head = try {
-            latestOp(account, alias.workId)
+        val window = try {
+            latestWindow(account, alias.workId)
         } catch (e: IOException) {
             // Not marked seeded: the question was asked and never
             // answered, so it is still owed. Handed back rather than
@@ -1325,7 +1356,10 @@ class LiseurSyncPositionSync(
             return e
         }
         forAccount(account) {
-            head?.let { land(account, book.url, it) }
+            window.op?.let { land(account, book.url, it) }
+            window.status?.let {
+                if (it.deviceId == null || it.deviceId != account.deviceId) land(account, book.url, it)
+            }
             // An empty answer is still an answer: the server has heard
             // nothing about this book, and there is nothing to recover.
             identityDao.markSeeded(book.url, account.peerId)
@@ -1417,10 +1451,7 @@ class LiseurSyncPositionSync(
             ops.forEach { observe(account, it) }
             historical.forEach { observe(account, it, retained = true) }
             val byWork = identityDao.aliasesFor(account.peerId).filter { it.usable }.groupBy { it.workId }
-            val newestByWork = ops
-                .groupBy(SyncOp::workId)
-                .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
-            for (op in newestByWork) {
+            for (op in newest(ops, status = false)) {
                 for (alias in byWork[op.workId].orEmpty()) {
                     if (op.deviceId != null && op.deviceId == account.deviceId) {
                         val pending = peerStateDao.get(alias.bookUrl, account.peerId)
@@ -1442,25 +1473,69 @@ class LiseurSyncPositionSync(
                     }
                 }
             }
+            // The status slot is a debt of its own: a page and a choice
+            // arriving in the same page of the feed are both kept, and
+            // neither stands in for the other.
+            for (op in newest(ops, status = true)) {
+                for (alias in byWork[op.workId].orEmpty()) {
+                    if (op.deviceId != null && op.deviceId == account.deviceId) {
+                        // Our own act coming back: the partner holds it,
+                        // so there is nothing here left to adopt.
+                        val pending = peerStateDao.get(alias.bookUrl, account.peerId)
+                        if (pending?.pendingStatusSeq == null ||
+                            pending.pendingStatusSeq <= op.seq
+                        ) {
+                            peerStateDao.clearPendingStatus(alias.bookUrl, account.peerId)
+                        }
+                    } else {
+                        land(account, alias.bookUrl, op)
+                    }
+                }
+            }
             serverDao.setSyncCursor(cursor)
         }
     }
 
+    /** The newest op of one kind per work: the two kinds never compete. */
+    private fun newest(ops: List<SyncOp>, status: Boolean): List<SyncOp> =
+        ops.filter { it.isStatus == status }
+            .groupBy(SyncOp::workId)
+            .mapNotNull { (_, candidates) -> candidates.maxByOrNull(SyncOp::seq) }
+
     private suspend fun land(account: Account, bookUrl: String, op: SyncOp) {
         observe(account, op)
+        val readingStatus = op.readingStatus
+        if (readingStatus != null) {
+            // A status act is not a move, so its progression is not
+            // landed as one: the sender's place is theirs, not ours
+            val pending = peerStateDao.get(bookUrl, account.peerId)
+            if (pending?.pendingStatusSeq != null && pending.pendingStatusSeq > op.seq) return
+            peerStateDao.persistPendingStatus(
+                bookUrl = bookUrl,
+                peerId = account.peerId,
+                choice = readingStatus.wireName,
+                remoteUpdatedAt = op.clientTs.takeIf { it > 0 },
+                seq = op.seq,
+            )
+            return
+        }
         val pending = peerStateDao.get(bookUrl, account.peerId)
         if (pending?.pendingSeq != null && pending.pendingSeq > op.seq) return
         peerStateDao.persistPending(
             bookUrl = bookUrl,
             peerId = account.peerId,
             progression = op.progression,
-            status = readingStatusFor(op.progression).wireName,
+            status = readingStatusFor(op.progression, partialCoverage = op.partialCoverage).wireName,
             remoteUpdatedAt = op.clientTs.takeIf { it > 0 },
             locatorJson = op.locatorJson,
             editionSha = op.editionSha,
             seq = op.seq,
+            coverage = op.coverage?.wireName,
         )
     }
+
+    private val SyncOp.partialCoverage: Boolean
+        get() = coverage == NarrativeCoverage.PARTIAL
 
     // -- Settling one book ------------------------------------------------
 
@@ -1483,13 +1558,28 @@ class LiseurSyncPositionSync(
         named: Pair<Book, WorkAlias>,
     ): Reconciled {
         val (book, alias) = named
-        val stored = progressDao.get(book.url)
+        var stored = progressDao.get(book.url)
         val state = peerStateDao.get(book.url, account.peerId)
         val exactRemote = state?.exactLocatorFor(alias)
         val dirty = state?.isDirty(stored?.localRevision ?: 0)
             ?: ((stored?.localRevision ?: 0) > 0)
 
-        if (!needsReconciling(false, state?.hasPending == true, dirty)) return Reconciled.Nothing
+        val statusWaiting = state?.hasPendingStatusAct == true
+        if (!needsReconciling(false, state?.hasPending == true || statusWaiting, dirty)) {
+            return Reconciled.Nothing
+        }
+
+        // The explicit choice is weighed first and on its own: it is a
+        // fact about the book, not about where the reader is, and
+        // adopting one moves the row this re-reads below.
+        val statusAdopted = statusWaiting && adoptWaitingStatus(
+            account,
+            book,
+            stored,
+            state,
+            dirty,
+        )
+        if (statusAdopted) stored = progressDao.get(book.url) ?: stored
 
         val decision = reconcileReadingState(
             local = stored?.asReadingState(),
@@ -1507,7 +1597,7 @@ class LiseurSyncPositionSync(
         // thing that can say two places are the same passage. What a
         // pull then *stores* is the ladder's answer, so a peer that
         // named only the chapter is still restored to it.
-        return act(
+        val outcome = act(
             account,
             book,
             alias,
@@ -1516,6 +1606,7 @@ class LiseurSyncPositionSync(
             state?.restorableLocatorFor(alias),
             decision,
         )
+        return if (statusAdopted && outcome == Reconciled.Nothing) Reconciled.Pulled else outcome
     }
 
     private suspend fun act(
@@ -1547,6 +1638,8 @@ class LiseurSyncPositionSync(
             }
 
             is SyncDecision.Pull -> {
+                // A pending position always carries the place it was
+                // read at; a choice alone never lands as one.
                 val progression = decision.state.progression ?: return Reconciled.Nothing
                 val expected = stored?.localRevision ?: 0
                 var applied = false
@@ -1559,6 +1652,7 @@ class LiseurSyncPositionSync(
                         now = at,
                         locatorJson = restorableRemote,
                         remoteUpdatedAt = state?.pendingUpdatedAt,
+                        coverage = state?.pendingCoverage,
                     )
                     if (applied) {
                         peerStateDao.settle(
@@ -1581,15 +1675,10 @@ class LiseurSyncPositionSync(
                 return Reconciled.Pulled
             }
 
-            is SyncDecision.AdoptStatus -> {
-                var adopted = false
-                forAccount(account) {
-                    adopted = progressDao.adoptPeerStatus(book.url, decision.status.wireName, at)
-                    if (adopted) peerStateDao.clearPending(book.url, account.peerId)
-                }
-                if (adopted) finishedState.refreshFromProgress(book.url)
-                return if (adopted) Reconciled.Pulled else Reconciled.Nothing
-            }
+            // A status arrives as a choice in its own slot and is
+            // settled before this; there is nothing about a place to
+            // decide here.
+            is SyncDecision.AdoptStatus -> return Reconciled.Nothing
 
             is SyncDecision.Conflict -> {
                 Log.i(TAG, "Both sides moved for a book; leaving it to be asked about")
@@ -1615,11 +1704,108 @@ class LiseurSyncPositionSync(
                             clientTs = stored.updatedAt,
                             progression = progression.coerceIn(0.0, 1.0),
                             locatorJson = stored.locatorJson,
+                            coverage = stored.narrativeCoverage,
                         ),
                     ),
                 )
             }
         }
+    }
+
+    /**
+     * Weighs the explicit choice a partner stated against this device's
+     * own, adopting it when this device has nothing newer to say.
+     *
+     * An act made here and not yet delivered wins, whichever the two is
+     * newer: it is appended afterwards, and the server orders acts by
+     * `seq` (ADR-0066). The waiting act is therefore left on disk, to be
+     * cleared by the pull that carries this device's own act back.
+     */
+    private suspend fun adoptWaitingStatus(
+        account: Account,
+        book: Book,
+        stored: ReadingProgress?,
+        state: SyncPeerState,
+        hadPositionDebt: Boolean,
+    ): Boolean {
+        val choice = state.pendingChoice() ?: return false
+        if (stored != null && stored.statusRevision > state.ackedStatusRevision) return false
+        return adopt(
+            account,
+            book,
+            stored,
+            choice.override,
+            resolvedStatus(choice, stored),
+            hadPositionDebt,
+            finishedAt = state.pendingStatusUpdatedAt,
+        ) == Reconciled.Pulled
+    }
+
+    /**
+     * What a choice resolves to here. A withdrawal states nothing in
+     * itself: the newest stored position and the coverage that came with
+     * it decide again, never the act's own progression.
+     */
+    private fun resolvedStatus(choice: ReadingStatusChoice, stored: ReadingProgress?): ReadingStatus =
+        when (choice) {
+            ReadingStatusChoice.FINISHED -> ReadingStatus.FINISHED
+            ReadingStatusChoice.UNREAD -> ReadingStatus.READY_TO_READ
+            ReadingStatusChoice.AUTOMATIC ->
+                readingStatusFor(
+                    stored?.totalProgression,
+                    FinishedOverride.NONE,
+                    stored?.partialCoverage == true,
+                )
+        }
+
+    /**
+     * Writes a peer's status into the row as a choice of this device's
+     * own.
+     *
+     * Written through the same guarded path a hand-made choice takes, so
+     * "read at 0.4" survives: re-deriving it from the position afterwards
+     * would undo it. The status revision is the guard, so a choice made
+     * here while this was being decided is what stays.
+     */
+    private suspend fun adopt(
+        account: Account,
+        book: Book,
+        stored: ReadingProgress?,
+        override: FinishedOverride,
+        status: ReadingStatus,
+        hadPositionDebt: Boolean,
+        finishedAt: Long?,
+    ): Reconciled {
+        var adopted = false
+        forAccount(account) {
+            adopted = finishedState.adoptRemoteStatus(
+                bookUrl = book.url,
+                expectedStatusRevision = stored?.statusRevision ?: 0,
+                account = account.peerId,
+                override = override,
+                status = status,
+                finishedAt = finishedAt,
+            )
+            if (adopted) {
+                val after = progressDao.get(book.url)
+                val settled = after?.statusRevision
+                if (settled != null) {
+                    peerStateDao.settleStatus(book.url, account.peerId, settled)
+                }
+                peerStateDao.clearPendingStatus(book.url, account.peerId)
+                // Taking a status is not a move. What was clean stays
+                // clean, and a book never opened here does not go on
+                // owing a position it does not have.
+                if (!hadPositionDebt && after != null) {
+                    peerStateDao.settlePositionRevision(
+                        book.url,
+                        account.peerId,
+                        after.localRevision,
+                    )
+                }
+            }
+        }
+        return if (adopted) Reconciled.Pulled else Reconciled.Nothing
     }
 
     /**
@@ -1644,6 +1830,10 @@ class LiseurSyncPositionSync(
         val prepared = mutableListOf<PendingPush>()
         for (item in pushes) {
             if (!sameAccount(account)) return pushed
+            if (item.op.isStatus) {
+                prepared += item
+                continue
+            }
             val current = deliverPeak(account, item, trouble) ?: continue
             prepared += current
         }
@@ -1660,7 +1850,7 @@ class LiseurSyncPositionSync(
             }
 
             val batch = queue.removeFirst()
-            rememberPeaksSent(account, batch)
+            rememberSent(account, batch)
             // A null answer means a recovery rebuilt the batch and it
             // goes back on the queue: nothing from the rejected request
             // is settled.
@@ -1707,6 +1897,12 @@ class LiseurSyncPositionSync(
                     in ACCEPTED -> {
                         pushed++
                         forAccount(account) {
+                            if (item.op.isStatus) {
+                                peerStateDao.settleStatus(
+                                    item.bookUrl, account.peerId, item.revision,
+                                )
+                                return@forAccount
+                            }
                             peerStateDao.settle(
                                 bookUrl = item.bookUrl,
                                 peerId = account.peerId,
@@ -1731,9 +1927,17 @@ class LiseurSyncPositionSync(
                         // revision moves on, which derives a fresh id for
                         // the same reading; conditionally, because a page
                         // turned since the send has done that already.
-                        Log.i(TAG, "The server holds op ${item.op.opId} with a different payload; renaming the position")
+                        Log.i(TAG, "The server holds op ${item.op.opId} with a different payload; renaming it")
                         forAccount(account) {
-                            progressDao.renameRevision(item.bookUrl, item.revision)
+                            if (item.op.isStatus) {
+                                progressDao.renameStatusRevision(item.bookUrl, item.revision)
+                                // The remembered bytes belong to the name
+                                // just retired, so the fresh act derives
+                                // its own payload.
+                                peerStateDao.clearStatusSent(item.bookUrl, account.peerId)
+                            } else {
+                                progressDao.renameRevision(item.bookUrl, item.revision)
+                            }
                         }
                         trouble.refused(SyncFailure.ServerError(LiseurSyncHttp.CONFLICT))
                     }
@@ -1751,7 +1955,8 @@ class LiseurSyncPositionSync(
     }
 
     private fun carriesPeak(local: ReadingProgress, item: PendingPush) =
-        local.peakRevision == item.revision && local.peakProgression == item.op.progression &&
+        !item.op.isStatus && local.peakRevision == item.revision &&
+            local.peakProgression == item.op.progression &&
             local.peakLocator == item.op.locatorJson && local.peakAt == item.op.clientTs
 
     /**
@@ -1759,6 +1964,30 @@ class LiseurSyncPositionSync(
      * before it is sent. If the answer is lost and the reader then moves
      * back, [deliverPeak] retries these bytes rather than a fresh peak id.
      */
+    private suspend fun rememberSent(account: Account, batch: List<PendingPush>) {
+        rememberStatusSent(account, batch)
+        rememberPeaksSent(account, batch)
+    }
+
+    /**
+     * Writes down each status act's exact bytes before they go up. An
+     * answer that never arrives is retried from these bytes, so a page
+     * turned in between cannot rebuild the act into a different payload.
+     */
+    private suspend fun rememberStatusSent(account: Account, batch: List<PendingPush>) {
+        for (item in batch) {
+            if (!item.op.isStatus) continue
+            forAccount(account) {
+                peerStateDao.rememberStatusSent(
+                    bookUrl = item.bookUrl,
+                    peerId = account.peerId,
+                    revision = item.revision,
+                    sentOp = SyncOps.toJson(item.op).toString(),
+                )
+            }
+        }
+    }
+
     private suspend fun rememberPeaksSent(account: Account, batch: List<PendingPush>) {
         val dao = furthestDao ?: return
         forAccount(account) {
@@ -1857,6 +2086,7 @@ class LiseurSyncPositionSync(
             opId = SyncOps.opIdFor(account.deviceKey, alias.workId, stored.localRevision),
             workId = alias.workId, editionSha = alias.editionSha, clientTs = stored.updatedAt,
             progression = requireNotNull(stored.totalProgression), locatorJson = stored.locatorJson,
+            coverage = stored.narrativeCoverage,
         ))
 
     private suspend fun pendingPeak(account: Account, book: String, alias: WorkAlias): PendingPush? {
@@ -1868,6 +2098,49 @@ class LiseurSyncPositionSync(
         val delivery = dao.delivered(account.peerId, book, alias.workId)
         if (delivery?.revision == stored.peakRevision && delivery?.acknowledged == true) return null
         return currentPush(account, book, alias, stored)
+    }
+
+    /**
+     * The explicit choice this device owes one partner, if it owes one.
+     *
+     * A status act is owed by the status revision and acknowledged on its
+     * own, so a position sent later or retried never stands for it and a
+     * stale position never overwrites a newer choice.
+     *
+     * The payload is written down before it is sent and replayed from
+     * there until the partner answers. A retry after a page turn must go
+     * up as the same bytes, or the server would take it for a different
+     * op under a name it already holds. Only one act is tracked, never a
+     * queue.
+     */
+    private suspend fun owedStatus(
+        account: Account,
+        book: String,
+        alias: WorkAlias,
+    ): PendingPush? {
+        val stored = progressDao.get(book) ?: return null
+        val statusRevision = stored.statusRevision
+        if (statusRevision <= 0) return null
+        val state = peerStateDao.get(book, account.peerId)
+        if (state != null && !state.owesStatus(statusRevision)) return null
+        val replay = state?.statusSentOp
+            ?.takeIf { state.statusSentRevision == statusRevision }
+            ?.let { sent -> runCatching { SyncOps.fromJson(JSONObject(sent)) }.getOrNull() }
+        if (replay != null) return PendingPush(book, alias, statusRevision, replay)
+        return PendingPush(
+            bookUrl = book,
+            alias = alias,
+            revision = statusRevision,
+            op = SyncOp(
+                opId = SyncOps.statusOpIdFor(account.deviceKey, alias.workId, statusRevision),
+                workId = alias.workId,
+                editionSha = alias.editionSha,
+                clientTs = stored.updatedAt,
+                progression = (stored.totalProgression ?: 0.0).coerceIn(0.0, 1.0),
+                locatorJson = null,
+                readingStatus = ReadingStatusChoice.forOverride(stored.override),
+            ),
+        )
     }
 
     /** What came of trying to recover a rejected ops batch. */
@@ -2427,13 +2700,13 @@ class LiseurSyncPositionSync(
      * Null means the whole window was unreadable, never that the reader
      * is at the start of the book.
      */
-    private suspend fun latestOp(
-        account: Account,
-        workId: String,
-    ): SyncOp? = latestWindow(account, workId).op
-
-    /** [latestOp], and the newest sequence anywhere in the answer. */
-    private data class LatestWindow(val op: SyncOp?, val seen: Long)
+    /**
+     * The newest op of each kind, and the newest sequence anywhere in the
+     * answer. The newest status act is kept apart from the newest
+     * position: they are two facts, and one must never be dropped for the
+     * other.
+     */
+    private data class LatestWindow(val op: SyncOp?, val status: SyncOp?, val seen: Long)
 
     private suspend fun latestWindow(account: Account, workId: String): LatestWindow {
         val response = http.get(
@@ -2442,9 +2715,17 @@ class LiseurSyncPositionSync(
         )
         observeResponse(account, response, workId)
         val ops = feed(response.optJSONArray("ops"))
+        val ours = ops.mapNotNull(SyncFeedItem::op).filter { it.workId == workId }
+        // The newest status act travels in its own array, because the
+        // server keeps status acts out of `ops`: a status act is not a
+        // move (ADR-0066).
+        val statusItems = feed(response.optJSONArray("status"))
+        val acts = statusItems.mapNotNull(SyncFeedItem::op).filter { it.workId == workId }
         return LatestWindow(
-            op = ops.mapNotNull(SyncFeedItem::op).filter { it.workId == workId }.maxByOrNull(SyncOp::seq),
-            seen = (ops + feed(response.optJSONArray("furthest"))).maxOfOrNull(SyncFeedItem::seq) ?: 0L,
+            op = ours.filter { !it.isStatus }.maxByOrNull(SyncOp::seq),
+            status = (ours + acts).filter { it.isStatus }.maxByOrNull(SyncOp::seq),
+            seen = (ops + statusItems + feed(response.optJSONArray("furthest")))
+                .maxOfOrNull(SyncFeedItem::seq) ?: 0L,
         )
     }
 
@@ -2465,6 +2746,8 @@ class LiseurSyncPositionSync(
     }
 
     private suspend fun observe(account: Account, op: SyncOp, retained: Boolean = false) {
+        // A status act is not a move, so it is no candidate for the furthest
+        if (op.isStatus) return
         // The recent window and a lagging cursor both still carry what was forgotten.
         val floor = identityDao.furthestFloor(account.peerId, op.workId) ?: 0L
         if (floor > 0 && op.seq <= floor) return
