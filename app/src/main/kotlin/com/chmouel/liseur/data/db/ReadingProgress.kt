@@ -238,6 +238,7 @@ abstract class ReadingProgressDao {
         UPDATE reading_progress SET
             locator_json = :locatorJson,
             total_progression = :progression,
+            coverage = NULL,
             updated_at = :now,
             local_revision = local_revision + 1,
             position_revision = position_revision + 1
@@ -1167,6 +1168,7 @@ abstract class ReadingProgressDao {
         now: Long,
         expectedLocalRevision: Long? = null,
         keepUnreadReset: Boolean = false,
+        handOverOwnership: Boolean = false,
     ): Boolean {
         val existing = get(bookUrl)
         if (existing == null) {
@@ -1195,6 +1197,7 @@ abstract class ReadingProgressDao {
             now,
             expectedLocalRevision,
             keepUnreadReset,
+            handOverOwnership,
         ) > 0
     }
 
@@ -1207,10 +1210,13 @@ abstract class ReadingProgressDao {
             unread_reset_revision = CASE
                 WHEN :override = 2 OR :keepUnreadReset THEN unread_reset_revision
                 ELSE NULL END,
+            owner_account = CASE
+                WHEN :handOverOwnership AND owner_account IS NOT NULL AND owner_account != :account
+                THEN :account ELSE owner_account END,
             updated_at = :now,
             local_revision = local_revision + 1
         WHERE book_url = :bookUrl AND status_revision = :expectedStatusRevision
-            AND (owner_account IS NULL OR owner_account = :account)
+            AND (owner_account IS NULL OR owner_account = :account OR :handOverOwnership)
             AND (:expectedLocalRevision IS NULL OR local_revision = :expectedLocalRevision)
         """,
     )
@@ -1223,6 +1229,7 @@ abstract class ReadingProgressDao {
         now: Long,
         expectedLocalRevision: Long?,
         keepUnreadReset: Boolean = false,
+        handOverOwnership: Boolean = false,
     ): Int
 
     @Query(
@@ -1281,6 +1288,15 @@ abstract class ReadingProgressDao {
         """,
     )
     abstract suspend fun retireAccountState()
+
+    /**
+     * Drops the claim that a choice still has to reach the server, for an
+     * account that is being left. The choice itself stays: it describes
+     * this reader's book, and a reader who decides again afterwards owes
+     * the next account that decision.
+     */
+    @Query("UPDATE reading_progress SET status_revision = 0")
+    abstract suspend fun retireStatusDebt()
 
     /**
      * Renames an account everywhere a position remembers it, for the

@@ -1827,6 +1827,9 @@ class LiseurSyncPositionSync(
                 // A reset this device still owes the server is a position
                 // debt: only its position acknowledgement may retire it.
                 keepUnreadReset = true,
+                // The peer is an accepted partner, so its act outranks the
+                // library account that pulled the book before it.
+                handOverOwnership = true,
             )
             if (adopted) {
                 val after = progressDao.get(book.url)

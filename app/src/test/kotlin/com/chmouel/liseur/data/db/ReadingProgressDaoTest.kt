@@ -647,6 +647,35 @@ class ReadingProgressDaoTest {
     }
 
     @Test
+    fun `accepting an ebook position clears a restored recording's coverage`() = runTest {
+        dao.restoreBackupPosition(
+            bookUrl = book,
+            locatorJson = """{"at":0.998}""",
+            progression = 0.998,
+            readAt = 1_000,
+            now = 1_000,
+            coverage = "partial",
+        )
+        val restored = row()
+        assertTrue(restored.partialCoverage)
+
+        val changed = dao.adoptBookOrbitPosition(
+            bookUrl = book,
+            expectedRevision = restored.positionRevision,
+            expectedLocator = restored.locatorJson,
+            locatorJson = """{"at":0.5}""",
+            progression = 0.5,
+            now = 2_000,
+        )
+
+        assertEquals(1, changed)
+        val adopted = row()
+        assertEquals(0.5, adopted.totalProgression!!, 0.0)
+        assertNull(adopted.coverage)
+        assertFalse(adopted.partialCoverage)
+    }
+
+    @Test
     fun `a peak this device read itself records no coverage`() = runTest {
         read(0.7)
         read(0.3)

@@ -67,6 +67,11 @@ class FinishedState(
      * [expectedLocalRevision] pins the whole row: a page turn that landed
      * since the caller looked makes this a refusal, because the reading it
      * would then settle was never weighed against the partner.
+     *
+     * [handOverOwnership] lets an accepted sync peer settle a status over
+     * reading a library account did earlier, taking that account's place
+     * as the owner. Without it a book first pulled from calibre-web or
+     * Komga would refuse every act the peer sends.
      */
     suspend fun adoptRemoteStatus(
         bookUrl: String,
@@ -77,6 +82,7 @@ class FinishedState(
         finishedAt: Long? = null,
         expectedLocalRevision: Long? = null,
         keepUnreadReset: Boolean = false,
+        handOverOwnership: Boolean = false,
     ): Boolean {
         val at = now()
         var applied = false
@@ -96,6 +102,7 @@ class FinishedState(
                 // from elsewhere must not silence the reset this device
                 // still owes.
                 keepUnreadReset = keepUnreadReset,
+                handOverOwnership = handOverOwnership,
             )
             if (applied) applyFlag(bookUrl, status == ReadingStatus.FINISHED, readAtFor(finishedAt, at))
         }

@@ -1070,6 +1070,10 @@ class RemoteAccountRepository(
         changingAccount {
             inTransaction {
                 forgetSyncPeer(dao.get())
+                // No server row survives to trigger account retirement on a
+                // reconnect, so a retained book would keep owing the
+                // previous account's choice to whoever signs in next.
+                progressDao.retireStatusDebt()
                 bookRemoval.deleteRemoteNotDownloaded()
                 bookDao.unlinkDownloadedFromRemote()
                 bookOrbitBindingDao?.clearOrphans()
