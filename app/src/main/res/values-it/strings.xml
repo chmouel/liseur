@@ -2005,7 +2005,7 @@
     <string name="settings_library_layout_detailed">Dettagliato</string>
     <string name="library_tab_library">Libreria</string>
     <string name="home_continue">Continua</string>
-    <string name="home_series_underway">Serie che stai leggendo</string>
+    <string name="home_series_underway">Serie in corso</string>
     <string name="home_see_all">Vedi tutto</string>
     <string name="tab_stats">Statistiche</string>
     <string name="shelf_other_books">Altri libri</string>
@@ -2015,8 +2015,8 @@
     <string name="home_tile_to_read">Da leggere</string>
     <string name="home_tile_series">Serie</string>
     <string name="home_tile_finished">Finiti</string>
-    <string name="home_your_shelves">I tuoi scaffali</string>
-    <string name="home_recently_added">Aggiunti di recente</string>
+    <string name="home_your_shelves">Scaffali</string>
+    <string name="home_recently_added">Nuovi arrivi</string>
     <string name="home_quote_title">Dalle tue letture</string>
     <string name="home_quote_highlight">Il tuo evidenziato</string>
     <string name="home_quote_another">Un\'altra citazione</string>

@@ -2017,7 +2017,7 @@
     <string name="settings_library_layout_detailed">Ausführlich</string>
     <string name="library_tab_library">Bibliothek</string>
     <string name="home_continue">Weiterlesen</string>
-    <string name="home_series_underway">Reihen, die du liest</string>
+    <string name="home_series_underway">Begonnene Reihen</string>
     <string name="home_see_all">Alle anzeigen</string>
     <string name="tab_stats">Statistik</string>
     <string name="shelf_other_books">Weitere Bücher</string>
@@ -2027,8 +2027,8 @@
     <string name="home_tile_to_read">Zu lesen</string>
     <string name="home_tile_series">Reihen</string>
     <string name="home_tile_finished">Gelesen</string>
-    <string name="home_your_shelves">Deine Regale</string>
-    <string name="home_recently_added">Kürzlich hinzugefügt</string>
+    <string name="home_your_shelves">Regale</string>
+    <string name="home_recently_added">Neu im Regal</string>
     <string name="home_quote_title">Aus deiner Lektüre</string>
     <string name="home_quote_highlight">Deine Markierung</string>
     <string name="home_quote_another">Anderes Zitat</string>

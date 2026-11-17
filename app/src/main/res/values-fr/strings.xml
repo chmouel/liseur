@@ -2015,8 +2015,8 @@
     <string name="home_tile_to_read">À lire</string>
     <string name="home_tile_series">Séries</string>
     <string name="home_tile_finished">Terminés</string>
-    <string name="home_your_shelves">Vos étagères</string>
-    <string name="home_recently_added">Ajoutés récemment</string>
+    <string name="home_your_shelves">Étagères</string>
+    <string name="home_recently_added">Nouveautés</string>
     <string name="home_quote_title">Tiré de vos lectures</string>
     <string name="home_quote_highlight">Votre surlignage</string>
     <string name="home_quote_another">Une autre citation</string>
