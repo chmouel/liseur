@@ -321,7 +321,7 @@ private fun sittings(spans: List<SessionSpan>, zone: ZoneId): Sittings {
  * on it, because a heatmap of every day since the epoch is mostly a
  * picture of before the reader owned the app.
  */
-private fun dailySeries(
+internal fun dailySeries(
     sessions: List<SessionSpan>,
     zone: ZoneId,
     today: LocalDate,
@@ -377,7 +377,7 @@ private fun streakDays(sessions: List<SessionSpan>, zone: ZoneId, today: LocalDa
  * Null rather than zero when nothing is known: a pace of nought reads
  * as a verdict on the reader, and no figure at all is the truth.
  */
-private fun progressionPerHour(sessions: List<SessionSpan>): Double? {
+internal fun progressionPerHour(sessions: List<SessionSpan>): Double? {
     var advance = 0.0
     var millis = 0L
     for (span in sessions) {
@@ -394,7 +394,7 @@ private fun progressionPerHour(sessions: List<SessionSpan>): Double? {
 
 private const val MILLIS_PER_HOUR = 3_600_000.0
 
-private fun SessionSpan.day(zone: ZoneId): LocalDate =
+internal fun SessionSpan.day(zone: ZoneId): LocalDate =
     Instant.ofEpochMilli(lastReadAt).atZone(zone).toLocalDate()
 
 /** Reading time over one span, and how much of it no server has yet. */

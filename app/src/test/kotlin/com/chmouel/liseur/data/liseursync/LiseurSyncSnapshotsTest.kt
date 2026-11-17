@@ -731,6 +731,9 @@ class LiseurSyncSnapshotsTest {
             assertEquals(120 * 60_000L, ready.headline.totalMs)
             assertEquals(120 * 60_000L, ready.stats.books.single().totalMs)
             assertEquals(120 * 60_000L, ready.stats.recent.last().totalMs)
+            // The month began midweek; the weekly goal still counts what
+            // the other devices read this week, not this device alone.
+            assertEquals(120 * 60_000L, ready.weekReadingMs)
             // The server offers no comparison, and one made from this
             // device alone is not put beside all devices' figures.
             assertNull(ready.headline.comparison)
@@ -754,6 +757,108 @@ class LiseurSyncSnapshotsTest {
                 it is ReadingStatsUiState.Ready && it.snapshotId != ready.snapshotId
             } as ReadingStatsUiState.Ready
             assertEquals(StatsProvenance.ALL_DEVICES, refreshed.provenance)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /** September began on a Tuesday; Monday's reading on another device still counts this week. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `the weekly goal counts other devices' reading before the month began`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        val monday = LocalDate.of(2026, 8, 31)
+        changeResponse = { response ->
+            if (response.optString("from") == monday.toString()) {
+                response.put("summary", JSONObject("""{"total_active_minutes":150,"sessions":5,"streak_days":10}"""))
+                response.getJSONArray("works").getJSONObject(0)
+                    .put("total_active_minutes", 150).put("sessions", 5)
+                response.getJSONArray("days").put(day(monday, 60, 1))
+            }
+        }
+        try {
+            sitting()
+            val instant = today.atTime(12, 30).atZone(zone).toInstant()
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH,
+                zone = { zone }, now = { instant.atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
+            )
+            models.put("snapshot", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.ALL_DEVICES
+            } as ReadingStatsUiState.Ready
+            assertEquals(120 * 60_000L, ready.headline.totalMs)
+            assertEquals(180 * 60_000L, ready.weekReadingMs)
+            assertTrue(requests.any { it.optString("from") == monday.toString() })
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    /** Without the week's own answer, Monday's reading elsewhere is unknown, so no goal figure is shown. */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a refused week answer leaves the weekly goal out rather than counting part of it`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        changeResponse = { response ->
+            if (response.optString("from") == "2026-08-31") response.put("complete", false)
+        }
+        try {
+            sitting()
+            val instant = today.atTime(12, 30).atZone(zone).toInstant()
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH,
+                zone = { zone }, now = { instant.atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
+            )
+            models.put("snapshot", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.ALL_DEVICES
+            } as ReadingStatsUiState.Ready
+            assertEquals(120 * 60_000L, ready.headline.totalMs)
+            assertNull(ready.weekReadingMs)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `a week from a different server revision is omitted`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val models = ViewModelStore()
+        changeResponse = { response ->
+            if (response.optString("from") == "2026-08-31") response.put("stats_revision", "different-revision")
+        }
+        try {
+            sitting()
+            val instant = today.atTime(12, 30).atZone(zone).toInstant()
+            val model = ReadingStatsViewModel(
+                db.readingSessionDao(), db.bookDao(), db.readingProgressDao(),
+                initialRange = StatsRange.THIS_MONTH,
+                zone = { zone }, now = { instant.atZone(it) }, initialWeekStart = DayOfWeek.MONDAY,
+                snapshotSource = client(),
+                accounts = db.remoteServerDao().observe().map(StatsAccount::from),
+            )
+            models.put("snapshot", model)
+            model.refreshServerInsights()
+            val ready = model.state.first {
+                it is ReadingStatsUiState.Ready && it.provenance == StatsProvenance.ALL_DEVICES
+            } as ReadingStatsUiState.Ready
+            assertEquals(120 * 60_000L, ready.headline.totalMs)
+            assertNull(ready.weekReadingMs)
         } finally {
             models.clear()
             Dispatchers.resetMain()
@@ -909,7 +1014,8 @@ class LiseurSyncSnapshotsTest {
                 it is ReadingStatsUiState.Ready || it is ReadingStatsUiState.Unavailable
             }
             assertEquals(StatsProvenance.ALL_DEVICES, (ready as ReadingStatsUiState.Ready).provenance)
-            assertEquals(2, requests.size)
+            // Twice for the month; the week before it is asked for once.
+            assertEquals(2, requests.count { it.optString("from") == "2026-09-01" })
         } finally {
             models.clear()
             Dispatchers.resetMain()

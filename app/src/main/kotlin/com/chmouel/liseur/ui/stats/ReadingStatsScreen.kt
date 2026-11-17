@@ -49,8 +49,10 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.TrackChanges
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -91,6 +93,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -98,6 +101,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -111,6 +115,7 @@ import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
 import com.chmouel.liseur.domain.ComparisonScope
 import com.chmouel.liseur.domain.ReadingComparison
+import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingPeriod
 import com.chmouel.liseur.domain.ReadingStats
 import com.chmouel.liseur.domain.StatsChartPeriod
@@ -125,9 +130,11 @@ import com.chmouel.liseur.ui.theme.DarkHomePalette
 import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
+import androidx.compose.ui.text.TextStyle as ComposeTextStyle
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.roundToInt
@@ -267,12 +274,14 @@ fun ReadingStatsScreen(
                             narrowedByRange = stats.streakDays > 0 || ready.range != StatsRange.ALL_TIME,
                         )
                     }
-                    item {
-                        WeeklyGoalCard(
-                            weekReadingMs = ready.weekReadingMs,
-                            weeklyGoalMinutes = ready.weeklyGoalMinutes,
-                            onClick = { showGoalDialog = true },
-                        )
+                    ready.weekReadingMs?.let { weekReadingMs ->
+                        item {
+                            WeeklyGoalCard(
+                                weekReadingMs = weekReadingMs,
+                                weeklyGoalMinutes = ready.weeklyGoalMinutes,
+                                onClick = { showGoalDialog = true },
+                            )
+                        }
                     }
                 } else {
                     item {
@@ -290,27 +299,27 @@ fun ReadingStatsScreen(
                         )
                     }
                     item {
-                        ActivitySection(stats = stats, range = ready.range)
+                        ActivitySection(days = stats.recent, range = ready.range)
                     }
                     item {
-                        ReadingRhythmCard(stats = stats, range = ready.range)
-                    }
-                    item {
-                        WeeklyGoalCard(
-                            weekReadingMs = ready.weekReadingMs,
-                            weeklyGoalMinutes = ready.weeklyGoalMinutes,
-                            onClick = { showGoalDialog = true },
+                        ReadingRhythmCard(
+                            stats = stats,
+                            headline = ready.headline,
+                            range = ready.range,
                         )
+                    }
+                    ready.weekReadingMs?.let { weekReadingMs ->
+                        item {
+                            WeeklyGoalCard(
+                                weekReadingMs = weekReadingMs,
+                                weeklyGoalMinutes = ready.weeklyGoalMinutes,
+                                onClick = { showGoalDialog = true },
+                            )
+                        }
                     }
                     if (ready.range != StatsRange.THIS_WEEK) {
                         item {
-                            StatsSectionHeader(stringResource(R.string.reading_stats_calendar))
-                            StatsCard {
-                                ReadingHeatmap(
-                                    stats.recent,
-                                    Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
-                                )
-                            }
+                            CalendarSection(days = stats.recent)
                         }
                     }
                     if (stats.books.isNotEmpty()) {
@@ -395,15 +404,41 @@ private const val EMPTY_HEIGHT_SHARE = 0.75f
 /**
  * The span the figures cover, as four equal-width pill buttons across the top.
  *
- * Falls back to a wrapping row at large font scales so long translations
- * never clip.
+ * Falls back to a wrapping row of chips when some label would not fit its
+ * share of the width in two lines without breaking a word, so long
+ * translations never break mid-word or clip.
  */
 @Composable
 private fun RangeChips(selected: StatsRange, onSelect: (StatsRange) -> Unit) {
+    val labels = StatsRange.entries.map { stringResource(it.chipLabel) }
+    val style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints {
+        val count = StatsRange.entries.size
+        val slot = (maxWidth - 8.dp * (count - 1)) / count - RANGE_CHIP_CHROME
+        val slotPx = with(density) { slot.roundToPx() }.coerceAtLeast(0)
+        val fits = labels.all { label ->
+            label.split(' ').all { word ->
+                with(density) {
+                    textMeasurer.measure(word, style, maxLines = 1, softWrap = false).size.width.toDp()
+                } <= slot
+            } && !textMeasurer.measure(
+                label, style, maxLines = 2, constraints = Constraints(maxWidth = slotPx),
+            ).hasVisualOverflow
+        }
+        RangeChipRow(selected, onSelect, segmented = fits)
+    }
+}
+
+/** A range chip's width besides its label: horizontal padding and border. */
+private val RANGE_CHIP_CHROME = 6.dp * 2 + 2.dp
+
+@Composable
+private fun RangeChipRow(selected: StatsRange, onSelect: (StatsRange) -> Unit, segmented: Boolean) {
     val palette = homePalette()
     val eInk = LocalEInk.current
-    val largeFont = LocalDensity.current.fontScale > 1.3f
-    if (largeFont) {
+    if (!segmented) {
         FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -723,36 +758,71 @@ private fun OverviewSection(
         ),
         Triple(Icons.Outlined.Speed, paceLabel, paceValue),
     )
-    // Two tiles side by side leave too little room for a figure at a
-    // large font scale, so they stack instead of cutting it short.
-    val perRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2
-
     StatsSectionHeader(stringResource(R.string.reading_stats_overview))
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        tiles.chunked(perRow).forEach { row ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Max),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                row.forEach { (icon, label, value) ->
-                    OverviewTile(
-                        icon = icon,
-                        label = label,
-                        value = value,
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
-                    )
+    OverviewGrid(tiles)
+}
+
+@Composable
+internal fun OverviewGrid(tiles: List<Triple<ImageVector, String, String>>) {
+    val labelStyle = MaterialTheme.typography.labelMedium
+    val valueStyle = overviewValueStyle()
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+
+    BoxWithConstraints {
+        // Tiles go two to a row only when every figure fits half the width
+        // on one line and every label fits it in two lines without breaking
+        // a word; otherwise they stack rather than cut text short.
+        val halfText = (maxWidth - 10.dp) / 2 - TILE_CHROME
+        fun width(text: String, style: ComposeTextStyle) = with(density) {
+            textMeasurer.measure(text, style, maxLines = 1, softWrap = false).size.width.toDp()
+        }
+        val halfPx = with(density) { halfText.roundToPx() }.coerceAtLeast(0)
+        val fitsTwo = tiles.all { (_, label, value) ->
+            width(value, valueStyle) <= halfText &&
+                label.split(' ').all { width(it, labelStyle) <= halfText } &&
+                !textMeasurer.measure(
+                    label, labelStyle, maxLines = 2,
+                    constraints = Constraints(maxWidth = halfPx),
+                ).hasVisualOverflow
+        }
+        val perRow = if (fitsTwo) 2 else 1
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            tiles.chunked(perRow).forEach { row ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    row.forEach { (icon, label, value) ->
+                        OverviewTile(
+                            icon = icon,
+                            label = label,
+                            value = value,
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/** A tile's width besides its text: padding, badge, the gap after it and the border. */
+private val TILE_CHROME = 14.dp * 2 + 38.dp + 12.dp + 2.dp
+
 @Composable
-private fun OverviewTile(
+private fun overviewValueStyle() = MaterialTheme.typography.titleLarge.copy(
+    fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+    fontWeight = FontWeight.Bold,
+    fontFeatureSettings = TABULAR,
+)
+
+@Composable
+internal fun OverviewTile(
     icon: ImageVector,
     label: String,
     value: String,
@@ -799,11 +869,7 @@ private fun OverviewTile(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
-                        fontWeight = FontWeight.Bold,
-                        fontFeatureSettings = TABULAR,
-                    ),
+                    style = overviewValueStyle(),
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -817,12 +883,30 @@ private fun OverviewTile(
  * The activity bar chart inside its own card with a header and Y-axis scale.
  */
 @Composable
-private fun ActivitySection(stats: ReadingStats, range: StatsRange) {
+internal fun ActivitySection(days: List<ReadingDay>, range: StatsRange) {
+    val locale = LocalLocale.current.platformLocale
     val periods = readingPeriods(
-        days = stats.recent,
+        days = days,
         range = range,
-        weekStart = localeWeekStart(LocalLocale.current.platformLocale),
+        weekStart = localeWeekStart(locale),
     )
+    var selectedIndex by remember(periods, range) { mutableStateOf<Int?>(null) }
+    val selectedPeriod = selectedIndex?.let { periods.getOrNull(it) }
+    val dateFormat = lastReadFormat()
+    val subtitle = if (selectedPeriod != null) {
+        val spokenPeriod = selectedPeriod.spokenLabel(range.chartPeriod, locale, dateFormat)
+        if (selectedPeriod.totalMs > 0) {
+            stringResource(
+                R.string.reading_stats_period_read,
+                readingDuration(selectedPeriod.totalMs),
+                spokenPeriod,
+            )
+        } else {
+            stringResource(R.string.reading_stats_no_reading_period, spokenPeriod)
+        }
+    } else {
+        stringResource(range.chartSubtitleRes)
+    }
     Spacer(Modifier.height(14.dp))
     StatsCard {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp)) {
@@ -837,12 +921,24 @@ private fun ActivitySection(stats: ReadingStats, range: StatsRange) {
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = stringResource(range.chartSubtitleRes),
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (selectedPeriod != null) {
+                    homePalette()?.progress ?: MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
             Spacer(Modifier.height(18.dp))
-            PeriodBars(periods, range.chartPeriod)
+            PeriodBars(
+                periods = periods,
+                unit = range.chartPeriod,
+                today = days.lastOrNull()?.date,
+                selectedIndex = selectedIndex,
+                onSelectIndex = { index ->
+                    selectedIndex = if (selectedIndex == index) null else index
+                },
+            )
         }
     }
 }
@@ -874,17 +970,24 @@ internal fun chartAxisStepLabel(minutes: Int): String {
  * A range of reading summarised in calendar-sized bars with a Y-axis scale.
  */
 @Composable
-private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
+private fun PeriodBars(
+    periods: List<ReadingPeriod>,
+    unit: StatsChartPeriod,
+    today: LocalDate? = null,
+    selectedIndex: Int? = null,
+    onSelectIndex: ((Int) -> Unit)? = null,
+) {
     val busiest = periods.maxOfOrNull { it.totalMs }?.coerceAtLeast(1L) ?: 1L
     val axisMaxMinutes = chartAxisMaxMinutes(busiest)
     val axisMaxMs = axisMaxMinutes * 60_000L
     val locale = LocalLocale.current.platformLocale
-    val lastIndex = periods.lastIndex
+    val currentIndex = periods.indexOfLast { today != null && !it.from.isAfter(today) }
+        .takeIf { it >= 0 } ?: periods.lastIndex
     val showAmounts = periods.size <= DAYS_IN_WEEK
     val eInk = LocalEInk.current
     val palette = homePalette()
     val gap = when {
-        periods.size <= DAYS_IN_WEEK -> 8.dp
+        periods.size <= DAYS_IN_WEEK -> 5.dp
         periods.size <= DAYS_IN_WEEK * 2 -> 5.dp
         periods.size <= DAYS_IN_WEEK * 3 -> 3.dp
         else -> 2.dp
@@ -903,22 +1006,33 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
     val density = LocalDensity.current
     // Vertical space follows the text size too, so large fonts grow the chart
     // instead of pushing the day labels below the zero line.
-    fun lineHeight(style: androidx.compose.ui.text.TextStyle) =
+    fun lineHeight(style: ComposeTextStyle) =
         with(density) { textMeasurer.measure("0h", style, maxLines = 1).size.height.toDp() }
     val axisLabelHalf = lineHeight(axisStyle) / 2
     val plotHeight = maxOf(136.dp, axisLabelHalf * 2 * 5)
     val labelAreaHeight = maxOf(26.dp, lineHeight(MaterialTheme.typography.labelSmall) + 8.dp)
     val calloutHeadroom = maxOf(
         axisLabelHalf,
-        if (showAmounts) lineHeight(calloutStyle) + CALLOUT_CHROME else 6.dp,
+        if (showAmounts || selectedIndex != null) lineHeight(calloutStyle) + CALLOUT_CHROME else 6.dp,
     )
-    val slotWidth = if (showAmounts) {
-        val widest = periods.mapNotNull { compactDuration(it.totalMs) }.maxOfOrNull {
+    // The date under each bar must fit its slot too; bold is the widest weight.
+    val dateStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+    val widestDate = periods.maxOfOrNull {
+        textMeasurer.measure(it.shortLabel(unit, locale), dateStyle, maxLines = 1, softWrap = false).size.width
+    } ?: 0
+    val widestCallout = if (showAmounts) {
+        periods.mapNotNull { compactDuration(it.totalMs) }.maxOfOrNull {
             textMeasurer.measure(it, calloutStyle, maxLines = 1, softWrap = false).size.width
-        } ?: 0
-        maxOf(MIN_BAR_SLOT, with(density) { widest.toDp() } + CalloutPadding * 2 + 2.dp)
+        }
     } else {
-        MIN_BAR_SLOT
+        null
+    }
+    val slotWidth = with(density) {
+        maxOf(
+            MIN_BAR_SLOT,
+            widestDate.toDp() + 4.dp,
+            widestCallout?.let { it.toDp() + CalloutPadding * 2 + 2.dp } ?: 0.dp,
+        )
     }
 
     val gridLineColor = (palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant)
@@ -966,8 +1080,14 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
                 .height(calloutHeadroom + plotHeight + labelAreaHeight),
         ) {
             val scrollable = slotWidth * periods.size + gap * (periods.size - 1) > maxWidth
-            LaunchedEffect(periods, scrollable, scrollState.maxValue) {
-                if (scrollable) scrollState.scrollTo(scrollState.maxValue)
+            LaunchedEffect(periods, scrollable, scrollState.maxValue, currentIndex, maxWidth) {
+                if (scrollable) {
+                    val target = currentIndex.takeIf { it >= 0 }?.let { index ->
+                        with(density) { (slotWidth * (index + 1) + gap * index - maxWidth).roundToPx() }
+                            .coerceAtLeast(0)
+                    } ?: scrollState.maxValue
+                    scrollState.scrollTo(target.coerceAtMost(scrollState.maxValue))
+                }
             }
             // Horizontal guide lines aligned with the 5 Y-axis steps
             Column(
@@ -995,7 +1115,9 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
                 verticalAlignment = Alignment.Bottom,
             ) {
                 periods.forEachIndexed { index, period ->
-                    val isCurrent = index == lastIndex
+                    val isCurrent = index == currentIndex
+                    val isSelected = index == selectedIndex
+                    val isHighlighted = if (selectedIndex != null) isSelected else isCurrent
                     val amount = readingDuration(period.totalMs)
                     val label = period.shortLabel(unit, locale)
                     val spokenPeriod = period.spokenLabel(unit, locale, dateFormat)
@@ -1022,15 +1144,25 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
                         modifier = Modifier
                             .then(if (scrollable) Modifier.width(slotWidth) else Modifier.weight(1f))
                             .fillMaxHeight()
-                            .clearAndSetSemantics { contentDescription = spoken },
+                            .then(
+                                if (onSelectIndex != null) {
+                                    Modifier.clickable(role = Role.Button) { onSelectIndex(index) }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clearAndSetSemantics {
+                                contentDescription = spoken
+                                if (onSelectIndex != null) selected = isSelected
+                            },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Bottom,
                     ) {
-                        val compact = compactDuration(period.totalMs)
-                        if (showAmounts && compact != null) {
+                        val compact = compactDuration(period.totalMs) ?: if (isSelected) "0m" else null
+                        if ((showAmounts || isSelected) && compact != null) {
                             BarCalloutPill(
                                 text = compact,
-                                highlighted = isCurrent,
+                                highlighted = isHighlighted,
                             )
                             Spacer(Modifier.height(3.dp))
                         }
@@ -1044,14 +1176,18 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
                                     when {
                                         period.totalMs <= 0 -> Modifier.background(gridLineColor)
                                         eInk -> Modifier.background(
-                                            if (isCurrent) {
+                                            if (isHighlighted) {
                                                 MaterialTheme.colorScheme.primary
                                             } else {
                                                 MaterialTheme.colorScheme.outlineVariant
                                             },
                                         )
                                         else -> {
-                                            val alpha = if (isCurrent) 1f else 0.82f
+                                            val alpha = when {
+                                                isHighlighted -> 1f
+                                                selectedIndex != null -> 0.45f
+                                                else -> 0.82f
+                                            }
                                             Modifier.background(
                                                 Brush.verticalGradient(
                                                     listOf(
@@ -1071,9 +1207,9 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
                             Text(
                                 text = label,
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                    fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.Medium,
                                 ),
-                                color = if (isCurrent) {
+                                color = if (isHighlighted) {
                                     MaterialTheme.colorScheme.onSurface
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -1091,8 +1227,8 @@ private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
 }
 
 /** The narrowest a bar's slot gets, and the callout's side padding. */
-private val MIN_BAR_SLOT = 40.dp
-private val CalloutPadding = 6.dp
+private val MIN_BAR_SLOT = 34.dp
+private val CalloutPadding = 4.dp
 
 /** Callout height besides its text: padding, border, pointer and gap above the bar. */
 private val CALLOUT_CHROME = 2.dp * 2 + 1.dp * 2 + 4.dp + 3.dp + 2.dp
@@ -1161,11 +1297,13 @@ internal fun readingRhythmTitleRes(activeDays: Int, totalDays: Int): Int {
 }
 
 /**
- * Reading rhythm card summarizing how many days in the current window had reading.
+ * Reading rhythm card summarizing how many days in the current window had reading,
+ * plus average sitting length and peak day.
  */
 @Composable
 private fun ReadingRhythmCard(
     stats: ReadingStats,
+    headline: StatsHeadline,
     range: StatsRange,
 ) {
     val palette = homePalette()
@@ -1178,67 +1316,137 @@ private fun ReadingRhythmCard(
     } else {
         pluralStringResource(R.plurals.reading_stats_rhythm_detail_period, activeDays, activeDays, totalDays)
     }
+    val avgSittingMs = if (headline.sessions > 0 && headline.totalMs > 0) {
+        headline.totalMs / headline.sessions
+    } else {
+        null
+    }
+    val peakDay = stats.recent.filter { it.totalMs > 0 }.maxByOrNull { it.totalMs }
+    val locale = LocalLocale.current.platformLocale
+    val dateFormat = lastReadFormat()
 
     Spacer(Modifier.height(14.dp))
     StatsCard {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(CircleShape)
-                    .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer)
-                    .border(
-                        1.dp,
-                        (palette?.progress ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.35f),
-                        CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarMonth,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(26.dp),
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .clip(CircleShape)
+                        .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer)
+                        .border(
+                            1.dp,
+                            (palette?.progress ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.35f),
+                            CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(48.dp)
+                        .background(palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant),
                 )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.reading_stats_rhythm_eyebrow).uppercase(),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.2.sp,
+                        ),
+                        color = accent,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(titleRes),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(48.dp)
-                    .background(palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant),
-            )
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.reading_stats_rhythm_eyebrow).uppercase(),
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.2.sp,
-                    ),
-                    color = accent,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = stringResource(titleRes),
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (avgSittingMs != null || peakDay != null) {
+                Spacer(Modifier.height(12.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    avgSittingMs?.let { ms ->
+                        HeroPill(
+                            icon = Icons.Outlined.Schedule,
+                            label = stringResource(
+                                R.string.reading_stats_joined,
+                                stringResource(R.string.reading_stats_avg_sitting),
+                                readingDuration(ms),
+                            ),
+                        )
+                    }
+                    peakDay?.let { day ->
+                        val dayLabel = if (range == StatsRange.THIS_WEEK) {
+                            day.date.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
+                        } else {
+                            day.date.format(dateFormat)
+                        }
+                        HeroPill(
+                            icon = Icons.Outlined.WbSunny,
+                            label = stringResource(
+                                R.string.reading_stats_joined,
+                                dayLabel,
+                                readingDuration(day.totalMs),
+                            ),
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun CalendarSection(days: List<ReadingDay>) {
+    var selectedDay by remember(days) { mutableStateOf<ReadingDay?>(null) }
+    val dateFormat = lastReadFormat()
+    val trailing = selectedDay?.let { day ->
+        val date = day.date.format(dateFormat)
+        if (day.totalMs > 0) {
+            stringResource(R.string.reading_stats_heatmap_day, readingDuration(day.totalMs), date)
+        } else {
+            stringResource(R.string.reading_stats_heatmap_empty_day, date)
+        }
+    }
+    StatsSectionHeader(
+        title = stringResource(R.string.reading_stats_calendar),
+        trailing = trailing,
+    )
+    StatsCard {
+        ReadingHeatmap(
+            days = days,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
+            onSelectDay = { selectedDay = it },
+        )
     }
 }
 
@@ -1255,9 +1463,8 @@ private fun WeeklyGoalCard(
     val eInk = LocalEInk.current
     val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
     val weeklyReadMs = weekReadingMs
-    val safeGoalMinutes = weeklyGoalMinutes.coerceAtLeast(30)
-    val goalMs = safeGoalMinutes * 60_000L
-    val goalHours = (safeGoalMinutes / 60).coerceAtLeast(1)
+    val goalMs = weeklyGoalMinutes * 60_000L
+    val goalHours = weeklyGoalMinutes / 60
     val progress = (weeklyReadMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
     val currentText = if (weeklyReadMs <= 0L) {
         "0m"
@@ -1265,21 +1472,24 @@ private fun WeeklyGoalCard(
         readingDuration(weeklyReadMs)
     }
     val goalText = compactDuration(goalMs) ?: "${goalHours}h"
-    // With large text the figure moves under the subtitle so the title keeps its width.
-    val stackProgress = LocalDensity.current.fontScale > 1.3f
+    val title = stringResource(R.string.reading_stats_weekly_goal_title)
+    val titleStyle = MaterialTheme.typography.titleMedium.copy(
+        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+        fontWeight = FontWeight.Bold,
+    )
+    val progressLabel = stringResource(
+        R.string.reading_stats_weekly_goal_progress,
+        currentText,
+        goalText,
+    )
+    val progressStyle = MaterialTheme.typography.titleSmall.copy(
+        fontWeight = FontWeight.SemiBold,
+        fontFeatureSettings = TABULAR,
+    )
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     val progressText = @Composable {
-        Text(
-            text = stringResource(
-                R.string.reading_stats_weekly_goal_progress,
-                currentText,
-                goalText,
-            ),
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontWeight = FontWeight.SemiBold,
-                fontFeatureSettings = TABULAR,
-            ),
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Text(text = progressLabel, style = progressStyle, color = MaterialTheme.colorScheme.onSurface)
     }
 
     Spacer(Modifier.height(14.dp))
@@ -1288,81 +1498,88 @@ private fun WeeklyGoalCard(
             .clip(RoundedCornerShape(StatsCardCorner))
             .clickable(role = Role.Button, onClick = onClick),
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.TrackChanges,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.reading_stats_weekly_goal_title),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.reading_stats_weekly_goal_subtitle,
-                            goalHours,
-                            goalHours,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    if (stackProgress) progressText()
-                }
-                if (!stackProgress) progressText()
+            // The figure sits beside the title only when both fit on one line;
+            // otherwise it moves under the subtitle so the title keeps its width.
+            val stackProgress = with(density) {
+                val measured =
+                    textMeasurer.measure(title, titleStyle, maxLines = 1, softWrap = false).size.width +
+                        textMeasurer.measure(progressLabel, progressStyle, maxLines = 1, softWrap = false).size.width
+                measured.toDp() > maxWidth - 40.dp - 12.dp * 2
             }
-            Spacer(Modifier.height(14.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(palette?.pill ?: MaterialTheme.colorScheme.surfaceContainerHighest),
-            ) {
-                if (progress > 0f) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth(progress)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(50))
-                            .then(
-                                if (eInk) {
-                                    Modifier.background(MaterialTheme.colorScheme.primary)
-                                } else {
-                                    Modifier.background(
-                                        Brush.horizontalGradient(
-                                            listOf(
-                                                palette?.accent ?: MaterialTheme.colorScheme.primary,
-                                                accent,
-                                            ),
-                                        ),
-                                    )
-                                },
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.TrackChanges,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            style = titleStyle,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.reading_stats_weekly_goal_subtitle,
+                                goalHours,
+                                goalHours,
                             ),
-                    )
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (stackProgress) progressText()
+                    }
+                    if (!stackProgress) progressText()
+                }
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(palette?.pill ?: MaterialTheme.colorScheme.surfaceContainerHighest),
+                ) {
+                    if (progress > 0f) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(50))
+                                .then(
+                                    if (eInk) {
+                                        Modifier.background(MaterialTheme.colorScheme.primary)
+                                    } else {
+                                        Modifier.background(
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    palette?.accent ?: MaterialTheme.colorScheme.primary,
+                                                    accent,
+                                                ),
+                                            ),
+                                        )
+                                    },
+                                ),
+                        )
+                    }
                 }
             }
         }
@@ -1564,6 +1781,33 @@ private fun BookStatRow(
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                    val progressFraction = when {
+                        book.finished -> 1f
+                        book.progression != null -> book.progression.toFloat().coerceIn(0f, 1f)
+                        else -> null
+                    }
+                    if (progressFraction != null && progressFraction > 0f) {
+                        Spacer(Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(0.75f)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(50))
+                                .background(
+                                    palette?.pill ?: MaterialTheme.colorScheme.surfaceContainerHighest,
+                                ),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progressFraction)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(50))
+                                    .background(
+                                        palette?.progress ?: MaterialTheme.colorScheme.primary,
+                                    ),
+                            )
+                        }
                     }
                     if (!book.isLocal) {
                         // Why this row has nothing to open. Said plainly

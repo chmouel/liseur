@@ -1131,6 +1131,7 @@
         <item quantity="other">阅读 %d 小时</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">每周阅读目标</string>
+    <string name="reading_stats_avg_sitting">平均每次</string>
     <string name="duration_minutes">%1$d 分钟</string>
     <string name="duration_hours">%1$d 小时</string>
     <string name="duration_hours_minutes">%1$d 小时 %2$d 分钟</string>

@@ -20,6 +20,7 @@ import com.chmouel.liseur.data.liseursync.CompleteStatsSnapshot
 import com.chmouel.liseur.data.liseursync.RemoteStatsRefresh
 import com.chmouel.liseur.data.liseursync.WorkInsights
 import com.chmouel.liseur.data.liseursync.WorkTotals
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonSpans
@@ -33,9 +34,12 @@ import com.chmouel.liseur.domain.SessionSpan
 import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.compareReading
+import com.chmouel.liseur.domain.dailySeries
+import com.chmouel.liseur.domain.day
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
+import com.chmouel.liseur.domain.progressionPerHour
 import com.chmouel.liseur.domain.readingStats
 import com.chmouel.liseur.domain.readingStatusFor
 import com.chmouel.liseur.domain.readingTotals
@@ -85,8 +89,12 @@ sealed interface ReadingStatsUiState {
         val today: LocalDate = stats.recent.lastOrNull()?.date ?: LocalDate.now(),
         val snapshotId: String? = null,
         val weeklyGoalMinutes: Int = 180,
-        /** This calendar week's reading time, whichever span is shown. */
-        val weekReadingMs: Long = 0L,
+        /**
+         * This calendar week's reading time, whichever span is shown, or
+         * null when every device was asked about the span but the week's
+         * own answer, needed for days before the span began, is missing.
+         */
+        val weekReadingMs: Long? = 0L,
     ) : ReadingStatsUiState
 }
 
@@ -131,7 +139,11 @@ sealed interface BookReadingStatsUiState {
     data object Loading : BookReadingStatsUiState
     data object Empty : BookReadingStatsUiState
     data object Unavailable : BookReadingStatsUiState
-    data class Ready(val stats: BookReadingStats) : BookReadingStatsUiState
+    data class Ready(
+        val stats: BookReadingStats,
+        val recent: List<ReadingDay> = emptyList(),
+        val progressionPerHour: Double? = null,
+    ) : BookReadingStatsUiState
 }
 
 /**
@@ -258,7 +270,14 @@ class ReadingStatsViewModel(
     }
 
     /** A server answer, and the question it was the answer to. */
-    private data class Answered<T>(val window: StatsWindow, val value: T)
+    /**
+     * [week] is this calendar week across every device, asked for
+     * separately when the span on screen began after the week did: the
+     * span's own answer cannot carry those earlier days, since its
+     * calendar must add up to its total. It travels with [value] so the
+     * two are never shown from different refreshes.
+     */
+    private data class Answered<T>(val window: StatsWindow, val value: T, val week: T? = null)
 
     private fun <T> Answered<T>?.forWindow(window: StatsWindow): T? =
         this?.takeIf { it.window.asked() == window.asked() }?.value
@@ -283,6 +302,7 @@ class ReadingStatsViewModel(
 
     /** Which refresh the answers now arriving are allowed to be from. */
     private var generation = 0L
+
     private var refresh: Job? = null
 
     private val _snapshot = MutableStateFlow<Answered<CompleteStatsSnapshot>?>(null)
@@ -311,7 +331,7 @@ class ReadingStatsViewModel(
     }
 
     fun setWeeklyGoalMinutes(minutes: Int) {
-        val clamped = minutes.coerceIn(15, 7 * 24 * 60)
+        val clamped = AppSettings.weeklyGoalMinutes(minutes)
         _weeklyGoalMinutes.value = clamped
         viewModelScope.launch { settings?.setWeeklyGoalMinutes(clamped) }
     }
@@ -411,6 +431,21 @@ class ReadingStatsViewModel(
                 }
                 if (token != generation || _window.value.asked() != window.asked()) return@launch
                 if (source.isCurrent(result) && now(result.zone).toLocalDate() == result.today) {
+                    val week = if (needsOwnWeek(window.range, result.today, window.weekStart)) {
+                        source.read(
+                            context, sessions, StatsRange.THIS_WEEK, result.today, window.weekStart,
+                            compare = false, requireCurrent = false,
+                        )?.takeIf { it.revision == result.revision && source.isCurrent(it) }
+                    } else {
+                        null
+                    }
+                    if (token != generation || _window.value.asked() != window.asked()) return@launch
+                    if (resampleClock() || now(result.zone).toLocalDate() != result.today) {
+                        refreshServerInsights()
+                        return@launch
+                    }
+                    if (token != generation || _window.value.asked() != window.asked()) return@launch
+                    if (!source.isCurrent(result)) return@repeat
                     val publish = if (result.totals.comparison != null &&
                         !source.isComparisonCurrent(result)
                     ) {
@@ -418,7 +453,8 @@ class ReadingStatsViewModel(
                     } else {
                         result
                     }
-                    _snapshot.value = Answered(window, publish)
+                    if (token != generation || _window.value.asked() != window.asked()) return@launch
+                    _snapshot.value = Answered(window, publish, week)
                     remoteStats?.accept(publish, window.range, window.weekStart)
                     return@launch
                 }
@@ -650,6 +686,26 @@ class ReadingStatsViewModel(
             progressionPerHour = local.stats.progressionPerHour,
             comparison = comparison,
         )
+        val week = answer?.week?.takeIf {
+            snapshot != null && it.today == snapshot.today && it.context == snapshot.context
+        }
+        val weekUnited = week?.let {
+            val inAccountZone = readingStats(
+                sessionSpans(it.captured.sessions), local.books, it.zone, it.today,
+                StatsRange.THIS_WEEK, window.weekStart,
+            )
+            uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone)
+        }
+        val weekReadingMs = when {
+            united == null || snapshot == null -> local.weekMs
+            weekUnited != null -> weekUnited.headline.totalMs
+            // Only this device could fill the days before the span, and a
+            // partial figure would pass for every device's week.
+            needsOwnWeek(window.range, snapshot.today, window.weekStart) -> null
+            else -> StatsRange.THIS_WEEK.startDate(snapshot.today, window.weekStart)?.let { start ->
+                united.stats.recent.filter { it.date in start..snapshot.today }.sumOf { it.totalMs }
+            } ?: 0L
+        }
         ReadingStatsUiState.Ready(
             stats = united?.stats ?: local.stats,
             headline = headline,
@@ -658,9 +714,7 @@ class ReadingStatsViewModel(
             today = if (united != null) snapshot?.today ?: window.today else window.today,
             snapshotId = if (united != null) snapshot?.snapshotId else null,
             weeklyGoalMinutes = weeklyGoalMinutes,
-            // On the week span the headline may already count every
-            // device; other spans only hold this device's week.
-            weekReadingMs = if (window.range == StatsRange.THIS_WEEK) headline.totalMs else local.weekMs,
+            weekReadingMs = weekReadingMs,
         )
     }.flowOn(Dispatchers.Default).stateIn(
         viewModelScope,
@@ -673,14 +727,36 @@ class ReadingStatsViewModel(
      * that the two can never disagree about the same book.
      */
     fun forBook(bookUrl: String): StateFlow<BookReadingStatsUiState> =
-        state.map { current ->
+        combine(state, local) { current, localStats ->
             when (current) {
                 ReadingStatsUiState.Loading -> BookReadingStatsUiState.Loading
                 is ReadingStatsUiState.Unavailable -> BookReadingStatsUiState.Unavailable
-                is ReadingStatsUiState.Ready -> current.stats.books
-                    .firstOrNull { it.bookUrl == bookUrl }
-                    ?.let(BookReadingStatsUiState::Ready)
-                    ?: BookReadingStatsUiState.Empty
+                is ReadingStatsUiState.Ready -> {
+                    val row = current.stats.books.firstOrNull { it.bookUrl == bookUrl }
+                        ?: return@combine BookReadingStatsUiState.Empty
+                    if (current.provenance == StatsProvenance.THIS_DEVICE) {
+                        val window = localStats.window
+                        val start = window.range.startDate(window.today, window.weekStart)
+                        val bookSpans = localStats.sessionSpans.filter { span ->
+                            if (span.bookUrl != bookUrl || span.durationMs <= 0) return@filter false
+                            val d = span.day(window.zone)
+                            !d.isAfter(window.today) && (start == null || !d.isBefore(start))
+                        }
+                        BookReadingStatsUiState.Ready(
+                            stats = row,
+                            recent = dailySeries(
+                                bookSpans,
+                                window.zone,
+                                window.today,
+                                window.range,
+                                window.weekStart,
+                            ),
+                            progressionPerHour = progressionPerHour(bookSpans),
+                        )
+                    } else {
+                        BookReadingStatsUiState.Ready(stats = row)
+                    }
+                }
             }
         }.stateIn(
             viewModelScope,
@@ -961,6 +1037,13 @@ data class StatsAccount(val identity: LiveIdentity?, val serverOnly: Boolean) {
                 server.credentials != null && server.canReadInsights,
         )
     }
+}
+
+/** Whether [range] began after this calendar week did, so misses some of it. */
+internal fun needsOwnWeek(range: StatsRange, today: LocalDate, weekStart: DayOfWeek): Boolean {
+    val start = range.startDate(today, weekStart) ?: return false
+    val week = StatsRange.THIS_WEEK.startDate(today, weekStart) ?: return false
+    return start > week
 }
 
 private fun sessionSpans(sessions: List<ReadingSession>): List<SessionSpan> = sessions.map {
