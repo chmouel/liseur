@@ -36,7 +36,7 @@ data class MemorableLine(
  */
 object MemorableLines {
     /** Bump when the scoring changes, so books scanned before are scanned again. */
-    const val VERSION = 2
+    const val VERSION = 3
 
     const val KEEP = 30
 
@@ -61,22 +61,37 @@ object MemorableLines {
         split.forEachIndexed { index, sentences ->
             val paragraph = paragraphs[index]
             sentences.forEachIndexed { at, range ->
-                val text = paragraph.text.substring(range.first, range.last + 1)
-                if (!acceptable(text)) return@forEachIndexed
-                val place = Place(
-                    alone = sentences.size == 1,
-                    last = at == sentences.lastIndex,
-                    first = at == 0,
-                    chapterEdge = paragraph.chapterEdge,
-                )
-                val score = score(text, lang, words, place, rarity, locale, wordIterator)
-                lines += MemorableLine(index, range.first, range.last + 1, text, score)
+                val next = sentences.getOrNull(at + 1)
+                val connected = next != null && next.last - range.first + 1 <= SWEET_SPOT.last &&
+                    startsWithTurn(paragraph.text.substring(next), words, locale)
+                val ends = if (next != null && connected) listOf(range.last, next.last) else listOf(range.last)
+                for (end in ends) {
+                    val text = paragraph.text.substring(range.first, end + 1)
+                    if (!acceptable(text)) continue
+                    val place = Place(
+                        alone = range.first == sentences.first().first && end == sentences.last().last,
+                        last = end == sentences.last().last,
+                        first = at == 0,
+                        chapterEdge = paragraph.chapterEdge,
+                    )
+                    val score = score(text, lang, words, place, rarity, locale, wordIterator)
+                    if (score >= MIN_QUALITY) {
+                        lines += MemorableLine(index, range.first, end + 1, text, score)
+                    }
+                }
             }
         }
         return best(lines, keep, locale)
     }
 
-    internal data class Place(
+    private fun startsWithTurn(text: String, words: Lexicon, locale: Locale): Boolean {
+        val lower = text.lowercase(locale)
+        if (locale.language == "zh") return CHINESE_CONTINUATION.any(lower::startsWith)
+        val tokens = WORD.findAll(lower).map { it.value }.toList()
+        return words.turns.any { tokens.take(it.size) == it }
+    }
+
+    private data class Place(
         val alone: Boolean = false,
         val last: Boolean = false,
         val first: Boolean = false,
@@ -104,10 +119,11 @@ object MemorableLines {
         }
         if (place.chapterEdge) score += 0.5
 
-        if (text.length in SWEET_SPOT) score += 0.5 else if (text.length > LONG) score -= 0.3
+        val sweetSpot = if (isCjk(text)) CJK_SWEET_SPOT else SWEET_SPOT
+        if (text.length in sweetSpot) score += 0.5 else if (text.length > LONG) score -= 0.3
 
         // Generality: words that speak about everyone, in the present.
-        score += min(lower.count { it in words.general } * 0.5, 1.5)
+        score += min(words.general.count { it in lower } * 0.5, 1.5)
         score += min(lower.count { it in words.present } * 0.3, 0.6)
         score -= min(lower.count { it in words.past } * 0.35, 1.0)
         if (lower.firstOrNull() in words.pointing) score -= 1.5
@@ -162,7 +178,7 @@ object MemorableLines {
     private fun balanced(text: String): Boolean =
         text.count { it == '(' } == text.count { it == ')' } &&
             text.count { it == '[' } == text.count { it == ']' } &&
-            text.count { it == '“' } == text.count { it == '”' } &&
+            text.count { it == '“' } == text.count { it == '”' || it == '„' } &&
             text.count { it == '«' } == text.count { it == '»' } &&
             text.count { it == '"' } % 2 == 0
 
@@ -243,19 +259,22 @@ object MemorableLines {
 
     private val LENGTH = 40..240
     private val CJK_LENGTH = 15..90
+    private val CJK_SWEET_SPOT = 20..55
+    private const val MIN_QUALITY = 2.1
     private val SWEET_SPOT = 60..160
     private const val LONG = 200
     private const val MIN_WORDS = 6
     private const val MIN_CONTENT_WORD = 4
     private const val DUPLICATE_PREFIX = 60
     private val ENDINGS = setOf('.', '!', '?', '…', '。', '！', '？')
-    private val CLOSERS = charArrayOf('"', '”', '’', '»', ')', '」', '』', ' ', '\u00A0')
+    private val CLOSERS = charArrayOf('"', '”', '’', '»', ')', '“', '」', '』', ' ', '\u00A0')
     private val OPENERS = charArrayOf('"', '“', '‘', '«', '¿', '¡', '„', '(', ' ', '\u00A0')
     private val WORD = Regex("\\p{L}[\\p{L}\\p{M}'’-]*")
+    private val CHINESE_CONTINUATION = listOf("但是", "然而", "可是", "反而", "而是")
     private val CHINESE_REFERENCE = Regex("^[「『“]?(?:他|她|他们|她们|那时|这时|于是|随后)|(?:对他说|对她说|接着说道)")
-    private val CHINESE_TURN = Regex("不但.+而且|不是.+而是|与其.+不如|越.+[，,].*越|[，,；;](?:却|但|反而)")
+    private val CHINESE_TURN = Regex("不但.+而且|不是.+而是|与其.+不如|越.+[，,].*越|[，,；;](?:却|但|反而)|；.+；")
     private val MIDDLE_TURN = Regex("\\S[;:]\\s+\\S")
-    private val DIALOGUE = Regex("^\\s*[—–-]|[\"“”«»„]|^\\s*[‘']")
+    private val DIALOGUE = Regex("^\\s*[-—–\"“«„‘'「『]")
     private val JUNK = Regex(
         "https?:|www\\.|@|©|ISBN|\\d{4,}|[|•_*#<>{}=]|\\.{4,}" +
             "|^\\s*(chapter|chapitre|kapitel|capítulo|capitolo|глава|kapitola)\\b",
