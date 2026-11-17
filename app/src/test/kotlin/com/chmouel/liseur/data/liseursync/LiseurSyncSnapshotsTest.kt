@@ -840,7 +840,9 @@ class LiseurSyncSnapshotsTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val models = ViewModelStore()
         changeResponse = { response ->
-            if (response.optString("from") == "2026-08-31") response.put("stats_revision", "different-revision")
+            // Another revision number, not another format: a value the
+            // parser refuses would leave the comparison untested.
+            if (response.optString("from") == "2026-08-31") response.put("stats_revision", "8")
         }
         try {
             sitting()
