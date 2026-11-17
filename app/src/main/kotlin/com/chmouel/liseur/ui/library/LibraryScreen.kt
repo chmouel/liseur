@@ -289,6 +289,7 @@ fun LibraryScreen(
     val classicState = rememberLazyGridState()
     val homeState = rememberLazyListState()
     val shelvesState = rememberLazyListState()
+    val seriesState = rememberLazyListState()
     val listState = rememberLazyGridState()
     // Results get a grid of their own, so they always start at the top
     // and closing search finds the shelf scrolled where it was left.
@@ -511,6 +512,7 @@ fun LibraryScreen(
     val homeTab = tabs.pickedHome ?: layout.startOnHome
     val catalogueStyle = if (layout.style == LibraryStyle.HOME) LibraryStyle.CLASSIC else layout.style
     val showHome = !archived && layout.tabs && homeTab
+    val showSeries = !showHome && !archived && state.seriesView && state.series.isNotEmpty()
     val activeStyle = if (showHome) LibraryStyle.HOME else catalogueStyle
     val scrollStyleToTop: (LibraryStyle) -> Unit = { target ->
         scope.launch {
@@ -526,6 +528,25 @@ fun LibraryScreen(
             }
         }
     }
+    val scrollCurrentToTop: () -> Unit = {
+        if (showSeries) {
+            scope.launch { if (eInk) seriesState.scrollToItem(0) else seriesState.animateScrollToItem(0) }
+        } else {
+            scrollStyleToTop(activeStyle)
+        }
+    }
+    val seriesControls: @Composable () -> Unit = {
+        LibraryControlsLine(
+            state = state,
+            onSetSort = onSetSort,
+            onToggleSortDirection = onToggleSortDirection,
+            onToggleFilter = onToggleFilter,
+            onSetGroupBySeries = onSetGroupBySeries,
+            onClearFilters = onClearFilters,
+            onChooseStyle = null,
+            extra = null,
+        )
+    }
 
     // Reselecting the shown tab scrolls it back up. Not saved, like the
     // count itself, and started from the current count, so neither coming
@@ -534,7 +555,7 @@ fun LibraryScreen(
     LaunchedEffect(tabs.topRequest) {
         if (tabs.topRequest != seenTopRequest) {
             seenTopRequest = tabs.topRequest
-            scrollStyleToTop(activeStyle)
+            scrollCurrentToTop()
         }
     }
 
@@ -610,7 +631,7 @@ fun LibraryScreen(
                             )
                         } else {
                             Row(
-                                modifier = Modifier.clickable { scrollStyleToTop(activeStyle) },
+                                modifier = Modifier.clickable { scrollCurrentToTop() },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 // A woman reading stretched out on her couch,
@@ -649,6 +670,7 @@ fun LibraryScreen(
                                         text = when {
                                             !layout.tabs || onboarding -> stringResource(R.string.library_title)
                                             showHome -> stringResource(R.string.library_style_home)
+                                            showSeries -> stringResource(R.string.home_tile_series)
                                             else -> stringResource(R.string.library_tab_library)
                                         },
                                         style = if (wide) {
@@ -659,7 +681,7 @@ fun LibraryScreen(
                                     )
                                     if (showHome && !onboarding) {
                                         pulse?.let { PulseLine(it, onOpenStats) }
-                                    } else if (!state.loading && state.books.isNotEmpty()) {
+                                    } else if (!showSeries && !state.loading && state.books.isNotEmpty()) {
                                         Text(
                                             text = shelfCountLine(state),
                                             maxLines = 1,
@@ -1005,8 +1027,10 @@ fun LibraryScreen(
                     // asked, and would suggest the shelf had been lost.
                     // The controls stay above it so another quick chip is
                     // still one tap away.
-                    state.books.isEmpty() -> Column(fillAboveBar) {
-                        if (!archived) {
+                    state.books.isEmpty() || (showSeries && state.seriesTabSeries.isEmpty()) -> Column(fillAboveBar) {
+                        if (showSeries) {
+                            Box(Modifier.padding(horizontal = 16.dp)) { seriesControls() }
+                        } else if (!archived) {
                             LibraryControlsRow(
                                 state = state,
                                 onSetSort = onSetSort,
@@ -1031,6 +1055,18 @@ fun LibraryScreen(
                             modifier = Modifier.fillMaxWidth().weight(1f),
                         )
                     }
+
+                    showSeries -> SeriesOverview(
+                        series = state.seriesTabSeries,
+                        downloads = state.downloads,
+                        listState = seriesState,
+                        controls = seriesControls,
+                        onBookSelected = openShelfBook,
+                        onBookLongPress = { sheetBook = it },
+                        onSeriesSelected = onSeriesSelected,
+                        bottomInset = bottomInset,
+                        modifier = Modifier.fillMaxSize(),
+                    )
 
                     else -> {
                         val shownState = if (activeStyle == state.layout.style) {
@@ -2121,7 +2157,7 @@ private fun QuickFilterChips(
                 )
             }
         }
-        if (state.hasSeries && state.layout.style != LibraryStyle.SHELVES) {
+        if (state.hasSeries && !state.seriesView && state.layout.style != LibraryStyle.SHELVES) {
             item(key = "series") {
                 androidx.compose.material3.FilterChip(
                     selected = state.filters.groupBySeries,
@@ -2148,7 +2184,7 @@ private fun LibraryControlsLine(
     onToggleFilter: (LibraryFilterOption) -> Unit,
     onSetGroupBySeries: (Boolean) -> Unit,
     onClearFilters: () -> Unit,
-    onChooseStyle: () -> Unit,
+    onChooseStyle: (() -> Unit)?,
     extra: (@Composable () -> Unit)?,
 ) {
     Row(
@@ -2175,13 +2211,15 @@ private fun LibraryControlsLine(
                 onToggleDirection = onToggleSortDirection,
                 modifier = Modifier.padding(start = 4.dp),
             )
-            IconButton(onClick = onChooseStyle) {
-                Icon(
-                    Icons.Outlined.Dashboard,
-                    contentDescription = stringResource(R.string.library_style),
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
+            if (onChooseStyle != null) {
+                IconButton(onClick = onChooseStyle) {
+                    Icon(
+                        Icons.Outlined.Dashboard,
+                        contentDescription = stringResource(R.string.library_style),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }
@@ -2856,7 +2894,10 @@ private fun FilterMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     val filters = state.filters
-    val active = LibraryFilterOption.entries.filter { it in filters.options }
+    val active = LibraryFilterOption.entries.filter { option ->
+        option in filters.options && !(state.seriesView && ALL_READING_STATES.all { it in filters.options } &&
+            option in ALL_READING_STATES)
+    }
     val grouped = stringResource(R.string.filter_group_series)
     // The grouping is a view mode offered from the filter menu, not a
     // narrowing, so it does not belong in the summary: on by default,
@@ -2892,7 +2933,7 @@ private fun FilterMenu(
             // series it is in, and never in the archive, where there are
             // no series to gather.
             // Shelves has its own grouping, so the toggle would do nothing there.
-            if (state.hasSeries && !filters.archived && state.layout.style != LibraryStyle.SHELVES) {
+            if (state.hasSeries && !state.seriesView && !filters.archived && state.layout.style != LibraryStyle.SHELVES) {
                 FilterMenuItem(
                     label = grouped,
                     checked = filters.groupBySeries,

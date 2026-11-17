@@ -205,20 +205,11 @@ class Notices {
 data class LibraryUiState(
     val loading: Boolean = true,
     val books: List<Book> = emptyList(),
-    /**
-     * The library gathered into series, for the series view. Worked out
-     * whether or not that view is showing, because the chip offering it
-     * only appears when there is something behind it.
-     */
+    /** All named series, including those with a single book. */
     val series: List<SeriesShelf> = emptyList(),
-    /**
-     * The series the grid draws, which is [series] narrowed by the
-     * filters as well. Held apart from [series] because that list is
-     * also what an open series screen looks itself up in, and a shelf
-     * that stops matching a filter under the reader's finger must not
-     * take the screen they are standing on with it.
-     */
+    /** Multi-volume series matching the library filters. */
     val shelfSeries: List<SeriesShelf> = emptyList(),
+    val seriesTabSeries: List<SeriesShelf> = emptyList(),
     /**
      * The grouped grid itself: series piles and standalone books in one
      * order. Empty unless the grouping is on, because it is only built
@@ -404,6 +395,19 @@ fun canMarkBookUnread(
     override: FinishedOverride = FinishedOverride.NONE,
 ): Boolean = override == FinishedOverride.WANT_TO_READ ||
     shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD
+
+internal fun matchingSeries(
+    series: List<SeriesShelf>,
+    filters: LibraryFilters,
+    progressions: Map<String, Double>,
+    overrides: Map<String, FinishedOverride>,
+    rated: Set<String>,
+): List<SeriesShelf> = series.filter { shelf ->
+    shelf.volumes.any { volume ->
+        val book = volume.book
+        filters.accepts(book, progressions[book.url], overrides[book.url] ?: FinishedOverride.NONE, book.url in rated)
+    }
+}
 
 /**
  * The card above the shelf, or nothing when the shelf calls the book
@@ -949,23 +953,19 @@ class LibraryViewModel(
                     settings.librarySortReversed,
                     readAt,
                 )
+            val allArrangedSeries = allShelves.arrangedBy(
+                settings.librarySort,
+                settings.librarySortReversed,
+                readAt,
+            )
 
             // A series stands for its volumes, so it survives a
             // narrowing as long as one of them does: asking for
             // unread books should leave a part-read series on the
             // shelf rather than hide the volume that has not been
             // started.
-            val narrowedSeries =
-                arrangedSeries.filter { shelf ->
-                    shelf.volumes.any {
-                        filters.accepts(
-                            it.book,
-                            progressions[it.book.url],
-                            overrides[it.book.url] ?: FinishedOverride.NONE,
-                            rated = it.book.url in rated,
-                        )
-                    }
-                }
+            val narrowedSeries = matchingSeries(arrangedSeries, filters, progressions, overrides, rated)
+            val seriesTabSeries = matchingSeries(allArrangedSeries, filters, progressions, overrides, rated)
 
             val layout = settings.libraryLayout
             val current =
@@ -974,8 +974,9 @@ class LibraryViewModel(
             LibraryUiState(
                 loading = false,
                 books = filteredBooks,
-                series = arrangedSeries,
+                series = allArrangedSeries,
                 shelfSeries = narrowedSeries,
+                seriesTabSeries = seriesTabSeries,
                 shelfEntries =
                     if (filters.groupBySeries) {
                         mixedShelf(
@@ -1086,7 +1087,7 @@ class LibraryViewModel(
                         val zone = ZoneId.systemDefault()
                         homeDeskOf(
                             books = books,
-                            series = shelves,
+                            series = allArrangedSeries,
                             current = current?.book?.url,
                             progressions = progressions,
                             now = System.currentTimeMillis(),

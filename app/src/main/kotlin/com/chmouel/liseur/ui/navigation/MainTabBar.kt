@@ -117,13 +117,14 @@ fun mainTabBarSpace(): Dp =
     BarHeight + BarMargin * 2 + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
 /**
- * The bottom bar: a floating pill holding the five tabs, the selected one
+ * The bottom bar: a floating pill holding the tabs, the selected one
  * on a tinted pill of its own. Flat and outlined on e-ink.
  */
 @Composable
 fun MainTabBar(
     selected: MainTab,
     onSelect: (MainTab) -> Unit,
+    hasSeries: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -147,7 +148,7 @@ fun MainTabBar(
                 .selectableGroup(),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            MainTab.entries.forEach { tab ->
+            MainTab.entries.filter { it != MainTab.SERIES || hasSeries }.forEach { tab ->
                 TabItem(
                     tab = tab,
                     selected = tab == selected,

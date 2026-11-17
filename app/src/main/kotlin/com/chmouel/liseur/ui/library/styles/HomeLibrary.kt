@@ -696,11 +696,12 @@ private fun ShelfTiles(
                 )
             }
         }
-        tiles.chunked(2).forEach { row ->
+        tiles.filter { it.kind != HomeShelfKind.SERIES || it.count > 0 }.chunked(2).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { tile ->
                     ShelfTile(tile = tile, onClick = { onOpenShelf(tile.kind) }, modifier = Modifier.weight(1f))
                 }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
