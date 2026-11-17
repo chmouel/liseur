@@ -648,7 +648,10 @@ class ReadingStatsViewModel(
             val inAccountZone = readingStats(
                 capturedSpans.orEmpty(), local.books, it.zone, it.today, window.range, window.weekStart,
             )
-            uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone)
+            uniteSnapshot(
+                inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone,
+                startsAtFirstReading = window.range == StatsRange.ALL_TIME,
+            )
         }
         if (serverOnly && united == null) {
             return@combine if (snapshot != null || failed == window.asked()) {
@@ -703,6 +706,7 @@ class ReadingStatsViewModel(
         }
         val weekReadingMs = when {
             united == null || snapshot == null -> local.weekMs
+            window.range == StatsRange.THIS_WEEK -> united.headline.totalMs
             weekUnited != null -> weekUnited.headline.totalMs
             // Only this device could fill the days before the span, and a
             // partial figure would pass for every device's week.
@@ -825,6 +829,7 @@ class ReadingStatsViewModel(
             firstReadAtByUrl: Map<String, Long> = emptyMap(),
             serverFirstReadDays: Map<String, LocalDate> = emptyMap(),
             zone: ZoneId = ZoneOffset.UTC,
+            startsAtFirstReading: Boolean = false,
         ): ReadingStats {
             val mergedBooks = local.books
                 .mapNotNull { row -> row.bookUrl?.let { it to row } }
@@ -975,7 +980,16 @@ class ReadingStatsViewModel(
                 // and this device cannot, and a series built only from
                 // local days would draw it blank.
                 val supplied = localByDate.keys + minutesByDate.keys
-                val first = supplied.minOrNull()
+                // A range with no beginning pads an empty local series
+                // with a week; only days with reading can start it.
+                val first = if (startsAtFirstReading) {
+                    (
+                        local.recent.filter { it.totalMs > 0 || it.pendingMs > 0 }.map { it.date } +
+                            minutesByDate.keys
+                        ).minOrNull() ?: supplied.minOrNull()
+                } else {
+                    supplied.minOrNull()
+                }
                 val last = local.recent.lastOrNull()?.date ?: supplied.maxOrNull()
                 val dates = if (first == null || last == null) emptyList() else
                     generateSequence(first) { it.plusDays(1).takeUnless { day -> day > last } }.toList()

@@ -17,6 +17,7 @@ internal fun uniteSnapshot(
     firstReadAtByUrl: Map<String, Long>,
     snapshot: SnapshotTotals,
     zone: ZoneId,
+    startsAtFirstReading: Boolean = false,
 ): UnitedStats? {
     val residual = snapshotResidual(snapshot) ?: return null
     val total = unionMinutes(
@@ -36,7 +37,7 @@ internal fun uniteSnapshot(
     )
     val merged = ReadingStatsViewModel.mergeDashboard(
         captured, knownBooks, residual.days, WorkTotals(residual.known, residual.elsewhere), firstReadAtByUrl,
-        snapshot.firstReadDays, zone,
+        snapshot.firstReadDays, zone, startsAtFirstReading,
     ).copy(totalMs = total, sessions = sessions, streakDays = snapshot.combinedStreak)
     val serverPace = snapshot.summary.progressionPerHour
     return UnitedStats(
