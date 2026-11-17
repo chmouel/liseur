@@ -993,6 +993,61 @@ class ReadingStatsViewModelTest {
     }
 
     @Test
+    fun `book reading days use today until finished and require a start`() {
+        val zone = java.time.ZoneOffset.UTC
+        val start = LocalDate.of(2026, 1, 1).atStartOfDay(zone).toInstant().toEpochMilli()
+        val last = LocalDate.of(2026, 1, 3).atStartOfDay(zone).toInstant().toEpochMilli()
+        val book = BookReadingStats(
+            bookUrl = "book", title = "Book", author = null, totalMs = 1,
+            firstReadAt = start, lastReadAt = last, sessions = 1, finished = false, progression = null,
+        )
+        val today = LocalDate.of(2026, 2, 1)
+        assertEquals(32, bookReadingDays(book, zone, today))
+        assertEquals(3, bookReadingDays(book.copy(finished = true), zone, today))
+        assertNull(bookReadingDays(book.copy(firstReadAt = null), zone, today))
+    }
+
+    @Test
+    fun `book eta prefers server estimate and falls back to local pace when unfinished`() {
+        val unfinished = BookReadingStats(
+            bookUrl = "calibre:one",
+            title = "A book",
+            author = "An author",
+            totalMs = 60 * 60_000L,
+            lastReadAt = 100L,
+            progression = 0.5,
+            finished = false,
+            sessions = 2,
+        )
+        val server = WorkInsights(
+            workId = "w-1",
+            sessions = 2,
+            activeMinutes = 60.0,
+            etaSeconds = 5_400.0,
+            lastReadAt = 100L,
+        )
+
+        // Server ETA wins when present (5_400s = 90m).
+        assertEquals(
+            90 * 60_000L,
+            resolveBookEtaMs(unfinished, serverInsights = server, progressionPerHour = 0.25),
+        )
+        // Local pace (25%/h with 50% remaining = 2 hours) is used when server ETA is absent.
+        assertEquals(
+            120 * 60_000L,
+            resolveBookEtaMs(unfinished, serverInsights = null, progressionPerHour = 0.25),
+        )
+        // Finished books never report remaining time.
+        assertNull(
+            resolveBookEtaMs(
+                unfinished.copy(finished = true, progression = 1.0),
+                serverInsights = server,
+                progressionPerHour = 0.25,
+            ),
+        )
+    }
+
+    @Test
     fun `book loading becomes empty or ready only after the dashboard loads`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
@@ -1004,10 +1059,9 @@ class ReadingStatsViewModelTest {
             val missing = model.forBook("missing")
 
             assertEquals(BookReadingStatsUiState.Loading, known.value)
-            assertTrue(
-                known.first { it !is BookReadingStatsUiState.Loading } is
-                    BookReadingStatsUiState.Ready,
-            )
+            val ready = known.first { it !is BookReadingStatsUiState.Loading } as
+                BookReadingStatsUiState.Ready
+            assertEquals(60_000L, ready.recent.sumOf { it.totalMs })
             assertEquals(
                 BookReadingStatsUiState.Empty,
                 missing.first { it !is BookReadingStatsUiState.Loading },

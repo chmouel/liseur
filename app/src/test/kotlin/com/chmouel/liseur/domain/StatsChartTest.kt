@@ -50,6 +50,29 @@ class StatsChartTest {
     }
 
     @Test
+    fun `a week always emits all seven weekday slots from weekStart`() {
+        val days = listOf(
+            ReadingDay(LocalDate.of(2026, 4, 13), 120),
+            ReadingDay(LocalDate.of(2026, 4, 14), 60),
+        )
+
+        val periods = readingPeriods(days, StatsRange.THIS_WEEK, DayOfWeek.MONDAY)
+
+        assertEquals(
+            listOf(
+                ReadingPeriod(LocalDate.of(2026, 4, 13), LocalDate.of(2026, 4, 13), 120),
+                ReadingPeriod(LocalDate.of(2026, 4, 14), LocalDate.of(2026, 4, 14), 60),
+                ReadingPeriod(LocalDate.of(2026, 4, 15), LocalDate.of(2026, 4, 15), 0),
+                ReadingPeriod(LocalDate.of(2026, 4, 16), LocalDate.of(2026, 4, 16), 0),
+                ReadingPeriod(LocalDate.of(2026, 4, 17), LocalDate.of(2026, 4, 17), 0),
+                ReadingPeriod(LocalDate.of(2026, 4, 18), LocalDate.of(2026, 4, 18), 0),
+                ReadingPeriod(LocalDate.of(2026, 4, 19), LocalDate.of(2026, 4, 19), 0),
+            ),
+            periods,
+        )
+    }
+
+    @Test
     fun `all time is added into years`() {
         val days = listOf(
             ReadingDay(LocalDate.of(2024, 12, 31), 10),

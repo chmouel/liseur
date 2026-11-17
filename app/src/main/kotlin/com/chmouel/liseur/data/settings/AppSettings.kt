@@ -464,6 +464,10 @@ data class AppSettings(
     companion object {
         const val DEFAULT_WEEKLY_GOAL_MINUTES = 180
 
+        /** Weekly goals are whole hours, from one hour to the whole week. */
+        fun weeklyGoalMinutes(minutes: Int): Int =
+            ((minutes.coerceIn(0, 7 * 24 * 60) + 30) / 60).coerceAtLeast(1) * 60
+
         /** The sentences per read-aloud request on offer; a stored value outside is brought within. */
         val SENTENCES_PER_REQUEST = 1..5
     }
@@ -714,8 +718,9 @@ class AppSettingsRepository(
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
             clearTranslationsOnFinish = p[Keys.CLEAR_TRANSLATIONS_ON_FINISH] ?: true,
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
-            weeklyGoalMinutes = (p[Keys.WEEKLY_GOAL_MINUTES] ?: AppSettings.DEFAULT_WEEKLY_GOAL_MINUTES)
-                .coerceIn(15, 7 * 24 * 60),
+            weeklyGoalMinutes = AppSettings.weeklyGoalMinutes(
+                p[Keys.WEEKLY_GOAL_MINUTES] ?: AppSettings.DEFAULT_WEEKLY_GOAL_MINUTES,
+            ),
             selectionActionLayout = SelectionActionLayout.parse(p[Keys.SELECTION_ACTION_LAYOUT]),
             highlightPalette = HighlightPalette.of(
                 offeredNames = p[Keys.HIGHLIGHT_TINTS],
@@ -832,7 +837,7 @@ class AppSettingsRepository(
     }
 
     suspend fun setWeeklyGoalMinutes(minutes: Int) {
-        store.edit { it[Keys.WEEKLY_GOAL_MINUTES] = minutes.coerceIn(15, 7 * 24 * 60) }
+        store.edit { it[Keys.WEEKLY_GOAL_MINUTES] = AppSettings.weeklyGoalMinutes(minutes) }
     }
 
     suspend fun setUploadPolicy(policy: UploadPolicy) {

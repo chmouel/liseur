@@ -1161,6 +1161,7 @@
         <item quantity="other">Lire %d heures</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">Objectif de lecture hebdomadaire</string>
+    <string name="reading_stats_avg_sitting">Séance moy.</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>

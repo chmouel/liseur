@@ -1209,6 +1209,7 @@
     </plurals>
     <string name="reading_stats_weekly_goal_progress" translatable="false">%1$s / %2$s</string>
     <string name="reading_stats_weekly_goal_dialog_title">Weekly reading goal</string>
+    <string name="reading_stats_avg_sitting">Avg. sitting</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>

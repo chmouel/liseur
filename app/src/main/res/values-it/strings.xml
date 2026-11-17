@@ -1161,6 +1161,7 @@
         <item quantity="other">Leggere per %d ore</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">Obiettivo di lettura settimanale</string>
+    <string name="reading_stats_avg_sitting">Sessione media</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>
