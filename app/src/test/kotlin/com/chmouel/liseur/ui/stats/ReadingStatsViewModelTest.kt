@@ -357,6 +357,24 @@ class ReadingStatsViewModelTest {
         assertEquals(98, merged.books.single().sessions)
     }
 
+    @Test
+    fun `an unbounded range starts at the first day with reading, not the local padding`() {
+        val today = LocalDate.of(2026, 8, 12)
+        val padding = (6L downTo 0L).map { ReadingDay(today.minusDays(it), 0) }
+
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats(
+                totalMs = 0, booksRead = 0, booksFinished = 0, books = emptyList(), recent = padding,
+            ),
+            knownBooks = emptyMap(),
+            serverRecent = listOf(InsightDay(today.minusDays(1), 30.0)),
+            serverBooks = null,
+            startsAtFirstReading = true,
+        )
+
+        assertEquals(listOf(today.minusDays(1), today), merged.recent.map { it.date })
+    }
+
     /**
      * Half a book's time uploaded and half of it still queued is the
      * ordinary state of things, and the two totals then overlap without

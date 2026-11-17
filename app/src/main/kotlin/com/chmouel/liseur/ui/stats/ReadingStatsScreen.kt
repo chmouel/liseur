@@ -258,9 +258,12 @@ fun ReadingStatsScreen(
                 mutableStateOf<Int?>(null)
             }
             val selectedActivityPeriod = selectedActivityIndex?.let { activityPeriods.getOrNull(it) }
+            // Books the list above leaves out as briefly read stay out of the breakdown too.
+            val listedKeys = remember(stats) { stats.books.mapTo(HashSet()) { it.key } }
             val selectedActivityBooks = remember(selectedActivityPeriod, ready.provenance, stats) {
                 if (selectedActivityPeriod != null && ready.provenance == StatsProvenance.THIS_DEVICE) {
                     stats.booksIn(selectedActivityPeriod.from, selectedActivityPeriod.to)
+                        .filter { it.key in listedKeys }
                 } else {
                     emptyList()
                 }
@@ -272,6 +275,7 @@ fun ReadingStatsScreen(
             val selectedCalendarBooks = remember(calendarDay, ready.provenance, stats) {
                 if (calendarDay != null && ready.provenance == StatsProvenance.THIS_DEVICE) {
                     stats.booksIn(calendarDay.date, calendarDay.date)
+                        .filter { it.key in listedKeys }
                 } else {
                     emptyList()
                 }
