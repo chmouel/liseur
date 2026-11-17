@@ -1158,6 +1158,57 @@
     <string name="reading_stats_heatmap_empty_day">Nothing read on %1$s</string>
     <string name="reading_stats_unavailable">Could not load your reading stats from liseur-sync.</string>
     <string name="reading_stats_empty_range">Nothing read in this span. Try a longer one.</string>
+    <string name="reading_stats_eyebrow_week">Your reading this week</string>
+    <string name="reading_stats_eyebrow_month">Your reading this month</string>
+    <string name="reading_stats_eyebrow_year">Your reading this year</string>
+    <string name="reading_stats_eyebrow_all">Your reading in total</string>
+    <plurals name="reading_stats_pill_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="reading_stats_pill_streak">
+        <item quantity="one">%d day streak</item>
+        <item quantity="other">%d day streak</item>
+    </plurals>
+    <plurals name="reading_stats_pill_books">
+        <item quantity="one">%d book</item>
+        <item quantity="other">%d books</item>
+    </plurals>
+    <string name="reading_stats_tile_streak">Reading streak</string>
+    <plurals name="reading_stats_tile_streak_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+    <string name="reading_stats_tile_sessions">Sessions</string>
+    <string name="reading_stats_tile_pace">Avg. pace</string>
+    <string name="reading_stats_pace_unknown" translatable="false">—</string>
+    <string name="reading_stats_chart_title_day">Reading time by day</string>
+    <string name="reading_stats_chart_title_week">Reading time by week</string>
+    <string name="reading_stats_chart_title_month">Reading time by month</string>
+    <string name="reading_stats_chart_title_year">Reading time by year</string>
+    <string name="reading_stats_chart_subtitle_day">Minutes read per day</string>
+    <string name="reading_stats_chart_subtitle_week">Time read per week</string>
+    <string name="reading_stats_chart_subtitle_month">Time read per month</string>
+    <string name="reading_stats_chart_subtitle_year">Time read per year</string>
+    <string name="reading_stats_rhythm_eyebrow">Reading rhythm</string>
+    <string name="reading_stats_rhythm_title_starting">Building a habit</string>
+    <string name="reading_stats_rhythm_title_steady">Steady rhythm</string>
+    <string name="reading_stats_rhythm_title_daily">Every single day</string>
+    <plurals name="reading_stats_rhythm_detail_week">
+        <item quantity="one">You read on %1$d of %2$d days this week. Keep going to build momentum.</item>
+        <item quantity="other">You read on %1$d of %2$d days this week. Keep going to build momentum.</item>
+    </plurals>
+    <plurals name="reading_stats_rhythm_detail_period">
+        <item quantity="one">You read on %1$d of %2$d days in this period.</item>
+        <item quantity="other">You read on %1$d of %2$d days in this period.</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_title">Weekly goal</string>
+    <plurals name="reading_stats_weekly_goal_subtitle">
+        <item quantity="one">Read for %d hour</item>
+        <item quantity="other">Read for %d hours</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_progress" translatable="false">%1$s / %2$s</string>
+    <string name="reading_stats_weekly_goal_dialog_title">Weekly reading goal</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>

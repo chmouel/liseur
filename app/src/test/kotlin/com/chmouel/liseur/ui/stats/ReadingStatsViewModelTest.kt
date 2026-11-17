@@ -191,6 +191,33 @@ class ReadingStatsViewModelTest {
     }
 
     @Test
+    fun `the weekly goal counts the whole week when a month starts midweek`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "calibre:one"
+            val friday = LocalDate.of(2026, 5, 1)
+            db.bookDao().upsert(book(url))
+            db.readingSessionDao().insert(session(url, friday.minusDays(1), 60 * 60_000L))
+            db.readingSessionDao().insert(session(url, friday, 30 * 60_000L))
+            val model = model(now = { friday.atTime(LocalTime.MAX).atZone(it) })
+
+            val week = model.state.first { it is ReadingStatsUiState.Ready }
+                as ReadingStatsUiState.Ready
+            assertEquals(90 * 60_000L, week.weekReadingMs)
+
+            model.selectRange(StatsRange.THIS_MONTH)
+            val month = model.state.first {
+                it is ReadingStatsUiState.Ready && it.range == StatsRange.THIS_MONTH
+            } as ReadingStatsUiState.Ready
+            assertEquals(30 * 60_000L, month.headline.totalMs)
+            assertEquals(90 * 60_000L, month.weekReadingMs)
+        } finally {
+            models.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun `a wider span reaches reading the default one cannot`() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {

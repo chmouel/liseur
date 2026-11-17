@@ -24,6 +24,7 @@ import com.chmouel.liseur.data.settings.AppSettingsRepository
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonSpans
 import com.chmouel.liseur.domain.ComparisonScope
+import com.chmouel.liseur.domain.DateSpan
 import com.chmouel.liseur.domain.ReadingComparison
 import com.chmouel.liseur.domain.ReadingDay
 import com.chmouel.liseur.domain.ReadingStats
@@ -83,6 +84,9 @@ sealed interface ReadingStatsUiState {
         val provenance: StatsProvenance = StatsProvenance.THIS_DEVICE,
         val today: LocalDate = stats.recent.lastOrNull()?.date ?: LocalDate.now(),
         val snapshotId: String? = null,
+        val weeklyGoalMinutes: Int = 180,
+        /** This calendar week's reading time, whichever span is shown. */
+        val weekReadingMs: Long = 0L,
     ) : ReadingStatsUiState
 }
 
@@ -275,6 +279,7 @@ class ReadingStatsViewModel(
 
     /** Set once the reader has picked a span for themselves. */
     private var rangeChosen = false
+    private val _weeklyGoalMinutes = MutableStateFlow(180)
 
     /** Which refresh the answers now arriving are allowed to be from. */
     private var generation = 0L
@@ -288,14 +293,27 @@ class ReadingStatsViewModel(
     init {
         settings?.let { store ->
             viewModelScope.launch {
-                val saved = store.current().statsRange
+                val current = store.current()
+                val saved = current.statsRange
+                _weeklyGoalMinutes.value = current.weeklyGoalMinutes
                 // A reader who reached the menu before the store answered
                 // has already said what they want; the stored value is
                 // then a stale answer to a question they have re-asked.
                 if (!rangeChosen) _window.update { it.copy(range = saved) }
                 refreshServerInsights()
             }
+            viewModelScope.launch {
+                store.settings.map { it.weeklyGoalMinutes }.distinctUntilChanged().collect {
+                    _weeklyGoalMinutes.value = it
+                }
+            }
         }
+    }
+
+    fun setWeeklyGoalMinutes(minutes: Int) {
+        val clamped = minutes.coerceIn(15, 7 * 24 * 60)
+        _weeklyGoalMinutes.value = clamped
+        viewModelScope.launch { settings?.setWeeklyGoalMinutes(clamped) }
     }
 
     /**
@@ -507,6 +525,8 @@ class ReadingStatsViewModel(
          */
         val currentMs: Long,
         val previousMs: Long,
+        /** This calendar week so far, from this device alone. */
+        val weekMs: Long,
     )
 
     private val local = combine(
@@ -554,6 +574,9 @@ class ReadingStatsViewModel(
             previousMs = comparison
                 ?.let { readingTotals(spans, window.zone, it.previous, it.through).totalMs }
                 ?: 0L,
+            weekMs = StatsRange.THIS_WEEK.startDate(window.today, window.weekStart)
+                ?.let { readingTotals(spans, window.zone, DateSpan(it, window.today)).totalMs }
+                ?: 0L,
         )
     }.flowOn(Dispatchers.Default)
 
@@ -562,7 +585,8 @@ class ReadingStatsViewModel(
         _snapshot,
         _failed,
         accounts,
-    ) { local, answer, failed, account ->
+        _weeklyGoalMinutes,
+    ) { local, answer, failed, account, weeklyGoalMinutes ->
 
         val window = local.window
         val serverOnly = account.serverOnly
@@ -619,19 +643,24 @@ class ReadingStatsViewModel(
         } else {
             localComparison
         }
+        val headline = united?.headline?.copy(comparison = comparison) ?: StatsHeadline(
+            totalMs = local.stats.totalMs,
+            sessions = local.stats.sessions,
+            streakDays = local.stats.streakDays,
+            progressionPerHour = local.stats.progressionPerHour,
+            comparison = comparison,
+        )
         ReadingStatsUiState.Ready(
             stats = united?.stats ?: local.stats,
-            headline = united?.headline?.copy(comparison = comparison) ?: StatsHeadline(
-                totalMs = local.stats.totalMs,
-                sessions = local.stats.sessions,
-                streakDays = local.stats.streakDays,
-                progressionPerHour = local.stats.progressionPerHour,
-                comparison = comparison,
-            ),
+            headline = headline,
             range = window.range,
             provenance = if (united != null) StatsProvenance.ALL_DEVICES else StatsProvenance.THIS_DEVICE,
             today = if (united != null) snapshot?.today ?: window.today else window.today,
             snapshotId = if (united != null) snapshot?.snapshotId else null,
+            weeklyGoalMinutes = weeklyGoalMinutes,
+            // On the week span the headline may already count every
+            // device; other spans only hold this device's week.
+            weekReadingMs = if (window.range == StatsRange.THIS_WEEK) headline.totalMs else local.weekMs,
         )
     }.flowOn(Dispatchers.Default).stateIn(
         viewModelScope,

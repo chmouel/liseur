@@ -1,14 +1,19 @@
 package com.chmouel.liseur.ui.stats
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,58 +24,88 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.TrackChanges
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.chmouel.liseur.R
+import com.chmouel.liseur.data.settings.AppSettings
 import com.chmouel.liseur.domain.BookReadingStats
 import com.chmouel.liseur.domain.ComparisonDirection
 import com.chmouel.liseur.domain.ComparisonPeriod
@@ -86,23 +121,22 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.theme.DarkHomePalette
+import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
+import java.util.concurrent.TimeUnit
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 
 /**
  * What the reader has actually read, added up.
  *
- * One figure set large and a ledger of plain rows beneath it, but the
- * rule behind the layout has not changed. The temptation with reading
- * statistics is to turn reading into a score — streaks to keep, targets
- * to miss, a best day to beat — and a book people feel guilty about is a
- * book they stop opening. So every row here reports and none of them
- * grades: no figure is singled out as an achievement, no day is drawn as
- * a record, and the streak is a count of days like any other count.
+ * One figure set large and a ledger of plain cards beneath it, keeping
+ * the rule that every card reports and none of them grades.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,24 +147,31 @@ fun ReadingStatsScreen(
     onBack: (() -> Unit)?,
     onSelectRange: (StatsRange) -> Unit = {},
     onRetry: () -> Unit = {},
+    onSetWeeklyGoalMinutes: (Int) -> Unit = {},
     /** The room the bottom bar covers, navigation bar included. */
     bottomBarSpace: Dp = 0.dp,
 ) {
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.reading_stats)) },
-                navigationIcon = {
-                    if (onBack != null) {
+            if (onBack != null) {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.reading_stats)) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                    navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Outlined.ArrowBack,
                                 contentDescription = stringResource(R.string.back),
                             )
                         }
-                    }
-                },
-            )
+                    },
+                )
+            } else {
+                StatsBrandHeader()
+            }
         },
     ) { padding ->
         if (state is ReadingStatsUiState.Loading) {
@@ -173,6 +214,17 @@ fun ReadingStatsScreen(
         val ready = state as ReadingStatsUiState.Ready
         val stats = ready.stats.hideBrieflyReadBooks()
         val empty = stats.isEmpty && ready.headline.totalMs <= 0
+        var showGoalDialog by rememberSaveable { mutableStateOf(false) }
+        if (showGoalDialog) {
+            WeeklyGoalDialog(
+                currentMinutes = ready.weeklyGoalMinutes,
+                onSelectMinutes = { minutes ->
+                    onSetWeeklyGoalMinutes(minutes)
+                    showGoalDialog = false
+                },
+                onDismiss = { showGoalDialog = false },
+            )
+        }
         // Capped and centred, like every other screen in the app. A row
         // stretched the width of a tablet puts its label and its figure
         // a hand apart, and thirty bars across that width are a fence.
@@ -202,6 +254,7 @@ fun ReadingStatsScreen(
                 // must still offer a way to a longer one.
                 item {
                     RangeChips(ready.range, onSelectRange)
+                    ProvenanceLine(ready.range, ready.provenance)
                 }
                 if (empty) {
                     item {
@@ -214,16 +267,40 @@ fun ReadingStatsScreen(
                             narrowedByRange = stats.streakDays > 0 || ready.range != StatsRange.ALL_TIME,
                         )
                     }
+                    item {
+                        WeeklyGoalCard(
+                            weekReadingMs = ready.weekReadingMs,
+                            weeklyGoalMinutes = ready.weeklyGoalMinutes,
+                            onClick = { showGoalDialog = true },
+                        )
+                    }
                 } else {
                     item {
-                        DashboardHero(ready.headline, ready.range, ready.provenance)
+                        DashboardHero(
+                            stats = stats,
+                            headline = ready.headline,
+                            range = ready.range,
+                        )
                     }
                     item {
-                        StatsSectionHeader(stringResource(R.string.reading_stats_overview))
-                        StatRows(overviewLines(stats, ready.headline, ready.provenance))
+                        OverviewSection(
+                            stats = stats,
+                            headline = ready.headline,
+                            provenance = ready.provenance,
+                        )
                     }
                     item {
                         ActivitySection(stats = stats, range = ready.range)
+                    }
+                    item {
+                        ReadingRhythmCard(stats = stats, range = ready.range)
+                    }
+                    item {
+                        WeeklyGoalCard(
+                            weekReadingMs = ready.weekReadingMs,
+                            weeklyGoalMinutes = ready.weeklyGoalMinutes,
+                            onClick = { showGoalDialog = true },
+                        )
                     }
                     if (ready.range != StatsRange.THIS_WEEK) {
                         item {
@@ -258,132 +335,486 @@ fun ReadingStatsScreen(
     }
 }
 
+/**
+ * Brand mark and large serif heading when Reading Stats sits as a primary tab.
+ */
+@Composable
+private fun StatsBrandHeader() {
+    val palette = homePalette()
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .windowInsetsPadding(TopAppBarDefaults.windowInsets),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = contentWidthCap(windowWidth()))
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                        fontStyle = FontStyle.Italic,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.reading_stats),
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
+        }
+    }
+}
+
+
 /** How much of the screen the empty state centres itself in. */
 private const val EMPTY_HEIGHT_SHARE = 0.75f
 
 /**
- * The span the figures cover, as chips across the top of the list.
+ * The span the figures cover, as four equal-width pill buttons across the top.
  *
- * Out of the app bar, where the selected span was a pill pressed against
- * the edge and the others hidden behind it. Laid out in a flow so a
- * large font scale wraps them onto a second line rather than clipping
- * "This month" to "This m…".
+ * Falls back to a wrapping row at large font scales so long translations
+ * never clip.
  */
 @Composable
 private fun RangeChips(selected: StatsRange, onSelect: (StatsRange) -> Unit) {
-    FlowRow(
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val largeFont = LocalDensity.current.fontScale > 1.3f
+    if (largeFont) {
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatsRange.entries.forEach { range ->
+                FilterChip(
+                    selected = range == selected,
+                    onClick = { onSelect(range) },
+                    label = { Text(stringResource(range.chipLabel)) },
+                )
+            }
+        }
+        return
+    }
+    Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(IntrinsicSize.Max)
             .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         StatsRange.entries.forEach { range ->
-            FilterChip(
-                selected = range == selected,
-                onClick = { onSelect(range) },
-                label = { Text(stringResource(range.chipLabel)) },
+            val isSelected = range == selected
+            val shape = RoundedCornerShape(12.dp)
+            val bg = when {
+                eInk && isSelected -> MaterialTheme.colorScheme.secondaryContainer
+                eInk -> Color.Transparent
+                isSelected -> palette?.tabSelected ?: MaterialTheme.colorScheme.secondaryContainer
+                else -> palette?.card?.copy(alpha = 0.65f) ?: MaterialTheme.colorScheme.surfaceContainerLow
+            }
+            val borderColor = when {
+                eInk && isSelected -> MaterialTheme.colorScheme.onSurface
+                eInk -> MaterialTheme.colorScheme.outline
+                isSelected -> (palette?.progress ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.55f)
+                else -> palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant
+            }
+            val contentColor = when {
+                isSelected -> palette?.onTabSelected ?: MaterialTheme.colorScheme.onSecondaryContainer
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Surface(
+                shape = shape,
+                color = bg,
+                border = BorderStroke(1.dp, borderColor),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(shape)
+                    .selectable(
+                        selected = isSelected,
+                        onClick = { onSelect(range) },
+                        role = Role.Tab,
+                    ),
+            ) {
+                Box(
+                    modifier = Modifier.padding(vertical = 9.dp, horizontal = 6.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // Two lines, so a long translation such as "Gesamte
+                    // Zeit" wraps instead of losing its end.
+                    Text(
+                        text = stringResource(range.chipLabel),
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
+                        color = contentColor,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Provenance scope line beneath the range selector (ADR-0021).
+ */
+@Composable
+private fun ProvenanceLine(
+    range: StatsRange,
+    provenance: StatsProvenance,
+) {
+    val scope = scopeLine(range, provenance)
+    val palette = homePalette()
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.padding(top = 12.dp, start = 2.dp),
+    ) {
+        Icon(
+            imageVector = when (provenance) {
+                StatsProvenance.THIS_DEVICE -> Icons.Outlined.PhoneAndroid
+                StatsProvenance.ALL_DEVICES -> Icons.Outlined.Devices
+            },
+            contentDescription = null,
+            modifier = Modifier.size(15.dp),
+            tint = palette?.progress ?: MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(
+                R.string.reading_stats_joined,
+                stringResource(scope.range),
+                stringResource(scope.devices),
+            ),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * The total the screen leads with, inside an illustrated hero card.
+ *
+ * One figure, not one per device. When the sync server answered, the
+ * total is its count of every device for the span the reader chose;
+ * when it did not, the total is this device's own for the same span.
+ */
+@Composable
+private fun DashboardHero(
+    stats: ReadingStats,
+    headline: StatsHeadline,
+    range: StatsRange,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val dark = palette == DarkHomePalette
+    val cardColor = palette?.card ?: MaterialTheme.colorScheme.surfaceContainerLow
+    val shape = RoundedCornerShape(22.dp)
+    val backgroundModifier = if (!eInk && palette != null) {
+        val start = lerp(cardColor, palette.heroWash, if (dark) 0.9f else 0.42f)
+        val end = lerp(cardColor, palette.heroWash, if (dark) 0.28f else 0.18f)
+        Modifier.background(Brush.linearGradient(listOf(start, end)))
+    } else {
+        Modifier.background(cardColor)
+    }
+
+    Surface(
+        shape = shape,
+        color = Color.Transparent,
+        border = when {
+            eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            palette != null -> BorderStroke(1.dp, palette.cardBorder)
+            else -> null
+        },
+        shadowElevation = if (palette != null && !dark) 3.dp else 0.dp,
+        modifier = Modifier
+            .padding(top = 12.dp)
+            .fillMaxWidth(),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(backgroundModifier),
+        ) {
+            if (!eInk) {
+                Image(
+                    painter = painterResource(
+                        if (dark) R.drawable.stats_hero_art_night else R.drawable.stats_hero_art,
+                    ),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .width(195.dp),
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 18.dp),
+            ) {
+                Text(
+                    text = stringResource(range.eyebrowRes).uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.3.sp,
+                    ),
+                    color = palette?.progress ?: MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = readingDuration(headline.totalMs),
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = TABULAR,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                headline.comparison?.let { comparison ->
+                    Spacer(Modifier.height(4.dp))
+                    ComparisonLine(comparison)
+                }
+                Spacer(Modifier.height(16.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    HeroPill(
+                        icon = Icons.AutoMirrored.Outlined.MenuBook,
+                        label = pluralStringResource(
+                            R.plurals.reading_stats_pill_sessions,
+                            headline.sessions,
+                            headline.sessions,
+                        ),
+                    )
+                    HeroPill(
+                        icon = Icons.Outlined.LocalFireDepartment,
+                        label = pluralStringResource(
+                            R.plurals.reading_stats_pill_streak,
+                            headline.streakDays,
+                            headline.streakDays,
+                        ),
+                    )
+                    HeroPill(
+                        icon = Icons.Outlined.Layers,
+                        label = pluralStringResource(
+                            R.plurals.reading_stats_pill_books,
+                            stats.booksRead,
+                            stats.booksRead,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroPill(
+    icon: ImageVector,
+    label: String,
+) {
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val pillShape = RoundedCornerShape(50)
+    Surface(
+        shape = pillShape,
+        color = when {
+            eInk -> Color.Transparent
+            palette != null -> palette.pill.copy(alpha = 0.9f)
+            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        border = BorderStroke(
+            1.dp,
+            when {
+                eInk -> MaterialTheme.colorScheme.outline
+                palette != null -> palette.cardBorder
+                else -> MaterialTheme.colorScheme.outlineVariant
+            },
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = palette?.progress ?: MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(14.dp),
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    fontFeatureSettings = TABULAR,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
 }
 
 /**
- * The total the screen leads with, from wherever reading happened.
- *
- * One figure, not one per device. When the sync server answered, the
- * total is its count of every device for the span the reader chose;
- * when it did not, the total is this device's own for the same span.
- * The reader is never asked to reconcile two, and never sees their
- * history shrink because they connected a server.
- *
- * The line above it says which (ADR-0021), and says it once. A
- * statement of provenance and nothing more: not a warning, not an
- * error, and nothing to dismiss. A reader offline on a train is looking
- * at their own reading, which is not a fault, and the screen saying so
- * is the difference between a number they can trust and one they
- * cannot place.
+ * The 2x2 overview grid under the hero card.
  */
 @Composable
-private fun DashboardHero(
-    headline: StatsHeadline,
-    range: StatsRange,
-    provenance: StatsProvenance,
-) {
-    val scope = scopeLine(range, provenance)
-    StatsHero(
-        scope = stringResource(
-            R.string.reading_stats_joined,
-            stringResource(scope.range),
-            stringResource(scope.devices),
-        ),
-        total = readingDuration(headline.totalMs),
-        scopeIcon = when (provenance) {
-            StatsProvenance.THIS_DEVICE -> Icons.Outlined.PhoneAndroid
-            StatsProvenance.ALL_DEVICES -> Icons.Outlined.Devices
-        },
-        modifier = Modifier.padding(top = 20.dp, start = 4.dp, end = 4.dp),
-    ) {
-        // A period with nothing in it never reaches here: the screen
-        // shows its empty state instead. That is deliberate. A nought in
-        // this face, captioned with the largest negative percentage there
-        // is, is the one thing this design could say that would read as
-        // a reprimand, and reading less is not a fault. See ADR 18.
-        headline.comparison?.let { comparison ->
-            Spacer(Modifier.height(6.dp))
-            ComparisonLine(comparison)
-        }
-    }
-}
-
-/**
- * The tallies under the total, one row each.
- *
- * Each keeps its own plain label. "Books finished" over a fraction
- * would leave the reader guessing what the denominator counted, and
- * the two are different facts: one is how many books had reading in
- * them, the other how many were seen out.
- *
- * Always present, whether or not a server answered. A list that changes
- * shape depending on what a network call returned reads as a fault, and
- * this device can count its own sittings, streak and pace perfectly
- * well. Pace is the one that can genuinely be unknown — it needs
- * sessions that recorded where in the book they happened, and the
- * oldest ones did not — so its row is left out entirely rather than
- * shown as nought, which would read as a verdict on the reader.
- */
-@Composable
-private fun overviewLines(
+private fun OverviewSection(
     stats: ReadingStats,
     headline: StatsHeadline,
     provenance: StatsProvenance,
-): List<StatLine> = buildList {
-    add(StatLine(stringResource(R.string.reading_stats_books_read), stats.booksRead.toString()))
-    add(
-        StatLine(
+) {
+    val paceLabel = if (provenance == StatsProvenance.ALL_DEVICES && headline.serverOnlyPace) {
+        stringResource(R.string.reading_stats_pace_server_only)
+    } else {
+        stringResource(R.string.reading_stats_tile_pace)
+    }
+    val paceValue = headline.progressionPerHour?.let { pace ->
+        stringResource(R.string.reading_stats_pace_value, (pace * 100).roundToInt())
+    } ?: stringResource(R.string.reading_stats_pace_unknown)
+
+    val tiles = listOf(
+        Triple(
+            Icons.AutoMirrored.Outlined.MenuBook,
             stringResource(R.string.reading_stats_books_finished),
             stats.booksFinished.toString(),
-            supporting = stringResource(R.string.reading_stats_books_finished_note),
         ),
+        Triple(
+            Icons.Outlined.LocalFireDepartment,
+            stringResource(R.string.reading_stats_tile_streak),
+            pluralStringResource(
+                R.plurals.reading_stats_tile_streak_days,
+                headline.streakDays,
+                headline.streakDays,
+            ),
+        ),
+        Triple(
+            Icons.Outlined.BarChart,
+            stringResource(R.string.reading_stats_tile_sessions),
+            headline.sessions.toString(),
+        ),
+        Triple(Icons.Outlined.Speed, paceLabel, paceValue),
     )
-    add(StatLine(stringResource(R.string.reading_stats_streak), headline.streakDays.toString()))
-    add(StatLine(stringResource(R.string.reading_stats_sessions), headline.sessions.toString()))
-    headline.progressionPerHour?.let { pace ->
-        val label = if (provenance == StatsProvenance.ALL_DEVICES && headline.serverOnlyPace) {
-            stringResource(R.string.reading_stats_pace_server_only)
-        } else {
-            stringResource(R.string.reading_stats_pace)
+    // Two tiles side by side leave too little room for a figure at a
+    // large font scale, so they stack instead of cutting it short.
+    val perRow = if (LocalDensity.current.fontScale > 1.3f) 1 else 2
+
+    StatsSectionHeader(stringResource(R.string.reading_stats_overview))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.chunked(perRow).forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Max),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                row.forEach { (icon, label, value) ->
+                    OverviewTile(
+                        icon = icon,
+                        label = label,
+                        value = value,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
+            }
         }
-        add(StatLine(label, stringResource(R.string.reading_stats_pace_value, (pace * 100).roundToInt())))
+    }
+}
+
+@Composable
+private fun OverviewTile(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    val palette = homePalette()
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    val badgeBg = palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer
+    StatsCard(
+        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.clearAndSetSemantics {
+            contentDescription = "$label, $value"
+        },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(badgeBg),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(19.dp),
+                )
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontFeatureSettings = TABULAR,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
 /**
- * The chart, under a heading of its own.
- *
- * Each range uses the calendar unit beneath it: days in a week, weeks
- * in a month, months in a year and years over all time. The calendar
- * below keeps the daily shape of longer spans available. The span's sum
- * is not repeated here: it is the figure at the top of the screen.
+ * The activity bar chart inside its own card with a header and Y-axis scale.
  */
 @Composable
 private fun ActivitySection(stats: ReadingStats, range: StatsRange) {
@@ -392,158 +823,630 @@ private fun ActivitySection(stats: ReadingStats, range: StatsRange) {
         range = range,
         weekStart = localeWeekStart(LocalLocale.current.platformLocale),
     )
-    StatsSectionHeader(stringResource(range.chartHeading))
+    Spacer(Modifier.height(14.dp))
     StatsCard {
-        Box(Modifier.padding(horizontal = 12.dp, vertical = 16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp)) {
+            Text(
+                text = stringResource(range.chartTitleRes),
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(range.chartSubtitleRes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(18.dp))
             PeriodBars(periods, range.chartPeriod)
         }
     }
 }
 
+/**
+ * Chooses a clean top scale (in minutes) divisible by 4 so the 5 Y-axis
+ * guide lines land on round minute/hour boundaries.
+ */
+internal fun chartAxisMaxMinutes(busiestMs: Long): Int {
+    val busiestMin = ceil(busiestMs.coerceAtLeast(0L) / 60_000.0).toInt()
+    if (busiestMin <= 60) return 80
+    val stepCandidates = intArrayOf(20, 30, 45, 60, 120, 180, 240, 360, 480, 720, 1440)
+    for (step in stepCandidates) {
+        val top = step * 4
+        if (top >= busiestMin) return top
+    }
+    val stepHours = ceil(busiestMin / (4.0 * 60.0)).toInt().coerceAtLeast(1)
+    return stepHours * 60 * 4
+}
+
+/** Formats a Y-axis step value in minutes as a compact label (`80m`, `2h`, `0m`). */
+internal fun chartAxisStepLabel(minutes: Int): String {
+    if (minutes <= 0) return "0m"
+    if (minutes >= 120 && minutes % 60 == 0) return "${minutes / 60}h"
+    return "${minutes}m"
+}
 
 /**
- * A range of reading summarised in calendar-sized bars.
- *
- * Bars rather than a line: a week is too few days for a line to mean
- * anything, and a bar of nothing reads correctly as a day with no
- * reading in it, which a line would smooth over.
- *
- * When seven or fewer bars are present, each one carries its own figure.
- *
- * The last bar is drawn in full and the rest a shade quieter, marking
- * the calendar period currently in progress. Flat colour throughout: a
- * gradient on a bar suggests a quantity it does not have.
+ * A range of reading summarised in calendar-sized bars with a Y-axis scale.
  */
 @Composable
 private fun PeriodBars(periods: List<ReadingPeriod>, unit: StatsChartPeriod) {
-    val busiest = periods.maxOfOrNull { it.totalMs }?.coerceAtLeast(1) ?: 1
-    // Read as observable state, so the letters change with the language
-    // rather than staying in whatever it was when the screen was built.
+    val busiest = periods.maxOfOrNull { it.totalMs }?.coerceAtLeast(1L) ?: 1L
+    val axisMaxMinutes = chartAxisMaxMinutes(busiest)
+    val axisMaxMs = axisMaxMinutes * 60_000L
     val locale = LocalLocale.current.platformLocale
     val lastIndex = periods.lastIndex
     val showAmounts = periods.size <= DAYS_IN_WEEK
-    val scrollable = periods.size > DAYS_IN_WEEK
-    // Translucent ink dithers into a halftone on an e-ink panel; the
-    // quieter bars take a solid grey of their own there instead.
     val eInk = LocalEInk.current
+    val palette = homePalette()
     val gap = when {
         periods.size <= DAYS_IN_WEEK -> 8.dp
         periods.size <= DAYS_IN_WEEK * 2 -> 5.dp
         periods.size <= DAYS_IN_WEEK * 3 -> 3.dp
         else -> 2.dp
     }
-    val corner = if (periods.size <= DAYS_IN_WEEK) 6.dp else 2.dp
-    // The figures above the bars need headroom of their own, or the
-    // tallest bar pushes its label out of the card.
-    val chartHeight = if (showAmounts) 150.dp else 130.dp
+    val corner = if (periods.size <= DAYS_IN_WEEK) 8.dp else 3.dp
     val dateFormat = lastReadFormat()
     val scrollState = rememberScrollState()
-    LaunchedEffect(periods, scrollable, scrollState.maxValue) {
-        if (scrollable) scrollState.scrollTo(scrollState.maxValue)
+    // Each slot must hold its callout at the current text size; when the
+    // slots do not fit the card, the chart scrolls rather than clip them.
+    val calloutStyle = MaterialTheme.typography.labelSmall.copy(
+        fontWeight = FontWeight.SemiBold,
+        fontFeatureSettings = TABULAR,
+    )
+    val axisStyle = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR)
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    // Vertical space follows the text size too, so large fonts grow the chart
+    // instead of pushing the day labels below the zero line.
+    fun lineHeight(style: androidx.compose.ui.text.TextStyle) =
+        with(density) { textMeasurer.measure("0h", style, maxLines = 1).size.height.toDp() }
+    val axisLabelHalf = lineHeight(axisStyle) / 2
+    val plotHeight = maxOf(136.dp, axisLabelHalf * 2 * 5)
+    val labelAreaHeight = maxOf(26.dp, lineHeight(MaterialTheme.typography.labelSmall) + 8.dp)
+    val calloutHeadroom = maxOf(
+        axisLabelHalf,
+        if (showAmounts) lineHeight(calloutStyle) + CALLOUT_CHROME else 6.dp,
+    )
+    val slotWidth = if (showAmounts) {
+        val widest = periods.mapNotNull { compactDuration(it.totalMs) }.maxOfOrNull {
+            textMeasurer.measure(it, calloutStyle, maxLines = 1, softWrap = false).size.width
+        } ?: 0
+        maxOf(MIN_BAR_SLOT, with(density) { widest.toDp() } + CalloutPadding * 2 + 2.dp)
+    } else {
+        MIN_BAR_SLOT
+    }
+
+    val gridLineColor = (palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant)
+        .copy(alpha = if (eInk) 1f else 0.55f)
+    val steps = remember(axisMaxMinutes) {
+        listOf(
+            axisMaxMinutes,
+            (axisMaxMinutes * 3) / 4,
+            axisMaxMinutes / 2,
+            axisMaxMinutes / 4,
+            0,
+        )
     }
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(chartHeight)
-            .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
-        horizontalArrangement = Arrangement.spacedBy(gap),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
     ) {
-        periods.forEachIndexed { index, period ->
-            val isCurrent = index == lastIndex
-            val amount = readingDuration(period.totalMs)
-            val label = period.shortLabel(unit, locale)
-            val spokenPeriod = period.spokenLabel(unit, locale, dateFormat)
-            val barHeight = if (period.totalMs > 0) {
-                (92.dp * (period.totalMs.toFloat() / busiest)).coerceAtLeast(8.dp)
-            } else {
-                // A rule on the floor of its own slot, so a quiet day
-                // still has a place in the row without looking like a
-                // short one.
-                2.dp
+        // Y-axis labels overhang the plot by half a line so the first and last
+        // label centre on the top and bottom grid lines.
+        Column(
+            modifier = Modifier
+                .padding(
+                    top = calloutHeadroom - axisLabelHalf,
+                    bottom = labelAreaHeight - axisLabelHalf,
+                    end = 10.dp,
+                )
+                .height(plotHeight + axisLabelHalf * 2),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.End,
+        ) {
+            steps.forEach { stepMinutes ->
+                Text(
+                    text = chartAxisStepLabel(stepMinutes),
+                    style = axisStyle,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            val spoken = if (period.totalMs > 0) {
-                stringResource(R.string.reading_stats_period_read, amount, spokenPeriod)
-            } else {
-                stringResource(R.string.reading_stats_no_reading_period, spokenPeriod)
+        }
+
+        // Plot area with horizontal guide lines and bars
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f)
+                .height(calloutHeadroom + plotHeight + labelAreaHeight),
+        ) {
+            val scrollable = slotWidth * periods.size + gap * (periods.size - 1) > maxWidth
+            LaunchedEffect(periods, scrollable, scrollState.maxValue) {
+                if (scrollable) scrollState.scrollTo(scrollState.maxValue)
             }
-            val primary = MaterialTheme.colorScheme.primary
-            val barColor = when {
-                period.totalMs <= 0 -> MaterialTheme.colorScheme.outlineVariant
-                isCurrent -> primary
-                // Earlier periods sit a shade back, leaving the current
-                // calendar period as the visual cursor. Electronic paper
-                // gets a solid mid grey, since it dithers translucency.
-                eInk -> MaterialTheme.colorScheme.outlineVariant
-                else -> primary.copy(alpha = 0.5f)
-            }
+            // Horizontal guide lines aligned with the 5 Y-axis steps
             Column(
                 modifier = Modifier
-                    .then(if (scrollable) Modifier.width(40.dp) else Modifier.weight(1f))
-                    .fillMaxHeight()
-                    // The bar and its letter are one fact, and read out
-                    // separately they are two thirds of a sentence.
-                    .clearAndSetSemantics { contentDescription = spoken },
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Bottom,
+                    .fillMaxWidth()
+                    .padding(top = calloutHeadroom, bottom = labelAreaHeight)
+                    .height(plotHeight),
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                if (showAmounts) {
-                    Text(
-                        text = compactDuration(period.totalMs).orEmpty(),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
-                        ),
-                        color = if (isCurrent) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Visible,
+                repeat(steps.size) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(gridLineColor),
                     )
-                    Spacer(Modifier.height(4.dp))
                 }
-                Box(
-                    Modifier
-                        // A lone day this early in the week is a bar, not
-                        // a slab across the card.
-                        .widthIn(max = 48.dp)
-                        .fillMaxWidth()
-                        // Heights must share the same scale. Weighting a
-                        // lone child inside each separate column makes
-                        // every bar fill its column and look identical.
-                        .height(barHeight)
-                        .clip(RoundedCornerShape(corner))
-                        .background(barColor),
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    ),
-                    color = if (isCurrent) {
-                        MaterialTheme.colorScheme.primary
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (scrollable) Modifier.horizontalScroll(scrollState) else Modifier),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                periods.forEachIndexed { index, period ->
+                    val isCurrent = index == lastIndex
+                    val amount = readingDuration(period.totalMs)
+                    val label = period.shortLabel(unit, locale)
+                    val spokenPeriod = period.spokenLabel(unit, locale, dateFormat)
+                    val fraction = (period.totalMs.toFloat() / axisMaxMs.coerceAtLeast(1L)).coerceIn(0f, 1f)
+                    val barHeight = if (period.totalMs > 0) {
+                        (plotHeight * fraction).coerceAtLeast(8.dp)
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Visible,
+                        2.dp
+                    }
+                    val spoken = if (period.totalMs > 0) {
+                        stringResource(R.string.reading_stats_period_read, amount, spokenPeriod)
+                    } else {
+                        stringResource(R.string.reading_stats_no_reading_period, spokenPeriod)
+                    }
+                    val topTint = palette?.progress ?: MaterialTheme.colorScheme.primary
+                    val bottomTint = palette?.accent ?: MaterialTheme.colorScheme.primary
+                    val barShape = RoundedCornerShape(
+                        topStart = corner,
+                        topEnd = corner,
+                        bottomStart = 3.dp,
+                        bottomEnd = 3.dp,
+                    )
+                    Column(
+                        modifier = Modifier
+                            .then(if (scrollable) Modifier.width(slotWidth) else Modifier.weight(1f))
+                            .fillMaxHeight()
+                            .clearAndSetSemantics { contentDescription = spoken },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom,
+                    ) {
+                        val compact = compactDuration(period.totalMs)
+                        if (showAmounts && compact != null) {
+                            BarCalloutPill(
+                                text = compact,
+                                highlighted = isCurrent,
+                            )
+                            Spacer(Modifier.height(3.dp))
+                        }
+                        Box(
+                            Modifier
+                                .widthIn(max = 36.dp)
+                                .fillMaxWidth()
+                                .height(barHeight)
+                                .clip(barShape)
+                                .then(
+                                    when {
+                                        period.totalMs <= 0 -> Modifier.background(gridLineColor)
+                                        eInk -> Modifier.background(
+                                            if (isCurrent) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.outlineVariant
+                                            },
+                                        )
+                                        else -> {
+                                            val alpha = if (isCurrent) 1f else 0.82f
+                                            Modifier.background(
+                                                Brush.verticalGradient(
+                                                    listOf(
+                                                        topTint.copy(alpha = alpha),
+                                                        bottomTint.copy(alpha = alpha),
+                                                    ),
+                                                ),
+                                            )
+                                        }
+                                    },
+                                ),
+                        )
+                        Box(
+                            modifier = Modifier.height(labelAreaHeight),
+                            contentAlignment = Alignment.BottomCenter,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                                ),
+                                color = if (isCurrent) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Visible,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The narrowest a bar's slot gets, and the callout's side padding. */
+private val MIN_BAR_SLOT = 40.dp
+private val CalloutPadding = 6.dp
+
+/** Callout height besides its text: padding, border, pointer and gap above the bar. */
+private val CALLOUT_CHROME = 2.dp * 2 + 1.dp * 2 + 4.dp + 3.dp + 2.dp
+
+@Composable
+private fun BarCalloutPill(
+    text: String,
+    highlighted: Boolean,
+) {
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val pillBg = when {
+        eInk -> MaterialTheme.colorScheme.surfaceContainerHigh
+        highlighted -> palette?.tabSelected ?: MaterialTheme.colorScheme.secondaryContainer
+        else -> palette?.pill ?: MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    val borderColor = when {
+        eInk -> MaterialTheme.colorScheme.outline
+        highlighted -> (palette?.progress ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.55f)
+        else -> palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = pillBg,
+            border = BorderStroke(1.dp, borderColor),
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    fontFeatureSettings = TABULAR,
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(horizontal = CalloutPadding, vertical = 2.dp),
+            )
+        }
+        if (!eInk) {
+            Canvas(Modifier.size(width = 8.dp, height = 4.dp)) {
+                val path = Path().apply {
+                    moveTo(0f, 0f)
+                    lineTo(size.width, 0f)
+                    lineTo(size.width / 2f, size.height)
+                    close()
+                }
+                drawPath(path, color = pillBg)
+            }
+        }
+    }
+}
+
+/**
+ * Chooses the rhythm card headline resource from the number of active days
+ * in the selected window.
+ */
+@StringRes
+internal fun readingRhythmTitleRes(activeDays: Int, totalDays: Int): Int {
+    val safeTotal = totalDays.coerceAtLeast(1)
+    return when {
+        activeDays >= safeTotal -> R.string.reading_stats_rhythm_title_daily
+        activeDays * 2 >= safeTotal -> R.string.reading_stats_rhythm_title_steady
+        else -> R.string.reading_stats_rhythm_title_starting
+    }
+}
+
+/**
+ * Reading rhythm card summarizing how many days in the current window had reading.
+ */
+@Composable
+private fun ReadingRhythmCard(
+    stats: ReadingStats,
+    range: StatsRange,
+) {
+    val palette = homePalette()
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    val activeDays = stats.recent.count { it.totalMs > 0 }
+    val totalDays = stats.recent.size.coerceAtLeast(1)
+    val titleRes = readingRhythmTitleRes(activeDays, totalDays)
+    val detail = if (range == StatsRange.THIS_WEEK) {
+        pluralStringResource(R.plurals.reading_stats_rhythm_detail_week, activeDays, activeDays, totalDays)
+    } else {
+        pluralStringResource(R.plurals.reading_stats_rhythm_detail_period, activeDays, activeDays, totalDays)
+    }
+
+    Spacer(Modifier.height(14.dp))
+    StatsCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer)
+                    .border(
+                        1.dp,
+                        (palette?.progress ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.35f),
+                        CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CalendarMonth,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(26.dp),
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(48.dp)
+                    .background(palette?.cardBorder ?: MaterialTheme.colorScheme.outlineVariant),
+            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.reading_stats_rhythm_eyebrow).uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.2.sp,
+                    ),
+                    color = accent,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = stringResource(titleRes),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
 }
 
-private val StatsRange.chartHeading: Int
+/**
+ * Weekly reading goal card with progress bar and tap-to-edit target duration.
+ */
+@Composable
+private fun WeeklyGoalCard(
+    weekReadingMs: Long,
+    weeklyGoalMinutes: Int,
+    onClick: () -> Unit,
+) {
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    val weeklyReadMs = weekReadingMs
+    val safeGoalMinutes = weeklyGoalMinutes.coerceAtLeast(30)
+    val goalMs = safeGoalMinutes * 60_000L
+    val goalHours = (safeGoalMinutes / 60).coerceAtLeast(1)
+    val progress = (weeklyReadMs.toFloat() / goalMs.toFloat()).coerceIn(0f, 1f)
+    val currentText = if (weeklyReadMs <= 0L) {
+        "0m"
+    } else {
+        readingDuration(weeklyReadMs)
+    }
+    val goalText = compactDuration(goalMs) ?: "${goalHours}h"
+    // With large text the figure moves under the subtitle so the title keeps its width.
+    val stackProgress = LocalDensity.current.fontScale > 1.3f
+    val progressText = @Composable {
+        Text(
+            text = stringResource(
+                R.string.reading_stats_weekly_goal_progress,
+                currentText,
+                goalText,
+            ),
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = TABULAR,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+
+    Spacer(Modifier.height(14.dp))
+    StatsCard(
+        modifier = Modifier
+            .clip(RoundedCornerShape(StatsCardCorner))
+            .clickable(role = Role.Button, onClick = onClick),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(palette?.pill ?: MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.TrackChanges,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.reading_stats_weekly_goal_title),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.reading_stats_weekly_goal_subtitle,
+                            goalHours,
+                            goalHours,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (stackProgress) progressText()
+                }
+                if (!stackProgress) progressText()
+            }
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(palette?.pill ?: MaterialTheme.colorScheme.surfaceContainerHighest),
+            ) {
+                if (progress > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(50))
+                            .then(
+                                if (eInk) {
+                                    Modifier.background(MaterialTheme.colorScheme.primary)
+                                } else {
+                                    Modifier.background(
+                                        Brush.horizontalGradient(
+                                            listOf(
+                                                palette?.accent ?: MaterialTheme.colorScheme.primary,
+                                                accent,
+                                            ),
+                                        ),
+                                    )
+                                },
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val WEEKLY_GOAL_HOUR_CHOICES = listOf(1, 2, 3, 5, 7, 10)
+
+@Composable
+private fun WeeklyGoalDialog(
+    currentMinutes: Int,
+    onSelectMinutes: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(R.string.reading_stats_weekly_goal_dialog_title))
+        },
+        text = {
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .selectableGroup(),
+            ) {
+                WEEKLY_GOAL_HOUR_CHOICES.forEach { hours ->
+                    val minutes = hours * 60
+                    val selected = currentMinutes == minutes
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .selectable(
+                                selected = selected,
+                                onClick = { onSelectMinutes(minutes) },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selected, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.reading_stats_weekly_goal_subtitle,
+                                hours,
+                                hours,
+                            ),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
+}
+
+private val StatsRange.eyebrowRes: Int
+    get() = when (this) {
+        StatsRange.THIS_WEEK -> R.string.reading_stats_eyebrow_week
+        StatsRange.THIS_MONTH -> R.string.reading_stats_eyebrow_month
+        StatsRange.THIS_YEAR -> R.string.reading_stats_eyebrow_year
+        StatsRange.ALL_TIME -> R.string.reading_stats_eyebrow_all
+    }
+
+private val StatsRange.chartTitleRes: Int
     get() = when (chartPeriod) {
-        StatsChartPeriod.DAY -> R.string.reading_stats_by_day
-        StatsChartPeriod.WEEK -> R.string.reading_stats_by_week
-        StatsChartPeriod.MONTH -> R.string.reading_stats_by_month
-        StatsChartPeriod.YEAR -> R.string.reading_stats_by_year
+        StatsChartPeriod.DAY -> R.string.reading_stats_chart_title_day
+        StatsChartPeriod.WEEK -> R.string.reading_stats_chart_title_week
+        StatsChartPeriod.MONTH -> R.string.reading_stats_chart_title_month
+        StatsChartPeriod.YEAR -> R.string.reading_stats_chart_title_year
+    }
+
+private val StatsRange.chartSubtitleRes: Int
+    get() = when (chartPeriod) {
+        StatsChartPeriod.DAY -> R.string.reading_stats_chart_subtitle_day
+        StatsChartPeriod.WEEK -> R.string.reading_stats_chart_subtitle_week
+        StatsChartPeriod.MONTH -> R.string.reading_stats_chart_subtitle_month
+        StatsChartPeriod.YEAR -> R.string.reading_stats_chart_subtitle_year
     }
 
 private fun ReadingPeriod.shortLabel(unit: StatsChartPeriod, locale: java.util.Locale): String =
@@ -608,9 +1511,12 @@ private fun BookStatRow(
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
+    val palette = homePalette()
+    val eInk = LocalEInk.current
     Surface(
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = palette?.card ?: MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)

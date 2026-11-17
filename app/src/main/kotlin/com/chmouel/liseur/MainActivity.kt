@@ -527,6 +527,7 @@ private fun LiseurApp(
                             },
                             onBack = back.takeIf { shownTab == null },
                             onSelectRange = model::selectRange,
+                            onSetWeeklyGoalMinutes = model::setWeeklyGoalMinutes,
                             onRetry = model::refreshServerInsights,
                             bottomBarSpace = if (shownTab != null) mainTabBarSpace() else 0.dp,
                         )

@@ -1112,6 +1112,55 @@
     <string name="reading_stats_heatmap_empty_day">Nada leído el %1$s</string>
     <string name="reading_stats_unavailable">No se pudieron cargar tus estadísticas de lectura desde liseur-sync.</string>
     <string name="reading_stats_empty_range">Nada leído en este periodo. Prueba uno más largo.</string>
+    <string name="reading_stats_eyebrow_week">Tu lectura esta semana</string>
+    <string name="reading_stats_eyebrow_month">Tu lectura este mes</string>
+    <string name="reading_stats_eyebrow_year">Tu lectura este año</string>
+    <string name="reading_stats_eyebrow_all">Tu lectura en total</string>
+    <plurals name="reading_stats_pill_sessions">
+        <item quantity="one">%d sesión</item>
+        <item quantity="other">%d sesiones</item>
+    </plurals>
+    <plurals name="reading_stats_pill_streak">
+        <item quantity="one">%d día de racha</item>
+        <item quantity="other">%d días de racha</item>
+    </plurals>
+    <plurals name="reading_stats_pill_books">
+        <item quantity="one">%d libro</item>
+        <item quantity="other">%d libros</item>
+    </plurals>
+    <string name="reading_stats_tile_streak">Racha de lectura</string>
+    <plurals name="reading_stats_tile_streak_days">
+        <item quantity="one">%d día</item>
+        <item quantity="other">%d días</item>
+    </plurals>
+    <string name="reading_stats_tile_sessions">Sesiones</string>
+    <string name="reading_stats_tile_pace">Ritmo med.</string>
+    <string name="reading_stats_chart_title_day">Tiempo de lectura por día</string>
+    <string name="reading_stats_chart_title_week">Tiempo de lectura por semana</string>
+    <string name="reading_stats_chart_title_month">Tiempo de lectura por mes</string>
+    <string name="reading_stats_chart_title_year">Tiempo de lectura por año</string>
+    <string name="reading_stats_chart_subtitle_day">Minutos leídos por día</string>
+    <string name="reading_stats_chart_subtitle_week">Tiempo leído por semana</string>
+    <string name="reading_stats_chart_subtitle_month">Tiempo leído por mes</string>
+    <string name="reading_stats_chart_subtitle_year">Tiempo leído por año</string>
+    <string name="reading_stats_rhythm_eyebrow">Ritmo de lectura</string>
+    <string name="reading_stats_rhythm_title_starting">Creando un hábito</string>
+    <string name="reading_stats_rhythm_title_steady">Ritmo constante</string>
+    <string name="reading_stats_rhythm_title_daily">Todos los días</string>
+    <plurals name="reading_stats_rhythm_detail_week">
+        <item quantity="one">Has leído %1$d de %2$d días esta semana. Sigue así para ganar impulso.</item>
+        <item quantity="other">Has leído %1$d de %2$d días esta semana. Sigue así para ganar impulso.</item>
+    </plurals>
+    <plurals name="reading_stats_rhythm_detail_period">
+        <item quantity="one">Has leído %1$d de %2$d días en este periodo.</item>
+        <item quantity="other">Has leído %1$d de %2$d días en este periodo.</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_title">Objetivo semanal</string>
+    <plurals name="reading_stats_weekly_goal_subtitle">
+        <item quantity="one">Leer %d hora</item>
+        <item quantity="other">Leer %d horas</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_dialog_title">Objetivo de lectura semanal</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>
