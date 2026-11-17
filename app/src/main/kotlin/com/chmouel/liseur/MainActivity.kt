@@ -391,8 +391,13 @@ private fun LiseurApp(
     val libraryLayout = libraryState.layout
     val libraryTab = when {
         tabs.pickedHome ?: libraryLayout.startOnHome -> MainTab.HOME
-        libraryState.seriesView -> MainTab.SERIES
+        libraryState.seriesView && (libraryState.loading || libraryState.series.isNotEmpty()) -> MainTab.SERIES
         else -> MainTab.LIBRARY
+    }
+    LaunchedEffect(libraryState.loading, libraryState.seriesView, libraryState.series.isEmpty()) {
+        if (!libraryState.loading && libraryState.seriesView && libraryState.series.isEmpty()) {
+            library.showSeries(false)
+        }
     }
     val shownTab = backStack.mainTab(libraryTab)?.takeIf {
         libraryLayout.tabs && (it != libraryTab || tabs.libraryBar)
@@ -855,6 +860,7 @@ private fun LiseurApp(
         MainTabBar(
             selected = tab,
             onSelect = selectTab,
+            hasSeries = libraryState.series.isNotEmpty(),
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

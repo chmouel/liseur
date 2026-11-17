@@ -2,13 +2,17 @@ package com.chmouel.liseur.ui.library
 
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.domain.FinishedOverride
+import com.chmouel.liseur.domain.LibraryFilterOption
+import com.chmouel.liseur.domain.LibraryFilters
 import com.chmouel.liseur.domain.LibraryLayout
 import com.chmouel.liseur.domain.LibraryStyle
 import com.chmouel.liseur.domain.ShelfGrouping
+import com.chmouel.liseur.domain.groupedIntoSeries
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -29,6 +33,32 @@ class LibraryViewModelTest {
         finishedAt = if (finished) 1L else null,
         remotePageCount = pageCount,
     )
+
+    @Test
+    fun `a series named Controls cannot collide with the controls row`() {
+        val series = listOf(book().copy(seriesName = "Controls")).groupedIntoSeries().single()
+        assertNotEquals(SERIES_CONTROLS_KEY, seriesBannerKey(series.key))
+    }
+
+    @Test
+    fun `series filters retain every volume of a matching series and include single volume series`() {
+        val books = listOf(
+            book().copy(id = 1, url = "a1", seriesName = "Alpha", seriesIndex = 1.0),
+            book().copy(id = 2, url = "a2", seriesName = "Alpha", seriesIndex = 2.0),
+            book().copy(id = 3, url = "b1", seriesName = "Beta", seriesIndex = 1.0),
+            book().copy(id = 4, url = "standalone"),
+        )
+        val series = books.groupedIntoSeries()
+        val all = matchingSeries(series, LibraryFilters(), emptyMap(), emptyMap(), emptySet())
+        assertEquals(listOf("Alpha", "Beta"), all.map { it.name })
+        assertEquals(listOf(2, 1), all.map { it.volumes.size })
+
+        val rated = matchingSeries(
+            series, LibraryFilters(setOf(LibraryFilterOption.RATED)), emptyMap(), emptyMap(), setOf("a2", "standalone"),
+        )
+        assertEquals(listOf("Alpha"), rated.map { it.name })
+        assertEquals(listOf("a1", "a2"), rated.single().volumes.map { it.book.url })
+    }
 
     @Test
     fun `mark unread is offered for finished or started books not already overridden unread`() {
