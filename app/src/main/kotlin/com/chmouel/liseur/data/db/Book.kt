@@ -234,6 +234,10 @@ data class Book(
      */
     @ColumnInfo(name = "hidden_at") val hiddenAt: Long? = null,
 ) {
+    internal fun sameGeneration(other: Book): Boolean =
+        id == other.id && url == other.url && workId == other.workId &&
+            fileModifiedAt == other.fileModifiedAt && linkGeneration == other.linkGeneration
+
     val finished: Boolean get() = finishedAt != null
 
     val archived: Boolean get() = archivedAt != null

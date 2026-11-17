@@ -267,8 +267,6 @@ class WorkResolver(
     ): WorkResolution {
         val workId = answer.optString("work_id").takeIf { it.isNotEmpty() }
             ?: return WorkResolution.Unresolved(cause = null)
-        dao.clearAmbiguity(book.url, peerId)
-
         // The digest the server matched on, when it said which: kept so
         // ops can carry the edition without the file ever being hashed
         // here.
@@ -305,7 +303,7 @@ class WorkResolver(
             editionSha = editionSha ?: existing?.editionSha,
             resolvedAt = now(),
         )
-        dao.upsert(alias)
+        if (!dao.saveResolution(book, alias)) return WorkResolution.Unresolved(cause = null)
 
         return if (alias.usable) {
             WorkResolution.Named(alias)
@@ -490,8 +488,6 @@ class WorkResolver(
         // A resolve that succeeds settles any earlier disagreement: the
         // server has just told us, with these identifiers, which book
         // this is.
-        dao.clearAmbiguity(book.url, peerId)
-
         // A re-resolve of a name already in use — to register the catalog
         // id, or to let the file settle a guess — must not lose what the
         // reader and the seed pass already established about it.
@@ -520,7 +516,7 @@ class WorkResolver(
             editionSha = fingerprint?.sha256,
             resolvedAt = now(),
         )
-        dao.upsert(alias)
+        if (!dao.saveResolution(book, alias)) return WorkResolution.Unresolved(cause = null)
 
         return if (alias.usable) {
             WorkResolution.Named(alias)
@@ -537,14 +533,14 @@ class WorkResolver(
         val works = rejection.body?.optJSONArray("works").let(::strings)
         if (works.size < 2) return WorkResolution.Unresolved(cause = rejection)
 
-        dao.upsert(
+        val ambiguity =
             WorkAmbiguity(
                 bookUrl = book.url,
                 peerId = peerId,
                 workIds = works.joinToString("\n"),
                 noticedAt = now(),
-            ),
-        )
+            )
+        if (!dao.saveAmbiguity(book, ambiguity)) return WorkResolution.Unresolved(cause = null)
         return WorkResolution.Ambiguous(works)
     }
 

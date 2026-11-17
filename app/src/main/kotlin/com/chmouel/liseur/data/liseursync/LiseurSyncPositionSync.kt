@@ -802,9 +802,10 @@ class LiseurSyncPositionSync(
             0
         }
 
+        var moreEvaluations = false
         if (trouble.unreachable == null) {
             try {
-                evaluations?.sync(server, book)
+                moreEvaluations = evaluations?.sync(server, book) == true
             } catch (e: CancellationException) {
                 throw e
             } catch (e: IOException) {
@@ -843,9 +844,9 @@ class LiseurSyncPositionSync(
 
         return if (firstFailure == null) {
             // A fresh stamp would hold off the foreground sync that finishes the catch-up
-            if (caughtUp) forAccount(account) { serverDao.setPositionSyncedAt(at) }
+            if (caughtUp && !moreEvaluations) forAccount(account) { serverDao.setPositionSyncedAt(at) }
             reporting.report(PositionSyncStatus.Synced(at))
-            if (caughtUp) named.outcome() else SyncOutcome.Incomplete
+            if (caughtUp && !moreEvaluations) named.outcome() else SyncOutcome.Incomplete
         } else {
             Log.i(TAG, "Some positions did not settle: ${firstFailure.label}")
             reporting.report(PositionSyncStatus.Failed(firstFailure))

@@ -12,6 +12,7 @@ import androidx.sqlite.execSQL
         ReadingProgress::class,
         BookEvaluation::class,
         EvaluationSync::class,
+        EvaluationPoll::class,
         RetainedEvaluation::class,
         FurthestPosition::class,
         PeakDelivery::class,
@@ -107,8 +108,13 @@ abstract class LiseurDatabase : RoomDatabase() {
                     CREATE TABLE IF NOT EXISTS evaluation_sync (
                         peer_id TEXT NOT NULL, book_url TEXT NOT NULL, field TEXT NOT NULL,
                         work_id TEXT NOT NULL, acked_revision INTEGER NOT NULL,
-                        sent_json TEXT, sent_revision INTEGER,
+                        sent_json TEXT, sent_revision INTEGER, polled_at INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY(peer_id, book_url, field)
+                    )
+                """.trimIndent())
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS evaluation_poll (
+                        peer_id TEXT NOT NULL PRIMARY KEY, started_at INTEGER NOT NULL
                     )
                 """.trimIndent())
                 connection.execSQL("""

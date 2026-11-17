@@ -49,7 +49,8 @@ class BookFingerprintStore(
         }
 
         val fresh = read(url) ?: return null
-        dao.upsert(
+        val saved = dao.saveFingerprint(
+            book,
             BookFingerprintRow(
                 bookUrl = book.url,
                 sha256 = fresh.sha256,
@@ -59,7 +60,7 @@ class BookFingerprintStore(
                 computedAt = now(),
             ),
         )
-        return fresh
+        return fresh.takeIf { saved }
     }
 
     /**

@@ -34,7 +34,9 @@ before sending. The server retains request fingerprints and writer revisions
 so a delayed retry never overwrites a later choice. A removal leaves a
 permanent null field; receipt records do not retain review text. For each
 work and field, settle requests, send local edits in revision order across
-active and retained copies, then pull the result into every copy. A sync for
+active and retained copies, then pull the result into every copy. Full syncs
+poll at most 20 works per pass, persist each sweep's progress, and schedule
+follow-up passes for the rest. A sync for
 one book includes the other known copies of that work. An acknowledged
 later revision retires older unsent edits on copies that become usable
 afterwards; those copies adopt the current server fields. Identical retries

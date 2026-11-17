@@ -171,9 +171,7 @@ class BookDetailsViewModel(
         var saved = false
         inTransaction {
             val current = bookDao.getByUrl(book.url) ?: return@inTransaction
-            if (current.id != book.id || current.workId != book.workId ||
-                current.fileModifiedAt != book.fileModifiedAt || current.linkGeneration != book.linkGeneration
-            ) return@inTransaction
+            if (!current.sameGeneration(book)) return@inTransaction
             dao.edit(current.url, field, value, current.title, current.author.orEmpty(), System.currentTimeMillis())
             saved = true
         }
