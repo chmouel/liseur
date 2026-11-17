@@ -34,6 +34,8 @@ class LibraryViewModelTest {
     fun `mark unread is offered for finished or started books not already overridden unread`() {
         assertTrue(canMarkBookUnread(book(finished = true), progression = null))
         assertTrue(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.NONE))
+        assertTrue(canMarkBookUnread(book(), progression = null, override = FinishedOverride.WANT_TO_READ))
+        assertTrue(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.WANT_TO_READ))
         assertFalse(canMarkBookUnread(book(), progression = 0.4, override = FinishedOverride.UNREAD))
         assertFalse(canMarkBookUnread(book(), progression = null, override = FinishedOverride.NONE))
         assertFalse(canMarkBookUnread(book(), progression = 0.001, override = FinishedOverride.NONE))

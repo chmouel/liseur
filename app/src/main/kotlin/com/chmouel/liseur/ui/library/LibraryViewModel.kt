@@ -376,7 +376,7 @@ data class LibraryUiState(
      * and the whole grouping is in hand here.
      */
     val shownSeries: Set<String> = emptySet(),
-    val inProgressBooks: Set<String> = emptySet(),
+    val canMarkUnreadBooks: Set<String> = emptySet(),
     /** The library style and its options. */
     val layout: LibraryLayout = LibraryLayout(),
     /** How far into each in-progress book the reader is, by URL. */
@@ -398,12 +398,12 @@ data class LibraryUiState(
     val trackLengths: Map<String, Float> = emptyMap(),
 )
 
-/** Whether [book] is in a shelf bucket that can be marked unread. */
 fun canMarkBookUnread(
     book: Book,
     progression: Double?,
     override: FinishedOverride = FinishedOverride.NONE,
-): Boolean = shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD
+): Boolean = override == FinishedOverride.WANT_TO_READ ||
+    shelfStateFor(book, progression, override) != LibraryFilterOption.UNREAD
 
 /**
  * The card above the shelf, or nothing when the shelf calls the book
@@ -842,7 +842,7 @@ class LibraryViewModel(
                     .mapNotNull { row -> row.totalProgression?.let { row.bookUrl to it } }
                     .toMap()
             val overrides = progressionList.associate { row -> row.bookUrl to row.override }
-            val inProgressBooks =
+            val canMarkUnreadBooks =
                 books
                     .mapNotNullTo(mutableSetOf()) { book ->
                         book.url.takeIf {
@@ -854,6 +854,9 @@ class LibraryViewModel(
                                 )
                         }
                     }
+            val inProgressBooks = canMarkUnreadBooks.filterTo(mutableSetOf()) { url ->
+                overrides[url] != FinishedOverride.WANT_TO_READ
+            }
 
             @Suppress("UNCHECKED_CAST")
             val uploading = baseValues[9] as Set<String>
@@ -1058,7 +1061,7 @@ class LibraryViewModel(
                 seriesView = seriesView,
                 seriesOptions = allShelves.map { shelf -> shelf.asPickOption(readAt) },
                 shownSeries = shownSeries,
-                inProgressBooks = inProgressBooks,
+                canMarkUnreadBooks = canMarkUnreadBooks,
                 layout = layout,
                 progressions = progressions.filterKeys { it in inProgressBooks },
                 styleShelves =

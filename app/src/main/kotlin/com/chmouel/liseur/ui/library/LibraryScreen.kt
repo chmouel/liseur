@@ -1184,7 +1184,7 @@ fun LibraryScreen(
     sheetBook?.let { book ->
         BookActionsSheet(
             book = book,
-            canMarkUnread = book.finished || book.url in state.inProgressBooks,
+            canMarkUnread = book.finished || book.url in state.canMarkUnreadBooks,
             downloading = book.url in state.downloads,
             onDismiss = { sheetBook = null },
             canDownload = state.canDownload(book),
