@@ -1000,6 +1000,7 @@ class ReadingStatsViewModel(
                 booksFinished = books.count { it.finished },
                 books = books,
                 recent = recent,
+                booksByDay = emptyMap(),
             )
         }
 

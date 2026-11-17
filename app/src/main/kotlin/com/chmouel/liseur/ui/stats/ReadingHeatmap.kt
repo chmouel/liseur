@@ -64,10 +64,10 @@ import java.time.format.TextStyle
 internal fun ReadingHeatmap(
     days: List<ReadingDay>,
     modifier: Modifier = Modifier,
+    selectedDate: LocalDate? = null,
     onSelectDay: ((ReadingDay?) -> Unit)? = null,
 ) {
     if (days.isEmpty()) return
-    var selectedDate by remember(days) { mutableStateOf<LocalDate?>(null) }
     val locale = LocalLocale.current.platformLocale
     val firstDayOfWeek = localeWeekStart(locale)
     // Pad the first column so every row is one weekday, the way a wall
@@ -162,9 +162,7 @@ internal fun ReadingHeatmap(
                             isSelected = isSelected,
                             onClick = if (onSelectDay != null && day != null) {
                                 {
-                                    val next = if (selectedDate == day.date) null else day.date
-                                    selectedDate = next
-                                    onSelectDay(if (next != null) day else null)
+                                    onSelectDay(if (isSelected) null else day)
                                 }
                             } else {
                                 null
