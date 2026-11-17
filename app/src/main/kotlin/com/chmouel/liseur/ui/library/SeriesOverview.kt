@@ -1,5 +1,25 @@
 package com.chmouel.liseur.ui.library
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.unit.sp
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.theme.DarkHomePalette
+import com.chmouel.liseur.ui.theme.homePalette
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -75,7 +95,15 @@ internal fun SeriesOverview(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * A series on the Series tab: the volume to open next large on the left,
+ * and beside it the name, the author, how many books, what comes next,
+ * every volume in a row and a rail of what has been read.
+ *
+ * The card takes a faint wash of the featured cover's colour, so a
+ * column of series reads as a column of different books rather than a
+ * stack of identical boxes. On e-ink it is an outline and nothing more.
+ */
 @Composable
 private fun SeriesBanner(
     shelf: SeriesShelf,
@@ -86,88 +114,159 @@ private fun SeriesBanner(
 ) {
     val next = shelf.nextUp
     val featured = next?.book ?: shelf.cover
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val dark = palette == DarkHomePalette
+    val shape = RoundedCornerShape(22.dp)
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    val card = palette?.card ?: Color.Transparent
+    val tint = rememberCoverTint(featured)
+    val wash by animateColorAsState(
+        targetValue = when {
+            palette == null -> Color.Transparent
+            tint != null -> lerp(card, tint, if (dark) 0.38f else 0.16f)
+            else -> lerp(card, palette.heroWash, if (dark) 0.9f else 0.8f)
+        },
+        animationSpec = tween(durationMillis = 400),
+        label = "seriesWash",
+    )
+    val background = if (palette == null) {
+        Modifier
+    } else {
+        Modifier.background(Brush.linearGradient(listOf(wash, card), end = Offset(900f, 700f)))
+    }
+    val state = seriesStateDescription(shelf)
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = shape,
+        color = card,
+        border = when {
+            eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            palette != null -> BorderStroke(1.dp, palette.cardBorder)
+            else -> null
+        },
+        shadowElevation = if (palette != null && !dark) 3.dp else 0.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onSeriesSelected),
-                verticalAlignment = Alignment.CenterVertically,
+        Row(
+            modifier = Modifier
+                .then(background)
+                .clickable(onClickLabel = stringResource(R.string.series_open), onClick = onSeriesSelected)
+                .padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SeriesBannerCover(
+                book = featured,
+                progress = downloads[featured.url],
+                onClick = { onBookSelected(featured) },
+                onLongClick = { onBookLongPress(featured) },
+                shape = RoundedCornerShape(12.dp),
+                elevation = 6.dp,
+                modifier = Modifier.width(116.dp).aspectRatio(2f / 3f),
+            )
+            Column(
+                Modifier
+                    .padding(start = 16.dp)
+                    .weight(1f),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = shelf.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                Row(
+                    modifier = Modifier
+                        .height(IntrinsicSize.Min)
+                        .semantics(mergeDescendants = true) { stateDescription = state },
+                ) {
+                    Box(
+                        Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .padding(vertical = 3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(accent),
                     )
-                    shelf.author?.takeIf { it.isNotBlank() }?.let { author ->
+                    Column(Modifier.padding(start = 10.dp)) {
                         Text(
-                            text = author,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            text = shelf.name,
+                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 21.sp, lineHeight = 26.sp),
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                }
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
-            }
-            Spacer(Modifier.height(14.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                SeriesBannerCover(
-                    book = featured,
-                    progress = downloads[featured.url],
-                    onClick = { onBookSelected(featured) },
-                    onLongClick = { onBookLongPress(featured) },
-                    modifier = Modifier.width(104.dp).aspectRatio(2f / 3f),
-                )
-                Column(Modifier.weight(1f)) {
-                    val title = when {
-                        next != null -> stringResource(
-                            if (next.inProgress) R.string.series_continue else R.string.series_start,
-                            next.book.displayTitle,
-                        )
-                        shelf.complete -> stringResource(R.string.series_all_known_read)
-                        else -> featured.displayTitle
-                    }
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = pluralStringResource(R.plurals.series_book_count, shelf.volumes.size, shelf.volumes.size),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(shelf.volumes, key = { it.book.url }) { volume ->
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                SeriesBannerCover(
-                                    book = volume.book,
-                                    progress = downloads[volume.book.url],
-                                    onClick = { onBookSelected(volume.book) },
-                                    onLongClick = { onBookLongPress(volume.book) },
-                                    modifier = Modifier.width(48.dp).aspectRatio(2f / 3f),
-                                )
-                                seriesIndexLabel(volume.index)?.let { number ->
-                                    Text(
-                                        text = stringResource(R.string.series_volume_number, number),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
+                        shelf.author?.takeIf { it.isNotBlank() }?.let { author ->
+                            Text(
+                                text = author,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = accent,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
                         }
                     }
                 }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 10.dp),
+                ) {
+                    Icon(
+                        Icons.Outlined.Layers,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = pluralStringResource(R.plurals.series_book_count, shelf.volumes.size, shelf.volumes.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                val upNext = when {
+                    next != null -> stringResource(
+                        if (next.inProgress) R.string.series_continue else R.string.series_start,
+                        next.book.displayTitle,
+                    )
+                    shelf.complete -> stringResource(R.string.series_all_known_read)
+                    else -> null
+                }
+                upNext?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp),
+                    modifier = Modifier.padding(top = 8.dp),
+                ) {
+                    items(shelf.volumes, key = { it.book.url }) { volume ->
+                        SeriesBannerCover(
+                            book = volume.book,
+                            progress = downloads[volume.book.url],
+                            onClick = { onBookSelected(volume.book) },
+                            onLongClick = { onBookLongPress(volume.book) },
+                            shape = RoundedCornerShape(8.dp),
+                            elevation = 3.dp,
+                            index = volume.index,
+                            modifier = Modifier.width(52.dp).aspectRatio(2f / 3f),
+                        )
+                    }
+                }
+                SeriesProgressRail(
+                    shelf = shelf,
+                    read = accent,
+                    untouched = palette?.track ?: MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                )
             }
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = palette?.onPill ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp),
+            )
         }
     }
 }
@@ -179,12 +278,18 @@ private fun SeriesBannerCover(
     progress: DownloadProgress?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    shape: Shape,
+    elevation: Dp,
     modifier: Modifier = Modifier,
+    index: Double? = null,
 ) {
+    val eInk = LocalEInk.current
     val description = book.displayTitle
     val state = bookStateDescription(book, progress)
     Box(
         modifier = modifier
+            .then(if (eInk) Modifier else Modifier.shadow(elevation, shape))
+            .clip(shape)
             .combinedClickable(
                 onClickLabel = stringResource(R.string.read_book),
                 onLongClickLabel = stringResource(R.string.book_actions),
@@ -196,10 +301,27 @@ private fun SeriesBannerCover(
                 stateDescription = state
             },
     ) {
-        BookCover(book = book, modifier = Modifier.fillMaxSize().alpha(if (book.finished) 0.6f else 1f))
+        BookCover(book = book, shape = shape, modifier = Modifier.fillMaxSize().alpha(if (book.finished) 0.6f else 1f))
+        VolumeBadge(index, Modifier.align(Alignment.TopStart))
         when {
             progress != null -> DownloadOverlay(progress.fraction, progress.queued, Modifier.matchParentSize())
             book.downloadState != DownloadState.DOWNLOADED -> OnServerBadge(Modifier.align(Alignment.TopEnd))
         }
     }
+}
+
+/** The volume number on a thumbnail: [SeriesIndexRibbon] cut down to the size of one. */
+@Composable
+private fun VolumeBadge(index: Double?, modifier: Modifier = Modifier) {
+    val label = seriesIndexLabel(index) ?: return
+    Text(
+        text = stringResource(R.string.series_volume_number, label),
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+        fontWeight = FontWeight.Bold,
+        color = CoverBadgeContent,
+        modifier = modifier
+            .clip(RoundedCornerShape(bottomEnd = 6.dp))
+            .background(CoverBadgeScrim)
+            .padding(horizontal = 5.dp, vertical = 1.dp),
+    )
 }

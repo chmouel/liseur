@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
@@ -288,31 +289,55 @@ private fun SeriesCountBadge(count: Int, modifier: Modifier = Modifier) {
  * without a number being written anywhere.
  */
 @Composable
-private fun SeriesProgressRail(shelf: SeriesShelf, modifier: Modifier = Modifier) {
-    val read = MaterialTheme.colorScheme.primary
-    val started = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-    val untouched = MaterialTheme.colorScheme.surfaceVariant
+internal fun SeriesProgressRail(
+    shelf: SeriesShelf,
+    modifier: Modifier = Modifier,
+    read: Color = MaterialTheme.colorScheme.primary,
+    untouched: Color = MaterialTheme.colorScheme.surfaceVariant,
+    thickness: Dp = 4.dp,
+) {
+    val eInk = LocalEInk.current
+    val outline = MaterialTheme.colorScheme.outline
+    val filled = if (eInk) outline else read
+    val started = if (eInk) outline.copy(alpha = 0.5f) else read.copy(alpha = 0.45f)
+    val shape = RoundedCornerShape(thickness / 2)
+    val track = if (eInk) Modifier.border(1.dp, outline, shape) else Modifier.background(untouched)
     Row(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = modifier.height(4.dp),
+        modifier = modifier.height(thickness),
     ) {
+        // Past a dozen volumes the segments shrink to slivers, so the
+        // series reads as one bar filled as far as the volumes read.
+        if (shelf.volumes.size > MAX_RAIL_SEGMENTS) {
+            Box(Modifier.weight(1f).fillMaxSize().clip(shape).then(track)) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(shelf.finishedCount.toFloat() / shelf.volumes.size)
+                        .fillMaxSize()
+                        .background(filled),
+                )
+            }
+            return@Row
+        }
         shelf.volumes.forEach { volume ->
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxSize()
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(
+                    .clip(shape)
+                    .then(
                         when {
-                            volume.finished -> read
-                            volume.inProgress -> started
-                            else -> untouched
+                            volume.finished -> Modifier.background(filled)
+                            volume.inProgress -> Modifier.background(started)
+                            else -> track
                         },
                     ),
             )
         }
     }
 }
+
+private const val MAX_RAIL_SEGMENTS = 12
 
 /**
  * How far through a pile of books the reader is, in words.
