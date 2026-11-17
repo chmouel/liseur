@@ -1412,6 +1412,39 @@ class ReadingStatsViewModelTest {
         assertEquals(1, merged.booksRead)
         assertEquals(1, merged.booksFinished)
         assertTrue(merged.books.single().finished)
+        assertTrue(merged.booksByDay.isEmpty())
+    }
+
+    @Test
+    fun `merging cross device stats clears local per day book breakdowns`() {
+        val url = "content://sd/book.epub"
+        val at = today.atTime(LocalTime.NOON).atZone(zone).toInstant().toEpochMilli()
+        val bookEntry = BookReadingStats(
+            bookUrl = url,
+            title = "A book",
+            author = "An author",
+            totalMs = 600_000L,
+            lastReadAt = at,
+            progression = 0.5,
+            finished = false,
+            sessions = 1,
+        )
+        val merged = ReadingStatsViewModel.mergeDashboard(
+            local = ReadingStats(
+                totalMs = 600_000L,
+                booksRead = 1,
+                booksFinished = 0,
+                books = listOf(bookEntry),
+                recent = listOf(ReadingDay(today, 600_000L)),
+                booksByDay = mapOf(today to listOf(bookEntry)),
+            ),
+            knownBooks = mapOf(url to StatsBook(url, "A book", "An author", 0.5, false)),
+            serverRecent = listOf(InsightDay(today, activeMinutes = 30.0)),
+            serverBooks = null,
+            zone = zone,
+        )
+
+        assertTrue(merged.booksByDay.isEmpty())
     }
 
     private fun session(

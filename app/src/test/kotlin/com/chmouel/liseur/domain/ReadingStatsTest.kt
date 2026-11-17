@@ -977,4 +977,61 @@ class ReadingStatsTest {
             assertEquals(period, compareReading(period, 1, 2).period)
         }
     }
+
+    @Test
+    fun `each day keeps the books read on it and coalesces their sittings`() {
+        val yesterday = today.minusDays(1)
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", at(yesterday, 10, 0), 600_000, lastReadAt = at(yesterday, 10, 10)),
+                SessionSpan("a", at(yesterday, 10, 12), 300_000, lastReadAt = at(yesterday, 10, 17)),
+                SessionSpan("b", at(yesterday, 20, 0), 1_200_000),
+                SessionSpan("a", at(today, 9, 0), 450_000),
+            ),
+            books = mapOf(
+                "a" to book("a"),
+                "b" to book("b"),
+            ),
+            zone = zone,
+            today = today,
+        )
+
+        val yesterdayBooks = stats.booksIn(yesterday, yesterday)
+        assertEquals(listOf("b", "a"), yesterdayBooks.map { it.bookUrl })
+        assertEquals(1_200_000L, yesterdayBooks[0].totalMs)
+        assertEquals(1, yesterdayBooks[0].sessions)
+        assertEquals(900_000L, yesterdayBooks[1].totalMs)
+        assertEquals(1, yesterdayBooks[1].sessions)
+
+        val todayBooks = stats.booksIn(today, today)
+        assertEquals(listOf("a"), todayBooks.map { it.bookUrl })
+        assertEquals(450_000L, todayBooks.single().totalMs)
+        assertEquals(1, todayBooks.single().sessions)
+    }
+
+    @Test
+    fun `a multi day period merges the books read across its days`() {
+        val twoDaysAgo = today.minusDays(2)
+        val yesterday = today.minusDays(1)
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", at(twoDaysAgo, 10, 0), 600_000),
+                SessionSpan("b", at(yesterday, 14, 0), 900_000),
+                SessionSpan("a", at(today, 18, 0), 600_000),
+            ),
+            books = mapOf(
+                "a" to book("a"),
+                "b" to book("b"),
+            ),
+            zone = zone,
+            today = today,
+        )
+
+        val merged = stats.booksIn(twoDaysAgo, today)
+        assertEquals(listOf("a", "b"), merged.map { it.bookUrl })
+        assertEquals(1_200_000L, merged[0].totalMs)
+        assertEquals(2, merged[0].sessions)
+        assertEquals(900_000L, merged[1].totalMs)
+        assertEquals(1, merged[1].sessions)
+    }
 }

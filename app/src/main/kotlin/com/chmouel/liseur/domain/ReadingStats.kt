@@ -114,8 +114,43 @@ data class ReadingStats(
      * divide by.
      */
     val progressionPerHour: Double? = null,
+    /**
+     * Books read on each day in the window, sorted by time spent on that day.
+     *
+     * Populated for local stats (`THIS_DEVICE`); empty on cross-device
+     * merged snapshots where the server only supplies whole-window per-work
+     * totals rather than a day-by-work matrix.
+     */
+    val booksByDay: Map<LocalDate, List<BookReadingStats>> = emptyMap(),
 ) {
     val isEmpty: Boolean get() = totalMs <= 0 && books.isEmpty()
+
+    /**
+     * Books read within `[from..to]` inclusive, sorted by time spent in
+     * that span.
+     */
+    fun booksIn(from: LocalDate, to: LocalDate): List<BookReadingStats> {
+        if (booksByDay.isEmpty() || to.isBefore(from)) return emptyList()
+        if (from == to) return booksByDay[from].orEmpty()
+        return booksByDay.entries
+            .asSequence()
+            .filter { (date, _) -> !date.isBefore(from) && !date.isAfter(to) }
+            .flatMap { (_, dayBooks) -> dayBooks.asSequence() }
+            .groupBy { it.key }
+            .values
+            .map { rows ->
+                val latest = rows.maxBy { it.lastReadAt }
+                latest.copy(
+                    totalMs = rows.sumOf { it.totalMs },
+                    pendingMs = rows.sumOf { it.pendingMs },
+                    lastReadAt = latest.lastReadAt,
+                    firstReadAt = rows.mapNotNull { it.firstReadAt }.minOrNull(),
+                    sessions = rows.sumOf { it.sessions },
+                    pendingSessions = rows.sumOf { it.pendingSessions },
+                )
+            }
+            .sortedWith(compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title })
+    }
 
     companion object {
         val Empty = ReadingStats(
@@ -226,29 +261,10 @@ fun readingStats(
         recent = dailySeries(emptyList(), zone, today, range, weekStart),
     )
 
-    val stats = counted.groupBy { it.bookUrl }.map { (url, spans) ->
-        val book = books[url]
-        val sittings = sittings(spans, zone)
-        BookReadingStats(
-            bookUrl = url,
-            // A book opened directly through Android may never have had a
-            // library row. Its URL is still a more honest label than
-            // dropping time that was genuinely recorded.
-            title = book?.title ?: url.substringAfterLast('/'),
-            author = book?.author,
-            totalMs = spans.sumOf { it.durationMs },
-            pendingMs = spans.filterNot { it.uploaded }.sumOf { it.durationMs },
-            lastReadAt = spans.maxOf { it.lastReadAt },
-            firstReadAt = firstStarts[url],
-            progression = book?.progression,
-            finished = book?.finished == true,
-            sessions = sittings.total,
-            pendingSessions = sittings.pending,
-            coverPath = book?.coverPath,
-            coverUrl = book?.coverUrl,
-            browseServerId = book?.browseServerId,
-        )
-    }.sortedWith(compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title })
+    val stats = booksFromSpans(counted, books, firstStarts, zone)
+    val booksByDay = counted.groupBy { it.day(zone) }.mapValues { (_, daySpans) ->
+        booksFromSpans(daySpans, books, firstStarts, zone)
+    }
 
     return ReadingStats(
         totalMs = stats.sumOf { it.totalMs },
@@ -261,8 +277,38 @@ fun readingStats(
         pendingSessions = stats.sumOf { it.pendingSessions },
         streakDays = streak,
         progressionPerHour = progressionPerHour(counted),
+        booksByDay = booksByDay,
     )
 }
+
+private fun booksFromSpans(
+    spans: List<SessionSpan>,
+    books: Map<String, StatsBook>,
+    firstStarts: Map<String, Long>,
+    zone: ZoneId,
+): List<BookReadingStats> = spans.groupBy { it.bookUrl }.map { (url, bookSpans) ->
+    val book = books[url]
+    val sittings = sittings(bookSpans, zone)
+    BookReadingStats(
+        bookUrl = url,
+        // A book opened directly through Android may never have had a
+        // library row. Its URL is still a more honest label than
+        // dropping time that was genuinely recorded.
+        title = book?.title ?: url.substringAfterLast('/'),
+        author = book?.author,
+        totalMs = bookSpans.sumOf { it.durationMs },
+        pendingMs = bookSpans.filterNot { it.uploaded }.sumOf { it.durationMs },
+        lastReadAt = bookSpans.maxOf { it.lastReadAt },
+        firstReadAt = firstStarts[url],
+        progression = book?.progression,
+        finished = book?.finished == true,
+        sessions = sittings.total,
+        pendingSessions = sittings.pending,
+        coverPath = book?.coverPath,
+        coverUrl = book?.coverUrl,
+        browseServerId = book?.browseServerId,
+    )
+}.sortedWith(compareByDescending<BookReadingStats> { it.totalMs }.thenBy { it.title })
 
 /** The pause that ends a sitting; liseur-sync counts with the same one. */
 internal const val SITTING_GAP_MS = 5 * 60_000L

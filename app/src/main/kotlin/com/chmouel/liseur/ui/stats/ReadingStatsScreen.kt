@@ -43,6 +43,7 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Layers
@@ -244,6 +245,38 @@ fun ReadingStatsScreen(
                 .consumeWindowInsets(padding),
             contentAlignment = Alignment.TopCenter,
         ) {
+            val locale = LocalLocale.current.platformLocale
+            val dateFormat = lastReadFormat()
+            val activityPeriods = remember(stats.recent, ready.range, locale) {
+                readingPeriods(
+                    days = stats.recent,
+                    range = ready.range,
+                    weekStart = localeWeekStart(locale),
+                )
+            }
+            var selectedActivityIndex by remember(activityPeriods, ready.range) {
+                mutableStateOf<Int?>(null)
+            }
+            val selectedActivityPeriod = selectedActivityIndex?.let { activityPeriods.getOrNull(it) }
+            val selectedActivityBooks = remember(selectedActivityPeriod, ready.provenance, stats) {
+                if (selectedActivityPeriod != null && ready.provenance == StatsProvenance.THIS_DEVICE) {
+                    stats.booksIn(selectedActivityPeriod.from, selectedActivityPeriod.to)
+                } else {
+                    emptyList()
+                }
+            }
+            var selectedCalendarDay by remember(stats.recent, ready.range) {
+                mutableStateOf<ReadingDay?>(null)
+            }
+            val calendarDay = selectedCalendarDay
+            val selectedCalendarBooks = remember(calendarDay, ready.provenance, stats) {
+                if (calendarDay != null && ready.provenance == StatsProvenance.THIS_DEVICE) {
+                    stats.booksIn(calendarDay.date, calendarDay.date)
+                } else {
+                    emptyList()
+                }
+            }
+
             // No spacing between items: each section sets its own, so
             // the rows of the book list can sit flush as one card.
             LazyColumn(
@@ -299,7 +332,39 @@ fun ReadingStatsScreen(
                         )
                     }
                     item {
-                        ActivitySection(days = stats.recent, range = ready.range)
+                        ActivitySection(
+                            days = stats.recent,
+                            range = ready.range,
+                            periods = activityPeriods,
+                            selectedIndex = selectedActivityIndex,
+                            onSelectIndex = { selectedActivityIndex = it },
+                        )
+                    }
+                    if (selectedActivityPeriod != null && selectedActivityBooks.isNotEmpty()) {
+                        val groupCount = selectedActivityBooks.size + 1
+                        item(key = "activity-books-header") {
+                            Spacer(Modifier.height(8.dp))
+                            SelectedPeriodBooksHeader(
+                                periodLabel = selectedActivityPeriod.spokenLabel(
+                                    ready.range.chartPeriod,
+                                    locale,
+                                    dateFormat,
+                                ),
+                                books = selectedActivityBooks,
+                                shape = groupedRowShape(0, groupCount),
+                                onClear = { selectedActivityIndex = null },
+                            )
+                        }
+                        itemsIndexed(
+                            items = selectedActivityBooks,
+                            key = { _, book -> "activity-book-${book.key}" },
+                        ) { index, book ->
+                            SelectedPeriodBookRow(
+                                book = book,
+                                shape = groupedRowShape(index + 1, groupCount),
+                                onClick = if (book.isLocal) ({ onOpenBook(book) }) else null,
+                            )
+                        }
                     }
                     item {
                         ReadingRhythmCard(
@@ -319,7 +384,33 @@ fun ReadingStatsScreen(
                     }
                     if (ready.range != StatsRange.THIS_WEEK) {
                         item {
-                            CalendarSection(days = stats.recent)
+                            CalendarSection(
+                                days = stats.recent,
+                                selectedDay = calendarDay,
+                                onSelectDay = { selectedCalendarDay = it },
+                            )
+                        }
+                        if (calendarDay != null && selectedCalendarBooks.isNotEmpty()) {
+                            val groupCount = selectedCalendarBooks.size + 1
+                            item(key = "calendar-books-header") {
+                                Spacer(Modifier.height(8.dp))
+                                SelectedPeriodBooksHeader(
+                                    periodLabel = calendarDay.date.format(dateFormat),
+                                    books = selectedCalendarBooks,
+                                    shape = groupedRowShape(0, groupCount),
+                                    onClear = { selectedCalendarDay = null },
+                                )
+                            }
+                            itemsIndexed(
+                                items = selectedCalendarBooks,
+                                key = { _, book -> "calendar-book-${book.key}" },
+                            ) { index, book ->
+                                SelectedPeriodBookRow(
+                                    book = book,
+                                    shape = groupedRowShape(index + 1, groupCount),
+                                    onClick = if (book.isLocal) ({ onOpenBook(book) }) else null,
+                                )
+                            }
                         }
                     }
                     if (stats.books.isNotEmpty()) {
@@ -883,15 +974,23 @@ internal fun OverviewTile(
  * The activity bar chart inside its own card with a header and Y-axis scale.
  */
 @Composable
-internal fun ActivitySection(days: List<ReadingDay>, range: StatsRange) {
+internal fun ActivitySection(
+    days: List<ReadingDay>,
+    range: StatsRange,
+    periods: List<ReadingPeriod>? = null,
+    selectedIndex: Int? = null,
+    onSelectIndex: ((Int?) -> Unit)? = null,
+) {
     val locale = LocalLocale.current.platformLocale
-    val periods = readingPeriods(
+    val resolvedPeriods = periods ?: readingPeriods(
         days = days,
         range = range,
         weekStart = localeWeekStart(locale),
     )
-    var selectedIndex by remember(periods, range) { mutableStateOf<Int?>(null) }
-    val selectedPeriod = selectedIndex?.let { periods.getOrNull(it) }
+    var internalSelectedIndex by remember(resolvedPeriods, range) { mutableStateOf<Int?>(null) }
+    val activeSelectedIndex = if (onSelectIndex != null) selectedIndex else internalSelectedIndex
+    val updateSelectedIndex: (Int?) -> Unit = onSelectIndex ?: { internalSelectedIndex = it }
+    val selectedPeriod = activeSelectedIndex?.let { resolvedPeriods.getOrNull(it) }
     val dateFormat = lastReadFormat()
     val subtitle = if (selectedPeriod != null) {
         val spokenPeriod = selectedPeriod.spokenLabel(range.chartPeriod, locale, dateFormat)
@@ -931,12 +1030,12 @@ internal fun ActivitySection(days: List<ReadingDay>, range: StatsRange) {
             )
             Spacer(Modifier.height(18.dp))
             PeriodBars(
-                periods = periods,
+                periods = resolvedPeriods,
                 unit = range.chartPeriod,
                 today = days.lastOrNull()?.date,
-                selectedIndex = selectedIndex,
+                selectedIndex = activeSelectedIndex,
                 onSelectIndex = { index ->
-                    selectedIndex = if (selectedIndex == index) null else index
+                    updateSelectedIndex(if (activeSelectedIndex == index) null else index)
                 },
             )
         }
@@ -1432,8 +1531,11 @@ private fun ReadingRhythmCard(
 }
 
 @Composable
-private fun CalendarSection(days: List<ReadingDay>) {
-    var selectedDay by remember(days) { mutableStateOf<ReadingDay?>(null) }
+private fun CalendarSection(
+    days: List<ReadingDay>,
+    selectedDay: ReadingDay?,
+    onSelectDay: (ReadingDay?) -> Unit,
+) {
     val dateFormat = lastReadFormat()
     val trailing = selectedDay?.let { day ->
         val date = day.date.format(dateFormat)
@@ -1451,8 +1553,165 @@ private fun CalendarSection(days: List<ReadingDay>) {
         ReadingHeatmap(
             days = days,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 16.dp),
-            onSelectDay = { selectedDay = it },
+            selectedDate = selectedDay?.date,
+            onSelectDay = onSelectDay,
         )
+    }
+}
+
+/**
+ * Header item for the lazy breakdown of books read on a selected bar or heatmap day.
+ */
+@Composable
+private fun SelectedPeriodBooksHeader(
+    periodLabel: String,
+    books: List<BookReadingStats>,
+    shape: Shape,
+    onClear: () -> Unit,
+) {
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val accent = palette?.progress ?: MaterialTheme.colorScheme.primary
+    val totalMs = books.sumOf { it.totalMs }
+    val totalSessions = books.sumOf { it.sessions }
+    val headerSummary = buildString {
+        append(
+            stringResource(
+                R.string.reading_stats_joined,
+                periodLabel,
+                readingDuration(totalMs),
+            ),
+        )
+        if (totalSessions > 0) {
+            append(" \u00b7 ")
+            append(
+                pluralStringResource(
+                    R.plurals.reading_stats_book_sessions,
+                    totalSessions,
+                    totalSessions,
+                ),
+            )
+        }
+    }
+
+    Surface(
+        shape = shape,
+        color = palette?.card ?: MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = headerSummary,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = accent,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = onClear,
+                modifier = Modifier.size(28.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.close),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedPeriodBookRow(
+    book: BookReadingStats,
+    shape: Shape,
+    onClick: (() -> Unit)?,
+) {
+    val palette = homePalette()
+    val eInk = LocalEInk.current
+    val sessionsLine = if (book.sessions > 0) {
+        pluralStringResource(R.plurals.reading_stats_book_sessions, book.sessions, book.sessions)
+    } else {
+        null
+    }
+    val subline = when {
+        book.author != null && sessionsLine != null -> stringResource(
+            R.string.reading_stats_joined,
+            book.author,
+            sessionsLine,
+        )
+        book.author != null -> book.author
+        else -> sessionsLine
+    }
+
+    Surface(
+        shape = shape,
+        color = palette?.card ?: MaterialTheme.colorScheme.surfaceContainerLow,
+        border = if (eInk) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it },
+    ) {
+        Column {
+            StatsRowDivider()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatsCoverThumbnail(
+                    title = book.title,
+                    coverPath = book.coverPath,
+                    coverUrl = book.coverUrl,
+                    browseServerId = book.browseServerId,
+                    modifier = Modifier
+                        .width(34.dp)
+                        .height(51.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = book.title,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    subline?.let { line ->
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = readingDuration(book.totalMs),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = TABULAR,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
     }
 }
 
