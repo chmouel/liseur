@@ -146,6 +146,34 @@ data class WorkAmbiguity(
 @Dao
 interface WorkIdentityDao {
 
+    @Query("SELECT * FROM books WHERE url = :bookUrl")
+    suspend fun resolvedBook(bookUrl: String): Book?
+
+    @Transaction
+    suspend fun saveResolution(book: Book, alias: WorkAlias): Boolean {
+        val current = resolvedBook(book.url) ?: return false
+        if (!current.sameGeneration(book)) return false
+        clearAmbiguity(book.url, alias.peerId)
+        upsert(alias)
+        return true
+    }
+
+    @Transaction
+    suspend fun saveAmbiguity(book: Book, ambiguity: WorkAmbiguity): Boolean {
+        val current = resolvedBook(book.url) ?: return false
+        if (!current.sameGeneration(book)) return false
+        upsert(ambiguity)
+        return true
+    }
+
+    @Transaction
+    suspend fun saveFingerprint(book: Book, fingerprint: BookFingerprintRow): Boolean {
+        val current = resolvedBook(book.url) ?: return false
+        if (!current.sameGeneration(book)) return false
+        upsert(fingerprint)
+        return true
+    }
+
     @Query("SELECT * FROM book_fingerprint WHERE book_url = :bookUrl")
     suspend fun fingerprint(bookUrl: String): BookFingerprintRow?
 

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 79,
-    "identityHash": "6171be9550870f72167b95cc799189e6",
+    "identityHash": "33cbfa3c8acc42797884a1b7f22eb348",
     "entities": [
       {
         "tableName": "reading_progress",
@@ -279,7 +279,7 @@
       },
       {
         "tableName": "evaluation_sync",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`peer_id` TEXT NOT NULL, `book_url` TEXT NOT NULL, `field` TEXT NOT NULL, `work_id` TEXT NOT NULL, `acked_revision` INTEGER NOT NULL, `sent_json` TEXT, `sent_revision` INTEGER, PRIMARY KEY(`peer_id`, `book_url`, `field`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`peer_id` TEXT NOT NULL, `book_url` TEXT NOT NULL, `field` TEXT NOT NULL, `work_id` TEXT NOT NULL, `acked_revision` INTEGER NOT NULL, `sent_json` TEXT, `sent_revision` INTEGER, `polled_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`peer_id`, `book_url`, `field`))",
         "fields": [
           {
             "fieldPath": "peerId",
@@ -320,6 +320,13 @@
             "fieldPath": "sentRevision",
             "columnName": "sent_revision",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "polledAt",
+            "columnName": "polled_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -328,6 +335,30 @@
             "peer_id",
             "book_url",
             "field"
+          ]
+        }
+      },
+      {
+        "tableName": "evaluation_poll",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`peer_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, PRIMARY KEY(`peer_id`))",
+        "fields": [
+          {
+            "fieldPath": "peerId",
+            "columnName": "peer_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "peer_id"
           ]
         }
       },
@@ -3038,7 +3069,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6171be9550870f72167b95cc799189e6')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '33cbfa3c8acc42797884a1b7f22eb348')"
     ]
   }
 }

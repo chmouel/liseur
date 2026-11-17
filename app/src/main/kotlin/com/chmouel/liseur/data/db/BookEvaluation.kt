@@ -32,6 +32,13 @@ data class EvaluationSync(
     @ColumnInfo(name = "acked_revision") val ackedRevision: Long = 0,
     @ColumnInfo(name = "sent_json") val sentJson: String? = null,
     @ColumnInfo(name = "sent_revision") val sentRevision: Long? = null,
+    @ColumnInfo(name = "polled_at", defaultValue = "0") val polledAt: Long = 0,
+)
+
+@Entity(tableName = "evaluation_poll")
+data class EvaluationPoll(
+    @androidx.room.PrimaryKey @ColumnInfo(name = "peer_id") val peerId: String,
+    @ColumnInfo(name = "started_at") val startedAt: Long,
 )
 
 @Entity(tableName = "retained_evaluation")
@@ -85,11 +92,32 @@ interface BookEvaluationDao {
     @Query("SELECT COUNT(*) + 1 FROM retained_evaluation")
     suspend fun nextRetainedId(): Long
 
-    @Query("SELECT COUNT(*) FROM evaluation_sync WHERE peer_id = :peerId")
+    @Query("SELECT (SELECT COUNT(*) FROM evaluation_sync WHERE peer_id = :peerId) + (SELECT COUNT(*) FROM evaluation_poll WHERE peer_id = :peerId)")
     suspend fun countForPeer(peerId: String): Int
 
+    @Query("SELECT * FROM evaluation_poll WHERE peer_id = :peerId")
+    suspend fun poll(peerId: String): EvaluationPoll?
+
+    @Upsert
+    suspend fun upsertPoll(poll: EvaluationPoll)
+
+    @Query("SELECT COALESCE(MAX(polled_at), 0) FROM evaluation_sync WHERE peer_id = :peerId")
+    suspend fun latestPoll(peerId: String): Long
+
+    @Query("DELETE FROM evaluation_poll WHERE peer_id = :peerId")
+    suspend fun deletePoll(peerId: String)
+
     @Query("UPDATE evaluation_sync SET peer_id = :to WHERE peer_id = :from")
-    suspend fun rekeyPeer(from: String, to: String)
+    suspend fun rekeyStates(from: String, to: String)
+
+    @Query("UPDATE evaluation_poll SET peer_id = :to WHERE peer_id = :from")
+    suspend fun rekeyPoll(from: String, to: String)
+
+    @Transaction
+    suspend fun rekeyPeer(from: String, to: String) {
+        rekeyStates(from, to)
+        rekeyPoll(from, to)
+    }
 
     @Query("""
         INSERT OR IGNORE INTO evaluation_sync (peer_id, book_url, field, work_id, acked_revision, sent_json, sent_revision)
@@ -126,6 +154,7 @@ interface BookEvaluationDao {
     suspend fun forgetPeer(peerId: String) {
         retireEdits()
         deletePeer(peerId)
+        deletePoll(peerId)
     }
 
     // Retained rows keep the high-water mark when a path is reused

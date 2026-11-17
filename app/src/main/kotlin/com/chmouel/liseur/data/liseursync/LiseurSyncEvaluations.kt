@@ -5,6 +5,7 @@ import com.chmouel.liseur.data.db.BookEvaluation
 import com.chmouel.liseur.data.db.BookEvaluationDao
 import com.chmouel.liseur.data.db.BookDao
 import com.chmouel.liseur.data.db.EvaluationSync
+import com.chmouel.liseur.data.db.EvaluationPoll
 import com.chmouel.liseur.data.db.RemoteServer
 import com.chmouel.liseur.data.db.RemoteServerDao
 import com.chmouel.liseur.data.db.RetainedEvaluation
@@ -25,27 +26,55 @@ class LiseurSyncEvaluations(
     private val works: WorkResolver,
     private val writerId: suspend () -> String,
     private val http: LiseurSyncHttp = LiseurSyncHttp(),
+    private val now: () -> Long = System::currentTimeMillis,
+    private val maxWorksPerPass: Int = 20,
 ) {
     private val unsupported = mutableSetOf<String>()
     private val fields = listOf(PersonalEvaluation.RATING, PersonalEvaluation.REVIEW)
 
-    private data class Target(val alias: WorkAlias, val retained: RetainedEvaluation? = null)
+    private data class Target(val alias: WorkAlias, val retained: RetainedEvaluation? = null, val book: Book? = null)
 
-    suspend fun sync(server: RemoteServer, book: String?) {
-        if (server.baseUrl in unsupported) return
+    suspend fun sync(server: RemoteServer, book: String?): Boolean {
+        if (server.baseUrl in unsupported) return false
         val peer = server.accountKey
         val targets = mutableListOf<Target>()
         val states = evaluations.states(peer).groupBy { it.bookUrl }
-        for (retained in evaluations.retained()) {
+        val valuesByBook = if (book == null) evaluations.all().groupBy { it.bookUrl } else emptyMap()
+        val aliases = identities.aliasesFor(peer).filter { it.usable }
+        val retainedBooks = evaluations.retained()
+        val requestedWorks = aliases.filter { it.bookUrl == book }.mapTo(mutableSetOf()) { it.workId }
+        if (book != null) retainedBooks.filter { it.originalUrl == book }.forEach { retained ->
+            states[retained.bookUrl].orEmpty().mapNotNullTo(requestedWorks) { it.workId.takeIf(String::isNotEmpty) }
+        }
+        var passAt = 0L
+        inTransaction {
+            if (!stillOurs(server)) return@inTransaction
+            val previous = evaluations.poll(peer)
+            passAt = previous?.startedAt ?: maxOf(1, now(), evaluations.latestPoll(peer) + 1)
+            if (book == null && previous == null) evaluations.upsertPoll(EvaluationPoll(peer, passAt))
+        }
+        if (passAt == 0L) return false
+        var resolutions = 0
+        var more = false
+        for (retained in retainedBooks.sortedBy { if (it.originalUrl == book) 0 else 1 }) {
             val saved = states[retained.bookUrl].orEmpty()
-            val values = fields.mapNotNull { evaluations.get(retained.bookUrl, it) }
+            if (book != null && retained.originalUrl != book && saved.none { it.workId in requestedWorks }) continue
+            val values = if (book == null) valuesByBook[retained.bookUrl].orEmpty()
+                else fields.mapNotNull { evaluations.get(retained.bookUrl, it) }
             if (saved.isEmpty() && values.none { it.owed(null) }) continue
             val workId = saved.firstOrNull()?.workId.orEmpty()
             if (book != null && book != retained.originalUrl && workId.isEmpty()) continue
             val alias = if (workId.isNotEmpty()) {
                 WorkAlias(retained.bookUrl, peer, workId, WorkAlias.HIGH, resolvedAt = 0)
             } else {
-                if (!stillOurs(server)) return
+                if (!stillOurs(server)) return false
+                val lastAttempt = saved.find { it.field == PersonalEvaluation.RATING }?.polledAt ?: 0
+                if (book == null && lastAttempt >= passAt) continue
+                if (book == null && resolutions >= maxWorksPerPass) {
+                    more = true
+                    continue
+                }
+                resolutions++
                 val metadata = values.firstOrNull() ?: continue
                 val identifiers = JSONArray(retained.identifiers).let { array ->
                     (0 until array.length()).map {
@@ -53,24 +82,70 @@ class LiseurSyncEvaluations(
                         WorkIdentifier(item.getString("kind"), item.getString("value"))
                     }
                 }
-                works.resolveRetained(
+                val resolved = works.resolveRetained(
                     Book(url = retained.bookUrl, title = metadata.title, author = metadata.author, coverPath = null,
                         source = null, addedAt = 0, lastOpenedAt = null),
-                    identifiers, peer, server.baseUrl, server.credentials ?: return,
-                ) ?: continue
+                    identifiers, peer, server.baseUrl, server.credentials ?: return false,
+                )
+                if (resolved == null) {
+                    inTransaction {
+                        if (stillOurs(server) && evaluations.retained(retained.bookUrl) == retained) {
+                            val prior = evaluations.state(peer, retained.bookUrl, PersonalEvaluation.RATING)
+                            evaluations.upsertState((prior ?: EvaluationSync(peer, retained.bookUrl, PersonalEvaluation.RATING, ""))
+                                .copy(polledAt = passAt))
+                        }
+                    }
+                    continue
+                }
+                inTransaction {
+                    if (stillOurs(server) && evaluations.retained(retained.bookUrl) == retained) {
+                        for (field in fields) {
+                            val prior = evaluations.state(peer, retained.bookUrl, field)
+                            evaluations.upsertState(prior?.copy(workId = resolved.workId, polledAt = 0)
+                                ?: EvaluationSync(peer, retained.bookUrl, field, resolved.workId))
+                        }
+                    }
+                }
+                resolved
             }
+            if (book != null && retained.originalUrl == book) requestedWorks += alias.workId
             targets += Target(alias, retained)
         }
-        targets += identities.aliasesFor(peer).filter { it.usable }.map { Target(it) }
-        for (copies in targets.groupBy { it.alias.workId }.values) {
-            if (book != null && copies.none { it.alias.bookUrl == book || it.retained?.originalUrl == book }) continue
-            if (!stillOurs(server)) return
+        for (alias in aliases.filter { book == null || it.bookUrl == book || it.workId in requestedWorks }) {
+            books.getByUrl(alias.bookUrl)?.let { targets += Target(alias, book = it) }
+        }
+        val eligible = targets.groupBy { it.alias.workId }.values.filter { copies ->
+            if (book != null) {
+                copies.any { it.alias.bookUrl == book || it.retained?.originalUrl == book }
+            } else {
+                copies.any { target ->
+                    val saved = states[target.alias.bookUrl].orEmpty()
+                    val rating = saved.find { it.field == PersonalEvaluation.RATING }
+                    rating == null || rating.workId != target.alias.workId || rating.polledAt < passAt ||
+                        saved.any { it.sentJson != null } || valuesByBook[target.alias.bookUrl].orEmpty().any { value ->
+                            value.owed(saved.find { it.field == value.field })
+                        }
+                }
+            }
+        }.sortedWith(compareBy<List<Target>> { copies ->
+            !copies.any { target ->
+                val saved = states[target.alias.bookUrl].orEmpty()
+                saved.any { it.sentJson != null } || valuesByBook[target.alias.bookUrl].orEmpty().any { value ->
+                    value.owed(saved.find { it.field == value.field })
+                }
+            }
+        }.thenBy { copies ->
+            copies.minOf { target -> states[target.alias.bookUrl].orEmpty().find { it.field == PersonalEvaluation.RATING }?.polledAt ?: 0 }
+        })
+        if (book == null && eligible.size > maxWorksPerPass) more = true
+        for (copies in if (book == null) eligible.take(maxWorksPerPass) else eligible) {
+            if (!stillOurs(server)) return false
             try {
-                syncWork(server, copies)
+                syncWork(server, copies, passAt)
             } catch (e: LiseurSyncRejection) {
                 if (e.code == 404 && e.rawBody.trim().let { it.isEmpty() || it == "404 page not found" }) {
                     unsupported += server.baseUrl
-                    return
+                    return false
                 }
                 if (e.code == 404) {
                     inTransaction {
@@ -86,9 +161,13 @@ class LiseurSyncEvaluations(
                 throw e
             }
         }
+        if (book == null && !more) inTransaction {
+            if (stillOurs(server) && evaluations.poll(peer)?.startedAt == passAt) evaluations.deletePoll(peer)
+        }
+        return more
     }
 
-    private suspend fun syncWork(server: RemoteServer, targets: List<Target>) {
+    private suspend fun syncWork(server: RemoteServer, targets: List<Target>, passAt: Long) {
         val peer = server.accountKey
         val workId = targets.first().alias.workId
         val url = LiseurSyncApi.evaluation(server.baseUrl, workId)
@@ -99,7 +178,8 @@ class LiseurSyncEvaluations(
                 for (field in fields) {
                     val prior = evaluations.state(peer, target.alias.bookUrl, field)
                     // Receipts move with a merged work; acknowledgement and retry bytes must follow
-                    evaluations.upsertState(prior?.copy(workId = workId) ?: EvaluationSync(peer, target.alias.bookUrl, field, workId))
+                    evaluations.upsertState(prior?.copy(workId = workId, polledAt = if (prior.workId == workId) prior.polledAt else 0)
+                        ?: EvaluationSync(peer, target.alias.bookUrl, field, workId))
                 }
                 bound += target
             }
@@ -178,6 +258,9 @@ class LiseurSyncEvaluations(
                         ))
                     }
                 }
+                evaluations.state(peer, bookUrl, PersonalEvaluation.RATING)?.let {
+                    evaluations.upsertState(it.copy(polledAt = passAt))
+                }
             }
         }
     }
@@ -185,7 +268,10 @@ class LiseurSyncEvaluations(
     private suspend fun stillBound(target: Target): Boolean = if (target.retained != null) {
         evaluations.retained(target.alias.bookUrl) == target.retained
     } else {
-        identities.alias(target.alias.bookUrl, target.alias.peerId)?.let {
+        val current = books.getByUrl(target.alias.bookUrl)
+        val original = target.book
+        current != null && original != null && current.sameGeneration(original) &&
+            identities.alias(target.alias.bookUrl, target.alias.peerId)?.let {
             it.usable && it.workId == target.alias.workId && it.resolvedAt == target.alias.resolvedAt && it.editionSha == target.alias.editionSha
         } == true
     }

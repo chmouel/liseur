@@ -14,6 +14,8 @@ import com.chmouel.liseur.data.db.WorkAlias
 import com.chmouel.liseur.data.library.evaluationExport
 import com.chmouel.liseur.data.remote.ServerKind
 import java.net.InetAddress
+import java.util.Collections
+import java.util.concurrent.Executor
 import javax.crypto.KeyGenerator
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -47,8 +49,11 @@ class LiseurSyncEvaluationsTest {
     private var evaluationWriter = "original-installation"
     private var resolutionConfidence = "high"
     private val posts = mutableListOf<String>()
+    private val reads = mutableListOf<String>()
+    private val queries = Collections.synchronizedList(mutableListOf<Pair<String, List<Any?>>>())
     private var failNextWrite = false
     private var rejectBeforeAcceptance = false
+    private var failNextRead = false
     private var onRead: (() -> Unit)? = null
     private var onWrite: (() -> Unit)? = null
 
@@ -94,11 +99,18 @@ class LiseurSyncEvaluationsTest {
                     return MockResponse(body = "{\"status\":\"applied\"}")
                 }
                 onRead?.invoke()
+                reads += work
+                if (failNextRead) {
+                    failNextRead = false
+                    return MockResponse(code = 503, body = "{}")
+                }
                 return MockResponse(body = JSONObject().put("fields", JSONArray(current.values.toList())).toString())
             }
         }
         http.start(InetAddress.getByName("127.0.0.1"), 0)
-        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LiseurDatabase::class.java).build()
+        db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LiseurDatabase::class.java)
+            .setQueryCallback({ sql, arguments -> queries += sql to arguments.toList() }, Executor { it.run() })
+            .build()
         account = RemoteServer(
             kind = ServerKind.LISEUR_SYNC,
             baseUrl = "http://127.0.0.1:${http.port}", username = "reader",
@@ -213,9 +225,13 @@ class LiseurSyncEvaluationsTest {
         removal().deleteByUrls(listOf("book"))
         sync.sync(account, null)
         assertTrue(heads.getValue("rating").isNull("value"))
+        dao.upsertPoll(com.chmouel.liseur.data.db.EvaluationPoll(account.accountKey, 123))
         dao.rekeyPeer(account.accountKey, "renamed")
         assertEquals(2, dao.states("renamed").size)
+        assertNull(dao.poll(account.accountKey))
+        assertEquals(123, dao.poll("renamed")!!.startedAt)
         dao.forgetPeer("renamed")
+        assertNull(dao.poll("renamed"))
         assertFalse(dao.all().single().owed(null))
         val exported = evaluationExport(dao.all()).getJSONArray("books").getJSONObject(0)
         assertEquals("Title", exported.getString("title"))
@@ -399,8 +415,99 @@ class LiseurSyncEvaluationsTest {
         assertEquals(2, posts.size)
     }
 
+    @Test
+    fun `full sync polls works in bounded passes and resumes after restart`() = runTest {
+        val original = db.bookDao().getByUrl("book")!!
+        repeat(45) { index ->
+            val url = "copy-$index"
+            db.bookDao().upsert(original.copy(id = 0, url = url))
+            db.workIdentityDao().upsert(WorkAlias(url, account.accountKey, "work-$index", "high", resolvedAt = 1))
+        }
+        fun bounded() = LiseurSyncEvaluations(
+            db.remoteServerDao(), db.workIdentityDao(), db.bookDao(), db.bookEvaluationDao(),
+            { block -> db.withTransaction { block() } },
+            WorkResolver(db.workIdentityDao(), BookFingerprintStore(ApplicationProvider.getApplicationContext(), db.workIdentityDao())),
+            writerId = { evaluationWriter }, now = { 10_000_000 }, maxWorksPerPass = 20,
+        )
+        assertTrue(bounded().sync(account, null))
+        assertEquals(20, reads.size)
+        assertTrue(bounded().sync(account, null))
+        assertEquals(40, reads.size)
+        assertFalse(bounded().sync(account, null))
+        assertEquals(46, reads.size)
+        assertEquals(46, reads.toSet().size)
+        bounded().sync(account, "book")
+        assertEquals(47, reads.size)
+        assertEquals("work", reads.last())
+        assertTrue(bounded().sync(account, null))
+        assertEquals(67, reads.size)
+    }
+
+    @Test
+    fun `a failed poll remains in the persisted sweep until it succeeds`() = runTest {
+        val original = db.bookDao().getByUrl("book")!!
+        db.bookDao().upsert(original.copy(id = 0, url = "second"))
+        db.workIdentityDao().upsert(WorkAlias("second", account.accountKey, "second-work", "high", resolvedAt = 1))
+        fun bounded() = LiseurSyncEvaluations(
+            db.remoteServerDao(), db.workIdentityDao(), db.bookDao(), db.bookEvaluationDao(),
+            { block -> db.withTransaction { block() } },
+            WorkResolver(db.workIdentityDao(), BookFingerprintStore(ApplicationProvider.getApplicationContext(), db.workIdentityDao())),
+            writerId = { evaluationWriter }, now = { 10_000_000 }, maxWorksPerPass = 1,
+        )
+        failNextRead = true
+        try { bounded().sync(account, null); fail("Expected the interrupted pull") } catch (_: java.io.IOException) { }
+        assertNotNull(db.bookEvaluationDao().poll(account.accountKey))
+        val first = reads.single()
+        assertTrue(bounded().sync(account, null))
+        assertEquals(first, reads.last())
+        assertFalse(bounded().sync(account, null))
+        assertNull(db.bookEvaluationDao().poll(account.accountKey))
+        assertEquals(2, reads.toSet().size)
+    }
+
+    @Test
+    fun `an unsent edit is delivered ahead of unpolled works`() = runTest {
+        val original = db.bookDao().getByUrl("book")!!
+        db.bookDao().upsert(original.copy(id = 0, url = "second"))
+        db.workIdentityDao().upsert(WorkAlias("second", account.accountKey, "second-work", "high", resolvedAt = 1))
+        val bounded = LiseurSyncEvaluations(
+            db.remoteServerDao(), db.workIdentityDao(), db.bookDao(), db.bookEvaluationDao(),
+            { block -> db.withTransaction { block() } },
+            WorkResolver(db.workIdentityDao(), BookFingerprintStore(ApplicationProvider.getApplicationContext(), db.workIdentityDao())),
+            writerId = { evaluationWriter }, now = { 10_000_000 }, maxWorksPerPass = 1,
+        )
+        bounded.sync(account, "book")
+        db.bookEvaluationDao().edit("book", "review", "New review", "Title", "Author", 1)
+        assertTrue(bounded.sync(account, null))
+        assertEquals("work", reads.last())
+        assertEquals("New review", heads.getValue("review").getString("value"))
+    }
+
+    @Test
+    fun `a book sync loads retained values only for the same work`() = runTest {
+        val dao = db.bookEvaluationDao()
+        repeat(60) { index ->
+            val url = "unrelated-$index"
+            dao.upsertRetained(com.chmouel.liseur.data.db.RetainedEvaluation(url, "other-$index", "[]"))
+            dao.upsert(com.chmouel.liseur.data.db.BookEvaluation(url, "review", "Private $index", "Other", "Author", updatedAt = 1))
+            dao.upsertState(com.chmouel.liseur.data.db.EvaluationSync(account.accountKey, url, "review", "other-work-$index"))
+        }
+        dao.upsertRetained(com.chmouel.liseur.data.db.RetainedEvaluation("same-work", "old-copy", "[]"))
+        dao.upsertState(com.chmouel.liseur.data.db.EvaluationSync(account.accountKey, "same-work", "review", "work"))
+        dao.edit("same-work", "review", "Retained choice", "Title", "Author", 2)
+        queries.clear()
+        sync.sync(account, "book")
+        assertEquals("Retained choice", heads.getValue("review").getString("value"))
+        val observed = synchronized(queries) { queries.toList() }
+        assertFalse(observed.any { (sql, args) ->
+            sql.contains("FROM book_evaluation", ignoreCase = true) &&
+                (sql.contains("ORDER BY book_url, field", ignoreCase = true) || args.any { it.toString().startsWith("unrelated-") })
+        })
+    }
+
     private suspend fun putCopy() {
-        db.bookDao().upsert(db.bookDao().getByUrl("book")!!.copy(url = "copy"))
+        db.bookDao().upsert(db.bookDao().getByUrl("book")!!.copy(id = 0, url = "copy"))
+        assertNotEquals(db.bookDao().getByUrl("book")!!.id, db.bookDao().getByUrl("copy")!!.id)
         db.workIdentityDao().upsert(WorkAlias("copy", account.accountKey, "work", "high", resolvedAt = 1))
     }
 

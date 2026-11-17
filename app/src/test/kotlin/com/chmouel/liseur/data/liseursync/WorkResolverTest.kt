@@ -12,9 +12,13 @@ import com.chmouel.liseur.domain.workIdOf
 import java.io.File
 import java.net.InetAddress
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import androidx.room.withTransaction
+import mockwebserver3.Dispatcher
 import mockwebserver3.MockResponse
 import mockwebserver3.MockWebServer
+import mockwebserver3.RecordedRequest
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -69,7 +73,7 @@ class WorkResolverTest {
     fun `a confident answer becomes the name to sync under`() = runTest {
         answer(200, """{"work_id":"w-1","confidence":"high","created":false}""")
 
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals("w-1", (result as WorkResolution.Named).alias.workId)
         assertTrue(result.alias.usable)
@@ -82,7 +86,7 @@ class WorkResolverTest {
         // which is how a re-encoded copy and the original converge.
         answer(201, """{"work_id":"w-1","confidence":"high","created":true}""")
 
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         val body = JSONObject(server.takeRequest().body!!.utf8())
         val kinds = (0 until body.getJSONArray("identifiers").length()).map {
@@ -103,7 +107,7 @@ class WorkResolverTest {
         assertEquals(book.workId, repaired.workId)
         answer(200, """{"work_id":"w-1","confidence":"low","created":false}""")
 
-        assertTrue(resolver.resolve(repaired, PEER, baseUrl(), TOKEN) is WorkResolution.NeedsConfirming)
+        assertTrue(resolve(repaired, PEER, baseUrl(), TOKEN) is WorkResolution.NeedsConfirming)
 
         val identifiers = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("identifiers")
         assertEquals(listOf("sha256", "partial-md5", "ta"), (0 until identifiers.length()).map {
@@ -118,7 +122,7 @@ class WorkResolverTest {
         db.bookDao().updateAuthor(book.url, "Corrected author")
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
 
-        resolver.resolve(db.bookDao().getByUrl(book.url)!!, PEER, baseUrl(), TOKEN)
+        resolve(db.bookDao().getByUrl(book.url)!!, PEER, baseUrl(), TOKEN)
 
         val identifiers = JSONObject(server.takeRequest().body!!.utf8()).getJSONArray("identifiers")
         assertEquals(listOf("sha256", "partial-md5", "dc", "ta"), (0 until identifiers.length()).map {
@@ -133,7 +137,7 @@ class WorkResolverTest {
         // reader's place on whichever device holds the file.
         answer(200, """{"work_id":"w-2","confidence":"high"}""")
 
-        val result = resolver.resolve(remoteOnly(), PEER, baseUrl(), TOKEN)
+        val result = resolve(remoteOnly(), PEER, baseUrl(), TOKEN)
 
         assertEquals("w-2", (result as WorkResolution.Named).alias.workId)
         assertNull(result.alias.editionSha)
@@ -171,7 +175,7 @@ class WorkResolverTest {
         )
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
 
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         val alias = (result as WorkResolution.Named).alias
         assertTrue(alias.sourceSent)
@@ -187,7 +191,7 @@ class WorkResolverTest {
         assertTrue(body.getBoolean("confirmed"))
 
         // The debt is paid: the next resolve uses the cache.
-        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val again = resolve(downloaded(), PEER, baseUrl(), TOKEN)
         assertEquals("w-1", (again as WorkResolution.Named).alias.workId)
         assertEquals(1, server.requestCount)
     }
@@ -199,7 +203,7 @@ class WorkResolverTest {
         // two copies of one file.
         answer(200, """{"work_id":"w-3","confidence":"low"}""")
 
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         val alias = (result as WorkResolution.NeedsConfirming).alias
         assertEquals(WorkAlias.LOW, alias.confidence)
@@ -214,13 +218,13 @@ class WorkResolverTest {
     @Test
     fun `a match the reader rejected is never asked about again`() = runTest {
         answer(200, """{"work_id":"w-3","confidence":"low"}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         resolver.reject(BOOK, PEER)
 
         // No second request, and no second question: a deleted alias
         // would be resolved again and the reader asked forever.
-        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val again = resolve(downloaded(), PEER, baseUrl(), TOKEN)
         assertTrue(again is WorkResolution.Unresolved)
         assertEquals(1, server.requestCount)
         assertNull(resolver.cached(downloaded(), PEER))
@@ -229,7 +233,7 @@ class WorkResolverTest {
     @Test
     fun `books awaiting an answer are the ones to ask about`() = runTest {
         answer(200, """{"work_id":"w-3","confidence":"low"}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals(1, db.workIdentityDao().observeAwaitingAnswer(PEER).first().size)
 
@@ -242,9 +246,9 @@ class WorkResolverTest {
     @Test
     fun `a name once learned is not asked for again`() = runTest {
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
-        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val again = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals("w-1", (again as WorkResolution.Named).alias.workId)
         assertEquals(1, server.requestCount)
@@ -255,12 +259,12 @@ class WorkResolverTest {
         // Catalog-only, so a title and an author were all there was to
         // offer, and the server could only guess.
         answer(200, """{"work_id":"w-6","confidence":"low"}""")
-        resolver.resolve(remoteOnly(), PEER, baseUrl(), TOKEN)
+        resolve(remoteOnly(), PEER, baseUrl(), TOKEN)
 
         // The book has been downloaded since. Its hashes name it
         // exactly, so they answer the question instead of the reader.
         answer(200, """{"work_id":"w-6","confidence":"high"}""")
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals("w-6", (result as WorkResolution.Named).alias.workId)
         assertTrue(result.alias.usable)
@@ -280,10 +284,10 @@ class WorkResolverTest {
         // the catalog id since — but an answer that is still a guess
         // leaves the question with the reader.
         answer(200, """{"work_id":"w-7","confidence":"low"}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         answer(200, """{"work_id":"w-7","confidence":"low"}""")
-        val again = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val again = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertTrue(again is WorkResolution.NeedsConfirming)
         assertEquals(2, server.requestCount)
@@ -293,7 +297,7 @@ class WorkResolverTest {
     fun `identifiers that name two books are left for the reader to settle`() = runTest {
         answer(409, """{"error":"identifiers resolve to multiple works","works":["w-4","w-5"]}""")
 
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals(listOf("w-4", "w-5"), (result as WorkResolution.Ambiguous).candidates)
         // Nothing was named, so nothing may be exchanged.
@@ -304,10 +308,10 @@ class WorkResolverTest {
     @Test
     fun `settling the disagreement clears it`() = runTest {
         answer(409, """{"error":"multiple","works":["w-4","w-5"]}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         answer(200, """{"work_id":"w-4","confidence":"high"}""")
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertEquals("w-4", (result as WorkResolution.Named).alias.workId)
         assertEquals(0, db.workIdentityDao().ambiguityCount(PEER))
@@ -319,7 +323,7 @@ class WorkResolverTest {
         // meanwhile nothing about the book has been decided wrongly.
         answer(500, """{"error":"nope"}""")
 
-        val result = resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        val result = resolve(downloaded(), PEER, baseUrl(), TOKEN)
 
         assertTrue(result is WorkResolution.Unresolved)
         assertNull(db.workIdentityDao().alias(BOOK, PEER))
@@ -328,7 +332,7 @@ class WorkResolverTest {
     @Test
     fun `a file rewritten in place is hashed again`() = runTest {
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
-        resolver.resolve(downloaded(), PEER, baseUrl(), TOKEN)
+        resolve(downloaded(), PEER, baseUrl(), TOKEN)
         val first = db.workIdentityDao().fingerprint(BOOK)!!
 
         file.writeBytes(ByteArray(4096) { 9 })
@@ -337,7 +341,7 @@ class WorkResolverTest {
         BookFingerprintStore(
             ApplicationProvider.getApplicationContext(),
             db.workIdentityDao(),
-        ) { NOW }.of(downloaded(modifiedAt = NOW + 1))
+        ) { NOW }.of(persist(downloaded(modifiedAt = NOW + 1)))
 
         val second = db.workIdentityDao().fingerprint(BOOK)!!
         assertTrue(first.sha256 != second.sha256)
@@ -361,7 +365,7 @@ class WorkResolverTest {
 
         assertNull(resolver.catalogIdOf(browsed))
         assertNull(resolver.sourceOf(browsed))
-        val result = resolver.resolve(browsed, PEER, baseUrl(), TOKEN)
+        val result = resolve(browsed, PEER, baseUrl(), TOKEN)
 
         assertEquals("w-3", (result as WorkResolution.Named).alias.workId)
         val request = server.takeRequest()
@@ -391,7 +395,7 @@ class WorkResolverTest {
             localUri = null,
             downloadState = DownloadState.REMOTE,
         )
-        val result = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+        val result = resolve(book, PEER, baseUrl(), TOKEN)
 
         assertEquals("w-9", (result as WorkResolution.Named).alias.workId)
         // The server's own digest is kept: ops carry the edition without
@@ -411,14 +415,14 @@ class WorkResolverTest {
         answer(200, """{"book_id":"b-1","work_id":"w-9","confidence":"low"}""")
         val book = downloaded().copy(url = "liseur-sync:b-1")
 
-        val first = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+        val first = resolve(book, PEER, baseUrl(), TOKEN)
         assertTrue(first is WorkResolution.NeedsConfirming)
         // The first ask sent nothing: no identifiers, and no yes yet.
         server.takeRequest()
 
         resolver.confirm(book, PEER)
         answer(200, """{"book_id":"b-1","work_id":"w-9","confidence":"high"}""")
-        val second = resolver.resolve(book, PEER, baseUrl(), TOKEN)
+        val second = resolve(book, PEER, baseUrl(), TOKEN)
 
         assertTrue(second is WorkResolution.Named)
         // The earlier yes travelled with the second ask.
@@ -451,7 +455,7 @@ class WorkResolverTest {
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
 
         val adopted = downloaded().copy(url = LOCAL, remoteUuid = "b-7")
-        val result = resolver.resolve(adopted, PEER, baseUrl(), TOKEN)
+        val result = resolve(adopted, PEER, baseUrl(), TOKEN)
 
         // The catalog route, which is the one that tells the server
         // which work its new book belongs to.
@@ -462,7 +466,7 @@ class WorkResolverTest {
         assertTrue(alias.seeded)
         // Said once, and not asked again.
         assertTrue(alias.sourceSent)
-        assertEquals("w-1", (resolver.resolve(adopted, PEER, baseUrl(), TOKEN) as WorkResolution.Named).alias.workId)
+        assertEquals("w-1", (resolve(adopted, PEER, baseUrl(), TOKEN) as WorkResolution.Named).alias.workId)
         assertEquals(1, server.requestCount)
     }
 
@@ -490,7 +494,7 @@ class WorkResolverTest {
 
         // Filed as names, so the per-book pass that follows asks nothing.
         assertEquals(setOf(shelf[0].url, shelf[1].url), filed.keys)
-        val named = shelf.map { resolver.resolve(it, PEER, baseUrl(), TOKEN) }
+        val named = shelf.map { resolve(it, PEER, baseUrl(), TOKEN) }
         assertEquals("w-1", (named[0] as WorkResolution.Named).alias.workId)
         assertEquals("w-2", (named[1] as WorkResolution.Named).alias.workId)
         assertEquals("aa", (named[0] as WorkResolution.Named).alias.editionSha)
@@ -539,7 +543,7 @@ class WorkResolverTest {
         assertNull(db.workIdentityDao().alias(shelf[0].url, PEER))
 
         answer(200, """{"work_id":"w-1","confidence":"high"}""")
-        val result = resolver.resolve(shelf[0], PEER, baseUrl(), TOKEN)
+        val result = resolve(shelf[0], PEER, baseUrl(), TOKEN)
         assertTrue(server.takeRequest().target!!.endsWith("/v1/books/b-1/resolve"))
         assertEquals("w-1", (result as WorkResolution.Named).alias.workId)
     }
@@ -625,8 +629,65 @@ class WorkResolverTest {
         assertEquals("w-3", db.workIdentityDao().alias(shelf[2].url, PEER)!!.workId)
     }
 
+    @Test
+    fun `a response cannot restore an alias for a removed or replaced book`() = runTest {
+        for ((index, catalog) in listOf(false, true).withIndex()) {
+            val original = persist(if (catalog) catalogued("replacement") else sideloaded())
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    runBlocking {
+                        db.withTransaction {
+                            db.workIdentityDao().forgetAliases(listOf(original.url))
+                            if (index == 0) {
+                                db.bookDao().deleteByUrls(listOf(original.url))
+                            } else {
+                                db.bookDao().upsert(original.copy(workId = "replacement", linkGeneration = original.linkGeneration + 1))
+                            }
+                        }
+                    }
+                    return MockResponse(body = """{"work_id":"stale","confidence":"high"}""")
+                }
+            }
+            val result = resolver.resolve(original, PEER, baseUrl(), TOKEN)
+            assertTrue(result is WorkResolution.Unresolved)
+            assertNull(db.workIdentityDao().alias(original.url, PEER))
+        }
+    }
+
+    @Test
+    fun `a fingerprint finishing after replacement cannot be cached for the new file`() = runTest {
+        val original = persist(sideloaded())
+        val store = BookFingerprintStore(
+            ApplicationProvider.getApplicationContext(), db.workIdentityDao(),
+        ) {
+            runBlocking {
+                db.withTransaction {
+                    db.bookDao().upsert(original.copy(linkGeneration = original.linkGeneration + 1))
+                    db.workIdentityDao().forgetFingerprints(listOf(original.url))
+                    file.writeBytes(ByteArray(4096) { 8 })
+                }
+            }
+            NOW
+        }
+        assertNull(store.of(original))
+        assertNull(db.workIdentityDao().fingerprint(original.url))
+        val replacement = db.bookDao().getByUrl(original.url)!!
+        val fresh = BookFingerprintStore(ApplicationProvider.getApplicationContext(), db.workIdentityDao()).of(replacement)
+        assertEquals(file.inputStream().use(com.chmouel.liseur.domain.BookFingerprints::of), fresh)
+    }
+
+    private suspend fun persist(book: Book): Book {
+        val prior = db.bookDao().getByUrl(book.url)
+        val current = book.copy(id = prior?.id ?: book.id)
+        db.bookDao().upsert(current)
+        return db.bookDao().getByUrl(book.url)!!
+    }
+
+    private suspend fun resolve(book: Book, peerId: String, baseUrl: String, credentials: RemoteCredentials) =
+        resolver.resolve(persist(book), peerId, baseUrl, credentials)
+
     private suspend fun prefetch(books: List<Book>) = resolver.prefetchCatalog(
-        books,
+        books.map { persist(it) },
         db.workIdentityDao().aliasesFor(PEER).associateBy { it.bookUrl },
         PEER,
         baseUrl(),
