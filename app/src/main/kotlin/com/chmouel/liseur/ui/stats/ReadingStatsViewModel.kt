@@ -734,14 +734,19 @@ class ReadingStatsViewModel(
                 is ReadingStatsUiState.Ready -> {
                     val row = current.stats.books.firstOrNull { it.bookUrl == bookUrl }
                         ?: return@combine BookReadingStatsUiState.Empty
+                    val window = localStats.window
+                    val start = window.range.startDate(window.today, window.weekStart)
+                    val bookSpans = localStats.sessionSpans.filter { span ->
+                        if (span.bookUrl != bookUrl || span.durationMs <= 0) return@filter false
+                        val d = span.day(window.zone)
+                        !d.isAfter(window.today) && (start == null || !d.isBefore(start))
+                    }
+                    // The pace stays this device's either way: the server
+                    // sends totals, not hours per hour, so a book without
+                    // an estimate from it is still paced by what was read
+                    // here.
+                    val pace = progressionPerHour(bookSpans)
                     if (current.provenance == StatsProvenance.THIS_DEVICE) {
-                        val window = localStats.window
-                        val start = window.range.startDate(window.today, window.weekStart)
-                        val bookSpans = localStats.sessionSpans.filter { span ->
-                            if (span.bookUrl != bookUrl || span.durationMs <= 0) return@filter false
-                            val d = span.day(window.zone)
-                            !d.isAfter(window.today) && (start == null || !d.isBefore(start))
-                        }
                         BookReadingStatsUiState.Ready(
                             stats = row,
                             recent = dailySeries(
@@ -751,10 +756,10 @@ class ReadingStatsViewModel(
                                 window.range,
                                 window.weekStart,
                             ),
-                            progressionPerHour = progressionPerHour(bookSpans),
+                            progressionPerHour = pace,
                         )
                     } else {
-                        BookReadingStatsUiState.Ready(stats = row)
+                        BookReadingStatsUiState.Ready(stats = row, progressionPerHour = pace)
                     }
                 }
             }

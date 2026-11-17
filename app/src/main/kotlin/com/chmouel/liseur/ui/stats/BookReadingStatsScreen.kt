@@ -304,19 +304,17 @@ private fun bookLines(
     return buildList {
         if (firstDate != null) {
             add(StatLine(stringResource(R.string.reading_stats_started_label), firstDate.format(dateFormat)))
-            // Both endpoints count: begun and last read on the same day
-            // is one day with the book, not none. A clock corrected
-            // backwards can date the start after the end, which is still
-            // a day with the book and never fewer.
-            val daysWithBook = (ChronoUnit.DAYS.between(firstDate, lastDate) + 1)
-                .coerceAtLeast(1L)
-                .toInt()
-            add(
-                StatLine(
-                    stringResource(R.string.reading_stats_reading_for_label),
-                    pluralStringResource(R.plurals.reading_stats_reading_for_days, daysWithBook, daysWithBook),
-                ),
-            )
+            // The tile above counts an unfinished book through today, so
+            // this row asks the same helper rather than counting to the
+            // last sitting, which would disagree from yesterday on.
+            bookReadingDays(stats, zone, java.time.LocalDate.now(zone))?.let { daysWithBook ->
+                add(
+                    StatLine(
+                        stringResource(R.string.reading_stats_reading_for_label),
+                        pluralStringResource(R.plurals.reading_stats_reading_for_days, daysWithBook, daysWithBook),
+                    ),
+                )
+            }
         }
         add(StatLine(stringResource(R.string.reading_stats_last_read_label), lastDate.format(dateFormat)))
         add(StatLine(stringResource(R.string.reading_stats_sessions), stats.sessions.toString()))

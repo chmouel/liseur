@@ -1001,6 +1001,10 @@ private fun PeriodBars(
         fontWeight = FontWeight.SemiBold,
         fontFeatureSettings = TABULAR,
     )
+    // A callout shows on every bar of a week, and on the selected bar
+    // anywhere else. Both the room above the plot and the width of a slot
+    // have to hold it.
+    val calloutsShown = showAmounts || onSelectIndex != null
     val axisStyle = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = TABULAR)
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -1013,14 +1017,16 @@ private fun PeriodBars(
     val labelAreaHeight = maxOf(26.dp, lineHeight(MaterialTheme.typography.labelSmall) + 8.dp)
     val calloutHeadroom = maxOf(
         axisLabelHalf,
-        if (showAmounts || selectedIndex != null) lineHeight(calloutStyle) + CALLOUT_CHROME else 6.dp,
+        if (calloutsShown) lineHeight(calloutStyle) + CALLOUT_CHROME else 6.dp,
     )
     // The date under each bar must fit its slot too; bold is the widest weight.
     val dateStyle = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
     val widestDate = periods.maxOfOrNull {
         textMeasurer.measure(it.shortLabel(unit, locale), dateStyle, maxLines = 1, softWrap = false).size.width
     } ?: 0
-    val widestCallout = if (showAmounts) {
+    // A slot must hold the callout drawn on a selected bar as well, or the
+    // pill spills over its neighbours once the chart is wider than a week.
+    val widestCallout = if (calloutsShown) {
         periods.mapNotNull { compactDuration(it.totalMs) }.maxOfOrNull {
             textMeasurer.measure(it, calloutStyle, maxLines = 1, softWrap = false).size.width
         }
