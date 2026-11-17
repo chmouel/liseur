@@ -631,7 +631,9 @@ fun LibraryScreen(
                             )
                         } else {
                             Row(
-                                modifier = Modifier.clickable { scrollCurrentToTop() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { scrollCurrentToTop() },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 // A woman reading stretched out on her couch,
@@ -663,7 +665,7 @@ fun LibraryScreen(
                                         .clip(RoundedCornerShape(if (wide) 14.dp else 10.dp)),
                                 )
                                 Spacer(Modifier.width(if (wide) 16.dp else 10.dp))
-                                Column {
+                                Column(Modifier.weight(1f)) {
                                     // With the tabs, the bar names the tab, so
                                     // Home and Library never look like one screen.
                                     Text(
@@ -3182,7 +3184,7 @@ private fun PulseLine(pulse: ReadingPulse, onOpenStats: () -> Unit) {
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         style = MaterialTheme.typography.labelSmall,
-        letterSpacing = 0.8.sp,
+        letterSpacing = 0.2.sp,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.clickable(onClickLabel = stringResource(R.string.reading_stats), onClick = onOpenStats),
     )
