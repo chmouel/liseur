@@ -2024,4 +2024,18 @@
     <string name="reading_status_empty_paused">Aucun livre en pause</string>
     <string name="reading_status_empty_did_not_finish">Aucun livre abandonné</string>
     <string name="series_set_status">Définir le statut de la série</string>
+
+    <string name="evaluation_title">Ma note et mon avis</string>
+    <string name="evaluation_private">Privé. Synchronisé uniquement avec votre compte liseur-sync.</string>
+    <string name="evaluation_edit">Modifier la note et l’avis</string>
+    <string name="evaluation_no_rating">Aucune note</string>
+    <string name="evaluation_rating_value">%1$s / 5 étoiles</string>
+    <string name="evaluation_review">Avis privé</string>
+    <string name="evaluation_review_limit">Utilisez au plus 8 Ko de texte, sans caractères nuls.</string>
+    <string name="evaluation_export">Exporter les notes et les avis</string>
+    <string name="evaluation_exported">Notes et avis exportés</string>
+    <string name="evaluation_export_failed">Impossible d’exporter les notes et les avis</string>
+    <string name="evaluation_rating">Ma note</string>
+    <string name="evaluation_rated">Avec une note</string>
+    <string name="evaluation_unrated">Sans note</string>
 </resources>

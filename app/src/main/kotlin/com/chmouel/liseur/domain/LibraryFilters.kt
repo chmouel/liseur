@@ -15,6 +15,7 @@ import com.chmouel.liseur.data.db.DownloadState
 enum class FilterGroup {
     /** Whether the file is on the device. */
     AVAILABILITY,
+    PERSONAL,
 
     /** How far into the book the reader is. */
     READING,
@@ -33,6 +34,8 @@ enum class LibraryFilterOption(
     val id: String,
     val group: FilterGroup,
 ) {
+    RATED("rated", FilterGroup.PERSONAL),
+    UNRATED("unrated", FilterGroup.PERSONAL),
     DOWNLOADED("downloaded", FilterGroup.AVAILABILITY),
     NOT_DOWNLOADED("not_downloaded", FilterGroup.AVAILABILITY),
 
@@ -166,6 +169,7 @@ data class LibraryFilters(
         book: Book,
         progression: Double? = null,
         override: FinishedOverride = FinishedOverride.NONE,
+        rated: Boolean = false,
     ): Boolean {
         // A book taken off the shelf is off it, whatever else is ticked
         // — including the archived box, which is a different wish.
@@ -176,6 +180,9 @@ data class LibraryFilters(
         // the rest: an archived book is out of every view but its own,
         // however well it matches the others.
         if (book.archived != archived) return false
+
+        val personal = group(FilterGroup.PERSONAL)
+        if (personal.isNotEmpty() && (if (rated) LibraryFilterOption.RATED else LibraryFilterOption.UNRATED) !in personal) return false
 
         val availability = group(FilterGroup.AVAILABILITY)
         if (availability.isNotEmpty()) {

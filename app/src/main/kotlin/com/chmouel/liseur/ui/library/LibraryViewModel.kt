@@ -535,6 +535,7 @@ class LibraryViewModel(
     /** Quotes from what has been read, for Home; null leaves the card out. */
     private val homeQuotes: com.chmouel.liseur.data.quotes.HomeQuotes? = null,
     savedState: SavedStateHandle = SavedStateHandle(),
+    ratedBooks: Flow<List<String>> = flowOf(emptyList()),
 ) : ViewModel() {
     private val sessions = readingSessions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -800,6 +801,7 @@ class LibraryViewModel(
                 account.browseServers,
                 kosyncPeer,
                 _seriesView,
+                ratedBooks,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -826,6 +828,8 @@ class LibraryViewModel(
             val settings = baseValues[6] as AppSettings
             // Only with the tab bar, which is the only way to leave it.
             val seriesView = baseValues[14] as Boolean && settings.libraryLayout.tabs
+            @Suppress("UNCHECKED_CAST")
+            val rated = (baseValues[15] as List<String>).toSet()
 
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
@@ -920,6 +924,7 @@ class LibraryViewModel(
                             it,
                             progressions[it.url],
                             overrides[it.url] ?: FinishedOverride.NONE,
+                            rated = it.url in rated,
                         )
                     }
 
@@ -954,6 +959,7 @@ class LibraryViewModel(
                             it.book,
                             progressions[it.book.url],
                             overrides[it.book.url] ?: FinishedOverride.NONE,
+                            rated = it.book.url in rated,
                         )
                     }
                 }
@@ -1973,6 +1979,7 @@ class LibraryViewModel(
                         readingSessions = container.database.readingSessionDao().observeAll(),
                         homeQuotes = container.homeQuotes,
                         savedState = createSavedStateHandle(),
+                        ratedBooks = container.database.bookEvaluationDao().observeRatedBooks(),
                     )
                 }
             }

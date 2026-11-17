@@ -2812,6 +2812,8 @@ private fun LibrarySort.label(): String = stringResource(
 @Composable
 private fun LibraryFilterOption.label(): String = stringResource(
     when (this) {
+        LibraryFilterOption.RATED -> R.string.evaluation_rated
+        LibraryFilterOption.UNRATED -> R.string.evaluation_unrated
         LibraryFilterOption.DOWNLOADED -> R.string.filter_downloaded
         LibraryFilterOption.NOT_DOWNLOADED -> R.string.filter_not_downloaded
         LibraryFilterOption.UNREAD -> R.string.filter_unread
@@ -2923,6 +2925,13 @@ private fun FilterMenu(
                     LibraryFilterOption.PAUSED,
                     LibraryFilterOption.DID_NOT_FINISH,
                 ),
+                filters = filters,
+                onToggleFilter = onToggleFilter,
+            )
+            HorizontalDivider()
+            FilterMenuHeading(stringResource(R.string.evaluation_rating))
+            FilterMenuOptions(
+                options = listOf(LibraryFilterOption.RATED, LibraryFilterOption.UNRATED),
                 filters = filters,
                 onToggleFilter = onToggleFilter,
             )

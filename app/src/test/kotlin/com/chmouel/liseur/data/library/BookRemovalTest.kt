@@ -75,6 +75,7 @@ class BookRemovalTest {
             uploadRefusalDao = db.uploadRefusalDao(),
             aiPreferencesDao = db.bookAiPreferencesDao(),
             glossaryDao = db.glossaryDao(),
+            evaluationDao = db.bookEvaluationDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -675,6 +676,31 @@ class BookRemovalTest {
 
         assertNull(db.bookDao().getByUrl("picked"))
         assertNotNull(db.bookDao().getByUrl("tree"))
+    }
+
+    @Test
+    fun `ratings reviews and removals protect unopened duplicates`() = runTest {
+        val dao = db.bookEvaluationDao()
+        val urls = listOf("rated", "reviewed", "cleared")
+        urls.forEach { db.bookDao().upsert(book(it)) }
+        dao.edit("rated", "rating", "9", "Title", "Author", 1)
+        dao.edit("reviewed", "review", "Keep this review", "Title", "Author", 2)
+        dao.edit("cleared", "review", null, "Title", "Author", 3)
+
+        assertTrue(removal.dropUntouchedDuplicates(urls).isEmpty())
+        urls.forEach { assertNotNull(db.bookDao().getByUrl(it)) }
+        assertEquals("Keep this review", dao.get("reviewed", "review")!!.value)
+        assertTrue(dao.retained().isEmpty())
+    }
+
+    @Test
+    fun `a reviewed catalog duplicate prevents upload adoption from removing it`() = runTest {
+        db.bookDao().upsert(book("reviewed", remoteUuid = "bo_x_5"))
+        db.bookEvaluationDao().edit("reviewed", "review", "Keep this review", "Title", "Author", 1)
+
+        assertEquals(false, removal.dropUntouchedCatalogDuplicates(listOf("reviewed"), "bo_x_5"))
+        assertNotNull(db.bookDao().getByUrl("reviewed"))
+        assertEquals("Keep this review", db.bookEvaluationDao().get("reviewed", "review")!!.value)
     }
 
     @Test

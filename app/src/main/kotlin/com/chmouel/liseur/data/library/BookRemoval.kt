@@ -11,7 +11,12 @@ import com.chmouel.liseur.data.db.ReadingSessionDao
 import com.chmouel.liseur.data.db.RemoteStatsDao
 import com.chmouel.liseur.data.db.SyncPeerStateDao
 import com.chmouel.liseur.data.db.WorkIdentityDao
+import com.chmouel.liseur.data.liseursync.workSourceOf
 import com.chmouel.liseur.domain.MetadataSource
+import com.chmouel.liseur.domain.PersonalEvaluation
+import com.chmouel.liseur.domain.WorkIdentifiers
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Removes library books and their reading statistics as one database change.
@@ -38,6 +43,7 @@ class BookRemoval(
     private val aiPreferencesDao: com.chmouel.liseur.data.db.BookAiPreferencesDao? = null,
     private val glossaryDao: com.chmouel.liseur.data.db.GlossaryDao? = null,
     private val metadataDao: com.chmouel.liseur.data.db.BookMetadataDao? = null,
+    private val evaluationDao: com.chmouel.liseur.data.db.BookEvaluationDao? = null,
 ) {
     suspend fun deleteByUrls(bookUrls: List<String>) {
         if (bookUrls.isEmpty()) return
@@ -224,6 +230,7 @@ class BookRemoval(
     suspend fun contentReplaced(bookUrl: String, then: suspend () -> Unit = {}) {
         var removedSessions = false
         inTransaction {
+            retainEvaluation(bookUrl)
             progressDao.forget(bookUrl)
             annotationDao.deleteForBook(bookUrl)
             annotationSyncDao.forgetBook(bookUrl)
@@ -374,6 +381,7 @@ class BookRemoval(
 
     private suspend fun untouched(bookUrl: String): Boolean =
         progressDao.get(bookUrl) == null &&
+            (evaluationDao?.countForBook(bookUrl) ?: 0) == 0 &&
             annotationDao.count(bookUrl) == 0 &&
             annotationSyncDao.countForBook(bookUrl) == 0 &&
             sessionDao.countForBook(bookUrl) == 0 &&
@@ -406,6 +414,7 @@ class BookRemoval(
             if (batch.any { sessionDao.countForBook(it) > 0 }) removedSessions = true
             sessionDao.deleteForBooks(batch)
             peerStateDao.forgetBooks(batch)
+            if (evaluationDao != null) batch.forEach { retainEvaluation(it) }
             identityDao.forgetFingerprints(batch)
             identityDao.forgetAliases(batch)
             identityDao.forgetAmbiguities(batch)
@@ -413,6 +422,21 @@ class BookRemoval(
         }
         if (removedSessions) remoteStatsDao?.clearAll()
         return removedSessions
+    }
+
+    private suspend fun retainEvaluation(bookUrl: String) {
+        val evaluations = evaluationDao ?: return
+        if (evaluations.get(bookUrl, PersonalEvaluation.RATING) == null && evaluations.get(bookUrl, PersonalEvaluation.REVIEW) == null) return
+        val book = bookDao.getByUrl(bookUrl)
+        val fingerprint = identityDao.fingerprint(bookUrl)?.takeIf { it.fileModifiedAt == book?.fileModifiedAt }
+        val identifiers = WorkIdentifiers.of(
+            fingerprint?.fingerprint, sourceId = book?.let(::workSourceOf),
+            dcIdentifier = WorkIdentifiers.dcFrom(book?.workId, book?.title, book?.identityAuthor ?: book?.author),
+            title = book?.title, author = book?.author,
+        )
+        evaluations.retain(bookUrl, JSONArray().apply {
+            identifiers.forEach { put(JSONObject().put("kind", it.kind).put("value", it.value)) }
+        }.toString())
     }
 
     private companion object {

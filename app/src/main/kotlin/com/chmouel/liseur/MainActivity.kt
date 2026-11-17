@@ -586,6 +586,7 @@ private fun LiseurApp(
                             },
                             onChooseFormat = { format -> detailsBook?.let { model.chooseFormat(it, format) } },
                             onSetReadingChoice = { choice -> detailsBook?.let { library.setReadingChoice(it, choice) } },
+                            onSetEvaluation = { field, value -> detailsBook?.let { model.setEvaluation(it, field, value) } },
                         )
                     }
 

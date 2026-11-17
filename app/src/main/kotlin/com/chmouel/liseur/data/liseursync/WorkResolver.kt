@@ -127,13 +127,28 @@ class WorkResolver(
      * A book from a saved browse catalog has neither: its `remote_uuid`
      * is that other server's id, so it resolves on its file alone.
      */
-    fun sourceOf(book: Book): String? =
-        if (book.browseServerId != null) {
-            null
-        } else {
-            book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
-                ?: book.remoteUuid?.let { ServerKind.LISEUR_SYNC.remoteUrl(it) }
+    fun sourceOf(book: Book): String? = workSourceOf(book)
+
+    suspend fun resolveRetained(
+        book: Book,
+        identifiers: List<WorkIdentifier>,
+        peerId: String,
+        baseUrl: String,
+        credentials: RemoteCredentials,
+    ): WorkAlias? {
+        if (identifiers.isEmpty()) return null
+        val answer = try {
+            http.post(
+                LiseurSyncApi.url(baseUrl, LiseurSyncApi.RESOLVE), credentials,
+                request(identifiers, book, confirmed = false), expected = setOf(LiseurSyncHttp.CONFLICT),
+            )
+        } catch (_: LiseurSyncRejection) {
+            return null
         }
+        val workId = answer.optString("work_id").takeIf { it.isNotEmpty() } ?: return null
+        if (answer.optString("confidence") == WorkAlias.LOW) return null
+        return WorkAlias(book.url, peerId, workId, WorkAlias.HIGH, resolvedAt = now())
+    }
 
     /**
      * This server's own id for [book], however the book came by it.
@@ -567,3 +582,11 @@ class WorkResolver(
         const val MAX_RESOLVE_BATCH = 500
     }
 }
+
+internal fun workSourceOf(book: Book): String? =
+    if (book.browseServerId != null) {
+        null
+    } else {
+        book.url.takeIf { url -> ServerKind.entries.any { it.remoteId(url) != null } }
+            ?: book.remoteUuid?.let { ServerKind.LISEUR_SYNC.remoteUrl(it) }
+    }

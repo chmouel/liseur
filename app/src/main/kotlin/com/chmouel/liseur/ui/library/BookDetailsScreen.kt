@@ -121,6 +121,7 @@ fun BookDetailsScreen(
     onOpenStats: () -> Unit,
     onChooseFormat: (DownloadFormat) -> Unit = {},
     onSetReadingChoice: (ReadingStatusChoice) -> Unit = {},
+    onSetEvaluation: (String, String?) -> Unit = { _, _ -> },
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
@@ -192,6 +193,9 @@ fun BookDetailsScreen(
                     if (status.isNotEmpty()) {
                         item(key = "status") { ReadingStatusCard(status, section.padding(top = 16.dp)) }
                     }
+                }
+                item(key = "evaluation") {
+                    PersonalEvaluationCard(details, onSetEvaluation, section.padding(top = 24.dp))
                 }
                 details.metadata.description?.let { description ->
                     item(key = "about") { Description(details.book.url, description, section.padding(top = 24.dp)) }

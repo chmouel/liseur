@@ -1953,4 +1953,18 @@
     <string name="reading_status_empty_paused">没有暂停的书</string>
     <string name="reading_status_empty_did_not_finish">没有未读完的书</string>
     <string name="series_set_status">设置丛书状态</string>
+
+    <string name="evaluation_title">我的评分与书评</string>
+    <string name="evaluation_private">仅自己可见。仅与你的 liseur-sync 账户同步。</string>
+    <string name="evaluation_edit">编辑评分与书评</string>
+    <string name="evaluation_no_rating">未评分</string>
+    <string name="evaluation_rating_value">%1$s / 5 星</string>
+    <string name="evaluation_review">私人书评</string>
+    <string name="evaluation_review_limit">文本不得超过 8 KB，且不能包含空字符。</string>
+    <string name="evaluation_export">导出评分与书评</string>
+    <string name="evaluation_exported">评分与书评已导出</string>
+    <string name="evaluation_export_failed">无法导出评分与书评</string>
+    <string name="evaluation_rating">我的评分</string>
+    <string name="evaluation_rated">已评分</string>
+    <string name="evaluation_unrated">未评分</string>
 </resources>

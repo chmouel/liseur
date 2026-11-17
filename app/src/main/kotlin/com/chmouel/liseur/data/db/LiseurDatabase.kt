@@ -10,6 +10,9 @@ import androidx.sqlite.execSQL
 @Database(
     entities = [
         ReadingProgress::class,
+        BookEvaluation::class,
+        EvaluationSync::class,
+        RetainedEvaluation::class,
         FurthestPosition::class,
         PeakDelivery::class,
         Book::class,
@@ -45,13 +48,15 @@ import androidx.sqlite.execSQL
         BookMetadata::class,
         SessionImportSource::class,
     ],
-    version = 78,
+    version = 79,
     exportSchema = true,
 )
 abstract class LiseurDatabase : RoomDatabase() {
     internal val bookOrbitPositionMutex = kotlinx.coroutines.sync.Mutex()
     internal val bookOrbitTraversalMutex = kotlinx.coroutines.sync.Mutex()
     internal val bookOrbitStatusMutex = kotlinx.coroutines.sync.Mutex()
+
+    abstract fun bookEvaluationDao(): BookEvaluationDao
 
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun furthestPositionDao(): FurthestPositionDao
@@ -88,6 +93,33 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
 
     companion object {
+        val MIGRATION_78_79 = object : Migration(78, 79) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS book_evaluation (
+                        book_url TEXT NOT NULL, field TEXT NOT NULL, value TEXT,
+                        title TEXT NOT NULL, author TEXT NOT NULL,
+                        revision INTEGER NOT NULL, retired_revision INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL, PRIMARY KEY(book_url, field)
+                    )
+                """.trimIndent())
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS evaluation_sync (
+                        peer_id TEXT NOT NULL, book_url TEXT NOT NULL, field TEXT NOT NULL,
+                        work_id TEXT NOT NULL, acked_revision INTEGER NOT NULL,
+                        sent_json TEXT, sent_revision INTEGER,
+                        PRIMARY KEY(peer_id, book_url, field)
+                    )
+                """.trimIndent())
+                connection.execSQL("""
+                    CREATE TABLE IF NOT EXISTS retained_evaluation (
+                        book_url TEXT NOT NULL PRIMARY KEY, original_url TEXT NOT NULL,
+                        identifiers TEXT NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         /**
          * Carries an explicit reading status and the coverage of a
          * recording beside the position (ADR-0066).
@@ -2127,6 +2159,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_75_76,
             MIGRATION_76_77,
             MIGRATION_77_78,
+            MIGRATION_78_79,
         )
     }
 }

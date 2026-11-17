@@ -108,6 +108,7 @@ class LiseurSyncPositionSync(
      * positions and marks.
      */
     private val translations: LiseurSyncTranslations? = null,
+    private val evaluations: LiseurSyncEvaluations? = null,
     private val settingsSync: LiseurSyncSettings? = null,
     /**
      * Whether a book is on screen right now.
@@ -799,6 +800,18 @@ class LiseurSyncPositionSync(
             syncAnnotations(account, server.annotationCursorSeq, book, trouble)
         } else {
             0
+        }
+
+        if (trouble.unreachable == null) {
+            try {
+                evaluations?.sync(server, book)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                trouble.failed(e, reasonFor(e))
+            } catch (e: Exception) {
+                Log.w(TAG, "Evaluation sync failed: ${e.javaClass.simpleName}")
+            }
         }
 
         // The sentence translation cache after them (ADR-0052): a cached
