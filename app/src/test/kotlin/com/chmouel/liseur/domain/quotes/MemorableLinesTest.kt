@@ -50,6 +50,39 @@ class MemorableLinesTest {
     }
 
     @Test
+    fun `self-contained lines outrank references to the scene across languages`() {
+        val examples = listOf(
+            Triple("en", "We were only three, and nobody knew how to take care of it.",
+                "We learn to live with silence long before we learn to listen to it."),
+            Triple("fr-FR", "Nous n’étions que trois, nous n’étions pas équipés pour nous en occuper.",
+                "La mémoire garde les blessures que le temps apprend à refermer."),
+            Triple("es", "Después de la cena se lo explicó con toda la paciencia del mundo.",
+                "La verdad cambia de voz cada vez que alguien se atreve a contarla."),
+            Triple("it", "Dopo la cena glielo disse con la calma di chi aveva aspettato a lungo.",
+                "La memoria custodisce ciò che il tempo non riesce a portare via."),
+            Triple("de", "Nach dem Abendessen sagte er zu ihr, dass die Reise am Morgen beginnen würde.",
+                "Die Erinnerung bewahrt, was die Zeit uns nicht zurückgeben kann."),
+            Triple("pt-BR", "Depois do jantar, ninguém sabia como cuidar disso antes de partir.",
+                "O tempo leva embora as palavras, mas deixa o silêncio que elas fizeram."),
+            Triple("cs", "Po večeři se podíval na ni a pomalu zavřel dveře do zahrady.",
+                "Čas mění podobu vzpomínek, ale pravda v nich zůstává stejná."),
+            Triple("ru", "После ужина он посмотрел на неё и медленно закрыл дверь в сад.",
+                "Время меняет наши воспоминания, но не отнимает у них правду."),
+            Triple("zh-Hans", "晚饭过后，他转过身对她说，明天一早就得出门。",
+                "人生的勇气不是从来不害怕，而是害怕的时候仍然愿意向前走。"),
+        )
+        for ((language, scene, standalone) in examples) {
+            assertEquals(language, listOf(standalone, scene), best(language, scene, standalone))
+        }
+    }
+
+    @Test
+    fun `missing language metadata permits sentences in an uncased script`() {
+        val line = "تحتفظ الذاكرة بما تعجز الأيام الطويلة عن محوه."
+        assertEquals(listOf(line), best(null, line))
+    }
+
+    @Test
     fun `one line per paragraph and no repeats`() {
         val line = "Every family keeps its own silence, and every silence keeps its own family."
         val found = best("en", "$line $line", line, "A second sentence that is long enough to be acceptable here.")

@@ -36,7 +36,7 @@ data class MemorableLine(
  */
 object MemorableLines {
     /** Bump when the scoring changes, so books scanned before are scanned again. */
-    const val VERSION = 1
+    const val VERSION = 2
 
     const val KEEP = 30
 
@@ -44,11 +44,12 @@ object MemorableLines {
         val lang = language?.substringBefore('-')?.substringBefore('_')?.lowercase(Locale.ROOT)
         val words = Lexicon.of(lang)
         val locale = lang?.let(Locale::forLanguageTag) ?: Locale.ROOT
+        val wordIterator = BreakIterator.getWordInstance(locale)
         val counts = HashMap<String, Int>()
         var total = 0
         val split = paragraphs.map { paragraph ->
-            for (token in tokens(paragraph.text)) {
-                if (token.length >= MIN_CONTENT_WORD && !token.isProperLike(lang)) {
+            for (token in tokens(paragraph.text, wordIterator)) {
+                if (token.isContentWord() && !token.isProperLike(lang)) {
                     counts.merge(token.lowercase(locale), 1, Int::plus)
                     total++
                 }
@@ -68,7 +69,7 @@ object MemorableLines {
                     first = at == 0,
                     chapterEdge = paragraph.chapterEdge,
                 )
-                val score = score(text, lang, words, place, rarity, locale)
+                val score = score(text, lang, words, place, rarity, locale, wordIterator)
                 lines += MemorableLine(index, range.first, range.last + 1, text, score)
             }
         }
@@ -82,16 +83,17 @@ object MemorableLines {
         val chapterEdge: Boolean = false,
     )
 
-    internal fun score(
+    private fun score(
         text: String,
         lang: String?,
         words: Lexicon,
         place: Place,
         rarity: Rarity,
         locale: Locale,
+        wordIterator: BreakIterator,
     ): Double {
-        val tokens = tokens(text)
-        val lower = tokens.map { it.lowercase(locale) }
+        val tokens = tokens(text, wordIterator)
+        val lower = tokens.map { it.lowercase(locale).replace('’', '\'') }
         var score = 0.0
 
         score += when {
@@ -108,13 +110,18 @@ object MemorableLines {
         score += min(lower.count { it in words.general } * 0.5, 1.5)
         score += min(lower.count { it in words.present } * 0.3, 0.6)
         score -= min(lower.count { it in words.past } * 0.35, 1.0)
-        if (lower.firstOrNull() in words.pointing) score -= 1.0
+        if (lower.firstOrNull() in words.pointing) score -= 1.5
+        if (words.references.any { lower.containsPhrase(it) }) score -= 1.8
+        if (lang == "zh") {
+            if (CHINESE_REFERENCE.containsMatchIn(text)) score -= 1.8
+            if (CHINESE_TURN.containsMatchIn(text)) score += 0.8
+        }
         score -= min(lower.count { it in words.thirdPerson } * 0.25, 0.75)
 
         // Shape: a turn, a balance, a word that comes back.
         if (MIDDLE_TURN.containsMatchIn(text)) score += 0.4
         if (words.turns.any { lower.drop(1).containsPhrase(it) }) score += 0.4
-        val content = lower.filter { it.length >= MIN_CONTENT_WORD && it !in words.general }
+        val content = lower.filter { it.isContentWord() && it !in words.general }
         if (content.size != content.toSet().size) score += 0.6
 
         // Context the line cannot carry by itself.
@@ -130,7 +137,7 @@ object MemorableLines {
         if (ending.endsWith('?') || ending.endsWith('？')) score -= 0.2
 
         // Distinctive within this book: its rarer words, names left out.
-        val distinctive = tokens.filter { it.length >= MIN_CONTENT_WORD && !it.isProperLike(lang) }
+        val distinctive = tokens.filter { it.isContentWord() && !it.isProperLike(lang) }
         score += 1.2 * rarity.of(distinctive.map { it.lowercase(locale) })
         return score
     }
@@ -143,9 +150,10 @@ object MemorableLines {
         if (last !in ENDINGS) return false
         if (!cjk) {
             val first = text.trimStart(*OPENERS).firstOrNull() ?: return false
-            if (!first.isUpperCase()) return false
-            if (tokens(text).size < MIN_WORDS) return false
             val letters = text.filter(Char::isLetter)
+            if (!first.isLetter() || letters.isEmpty()) return false
+            if (letters.any { it.isUpperCase() || it.isLowerCase() } && !first.isUpperCase()) return false
+            if (WORD.findAll(text).count() < MIN_WORDS) return false
             if (letters.count(Char::isUpperCase) * 2 > letters.length) return false
         }
         return !JUNK.containsMatchIn(text) && balanced(text)
@@ -189,10 +197,25 @@ object MemorableLines {
         return ranges
     }
 
-    private fun tokens(text: String): List<String> = WORD.findAll(text).map { it.value }.toList()
+    private fun tokens(text: String, wordIterator: BreakIterator): List<String> {
+        if (!isCjk(text)) return WORD.findAll(text).map { it.value }.toList()
+        wordIterator.setText(text)
+        return buildList {
+            var start = wordIterator.first()
+            var end = wordIterator.next()
+            while (end != BreakIterator.DONE) {
+                val token = text.substring(start, end)
+                if (token.any(Char::isLetter)) add(token)
+                start = end
+                end = wordIterator.next()
+            }
+        }
+    }
+
+    private fun String.isContentWord(): Boolean = length >= MIN_CONTENT_WORD || isCjk(this)
 
     private fun String.isProperLike(lang: String?): Boolean =
-        first().isUpperCase() && length > 1 && !(lang == "en" && this == "I")
+        lang != "de" && length > 1 && first().isUpperCase()
 
     private fun List<String>.containsPhrase(phrase: List<String>): Boolean =
         phrase.isNotEmpty() && size >= phrase.size && windowed(phrase.size).any { it == phrase }
@@ -229,6 +252,8 @@ object MemorableLines {
     private val CLOSERS = charArrayOf('"', '”', '’', '»', ')', '」', '』', ' ', '\u00A0')
     private val OPENERS = charArrayOf('"', '“', '‘', '«', '¿', '¡', '„', '(', ' ', '\u00A0')
     private val WORD = Regex("\\p{L}[\\p{L}\\p{M}'’-]*")
+    private val CHINESE_REFERENCE = Regex("^[「『“]?(?:他|她|他们|她们|那时|这时|于是|随后)|(?:对他说|对她说|接着说道)")
+    private val CHINESE_TURN = Regex("不但.+而且|不是.+而是|与其.+不如|越.+[，,].*越|[，,；;](?:却|但|反而)")
     private val MIDDLE_TURN = Regex("\\S[;:]\\s+\\S")
     private val DIALOGUE = Regex("^\\s*[—–-]|[\"“”«»„]|^\\s*[‘']")
     private val JUNK = Regex(
@@ -250,6 +275,7 @@ internal class Lexicon(
     val turns: List<List<String>>,
     /** German capitalises every noun, so a capital says nothing about a name. */
     val capitalisesNouns: Boolean = false,
+    val references: List<List<String>> = emptyList(),
 ) {
     companion object {
         private val NONE = Lexicon(emptySet(), emptySet(), emptySet(), emptySet(), emptySet(), emptySet(), emptyList())
@@ -283,6 +309,7 @@ internal class Lexicon(
             thirdPerson = words("he she him her his hers"),
             speech = words("said asked replied whispered shouted cried answered muttered"),
             turns = turns("but", "yet", "not only", "the more", "rather than", "instead of"),
+            references = turns("as he said", "as she said", "looked at him", "looked at her", "take care of it"),
         )
 
         private val FR = Lexicon(
@@ -296,6 +323,10 @@ internal class Lexicon(
             thirdPerson = words("il elle lui son sa ses"),
             speech = words("dit demanda répondit murmura s'écria cria ajouta"),
             turns = turns("mais", "pourtant", "non seulement", "plus on", "plutôt que", "au lieu de"),
+            references = turns(
+                "s'en occuper", "s'en occupe", "s'en occupait", "m'en occuper", "nous en occuper",
+                "vous en occuper", "s'en charger", "le lui dit", "la regarda",
+            ),
         )
 
         private val ES = Lexicon(
@@ -309,6 +340,7 @@ internal class Lexicon(
             thirdPerson = words("él ella su sus le"),
             speech = words("dijo preguntó respondió susurró gritó contestó"),
             turns = turns("pero", "sin embargo", "no solo", "cuanto más", "en lugar de"),
+            references = turns("se lo dijo", "se lo explicó", "se hizo cargo de ello", "la miró"),
         )
 
         private val IT = Lexicon(
@@ -322,6 +354,7 @@ internal class Lexicon(
             thirdPerson = words("lui lei suo sua suoi gli"),
             speech = words("disse chiese rispose sussurrò gridò"),
             turns = turns("ma", "eppure", "non solo", "più si", "invece di"),
+            references = turns("glielo disse", "se ne occupò", "occuparcene", "la guardò"),
         )
 
         private val DE = Lexicon(
@@ -335,6 +368,7 @@ internal class Lexicon(
             thirdPerson = words("er ihm ihn sein seine"),
             speech = words("sagte fragte antwortete flüsterte rief"),
             turns = turns("aber", "doch", "nicht nur", "je mehr", "statt"),
+            references = turns("sagte er zu ihr", "sagte sie zu ihm", "sich darum kümmern", "sah ihn an"),
             capitalisesNouns = true,
         )
 
@@ -349,6 +383,7 @@ internal class Lexicon(
             thirdPerson = words("ele ela seu sua seus lhe"),
             speech = words("disse perguntou respondeu sussurrou gritou"),
             turns = turns("mas", "porém", "não só", "quanto mais", "em vez de"),
+            references = turns("disse a ele", "disse a ela", "cuidar disso", "olhou para ele"),
         )
 
         private val CS = Lexicon(
@@ -359,6 +394,7 @@ internal class Lexicon(
             thirdPerson = words("on ona jeho její mu"),
             speech = words("řekl řekla zeptal odpověděl zašeptal vykřikl"),
             turns = turns("ale", "přesto", "nejen", "čím víc", "místo"),
+            references = turns("řekl jí", "řekla mu", "podíval se na ni", "postarat se o to"),
         )
 
         private val RU = Lexicon(
@@ -371,6 +407,7 @@ internal class Lexicon(
             thirdPerson = words("он она его её ему"),
             speech = words("сказал сказала спросил ответил прошептал крикнул"),
             turns = turns("но", "однако", "не только", "чем больше", "вместо"),
+            references = turns("сказал ей", "сказала ему", "посмотрел на неё", "заняться этим"),
         )
     }
 }
