@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,8 +47,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,8 +60,6 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -78,8 +73,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.quotes.HomeQuote
@@ -92,7 +85,6 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
-import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.ContinueReading
 import com.chmouel.liseur.ui.library.HeroDetail
@@ -191,7 +183,6 @@ internal fun HomeLibrary(
                 ) {
                     HomeSectionHeader(
                         text = stringResource(R.string.home_series_underway),
-                        accent = homePalette()?.series?.content,
                         actionText = stringResource(R.string.home_see_all),
                         onAction = { onOpenShelf(HomeShelfKind.SERIES) },
                     )
@@ -217,7 +208,6 @@ internal fun HomeLibrary(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     HomeSectionHeader(
                         text = stringResource(R.string.home_recently_added),
-                        accent = homePalette()?.toRead?.content,
                         actionText = stringResource(R.string.home_see_all),
                         onAction = onOpenRecent,
                         modifier = gutter,
@@ -319,57 +309,88 @@ private fun QuoteCard(
     onAnother: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val eInk = LocalEInk.current
     val palette = homePalette()
-    val accent = palette?.reading?.content ?: MaterialTheme.colorScheme.onSurface
+    val accent = palette?.onPill ?: MaterialTheme.colorScheme.primary
     DeskCard(
         onClick = onOpen,
         onClickLabel = stringResource(R.string.home_quote_open),
+        shape = RoundedCornerShape(20.dp),
         modifier = modifier,
-        borderColor = palette?.reading?.content?.copy(alpha = 0.4f),
+        borderColor = palette?.reading?.content?.copy(alpha = 0.28f),
     ) {
         Box {
-            if (palette != null) {
-                QuoteCoverBackdrop(quote.book, palette.card, Modifier.matchParentSize())
-            }
-            Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(
-                            if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
-                        ),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = onAnother) {
-                        Icon(Icons.Outlined.Shuffle, contentDescription = stringResource(R.string.home_quote_another))
-                    }
-                }
+            palette?.let { QuoteBackdrop(quote.book, it, Modifier.matchParentSize()) }
+            Column(Modifier.padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)) {
                 Text(
-                    text = stringResource(R.string.home_quote_text, quote.text.trimQuoteMarks()),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontStyle = FontStyle.Italic,
-                    modifier = Modifier.padding(end = 12.dp),
+                    text = stringResource(
+                        if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
+                    ).uppercase(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.8.sp,
+                    color = if (eInk) MaterialTheme.colorScheme.onSurfaceVariant else accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                val source = listOfNotNull(quote.book.displayTitle, quote.book.displayAuthor).joinToString(", ")
+                Text(
+                    text = quote.text.trimQuoteMarks(),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        lineHeight = 29.sp,
+                        fontWeight = FontWeight.Normal,
+                    ),
+                    fontStyle = FontStyle.Italic,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                val subtitle = listOfNotNull(quote.book.displayAuthor, quote.chapter).joinToString(" · ")
                 Row(
-                    Modifier.padding(top = 12.dp, end = 12.dp).height(IntrinsicSize.Min),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 16.dp).fillMaxWidth(),
                 ) {
-                    Spacer(Modifier.width(2.dp).fillMaxHeight().background(accent.copy(alpha = 0.7f)))
-                    Column(Modifier.padding(start = 10.dp)) {
+                    BookCover(
+                        book = quote.book,
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier
+                            .width(30.dp)
+                            .height(45.dp)
+                            .then(if (eInk) Modifier else Modifier.shadow(2.dp, RoundedCornerShape(4.dp))),
+                    )
+                    Column(
+                        Modifier
+                            .padding(start = 12.dp)
+                            .weight(1f),
+                    ) {
                         Text(
-                            text = stringResource(R.string.home_quote_source, source),
+                            text = quote.book.displayTitle,
                             style = MaterialTheme.typography.labelLarge,
-                            maxLines = 2,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        quote.chapter?.let { chapter ->
+                        if (subtitle.isNotEmpty()) {
                             Text(
-                                text = chapter,
+                                text = subtitle,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
+                            )
+                        }
+                    }
+                    Surface(
+                        shape = CircleShape,
+                        color = palette?.card?.copy(alpha = 0.7f) ?: Color.Transparent,
+                        border = BorderStroke(1.dp, palette?.cardBorder ?: MaterialTheme.colorScheme.outline),
+                        modifier = Modifier.padding(start = 12.dp).size(38.dp),
+                    ) {
+                        IconButton(onClick = onAnother) {
+                            Icon(
+                                Icons.Outlined.Shuffle,
+                                contentDescription = stringResource(R.string.home_quote_another),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
@@ -383,38 +404,29 @@ private val QUOTE_EDGE_MARKS = charArrayOf(
     '"', '“', '”', '„', '‟', '«', '»', '‹', '›', '「', '」', '『', '』', '\u00A0', '\u202F',
 )
 
-/** Strips outer book quotation marks when `home_quote_text` wraps the passage in its own. */
+/** Strips outer book quotation marks around a quoted passage. */
 internal fun String.trimQuoteMarks(): String =
     trim().trim(*QUOTE_EDGE_MARKS).trim()
 
 @Composable
-private fun QuoteCoverBackdrop(book: Book, surface: Color, modifier: Modifier) {
-    val artwork = book.coverPath ?: book.coverUrl ?: return
-    val context = LocalContext.current
-    val request = remember(context, artwork, book.coverUrl, book.browseServerId) {
-        ImageRequest.Builder(context)
-            .data(artwork)
-            .browseCover(artwork, book.coverUrl, book.browseServerId)
-            .build()
-    }
-    Box(modifier, contentAlignment = AbsoluteAlignment.CenterRight) {
-        Box(Modifier.fillMaxWidth(0.55f).fillMaxHeight()) {
-            AsyncImage(
-                model = request,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alpha = 0.16f,
-                modifier = Modifier.matchParentSize(),
-            )
-            Box(
-                Modifier.matchParentSize().background(
-                    Brush.horizontalGradient(
-                        0f to surface,
-                        0.9f to surface.copy(alpha = 0f),
-                    ),
-                ),
+private fun QuoteBackdrop(book: Book, palette: HomePalette, modifier: Modifier = Modifier) {
+    Box(modifier) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            BookCover(
+                book = book,
+                shape = RoundedCornerShape(0.dp),
+                modifier = Modifier.matchParentSize().blur(44.dp).alpha(0.32f),
             )
         }
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.horizontalGradient(
+                    0f to palette.card.copy(alpha = 0.94f),
+                    0.55f to palette.card.copy(alpha = 0.82f),
+                    1f to palette.heroWash.copy(alpha = 0.45f),
+                ),
+            ),
+        )
     }
 }
 
@@ -744,7 +756,6 @@ private fun ShelfTiles(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         HomeSectionHeader(
             text = stringResource(R.string.home_your_shelves),
-            accent = homePalette()?.reading?.content,
             actionText = stringResource(R.string.home_see_all),
             onAction = onSeeAll,
         )
@@ -765,18 +776,11 @@ private fun ShelfTiles(
 private fun HomeSectionHeader(
     text: String,
     modifier: Modifier = Modifier,
-    accent: Color? = null,
     actionText: String? = null,
     onAction: (() -> Unit)? = null,
 ) {
     val eInk = LocalEInk.current
     val palette = homePalette()
-    val markColor = when {
-        eInk -> MaterialTheme.colorScheme.onSurface
-        accent != null -> accent
-        palette != null -> palette.onPill
-        else -> MaterialTheme.colorScheme.primary
-    }
     val actionColor = when {
         eInk -> MaterialTheme.colorScheme.onSurface
         palette != null -> palette.onPill
@@ -784,7 +788,7 @@ private fun HomeSectionHeader(
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
             .fillMaxWidth()
             .then(
@@ -798,13 +802,6 @@ private fun HomeSectionHeader(
             )
             .padding(vertical = 2.dp),
     ) {
-        Box(
-            Modifier
-                .width(3.dp)
-                .height(18.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(markColor),
-        )
         Text(
             text = text,
             style = MaterialTheme.typography.titleLarge.copy(
