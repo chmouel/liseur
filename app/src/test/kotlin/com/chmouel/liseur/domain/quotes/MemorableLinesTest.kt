@@ -72,7 +72,7 @@ class MemorableLinesTest {
                 "人生的勇气不是从来不害怕，而是害怕的时候仍然愿意向前走。"),
         )
         for ((language, scene, standalone) in examples) {
-            assertEquals(language, listOf(standalone, scene), best(language, scene, standalone))
+            assertEquals(language, standalone, best(language, scene, standalone).firstOrNull())
         }
     }
 
@@ -80,6 +80,25 @@ class MemorableLinesTest {
     fun `missing language metadata permits sentences in an uncased script`() {
         val line = "تحتفظ الذاكرة بما تعجز الأيام الطويلة عن محوه."
         assertEquals(listOf(line), best(null, line))
+    }
+
+    @Test
+    fun `a weak automatic candidate can leave the book without a quote`() {
+        val scene = "Nous n’étions que trois, nous n’étions pas équipés pour nous en occuper."
+        assertTrue(MemorableLines.acceptable(scene))
+        assertTrue(best("fr", scene).isEmpty())
+    }
+
+    @Test
+    fun `a short setup and its turn can be quoted together within a paragraph`() {
+        val first = "Silence lies."
+        val second = "But silence also tells us what we are afraid to hear."
+        val paragraph = "$first $second"
+        val line = MemorableLines.find(listOf(QuoteParagraph(paragraph)), "en").single()
+        assertEquals(paragraph, line.text)
+        assertEquals(0, line.start)
+        assertEquals(paragraph.length, line.end)
+        assertTrue(best("en", first, second).isEmpty())
     }
 
     @Test
