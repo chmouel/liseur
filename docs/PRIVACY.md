@@ -102,6 +102,11 @@ All of this stays in the app's own private storage:
   build the narration direction you saved for reading it aloud. Removing
   the book keeps them for when it comes back; they are not synced, and
   the ZIP backups you export from Settings do not carry them.
+- If you connect Hardcover, the API token you pasted, encrypted the same
+  way as server credentials, your Hardcover username and user id, and for
+  each book the Hardcover edition it was matched with and whether you
+  keep it off Hardcover. Deleting a book removes its match; disconnecting
+  removes the token and every match.
 
 Uninstalling the app removes all of it.
 
@@ -142,6 +147,20 @@ cleared on your other devices as well. Vocabulary stays scoped to the
 account you signed in with and is never sent to other providers. You
 operate that server, or someone you trust does. This policy does not
 cover what the server does with the data it receives.
+
+### Hardcover, if you connect it
+
+If you paste a Hardcover API token in Settings, Liseur talks to
+`https://api.hardcover.app/v1/graphql`, sending that token with every
+request. To find which Hardcover book you are reading it sends the
+book's ISBN when the file has one, and otherwise its title and author.
+It then sends whether you are reading or have finished that book and how
+many pages in you are, after you close the book or when you tap Push to
+Hardcover. It reads back only what it needs to avoid repeating itself:
+your Hardcover user id, and that book's status and logged page. Books you
+switch off in Book details are never sent. Hardcover publishes what it
+does with this under its own privacy policy, which this policy does not
+cover.
 
 ### Free book catalogs
 
@@ -554,14 +573,14 @@ also carries your reading sessions, and if you tick “Include book files” it
 carries the offline EPUBs you select. Both travel unencrypted, even when a
 backup password is set: only the connection payload is encrypted. They exclude passwords, tokens and API keys by
 default. If you check “Include accounts, services and passwords”, Liseur also
-includes your library account, KOReader pairing, service API keys and, in the
-Google Play build, your Gemini key. These credentials are encrypted with a
+includes your library account, KOReader pairing, Hardcover token, service API
+keys and, in the Google Play build, your Gemini key. These credentials are encrypted with a
 backup password you choose, using AES-256-GCM and PBKDF2-HMAC-SHA256 with a
 random salt and 600,000 iterations. Only this connection payload is encrypted;
 the other ZIP contents remain readable. Keep the password to restore the
 credentials; Liseur does not save or send it anywhere.
 
-Restoring such a backup replaces saved library and KOReader accounts, service
+Restoring such a backup replaces saved library, KOReader and Hardcover accounts, service
 configuration and credentials without contacting the servers to sign in.
 Credentials are encrypted again with the new device’s Keystore. Sync cursors,
 acknowledgements and queued work are not transferred. Backups without

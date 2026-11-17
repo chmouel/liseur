@@ -148,6 +148,8 @@ fun BookDetailsScreen(
     onResetSharedSeries: (Book) -> Unit = {},
     onSaveMetadataEdits: (Book, FieldEdit, FieldEdit, FieldEdit, CoverEdit) -> Unit = { _, _, _, _, _ -> },
     onResetAllMetadataOverrides: (Book) -> Unit = {},
+    /** One more section under the file details, given the width the others use. */
+    extraSection: (@Composable (Modifier) -> Unit)? = null,
 ) {
     if (state is BookDetailsUiState.Gone) {
         LaunchedEffect(Unit) { onBack() }
@@ -260,6 +262,7 @@ fun BookDetailsScreen(
                     item(key = "publication") { Publication(details, section) }
                 }
                 item(key = "fileinfo") { FileInfo(details, section) }
+                extraSection?.let { extra -> item(key = "extra") { extra(section) } }
             }
             if (editingMetadata) {
                 metadataEditStates.SaveableStateProvider("metadata-edit-$metadataEditRound") {

@@ -2277,4 +2277,26 @@
     <string name="book_metadata_reset_all">Alle Änderungen zurücksetzen</string>
     <string name="book_metadata_edit_series">Reihe bearbeiten</string>
     <string name="book_metadata_no_series">Keine</string>
+    <string name="hardcover_settings_summary">Deinen Lesefortschritt an dein Hardcover-Konto melden</string>
+    <string name="hardcover_intro">Liseur kann Hardcover mitteilen, welches Buch du liest, wie weit du bist und wann du es beendest. Von Hardcover wird nichts übernommen.</string>
+    <string name="hardcover_token_label">API-Token</string>
+    <string name="hardcover_token_help">Öffne in den Einstellungen deines Hardcover-Kontos „Hardcover API“, erstelle ein Token und füge es hier ein.</string>
+    <string name="hardcover_connect">Verbinden</string>
+    <string name="hardcover_disconnect">Trennen</string>
+    <string name="hardcover_connected_as">Angemeldet als %1$s</string>
+    <string name="hardcover_auto_sync">Automatisch synchronisieren</string>
+    <string name="hardcover_auto_sync_detail">Meldet den Fortschritt bei jedem Schließen eines Buchs. Wenn aus, nutze „An Hardcover senden“ im Lesemenü.</string>
+    <string name="hardcover_error_token">Hardcover hat dieses Token nicht akzeptiert.</string>
+    <string name="hardcover_error_offline">Hardcover ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.</string>
+    <string name="hardcover_error_other">Hardcover konnte gerade nicht aktualisiert werden. Versuche es später erneut.</string>
+    <string name="hardcover_push">An Hardcover senden</string>
+    <string name="hardcover_pushed">An Hardcover gesendet</string>
+    <string name="hardcover_up_to_date">Hardcover ist bereits aktuell</string>
+    <string name="hardcover_needs_match">Wähle zuerst in den Buchdetails die Hardcover-Ausgabe dieses Buchs</string>
+    <string name="hardcover_push_off">Dieses Buch wird nicht an Hardcover gesendet</string>
+    <string name="hardcover_book_matched">Zugeordnet: %1$s</string>
+    <string name="hardcover_book_unmatched">Noch keiner Ausgabe zugeordnet</string>
+    <string name="hardcover_book_sync">Dieses Buch synchronisieren</string>
+    <string name="hardcover_book_choose">Ausgabe wählen</string>
+    <string name="hardcover_editions_none">Hardcover hat keine passende Ausgabe für dieses Buch.</string>
 </resources>
