@@ -328,7 +328,7 @@ internal class Lexicon(
             thirdPerson = words("he she him her his hers"),
             speech = words("said asked replied whispered shouted cried answered muttered"),
             turns = turns("but", "yet", "not only", "the more", "rather than", "instead of"),
-            references = turns("as he said", "as she said", "looked at him", "looked at her", "take care of it"),
+            references = turns("as he said", "as she said", "looked at him", "looked at her", "take care of it", "we shall therefore speak"),
         )
 
         private val FR = Lexicon(
@@ -373,7 +373,7 @@ internal class Lexicon(
             thirdPerson = words("lui lei suo sua suoi gli"),
             speech = words("disse chiese rispose sussurrò gridò"),
             turns = turns("ma", "eppure", "non solo", "più si", "invece di"),
-            references = turns("glielo disse", "se ne occupò", "occuparcene", "la guardò"),
+            references = turns("glielo disse", "se ne occupò", "occuparcene", "la guardò", "quel primo", "quel secondo"),
         )
 
         private val DE = Lexicon(
@@ -402,7 +402,7 @@ internal class Lexicon(
             thirdPerson = words("ele ela seu sua seus lhe"),
             speech = words("disse perguntou respondeu sussurrou gritou"),
             turns = turns("mas", "porém", "não só", "quanto mais", "em vez de"),
-            references = turns("disse a ele", "disse a ela", "cuidar disso", "olhou para ele"),
+            references = turns("disse a ele", "disse a ela", "cuidar disso", "olhou para ele", "vi-lhe fazer", "que elle interrompesse"),
         )
 
         private val CS = Lexicon(
@@ -413,7 +413,7 @@ internal class Lexicon(
             thirdPerson = words("on ona jeho její mu"),
             speech = words("řekl řekla zeptal odpověděl zašeptal vykřikl"),
             turns = turns("ale", "přesto", "nejen", "čím víc", "místo"),
-            references = turns("řekl jí", "řekla mu", "podíval se na ni", "postarat se o to"),
+            references = turns("řekl jí", "řekla mu", "podíval se na ni", "postarat se o to", "se jim ale"),
         )
 
         private val RU = Lexicon(
@@ -426,7 +426,7 @@ internal class Lexicon(
             thirdPerson = words("он она его её ему"),
             speech = words("сказал сказала спросил ответил прошептал крикнул"),
             turns = turns("но", "однако", "не только", "чем больше", "вместо"),
-            references = turns("сказал ей", "сказала ему", "посмотрел на неё", "заняться этим"),
+            references = turns("сказал ей", "сказала ему", "посмотрел на неё", "заняться этим", "история эта"),
         )
     }
 }
