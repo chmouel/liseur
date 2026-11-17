@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,6 +48,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -60,6 +63,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -72,6 +77,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.quotes.HomeQuote
@@ -84,6 +91,7 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
+import com.chmouel.liseur.ui.browseCover
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.ContinueReading
 import com.chmouel.liseur.ui.library.HeroDetail
@@ -248,6 +256,7 @@ private fun DeskCard(
     onClickLabel: String? = null,
     shape: Shape = RoundedCornerShape(16.dp),
     color: Color? = null,
+    borderColor: Color? = null,
     content: @Composable () -> Unit,
 ) {
     val eInk = LocalEInk.current
@@ -262,7 +271,7 @@ private fun DeskCard(
         },
         border = when {
             eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            palette != null -> BorderStroke(1.dp, palette.cardBorder)
+            palette != null -> BorderStroke(1.dp, borderColor ?: palette.cardBorder)
             else -> null
         },
         shadowElevation = if (palette != null) 2.dp else 0.dp,
@@ -292,49 +301,93 @@ private fun QuoteCard(
     onAnother: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val palette = homePalette()
+    val accent = palette?.reading?.content ?: MaterialTheme.colorScheme.onSurface
     DeskCard(
         onClick = onOpen,
         onClickLabel = stringResource(R.string.home_quote_open),
         modifier = modifier,
+        borderColor = palette?.reading?.content?.copy(alpha = 0.4f),
     ) {
-        Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(
-                        if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onAnother) {
-                    Icon(Icons.Outlined.Shuffle, contentDescription = stringResource(R.string.home_quote_another))
-                }
+        Box {
+            if (palette != null) {
+                QuoteCoverBackdrop(quote.book, palette.card, Modifier.matchParentSize())
             }
-            Text(
-                text = stringResource(R.string.home_quote_text, quote.text),
-                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Serif),
-                fontStyle = FontStyle.Italic,
-                modifier = Modifier.padding(end = 12.dp),
-            )
-            val source = listOfNotNull(quote.book.displayTitle, quote.book.displayAuthor).joinToString(", ")
-            Text(
-                text = stringResource(R.string.home_quote_source, source),
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 12.dp, end = 12.dp),
-            )
-            quote.chapter?.let { chapter ->
+            Column(Modifier.padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(
+                            if (quote.highlight) R.string.home_quote_highlight else R.string.home_quote_title,
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onAnother) {
+                        Icon(Icons.Outlined.Shuffle, contentDescription = stringResource(R.string.home_quote_another))
+                    }
+                }
                 Text(
-                    text = chapter,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    text = stringResource(R.string.home_quote_text, quote.text),
+                    style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Serif),
+                    fontStyle = FontStyle.Italic,
                     modifier = Modifier.padding(end = 12.dp),
                 )
+                val source = listOfNotNull(quote.book.displayTitle, quote.book.displayAuthor).joinToString(", ")
+                Row(
+                    Modifier.padding(top = 12.dp, end = 12.dp).height(IntrinsicSize.Min),
+                ) {
+                    Spacer(Modifier.width(2.dp).fillMaxHeight().background(accent.copy(alpha = 0.7f)))
+                    Column(Modifier.padding(start = 10.dp)) {
+                        Text(
+                            text = stringResource(R.string.home_quote_source, source),
+                            style = MaterialTheme.typography.labelLarge,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        quote.chapter?.let { chapter ->
+                            Text(
+                                text = chapter,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun QuoteCoverBackdrop(book: Book, surface: Color, modifier: Modifier) {
+    val artwork = book.coverPath ?: book.coverUrl ?: return
+    val context = LocalContext.current
+    val request = remember(context, artwork, book.coverUrl, book.browseServerId) {
+        ImageRequest.Builder(context)
+            .data(artwork)
+            .browseCover(artwork, book.coverUrl, book.browseServerId)
+            .build()
+    }
+    Box(modifier, contentAlignment = AbsoluteAlignment.CenterRight) {
+        Box(Modifier.fillMaxWidth(0.55f).fillMaxHeight()) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alpha = 0.16f,
+                modifier = Modifier.matchParentSize(),
+            )
+            Box(
+                Modifier.matchParentSize().background(
+                    Brush.horizontalGradient(
+                        0f to surface,
+                        0.9f to surface.copy(alpha = 0f),
+                    ),
+                ),
+            )
         }
     }
 }
