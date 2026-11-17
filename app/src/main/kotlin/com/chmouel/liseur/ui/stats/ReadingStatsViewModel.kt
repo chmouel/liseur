@@ -66,6 +66,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -565,6 +566,9 @@ class ReadingStatsViewModel(
         val weekMs: Long,
     )
 
+    // Shared so the dashboard and an open book page read one answer: as
+    // a cold flow every extra consumer walked the three DAO observations
+    // and the whole library again for a single book's spans.
     private val local = combine(
         sessionDao.observeAll(),
         bookDao.observeAll(),
@@ -615,6 +619,7 @@ class ReadingStatsViewModel(
                 ?: 0L,
         )
     }.flowOn(Dispatchers.Default)
+        .shareIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), replay = 1)
 
     val state: StateFlow<ReadingStatsUiState> = combine(
         local,
