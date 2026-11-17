@@ -389,6 +389,8 @@ fun SettingsBackupScreen(
                         onClick = backup.restore,
                         modifier = Modifier.settingsAnchor(SettingsEntries.BackupRestore),
                     )
+                    RowDivider()
+                    EvaluationExportButton(enabled = !backup.busy)
                     backup.archiveProgress?.let { progress ->
                         RowDivider()
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {

@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.library
 
 import androidx.room.Room
+import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookMetadata
@@ -17,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -69,6 +71,7 @@ class BookDetailsViewModelTest {
                 identityDao = db.workIdentityDao(),
                 remoteServerDao = db.remoteServerDao(),
                 folderName = { null },
+                inTransaction = { block -> db.withTransaction { block() } },
             )
             val state = model.details(url)
             val collecting = launch { state.collect {} }
@@ -86,4 +89,67 @@ class BookDetailsViewModelTest {
             Dispatchers.resetMain()
         }
     }
+
+    @Test
+    fun `stale editors cannot save to removed or replaced books`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "content://books/reused.epub"
+            val synced = mutableListOf<String>()
+            val model = evaluationModel(synced)
+            val seed = Book(url = url, title = "Original", author = "Author", coverPath = null,
+                source = null, addedAt = 1, lastOpenedAt = null, workId = "original", fileModifiedAt = 1)
+            val replacements: List<(Book) -> Book?> = listOf(
+                { null },
+                { it.copy(id = 0) },
+                { it.copy(workId = "replacement") },
+                { it.copy(fileModifiedAt = 2) },
+                { it.copy(linkGeneration = it.linkGeneration + 1) },
+            )
+            for (replace in replacements) {
+                db.bookDao().deleteByUrls(listOf(url))
+                db.bookDao().upsert(seed)
+                val original = db.bookDao().getByUrl(url)!!
+                val replacement = replace(original)
+                if (replacement == null || replacement.id == 0L) db.bookDao().deleteByUrls(listOf(url))
+                replacement?.let { db.bookDao().upsert(it) }
+                model.setEvaluation(original, "review", "Original book's private review").join()
+                assertNull(db.bookEvaluationDao().get(url, "review"))
+                assertEquals(emptyList<String>(), synced)
+            }
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun `evaluation saves use current display metadata and request sync after commit`() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val url = "content://books/a.epub"
+            db.bookDao().upsert(Book(url = url, title = "Original", author = "Author", coverPath = null,
+                source = null, addedAt = 1, lastOpenedAt = null))
+            val original = db.bookDao().getByUrl(url)!!
+            db.bookDao().upsert(original.copy(title = "Corrected title", author = "Corrected author", lastOpenedAt = 2))
+            val synced = mutableListOf<String>()
+            evaluationModel(synced).setEvaluation(original, "review", "Private review").join()
+            val saved = db.bookEvaluationDao().get(url, "review")!!
+            assertEquals("Private review", saved.value)
+            assertEquals("Corrected title", saved.title)
+            assertEquals("Corrected author", saved.author)
+            assertEquals(listOf(url), synced)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    private fun evaluationModel(synced: MutableList<String>) = BookDetailsViewModel(
+        bookDao = db.bookDao(), metadataDao = db.bookMetadataDao(), progressDao = db.readingProgressDao(),
+        annotationDao = db.annotationDao(), identityDao = db.workIdentityDao(), remoteServerDao = db.remoteServerDao(),
+        folderName = { null }, inTransaction = { block -> db.withTransaction { block() } },
+        evaluationDao = db.bookEvaluationDao(), requestSync = {
+            check(!db.inTransaction())
+            synced += it
+        },
+    )
 }

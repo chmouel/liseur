@@ -251,6 +251,7 @@ object SettingsEntries {
         "backup_export", Route.SettingsBackup, R.string.settings_backup_export,
         R.string.settings_backup_export_detail,
     )
+    val EvaluationExport = entry("evaluation_export", Route.SettingsBackup, R.string.evaluation_export)
     val BackupRestore = entry(
         "backup_restore", Route.SettingsBackup, R.string.settings_backup_restore,
         R.string.settings_backup_restore_detail,

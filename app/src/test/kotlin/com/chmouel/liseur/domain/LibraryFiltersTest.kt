@@ -18,6 +18,21 @@ import org.junit.Test
  * shelf, which is the failure the chips were replaced to avoid.
  */
 class LibraryFiltersTest {
+    @Test
+    fun `rating filters combine with reading and availability filters`() {
+        val rated = filters(LibraryFilterOption.RATED, LibraryFilterOption.FINISHED, LibraryFilterOption.DOWNLOADED)
+        assertTrue(rated.accepts(book(finished = true), rated = true))
+        assertFalse(rated.accepts(book(finished = true), rated = false))
+        assertFalse(rated.accepts(book(finished = true, downloaded = false), rated = true))
+        assertFalse(rated.accepts(book(), rated = true))
+        assertTrue(filters(LibraryFilterOption.UNRATED).accepts(book(), rated = false))
+        assertFalse(filters(LibraryFilterOption.UNRATED).accepts(book(), rated = true))
+        val either = filters(LibraryFilterOption.RATED, LibraryFilterOption.UNRATED)
+        assertTrue(either.accepts(book(), rated = true))
+        assertTrue(either.accepts(book(), rated = false))
+        assertEquals(either.options, LibraryFilters.parse(either.serialise()))
+    }
+
 
     private fun book(
         archived: Boolean = false,

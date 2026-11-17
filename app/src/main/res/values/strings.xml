@@ -2098,4 +2098,18 @@
     <string name="reading_status_empty_paused">No paused books</string>
     <string name="reading_status_empty_did_not_finish">No books marked did not finish</string>
     <string name="series_set_status">Set status for series</string>
+
+    <string name="evaluation_title">My rating and review</string>
+    <string name="evaluation_private">Private. Synced only with your liseur-sync account.</string>
+    <string name="evaluation_edit">Edit rating and review</string>
+    <string name="evaluation_no_rating">No rating</string>
+    <string name="evaluation_rating_value">%1$s / 5 stars</string>
+    <string name="evaluation_review">Private review</string>
+    <string name="evaluation_review_limit">Use at most 8 KB of text, without null characters.</string>
+    <string name="evaluation_export">Export ratings and reviews</string>
+    <string name="evaluation_exported">Ratings and reviews exported</string>
+    <string name="evaluation_export_failed">Could not export ratings and reviews</string>
+    <string name="evaluation_rating">My rating</string>
+    <string name="evaluation_rated">Rated</string>
+    <string name="evaluation_unrated">Unrated</string>
 </resources>

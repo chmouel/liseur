@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.room.withTransaction
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.BookAnnotationDao
@@ -62,6 +63,7 @@ data class BookDetails(
     val formats: List<DownloadFormat> = emptyList(),
     /** The one a download would fetch now. */
     val chosenFormat: DownloadFormat? = null,
+    val evaluations: List<com.chmouel.liseur.data.db.BookEvaluation> = emptyList(),
 )
 
 /**
@@ -78,6 +80,9 @@ class BookDetailsViewModel(
     private val identityDao: WorkIdentityDao,
     private val remoteServerDao: RemoteServerDao,
     private val folderName: suspend (String) -> String?,
+    private val inTransaction: suspend (suspend () -> Unit) -> Unit,
+    private val evaluationDao: com.chmouel.liseur.data.db.BookEvaluationDao? = null,
+    private val requestSync: (String) -> Unit = {},
 ) : ViewModel() {
     fun details(bookUrl: String): StateFlow<BookDetailsUiState> {
         val book = bookDao.observeByUrl(bookUrl)
@@ -111,6 +116,7 @@ class BookDetailsViewModel(
                         }
                     }
                 }
+        val evaluation = evaluationDao?.observe(bookUrl) ?: flowOf(emptyList())
         val reading =
             combine(
                 progressDao.observe(bookUrl),
@@ -119,7 +125,9 @@ class BookDetailsViewModel(
                 ::Triple,
             )
         val place = combine(folder, formats, ::Pair)
-        return combine(book, metadata, place, reading) { current, resolved, (folderName, offered), (progress, notes, print) ->
+        val personal = combine(reading, evaluation, ::Pair)
+        return combine(book, metadata, place, personal) { current, resolved, (folderName, offered), (readingState, evaluations) ->
+            val (progress, notes, print) = readingState
             if (current == null) {
                 BookDetailsUiState.Gone
             } else {
@@ -140,6 +148,7 @@ class BookDetailsViewModel(
                         fingerprint = currentFingerprint(current, print),
                         formats = offered.first,
                         chosenFormat = offered.second,
+                        evaluations = evaluations,
                     ),
                 )
             }
@@ -155,6 +164,20 @@ class BookDetailsViewModel(
         viewModelScope.launch {
             remoteServerDao.setPreferredFormat(book.browseServerId ?: RemoteServer.SINGLE_ID, format.key)
         }
+    }
+
+    fun setEvaluation(book: Book, field: String, value: String?) = viewModelScope.launch {
+        val dao = evaluationDao ?: return@launch
+        var saved = false
+        inTransaction {
+            val current = bookDao.getByUrl(book.url) ?: return@inTransaction
+            if (current.id != book.id || current.workId != book.workId ||
+                current.fileModifiedAt != book.fileModifiedAt || current.linkGeneration != book.linkGeneration
+            ) return@inTransaction
+            dao.edit(current.url, field, value, current.title, current.author.orEmpty(), System.currentTimeMillis())
+            saved = true
+        }
+        if (saved) requestSync(book.url)
     }
 
     companion object {
@@ -173,6 +196,9 @@ class BookDetailsViewModel(
                         identityDao = database.workIdentityDao(),
                         remoteServerDao = database.remoteServerDao(),
                         folderName = { folderDisplayName(application, it) },
+                        inTransaction = { block -> database.withTransaction { block() } },
+                        evaluationDao = database.bookEvaluationDao(),
+                        requestSync = application.container::requestBookSync,
                     )
                 }
             }

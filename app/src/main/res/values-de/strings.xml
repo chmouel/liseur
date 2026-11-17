@@ -2036,4 +2036,18 @@
     <string name="reading_status_empty_paused">Keine pausierten Bücher</string>
     <string name="reading_status_empty_did_not_finish">Keine nicht beendeten Bücher</string>
     <string name="series_set_status">Status der Reihe festlegen</string>
+
+    <string name="evaluation_title">Meine Bewertung und Rezension</string>
+    <string name="evaluation_private">Privat. Wird nur mit deinem liseur-sync-Konto synchronisiert.</string>
+    <string name="evaluation_edit">Bewertung und Rezension bearbeiten</string>
+    <string name="evaluation_no_rating">Keine Bewertung</string>
+    <string name="evaluation_rating_value">%1$s / 5 Sterne</string>
+    <string name="evaluation_review">Private Rezension</string>
+    <string name="evaluation_review_limit">Höchstens 8 KB Text ohne Nullzeichen verwenden.</string>
+    <string name="evaluation_export">Bewertungen und Rezensionen exportieren</string>
+    <string name="evaluation_exported">Bewertungen und Rezensionen exportiert</string>
+    <string name="evaluation_export_failed">Bewertungen und Rezensionen konnten nicht exportiert werden</string>
+    <string name="evaluation_rating">Meine Bewertung</string>
+    <string name="evaluation_rated">Bewertet</string>
+    <string name="evaluation_unrated">Unbewertet</string>
 </resources>

@@ -109,6 +109,13 @@ keytool -genkeypair -v -keystore /path/to/your.p12 -storetype PKCS12 \
   -alias liseur -keyalg RSA -keysize 4096 -validity 10950
 ```
 
+## Personal ratings and reviews
+
+Ratings and reviews are independent fields kept beyond file removal. Sync
+requests persist their bytes before sending; account rekeying and cleanup
+include `evaluation_sync`. See [ADR 0073](docs/adr/0073-private-ratings-and-reviews.md)
+for conflict, removal and export semantics.
+
 ## Settings backup archive
 
 A backup is a ZIP with a versioned `manifest.json`, `settings.json`,

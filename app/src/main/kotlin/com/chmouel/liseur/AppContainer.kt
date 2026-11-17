@@ -179,6 +179,7 @@ class AppContainer(
             identityDao = database.workIdentityDao(),
             progressDao = database.readingProgressDao(),
             annotationDao = database.annotationDao(),
+            evaluationDao = database.bookEvaluationDao(),
             annotationSyncDao = database.annotationSyncDao(),
             inTransaction = { work -> database.withTransaction { work() } },
             bookOrbitBindings = database.bookOrbitBindingDao(),
@@ -629,6 +630,7 @@ class AppContainer(
             identityDao = database.workIdentityDao(),
             sessionDao = database.readingSessionDao(),
             annotationSyncDao = database.annotationSyncDao(),
+            evaluationDao = database.bookEvaluationDao(),
             uploadRefusalDao = database.uploadRefusalDao(),
             sessionRefusalDao = database.sessionRefusalDao(),
             sessionTransmissionDao = database.sessionTransmissionDao(),
@@ -777,6 +779,8 @@ class AppContainer(
 
     private val syncableSettings = syncableSettings(appSettings, readerPreferences)
 
+    private val evaluationWriter = com.chmouel.liseur.data.liseursync.EvaluationWriterIdentity(context)
+
     private val liseurSyncSettings =
         LiseurSyncSettings(
             syncState = settingsSyncState,
@@ -813,6 +817,12 @@ class AppContainer(
             networkAvailability = networkAvailability,
             annotations = liseurSyncAnnotations,
             translations = liseurSyncTranslations,
+            evaluations = com.chmouel.liseur.data.liseursync.LiseurSyncEvaluations(
+                database.remoteServerDao(), database.workIdentityDao(), database.bookDao(), database.bookEvaluationDao(),
+                works = workResolver,
+                inTransaction = { work -> database.withTransaction { work() } },
+                writerId = evaluationWriter::current,
+            ),
             settingsSync = liseurSyncSettings,
             readerIsOpen = { ReaderPresence.isOpen },
             inTransaction = { work -> database.withTransaction { work() } },

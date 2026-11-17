@@ -2200,4 +2200,18 @@
     <string name="reading_status_empty_paused">Žádné pozastavené knihy</string>
     <string name="reading_status_empty_did_not_finish">Žádné nedočtené knihy</string>
     <string name="series_set_status">Nastavit stav série</string>
+
+    <string name="evaluation_title">Moje hodnocení a recenze</string>
+    <string name="evaluation_private">Soukromé. Synchronizuje se pouze s vaším účtem liseur-sync.</string>
+    <string name="evaluation_edit">Upravit hodnocení a recenzi</string>
+    <string name="evaluation_no_rating">Bez hodnocení</string>
+    <string name="evaluation_rating_value">%1$s / 5 hvězdiček</string>
+    <string name="evaluation_review">Soukromá recenze</string>
+    <string name="evaluation_review_limit">Použijte nejvýše 8 kB textu bez nulových znaků.</string>
+    <string name="evaluation_export">Exportovat hodnocení a recenze</string>
+    <string name="evaluation_exported">Hodnocení a recenze exportovány</string>
+    <string name="evaluation_export_failed">Hodnocení a recenze se nepodařilo exportovat</string>
+    <string name="evaluation_rating">Moje hodnocení</string>
+    <string name="evaluation_rated">Ohodnocené</string>
+    <string name="evaluation_unrated">Neohodnocené</string>
 </resources>

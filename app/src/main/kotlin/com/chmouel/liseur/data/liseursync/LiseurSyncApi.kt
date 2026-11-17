@@ -5,6 +5,8 @@ import java.time.LocalDate
 
 /** The liseur-sync API, as paths rather than strings scattered about. */
 object LiseurSyncApi {
+    fun evaluation(baseUrl: String, workId: String): String =
+        url(baseUrl, "/v1/works/${pathSegment(workId)}/evaluation")
 
     const val HEALTH = "/healthz"
     const val LOGIN = "/v1/login"

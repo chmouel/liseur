@@ -113,7 +113,10 @@ If you connect a book server, Liseur talks to the calibre-web, Komga or
 liseur-sync server whose address you entered. It sends the credentials that
 server asked for, downloads the books and covers you request, and exchanges
 your reading position so the same book resumes in the right place on another
-device. A liseur-sync server also keeps the sentence translations of the
+device. Your personal ratings and private reviews also sync with your
+liseur-sync account. They are not published in catalogs or sent to other
+providers. Removing a rating or review sends a deletion marker; old review
+text is not retained in sync receipts. A liseur-sync server also keeps the sentence translations of the
 pages you have translated, so another device reading the same book does not
 have to call a translation service again. What travels is each sentence's
 one-way hash — the same key the local cache uses — and its translation,
