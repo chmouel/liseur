@@ -2066,7 +2066,7 @@
     <string name="settings_library_layout_detailed">Detalhado</string>
     <string name="library_tab_library">Biblioteca</string>
     <string name="home_continue">Continuar</string>
-    <string name="home_series_underway">Séries que você está lendo</string>
+    <string name="home_series_underway">Séries em andamento</string>
     <string name="home_see_all">Ver tudo</string>
     <string name="tab_stats">Estatísticas</string>
     <string name="shelf_other_books">Outros livros</string>
@@ -2076,8 +2076,8 @@
     <string name="home_tile_to_read">Para ler</string>
     <string name="home_tile_series">Séries</string>
     <string name="home_tile_finished">Concluídos</string>
-    <string name="home_your_shelves">Suas estantes</string>
-    <string name="home_recently_added">Adicionados recentemente</string>
+    <string name="home_your_shelves">Estantes</string>
+    <string name="home_recently_added">Novos na estante</string>
     <string name="home_quote_title">Das suas leituras</string>
     <string name="home_quote_highlight">Seu destaque</string>
     <string name="home_quote_another">Outra citação</string>

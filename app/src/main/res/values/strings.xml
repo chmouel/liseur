@@ -2081,7 +2081,7 @@
     <string name="settings_library_layout_detailed">Detailed</string>
     <string name="library_tab_library">Library</string>
     <string name="home_continue">Continue</string>
-    <string name="home_series_underway">Series you are reading</string>
+    <string name="home_series_underway">Series under way</string>
     <string name="home_see_all">See all</string>
     <string name="tab_stats">Stats</string>
     <string name="shelf_other_books">Other books</string>
@@ -2091,8 +2091,8 @@
     <string name="home_tile_to_read">To read</string>
     <string name="home_tile_series">Series</string>
     <string name="home_tile_finished">Finished</string>
-    <string name="home_your_shelves">Your shelves</string>
-    <string name="home_recently_added">Recently added</string>
+    <string name="home_your_shelves">Shelves</string>
+    <string name="home_recently_added">New on the shelf</string>
     <string name="home_quote_title">From your reading</string>
     <string name="home_quote_highlight">Your highlight</string>
     <string name="home_quote_another">Another quote</string>

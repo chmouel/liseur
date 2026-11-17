@@ -993,6 +993,15 @@ fun LibraryScreen(
                             }
                             showCatalogue(kind == HomeShelfKind.SERIES)
                         },
+                        onOpenRecent = {
+                            onSetReadingFilter(setOf(LibraryFilterOption.UNREAD))
+                            if (state.sort != LibrarySort.ADDED) {
+                                onSetSort(LibrarySort.ADDED)
+                            } else if (state.sortReversed) {
+                                onToggleSortDirection()
+                            }
+                            showCatalogue(false)
+                        },
                         onBrowseAll = {
                             onSetReadingFilter(ALL_READING_STATES)
                             showCatalogue(false)

@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,7 +47,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.AbsoluteAlignment
@@ -68,9 +68,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -122,6 +123,7 @@ internal fun HomeLibrary(
     onOpenShelf: (HomeShelfKind) -> Unit,
     onBrowseAll: () -> Unit,
     modifier: Modifier = Modifier,
+    onOpenRecent: () -> Unit = onBrowseAll,
     bottomInset: Dp = 0.dp,
     quote: HomeQuote? = null,
     onOpenQuote: (HomeQuote) -> Unit = {},
@@ -182,28 +184,44 @@ internal fun HomeLibrary(
             }
         }
         if (desk.seriesSets.isNotEmpty()) {
-            item(key = "home:series:header") {
-                SectionHeader(stringResource(R.string.home_series_underway), gutter)
-            }
-            desk.seriesSets.chunked(if (wide) 2 else 1).forEach { row ->
-                item(key = "home:series:${row.first().shelf.key}") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = gutter) {
-                        row.forEach { set ->
-                            SeriesSetCard(
-                                set = set,
-                                onClick = { onSeriesSelected(set.shelf) },
-                                modifier = Modifier.weight(1f),
-                            )
+            item(key = "home:series") {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = gutter,
+                ) {
+                    HomeSectionHeader(
+                        text = stringResource(R.string.home_series_underway),
+                        accent = homePalette()?.series?.content,
+                        actionText = stringResource(R.string.home_see_all),
+                        onAction = { onOpenShelf(HomeShelfKind.SERIES) },
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        desk.seriesSets.chunked(if (wide) 2 else 1).forEach { row ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                row.forEach { set ->
+                                    SeriesSetCard(
+                                        set = set,
+                                        onClick = { onSeriesSelected(set.shelf) },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                if (row.size == 1 && wide) Spacer(Modifier.weight(1f))
+                            }
                         }
-                        if (row.size == 1 && wide) Spacer(Modifier.weight(1f))
                     }
                 }
             }
         }
         if (desk.recentlyAdded.isNotEmpty()) {
             item(key = "home:recent") {
-                Column {
-                    SectionHeader(stringResource(R.string.home_recently_added), gutter)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    HomeSectionHeader(
+                        text = stringResource(R.string.home_recently_added),
+                        accent = homePalette()?.toRead?.content,
+                        actionText = stringResource(R.string.home_see_all),
+                        onAction = onOpenRecent,
+                        modifier = gutter,
+                    )
                     val width = stripCoverWidth()
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -328,8 +346,8 @@ private fun QuoteCard(
                     }
                 }
                 Text(
-                    text = stringResource(R.string.home_quote_text, quote.text),
-                    style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Serif),
+                    text = stringResource(R.string.home_quote_text, quote.text.trimQuoteMarks()),
+                    style = MaterialTheme.typography.titleLarge,
                     fontStyle = FontStyle.Italic,
                     modifier = Modifier.padding(end = 12.dp),
                 )
@@ -360,6 +378,14 @@ private fun QuoteCard(
         }
     }
 }
+
+private val QUOTE_EDGE_MARKS = charArrayOf(
+    '"', '“', '”', '„', '‟', '«', '»', '‹', '›', '「', '」', '『', '』', '\u00A0', '\u202F',
+)
+
+/** Strips outer book quotation marks when `home_quote_text` wraps the passage in its own. */
+internal fun String.trimQuoteMarks(): String =
+    trim().trim(*QUOTE_EDGE_MARKS).trim()
 
 @Composable
 private fun QuoteCoverBackdrop(book: Book, surface: Color, modifier: Modifier) {
@@ -715,24 +741,102 @@ private fun ShelfTiles(
     onSeeAll: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionHeader(stringResource(R.string.home_your_shelves), Modifier.weight(1f))
-            TextButton(onClick = onSeeAll) {
-                Text(stringResource(R.string.home_see_all))
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeSectionHeader(
+            text = stringResource(R.string.home_your_shelves),
+            accent = homePalette()?.reading?.content,
+            actionText = stringResource(R.string.home_see_all),
+            onAction = onSeeAll,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            tiles.filter { it.kind != HomeShelfKind.SERIES || it.count > 0 }.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    row.forEach { tile ->
+                        ShelfTile(tile = tile, onClick = { onOpenShelf(tile.kind) }, modifier = Modifier.weight(1f))
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeSectionHeader(
+    text: String,
+    modifier: Modifier = Modifier,
+    accent: Color? = null,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val markColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurface
+        accent != null -> accent
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val actionColor = when {
+        eInk -> MaterialTheme.colorScheme.onSurface
+        palette != null -> palette.onPill
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (onAction != null) {
+                    Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button, onClick = onAction)
+                } else {
+                    Modifier
+                },
+            )
+            .padding(vertical = 2.dp),
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(markColor),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 20.sp,
+                lineHeight = 25.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .semantics { heading() },
+        )
+        if (actionText != null && onAction != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 4.dp),
+            ) {
+                Text(
+                    text = actionText,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = actionColor,
+                    maxLines = 1,
+                )
                 Icon(
                     Icons.AutoMirrored.Outlined.ArrowForward,
                     contentDescription = null,
-                    modifier = Modifier.padding(start = 6.dp).size(18.dp),
+                    tint = actionColor,
+                    modifier = Modifier.padding(start = 4.dp).size(16.dp),
                 )
-            }
-        }
-        tiles.filter { it.kind != HomeShelfKind.SERIES || it.count > 0 }.chunked(2).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { tile ->
-                    ShelfTile(tile = tile, onClick = { onOpenShelf(tile.kind) }, modifier = Modifier.weight(1f))
-                }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

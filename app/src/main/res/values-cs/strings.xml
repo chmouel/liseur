@@ -2193,8 +2193,8 @@
     <string name="home_tile_to_read">K přečtení</string>
     <string name="home_tile_series">Série</string>
     <string name="home_tile_finished">Přečtené</string>
-    <string name="home_your_shelves">Vaše police</string>
-    <string name="home_recently_added">Nedávno přidané</string>
+    <string name="home_your_shelves">Police</string>
+    <string name="home_recently_added">Nové na polici</string>
     <string name="home_quote_title">Z vaší četby</string>
     <string name="home_quote_highlight">Vaše zvýraznění</string>
     <string name="home_quote_another">Jiný citát</string>

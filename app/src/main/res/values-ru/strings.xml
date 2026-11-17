@@ -2151,7 +2151,7 @@
     <string name="settings_library_layout_detailed">Подробный</string>
     <string name="library_tab_library">Библиотека</string>
     <string name="home_continue">Продолжить</string>
-    <string name="home_series_underway">Серии, которые вы читаете</string>
+    <string name="home_series_underway">Начатые серии</string>
     <string name="home_see_all">Все</string>
     <string name="tab_stats">Статистика</string>
     <string name="shelf_other_books">Другие книги</string>
@@ -2161,8 +2161,8 @@
     <string name="home_tile_to_read">Прочитать</string>
     <string name="home_tile_series">Серии</string>
     <string name="home_tile_finished">Прочитано</string>
-    <string name="home_your_shelves">Ваши полки</string>
-    <string name="home_recently_added">Недавно добавленные</string>
+    <string name="home_your_shelves">Полки</string>
+    <string name="home_recently_added">Новое на полке</string>
     <string name="home_quote_title">Из прочитанного</string>
     <string name="home_quote_highlight">Ваше выделение</string>
     <string name="home_quote_another">Другая цитата</string>
