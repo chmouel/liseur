@@ -87,6 +87,10 @@ object SettingsEntries {
         "server_account", Route.Settings, R.string.server_account, R.string.settings_account_detail,
         R.string.settings_library,
     )
+    val Hardcover = entry(
+        "hardcover", Route.Settings, R.string.hardcover_title, R.string.hardcover_settings_summary,
+        R.string.settings_library,
+    )
     val LibraryFolders = entry(
         "library_folders", Route.Settings, R.string.library_folders, section = R.string.settings_library,
     )

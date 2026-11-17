@@ -76,6 +76,7 @@ class BookRemovalTest {
             aiPreferencesDao = db.bookAiPreferencesDao(),
             glossaryDao = db.glossaryDao(),
             evaluationDao = db.bookEvaluationDao(),
+            hardcoverDao = db.hardcoverDao(),
         )
         val context = ApplicationProvider.getApplicationContext<Context>()
         val httpClient = DefaultHttpClient()
@@ -119,6 +120,23 @@ class BookRemovalTest {
 
         assertEquals(url, db.bookDao().getByUrl(url)?.url)
         assertEquals(newFolder, db.bookDao().getByUrl(url)?.source)
+    }
+
+    @Test
+    fun `deleting a book forgets its hardcover match and keeps the others`() = runTest {
+        db.bookDao().upsert(book("gone"))
+        db.bookDao().upsert(book("kept"))
+        db.hardcoverDao().upsertLink(
+            com.chmouel.liseur.data.db.HardcoverBookLink("gone", hardcoverBookId = 1, editionId = 2),
+        )
+        db.hardcoverDao().upsertLink(
+            com.chmouel.liseur.data.db.HardcoverBookLink("kept", hardcoverBookId = 3, editionId = 4),
+        )
+
+        removal.deleteByUrls(listOf("gone"))
+
+        assertNull(db.hardcoverDao().link("gone"))
+        assertEquals(4L, db.hardcoverDao().link("kept")?.editionId)
     }
 
     @Test

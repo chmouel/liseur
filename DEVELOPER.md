@@ -1019,6 +1019,13 @@ changing reader behavior.
   reading. Komga has no status of its own, so a richer choice only pushes
   the saved position and Komga derives progress from it. Either way the
   peer loses the original choice. kosync exchanges positions only.
+- Hardcover is a one-way reading tracker, not a position peer: it never
+  feeds `ReadingStateMerge`. A push reads Hardcover's side and sends only
+  what `domain/HardcoverProgress.kt` plans; never write `started_at` or
+  `finished_at` by hand, since status changes date reads and write
+  journal entries on the server. Book matches live in `hardcover_book`
+  and are cleared by `BookRemoval` with the book
+  ([ADR 0073](docs/adr/0073-hardcover-reading-progress.md)).
 - A renewable credential belongs to one published connection.
   `BookOrbitSession` serialises renewal and writes it only if the row still
   has the epoch and refresh token it started from; otherwise drops it.

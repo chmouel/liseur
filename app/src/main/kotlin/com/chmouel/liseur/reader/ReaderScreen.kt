@@ -66,6 +66,7 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -548,6 +549,8 @@ internal fun ReaderScreen(
     onAnnotationAction: ReaderAnnotationActions,
     onSearchAction: ReaderSearchActions,
     syncableFlow: StateFlow<Boolean>,
+    /** Reports this book to Hardcover now; null when no account is connected. */
+    onPushToHardcover: (() -> Unit)? = null,
     dictionaryFlow: StateFlow<ReaderViewModel.DictionarySettings>,
     onEnableDictionary: () -> Unit,
     footnoteFlow: StateFlow<ReaderViewModel.Footnote?>,
@@ -4944,9 +4947,20 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
+                                onPushToHardcover?.let { push ->
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.hardcover_push)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Sync, contentDescription = null) },
+                                        onClick = {
+                                            moreOpen = false
+                                            push()
+                                        },
+                                    )
+                                }
                                 if (
                                     codexEnabled || storyAvailable || translateEntry != null ||
-                                    listening != null || narrateEntry != null || syncable
+                                    listening != null || narrateEntry != null || syncable ||
+                                    onPushToHardcover != null
                                 ) {
                                     HorizontalDivider()
                                 }

@@ -63,8 +63,10 @@ import com.chmouel.liseur.vocabulary.VocabularyWord
         VocabularyWordSync::class,
         VocabularyReviewSync::class,
         VocabularyStagedReview::class,
+        HardcoverAccount::class,
+        HardcoverBookLink::class,
     ],
-    version = 84,
+    version = 85,
     autoMigrations = [AutoMigration(from = 80, to = 81)],
     exportSchema = true,
 )
@@ -111,6 +113,7 @@ abstract class LiseurDatabase : RoomDatabase() {
     abstract fun sessionImportSourceDao(): SessionImportSourceDao
     abstract fun vocabularyDao(): VocabularyDao
     abstract fun vocabularySyncDao(): VocabularySyncDao
+    abstract fun hardcoverDao(): HardcoverDao
 
     companion object {
         val MIGRATION_83_84 = object : Migration(83, 84) {
@@ -528,6 +531,42 @@ abstract class LiseurDatabase : RoomDatabase() {
                 connection.execSQL(
                     "ALTER TABLE `reading_progress` ADD COLUMN `status_retired_revision` " +
                         "INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
+        /**
+         * A Hardcover account to report reading to, and which Hardcover
+         * edition each book was matched with.
+         */
+        val MIGRATION_84_85 = object : Migration(84, 85) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `hardcover_account` (
+                        `id` INTEGER NOT NULL,
+                        `user_id` INTEGER NOT NULL,
+                        `username` TEXT NOT NULL,
+                        `token_cipher` TEXT NOT NULL,
+                        `added_at` INTEGER NOT NULL,
+                        `auto_sync` INTEGER NOT NULL DEFAULT 1,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent(),
+                )
+                connection.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `hardcover_book` (
+                        `book_url` TEXT NOT NULL,
+                        `hardcover_book_id` INTEGER,
+                        `edition_id` INTEGER,
+                        `edition_title` TEXT,
+                        `edition_pages` INTEGER,
+                        `excluded` INTEGER NOT NULL DEFAULT 0,
+                        `pushed_at` INTEGER,
+                        PRIMARY KEY(`book_url`)
+                    )
+                    """.trimIndent(),
                 )
             }
         }
@@ -2509,6 +2548,7 @@ abstract class LiseurDatabase : RoomDatabase() {
             MIGRATION_81_82,
             MIGRATION_82_83,
             MIGRATION_83_84,
+            MIGRATION_84_85,
         )
     }
 }
