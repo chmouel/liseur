@@ -4,8 +4,9 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.StatsRange
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -73,5 +74,24 @@ class ComparisonWordingTest {
             context.getString(line.range),
             context.getString(line.devices),
         )
+    }
+
+    @Test
+    fun `chart axis scale chooses a 4-step ceiling at or above the busiest bar`() {
+        assertEquals(80, chartAxisMaxMinutes(0L))
+        assertEquals(80, chartAxisMaxMinutes(45 * 60_000L))
+        assertEquals(80, chartAxisMaxMinutes(62 * 60_000L))
+        assertEquals(120, chartAxisMaxMinutes(95 * 60_000L))
+        assertEquals(240, chartAxisMaxMinutes(190 * 60_000L))
+        assertEquals("0m", chartAxisStepLabel(0))
+        assertEquals("60m", chartAxisStepLabel(60))
+        assertEquals("2h", chartAxisStepLabel(120))
+    }
+
+    @Test
+    fun `reading rhythm title reflects active day ratio`() {
+        assertEquals(R.string.reading_stats_rhythm_title_starting, readingRhythmTitleRes(1, 7))
+        assertEquals(R.string.reading_stats_rhythm_title_steady, readingRhythmTitleRes(4, 7))
+        assertEquals(R.string.reading_stats_rhythm_title_daily, readingRhythmTitleRes(7, 7))
     }
 }

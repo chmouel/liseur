@@ -1206,6 +1206,69 @@
     <string name="reading_stats_heatmap_empty_day">Ничего не прочитано %1$s</string>
     <string name="reading_stats_unavailable">Не удалось загрузить статистику чтения из liseur-sync.</string>
     <string name="reading_stats_empty_range">В этом периоде ничего не прочитано. Попробуйте более длинный.</string>
+    <string name="reading_stats_eyebrow_week">Ваше чтение на этой неделе</string>
+    <string name="reading_stats_eyebrow_month">Ваше чтение в этом месяце</string>
+    <string name="reading_stats_eyebrow_year">Ваше чтение в этом году</string>
+    <string name="reading_stats_eyebrow_all">Ваше чтение за всё время</string>
+    <plurals name="reading_stats_pill_sessions">
+        <item quantity="one">%d сеанс</item>
+        <item quantity="few">%d сеанса</item>
+        <item quantity="many">%d сеансов</item>
+        <item quantity="other">%d сеансов</item>
+    </plurals>
+    <plurals name="reading_stats_pill_streak">
+        <item quantity="one">%d день подряд</item>
+        <item quantity="few">%d дня подряд</item>
+        <item quantity="many">%d дней подряд</item>
+        <item quantity="other">%d дней подряд</item>
+    </plurals>
+    <plurals name="reading_stats_pill_books">
+        <item quantity="one">%d книга</item>
+        <item quantity="few">%d книги</item>
+        <item quantity="many">%d книг</item>
+        <item quantity="other">%d книг</item>
+    </plurals>
+    <string name="reading_stats_tile_streak">Серия дней</string>
+    <plurals name="reading_stats_tile_streak_days">
+        <item quantity="one">%d день</item>
+        <item quantity="few">%d дня</item>
+        <item quantity="many">%d дней</item>
+        <item quantity="other">%d дней</item>
+    </plurals>
+    <string name="reading_stats_tile_sessions">Сеансы</string>
+    <string name="reading_stats_tile_pace">Ср. темп</string>
+    <string name="reading_stats_chart_title_day">Время чтения по дням</string>
+    <string name="reading_stats_chart_title_week">Время чтения по неделям</string>
+    <string name="reading_stats_chart_title_month">Время чтения по месяцам</string>
+    <string name="reading_stats_chart_title_year">Время чтения по годам</string>
+    <string name="reading_stats_chart_subtitle_day">Минут чтения в день</string>
+    <string name="reading_stats_chart_subtitle_week">Время чтения в неделю</string>
+    <string name="reading_stats_chart_subtitle_month">Время чтения в месяц</string>
+    <string name="reading_stats_chart_subtitle_year">Время чтения в год</string>
+    <string name="reading_stats_rhythm_eyebrow">Ритм чтения</string>
+    <string name="reading_stats_rhythm_title_starting">Формируем привычку</string>
+    <string name="reading_stats_rhythm_title_steady">Стабильный ритм</string>
+    <string name="reading_stats_rhythm_title_daily">Каждый день</string>
+    <plurals name="reading_stats_rhythm_detail_week">
+        <item quantity="one">Дней с чтением на этой неделе: %1$d из %2$d. Продолжайте в том же духе.</item>
+        <item quantity="few">Дней с чтением на этой неделе: %1$d из %2$d. Продолжайте в том же духе.</item>
+        <item quantity="many">Дней с чтением на этой неделе: %1$d из %2$d. Продолжайте в том же духе.</item>
+        <item quantity="other">Дней с чтением на этой неделе: %1$d из %2$d. Продолжайте в том же духе.</item>
+    </plurals>
+    <plurals name="reading_stats_rhythm_detail_period">
+        <item quantity="one">Дней с чтением за этот период: %1$d из %2$d.</item>
+        <item quantity="few">Дней с чтением за этот период: %1$d из %2$d.</item>
+        <item quantity="many">Дней с чтением за этот период: %1$d из %2$d.</item>
+        <item quantity="other">Дней с чтением за этот период: %1$d из %2$d.</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_title">Цель на неделю</string>
+    <plurals name="reading_stats_weekly_goal_subtitle">
+        <item quantity="one">Читать %d час</item>
+        <item quantity="few">Читать %d часа</item>
+        <item quantity="many">Читать %d часов</item>
+        <item quantity="other">Читать %d часов</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_dialog_title">Цель чтения на неделю</string>
     <string name="duration_minutes">%1$d мин</string>
     <string name="duration_hours">%1$d ч</string>
     <string name="duration_hours_minutes">%1$d ч %2$d мин</string>

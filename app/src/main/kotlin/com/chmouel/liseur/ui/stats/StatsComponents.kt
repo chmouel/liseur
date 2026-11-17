@@ -1,6 +1,7 @@
 package com.chmouel.liseur.ui.stats
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -29,6 +30,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.StatsRange
+import com.chmouel.liseur.ui.LocalEInk
+import com.chmouel.liseur.ui.theme.DarkHomePalette
+import com.chmouel.liseur.ui.theme.homePalette
 
 /*
  * The parts both stats screens are built from.
@@ -44,7 +48,7 @@ import com.chmouel.liseur.domain.StatsRange
 internal const val TABULAR = "tnum"
 
 /** What a section card and the group of rows inside it are cut to. */
-internal val StatsCardCorner = 16.dp
+internal val StatsCardCorner = 20.dp
 
 /** How far inside a card its rows start, and its dividers with them. */
 private val RowInset = 16.dp
@@ -173,9 +177,18 @@ internal fun StatsCard(
     shape: Shape = RoundedCornerShape(StatsCardCorner),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val eInk = LocalEInk.current
+    val palette = homePalette()
+    val dark = palette == DarkHomePalette
     Surface(
         shape = shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = palette?.card ?: MaterialTheme.colorScheme.surfaceContainerLow,
+        border = when {
+            eInk -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            palette != null -> BorderStroke(1.dp, palette.cardBorder)
+            else -> null
+        },
+        shadowElevation = if (palette != null && !dark) 2.dp else 0.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(content = content)

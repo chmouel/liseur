@@ -1238,6 +1238,69 @@
     <string name="reading_stats_heatmap_empty_day">Dne %1$s se nečetlo</string>
     <string name="reading_stats_unavailable">Statistiky čtení ze serveru liseur-sync se nepodařilo načíst.</string>
     <string name="reading_stats_empty_range">V tomto období nebylo nic čteno. Zkus delší období.</string>
+    <string name="reading_stats_eyebrow_week">Tvé čtení tento týden</string>
+    <string name="reading_stats_eyebrow_month">Tvé čtení tento měsíc</string>
+    <string name="reading_stats_eyebrow_year">Tvé čtení tento rok</string>
+    <string name="reading_stats_eyebrow_all">Tvé čtení celkem</string>
+    <plurals name="reading_stats_pill_sessions">
+        <item quantity="one">%d relace</item>
+        <item quantity="few">%d relace</item>
+        <item quantity="many">%d relací</item>
+        <item quantity="other">%d relací</item>
+    </plurals>
+    <plurals name="reading_stats_pill_streak">
+        <item quantity="one">%d den v řadě</item>
+        <item quantity="few">%d dny v řadě</item>
+        <item quantity="many">%d dní v řadě</item>
+        <item quantity="other">%d dní v řadě</item>
+    </plurals>
+    <plurals name="reading_stats_pill_books">
+        <item quantity="one">%d kniha</item>
+        <item quantity="few">%d knihy</item>
+        <item quantity="many">%d knih</item>
+        <item quantity="other">%d knih</item>
+    </plurals>
+    <string name="reading_stats_tile_streak">Série čtení</string>
+    <plurals name="reading_stats_tile_streak_days">
+        <item quantity="one">%d den</item>
+        <item quantity="few">%d dny</item>
+        <item quantity="many">%d dní</item>
+        <item quantity="other">%d dní</item>
+    </plurals>
+    <string name="reading_stats_tile_sessions">Relace</string>
+    <string name="reading_stats_tile_pace">Prům. tempo</string>
+    <string name="reading_stats_chart_title_day">Doba čtení po dnech</string>
+    <string name="reading_stats_chart_title_week">Doba čtení po týdnech</string>
+    <string name="reading_stats_chart_title_month">Doba čtení po měsících</string>
+    <string name="reading_stats_chart_title_year">Doba čtení po letech</string>
+    <string name="reading_stats_chart_subtitle_day">Minuty čtení za den</string>
+    <string name="reading_stats_chart_subtitle_week">Doba čtení za týden</string>
+    <string name="reading_stats_chart_subtitle_month">Doba čtení za měsíc</string>
+    <string name="reading_stats_chart_subtitle_year">Doba čtení za rok</string>
+    <string name="reading_stats_rhythm_eyebrow">Rytmus čtení</string>
+    <string name="reading_stats_rhythm_title_starting">Budování návyku</string>
+    <string name="reading_stats_rhythm_title_steady">Pravidelný rytmus</string>
+    <string name="reading_stats_rhythm_title_daily">Každý den</string>
+    <plurals name="reading_stats_rhythm_detail_week">
+        <item quantity="one">Dny se čtením tento týden: %1$d z %2$d. Pokračuj v tempu.</item>
+        <item quantity="few">Dny se čtením tento týden: %1$d z %2$d. Pokračuj v tempu.</item>
+        <item quantity="many">Dny se čtením tento týden: %1$d z %2$d. Pokračuj v tempu.</item>
+        <item quantity="other">Dny se čtením tento týden: %1$d z %2$d. Pokračuj v tempu.</item>
+    </plurals>
+    <plurals name="reading_stats_rhythm_detail_period">
+        <item quantity="one">Dny se čtením v tomto období: %1$d z %2$d.</item>
+        <item quantity="few">Dny se čtením v tomto období: %1$d z %2$d.</item>
+        <item quantity="many">Dny se čtením v tomto období: %1$d z %2$d.</item>
+        <item quantity="other">Dny se čtením v tomto období: %1$d z %2$d.</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_title">Týdenní cíl</string>
+    <plurals name="reading_stats_weekly_goal_subtitle">
+        <item quantity="one">Číst %d hodinu</item>
+        <item quantity="few">Číst %d hodiny</item>
+        <item quantity="many">Číst %d hodin</item>
+        <item quantity="other">Číst %d hodin</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_dialog_title">Týdenní cíl čtení</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>
     <string name="duration_hours_minutes">%1$d h %2$d min</string>

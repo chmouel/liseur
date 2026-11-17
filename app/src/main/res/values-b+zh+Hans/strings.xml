@@ -1089,6 +1089,48 @@
     <string name="reading_stats_heatmap_empty_day">%1$s 没有阅读记录</string>
     <string name="reading_stats_unavailable">无法从 liseur-sync 加载您的阅读统计。</string>
     <string name="reading_stats_empty_range">此时间范围内没有阅读记录。试试更长的时间范围。</string>
+    <string name="reading_stats_eyebrow_week">本周阅读时间</string>
+    <string name="reading_stats_eyebrow_month">本月阅读时间</string>
+    <string name="reading_stats_eyebrow_year">今年阅读时间</string>
+    <string name="reading_stats_eyebrow_all">累计阅读时间</string>
+    <plurals name="reading_stats_pill_sessions">
+        <item quantity="other">%d 次阅读</item>
+    </plurals>
+    <plurals name="reading_stats_pill_streak">
+        <item quantity="other">连续 %d 天</item>
+    </plurals>
+    <plurals name="reading_stats_pill_books">
+        <item quantity="other">%d 本书</item>
+    </plurals>
+    <string name="reading_stats_tile_streak">连续阅读</string>
+    <plurals name="reading_stats_tile_streak_days">
+        <item quantity="other">%d 天</item>
+    </plurals>
+    <string name="reading_stats_tile_sessions">阅读次数</string>
+    <string name="reading_stats_tile_pace">平均速度</string>
+    <string name="reading_stats_chart_title_day">每日阅读时间</string>
+    <string name="reading_stats_chart_title_week">每周阅读时间</string>
+    <string name="reading_stats_chart_title_month">每月阅读时间</string>
+    <string name="reading_stats_chart_title_year">每年阅读时间</string>
+    <string name="reading_stats_chart_subtitle_day">每日阅读分钟数</string>
+    <string name="reading_stats_chart_subtitle_week">每周阅读时长</string>
+    <string name="reading_stats_chart_subtitle_month">每月阅读时长</string>
+    <string name="reading_stats_chart_subtitle_year">每年阅读时长</string>
+    <string name="reading_stats_rhythm_eyebrow">阅读节奏</string>
+    <string name="reading_stats_rhythm_title_starting">正在养成习惯</string>
+    <string name="reading_stats_rhythm_title_steady">节奏稳定</string>
+    <string name="reading_stats_rhythm_title_daily">每日坚持</string>
+    <plurals name="reading_stats_rhythm_detail_week">
+        <item quantity="other">本周 %2$d 天中您已阅读 %1$d 天，继续保持。</item>
+    </plurals>
+    <plurals name="reading_stats_rhythm_detail_period">
+        <item quantity="other">此期间 %2$d 天中您已阅读 %1$d 天。</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_title">每周目标</string>
+    <plurals name="reading_stats_weekly_goal_subtitle">
+        <item quantity="other">阅读 %d 小时</item>
+    </plurals>
+    <string name="reading_stats_weekly_goal_dialog_title">每周阅读目标</string>
     <string name="duration_minutes">%1$d 分钟</string>
     <string name="duration_hours">%1$d 小时</string>
     <string name="duration_hours_minutes">%1$d 小时 %2$d 分钟</string>

@@ -389,6 +389,7 @@ data class AppSettings(
     /** Whether finishing a book clears its saved translations, here and on the liseur-sync account (ADR-0050). */
     val clearTranslationsOnFinish: Boolean = true,
     val statsRange: StatsRange = StatsRange.Default,
+    val weeklyGoalMinutes: Int = DEFAULT_WEEKLY_GOAL_MINUTES,
     val highlightPalette: HighlightPalette = HighlightPalette(),
     val selectionActionLayout: SelectionActionLayout = SelectionActionLayout.default,
     val readAloudVoice: String? = null,
@@ -461,6 +462,8 @@ data class AppSettings(
         get() = readAloudServerConnection?.takeIf { it.id in unsettledReadAloudServers }?.url
 
     companion object {
+        const val DEFAULT_WEEKLY_GOAL_MINUTES = 180
+
         /** The sentences per read-aloud request on offer; a stored value outside is brought within. */
         val SENTENCES_PER_REQUEST = 1..5
     }
@@ -589,6 +592,7 @@ class AppSettingsRepository(
         val UPLOAD_POLICY = stringPreferencesKey("upload_policy")
         val CLEAR_TRANSLATIONS_ON_FINISH = booleanPreferencesKey("clear_translations_on_finish")
         val STATS_RANGE = stringPreferencesKey("stats_range")
+        val WEEKLY_GOAL_MINUTES = intPreferencesKey("weekly_goal_minutes")
         val SELECTION_ACTION_LAYOUT = stringPreferencesKey("selection_action_layout")
         val HIGHLIGHT_TINTS = stringSetPreferencesKey("highlight_tints_offered")
         val HIGHLIGHT_TINT_DEFAULT = stringPreferencesKey("highlight_tint_default")
@@ -710,6 +714,8 @@ class AppSettingsRepository(
             uploadPolicy = UploadPolicy.fromId(p[Keys.UPLOAD_POLICY]),
             clearTranslationsOnFinish = p[Keys.CLEAR_TRANSLATIONS_ON_FINISH] ?: true,
             statsRange = StatsRange.fromId(p[Keys.STATS_RANGE]),
+            weeklyGoalMinutes = (p[Keys.WEEKLY_GOAL_MINUTES] ?: AppSettings.DEFAULT_WEEKLY_GOAL_MINUTES)
+                .coerceIn(15, 7 * 24 * 60),
             selectionActionLayout = SelectionActionLayout.parse(p[Keys.SELECTION_ACTION_LAYOUT]),
             highlightPalette = HighlightPalette.of(
                 offeredNames = p[Keys.HIGHLIGHT_TINTS],
@@ -823,6 +829,10 @@ class AppSettingsRepository(
 
     suspend fun setStatsRange(range: StatsRange) {
         store.edit { it[Keys.STATS_RANGE] = range.id }
+    }
+
+    suspend fun setWeeklyGoalMinutes(minutes: Int) {
+        store.edit { it[Keys.WEEKLY_GOAL_MINUTES] = minutes.coerceIn(15, 7 * 24 * 60) }
     }
 
     suspend fun setUploadPolicy(policy: UploadPolicy) {
@@ -1469,6 +1479,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "dictionary_lookup_enabled" to BackupValueType.BOOLEAN, "dictionary_base_url" to BackupValueType.STRING,
     DICTIONARY_ALT_LANGUAGE_NAME to BackupValueType.STRING,
     "upload_policy" to BackupValueType.STRING, "stats_range" to BackupValueType.STRING,
+    "weekly_goal_minutes" to BackupValueType.INT,
     "clear_translations_on_finish" to BackupValueType.BOOLEAN,
     "highlight_tints_offered" to BackupValueType.STRING_SET,"lock_footer_on" to BackupValueType.BOOLEAN,
     "highlight_tint_default" to BackupValueType.STRING,
