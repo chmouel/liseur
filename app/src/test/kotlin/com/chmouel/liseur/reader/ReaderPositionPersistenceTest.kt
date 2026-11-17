@@ -219,6 +219,27 @@ class ReaderPositionPersistenceTest {
             assertEquals(unreadRevision + 1, dao.get(url)!!.statusRevision)
             assertTrue(dao.get(url)!!.totalProgression!! > 0.0)
             assertEquals(5, writes)
+
+            models.clear()
+            val emptyUrl = emptySpineBook(context).toURI().toString()
+            val emptyReader = ReaderViewModel(
+                bookUrl = requireNotNull(AbsoluteUrl(emptyUrl)), bookId = emptyUrl,
+                assetRetriever = container.assetRetriever, publicationOpener = container.publicationOpener,
+                progressDao = dao, bookDao = container.database.bookDao(),
+                annotationDao = container.database.annotationDao(), typographyDao = container.database.typographyDao(),
+                bookScreenDao = container.database.bookScreenDao(), readingModeDao = container.database.bookReadingModeDao(),
+                library = container.libraryRepository, prefsRepo = container.readerPreferences,
+                readingPace = container.readingPace, positionSync = container.positionSync,
+                appSettings = container.appSettings, positionPublisher = publisher,
+                downloads = container.bookDownloads, seriesExtras = container.seriesExtras,
+                remoteAccount = container.remoteAccount, userFonts = container.userFonts,
+                openBookHandles = container.openBookHandles, sessionManager = container.readingSessions,
+            ).also { models.put("reader", it) }
+            val failed = withTimeout(15_000) {
+                emptyReader.state.filterIsInstance<ReaderViewModel.UiState.Failure>().first()
+            }
+            assertEquals("", failed.message)
+            assertNull(container.openBookHandles.acquire(emptyUrl))
         } finally {
             models.clear()
             scope.cancel()
@@ -226,6 +247,33 @@ class ReaderPositionPersistenceTest {
             main.close()
         }
     }
+
+    private fun emptySpineBook(context: Context): File =
+        File.createTempFile("reader-empty-spine", ".epub", context.cacheDir).also { file ->
+            ZipOutputStream(file.outputStream()).use { zip ->
+                fun entry(name: String, content: String) {
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(content.toByteArray())
+                    zip.closeEntry()
+                }
+                entry("mimetype", "application/epub+zip")
+                entry("META-INF/container.xml", """
+                    <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+                      <rootfiles><rootfile full-path="book.opf" media-type="application/oebps-package+xml"/></rootfiles>
+                    </container>
+                """.trimIndent())
+                entry("book.opf", """
+                    <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id">
+                      <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                        <dc:identifier id="id">empty-spine-test</dc:identifier><dc:title>Empty spine</dc:title><dc:language>en</dc:language>
+                      </metadata>
+                      <manifest><item id="one" href="one.xhtml" media-type="application/xhtml+xml"/></manifest>
+                      <spine/>
+                    </package>
+                """.trimIndent())
+                entry("one.xhtml", """<html xmlns="http://www.w3.org/1999/xhtml"><head><title>one</title></head><body><p>Orphan.</p></body></html>""")
+            }
+        }
 
     private fun book(context: Context): File = File.createTempFile("reader-position", ".epub", context.cacheDir).also { file ->
         ZipOutputStream(file.outputStream()).use { zip ->

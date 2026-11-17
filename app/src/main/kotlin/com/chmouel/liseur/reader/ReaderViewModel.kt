@@ -1425,7 +1425,7 @@ class ReaderViewModel(
                     _state.value = UiState.Failure(it.message)
                     return@open null
                 }
-                publicationOpener.open(
+                val publication = publicationOpener.open(
                     asset,
                     allowUserInteraction = false,
                     onCreatePublication = {
@@ -1447,6 +1447,12 @@ class ReaderViewModel(
                         _state.value = UiState.Failure(it.message)
                         return@open null
                     }
+                if (publication.readingOrder.isEmpty()) {
+                    publication.close()
+                    _state.value = UiState.Failure("")
+                    return@open null
+                }
+                publication
             } ?: return@launch
             val publication = opened.publication
             val openedBookOrbit = try {
