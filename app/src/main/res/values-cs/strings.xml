@@ -2130,7 +2130,6 @@
     <string name="home_tile_series">Série</string>
     <string name="home_tile_finished">Přečtené</string>
     <string name="home_your_shelves">Vaše police</string>
-    <string name="home_pick_up_next">Číst dál</string>
     <string name="home_recently_added">Nedávno přidané</string>
     <string name="home_quote_title">Z vaší četby</string>
     <string name="home_quote_highlight">Vaše zvýraznění</string>
@@ -2146,8 +2145,6 @@
     <string name="home_start_reading">Začít číst</string>
     <string name="home_series_read">přečteno %1$d / %2$d</string>
     <string name="home_series_next">Další: %s</string>
-    <string name="home_pick_next_volume">Další · %s</string>
-    <string name="home_pick_next_in_series">Další v sérii</string>
     <string name="library_shown_of">%1$d z %2$d</string>
     <string name="home_pulse_today">%d min dnes</string>
     <string name="library_opens_on">Otevírá se na</string>

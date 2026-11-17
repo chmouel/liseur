@@ -1966,7 +1966,6 @@
     <string name="home_tile_series">Series</string>
     <string name="home_tile_finished">Terminados</string>
     <string name="home_your_shelves">Tus estanterías</string>
-    <string name="home_pick_up_next">Para seguir</string>
     <string name="home_recently_added">Añadidos recientemente</string>
     <string name="home_quote_title">De tus lecturas</string>
     <string name="home_quote_highlight">Tu subrayado</string>
@@ -1982,8 +1981,6 @@
     <string name="home_start_reading">Empezar a leer</string>
     <string name="home_series_read">%1$d / %2$d leídos</string>
     <string name="home_series_next">Siguiente: %s</string>
-    <string name="home_pick_next_volume">Siguiente · %s</string>
-    <string name="home_pick_next_in_series">Siguiente de la serie</string>
     <string name="library_shown_of">%1$d de %2$d</string>
     <string name="home_pulse_today">%d min hoy</string>
     <string name="library_opens_on">Abre en</string>

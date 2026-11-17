@@ -1901,7 +1901,6 @@
     <string name="home_tile_series">系列</string>
     <string name="home_tile_finished">已读完</string>
     <string name="home_your_shelves">你的书架</string>
-    <string name="home_pick_up_next">接着读</string>
     <string name="home_recently_added">最近添加</string>
     <string name="home_quote_title">摘自你的阅读</string>
     <string name="home_quote_highlight">你的高亮</string>
@@ -1917,8 +1916,6 @@
     <string name="home_start_reading">开始阅读</string>
     <string name="home_series_read">已读 %1$d / %2$d</string>
     <string name="home_series_next">下一本：%s</string>
-    <string name="home_pick_next_volume">下一本 · %s</string>
-    <string name="home_pick_next_in_series">系列下一本</string>
     <string name="library_shown_of">%1$d / %2$d</string>
     <string name="home_pulse_today">今天 %d 分钟</string>
     <string name="library_opens_on">启动时打开</string>

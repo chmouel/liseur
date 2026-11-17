@@ -75,11 +75,9 @@ import androidx.compose.ui.unit.sp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.quotes.HomeQuote
-import com.chmouel.liseur.domain.HomePick
 import com.chmouel.liseur.domain.HomeSeriesSet
 import com.chmouel.liseur.domain.HomeShelfKind
 import com.chmouel.liseur.domain.HomeShelfTile
-import com.chmouel.liseur.domain.PickReason
 import com.chmouel.liseur.domain.SeriesShelf
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
@@ -190,26 +188,6 @@ internal fun HomeLibrary(
                             )
                         }
                         if (row.size == 1 && wide) Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-        if (desk.pickUpNext.isNotEmpty()) {
-            item(key = "home:picks") {
-                Column {
-                    SectionHeader(stringResource(R.string.home_pick_up_next), gutter)
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp),
-                    ) {
-                        items(desk.pickUpNext, key = { it.book.id }) { pick ->
-                            PickTile(
-                                pick = pick,
-                                state = state,
-                                onClick = { onBookSelected(pick.book) },
-                                onLongClick = { onBookLongPress(pick.book) },
-                            )
-                        }
                     }
                 }
             }
@@ -885,34 +863,5 @@ private fun VolumeBar(progress: List<Float>, modifier: Modifier = Modifier) {
                 }
             }
         }
-    }
-}
-
-/** A cover in "Pick up next", with why it is there under it. */
-@Composable
-private fun PickTile(
-    pick: HomePick,
-    state: LibraryUiState,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-) {
-    val width = stripCoverWidth()
-    val reason = when (pick.reason) {
-        PickReason.IN_PROGRESS -> pick.progression?.let { "${(it * 100).toInt()}%" }
-        PickReason.NEXT_IN_SERIES -> seriesIndexLabel(pick.book.seriesIndex)
-            ?.let { stringResource(R.string.home_pick_next_volume, it) }
-            ?: stringResource(R.string.home_pick_next_in_series)
-        PickReason.UNREAD -> stringResource(R.string.filter_unread)
-    }
-    Column(Modifier.width(width)) {
-        CoverTile(
-            book = pick.book,
-            download = state.downloads[pick.book.url],
-            progression = pick.progression,
-            onClick = onClick,
-            onLongClick = onLongClick,
-            title = true,
-        )
-        reason?.let { Pill(it, Modifier.padding(top = 4.dp)) }
     }
 }
