@@ -161,10 +161,16 @@ internal fun StatsSectionHeader(
                 .semantics { heading() },
         )
         trailing?.let {
+            // A trailing sentence wraps beside the name rather than
+            // taking the row, which would leave the heading no width at
+            // all on a narrow screen or at a large text size.
             Text(
                 text = it,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                modifier = Modifier.weight(1.5f),
             )
         }
     }
