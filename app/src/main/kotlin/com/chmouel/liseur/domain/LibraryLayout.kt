@@ -351,11 +351,6 @@ data class HomeSeriesSet(
     val volumeProgress: List<Float>,
 )
 
-/** Why a book is in "Pick up next", which decides its label. */
-enum class PickReason { IN_PROGRESS, NEXT_IN_SERIES, UNREAD }
-
-data class HomePick(val book: Book, val reason: PickReason, val progression: Double?)
-
 /**
  * The Home tab: a finite desk about what is being read and what comes
  * next, rather than another way of looking at the whole library.
@@ -366,7 +361,6 @@ data class HomePick(val book: Book, val reason: PickReason, val progression: Dou
 data class HomeDesk(
     val tiles: List<HomeShelfTile> = emptyList(),
     val seriesSets: List<HomeSeriesSet> = emptyList(),
-    val pickUpNext: List<HomePick> = emptyList(),
     val recentlyAdded: List<Book> = emptyList(),
     val starter: Book? = null,
     val shelfSize: Int = 0,
@@ -374,7 +368,6 @@ data class HomeDesk(
 
 private const val HOME_STRIP_LIMIT = 12
 private const val HOME_SERIES_LIMIT = 4
-private const val HOME_STARTER_PICKS = 6
 private const val ALMOST_DONE = 0.85
 private const val ADDED_LATELY_MS = 14L * 24 * 60 * 60 * 1000
 
@@ -439,25 +432,6 @@ fun homeDeskOf(
         ),
     )
 
-    val picks = LinkedHashMap<String, HomePick>()
-    reading.filter { it.url != current }.forEach {
-        picks[it.url] = HomePick(it, PickReason.IN_PROGRESS, progressions[it.url])
-    }
-    underway.mapNotNull { it.nextUp }.forEach { volume ->
-        val url = volume.book.url
-        if (url != current && url !in picks) {
-            picks[url] = HomePick(volume.book, PickReason.NEXT_IN_SERIES, volume.progression.takeIf { volume.inProgress })
-        }
-    }
-    // A library nobody has started yet still gets something to pick up.
-    if (picks.isEmpty()) {
-        unread.filter { it.url != current }.take(HOME_STARTER_PICKS).forEach {
-            picks[it.url] = HomePick(it, PickReason.UNREAD, null)
-        }
-    }
-    val pickUpNext = picks.values.take(HOME_STRIP_LIMIT)
-    val picked = pickUpNext.mapTo(mutableSetOf()) { it.book.url }
-
     return HomeDesk(
         tiles = tiles,
         seriesSets = underway.take(HOME_SERIES_LIMIT).map { set ->
@@ -474,9 +448,8 @@ fun homeDeskOf(
                 },
             )
         },
-        pickUpNext = pickUpNext,
         recentlyAdded = unread
-            .filter { it.url != current && it.url !in picked }
+            .filter { it.url != current }
             // Every book on the shelf being new would only repeat the Library.
             .takeIf { unread.size < shelf.size }
             .orEmpty()

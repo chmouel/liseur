@@ -173,34 +173,26 @@ class LibraryLayoutTest {
     }
 
     @Test
-    fun `pick up next puts books under way first, then the next volume of each series, never the hero`() {
+    fun `recently added leaves out the hero and keeps only unread books`() {
         val hero = book("hero", openedAt = 50)
-        val older = book("older", openedAt = 10)
-        val newer = book("newer", openedAt = 20)
+        val reading = book("reading", openedAt = 10)
         val s1 = book("s1", finished = true, openedAt = 5)
         val s2 = book("s2")
         val loose = book("loose", addedAt = 30)
-        val books = listOf(hero, older, newer, s1, s2, loose)
+        val books = listOf(hero, reading, s1, s2, loose)
 
         val home = desk(books, series = listOf(series("saga", s1, s2)), current = hero.url)
 
-        assertEquals(listOf("newer", "older", "s2"), home.pickUpNext.map { it.book.title })
-        assertEquals(
-            listOf(PickReason.IN_PROGRESS, PickReason.IN_PROGRESS, PickReason.NEXT_IN_SERIES),
-            home.pickUpNext.map { it.reason },
-        )
-        assertEquals(listOf("loose"), home.recentlyAdded.map { it.title })
+        assertEquals(setOf("loose", "s2"), home.recentlyAdded.map { it.title }.toSet())
         assertEquals(null, home.starter)
     }
 
     @Test
-    fun `an untouched library is offered unread picks and a starter instead of a hero`() {
+    fun `an untouched library is offered a starter instead of a hero`() {
         val books = listOf(book("a", addedAt = 1), book("b", addedAt = 2))
 
         val home = desk(books)
 
-        assertEquals(listOf("b", "a"), home.pickUpNext.map { it.book.title })
-        assertTrue(home.pickUpNext.all { it.reason == PickReason.UNREAD })
         // Everything is new, so a recently added strip would only repeat it.
         assertEquals(emptyList<Book>(), home.recentlyAdded)
         assertEquals("b", home.starter?.title)
