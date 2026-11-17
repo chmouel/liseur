@@ -109,6 +109,13 @@ class HomeQuotesTest {
     }
 
     @Test
+    fun `a scoring change makes the same reading position due for a rescan`() {
+        val current = scan(workId = "work-one")
+        assertFalse(HomeQuotes.isDue(current, current.scannedThrough))
+        assertTrue(HomeQuotes.isDue(current.copy(version = current.version - 1), current.scannedThrough))
+    }
+
+    @Test
     fun `a replaced file drops its lines and its watermark`() = runTest {
         dao().replace(scan(workId = "work-one"), listOf(line()))
 
