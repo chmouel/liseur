@@ -123,7 +123,7 @@ class StarDictTest {
             GZIPOutputStream(this).use { it.write("entry".encodeToByteArray()) }
         }.toByteArray()
         val input = CheckedZipEntryInputStream(
-            PrefixThenSuffixInputStream(gzipMember, byteArrayOf(1, 2)),
+            PrefixThenSuffixInputStream(gzipMember, byteArrayOf(1)),
             100,
             {},
             ExpandedBudget(gzipMember.size.toLong()),
