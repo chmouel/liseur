@@ -637,9 +637,12 @@ Permissions and production:
   sync automatically, the rest is copied by hand.
 
 Play screenshots. The repository owns the phone and tablet screenshots.
+Play keeps a separate set per listing language, so the lane asks Play
+which languages the listing has and copies the `en-US` set to each before
+uploading; the repository holds no per-language screenshots.
 After a final release's production promotion succeeds, the workflow runs
-`fastlane android screenshots`, comparing
-`fastlane/metadata/android/en-US/images/` with Play's in order: an
+`fastlane android screenshots`, comparing each language with
+`fastlane/metadata/android/en-US/images/` in order: an
 unchanged set touches nothing, anything else is replaced to match the
 repository (including console edits). RCs never touch it, since the
 listing is shared by every track. Success means the edit was committed,
