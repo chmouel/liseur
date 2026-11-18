@@ -27,6 +27,7 @@ import com.chmouel.liseur.data.library.BookBackupCandidate
 import com.chmouel.liseur.data.library.BookExportRepository
 import com.chmouel.liseur.data.library.BookExportProgress
 import com.chmouel.liseur.data.library.BookExportResult
+import com.chmouel.liseur.ui.launchPicker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import com.chmouel.liseur.data.library.SettingsBackupExportResult
@@ -525,7 +526,8 @@ internal suspend fun Lifecycle.launchSaveRequest(
 
 @Composable
 fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
-    val container = (LocalContext.current.applicationContext as LiseurApplication).container
+    val context = LocalContext.current
+    val container = (context.applicationContext as LiseurApplication).container
     // Opening the coordinator reconciles translation storage, so only an open backup screen asks.
     val translations by remember(active) {
         if (active) container.wholeBookTranslations.records else flowOf(emptyList())
@@ -545,7 +547,7 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
             request = { model.state.value.saveRequest },
             consume = { name ->
                 model.saveLaunched(name)
-                save.launch(name)
+                if (!save.launchPicker(context, name)) model.writeExport(null)
             },
         )
     }
@@ -560,12 +562,12 @@ fun rememberSettingsZipBackup(active: Boolean): SettingsZipBackupUi {
         status = state.status,
         busy = state.busy,
         bookProgress = state.bookProgress,
-        exportBooks = { folder.launch(null) },
+        exportBooks = { folder.launchPicker(context, null) },
         cancelBookExport = model::cancelBookExport,
         export = { password, includeTranslations ->
             model.prepareExport(password, includeTranslations)
         },
-        restore = { open.launch(arrayOf("*/*")) },
+        restore = { open.launchPicker(context, arrayOf("*/*")) },
         confirmRestore = model::confirmRestore,
         dismissPreview = model::dismissPreview,
         close = model::close,

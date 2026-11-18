@@ -55,6 +55,7 @@ import com.chmouel.liseur.domain.ShelfBackdrop
 import com.chmouel.liseur.domain.ShelfGrouping
 import com.chmouel.liseur.domain.ShelfTone
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
+import com.chmouel.liseur.ui.launchPicker
 import com.chmouel.liseur.ui.settings.ChipRow
 import com.chmouel.liseur.ui.settings.SwitchRow
 import java.io.File
@@ -231,7 +232,7 @@ internal fun LibraryStyleSheet(
                             val needPick = chosen == ShelfBackdrop.CUSTOM &&
                                 (layout.shelfBackdrop == ShelfBackdrop.CUSTOM || layout.shelfBackdropUri == null)
                             if (needPick) {
-                                pickBackdrop.launch(arrayOf("image/*"))
+                                pickBackdrop.launchPicker(context, arrayOf("image/*"))
                             } else {
                                 onChange(layout.copy(shelfBackdrop = chosen))
                             }

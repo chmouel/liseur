@@ -2100,4 +2100,5 @@
     <string name="evaluation_rating">La mia valutazione</string>
     <string name="evaluation_rated">Con valutazione</string>
     <string name="evaluation_unrated">Senza valutazione</string>
+    <string name="no_file_picker">Nessun selettore di file disponibile su questo dispositivo</string>
 </resources>

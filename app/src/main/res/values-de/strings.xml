@@ -2112,4 +2112,5 @@
     <string name="evaluation_rating">Meine Bewertung</string>
     <string name="evaluation_rated">Bewertet</string>
     <string name="evaluation_unrated">Unbewertet</string>
+    <string name="no_file_picker">Auf diesem Gerät ist keine Dateiauswahl verfügbar</string>
 </resources>

@@ -70,6 +70,7 @@ import com.chmouel.liseur.reader.dictionary.OfflineDictionary
 import com.chmouel.liseur.translate.TranslationLanguages
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.launchPicker
 import com.chmouel.liseur.ui.windowWidth
 import java.text.Collator
 import java.text.NumberFormat
@@ -309,7 +310,7 @@ internal fun OfflineDictionaryPickerSheet(pinnedLanguage: String?, onDismiss: ()
                 onDismiss()
                 OfflineDictionary.startDownload(context, language)
             },
-            onImportZip = { picker.launch(ARCHIVE_MIME_TYPES) },
+            onImportZip = { picker.launchPicker(context, ARCHIVE_MIME_TYPES) },
             onDismiss = onDismiss,
         )
     }
