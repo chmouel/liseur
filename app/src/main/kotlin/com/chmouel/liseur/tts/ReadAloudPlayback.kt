@@ -2,8 +2,11 @@ package com.chmouel.liseur.tts
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.emptyFlow
@@ -99,6 +102,11 @@ class ReadAloudPlayback(
     private val mutableFailure = MutableStateFlow<Failure?>(null)
     val failure: StateFlow<Failure?> = mutableFailure.asStateFlow()
 
+    private var failures = 0
+
+    /** The failures reported so far, which [played] carries so its reader can tell a newer one. */
+    val failureCount: Int get() = failures
+
     private var waitingFor: TtsEngine.RequestId? = null
     private val mutableWaiting = MutableStateFlow(false)
 
@@ -125,6 +133,15 @@ class ReadAloudPlayback(
      * translation or its audio, can be well before it is heard.
      */
     val heard: StateFlow<Locator?> = mutableHeard.asStateFlow()
+
+    private val mutablePlayed = MutableSharedFlow<Int>(extraBufferCapacity = 1)
+
+    /**
+     * Emitted each time a request of the live navigator begins to play, with
+     * [failureCount] as it stood: an emitted audio that a failure overtook
+     * before it was read never played.
+     */
+    val played: SharedFlow<Int> = mutablePlayed.asSharedFlow()
     private var closed = false
 
     /** Whether the listener wants it playing, before the first sentence sounds too. */
@@ -424,6 +441,7 @@ class ReadAloudPlayback(
 
     override fun onPlaying(requestId: TtsEngine.RequestId) {
         if (requestId !in spoken) return
+        mutablePlayed.tryEmit(failures)
         mutableHeard.value = places[requestId] ?: mutableNavigator.value?.location?.value?.utteranceLocator ?: return
     }
 
@@ -431,6 +449,8 @@ class ReadAloudPlayback(
         // Only this navigator's requests; a closed one's are long gone.
         if (requestId !in spoken) return
         val navigator = mutableNavigator.value ?: return
+        // Before the failure is reported, so a playing already on its way to a reader is not taken for this try.
+        failures++
         // Readium publishes the new sentence before the engine is asked to
         // speak it, and the failure arrives after, so the place shown now is
         // the failed sentence. Should it still lag, the sentence shown is the

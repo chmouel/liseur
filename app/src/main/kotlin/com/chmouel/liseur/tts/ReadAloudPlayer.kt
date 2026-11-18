@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.readaloud.ReadAloudNotice
+import com.chmouel.liseur.readaloud.ReadAloudProblem
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.chrome.ChromeCard
 import com.chmouel.liseur.reader.chrome.ChromePill
@@ -96,6 +97,8 @@ internal fun ReadAloudPlayer(
     val eInk = LocalEInk.current
     val session by feature.session.collectAsStateWithLifecycle()
     val here = session?.takeIf { it.bookId == bookId }
+    val problem by feature.problem.collectAsStateWithLifecycle()
+    val shown = problem?.takeIf { it.bookId == bookId }
     var notice by remember { mutableStateOf<ReadAloudNotice?>(null) }
     // A book still playing in the background speaks only in its own reader.
     LaunchedEffect(feature, bookId) {
@@ -109,17 +112,57 @@ internal fun ReadAloudPlayer(
     val pending by feature.pendingChoice.collectAsStateWithLifecycle()
     val asking = pending?.takeIf { it.bookId == bookId }
     var choosing by remember { mutableStateOf(false) }
+    // Opened from a problem, with no session to read on in: it saves the
+    // voice or the settings and goes, and reading starts again from the menu.
+    var alone by remember { mutableStateOf(false) }
+    var settingsFirst by remember { mutableStateOf(false) }
+    val openVoice = { standalone: Boolean, settingsAtOnce: Boolean ->
+        alone = standalone
+        settingsFirst = settingsAtOnce
+        choosing = true
+    }
     LaunchedEffect(asking) { if (asking != null) choosing = true }
     // Asked before the book is read, or opened from the controls of the one
     // being read. It stays when changing the service in its settings ends
     // the session, until it is dismissed.
     if (choosing || asking != null) {
-        ReadAloudVoiceSheet(feature, bookId, asking, start, onDismiss = { choosing = false })
+        ReadAloudVoiceSheet(
+            feature,
+            bookId,
+            asking,
+            start,
+            onDismiss = {
+                choosing = false
+                alone = false
+                settingsFirst = false
+            },
+            standalone = alone,
+            settingsFirst = settingsFirst,
+        )
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
         val waitShown = rememberWaitShown(here?.preparing == true)
         service?.AccessPrompt(theme)
+        // A problem stays until it is answered, whether the chrome is up or not.
+        shown?.let { current ->
+            ProblemCard(
+                problem = current,
+                theme = theme,
+                host = feature.noticeHost ?: stringResource(feature.noticeLabel),
+                canRetry = here != null,
+                onAction = { action ->
+                    when (action) {
+                        ProblemAction.Retry -> feature.resume()
+                        ProblemAction.Skip -> feature.skipForward()
+                        ProblemAction.ChooseVoice -> openVoice(true, false)
+                        // The sheet's own not-set-up state offers the settings from there.
+                        ProblemAction.Settings -> openVoice(true, current.notice != ReadAloudNotice.NotSetUp)
+                    }
+                },
+                onDismiss = { feature.dismissProblem(bookId) },
+            )
+        }
         AnimatedVisibility(
             visible = notice != null,
             enter = if (eInk) EnterTransition.None else fadeIn(),
@@ -140,7 +183,7 @@ internal fun ReadAloudPlayer(
         }
         // With the controls hidden, the wait for the voice still shows.
         AnimatedVisibility(
-            visible = here != null && !controls && waitShown && notice == null,
+            visible = here != null && !controls && waitShown && notice == null && shown == null,
             enter = if (eInk) EnterTransition.None else fadeIn(),
             exit = if (eInk) ExitTransition.None else fadeOut(),
         ) {
@@ -175,7 +218,7 @@ internal fun ReadAloudPlayer(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp),
                     ) {
-                        VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { choosing = true }
+                        VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { openVoice(false, false) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             onReturnToVoice?.let {
                                 ControlButton(it) {
@@ -267,6 +310,82 @@ private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: 
         }
     }
 }
+
+/** Which way out of a [ReadAloudProblem]: what the listener can do about it. */
+private enum class ProblemAction { Retry, Skip, ChooseVoice, Settings }
+
+/** What a notice leaves to be done about it, in the order they are offered. */
+private fun ReadAloudNotice.answers(): List<ProblemAction> = when (this) {
+    ReadAloudNotice.Network, ReadAloudNotice.Service, ReadAloudNotice.Output -> listOf(ProblemAction.Retry)
+    ReadAloudNotice.RateLimited -> listOf(ProblemAction.Retry, ProblemAction.ChooseVoice)
+    ReadAloudNotice.TranslationFailed -> listOf(ProblemAction.Retry, ProblemAction.Skip)
+    ReadAloudNotice.InvalidVoice -> listOf(ProblemAction.ChooseVoice)
+    ReadAloudNotice.InvalidKey,
+    ReadAloudNotice.TermsRequired,
+    ReadAloudNotice.NoSpeech,
+    ReadAloudNotice.NotSetUp -> listOf(ProblemAction.Settings)
+    ReadAloudNotice.SelectionNotFound, ReadAloudNotice.Unavailable -> emptyList()
+}
+
+/**
+ * What went wrong, said once to a screen reader, and what can be done
+ * about it. It stays over the page, with the chrome up or down, until one
+ * of its answers is taken.
+ */
+@Composable
+private fun ProblemCard(
+    problem: ReadAloudProblem,
+    theme: ReaderTheme,
+    host: String,
+    canRetry: Boolean,
+    onAction: (ProblemAction) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Nothing to retry while no session is left to resume.
+    val actions = problem.notice.answers().filter { it != ProblemAction.Retry || canRetry }
+    ChromeCard(theme = theme) {
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = stringResource(problem.notice.message(), host),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = 12.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                ControlButton(onDismiss) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+            }
+            if (actions.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(bottom = 4.dp),
+                ) {
+                    actions.forEach { action ->
+                        Text(
+                            text = stringResource(action.label),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .clickable(role = Role.Button) { onAction(action) }
+                                .padding(horizontal = 12.dp, vertical = 14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private val ProblemAction.label: Int
+    get() = when (this) {
+        ProblemAction.Retry -> R.string.read_aloud_settings_server_retry
+        ProblemAction.Skip -> R.string.read_aloud_problem_skip
+        ProblemAction.ChooseVoice -> R.string.read_aloud_change_voice
+        ProblemAction.Settings -> R.string.settings
+    }
 
 /**
  * Whether to show the wait for the voice: only once it has lasted, so a

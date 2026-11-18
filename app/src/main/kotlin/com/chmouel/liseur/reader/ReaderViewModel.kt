@@ -3137,6 +3137,7 @@ class ReaderViewModel(
 
     override fun onCleared() {
         readAloud.cancelChoice(bookId)
+        readAloud.readerClosed(bookId)
         // Reading on from the opened server place already agreed it with
         // the first move, so only an untouched opening is adopted on close.
         val closingPull = bookOrbitOpening.verifiedPull?.takeIf { readingGeneration == 0L && !it.fresh }

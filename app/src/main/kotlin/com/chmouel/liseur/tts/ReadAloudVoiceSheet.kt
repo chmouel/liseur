@@ -60,7 +60,11 @@ private sealed interface SheetLoad {
  * Picks the language a book is read in and the voice for it. Looking
  * changes nothing; Apply remembers the voice for the language and reads
  * on in it. With [pending], the book waits for the answer before a word
- * is spoken, and dismissing the sheet gives up reading it.
+ * is spoken, and dismissing the sheet gives up reading it. [standalone],
+ * opened to answer a problem, has no session to read on in: it is not
+ * dismissed by reading that ended, Apply only saves, and the settings
+ * open in place without a hold to read on from. [settingsFirst] opens
+ * them at once, for a service that refused its key or its model's terms.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,11 +74,13 @@ internal fun ReadAloudVoiceSheet(
     pending: PendingChoice?,
     start: (Locator, SpeechTranslation?) -> Unit,
     onDismiss: () -> Unit,
+    standalone: Boolean = false,
+    settingsFirst: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     var reload by remember { mutableIntStateOf(0) }
     var load by remember { mutableStateOf<SheetLoad>(SheetLoad.Loading) }
-    var settingsOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(settingsFirst) }
     // Taken when the settings open: changing the service there ends the session.
     var restart by remember { mutableStateOf<ReadAloudRestart?>(null) }
     DisposableEffect(Unit) { onDispose { restart?.release() } }
@@ -91,13 +97,13 @@ internal fun ReadAloudVoiceSheet(
     // Reading ended some other way, from the notification or at the end of
     // the book: there is nothing left to pick a voice for.
     val reading = feature.session.collectAsStateWithLifecycle().value?.bookId == bookId
-    LaunchedEffect(settingsOpen, reading, pending) {
-        if (settingsOpen || reading || pending != null) return@LaunchedEffect
+    LaunchedEffect(standalone, settingsOpen, reading, pending) {
+        if (standalone || settingsOpen || reading || pending != null) return@LaunchedEffect
         if (restart?.let { it.held && it.wanted } == true) return@LaunchedEffect
         onDismiss()
     }
     val openSettings = {
-        if (restart?.held != true) restart = feature.holdForRestart(bookId, start)
+        if (!standalone && restart?.held != true) restart = feature.holdForRestart(bookId, start)
         settingsOpen = true
     }
     val dismiss = {

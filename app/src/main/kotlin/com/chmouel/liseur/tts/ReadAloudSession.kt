@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -206,6 +207,12 @@ internal class ReadAloudSession(
 
     /** Whether the listener has it playing, even while the first sentence is on its way. */
     val playRequested: Boolean get() = playback.playRequested
+
+    /** Emitted each time a request of this session begins to play, with the failures reported so far. */
+    val played: SharedFlow<Int> get() = playback.played
+
+    /** The failures this session reported so far. */
+    val failureCount: Int get() = playback.failureCount
 
     private val location = playback.navigator.flatMapLatest { it?.location ?: emptyFlow() }
     private val playWhenReady = playback.navigator

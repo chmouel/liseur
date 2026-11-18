@@ -21,6 +21,8 @@ import com.chmouel.liseur.readaloud.PausedReadAloud
 import com.chmouel.liseur.readaloud.ReadAloudBookNotice
 import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.readaloud.ReadAloudNotice
+import com.chmouel.liseur.readaloud.ReadAloudProblem
+import com.chmouel.liseur.readaloud.ReadAloudProblems
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.OpenBookHandle
 import java.util.Locale
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -138,6 +141,7 @@ internal class SpeechReadAloud(
             it.stop()
         }
         previews.filterValues { it === UNKNOWN || it == owner }.keys.forEach { it.cancel() }
+        onProblemEvent(ReadAloudProblems.Event.SettingsChanged)
     }
 
     /**
@@ -197,6 +201,18 @@ internal class SpeechReadAloud(
                 .drop(1)
                 .collect { switchVoice() }
         }
+        scope.launch {
+            mutableCurrent.flatMapLatest { s ->
+                s?.played?.map { failedWhenPlayed -> s to failedWhenPlayed } ?: emptyFlow()
+            }.collect { (session, failedWhenPlayed) ->
+                mutableProblem.value = ReadAloudProblems.playingNow(
+                    mutableProblem.value,
+                    session.handle.bookId,
+                    failedWhenPlayed,
+                    session.failureCount,
+                )
+            }
+        }
     }
 
     override val configured: StateFlow<Boolean> =
@@ -215,8 +231,33 @@ internal class SpeechReadAloud(
         mutableCurrent.flatMapLatest { it?.ui ?: flowOf(null) }
             .stateIn(scope, SharingStarted.Eagerly, null)
 
+    private val mutableProblem = MutableStateFlow<ReadAloudProblem?>(null)
+    override val problem: StateFlow<ReadAloudProblem?> = mutableProblem.asStateFlow()
+
     private val mutableNotices = MutableSharedFlow<ReadAloudBookNotice>(extraBufferCapacity = 8)
     override val notices: SharedFlow<ReadAloudBookNotice> = mutableNotices.asSharedFlow()
+
+    private fun onProblemEvent(event: ReadAloudProblems.Event) {
+        mutableProblem.value = ReadAloudProblems.next(mutableProblem.value, event)
+    }
+
+    private fun reportNotice(bookId: String, notice: ReadAloudNotice) {
+        onProblemEvent(ReadAloudProblems.Event.Notice(bookId, notice))
+        if (notice == ReadAloudNotice.SelectionNotFound) {
+            mutableNotices.tryEmit(ReadAloudBookNotice(bookId, notice))
+        }
+    }
+
+    override fun dismissProblem(bookId: String?) {
+        onProblemEvent(ReadAloudProblems.Event.Dismissed(bookId))
+    }
+
+    override fun readerClosed(bookId: String) {
+        val current = mutableProblem.value ?: return
+        if (current.bookId == bookId && !current.recoverable) {
+            onProblemEvent(ReadAloudProblems.Event.Dismissed(bookId))
+        }
+    }
 
     override fun translation(bookId: String): SpeechTranslation? =
         mutableCurrent.value?.takeIf { it.handle.bookId == bookId }?.translation?.takeIf { it.translations.open }
@@ -239,7 +280,10 @@ internal class SpeechReadAloud(
         val again = if (restoring == null) carried?.takeIf { it.bookId == handle.bookId }.also { carried = null } else null
         stop()
         // Reading anything else from here on: the pause left before is over.
-        if (restoring == null) paused?.forget()
+        if (restoring == null) {
+            paused?.forget()
+            onProblemEvent(ReadAloudProblems.Event.Started(handle.bookId))
+        }
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
@@ -290,7 +334,7 @@ internal class SpeechReadAloud(
                     sentencesPerRequest = current.readAloudSentencesPerRequest,
                     speed = { speed.value },
                     checkpoints = checkpoints,
-                    onNotice = { mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, it)) },
+                    onNotice = { reportNotice(handle.bookId, it) },
                     onEnded = { ended -> if (mutableCurrent.value === ended) mutableCurrent.value = null },
                     onChapterEnded = { setSleepTimer(null) },
                     onPaused = ::pausedAt,
@@ -314,7 +358,7 @@ internal class SpeechReadAloud(
                         return@launch
                     }
                     session.stop()
-                    mutableNotices.tryEmit(ReadAloudBookNotice(handle.bookId, ReadAloudNotice.Output))
+                    reportNotice(handle.bookId, ReadAloudNotice.Output)
                     return@launch
                 }
                 // A sleep timer that ran out while the settings were open leaves it paused.
@@ -467,6 +511,7 @@ internal class SpeechReadAloud(
         restartWanted(startingBookId)
         restartWanted(mutableCurrent.value?.handle?.bookId)
         stop()
+        onProblemEvent(ReadAloudProblems.Event.SettingsChanged)
     }
 
     override fun skipForward() {
@@ -479,7 +524,7 @@ internal class SpeechReadAloud(
 
     private fun notSetUp(bookId: String, quietly: Boolean = false) {
         if (quietly) return
-        mutableNotices.tryEmit(ReadAloudBookNotice(bookId, ReadAloudNotice.NotSetUp))
+        reportNotice(bookId, ReadAloudNotice.NotSetUp)
     }
 
     /** Waits for the reader to answer [pending]; cancelling the start takes the question away. */
@@ -513,7 +558,18 @@ internal class SpeechReadAloud(
         val catalogue = service.catalogue(s) ?: return null
         val preferences = s.voicePreferences.filter(catalogue.scope::owns)
         val choice = reading?.session?.choice?.value
+        val deviceLanguage = SpeechLanguage.normalize(Locale.getDefault().toLanguageTag())
+        val languages = VoiceResolver.languages(
+            catalogue,
+            preferences,
+            book,
+            choice?.language ?: resuming?.language,
+            deviceLanguage,
+        )
+        // Nothing read yet, as when the sheet answers a problem: the device's language, which is what an unread book is most likely in.
         val language = choice?.language ?: resuming?.language ?: (book as? BookLanguage.Known)?.tag
+            ?: (book as? BookLanguage.Ambiguous)?.tags?.firstOrNull()
+            ?: deviceLanguage
         val reason = pending?.reason ?: if (catalogue.failed && catalogue.voices.isEmpty()) ChoiceReason.CatalogueFailed else null
         return VoiceSheet(
             bookId = bookId,
@@ -521,13 +577,7 @@ internal class SpeechReadAloud(
             catalogue = catalogue,
             preferences = preferences,
             book = book,
-            languages = VoiceResolver.languages(
-                catalogue,
-                preferences,
-                book,
-                choice?.language ?: resuming?.language,
-                SpeechLanguage.normalize(Locale.getDefault().toLanguageTag()),
-            ),
+            languages = languages,
             language = language?.let(SpeechLanguage::primary),
             choice = choice,
             reason = reason,
@@ -554,6 +604,7 @@ internal class SpeechReadAloud(
         val direction = narrationDirection.takeIf { sheet.service.supportsNarrationDirection } ?: sheet.narrationDirection
         val directionChanged = direction != sheet.narrationDirection
         if (directionChanged) bookPreferences?.setNarration(sheet.bookId, direction)
+        onProblemEvent(ReadAloudProblems.Event.SettingsChanged)
         val tag = sheet.choice?.language?.takeIf { SpeechLanguage.primary(it) == language }
             ?: VoiceResolver.sessionTag(language, sheet.book, sheet.catalogue.voices.firstOrNull { it.id == voice })
         val pick = VoicePick(voice, tag)
@@ -637,6 +688,7 @@ internal class SpeechReadAloud(
      * for it.
      */
     private suspend fun switchVoice() {
+        onProblemEvent(ReadAloudProblems.Event.SettingsChanged)
         val reading = reading() ?: return
         val switch = ++switches
         val s = settings.settings.first()
