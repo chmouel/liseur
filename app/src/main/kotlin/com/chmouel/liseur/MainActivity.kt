@@ -222,15 +222,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if (deciding) {
-            resumeJob = lifecycleScope.launch {
-                try {
-                    resumeLastBook()
-                } finally {
-                    deciding = false
-                }
-            }
-        }
         lifecycleScope.launch {
             LaunchRequests.shared.pending.collect { request ->
                 if (request != null) {
@@ -257,16 +248,25 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Being here means the library is what you left the app on.
-        lifecycleScope.launch { container.sessionState.setLeftFromReader(false) }
+        lifecycleScope.launch {
+            val leftFromReader = container.sessionState.enterLibrary()
+            if (deciding && resumeJob == null) {
+                resumeJob = launch {
+                    try {
+                        resumeLastBook(leftFromReader)
+                    } finally {
+                        deciding = false
+                    }
+                }
+            }
+        }
         // Android allows starting the foreground job only while the app is in front.
         lifecycleScope.launch { container.resumeWholeBookTranslations() }
     }
 
-    private suspend fun resumeLastBook() {
+    private suspend fun resumeLastBook(leftFromReader: Boolean) {
         val container = container
         if (!container.appSettings.current().resumeLastBook) return
-        val leftFromReader = container.sessionState.leftFromReader()
         val book = container.database.bookDao().mostRecentlyOpened()
         val stored = book?.let { container.database.readingProgressDao().get(it.url) }
         val candidate = book?.openableUri()?.let { fileUrl ->
