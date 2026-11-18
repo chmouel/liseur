@@ -92,17 +92,22 @@ class WiktionaryClient(
         languages: List<String>,
         baseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
         strict: Boolean = false,
+        fallbackWords: List<String> = emptyList(),
         onInitialResult: suspend (DictionaryState.Found) -> Unit = {},
     ): DictionaryState =
         withContext(Dispatchers.IO) {
-            val term = normaliseLookupTerm(word)
+            val term = word.trim()
             if (term.isBlank()) return@withContext DictionaryState.NotFound
             val cache = Collections.synchronizedMap(mutableMapOf<String, DictionaryResponse>())
             pages = cache
-            val (foundTerm, lookedUp) = lookupWithLowercase(term, languages, baseUrl, cache = cache, strict = strict)
-            val result = (lookedUp as? DictionaryState.Found)?.copy(term = foundTerm) ?: return@withContext lookedUp
-            onInitialResult(result)
-            expand(term, result, baseUrl)
+            for (candidate in listOf(term) + fallbackWords) {
+                val (foundTerm, lookedUp) = lookupWithLowercase(candidate, languages, baseUrl, cache = cache, strict = strict)
+                if (lookedUp == DictionaryState.NotFound) continue
+                val result = (lookedUp as? DictionaryState.Found)?.copy(term = foundTerm) ?: return@withContext lookedUp
+                onInitialResult(result)
+                return@withContext expand(foundTerm, result, baseUrl)
+            }
+            DictionaryState.NotFound
         }
 
     private suspend fun lookupWithLowercase(

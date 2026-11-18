@@ -32,34 +32,39 @@ class DefinitionQueryTest {
     }
 
     @Test
-    fun `selected text lookup removes French elisions and keeps internal apostrophes`() {
-        assertEquals(DefinitionQuery("accord", "fr"), definitionQuery("“d’accord”", null, "fr", false))
-        assertEquals(DefinitionQuery("accord", "fr"), definitionQuery("D'accord", null, "fr", false))
-        assertEquals(DefinitionQuery("autrefois", "fr"), definitionQuery("", "qu’autrefois,", "fr", true))
-        assertEquals(DefinitionQuery("aujourd'hui", "fr"), definitionQuery("aujourd’hui", null, "fr", false))
+    fun `selected headwords keep their original punctuation`() {
+        assertEquals(DefinitionQuery("C++", "en"), definitionQuery(" C++ ", null, "en", false))
+        assertEquals(DefinitionQuery("@", null), definitionQuery("@", null, null, false))
+        assertEquals(DefinitionQuery("“d’Artagnan”", "fr"), definitionQuery("“d’Artagnan”", null, "fr", false))
+        assertEquals(emptyList<String>(), DefinitionQuery("well—known", "en").fallbackWords())
     }
 
     @Test
-    fun `selected text lookup cleans dictionary markers and edge punctuation`() {
-        assertEquals(DefinitionQuery("cat", "en"), definitionQuery("“(ˈc·a|t↑’s!)”", null, "en", false))
-        assertEquals(DefinitionQuery("très bien", "fr"), definitionQuery("très\u00a0bien", null, "fr", false))
-        assertNull(definitionQuery("…!", null, null, false))
+    fun `cleanup is a fallback for the selected spelling`() {
+        assertEquals(listOf("C"), DefinitionQuery("C++", "en").fallbackWords())
+        assertEquals(emptyList<String>(), DefinitionQuery("@", null).fallbackWords())
+        assertEquals(listOf("cat's", "cat"), DefinitionQuery("“(ˈc·a|t↑’s!)”", "en").fallbackWords())
+        assertEquals(listOf("filehandle"), DefinitionQuery("“filehandle,”", null).fallbackWords())
+        assertEquals(listOf("well-known"), DefinitionQuery("well-known.", null).fallbackWords())
+        assertEquals(listOf("don't"), DefinitionQuery("(don't)", null).fallbackWords())
+        assertEquals(listOf("first"), DefinitionQuery("first\nsecond", null).fallbackWords())
     }
 
     @Test
-    fun `grammatical cleanup uses the lookup language`() {
-        assertEquals(DefinitionQuery("accord", "fr-CA"), definitionQuery("d’accord", null, "fr-CA", false))
-        assertEquals(DefinitionQuery("l'acqua", "it"), definitionQuery("l’acqua", null, "it", false))
-        assertEquals(DefinitionQuery("d'fhág", "ga"), definitionQuery("d’fhág", null, "ga", false))
-        assertEquals(DefinitionQuery("d'accord", null), definitionQuery("d’accord", null, null, false))
-        assertEquals(DefinitionQuery("cat", "en-GB"), definitionQuery("cat’s", null, "en-GB", false))
-        assertEquals(DefinitionQuery("O'Connor's", null), definitionQuery("O’Connor’s", null, null, false))
+    fun `grammatical fallback uses the lookup language`() {
+        assertEquals(listOf("d'accord", "accord"), DefinitionQuery("d’accord", "fr-CA").fallbackWords())
+        assertEquals(listOf("qu'autrefois", "autrefois"), definitionQuery("", "qu’autrefois,", "fr", true)?.fallbackWords())
+        assertEquals(listOf("cat"), DefinitionQuery("cat's", "en-GB").fallbackWords())
+        assertEquals(listOf("l'acqua"), DefinitionQuery("l’acqua", "it").fallbackWords())
+        assertEquals(listOf("d'fhág"), DefinitionQuery("d’fhág", "ga").fallbackWords())
+        assertEquals(listOf("d'accord"), DefinitionQuery("d’accord", null).fallbackWords())
+        assertEquals(listOf("aujourd'hui"), DefinitionQuery("aujourd’hui", "fr").fallbackWords())
     }
 
     @Test
     fun `Unicode spaces preserve lookup word boundaries`() {
         listOf('\u00A0', '\u2003', '\u2009', '\u202F', '\u3000').forEach { space ->
-            assertEquals(DefinitionQuery("très bien", "fr"), definitionQuery("très${space}bien", null, "fr", false))
+            assertEquals(listOf("très bien"), DefinitionQuery("très${space}bien", "fr").fallbackWords())
         }
     }
 }

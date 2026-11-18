@@ -87,6 +87,44 @@ class WiktionaryClientTest {
     }
 
     @Test
+    fun `tries punctuation-bearing headwords before cleanup`() = runBlocking {
+        val definition = MockResponse(
+            code = 200,
+            body = """{"en":[{"partOfSpeech":"Noun","definitions":[{"definition":"A symbol."}]}]}""",
+        )
+        server.enqueue(definition)
+        server.enqueue(definition)
+
+        val client = WiktionaryClient()
+        listOf("C++", "@").forEach { word ->
+            val result = client.define(word, listOf("en"), baseUrl(), fallbackWords = DefinitionQuery(word, "en").fallbackWords())
+            assertEquals(word, (result as DictionaryState.Found).term)
+            assertEquals(word, java.net.URLDecoder.decode(server.takeRequest().target.substringAfterLast('/'), "UTF-8"))
+        }
+    }
+
+    @Test
+    fun `affix fallback runs only after an exact miss`() = runBlocking {
+        val definition = MockResponse(
+            code = 200,
+            body = """{"en":[{"partOfSpeech":"Noun","definitions":[{"definition":"A cat."}]}]}""",
+        )
+        val client = WiktionaryClient()
+        server.enqueue(definition)
+        server.enqueue(MockResponse(code = 404))
+        server.enqueue(definition)
+
+        val exact = client.define("cat's", listOf("en"), baseUrl(), fallbackWords = listOf("cat"))
+        val fallback = client.define("cat's", listOf("en"), baseUrl(), fallbackWords = listOf("cat"))
+
+        assertEquals("cat's", (exact as DictionaryState.Found).term)
+        assertEquals("cat", (fallback as DictionaryState.Found).term)
+        assertTrue(java.net.URLDecoder.decode(server.takeRequest().target, "UTF-8").endsWith("/cat's"))
+        assertTrue(java.net.URLDecoder.decode(server.takeRequest().target, "UTF-8").endsWith("/cat's"))
+        assertTrue(server.takeRequest().target.endsWith("/cat"))
+    }
+
+    @Test
     fun `retries a capitalised word in lowercase`() = runBlocking {
         server.enqueue(MockResponse(code = 404))
         server.enqueue(
