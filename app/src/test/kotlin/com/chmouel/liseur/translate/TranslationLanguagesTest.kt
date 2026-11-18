@@ -93,8 +93,10 @@ class TranslationLanguagesTest {
         assertNull(TranslationLanguages.flag(TranslationLanguages.of("zh_HK")!!))
         assertEquals("🇧🇷", TranslationLanguages.flag("pt-BR"))
         assertEquals("🇩🇪", TranslationLanguages.flag("de"))
-        assertNull(TranslationLanguages.flag("en"))
-        assertNull(TranslationLanguages.flag("es"))
+        assertEquals("🇬🇧", TranslationLanguages.flag("en"))
+        assertEquals("🇪🇸", TranslationLanguages.flag("es"))
+        assertEquals("🇨🇳", TranslationLanguages.flag("zh"))
+        assertEquals("🇵🇹", TranslationLanguages.flag("pt"))
         assertNull(TranslationLanguages.flag("ar"))
         assertNull(TranslationLanguages.flag("xx"))
     }

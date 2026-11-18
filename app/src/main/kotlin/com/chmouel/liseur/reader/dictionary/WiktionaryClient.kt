@@ -129,8 +129,15 @@ class WiktionaryClient(
      * this is at most two requests: none for the entry page when the
      * lookup already fetched it, as other editions do.
      */
-    suspend fun translations(term: String, baseUrl: String, target: String): TranslationsState =
+    suspend fun translations(
+        term: String,
+        baseUrl: String,
+        target: String,
+        /** An explicit retry: forget the pages already fetched, which may hold a temporary failure. */
+        fresh: Boolean = false,
+    ): TranslationsState =
         withContext(Dispatchers.IO) {
+            if (fresh) pages.clear()
             val language = WiktionaryEditions.codeOf(baseUrl) ?: "en"
             val host = DictionaryUrl.hostOf(baseUrl)
             val budget = Expansion(MAX_TRANSLATION_REQUESTS, pages)

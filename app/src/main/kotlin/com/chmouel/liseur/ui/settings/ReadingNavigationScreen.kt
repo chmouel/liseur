@@ -219,6 +219,10 @@ fun ReadingNavigationScreen(
                     )
                     if (settings.definitionTarget == DefinitionTarget.BUILT_IN) {
                         RowDivider()
+                        OfflineDictionarySettings(
+                            modifier = Modifier.settingsAnchor(SettingsEntries.OfflineDictionaries),
+                        )
+                        RowDivider()
                         SwitchRow(
                             title = stringResource(R.string.settings_dictionary_lookup),
                             subtitle = stringResource(R.string.settings_dictionary_lookup_detail),

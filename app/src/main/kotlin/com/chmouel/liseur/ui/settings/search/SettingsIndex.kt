@@ -153,6 +153,10 @@ object SettingsEntries {
     val DefineWith = entry(
         "define_with", Route.ReadingNavigation, R.string.settings_define_with, section = R.string.settings_dictionary,
     )
+    val OfflineDictionaries = entry(
+        "offline_dictionaries", Route.ReadingNavigation, R.string.offline_dictionary_title,
+        R.string.offline_dictionary_empty_detail, R.string.settings_dictionary, shown = { it.builtInDictionary },
+    )
     val DictionaryLookup = entry(
         "dictionary_lookup", Route.ReadingNavigation, R.string.settings_dictionary_lookup,
         R.string.settings_dictionary_lookup_detail, R.string.settings_dictionary, shown = { it.builtInDictionary },

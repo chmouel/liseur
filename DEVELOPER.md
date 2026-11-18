@@ -1225,7 +1225,7 @@ changing reader behavior.
 
 ### Reader behavior
 
-- `dictionaryOnLongPress` defaults off and applies only to the built-in
+- `dictionaryOnLongPress` defaults on (a stored choice is kept) and applies only to the built-in
   dictionary. A long press arms a lookup (`pendingLookup`) that waits for
   the finger to lift, so a drag can grow the selection first; it is keyed
   on the arming, not the selection, which keeps changing during the drag.
@@ -2543,10 +2543,10 @@ it can sync a book that came off an SD card.
   in `LicencesScreen.kt`.
 - `foss` has no trackers, analytics or Google Play services. Outbound
   traffic goes only to the user's calibre-web, Komga, BookOrbit or
-  liseur-sync server, and to a dictionary site when a definition is
-  asked for. The dictionary is off until enabled in Settings and the
-  site is user-chosen (`DictionaryUrl`); a hardcoded third-party host
-  would earn the TetheredNet anti-feature. That justifies `INTERNET`;
+  liseur-sync server, to a user-chosen dictionary site when online lookup
+  is enabled, and to reader.dict when the user explicitly downloads an
+  offline dictionary. Offline lookups use on-device data. These requests
+  justify `INTERNET`;
   `ACCESS_NETWORK_STATE` serves the sync workers'
   `NetworkType.CONNECTED` constraint.
 - Gemini read-aloud, Gemini translation and the companion on Gemini send

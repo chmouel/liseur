@@ -20,4 +20,11 @@ class HomeQuoteTextTest {
             "Plain sentence without quotes.".trimQuoteMarks(),
         )
     }
+
+    @Test
+    fun `keeps quote marks that do not enclose the whole passage`() {
+        assertEquals("She called it “home”", "She called it “home”".trimQuoteMarks())
+        assertEquals("“Yes,” she said, “no.”", "“Yes,” she said, “no.”".trimQuoteMarks())
+        assertEquals("“Unclosed", "“Unclosed".trimQuoteMarks())
+    }
 }

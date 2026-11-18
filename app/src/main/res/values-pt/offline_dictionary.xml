@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Dicionários offline</string>
+    <string name="offline_dictionary_empty_detail">Consulte palavras no dispositivo sem enviá-las pela internet</string>
+    <string name="offline_dictionary_add">Adicionar dicionário offline</string>
+    <string name="offline_dictionary_sheet_title">Adicionar dicionário offline</string>
+    <string name="offline_dictionary_import">Importar arquivo StarDict</string>
+    <string name="offline_dictionary_import_detail">Escolher um arquivo .zip do dispositivo</string>
+    <string name="offline_dictionary_catalog_heading">Baixar de reader.dict</string>
+    <string name="offline_dictionary_catalog_footer">Os dicionários vêm de reader.dict e são gerados a partir do Wikcionário.</string>
+    <string name="offline_dictionary_installed_note">Neste dispositivo · %1$s</string>
+    <string name="offline_dictionary_entries">Verbetes: %1$s</string>
+    <string name="offline_dictionary_downloading">Baixando %1$s · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">Baixando %1$s · %2$s de %3$s</string>
+    <string name="offline_dictionary_unpacking_named">Instalando %1$s…</string>
+    <string name="offline_dictionary_working">Instalando dicionário…</string>
+    <string name="offline_dictionary_error">Não foi possível abrir ou instalar o arquivo do dicionário.</string>
+    <string name="offline_dictionary_download_error">Não foi possível baixar ou instalar o dicionário.</string>
+    <string name="offline_dictionary_retry">Tentar novamente</string>
+    <string name="offline_dictionary_remove_title">Remover %1$s?</string>
+    <string name="offline_dictionary_remove_body">Você pode baixá-lo ou importá-lo novamente a qualquer momento.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Wikcionário</string>
+    <string name="dictionary_download_offline">Baixar um dicionário offline</string>
+</resources>

@@ -382,7 +382,7 @@ data class AppSettings(
     val vendorRefresh: Boolean = false,
     val definitionTarget: DefinitionTarget = DefinitionTarget.Default,
     val dictionaryLookupEnabled: Boolean = false,
-    val dictionaryOnLongPress: Boolean = false,
+    val dictionaryOnLongPress: Boolean = true,
     val dictionaryBaseUrl: String = DictionaryUrl.DEFAULT_BASE_URL,
     val dictionaryAltLanguage: String? = null,
     val uploadPolicy: UploadPolicy = UploadPolicy.Default,
@@ -710,7 +710,7 @@ class AppSettingsRepository(
             vendorRefresh = p[Keys.VENDOR_REFRESH] ?: false,
             definitionTarget = DefinitionTarget.fromId(p[Keys.DEFINITION_TARGET]),
             dictionaryLookupEnabled = p[Keys.DICTIONARY_ENABLED] ?: false,
-            dictionaryOnLongPress = p[Keys.DICTIONARY_ON_LONG_PRESS] ?: false,
+            dictionaryOnLongPress = p[Keys.DICTIONARY_ON_LONG_PRESS] ?: true,
             dictionaryBaseUrl = p[Keys.DICTIONARY_BASE_URL]?.let(DictionaryUrl::normalise)
                 ?: DictionaryUrl.DEFAULT_BASE_URL,
             dictionaryAltLanguage = p[Keys.DICTIONARY_ALT_LANGUAGE]
