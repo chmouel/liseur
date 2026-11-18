@@ -81,6 +81,19 @@ class SettingsSearchTest {
     }
 
     @Test
+    fun selectionToolbarLivesUnderReadingNavigation() {
+        val names = mapOf(
+            SettingsEntries.SelectionToolbar.title to "Selection toolbar",
+            SettingsEntries.SelectionToolbar.summary to "Highlight colours",
+            Route.ReadingNavigation.settingsTitle to "Reading and navigation",
+        )
+        val result = SettingsSearch.resolve(listOf(SettingsEntries.SelectionToolbar), SearchContext()) { names[it] ?: "?" }
+        assertEquals(Route.ReadingNavigation, result.single().entry.page)
+        assertEquals("Reading and navigation", result.single().path)
+        assertEquals(listOf("Selection toolbar"), titles("highlight", result))
+    }
+
+    @Test
     fun everyRowHasItsOwnKey() {
         val keys = SettingsEntries.all().map { it.key }
         assertEquals(keys.size, keys.toSet().size)

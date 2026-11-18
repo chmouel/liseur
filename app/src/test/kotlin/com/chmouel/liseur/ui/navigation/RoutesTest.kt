@@ -28,7 +28,7 @@ class RoutesTest {
     @Test
     fun nestedSettingsPagesReturnToTheirParentAndSurviveRestore() {
         listOf(
-            Route.ReadingAppearance to Route.SelectionToolbar,
+            Route.ReadingNavigation to Route.SelectionToolbar,
             Route.ReadingNavigation to Route.PageTaps,
         ).forEach { (parent, page) ->
             assertTrue(page.isSettingsPage)
@@ -145,6 +145,8 @@ class RoutesTest {
         val stack = mutableListOf(Route.Library, Route.Settings, Route.SettingsSearch)
         stack.openSettingsResult(Route.PageTaps)
         assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.PageTaps), stack)
+        stack.openSettingsResult(Route.SelectionToolbar)
+        assertEquals(listOf(Route.Library, Route.Settings, Route.ReadingNavigation, Route.SelectionToolbar), stack)
     }
 
     @Test

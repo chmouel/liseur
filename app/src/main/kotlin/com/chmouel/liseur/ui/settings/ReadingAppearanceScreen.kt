@@ -42,11 +42,7 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
-import com.chmouel.liseur.reader.annotations.HighlightPalette
-import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.navigation.Route
-import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
-import com.chmouel.liseur.ui.reading.SelectionToolbarRow
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingBrightnessSlider
@@ -99,10 +95,6 @@ fun ReadingAppearanceScreen(
     onColumnMode: (ColumnMode) -> Unit,
     onFooterMode: (FooterMode) -> Unit,
     onFooterField: (FooterSlot, FooterField) -> Unit,
-    onOpenSelectionToolbar: () -> Unit,
-    highlightPalette: HighlightPalette,
-    onHighlightTintToggled: (HighlightTint) -> Unit,
-    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     fineTypography: FineTypographyActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -173,20 +165,6 @@ fun ReadingAppearanceScreen(
                                 onRemove = fontLibrary.remove,
                             )
                         }
-                        // Kept out of Advanced: the selection bar offers one
-                        // colour by default, and readers missed the others
-                        // when they lived only in the toolbar editor.
-                        Column(
-                            Modifier.settingsAnchor(SettingsEntries.HighlightColours),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            ReadingSectionLabel(stringResource(R.string.reader_highlight_colours_title))
-                            ReadingHighlightPaletteControls(
-                                palette = highlightPalette,
-                                onTintToggled = onHighlightTintToggled,
-                                onDefaultChanged = onHighlightDefaultTintChanged,
-                            )
-                        }
                         Text(
                             text = stringResource(R.string.settings_reading_appearance_detail),
                             style = MaterialTheme.typography.bodyMedium,
@@ -242,9 +220,6 @@ fun ReadingAppearanceScreen(
                                 onModeSelected = onFooterMode,
                                 onFieldSelected = onFooterField,
                             )
-                        }
-                        Column(Modifier.settingsAnchor(SettingsEntries.SelectionToolbar)) {
-                            SelectionToolbarRow(onOpenSelectionToolbar)
                         }
                     }
                 }

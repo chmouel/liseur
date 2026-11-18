@@ -79,6 +79,7 @@ import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
 import com.chmouel.liseur.ui.reading.ReadingPageTurnStyleControl
+import com.chmouel.liseur.ui.reading.SelectionPreview
 import com.chmouel.liseur.ui.settings.search.ExpandForSettingsFocus
 import com.chmouel.liseur.ui.settings.search.SettingsEntries
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
@@ -104,6 +105,7 @@ fun ReadingNavigationScreen(
     vendorName: String?,
     onVolumeKeyMode: (VolumeKeyMode) -> Unit,
     onOpenPageTaps: () -> Unit,
+    onOpenSelectionToolbar: () -> Unit,
     onPinchToResize: (Boolean) -> Unit,
     onEdgeBrightness: (EdgeBrightness) -> Unit,
     onReaderOrientation: (ReaderOrientation) -> Unit,
@@ -167,6 +169,29 @@ fun ReadingNavigationScreen(
                         onCheckedChange = onScrollMode,
                         modifier = Modifier.settingsAnchor(SettingsEntries.ScrollMode),
                     )
+                }
+
+                SettingsGroup(stringResource(R.string.selection_arrange)) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .settingsAnchor(SettingsEntries.SelectionToolbar)
+                            .clickable(role = Role.Button, onClick = onOpenSelectionToolbar),
+                    ) {
+                        SelectionPreview(
+                            entries = settings.selectionActionLayout.shown,
+                            palette = settings.highlightPalette,
+                            modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp),
+                        )
+                        ListItem(
+                            headlineContent = { Text(stringResource(R.string.selection_arrange)) },
+                            supportingContent = { Text(stringResource(R.string.selection_arrange_help)) },
+                            trailingContent = {
+                                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null)
+                            },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+                    }
                 }
 
                 // The e-ink rows are about the panel the book is drawn
