@@ -1289,7 +1289,7 @@
     <string name="read_aloud_settings_server_models_none">服务器没有列出任何模型。请手动输入。</string>
     <string name="read_aloud_settings_server_model_price">每百万字符 $%1$s</string>
     <string name="read_aloud_settings_server_models_failed">服务器没有列出它的模型。</string>
-    <string name="read_aloud_settings_voice_pick_detail">点按某个声音即可选择并试听。</string>
+    <string name="read_aloud_settings_voice_pick_detail">点按某个声音进行选择；使用播放按钮试听。</string>
     <string name="read_aloud_settings_voice_type_detail">输入服务支持的声音名称。</string>
     <string name="read_aloud_settings_voice_other">其他声音</string>
     <string name="read_aloud_settings_voice_stop">停止</string>
@@ -1312,6 +1312,7 @@
     <string name="read_aloud_settings_voices_choose_detail">只有勾选的声音会出现在此页面和播放器中。</string>
     <string name="read_aloud_settings_voices_tick_all">全选</string>
     <string name="read_aloud_settings_voices_untick_all">全不选</string>
+    <string name="read_aloud_settings_voices_tick_one">请至少勾选一个声音。</string>
     <string name="read_aloud_settings_voice_hear_named">试听 %1$s</string>
     <string name="read_aloud_settings_test">测试连接</string>
     <string name="read_aloud_settings_test_running">正在测试…</string>

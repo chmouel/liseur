@@ -60,4 +60,12 @@ class VoiceLabelTest {
         val listed = listOf("af_bella", "af_sky")
         assertEquals(listed, VoiceLabel.offered(listed, setOf("gone"), "af_bella"))
     }
+
+    @Test
+    fun `saving all ticked voices stores empty set and unticking all refuses to save`() {
+        val listed = listOf("af_bella", "af_sky", "bm_george")
+        assertNull(VoiceLabel.chosenToSave(listed, emptySet()))
+        assertEquals(emptySet<String>(), VoiceLabel.chosenToSave(listed, listed.toSet()))
+        assertEquals(setOf("af_bella", "bm_george"), VoiceLabel.chosenToSave(listed, setOf("af_bella", "bm_george")))
+    }
 }

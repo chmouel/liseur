@@ -1363,7 +1363,7 @@
     <string name="read_aloud_settings_server_models_none">Der Server listet keine Modelle auf. Gib einen Namen ein.</string>
     <string name="read_aloud_settings_server_model_price">%1$s $ pro Million Zeichen</string>
     <string name="read_aloud_settings_server_models_failed">Der Server hat seine Modelle nicht aufgelistet.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Tippe auf eine Stimme, um sie auszuwählen und anzuhören.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Tippe auf eine Stimme, um sie auszuwählen; mit der Wiedergabetaste hörst du eine Hörprobe.</string>
     <string name="read_aloud_settings_voice_type_detail">Gib den Namen einer Stimme ein, die der Dienst kennt.</string>
     <string name="read_aloud_settings_voice_other">Andere Stimme</string>
     <string name="read_aloud_settings_voice_stop">Stopp</string>
@@ -1386,6 +1386,7 @@
     <string name="read_aloud_settings_voices_choose_detail">Nur die angehakten Stimmen werden hier und im Player angeboten.</string>
     <string name="read_aloud_settings_voices_tick_all">Alle anhaken</string>
     <string name="read_aloud_settings_voices_untick_all">Alle abwählen</string>
+    <string name="read_aloud_settings_voices_tick_one">Hake mindestens eine Stimme an.</string>
     <string name="read_aloud_settings_voice_hear_named">%1$s anhören</string>
     <string name="read_aloud_settings_test">Verbindung testen</string>
     <string name="read_aloud_settings_test_running">Wird getestet…</string>

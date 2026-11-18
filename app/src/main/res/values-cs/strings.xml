@@ -1514,7 +1514,7 @@
     <string name="read_aloud_settings_server_models_none">Server neuvádí žádné modely. Zadej název ručně.</string>
     <string name="read_aloud_settings_server_model_price">%1$s USD za milion znaků</string>
     <string name="read_aloud_settings_server_models_failed">Server neposkytl seznam modelů.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Klepnutím vybereš hlas a poslechneš si ukázku.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Klepnutím vybereš hlas; tlačítkem přehrávání si poslechneš ukázku.</string>
     <string name="read_aloud_settings_voice_type_detail">Zadej název hlasu, který služba zná.</string>
     <string name="read_aloud_settings_voice_other">Jiný hlas</string>
     <string name="read_aloud_settings_voice_stop">Zastavit</string>
@@ -1537,6 +1537,7 @@
     <string name="read_aloud_settings_voices_choose_detail">Jen zaškrtnuté hlasy budou nabízeny na této obrazovce a v přehrávači.</string>
     <string name="read_aloud_settings_voices_tick_all">Zaškrtnout vše</string>
     <string name="read_aloud_settings_voices_untick_all">Odškrtnout vše</string>
+    <string name="read_aloud_settings_voices_tick_one">Zaškrtni alespoň jeden hlas.</string>
     <string name="read_aloud_settings_voice_hear_named">Poslechnout hlas %1$s</string>
     <string name="read_aloud_settings_test">Otestovat připojení</string>
     <string name="read_aloud_settings_test_running">Testování…</string>

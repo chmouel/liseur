@@ -1477,7 +1477,7 @@
     <string name="read_aloud_settings_server_models_none">Сервер не перечисляет модели. Введите название сами.</string>
     <string name="read_aloud_settings_server_model_price">%1$s $ за миллион символов</string>
     <string name="read_aloud_settings_server_models_failed">Сервер не прислал список моделей.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Нажмите на голос, чтобы выбрать и прослушать его.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Нажмите на голос, чтобы выбрать его; кнопка воспроизведения включает образец.</string>
     <string name="read_aloud_settings_voice_type_detail">Введите название голоса, известного сервису.</string>
     <string name="read_aloud_settings_voice_other">Другой голос</string>
     <string name="read_aloud_settings_voice_stop">Остановить</string>
@@ -1500,6 +1500,7 @@
     <string name="read_aloud_settings_voices_choose_detail">На этом экране и в плеере предлагаются только отмеченные голоса.</string>
     <string name="read_aloud_settings_voices_tick_all">Отметить все</string>
     <string name="read_aloud_settings_voices_untick_all">Снять все</string>
+    <string name="read_aloud_settings_voices_tick_one">Отметьте хотя бы один голос.</string>
     <string name="read_aloud_settings_voice_hear_named">Прослушать: %1$s</string>
     <string name="read_aloud_settings_test">Проверить подключение</string>
     <string name="read_aloud_settings_test_running">Проверка…</string>

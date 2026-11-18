@@ -6,20 +6,13 @@ import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -241,28 +234,23 @@ private fun DeviceRows(feature: SpeechReadAloud, service: DeviceSpeechService) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 val selected = DeviceVoices.pick(l.voices, stored, default, locale)?.id
-                DeviceVoices.grouped(l.voices, locale).forEach { (language, voices) ->
-                    LanguageHeader(language, locale)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.selectableGroup()) {
+                    DeviceVoices.grouped(l.voices, locale).forEach { (language, voices) ->
+                        LanguageHeader(language, locale)
                         voices.forEach { voice ->
-                            val speaking = preview.playing == voice.id
-                            FilterChip(
+                            val label = deviceVoiceLabel(voice)
+                            VoiceChoiceRow(
+                                label = label,
+                                previewName = label,
                                 selected = voice.id == selected,
-                                onClick = {
-                                    if (speaking) {
+                                speaking = preview.playing == voice.id,
+                                onSelect = { scope.launch { service.setVoice(voice.id) } },
+                                onPreview = {
+                                    if (preview.playing == voice.id) {
                                         preview.stop()
                                     } else {
-                                        scope.launch { service.setVoice(voice.id) }
                                         preview.play(sample(language), voice.id)
                                     }
-                                },
-                                label = { Text(deviceVoiceLabel(voice)) },
-                                leadingIcon = {
-                                    Icon(
-                                        if (speaking) Icons.Filled.Stop else Icons.Filled.PlayArrow,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(FilterChipDefaults.IconSize),
-                                    )
                                 },
                             )
                         }
