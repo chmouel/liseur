@@ -37,8 +37,7 @@ import com.chmouel.liseur.reader.annotations.HighlightTint
  * Shown at the end of the selection toolbar editor
  * (`ReadingSelectionActions`), which supplies its section header, so the
  * colours are set where the rest of the same bar is. That editor is reached
- * from the reader's Advanced sheet and from Settings → Reading appearance →
- * Advanced. Settings → Reading appearance also shows it in its main card.
+ * from the reader's Advanced sheet and from Settings → Reading & navigation.
  *
  * All six are always on screen, ticked or not, because a set is a
  * clearer thing to be shown than a count: the row is the bar, at the

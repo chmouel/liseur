@@ -162,8 +162,7 @@ fun MutableList<Route>.openDetail(route: Route) {
 /** The Settings page a nested page is opened from, so Back walks out through it. */
 val Route.settingsParent: Route?
     get() = when (this) {
-        Route.PageTaps -> Route.ReadingNavigation
-        Route.SelectionToolbar -> Route.ReadingAppearance
+        Route.PageTaps, Route.SelectionToolbar -> Route.ReadingNavigation
         else -> null
     }
 

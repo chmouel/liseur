@@ -228,7 +228,7 @@ fun ReadingSelectionActions(
  * [SelectionPopup] lays out the real one.
  */
 @Composable
-private fun SelectionPreview(entries: List<SelectionActionEntry>, palette: HighlightPalette, modifier: Modifier = Modifier) {
+fun SelectionPreview(entries: List<SelectionActionEntry>, palette: HighlightPalette, modifier: Modifier = Modifier) {
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = modifier.fillMaxWidth()) {
         Column(
             Modifier.padding(horizontal = 16.dp, vertical = 18.dp),

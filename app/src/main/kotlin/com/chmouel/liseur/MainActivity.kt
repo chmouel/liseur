@@ -746,6 +746,7 @@ private fun LiseurApp(
                             vendorName = context.container.eInkDisplay.vendor,
                             onVolumeKeyMode = { scope.launch { repository.setVolumeKeyMode(it) } },
                             onOpenPageTaps = { backStack.push(Route.PageTaps) },
+                            onOpenSelectionToolbar = { backStack.push(Route.SelectionToolbar) },
                             onPinchToResize = { scope.launch { repository.setPinchToResize(it) } },
                             onEdgeBrightness = { scope.launch { repository.setEdgeBrightness(it) } },
                             onReaderOrientation = { scope.launch { repository.setReaderOrientation(it) } },
@@ -790,12 +791,6 @@ private fun LiseurApp(
                             onFooterMode = { scope.launch { readerPreferences.setFooterMode(it) } },
                             onFooterField = { slot, field ->
                                 scope.launch { readerPreferences.setFooterField(slot, field) }
-                            },
-                            onOpenSelectionToolbar = { backStack.push(Route.SelectionToolbar) },
-                            highlightPalette = settings.highlightPalette,
-                            onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
-                            onHighlightDefaultTintChanged = {
-                                scope.launch { repository.setHighlightDefaultTint(it) }
                             },
                             fineTypography = FineTypographyActions(
                                 onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },

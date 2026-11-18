@@ -118,7 +118,6 @@ object SettingsEntries {
     val FontSize = entry("font_size", Route.ReadingAppearance, R.string.reader_size)
     val Brightness = entry("brightness", Route.ReadingAppearance, R.string.reader_brightness)
     val Font = entry("font", Route.ReadingAppearance, R.string.reader_font)
-    val HighlightColours = entry("highlight_colours", Route.ReadingAppearance, R.string.reader_highlight_colours_title)
     val LineSpacing = advanced("line_spacing", Route.ReadingAppearance, R.string.reader_line_spacing)
     val Margins = advanced("margins", Route.ReadingAppearance, R.string.reader_margins)
     val Columns = advanced("columns", Route.ReadingAppearance, R.string.reader_columns, shown = { it.columnsAvailable })
@@ -129,7 +128,6 @@ object SettingsEntries {
     val WordSpacing = advanced("word_spacing", Route.ReadingAppearance, R.string.reader_word_spacing)
     val ParagraphSpacing = advanced("paragraph_spacing", Route.ReadingAppearance, R.string.reader_paragraph_spacing)
     val Footer = advanced("footer", Route.ReadingAppearance, R.string.reader_progress)
-    val SelectionToolbar = advanced("selection_toolbar", Route.ReadingAppearance, R.string.selection_arrange)
 
     // Reading navigation
     val Resume = entry(
@@ -139,6 +137,9 @@ object SettingsEntries {
     val ScrollMode = entry(
         "scroll_mode", Route.ReadingNavigation, R.string.settings_scroll_mode, R.string.settings_scroll_mode_detail,
         R.string.settings_reading,
+    )
+    val SelectionToolbar = entry(
+        "selection_toolbar", Route.ReadingNavigation, R.string.selection_arrange, R.string.reader_highlight_colours_title,
     )
     val EInk = entry(
         "eink", Route.ReadingNavigation, R.string.settings_eink, R.string.settings_eink_detail, R.string.settings_screen,
