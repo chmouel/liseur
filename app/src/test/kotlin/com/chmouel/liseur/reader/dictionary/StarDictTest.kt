@@ -83,6 +83,17 @@ class StarDictTest {
     }
 
     @Test
+    fun `bounds decompression of ignored zip entries`() {
+        val oversizedIgnoredFile = ByteArray(65 * 1024 * 1024)
+        assertThrows(IOException::class.java) {
+            StarDict.unpack(
+                archive(extraZipEntries = mapOf("README.txt" to oversizedIgnoredFile)).inputStream(),
+                temporaryFolder.newFolder(),
+            )
+        }
+    }
+
+    @Test
     fun `rejects synonym indexes that point outside the headword table`() {
         assertThrows(IOException::class.java) {
             StarDict.unpack(

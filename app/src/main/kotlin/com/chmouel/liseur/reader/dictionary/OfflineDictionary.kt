@@ -168,12 +168,14 @@ internal object OfflineDictionary {
     fun setEnabled(context: Context, id: String, enabled: Boolean) {
         val app = context.applicationContext
         ensureLoaded(app)
-        synchronized(lock) {
-            val updated = _state.value.packs.map { pack ->
-                if (pack.id == id) pack.copy(enabled = enabled) else pack
-            }
-            if (savePacks(app, updated)) {
-                _state.value = _state.value.copy(packs = updated)
+        scope.launch {
+            synchronized(lock) {
+                val updated = _state.value.packs.map { pack ->
+                    if (pack.id == id) pack.copy(enabled = enabled) else pack
+                }
+                if (savePacks(app, updated)) {
+                    _state.value = _state.value.copy(packs = updated)
+                }
             }
         }
     }
@@ -313,20 +315,32 @@ internal object OfflineDictionary {
 
     suspend fun lookup(context: Context, id: String, word: String): List<StarDictEntry> = withContext(Dispatchers.IO) {
         val app = context.applicationContext
-        val cachedDict = synchronized(lock) { cached[id] }
-        val dict = cachedDict ?: run {
-            val dir = directory(app, id)
-            if (!dir.isDirectory) throw IOException("Dictionary missing on disk")
-            // Validating a big index is slow, so it happens outside the lock the UI reads state under.
-            val opened = StarDict(dir)
-            synchronized(lock) {
-                if (_state.value.packs.none { it.id == id }) throw IOException("Dictionary was removed")
-                cached.clear()
-                cached[id] = opened
+        val candidates = synchronized(lock) {
+            val selected = _state.value.packs.firstOrNull { it.id == id && it.enabled }
+                ?: throw IOException("Dictionary missing or disabled")
+            _state.value.packs.filter { pack ->
+                pack.enabled && (pack.id == id ||
+                    if (selected.language.isBlank()) pack.language.isBlank()
+                    else samePrimary(pack.language, selected.language))
             }
-            opened
         }
-        dict.lookup(word)
+        for (pack in candidates) {
+            val dict = synchronized(lock) { cached[pack.id] } ?: run {
+                val dir = directory(app, pack.id)
+                if (!dir.isDirectory) continue
+                // Validating a big index is slow, so it happens outside the lock the UI reads state under.
+                val opened = StarDict(dir)
+                synchronized(lock) {
+                    if (_state.value.packs.none { it.id == pack.id && it.enabled }) continue
+                    cached.clear()
+                    cached[pack.id] = opened
+                }
+                opened
+            }
+            val entries = dict.lookup(word)
+            if (entries.isNotEmpty()) return@withContext entries
+        }
+        emptyList()
     }
 
     private fun isBusy(): Boolean {
