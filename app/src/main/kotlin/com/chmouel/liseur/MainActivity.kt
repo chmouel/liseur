@@ -1092,13 +1092,21 @@ private fun LibraryRoute(
     // gesture, and neither of those is a moment to open a book.
     LaunchedEffect(viewModel, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            viewModel.openRequests.collect { book ->
+            viewModel.openRequests.collect { request ->
                 viewModel.forgetPendingOpen()
                 if (LaunchRequests.shared.latestId != navigationGeneration) return@collect
                 // A reader opened from a widget while the library waited covers it; don't open over it.
                 if (LaunchRequests.shared.readerStarts != readerStartsSeen) return@collect
+                val book = request.book
                 book.openableUri()?.let {
-                    context.startActivity(ReaderActivity.intent(context, it, book.url))
+                    context.startActivity(
+                        ReaderActivity.intent(
+                            context,
+                            it,
+                            book.url,
+                            resumeListening = request.resumeListening,
+                        ),
+                    )
                 }
             }
         }
@@ -1352,6 +1360,13 @@ private fun LibraryRoute(
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
             }
         },
+        onResumeListening = { book ->
+            book.openableUri()?.let {
+                context.startActivity(
+                    ReaderActivity.intent(context, it, book.url, resumeListening = true),
+                )
+            }
+        },
         onOpenSettings = onOpenSettings,
         onOpenStats = onOpenStats,
         onOpenBookStats = onOpenBookStats,
@@ -1383,7 +1398,7 @@ private fun LibraryRoute(
         onSyncNow = onSyncNow,
         onSetSort = viewModel::setSort,
         onToggleSortDirection = viewModel::toggleSortDirection,
-        onDownloadAndOpen = viewModel::downloadAndOpen,
+        onDownloadAndOpen = { book, resumeListening -> viewModel.downloadAndOpen(book, resumeListening) },
         failedOpens = viewModel.failedOpens,
         sentUp = viewModel.sentUp,
         uploadRefusals = viewModel.uploadRefusals,

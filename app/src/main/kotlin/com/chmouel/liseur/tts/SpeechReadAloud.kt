@@ -24,6 +24,7 @@ import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudProblem
 import com.chmouel.liseur.readaloud.ReadAloudProblems
 import com.chmouel.liseur.readaloud.ReadAloudUi
+import com.chmouel.liseur.readaloud.resumesPausedSession
 import com.chmouel.liseur.reader.OpenBookHandle
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -269,9 +270,21 @@ internal class SpeechReadAloud(
     override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) =
         start(handle, selection, reader, translation, restoring = null)
 
-    override fun restorePaused(handle: OpenBookHandle, record: PausedReadAloud, selection: Locator, reader: Intent) {
+    override fun restorePaused(
+        handle: OpenBookHandle,
+        record: PausedReadAloud,
+        selection: Locator,
+        reader: Intent,
+        resumeAfterRestore: Boolean,
+    ) {
         if (mutableCurrent.value != null || startingJob?.isActive == true) return
-        start(handle, selection, reader, translation = null, restoring = record)
+        start(handle, selection, reader, translation = null, restoring = record, resumeAfterRestore = resumeAfterRestore)
+    }
+
+    override fun resumeIfPaused(bookId: String): Boolean {
+        if (!resumesPausedSession(session.value, bookId)) return false
+        resume()
+        return true
     }
 
     private fun start(
@@ -280,6 +293,7 @@ internal class SpeechReadAloud(
         reader: Intent,
         translation: SpeechTranslation?,
         restoring: PausedReadAloud?,
+        resumeAfterRestore: Boolean = false,
     ) {
         val again = if (restoring == null) carried?.takeIf { it.bookId == handle.bookId }.also { carried = null } else null
         stop()
@@ -368,7 +382,12 @@ internal class SpeechReadAloud(
                 }
                 // A sleep timer that ran out while the settings were open leaves it paused.
                 val slept = (again?.timer as? SleepTimer.Timed)?.let { it.endsAt <= SystemClock.elapsedRealtime() } == true
-                session.start(selection, play = restoring == null && (again?.play ?: true) && !slept, restoring = restoring != null)
+                session.start(
+                    selection,
+                    play = restoring == null && (again?.play ?: true) && !slept,
+                    restoring = restoring != null,
+                    resumeAfterRestore = resumeAfterRestore,
+                )
             } catch (e: CancellationException) {
                 throw e
             } finally {

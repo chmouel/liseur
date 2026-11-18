@@ -29,6 +29,14 @@ data class ReadAloudUi(
     val chapters: Boolean = false,
 )
 
+/**
+ * Whether Continue listening can play [bookId] on: the session in progress
+ * must be that book's, and the listener must have paused it, so one still
+ * landing, waiting for a voice or playing is left alone.
+ */
+internal fun resumesPausedSession(session: ReadAloudUi?, bookId: String): Boolean =
+    session?.bookId == bookId && !session.playing && !session.preparing
+
 /** Something the reader should tell the listener about, once. */
 enum class ReadAloudNotice {
     /** The speech service could not be reached; paused on the sentence that failed. */
@@ -109,9 +117,24 @@ interface ReadAloudFeature {
      * Puts back, paused at [selection], the session [record] kept when the
      * app closed, while nothing else is being read. It saves nothing until
      * the listener plays, and gives up quietly unless it lands on the very
-     * sentence heard.
+     * sentence heard. With [resumeAfterRestore], it plays on once it has
+     * landed there, and only then.
      */
-    fun restorePaused(handle: OpenBookHandle, record: PausedReadAloud, selection: Locator, reader: Intent) = Unit
+    fun restorePaused(
+        handle: OpenBookHandle,
+        record: PausedReadAloud,
+        selection: Locator,
+        reader: Intent,
+        resumeAfterRestore: Boolean = false,
+    ) = Unit
+
+    /**
+     * Plays on the session in progress when it is [bookId]'s and paused,
+     * as the shelf's Continue listening asks once the book is open, and
+     * says whether it did. Another book's session, or one already playing,
+     * is left alone; nothing is put back.
+     */
+    fun resumeIfPaused(bookId: String): Boolean = false
 
     /**
      * The translation [bookId] is being read aloud in, for a translated

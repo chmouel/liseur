@@ -111,6 +111,7 @@
     <string name="series_source_personal">Tvoje vlastní zařazení do série</string>
     <string name="clear">Vymazat</string>
     <string name="continue_reading">Pokračovat ve čtení</string>
+    <string name="continue_listening">Pokračovat v poslechu · %1$s</string>
     <string name="empty_library_title">Tvoje knihovna je prázdná</string>
     <string name="empty_library_subtitle">Tady je několik způsobů, jak ji naplnit.</string>
     <string name="starter_catalog">Začít s knihami zdarma</string>

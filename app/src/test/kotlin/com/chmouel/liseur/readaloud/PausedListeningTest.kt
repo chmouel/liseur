@@ -1,5 +1,8 @@
 package com.chmouel.liseur.readaloud
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -8,10 +11,13 @@ import org.junit.Test
 class PausedListeningTest {
     private var stored: PausedReadAloud? = null
     private val places = mutableMapOf<String, SavedPlace>()
+    private val written = MutableStateFlow<PausedReadAloud?>(null)
     private val store = object : PausedReadAloudStore {
+        override val record: Flow<PausedReadAloud?> = written
         override suspend fun read() = stored
         override suspend fun write(record: PausedReadAloud?) {
             stored = record
+            written.value = record
         }
     }
     private val listening = PausedListening(
@@ -69,5 +75,14 @@ class PausedListeningTest {
         pauseAt(3, "page")
         val closed = PausedListening(store, queue = { false }, saved = { places[it] })
         assertNull(closed.toRestore("book"))
+    }
+
+    @Test
+    fun `the paused book is offered as it is written`() = runBlocking {
+        assertNull(listening.record.first())
+        pauseAt(3, "page")
+        assertEquals("book", listening.record.first()?.bookId)
+        listening.forget()
+        assertNull(listening.record.first())
     }
 }

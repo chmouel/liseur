@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 /**
  * A book left paused while read aloud, kept on this device only, so that
@@ -31,6 +33,9 @@ data class PausedReadAloud(
 data class SavedPlace(val revision: Long, val locatorJson: String)
 
 interface PausedReadAloudStore {
+    /** The paused book as it is kept now, emitted again on every write. */
+    val record: Flow<PausedReadAloud?>
+
     suspend fun read(): PausedReadAloud?
     suspend fun write(record: PausedReadAloud?)
 }
@@ -50,6 +55,13 @@ class PausedListening(
     private val queue: (suspend () -> Unit) -> Boolean,
     private val saved: suspend (String) -> SavedPlace?,
 ) {
+    /**
+     * The book kept paused, as it was last written, for a shelf to offer to
+     * carry on with it. Not checked against the book's place, which
+     * [toRestore] does for the reader.
+     */
+    val record: Flow<PausedReadAloud?> get() = store.record
+
     /** [bookId] paused at [heard], whose place was just queued. */
     fun paused(bookId: String, heardJson: String, voice: String, language: String) {
         inOrder {
@@ -132,17 +144,18 @@ class DataStorePausedReadAloudStore(private val context: Context) : PausedReadAl
         val POSITION = stringPreferencesKey("position")
     }
 
-    override suspend fun read(): PausedReadAloud? {
-        val p = context.pausedReadAloudStore.data.first()
-        return PausedReadAloud(
-            bookId = p[Keys.BOOK] ?: return null,
-            heardJson = p[Keys.HEARD] ?: return null,
-            voice = p[Keys.VOICE] ?: return null,
-            language = p[Keys.LANGUAGE] ?: return null,
-            revision = p[Keys.REVISION] ?: return null,
-            positionJson = p[Keys.POSITION] ?: return null,
+    override val record: Flow<PausedReadAloud?> = context.pausedReadAloudStore.data.map { p ->
+        PausedReadAloud(
+            bookId = p[Keys.BOOK] ?: return@map null,
+            heardJson = p[Keys.HEARD] ?: return@map null,
+            voice = p[Keys.VOICE] ?: return@map null,
+            language = p[Keys.LANGUAGE] ?: return@map null,
+            revision = p[Keys.REVISION] ?: return@map null,
+            positionJson = p[Keys.POSITION] ?: return@map null,
         )
     }
+
+    override suspend fun read(): PausedReadAloud? = record.first()
 
     override suspend fun write(record: PausedReadAloud?) {
         context.pausedReadAloudStore.edit { p ->

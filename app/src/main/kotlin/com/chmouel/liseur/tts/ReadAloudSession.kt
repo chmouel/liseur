@@ -42,6 +42,31 @@ import org.readium.r2.shared.util.tokenizer.TextUnit
 internal class SessionVoice(val name: String, val maxConcurrent: Int, val configurationIdentity: String = name, val synthesizer: SpeechSynthesizer)
 
 /**
+ * A pause being put back that should play on once it has landed: the start
+ * that puts it back asks for it, and only a landing on the very sentence
+ * resumes. Anything the listener does first, a pause or a stop, takes it
+ * back, so their wish wins over the put-back.
+ */
+internal class ResumeWhenLanded {
+    private var wanted = false
+
+    fun want() {
+        wanted = true
+    }
+
+    fun drop() {
+        wanted = false
+    }
+
+    /** Whether to resume after [landing], which also ends the wish. */
+    fun take(landing: ReadAloudPlayback.Landing): Boolean {
+        val resume = wanted && landing == ReadAloudPlayback.Landing.Sentence
+        wanted = false
+        return resume
+    }
+}
+
+/**
  * One book being read aloud: the voice, the sentences fetched ahead of
  * it, and the hold on the open book that keeps the book open after the
  * reader has gone.
@@ -205,6 +230,9 @@ internal class ReadAloudSession(
     private var checkpointJob: Job? = null
     private var ended = false
 
+    /** Whether the pause being put back plays on once it lands. */
+    private val resumeWhenLanded = ResumeWhenLanded()
+
     /** Where reading resumes once the session has ended, null while it runs. */
     var endedAt: Locator? = null
         private set
@@ -290,10 +318,17 @@ internal class ReadAloudSession(
     /**
      * Plays from the sentence [selection] starts in, or waits there paused
      * without [play], taking the place only once it plays. [restoring] a
-     * pause from before the app closed gives up unless it lands on the
-     * very sentence.
+     * pause from before the app closed gives up unless it lands on the very
+     * sentence. [resumeAfterRestore] plays that pause on once it has landed
+     * on it, unless the listener has paused or stopped it by then.
      */
-    fun start(selection: Locator, play: Boolean = true, restoring: Boolean = false) {
+    fun start(
+        selection: Locator,
+        play: Boolean = true,
+        restoring: Boolean = false,
+        resumeAfterRestore: Boolean = false,
+    ) {
+        if (resumeAfterRestore) resumeWhenLanded.want() else resumeWhenLanded.drop()
         startedFrom = selection
         beginMove()
         if (play) claim()
@@ -302,8 +337,9 @@ internal class ReadAloudSession(
             val target = SelectionTarget.of(selection, sentences)
             val landing = playback.start(selection, target?.let { it::matchesClosely }, looser = target?.let { it::matches }, play = play)
             mutableStarting.value = false
+            val resume = resumeWhenLanded.take(landing)
             when (landing) {
-                ReadAloudPlayback.Landing.Sentence -> Unit
+                ReadAloudPlayback.Landing.Sentence -> if (resume) resume()
                 ReadAloudPlayback.Landing.ElementStart -> if (restoring) stop() else onNotice(ReadAloudNotice.SelectionNotFound)
                 // A pause put back that cannot play now is still there for the next opening.
                 ReadAloudPlayback.Landing.Failed -> if (restoring) {
@@ -318,12 +354,14 @@ internal class ReadAloudSession(
 
     /** Pauses; the place heard is queued and handed back before this returns. */
     fun pause() {
+        resumeWhenLanded.drop()
         playback.pause()
         settle()
     }
 
     fun resume() {
         if (ended) return
+        resumeWhenLanded.drop()
         beginMove()
         claim()
         scope.launch {
@@ -440,6 +478,7 @@ internal class ReadAloudSession(
     private fun end() {
         if (ended) return
         ended = true
+        resumeWhenLanded.drop()
         endedAt = place() ?: startedFrom
         settle()
         checkpointJob?.cancel()

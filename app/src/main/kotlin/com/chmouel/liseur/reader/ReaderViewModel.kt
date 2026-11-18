@@ -192,6 +192,8 @@ class ReaderViewModel(
     val usageReporting: com.chmouel.liseur.insights.UsageReporting? = null,
     val readAloud: ReadAloudFeature = ReadAloudFeature.None,
     private val pausedListening: PausedListening? = null,
+    /** The shelf's Continue listening asked this opening to play the book's paused listening. */
+    resumeListeningRequested: Boolean = false,
 ) : ViewModel() {
 
     /**
@@ -1768,13 +1770,34 @@ class ReaderViewModel(
 
     private var pausedRestoreTried = false
 
+    private var resumeListening = resumeListeningRequested
+
+    /**
+     * The shelf's Continue listening asked for this opening, taken once so
+     * a later landing or a recreated reader does not play again.
+     */
+    private fun takeResumeListening(): Boolean = resumeListening.also { resumeListening = false }
+
+    /**
+     * Carries on the book's paused listening once the page has landed, as
+     * the shelf's Continue listening asks: the session still paused in this
+     * book plays on, and otherwise the pause kept for it comes back to
+     * play. Opening the book any other way leaves the pause paused.
+     */
+    suspend fun continueListening(reader: Intent) {
+        val resume = takeResumeListening()
+        if (resume && readAloud.resumeIfPaused(bookId)) return
+        restorePausedReadAloud(reader, resumeAfterRestore = resume)
+    }
+
     /**
      * Puts back the read-aloud session this book was paused in when the
      * app closed, paused on the sentence last heard, provided the book's
-     * saved place is still the one that pause left. Tried once per
-     * opening, after the page has landed.
+     * saved place is still the one that pause left, and plays it on when
+     * the listener asked to carry on listening. Tried once per opening,
+     * after the page has landed.
      */
-    suspend fun restorePausedReadAloud(reader: Intent) {
+    suspend fun restorePausedReadAloud(reader: Intent, resumeAfterRestore: Boolean = false) {
         if (pausedRestoreTried) return
         pausedRestoreTried = true
         val paused = pausedListening ?: return
@@ -1788,7 +1811,7 @@ class ReaderViewModel(
             return
         }
         if (readAloud.session.value != null || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) return
-        readAloud.restorePaused(handle, record, heard, reader)
+        readAloud.restorePaused(handle, record, heard, reader, resumeAfterRestore)
     }
 
     /** The reader saved [locator] as the page showing the sentence heard. */
@@ -3261,7 +3284,12 @@ class ReaderViewModel(
          */
         private const val MAX_SEARCH_HITS = 500
 
-        fun factory(bookUrl: AbsoluteUrl, bookId: String, openAt: String? = null): ViewModelProvider.Factory = viewModelFactory {
+        fun factory(
+            bookUrl: AbsoluteUrl,
+            bookId: String,
+            openAt: String? = null,
+            resumeListening: Boolean = false,
+        ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = checkNotNull(this[APPLICATION_KEY])
                 val container = application.container
@@ -3297,6 +3325,7 @@ class ReaderViewModel(
                     usageReporting = container.usageReporting,
                     readAloud = container.readAloud,
                     pausedListening = container.pausedListening,
+                    resumeListeningRequested = resumeListening,
                 )
             }
         }

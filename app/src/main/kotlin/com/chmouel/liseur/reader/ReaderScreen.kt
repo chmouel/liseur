@@ -2607,14 +2607,15 @@ internal fun ReaderScreen(
         }
     }
 
-    // Closed while paused reading aloud: the paused player comes back once the page has landed.
+    // Closed while paused reading aloud, or opened from the shelf to carry on
+    // listening: what is left of that listening comes back once the page has landed.
     LaunchedEffect(navigator, readAloudConfigured) {
         navigator ?: return@LaunchedEffect
         val reading = readAloud ?: return@LaunchedEffect
         if (!readAloudFeature.isAvailable || !readAloudConfigured) return@LaunchedEffect
         while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
         if (pageTranslated) return@LaunchedEffect
-        reading.restorePaused()
+        reading.continueListening()
     }
 
     // The book's words go back on the page in the effect below.

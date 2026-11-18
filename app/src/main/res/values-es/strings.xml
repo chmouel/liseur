@@ -103,6 +103,7 @@
     <string name="series_source_personal">Tu asignación personal a una serie</string>
     <string name="clear">Borrar</string>
     <string name="continue_reading">Seguir leyendo</string>
+    <string name="continue_listening">Seguir escuchando · %1$s</string>
     <string name="empty_library_title">Tu biblioteca está vacía</string>
     <string name="empty_library_subtitle">Así es como la rellenas.</string>
     <string name="starter_catalog">Empieza con libros gratis</string>

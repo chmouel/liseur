@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -18,6 +19,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -195,5 +201,23 @@ internal fun SectionHeader(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * Scrolls to the top when a row appears above a list at rest there, because
+ * the list keeps its first item anchored and leaves the new row off-screen.
+ * A remembered or scrolled position stays where it was: this only acts on a
+ * first appearance, and only from the top.
+ */
+@Composable
+internal fun RevealInsertedRow(listState: LazyListState, present: Boolean) {
+    var wasPresent by remember { mutableStateOf(present) }
+    LaunchedEffect(present) {
+        val appeared = present && !wasPresent
+        wasPresent = present
+        if (!appeared) return@LaunchedEffect
+        val atTop = listState.firstVisibleItemScrollOffset == 0 && listState.firstVisibleItemIndex <= 1
+        if (atTop) listState.scrollToItem(0)
     }
 }

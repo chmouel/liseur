@@ -108,6 +108,7 @@
     <string name="series_source_personal">Your personal series claim</string>
     <string name="clear">Clear</string>
     <string name="continue_reading">Continue reading</string>
+    <string name="continue_listening">Continue listening · %1$s</string>
     <string name="empty_library_title">Your library is empty</string>
     <string name="empty_library_subtitle">Here is how to fill it.</string>
     <string name="starter_catalog">Start with free books</string>
