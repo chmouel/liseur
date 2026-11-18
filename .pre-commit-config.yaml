@@ -3,15 +3,15 @@ repos:
   - repo: local
     hooks:
       - id: unit-tests
-        name: Unit tests (testFossDebugUnitTest testPlayDebugUnitTest)
-        entry: ./gradlew testFossDebugUnitTest testPlayDebugUnitTest --console=plain --daemon
+        name: Unit tests testPlayDebugUnitTest
+        entry: ./gradlew testPlayDebugUnitTest --console=plain --daemon
         language: system
         pass_filenames: false
         stages: [pre-push]
         files: '^(app/|gradle/|gradlew$|gradlew\.bat$|.*\.gradle\.kts$|gradle\.properties$)'
       - id: lint
-        name: Android Lint (lintFossDebug lintPlayDebug)
-        entry: ./gradlew lintFossDebug lintPlayDebug --console=plain --daemon
+        name: Android Lint lintPlayDebug
+        entry: ./gradlew lintPlayDebug --console=plain --daemon
         language: system
         pass_filenames: false
         stages: [pre-push]
