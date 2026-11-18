@@ -1161,6 +1161,20 @@
         <item quantity="other">Leer %d horas</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">Objetivo de lectura semanal</string>
+    <string name="reading_stats_weekly_goal_reached">Objetivo cumplido</string>
+    <string name="reading_stats_longest_session">Sesión más larga</string>
+    <string name="reading_stats_peak_day">Día más activo</string>
+    <string name="reading_stats_consistency_title">Constancia de lectura</string>
+    <plurals name="reading_stats_consistency_active_week">
+        <item quantity="one">%1$d de %2$d día activo esta semana</item>
+        <item quantity="other">%1$d de %2$d días activos esta semana</item>
+    </plurals>
+    <plurals name="reading_stats_consistency_active_period">
+        <item quantity="one">%1$d de %2$d día activo en el periodo</item>
+        <item quantity="other">%1$d de %2$d días activos en el periodo</item>
+    </plurals>
+    <string name="reading_stats_consistency_keep_going">¡Sigue así!</string>
+    <string name="reading_stats_consistency_last_4_weeks">Últimas 4 sem.</string>
     <string name="reading_stats_avg_sitting">Sesión media</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>

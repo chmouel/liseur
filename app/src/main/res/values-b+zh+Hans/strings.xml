@@ -1131,6 +1131,18 @@
         <item quantity="other">阅读 %d 小时</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">每周阅读目标</string>
+    <string name="reading_stats_weekly_goal_reached">已达标</string>
+    <string name="reading_stats_longest_session">最长单次</string>
+    <string name="reading_stats_peak_day">最高单日</string>
+    <string name="reading_stats_consistency_title">阅读规律</string>
+    <plurals name="reading_stats_consistency_active_week">
+        <item quantity="other">本周活跃 %1$d / %2$d 天</item>
+    </plurals>
+    <plurals name="reading_stats_consistency_active_period">
+        <item quantity="other">本期活跃 %1$d / %2$d 天</item>
+    </plurals>
+    <string name="reading_stats_consistency_keep_going">继续保持！</string>
+    <string name="reading_stats_consistency_last_4_weeks">近 4 周</string>
     <string name="reading_stats_avg_sitting">平均每次</string>
     <string name="duration_minutes">%1$d 分钟</string>
     <string name="duration_hours">%1$d 小时</string>

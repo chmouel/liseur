@@ -102,6 +102,14 @@ data class ReadingStats(
     /** How many of [sessions] no server has been told about yet. */
     val pendingSessions: Int = 0,
     /**
+     * Length of the longest single sitting in the window, in milliseconds.
+     *
+     * Computed from local sittings on [THIS_DEVICE]; 0 when no local
+     * sittings are available or on merged cross-device snapshots where
+     * the server supplies only daily and per-work totals.
+     */
+    val longestSessionMs: Long = 0,
+    /**
      * Consecutive days with reading on them, ending today or yesterday.
      *
      * Counted over everything on record rather than the selected
@@ -246,6 +254,15 @@ fun readingStats(
     val firstStarts = recorded.groupBy { it.bookUrl }
         .mapValues { (_, spans) -> spans.minOf { it.startedAt } }
     val start = range.startDate(today, weekStart)
+    // Per-day book breakdowns are kept for every recorded day up to today
+    // so the recent consistency heatmap can answer what was read on any of
+    // its days even when a narrower range (such as THIS_WEEK) is selected.
+    val booksByDay = recorded
+        .filter { !it.day(zone).isAfter(today) }
+        .groupBy { it.day(zone) }
+        .mapValues { (_, daySpans) ->
+            booksFromSpans(daySpans, books, firstStarts, zone)
+        }
     // Bounded at both ends, and the upper bound matters as much as the
     // lower one. A session dated after today — a clock corrected
     // backwards, an imported row, a flight east — would otherwise land
@@ -259,12 +276,10 @@ fun readingStats(
     if (counted.isEmpty()) return ReadingStats.Empty.copy(
         streakDays = streak,
         recent = dailySeries(emptyList(), zone, today, range, weekStart),
+        booksByDay = booksByDay,
     )
 
     val stats = booksFromSpans(counted, books, firstStarts, zone)
-    val booksByDay = counted.groupBy { it.day(zone) }.mapValues { (_, daySpans) ->
-        booksFromSpans(daySpans, books, firstStarts, zone)
-    }
 
     return ReadingStats(
         totalMs = stats.sumOf { it.totalMs },
@@ -275,6 +290,7 @@ fun readingStats(
         recent = dailySeries(counted, zone, today, range, weekStart),
         sessions = stats.sumOf { it.sessions },
         pendingSessions = stats.sumOf { it.pendingSessions },
+        longestSessionMs = longestSittingMs(counted, zone),
         streakDays = streak,
         progressionPerHour = progressionPerHour(counted),
         booksByDay = booksByDay,
@@ -349,6 +365,33 @@ private fun sittings(spans: List<SessionSpan>, zone: ZoneId): Sittings {
 }
 
 /**
+ * The longest single sitting across [spans], grouped by book and day
+ * using the same [SITTING_GAP_MS] rule as [sittings].
+ */
+internal fun longestSittingMs(spans: List<SessionSpan>, zone: ZoneId): Long {
+    var longest = 0L
+    for (bookSpans in spans.groupBy { it.bookUrl }.values) {
+        for (day in bookSpans.groupBy { it.day(zone) }.values) {
+            var end = 0L
+            var sittingMs = 0L
+            day.sortedWith(compareBy({ it.startedAt }, { it.lastReadAt }))
+                .forEachIndexed { index, span ->
+                    if (index == 0 || span.startedAt - end >= SITTING_GAP_MS) {
+                        if (sittingMs > longest) longest = sittingMs
+                        sittingMs = span.durationMs
+                        end = span.lastReadAt
+                    } else {
+                        sittingMs += span.durationMs
+                        end = maxOf(end, span.lastReadAt)
+                    }
+                }
+            if (sittingMs > longest) longest = sittingMs
+        }
+    }
+    return longest
+}
+
+/**
  * The days in the window, including the ones with nothing on them.
  *
  * Empty days are kept deliberately: a week with two gaps in it is the
@@ -378,8 +421,21 @@ internal fun dailySeries(
     val start = range.startDate(today, weekStart)
         ?: byDay.keys.minOrNull()
         ?: today.minusDays((RECENT_DAYS - 1).toLong())
+    return dailyWindowSeries(sessions, zone, start, today)
+}
+
+/**
+ * The days in `[start..today]` inclusive, including empty ones.
+ */
+internal fun dailyWindowSeries(
+    sessions: List<SessionSpan>,
+    zone: ZoneId,
+    start: LocalDate,
+    today: LocalDate,
+): List<ReadingDay> {
     val span = ChronoUnit.DAYS.between(start, today)
     if (span < 0) return emptyList()
+    val byDay = sessions.filter { it.durationMs > 0 }.groupBy { it.day(zone) }
     return (0..span).map { forward ->
         val date = start.plusDays(forward)
         val onDay = byDay[date].orEmpty()

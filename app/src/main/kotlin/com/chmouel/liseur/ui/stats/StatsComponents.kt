@@ -139,7 +139,7 @@ internal fun StatsHero(
     }
 }
 
-/** A section's name, set like the headings in the settings. */
+/** A section's name, set in the display serif to anchor each group of cards. */
 @Composable
 internal fun StatsSectionHeader(
     title: String,
@@ -149,13 +149,16 @@ internal fun StatsSectionHeader(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = 24.dp, bottom = 8.dp, start = 4.dp, end = 4.dp),
+            .padding(top = 20.dp, bottom = 10.dp, start = 2.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontFamily = MaterialTheme.typography.displaySmall.fontFamily,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .weight(1f)
                 .semantics { heading() },
@@ -166,11 +169,13 @@ internal fun StatsSectionHeader(
             // all on a narrow screen or at a large text size.
             Text(
                 text = it,
-                style = MaterialTheme.typography.labelLarge,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontFeatureSettings = TABULAR,
+                ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.End,
                 maxLines = 2,
-                modifier = Modifier.weight(1.5f),
+                modifier = Modifier.weight(1.2f),
             )
         }
     }
