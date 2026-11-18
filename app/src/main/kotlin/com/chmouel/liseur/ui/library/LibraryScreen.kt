@@ -187,6 +187,7 @@ import com.chmouel.liseur.ui.BusyIndicator
 import com.chmouel.liseur.ui.brandTileHeight
 import com.chmouel.liseur.ui.library.styles.LibraryStyleSheet
 import com.chmouel.liseur.ui.library.styles.ListLibrary
+import com.chmouel.liseur.ui.library.styles.RevealInsertedRow
 import com.chmouel.liseur.ui.library.styles.ShelvesLibrary
 import com.chmouel.liseur.ui.library.styles.HomeLibrary
 import com.chmouel.liseur.ui.library.styles.isUnderway
@@ -1047,13 +1048,17 @@ fun LibraryScreen(
                     // rule would send the reader to undo the wrong one.
                     state.books.isEmpty() && state.hasFinished &&
                         state.filters.hidesFinished && state.filters.options.isEmpty() &&
-                        !(state.isSearchActive && state.searchQuery.isNotBlank()) ->
+                        !(state.isSearchActive && state.searchQuery.isNotBlank()) -> Column(fillAboveBar) {
+                        listeningHeader?.let { above ->
+                            Box(Modifier.padding(horizontal = 16.dp)) { above() }
+                        }
                         EverythingFinished(
                             onShowFinished = {
                                 onToggleFilter(LibraryFilterOption.FINISHED)
                             },
-                            modifier = fillAboveBar,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
                         )
+                    }
 
                     // Books exist, they are simply all hidden. Offering to
                     // add a folder here would be answering a question nobody
@@ -1974,6 +1979,7 @@ private fun BookGrid(
     } else {
         GridCells.Adaptive(minSize = minCover)
     }
+    RevealInsertedRow(gridState, present = header != null)
     LazyVerticalGrid(
         columns = columns,
         state = gridState,

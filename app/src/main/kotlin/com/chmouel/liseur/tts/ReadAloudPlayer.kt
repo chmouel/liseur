@@ -216,8 +216,7 @@ internal fun ReadAloudPlayer(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
-                    // Nothing is playing yet: the wait can be given up rather than paused.
-                    if (starting || here?.utterance == null) CancelAction(feature::stop)
+                    CancelAction(feature::stop)
                 }
             }
         }
