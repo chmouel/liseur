@@ -4,6 +4,8 @@ import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.reader.progress.ExactLocatorAnchor
 import com.chmouel.liseur.translate.SentenceTranslations
 import com.chmouel.liseur.tts.SpeechTranslation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import org.readium.r2.shared.publication.Locator
 
 /** What the reader screen needs to read its book aloud. */
@@ -27,7 +29,26 @@ class ReaderReadAloud(
      * playing it when the shelf's Continue listening opened the reader.
      */
     val continueListening: suspend () -> Unit = {},
+    /** Emits when read aloud is unblocked by any BookOrbit choice or catch-up. */
+    val unblocked: Flow<Unit> = flowOf(Unit),
 )
+
+/**
+ * Defers [consumeResume] while a BookOrbit choice or catch-up blocks read aloud,
+ * so the shelf's Continue-listening request stays pending until the guard clears.
+ */
+internal suspend fun continueListeningWhenUnblocked(
+    blocked: Boolean,
+    resumeRequested: Boolean,
+    consumeResume: () -> Unit,
+    resumeIfPaused: () -> Boolean,
+    restorePaused: suspend (resumeAfterRestore: Boolean) -> Unit,
+) {
+    if (blocked) return
+    consumeResume()
+    if (resumeRequested && resumeIfPaused()) return
+    restorePaused(resumeRequested)
+}
 
 internal fun readAloudStartLocator(selected: Locator, original: Locator?, translated: Boolean): Locator =
     original ?: if (translated) ExactLocatorAnchor.coarse(selected) else selected

@@ -1105,6 +1105,9 @@ private fun LibraryRoute(
                             it,
                             book.url,
                             resumeListening = request.resumeListening,
+                            resumeListeningToken = context.container.resumeListeningToken.takeIf {
+                                request.resumeListening
+                            },
                         ),
                     )
                 }
@@ -1363,7 +1366,13 @@ private fun LibraryRoute(
         onResumeListening = { book ->
             book.openableUri()?.let {
                 context.startActivity(
-                    ReaderActivity.intent(context, it, book.url, resumeListening = true),
+                    ReaderActivity.intent(
+                        context,
+                        it,
+                        book.url,
+                        resumeListening = true,
+                        resumeListeningToken = context.container.resumeListeningToken,
+                    ),
                 )
             }
         },

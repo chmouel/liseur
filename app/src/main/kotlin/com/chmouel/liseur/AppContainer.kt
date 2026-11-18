@@ -1024,6 +1024,9 @@ class AppContainer(
         positionSync.request(SyncScope.Full)
     }
 
+    /** In-process token proving a Continue-listening reader intent came from this process. */
+    val resumeListeningToken: String = java.util.UUID.randomUUID().toString()
+
     /** Books open in the reader or being read aloud, shared between them. */
     val openBookHandles = OpenBookHandles()
 

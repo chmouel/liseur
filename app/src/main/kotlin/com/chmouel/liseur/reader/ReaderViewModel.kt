@@ -118,6 +118,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -127,6 +128,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.flow
@@ -607,6 +609,13 @@ class ReaderViewModel(
 
     private val _bookSync = MutableStateFlow<BookSync>(BookSync.Idle)
     val bookSync: StateFlow<BookSync> = _bookSync.asStateFlow()
+
+    private val _bookOrbitApplyCount = MutableStateFlow(0)
+
+    /** Changes when a BookOrbit opening choice or catch-up stops blocking read aloud. */
+    val readAloudUnblocked: Flow<Unit> = combine(_bookSync, _bookOrbitApplyCount) { _, _ ->
+        bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null
+    }.distinctUntilChanged().filter { !it }.map { }
 
     /** Raised when a choice moves the reader somewhere else in the book. */
     private val _goTo = MutableSharedFlow<Locator>(extraBufferCapacity = 1)
@@ -1772,11 +1781,8 @@ class ReaderViewModel(
 
     private var resumeListening = resumeListeningRequested
 
-    /**
-     * The shelf's Continue listening asked for this opening, taken once so
-     * a later landing or a recreated reader does not play again.
-     */
-    private fun takeResumeListening(): Boolean = resumeListening.also { resumeListening = false }
+    private val readAloudBlocked: Boolean
+        get() = bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null
 
     /**
      * Carries on the book's paused listening once the page has landed, as
@@ -1785,9 +1791,13 @@ class ReaderViewModel(
      * play. Opening the book any other way leaves the pause paused.
      */
     suspend fun continueListening(reader: Intent) {
-        val resume = takeResumeListening()
-        if (resume && readAloud.resumeIfPaused(bookId)) return
-        restorePausedReadAloud(reader, resumeAfterRestore = resume)
+        continueListeningWhenUnblocked(
+            blocked = readAloudBlocked,
+            resumeRequested = resumeListening,
+            consumeResume = { resumeListening = false },
+            resumeIfPaused = { readAloud.resumeIfPaused(bookId) },
+            restorePaused = { resume -> restorePausedReadAloud(reader, resumeAfterRestore = resume) },
+        )
     }
 
     /**
@@ -1798,19 +1808,31 @@ class ReaderViewModel(
      * after the page has landed.
      */
     suspend fun restorePausedReadAloud(reader: Intent, resumeAfterRestore: Boolean = false) {
-        if (pausedRestoreTried) return
-        pausedRestoreTried = true
+        if (pausedRestoreTried || readAloudBlocked) return
         val paused = pausedListening ?: return
         val handle = bookHandle ?: return
         val publication = publication ?: return
-        if (readAloud.session.value != null) return
-        val record = paused.toRestore(bookId) ?: return
+        if (readAloud.session.value != null) {
+            pausedRestoreTried = true
+            return
+        }
+        val record = paused.toRestore(bookId)
+        if (record == null) {
+            pausedRestoreTried = true
+            return
+        }
         val heard = runCatching { Locator.fromJSON(JSONObject(record.heardJson)) }.getOrNull()
         if (heard == null || publication.readingOrder.indexOfFirstWithHref(heard.href) == null) {
+            pausedRestoreTried = true
             paused.forget(bookId)
             return
         }
-        if (readAloud.session.value != null || bookOrbitOpening.choice != null || bookOrbitCatchUpApplying != null) return
+        if (readAloud.session.value != null) {
+            pausedRestoreTried = true
+            return
+        }
+        if (readAloudBlocked) return
+        pausedRestoreTried = true
         readAloud.restorePaused(handle, record, heard, reader, resumeAfterRestore)
     }
 
@@ -2338,6 +2360,7 @@ class ReaderViewModel(
         val opened = (_state.value as? UiState.Ready)?.openedBookOrbit ?: return
         val from = lastLocator ?: return
         bookOrbitCatchUpApplying = offered
+        _bookOrbitApplyCount.update { it + 1 }
         viewModelScope.launch {
             var adopted = false
             var moved = false
@@ -2375,6 +2398,7 @@ class ReaderViewModel(
             } finally {
                 bookOrbitCatchUpArrival = null
                 bookOrbitCatchUpApplying = null
+                _bookOrbitApplyCount.update { it + 1 }
                 if (!adopted) {
                     if (moved) {
                         dismissJumpBack()
