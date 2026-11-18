@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,7 +117,7 @@ fun DefinitionSheet(
             }
         }.value
     }
-    var choosingOffline by remember { mutableStateOf(false) }
+    var choosingOffline by rememberSaveable { mutableStateOf(false) }
     val offlineEntries = localResult?.getOrNull()
     // When an offline dictionary is active, only reach over the network if the
     // reader has online lookup enabled AND the offline pack had no entry for this word.
@@ -145,10 +146,15 @@ fun DefinitionSheet(
     } else {
         WiktionaryEditions.codeOf(baseUrl) ?: "en"
     }
-    val target = remember(found, offlineResolved, source, altLanguage, enabled) {
+    val target = remember(found, offline, offlineResolved, source, baseUrl, altLanguage, enabled) {
         when {
             found != null -> translationTarget(found.senses, source, altLanguage)
-            offlineResolved && enabled -> translationTarget(
+            // Wiktionary's translation table is in the site's own language, so it only
+            // describes the offline entry when the pack is in that language too.
+            offlineResolved && enabled && OfflineDictionary.samePrimary(
+                offline.language,
+                WiktionaryEditions.codeOf(baseUrl) ?: "en",
+            ) -> translationTarget(
                 listOf(DictionarySense("", emptyList(), language = source)),
                 source,
                 altLanguage,
@@ -176,9 +182,9 @@ fun DefinitionSheet(
     // kept while this card is open.
     val targetClient = remember { WiktionaryClient() }
     var targetEntry by remember(entry, site, source) { mutableStateOf<DictionaryState?>(null) }
-    LaunchedEffect(showTranslations, entry, site, source) {
+    LaunchedEffect(showTranslations, entry, site, source, translationAttempt) {
         if (!showTranslations || site == null) return@LaunchedEffect
-        if (targetEntry != null && targetEntry != DictionaryState.Loading) return@LaunchedEffect
+        if (targetEntry is DictionaryState.Found) return@LaunchedEffect
         targetEntry = DictionaryState.Loading
         targetEntry = targetClient.define(entry, listOf(source), site, strict = true) { initial ->
             withContext(Dispatchers.Main.immediate) { targetEntry = initial }
@@ -206,7 +212,7 @@ fun DefinitionSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val firstPronunciation = offlineEntries?.firstOrNull()
-                    ?.takeIf { it.headword.equals(term, ignoreCase = true) }
+                    ?.takeIf { it.headword == term }
                     ?.pronunciation
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Row(
@@ -305,7 +311,7 @@ fun DefinitionSheet(
                             ),
                             onClick = {
                                 // A failed or empty answer is asked for again; a found one is just shown.
-                                if (translations !is TranslationsState.Found) translationAttempt++
+                                if (showTranslations && translations != TranslationsState.Loading) translationAttempt++
                                 showTranslations = true
                             },
                         )
@@ -351,11 +357,12 @@ fun DefinitionSheet(
     }
 
     val sections = (translations as? TranslationsState.Found)?.sections
-    if (showTranslations && target != null && sections != null) {
+    // The word's own entry on the target site is enough to open, even when the table is empty or failed.
+    if (showTranslations && target != null && (sections != null || targetEntry is DictionaryState.Found)) {
         TranslationsSheet(
             term = entry,
             baseUrl = baseUrl,
-            sections = sections,
+            sections = sections.orEmpty(),
             target = target,
             site = site,
             targetEntry = targetEntry,
@@ -718,7 +725,8 @@ private fun OfflineEntriesContent(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val showBaseHeadword = !entry.headword.equals(queriedTerm, ignoreCase = true)
+                // Exact, so "A" (the letter) and "a" are told apart.
+                val showBaseHeadword = entry.headword != queriedTerm
                 if (showBaseHeadword) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),

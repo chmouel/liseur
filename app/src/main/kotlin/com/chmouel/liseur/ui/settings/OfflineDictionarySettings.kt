@@ -288,6 +288,9 @@ internal fun OfflineDictionaryPickerSheet(pinnedLanguage: String?, onDismiss: ()
     val context = LocalContext.current
     val state by OfflineDictionary.state(context).collectAsState()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        // The sheet stays up until here: leaving composition would unregister this launcher
+        // while the system picker is still open and the result would be lost.
+        onDismiss()
         if (uri == null) return@rememberLauncherForActivityResult
         val displayName = runCatching {
             context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
@@ -306,10 +309,7 @@ internal fun OfflineDictionaryPickerSheet(pinnedLanguage: String?, onDismiss: ()
                 onDismiss()
                 OfflineDictionary.startDownload(context, language)
             },
-            onImportZip = {
-                onDismiss()
-                picker.launch(ARCHIVE_MIME_TYPES)
-            },
+            onImportZip = { picker.launch(ARCHIVE_MIME_TYPES) },
             onDismiss = onDismiss,
         )
     }
