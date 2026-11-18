@@ -116,7 +116,7 @@ fun DefinitionSheet(
     val term = remember(word) { normaliseLookupTerm(word) }
     // Keyed, not just re-run: produceState keeps its last value when its keys change, and a
     // previous word's miss must never let this word go online before its own lookup finishes.
-    val localResult = key(offlineState.packs, term) {
+    val localResult = key(offlineState.packs, offline?.id, term) {
         produceState<Result<OfflineDictionary.Lookup?>?>(null) {
             val pack = offline ?: return@produceState
             value = try {
