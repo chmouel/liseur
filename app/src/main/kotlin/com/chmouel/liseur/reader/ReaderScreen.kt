@@ -4951,7 +4951,7 @@ internal fun ReaderScreen(
                 displayedText = null,
                 language = publication.metadata.languages.firstOrNull(),
                 useDisplayedText = false,
-            )?.let(openLookup)
+            )?.let(openLookup) ?: abandonAutomaticLookup()
             if (!automatically) dismissSelection()
         }
     }
@@ -5351,6 +5351,7 @@ internal fun ReaderScreen(
             },
             selectedDefinitionActions = { text, language ->
                 val focus = LocalFocusManager.current
+                val nextQuery = definitionQuery(text, null, language, useDisplayedText = false)
                 fun closeCard() {
                     defineWord = null
                     if (automaticSelection != null) dismissSelection()
@@ -5368,7 +5369,6 @@ internal fun ReaderScreen(
                         },
                         noteLabel = R.string.annotation_book_note_title,
                         onLookUp = {
-                            val nextQuery = DefinitionQuery(text, language)
                             if (nextQuery == query) focus.clearFocus()
                             if (automaticSelection != null) dismissSelection()
                             defineWord = nextQuery
@@ -5398,7 +5398,7 @@ internal fun ReaderScreen(
                     ),
                     activeTint = null,
                     palette = highlightPalette,
-                    lookUp = true,
+                    lookUp = nextQuery != null,
                 )
             },
             selectionActions = automaticSelection?.let { active ->
