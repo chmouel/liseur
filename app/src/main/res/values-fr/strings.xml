@@ -1295,12 +1295,14 @@
     <string name="read_aloud_previous_sentence">Phrase précédente</string>
     <string name="read_aloud_next_sentence">Phrase suivante</string>
     <string name="read_aloud_return_to_voice">Revenir à la voix</string>
+    <string name="read_aloud_from_this_page">Lire à partir de cette page</string>
     <string name="read_aloud_from_here">Lire à voix haute à partir d\'ici</string>
     <string name="reader_translate_into">Traduire en %1$s</string>
     <string name="reader_translate_book">Traduire le livre</string>
     <string name="reader_narrate_from_here">Narrer à partir d\'ici</string>
     <string name="read_aloud_pause">Mettre la lecture à voix haute en pause</string>
     <string name="read_aloud_resume">Reprendre la lecture à voix haute</string>
+    <string name="read_aloud_resume_listening">Reprendre l\'écoute</string>
     <string name="read_aloud_stop">Arrêter la lecture à voix haute</string>
     <string name="read_aloud_notice_network">Impossible de joindre %1$s. En pause.</string>
     <string name="read_aloud_preparing">Préparation de la voix</string>

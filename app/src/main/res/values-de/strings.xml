@@ -1307,12 +1307,14 @@
     <string name="read_aloud_previous_sentence">Vorheriger Satz</string>
     <string name="read_aloud_next_sentence">Nächster Satz</string>
     <string name="read_aloud_return_to_voice">Zurück zur Stimme</string>
+    <string name="read_aloud_from_this_page">Ab dieser Seite vorlesen</string>
     <string name="read_aloud_from_here">Ab hier vorlesen</string>
     <string name="reader_translate_into">Auf %1$s übersetzen</string>
     <string name="reader_translate_book">Buch übersetzen</string>
     <string name="reader_narrate_from_here">Ab hier erzählen</string>
     <string name="read_aloud_pause">Vorlesen pausieren</string>
     <string name="read_aloud_resume">Vorlesen fortsetzen</string>
+    <string name="read_aloud_resume_listening">Weiterhören</string>
     <string name="read_aloud_stop">Vorlesen beenden</string>
     <string name="read_aloud_notice_network">%1$s ist nicht erreichbar. Pausiert.</string>
     <string name="read_aloud_preparing">Stimme wird vorbereitet</string>

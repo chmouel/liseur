@@ -90,7 +90,9 @@ internal fun ReadAloudPlayer(
     bookId: String,
     theme: ReaderTheme,
     controls: Boolean,
-    onReturnToVoice: (() -> Unit)?,
+    away: Boolean,
+    onReturnToVoice: () -> Unit,
+    onReadFromHere: (() -> Unit)?,
     modifier: Modifier,
     start: (Locator, SpeechTranslation?) -> Unit,
 ) {
@@ -231,8 +233,8 @@ internal fun ReadAloudPlayer(
                     ) {
                         VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { openVoice(false, false) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            onReturnToVoice?.let {
-                                ControlButton(it) {
+                            if (away) {
+                                ControlButton(onReturnToVoice) {
                                     Icon(Icons.Filled.MyLocation, stringResource(R.string.read_aloud_return_to_voice))
                                 }
                             }
@@ -250,11 +252,25 @@ internal fun ReadAloudPlayer(
                         ControlButton(feature::skipBackward) {
                             Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
                         }
-                        PlayButton(feature, here, waitShown, theme)
+                        PlayButton(feature, here, waitShown, theme, away)
                         ControlButton(feature::skipForward) {
                             Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                         }
                         SleepButton(feature)
+                    }
+                    // Away from the voice, reading on is the other way back
+                    // to it: the same words, from the page in front.
+                    if (away && onReadFromHere != null) {
+                        Text(
+                            text = stringResource(R.string.read_aloud_from_this_page),
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .heightIn(min = 48.dp)
+                                .clip(CircleShape)
+                                .clickable(role = Role.Button, onClick = onReadFromHere)
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                        )
                     }
                 }
             }
@@ -267,10 +283,12 @@ internal fun ReadAloudPlayer(
  * one control that matters most is found without looking. While audio is
  * on its way the voice mark takes the icon's place; once playing, the
  * button still pauses. Before the first sentence has landed there is
- * nothing to pause, so it gives up the wait instead.
+ * nothing to pause, so it gives up the wait instead. Away from the voice
+ * it resumes where the voice stands rather than where the reader is, and
+ * its label says so.
  */
 @Composable
-private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: Boolean, theme: ReaderTheme) {
+private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: Boolean, theme: ReaderTheme, away: Boolean) {
     val colors = IconButtonDefaults.filledIconButtonColors(
         containerColor = theme.foreground,
         contentColor = theme.background,
@@ -319,7 +337,10 @@ private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: 
             }
         }
         else -> FilledIconButton(feature::resume, Modifier.size(PLAY_SIZE), colors = colors) {
-            Icon(Icons.Filled.PlayArrow, stringResource(R.string.read_aloud_resume), Modifier.size(32.dp))
+            val label = stringResource(
+                if (away) R.string.read_aloud_resume_listening else R.string.read_aloud_resume,
+            )
+            Icon(Icons.Filled.PlayArrow, label, Modifier.size(32.dp))
         }
     }
 }

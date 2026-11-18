@@ -151,23 +151,35 @@ interface ReadAloudFeature {
     fun SettingsScreen(onBack: () -> Unit)
 
     /**
+     * The voice sheet for [bookId] with no session to read on in, as the
+     * reader opens it to set read aloud up: it saves a language and voice
+     * or the settings, and gives up on [onDismiss]. The reader starts
+     * reading afterwards, through [start].
+     */
+    @Composable
+    fun VoiceSheet(bookId: String, start: (Locator, SpeechTranslation?) -> Unit, onDismiss: () -> Unit) = Unit
+
+    /**
      * The player laid over [bookId]'s page while it is being read aloud,
      * painted in the reading [theme], with whatever the listener should
      * be told: a problem with [bookId], shown whether or not it is still
      * being read. Draws nothing else for another book or no session. The
      * controls show only while [controls] is set, which is when the
      * reader has raised the chrome; otherwise the page shows just the
-     * highlight. [onReturnToVoice], set while the reader has moved away
-     * from the sentence being read, offers to take the page back to it.
-     * Reading that has to start again, as after changing the service from
-     * its voice sheet, goes through the reader's own [start].
+     * highlight. [away], set while the reader is away from the sentence
+     * being read, playing or paused, offers [onReturnToVoice] to take the
+     * page back to it and, with [onReadFromHere], reading on from the page
+     * in front. Reading that has to start again, as after changing the
+     * service from its voice sheet, goes through the reader's own [start].
      */
     @Composable
     fun Player(
         bookId: String,
         theme: ReaderTheme,
         controls: Boolean,
-        onReturnToVoice: (() -> Unit)?,
+        away: Boolean,
+        onReturnToVoice: () -> Unit,
+        onReadFromHere: (() -> Unit)?,
         modifier: Modifier,
         start: (Locator, SpeechTranslation?) -> Unit,
     )
@@ -200,7 +212,9 @@ interface ReadAloudFeature {
             bookId: String,
             theme: ReaderTheme,
             controls: Boolean,
-            onReturnToVoice: (() -> Unit)?,
+            away: Boolean,
+            onReturnToVoice: () -> Unit,
+            onReadFromHere: (() -> Unit)?,
             modifier: Modifier,
             start: (Locator, SpeechTranslation?) -> Unit,
         ) = Unit
