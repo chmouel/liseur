@@ -28,12 +28,15 @@ internal fun definitionQuery(
 
 private val unicodeSpaces = Regex("""\p{Zs}""")
 private val pronunciationMarks = Regex("[·|↑ˈˌ]")
-private val frenchElision = Regex("^(?:[lsdmnt]|qu)'", RegexOption.IGNORE_CASE)
+private val frenchElision = Regex("^(?:[lsdmntjc]|qu)'", RegexOption.IGNORE_CASE)
+// Everything outside these categories is punctuation, a quote, a bracket or a space
+// in some script, so it only ever decorates the edges of a selected word.
+private val edgeDecoration = Regex("^[^\\p{L}\\p{N}\\p{M}]+|[^\\p{L}\\p{N}\\p{M}]+$")
 
 private fun cleanDictionarySelection(text: String): String =
     text.replace(unicodeSpaces, " ")
         .trim()
         .replace('’', '\'')
-        .trim { it in '!'..'/' || it in ':'..'@' || it in '['..'`' || it in '{'..'~' || it in '\u2000'..'\u206F' }
         .replace(pronunciationMarks, "")
+        .replace(edgeDecoration, "")
         .trim()
