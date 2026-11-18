@@ -282,10 +282,17 @@ class ReadingStatsViewModel(
      * [week] is this calendar week across every device, asked for
      * separately when the span on screen began after the week did: the
      * span's own answer cannot carry those earlier days, since its
-     * calendar must add up to its total. It travels with [value] so the
-     * two are never shown from different refreshes.
+     * calendar must add up to its total. [consistency] is the 28-day
+     * window used by the consistency heatmap when the span on screen is
+     * narrower than four weeks. Both travel with [value] so they are
+     * never shown from different refreshes.
      */
-    private data class Answered<T>(val window: StatsWindow, val value: T, val week: T? = null)
+    private data class Answered<T>(
+        val window: StatsWindow,
+        val value: T,
+        val week: T? = null,
+        val consistency: T? = null,
+    )
 
     private fun <T> Answered<T>?.forWindow(window: StatsWindow): T? =
         this?.takeIf { it.window.asked() == window.asked() }?.value
@@ -447,6 +454,16 @@ class ReadingStatsViewModel(
                     } else {
                         null
                     }
+                    val consistencyFrom = result.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
+                    val spanStart = window.range.startDate(result.today, window.weekStart)
+                    val consistency = if (spanStart != null && spanStart > consistencyFrom) {
+                        source.read(
+                            context, sessions, window.range, result.today, window.weekStart,
+                            compare = false, from = consistencyFrom, requireCurrent = false,
+                        )?.takeIf { it.revision == result.revision && source.isCurrent(it) }
+                    } else {
+                        null
+                    }
                     if (token != generation || _window.value.asked() != window.asked()) return@launch
                     if (resampleClock() || now(result.zone).toLocalDate() != result.today) {
                         refreshServerInsights()
@@ -462,7 +479,7 @@ class ReadingStatsViewModel(
                         result
                     }
                     if (token != generation || _window.value.asked() != window.asked()) return@launch
-                    _snapshot.value = Answered(window, publish, week)
+                    _snapshot.value = Answered(window, publish, week, consistency)
                     remoteStats?.accept(publish, window.range, window.weekStart)
                     return@launch
                 }
@@ -731,10 +748,27 @@ class ReadingStatsViewModel(
             } ?: 0L
         }
         val mergedStats = united?.stats ?: local.stats
-        val consistencyDays = if (united != null) {
-            mergedStats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
-        } else {
-            local.consistencyDays
+        val consistencySnapshot = answer?.consistency?.takeIf {
+            snapshot != null && it.today == snapshot.today && it.context == snapshot.context
+        }
+        val consistencyUnited = consistencySnapshot?.let {
+            val consistencyStart = it.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
+            val localSeries = dailyWindowSeries(
+                sessions = sessionSpans(it.captured.sessions),
+                zone = it.zone,
+                start = consistencyStart,
+                today = it.today,
+            )
+            val inAccountZone = readingStats(
+                sessionSpans(it.captured.sessions), local.books, it.zone, it.today,
+                window.range, window.weekStart,
+            ).copy(recent = localSeries)
+            uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone)
+        }
+        val consistencyDays = when {
+            united == null -> local.consistencyDays
+            consistencyUnited != null -> consistencyUnited.stats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
+            else -> mergedStats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
         }
         ReadingStatsUiState.Ready(
             stats = mergedStats,

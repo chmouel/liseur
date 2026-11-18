@@ -313,15 +313,54 @@ fun ReadingStatsScreen(
                     ProvenanceLine(ready.range, ready.provenance)
                 }
                 if (empty) {
+                    val hasRecentActivity = ready.consistencyDays.any { it.totalMs > 0L }
                     item {
                         EmptyStats(
-                            Modifier.fillParentMaxHeight(EMPTY_HEIGHT_SHARE),
+                            Modifier.fillParentMaxHeight(if (hasRecentActivity) 0.45f else EMPTY_HEIGHT_SHARE),
                             // A reader with history who picked too narrow a
                             // span has not got nothing recorded, they have
                             // got nothing here. Telling them to start reading
                             // would be wrong.
                             narrowedByRange = stats.streakDays > 0 || ready.range != StatsRange.ALL_TIME,
                         )
+                    }
+                    if (hasRecentActivity) {
+                        item {
+                            ReadingConsistencyCard(
+                                stats = stats,
+                                headline = ready.headline,
+                                range = ready.range,
+                                consistencyDays = ready.consistencyDays,
+                                selectedDay = consistencyDay,
+                                onSelectDay = { selectedConsistencyDay = it },
+                            )
+                        }
+                        if (consistencyDay != null && selectedConsistencyBooks.isNotEmpty()) {
+                            val groupCount = selectedConsistencyBooks.size + 1
+                            item(key = "empty-consistency-books-header") {
+                                Spacer(Modifier.height(8.dp))
+                                SelectedPeriodBooksHeader(
+                                    periodLabel = consistencyDay.date.format(dateFormat),
+                                    books = selectedConsistencyBooks,
+                                    shape = groupedRowShape(0, groupCount),
+                                    onClear = { selectedConsistencyDay = null },
+                                )
+                            }
+                            itemsIndexed(
+                                items = selectedConsistencyBooks,
+                                key = { _, book -> "empty-consistency-book-${book.key}" },
+                            ) { index, book ->
+                                SelectedPeriodBookRow(
+                                    book = book,
+                                    shape = groupedRowShape(index + 1, groupCount),
+                                    onClick = if (book.isLocal && book.key in listedKeys) {
+                                        { onOpenBook(book) }
+                                    } else {
+                                        null
+                                    },
+                                )
+                            }
+                        }
                     }
                     ready.weekReadingMs?.let { weekReadingMs ->
                         item {
@@ -415,7 +454,11 @@ fun ReadingStatsScreen(
                             SelectedPeriodBookRow(
                                 book = book,
                                 shape = groupedRowShape(index + 1, groupCount),
-                                onClick = if (book.isLocal) ({ onOpenBook(book) }) else null,
+                                onClick = if (book.isLocal && book.key in listedKeys) {
+                                    { onOpenBook(book) }
+                                } else {
+                                    null
+                                },
                             )
                         }
                     }
@@ -1054,10 +1097,14 @@ private fun OverviewSection(
     }
     val paceLabel = stringResource(R.string.reading_stats_tile_pace)
     val paceQualifier = if (provenance == StatsProvenance.ALL_DEVICES && headline.serverOnlyPace) {
-        stringResource(R.string.reading_stats_pace_server_only)
-            .substringAfter('(', "")
-            .substringBefore(')')
-            .takeIf { it.isNotEmpty() }
+        val raw = stringResource(R.string.reading_stats_pace_server_only)
+        val openIdx = raw.indexOfAny(charArrayOf('(', '（'))
+        val closeIdx = raw.lastIndexOfAny(charArrayOf(')', '）'))
+        if (openIdx >= 0 && closeIdx > openIdx + 1) {
+            raw.substring(openIdx + 1, closeIdx).trim().takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
     } else {
         null
     }
@@ -1730,7 +1777,8 @@ private fun ReadingConsistencyCard(
             headline.streakDays,
         )
     }
-    val compactGrid = LocalDensity.current.fontScale <= 1.3f && consistencyDays.isNotEmpty()
+    val hasGrid = consistencyDays.isNotEmpty()
+    val canSideBySide = LocalDensity.current.fontScale <= 1.3f && hasGrid
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val titleText = stringResource(R.string.reading_stats_consistency_title)
@@ -1750,7 +1798,7 @@ private fun ReadingConsistencyCard(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp),
         ) {
-            val sideBySide = compactGrid && with(density) {
+            val sideBySide = canSideBySide && with(density) {
                 val leftAvailable = maxWidth - 40.dp - 12.dp * 3 - 1.dp - 94.dp
                 val leftPx = leftAvailable.roundToPx().coerceAtLeast(0)
                 leftAvailable >= 130.dp &&
@@ -1813,7 +1861,7 @@ private fun ReadingConsistencyCard(
                         )
                     }
                 }
-                if (compactGrid && !sideBySide) {
+                if (hasGrid && !sideBySide) {
                     Spacer(Modifier.height(12.dp))
                     ConsistencyMiniHeatmap(
                         days = consistencyDays,
