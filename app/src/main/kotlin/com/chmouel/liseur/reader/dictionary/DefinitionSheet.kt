@@ -107,8 +107,8 @@ fun DefinitionSheet(
     val term = remember(word) { normaliseLookupTerm(word) }
     // Keyed, not just re-run: produceState keeps its last value when its keys change, and a
     // previous word's miss must never let this word go online before its own lookup finishes.
-    val localResult = key(offline?.id, term) {
-        produceState<Result<List<StarDictEntry>>?>(null) {
+    val localResult = key(offlineState.packs, term) {
+        produceState<Result<OfflineDictionary.Lookup?>?>(null) {
             val pack = offline ?: return@produceState
             value = try {
                 Result.success(OfflineDictionary.lookup(context, pack.id, term))
@@ -118,7 +118,9 @@ fun DefinitionSheet(
         }.value
     }
     var choosingOffline by rememberSaveable { mutableStateOf(false) }
-    val offlineEntries = localResult?.getOrNull()
+    val offlineLookup = localResult?.getOrNull()
+    val offlineEntries = offlineLookup?.entries
+    val definitionPack = offlineLookup?.pack ?: offline
     // When an offline dictionary is active, only reach over the network if the
     // reader has online lookup enabled AND the offline pack had no entry for this word.
     val useOnline = offline == null || (enabled && localResult != null && (localResult.isFailure || offlineEntries?.isEmpty() == true))
@@ -136,23 +138,23 @@ fun DefinitionSheet(
         }
     }
 
-    val offlineResolved = offline != null && offlineEntries?.isNotEmpty() == true
+    val offlineResolved = definitionPack != null && offlineEntries?.isNotEmpty() == true
     val found = (state as? DictionaryState.Found)?.takeIf { !offlineResolved }
     val entry = found?.term?.ifBlank { null }
         ?: offlineEntries?.firstOrNull()?.headword?.ifBlank { null }
         ?: term
-    val source = if (offlineResolved && offline.language.isNotBlank()) {
-        OfflineDictionary.primaryLanguage(offline.language)
+    val source = if (offlineResolved && definitionPack.language.isNotBlank()) {
+        OfflineDictionary.primaryLanguage(definitionPack.language)
     } else {
         WiktionaryEditions.codeOf(baseUrl) ?: "en"
     }
-    val target = remember(found, offline, offlineResolved, source, baseUrl, altLanguage, enabled) {
+    val target = remember(found, definitionPack, offlineResolved, source, baseUrl, altLanguage, enabled) {
         when {
             found != null -> translationTarget(found.senses, source, altLanguage)
             // Wiktionary's translation table is in the site's own language, so it only
             // describes the offline entry when the pack is in that language too.
             offlineResolved && enabled && OfflineDictionary.samePrimary(
-                offline.language,
+                definitionPack.language,
                 WiktionaryEditions.codeOf(baseUrl) ?: "en",
             ) -> translationTarget(
                 listOf(DictionarySense("", emptyList(), language = source)),
@@ -268,7 +270,7 @@ fun DefinitionSheet(
                             OfflineEntriesContent(
                                 queriedTerm = term,
                                 entries = offlineEntries,
-                                pack = offline,
+                                pack = definitionPack ?: offline,
                             )
                         }
                     }
