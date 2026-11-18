@@ -454,16 +454,6 @@ class ReadingStatsViewModel(
                     } else {
                         null
                     }
-                    val consistencyFrom = result.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
-                    val spanStart = window.range.startDate(result.today, window.weekStart)
-                    val consistency = if (spanStart != null && spanStart > consistencyFrom) {
-                        source.read(
-                            context, sessions, window.range, result.today, window.weekStart,
-                            compare = false, from = consistencyFrom, requireCurrent = false,
-                        )?.takeIf { it.revision == result.revision && source.isCurrent(it) }
-                    } else {
-                        null
-                    }
                     if (token != generation || _window.value.asked() != window.asked()) return@launch
                     if (resampleClock() || now(result.zone).toLocalDate() != result.today) {
                         refreshServerInsights()
@@ -479,7 +469,22 @@ class ReadingStatsViewModel(
                         result
                     }
                     if (token != generation || _window.value.asked() != window.asked()) return@launch
-                    _snapshot.value = Answered(window, publish, week, consistency)
+                    _snapshot.value = Answered(window, publish, week)
+                    val consistencyFrom = result.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
+                    val spanStart = window.range.startDate(result.today, window.weekStart)
+                    if (spanStart != null && spanStart > consistencyFrom) {
+                        val consistency = source.read(
+                            context, sessions, window.range, result.today, window.weekStart,
+                            compare = false, from = consistencyFrom, requireCurrent = false,
+                        )?.takeIf { it.revision == result.revision && source.isCurrent(it) }
+                        if (consistency != null && token == generation &&
+                            _window.value.asked() == window.asked() &&
+                            !resampleClock() && now(result.zone).toLocalDate() == result.today &&
+                            source.isCurrent(result)
+                        ) {
+                            _snapshot.value = Answered(window, publish, week, consistency)
+                        }
+                    }
                     remoteStats?.accept(publish, window.range, window.weekStart)
                     return@launch
                 }
@@ -766,9 +771,20 @@ class ReadingStatsViewModel(
             uniteSnapshot(inAccountZone, local.books, local.firstReadAtByUrl, it.totals, it.zone)
         }
         val consistencyDays = when {
-            united == null -> local.consistencyDays
-            consistencyUnited != null -> consistencyUnited.stats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
-            else -> mergedStats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
+            united == null || snapshot == null -> local.consistencyDays
+            consistencyUnited != null -> padConsistencyWindow(
+                consistencyUnited.stats.recent,
+                snapshot.today,
+            )
+            else -> {
+                val spanStart = window.range.startDate(snapshot.today, window.weekStart)
+                val consistencyStart = snapshot.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
+                if (spanStart != null && spanStart > consistencyStart) {
+                    emptyList()
+                } else {
+                    padConsistencyWindow(mergedStats.recent, snapshot.today)
+                }
+            }
         }
         ReadingStatsUiState.Ready(
             stats = mergedStats,
@@ -841,6 +857,15 @@ class ReadingStatsViewModel(
         private const val COMPARISON_REFRESH_MS = 5 * 60_000L
         private const val STALE_ATTEMPTS = 3
         private const val CONSISTENCY_WINDOW_DAYS = 28
+
+        private fun padConsistencyWindow(days: List<ReadingDay>, today: LocalDate): List<ReadingDay> {
+            val byDate = days.associateBy { it.date }
+            val start = today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
+            return (0 until CONSISTENCY_WINDOW_DAYS).map { offset ->
+                val date = start.plusDays(offset.toLong())
+                byDate[date] ?: ReadingDay(date, 0L)
+            }
+        }
 
         /**
          * Folds the server's aggregates into the local ones, never
