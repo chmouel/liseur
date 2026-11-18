@@ -237,7 +237,7 @@ gets a long summary), `POST /v1/audio/speech` (silent 24 kHz WAV; other
 voices), and `GET /_stub/requests`
 (all requests, `DELETE` empties; also `tmp/ai-stub/requests.jsonl`; chat
 entries split `<book>`, `<context>`, `<passage>` into `blocks`; the API
-key is never logged). Flags: `--speech-failures COUNT` (first speech requests return 503), `--fail CODE`, `--delay SECONDS`,
+key is never logged). Flags: `--speech-failures COUNT` (first speech requests return 503), `--fail CODE`, `--delay SECONDS` (every request), `--refuse-voice VOICE` (answer that voice with a 400, as a server without it does),
 `--key KEY` (require bearer), `--think` (prepend `<think>`), `--long`
 (fill every section of a companion term, so the profile scrolls), `--realistic`
 (answer the character profiles it has a fixture for, Bingley in *Pride and

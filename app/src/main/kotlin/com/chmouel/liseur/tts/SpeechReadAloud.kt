@@ -86,9 +86,13 @@ internal class SpeechReadAloud(
     /** The session in progress, for the service. */
     val current: StateFlow<ReadAloudSession?> = mutableCurrent.asStateFlow()
 
-    private var starting: Job? = null
+    private var startingJob: Job? = null
     private var startingBookId: String? = null
     private var startingToken: Any? = null
+
+    private val mutableStarting = MutableStateFlow<String?>(null)
+
+    override val starting: StateFlow<String?> = mutableStarting.asStateFlow()
 
     override val isAvailable = true
 
@@ -134,7 +138,7 @@ internal class SpeechReadAloud(
     private fun connectionChanging(owner: String) {
         if (startingOwner === UNKNOWN || startingOwner == owner) {
             restartWanted(startingBookId)
-            starting?.cancel()
+            startingJob?.cancel()
         }
         reading()?.takeIf { it.owner == owner }?.session?.let {
             restartWanted(it.handle.bookId)
@@ -189,7 +193,7 @@ internal class SpeechReadAloud(
                 val pending = mutablePending.value
                 if (pending != null && pending.service != chosen) {
                     restartWanted(pending.bookId)
-                    starting?.cancel()
+                    startingJob?.cancel()
                 }
             }
         }
@@ -266,7 +270,7 @@ internal class SpeechReadAloud(
         start(handle, selection, reader, translation, restoring = null)
 
     override fun restorePaused(handle: OpenBookHandle, record: PausedReadAloud, selection: Locator, reader: Intent) {
-        if (mutableCurrent.value != null || starting?.isActive == true) return
+        if (mutableCurrent.value != null || startingJob?.isActive == true) return
         start(handle, selection, reader, translation = null, restoring = record)
     }
 
@@ -287,12 +291,13 @@ internal class SpeechReadAloud(
         val startToken = Any()
         startingToken = startToken
         startingBookId = handle.bookId
+        mutableStarting.value = handle.bookId
         startingRequest = StartRequest(handle, selection, translation)
         startingOwner = UNKNOWN
         // The translation's hold is this start's until a session takes it,
         // given back however the start ends, even cancelled before it ran.
         var translationHeld = translation != null
-        starting = scope.launch {
+        startingJob = scope.launch {
             // Taken here rather than before launching: a start cancelled
             // before it runs never reaches the finally that gives it back.
             if (!handle.acquire()) return@launch
@@ -371,6 +376,7 @@ internal class SpeechReadAloud(
                 if (startingToken === startToken) {
                     startingToken = null
                     startingBookId = null
+                    mutableStarting.value = null
                     startingRequest = null
                     startingOwner = null
                 }
@@ -502,7 +508,10 @@ internal class SpeechReadAloud(
     }
 
     override fun stop() {
-        starting?.cancel()
+        startingJob?.cancel()
+        // The wait for the voice ends with the tap, not whenever the cancelled
+        // start gets to run its finally.
+        mutableStarting.value = null
         mutableCurrent.value?.stop()
     }
 
@@ -539,7 +548,7 @@ internal class SpeechReadAloud(
 
     /** Gives up starting [bookId] while its language or voice is being asked, leaving its place as it was. */
     override fun cancelChoice(bookId: String) {
-        if (startingBookId == bookId) starting?.cancel()
+        if (startingBookId == bookId) startingJob?.cancel()
     }
 
     /**

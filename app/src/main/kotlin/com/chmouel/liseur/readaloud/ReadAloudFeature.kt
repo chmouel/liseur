@@ -83,6 +83,12 @@ interface ReadAloudFeature {
     /** The session in progress, whichever book it is reading. */
     val session: StateFlow<ReadAloudUi?>
 
+    /**
+     * The book a start is on its way for, from the tap until its session
+     * exists, or null when nothing is being started.
+     */
+    val starting: StateFlow<String?>
+
     /** The unresolved playback or setup problem, if any. */
     val problem: StateFlow<ReadAloudProblem?>
 
@@ -170,6 +176,7 @@ interface ReadAloudFeature {
         override val isAvailable = false
         override val configured: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val session: StateFlow<ReadAloudUi?> = MutableStateFlow<ReadAloudUi?>(null).asStateFlow()
+        override val starting: StateFlow<String?> = MutableStateFlow<String?>(null).asStateFlow()
         override val problem: StateFlow<ReadAloudProblem?> = MutableStateFlow<ReadAloudProblem?>(null).asStateFlow()
         override val notices: SharedFlow<ReadAloudBookNotice> = MutableSharedFlow<ReadAloudBookNotice>().asSharedFlow()
 
