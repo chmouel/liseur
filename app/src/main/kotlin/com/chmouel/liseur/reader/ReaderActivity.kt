@@ -172,7 +172,12 @@ class ReaderActivity : FragmentActivity() {
                 intent.getStringExtra(EXTRA_ID) ?: url.toString(),
                 // Only on a fresh open: after recreation the reader's own place wins.
                 intent.getStringExtra(EXTRA_AT).takeIf { savedInstanceState == null },
-                savedInstanceState == null && intent.getBooleanExtra(EXTRA_RESUME_LISTENING, false),
+                honorsResumeListening(
+                    freshOpen = savedInstanceState == null,
+                    requested = intent.getBooleanExtra(EXTRA_RESUME_LISTENING, false),
+                    intentToken = intent.getStringExtra(EXTRA_RESUME_LISTENING_TOKEN),
+                    expectedToken = container.resumeListeningToken,
+                ),
             )
         } else {
             // Handed over by another app. Shelve it, then read the copy
@@ -705,6 +710,7 @@ class ReaderActivity : FragmentActivity() {
                                                     intent(this@ReaderActivity, open.url.toString(), open.id),
                                                 )
                                             },
+                                            unblocked = viewModel.readAloudUnblocked,
                                         )
                                     },
                                     translate = container.translate,
@@ -1037,6 +1043,7 @@ class ReaderActivity : FragmentActivity() {
 
         /** Opens the book to play its paused listening, as the shelf's Continue listening does. */
         const val EXTRA_RESUME_LISTENING = "resume_listening"
+        private const val EXTRA_RESUME_LISTENING_TOKEN = "resume_listening_token"
 
         private val VOLUME_KEYS = setOf(
             KeyEvent.KEYCODE_VOLUME_DOWN,
@@ -1075,14 +1082,30 @@ class ReaderActivity : FragmentActivity() {
             id: String = url,
             at: String? = null,
             resumeListening: Boolean = false,
+            resumeListeningToken: String? = null,
         ): Intent =
             Intent(context, ReaderActivity::class.java)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_ID, id)
                 .apply { if (at != null) putExtra(EXTRA_AT, at) }
-                .apply { if (resumeListening) putExtra(EXTRA_RESUME_LISTENING, true) }
+                .apply {
+                    if (resumeListening) {
+                        putExtra(EXTRA_RESUME_LISTENING, true)
+                        if (resumeListeningToken != null) {
+                            putExtra(EXTRA_RESUME_LISTENING_TOKEN, resumeListeningToken)
+                        }
+                    }
+                }
     }
 }
+
+/** ReaderActivity is exported, so only an intent carrying the current process token may start playback. */
+internal fun honorsResumeListening(
+    freshOpen: Boolean,
+    requested: Boolean,
+    intentToken: String?,
+    expectedToken: String,
+): Boolean = freshOpen && requested && intentToken != null && intentToken == expectedToken
 
 /**
  * What the spinner is drawn in while a book is opening.

@@ -189,4 +189,129 @@ class ReaderReadAloudTest {
         assertFalse(start.await())
         assertFalse(started)
     }
+
+    @Test
+    fun `resume listening honors only fresh intents carrying the current process token`() {
+        val token = "process-token"
+
+        assertTrue(
+            honorsResumeListening(
+                freshOpen = true,
+                requested = true,
+                intentToken = token,
+                expectedToken = token,
+            ),
+        )
+        assertFalse(
+            honorsResumeListening(
+                freshOpen = false,
+                requested = true,
+                intentToken = token,
+                expectedToken = token,
+            ),
+        )
+        assertFalse(
+            honorsResumeListening(
+                freshOpen = true,
+                requested = false,
+                intentToken = token,
+                expectedToken = token,
+            ),
+        )
+        assertFalse(
+            honorsResumeListening(
+                freshOpen = true,
+                requested = true,
+                intentToken = null,
+                expectedToken = token,
+            ),
+        )
+        assertFalse(
+            honorsResumeListening(
+                freshOpen = true,
+                requested = true,
+                intentToken = "forged-token",
+                expectedToken = token,
+            ),
+        )
+    }
+
+    @Test
+    fun `continue listening keeps the resume request pending while BookOrbit blocks it`() = runTest {
+        var resumePending = true
+        var resumedLive = 0
+        val restoredWithResume = mutableListOf<Boolean>()
+
+        continueListeningWhenUnblocked(
+            blocked = true,
+            resumeRequested = resumePending,
+            consumeResume = { resumePending = false },
+            resumeIfPaused = {
+                resumedLive++
+                true
+            },
+            restorePaused = { restoredWithResume += it },
+        )
+
+        assertTrue(resumePending)
+        assertEquals(0, resumedLive)
+        assertTrue(restoredWithResume.isEmpty())
+
+        continueListeningWhenUnblocked(
+            blocked = false,
+            resumeRequested = resumePending,
+            consumeResume = { resumePending = false },
+            resumeIfPaused = {
+                resumedLive++
+                true
+            },
+            restorePaused = { restoredWithResume += it },
+        )
+
+        assertFalse(resumePending)
+        assertEquals(1, resumedLive)
+        assertTrue(restoredWithResume.isEmpty())
+
+        continueListeningWhenUnblocked(
+            blocked = false,
+            resumeRequested = resumePending,
+            consumeResume = { resumePending = false },
+            resumeIfPaused = {
+                resumedLive++
+                true
+            },
+            restorePaused = { restoredWithResume += it },
+        )
+
+        assertEquals(1, resumedLive)
+        assertEquals(listOf(false), restoredWithResume)
+    }
+
+    @Test
+    fun `deferred continue listening falls back to restoring paused playback with resume`() = runTest {
+        var resumePending = true
+        val restoredWithResume = mutableListOf<Boolean>()
+
+        continueListeningWhenUnblocked(
+            blocked = true,
+            resumeRequested = resumePending,
+            consumeResume = { resumePending = false },
+            resumeIfPaused = { false },
+            restorePaused = { restoredWithResume += it },
+        )
+
+        assertTrue(resumePending)
+        assertTrue(restoredWithResume.isEmpty())
+
+        continueListeningWhenUnblocked(
+            blocked = false,
+            resumeRequested = resumePending,
+            consumeResume = { resumePending = false },
+            resumeIfPaused = { false },
+            restorePaused = { restoredWithResume += it },
+        )
+
+        assertFalse(resumePending)
+        assertEquals(listOf(true), restoredWithResume)
+    }
 }

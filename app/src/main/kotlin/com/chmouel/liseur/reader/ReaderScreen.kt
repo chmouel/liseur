@@ -2613,9 +2613,10 @@ internal fun ReaderScreen(
         navigator ?: return@LaunchedEffect
         val reading = readAloud ?: return@LaunchedEffect
         if (!readAloudFeature.isAvailable || !readAloudConfigured) return@LaunchedEffect
-        while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
-        if (pageTranslated) return@LaunchedEffect
-        reading.continueListening()
+        reading.unblocked.collect {
+            while (gate.isGated) delay(READ_ALOUD_CAPTURE_WAIT_MS)
+            if (!pageTranslated) reading.continueListening()
+        }
     }
 
     // The book's words go back on the page in the effect below.
