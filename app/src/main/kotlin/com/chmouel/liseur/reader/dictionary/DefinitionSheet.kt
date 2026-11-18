@@ -174,7 +174,10 @@ fun DefinitionSheet(
             val pack = offline ?: return@produceState
             if (localResult?.isSuccess != true || localResult.getOrNull() != null) return@produceState
             value = try {
-                OfflineDictionary.suggestions(context, pack.id, term)
+                (listOf(term) + fallbackWords)
+                    .flatMap { OfflineDictionary.suggestions(context, pack.id, it) }
+                    .distinct()
+                    .take(MAX_SUGGESTIONS)
             } catch (_: java.io.IOException) {
                 emptyList()
             }
@@ -495,6 +498,9 @@ fun DefinitionSheet(
         )
     }
 }
+
+/** How many spelling suggestions a missed word offers before the row gets long. */
+private const val MAX_SUGGESTIONS = 5
 
 /** What a lookup came to, once there is something to say: loading, the senses, or why not. */
 @Composable

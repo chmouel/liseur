@@ -67,4 +67,18 @@ class DefinitionQueryTest {
             assertEquals(listOf("très bien"), DefinitionQuery("très${space}bien", "fr").fallbackWords())
         }
     }
+
+    @Test
+    fun `quotes and brackets in other scripts are stripped from the edges`() {
+        assertEquals(listOf("bonjour"), DefinitionQuery("«bonjour»", "fr").fallbackWords())
+        assertEquals(listOf("hola"), DefinitionQuery("¿hola?", "es").fallbackWords())
+        assertEquals(listOf("cat"), DefinitionQuery("「cat」", null).fallbackWords())
+        assertEquals(listOf("chat"), DefinitionQuery("¡chat!", null).fallbackWords())
+    }
+
+    @Test
+    fun `every French elision falls back to the word it hides`() {
+        assertEquals(listOf("j'aime", "aime"), DefinitionQuery("j’aime", "fr").fallbackWords())
+        assertEquals(listOf("c'est", "est"), DefinitionQuery("c’est", "fr").fallbackWords())
+    }
 }
