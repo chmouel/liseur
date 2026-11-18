@@ -83,6 +83,9 @@ interface ReadAloudFeature {
     /** The session in progress, whichever book it is reading. */
     val session: StateFlow<ReadAloudUi?>
 
+    /** The unresolved playback or setup problem, if any. */
+    val problem: StateFlow<ReadAloudProblem?>
+
     val notices: SharedFlow<ReadAloudBookNotice>
 
     /**
@@ -114,6 +117,12 @@ interface ReadAloudFeature {
      */
     fun cancelChoice(bookId: String) = Unit
 
+    /** Clears the unresolved problem for [bookId], or whichever problem is shown when null. */
+    fun dismissProblem(bookId: String? = null) = Unit
+
+    /** Clears a non-recoverable problem for [bookId] when its reader closes. */
+    fun readerClosed(bookId: String) = Unit
+
     /**
      * Pauses. On the main thread, the place heard so far is queued and
      * handed back to the reader before this returns, so a move the
@@ -138,13 +147,14 @@ interface ReadAloudFeature {
     /**
      * The player laid over [bookId]'s page while it is being read aloud,
      * painted in the reading [theme], with whatever the listener should
-     * be told. Draws nothing for another book or no session. The controls
-     * show only while [controls] is set, which is when the reader has
-     * raised the chrome; otherwise the page shows just the highlight.
-     * [onReturnToVoice], set while the reader has moved away from the
-     * sentence being read, offers to take the page back to it. Reading
-     * that has to start again, as after changing the service from its
-     * voice sheet, goes through the reader's own [start].
+     * be told: a problem with [bookId], shown whether or not it is still
+     * being read. Draws nothing else for another book or no session. The
+     * controls show only while [controls] is set, which is when the
+     * reader has raised the chrome; otherwise the page shows just the
+     * highlight. [onReturnToVoice], set while the reader has moved away
+     * from the sentence being read, offers to take the page back to it.
+     * Reading that has to start again, as after changing the service from
+     * its voice sheet, goes through the reader's own [start].
      */
     @Composable
     fun Player(
@@ -160,6 +170,7 @@ interface ReadAloudFeature {
         override val isAvailable = false
         override val configured: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
         override val session: StateFlow<ReadAloudUi?> = MutableStateFlow<ReadAloudUi?>(null).asStateFlow()
+        override val problem: StateFlow<ReadAloudProblem?> = MutableStateFlow<ReadAloudProblem?>(null).asStateFlow()
         override val notices: SharedFlow<ReadAloudBookNotice> = MutableSharedFlow<ReadAloudBookNotice>().asSharedFlow()
 
         override fun start(handle: OpenBookHandle, selection: Locator, reader: Intent, translation: SpeechTranslation?) {
