@@ -18,11 +18,7 @@ package com.chmouel.liseur.domain
  * The cost is that two genuinely different series sharing a title become
  * one. That is rare, and the alternative gets the common case wrong.
  */
-fun seriesKey(name: String?): String {
-    val folded = name?.trim().orEmpty()
-    if (folded.isEmpty()) return ""
-    return sortKey(folded.foldForSearch())
-}
+fun seriesKey(name: String?): String = sortKey(name)
 
 /**
  * How a book's place in its series reads: `#3`, or `#7.5` when a novella

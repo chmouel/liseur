@@ -168,7 +168,7 @@ fun recentSeries(options: List<SeriesPickOption>, limit: Int = 5): List<SeriesPi
  * bucket at the end rather than in a scattering of one-row sections.
  */
 fun seriesInitial(name: String): String {
-    val first = sortKey(name.foldForSearch()).firstOrNull() ?: return OTHER_INITIAL
+    val first = sortKey(name).firstOrNull() ?: return OTHER_INITIAL
     return if (first.isLetter()) first.uppercase() else OTHER_INITIAL
 }
 

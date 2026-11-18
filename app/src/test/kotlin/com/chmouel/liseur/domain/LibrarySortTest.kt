@@ -77,6 +77,9 @@ class LibrarySortTest {
     fun `sort keys fold composed and decomposed accents`() {
         assertEquals("aaaaeeiooouc", sortKey("ÁÀÂÃÉÊÍÓÔÕÚÇ"))
         assertEquals("eden", sortKey("E\u0301den"))
+        assertEquals("a la recherche du temps perdu", sortKey("À la recherche du temps perdu"))
+        assertEquals("ирис", sortKey("Ирис"))
+        assertEquals("йогурт", sortKey("Йогурт"))
     }
 
     @Test
