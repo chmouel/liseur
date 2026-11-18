@@ -106,6 +106,7 @@ fun NoteEditor(
     @StringRes clearRes: Int,
     onSave: (note: String, tint: HighlightTint?) -> Unit,
     onDismiss: () -> Unit,
+    canClear: Boolean = true,
 ) {
     val eInk = LocalEInk.current
     val ink = theme.foreground
@@ -121,7 +122,7 @@ fun NoteEditor(
     var confirmingDiscard by rememberSaveable { mutableStateOf(false) }
 
     val dirty = value.text != initialNote || tint != initialTint
-    val clearing = value.text.isBlank() && initialNote.isNotBlank()
+    val clearing = canClear && value.text.isBlank() && initialNote.isNotBlank()
     val canSave = value.text.isNotBlank() || clearing
     val close = { if (dirty) confirmingDiscard = true else onDismiss() }
     // An untouched note goes back exactly as it was, so a colour change
