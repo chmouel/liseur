@@ -107,7 +107,7 @@ class ReaderActivity : FragmentActivity() {
 
     private val viewModel: ReaderViewModel by viewModels {
         val open = checkNotNull(target)
-        ReaderViewModel.factory(open.url, open.id, open.at)
+        ReaderViewModel.factory(open.url, open.id, open.at, resumeListening = open.resumeListening)
     }
 
     private val companionViewModel: CompanionViewModel by viewModels {
@@ -128,7 +128,13 @@ class ReaderActivity : FragmentActivity() {
      * entry — filing the book afterwards would strand the position
      * under a URI the library knows nothing about.
      */
-    private data class OpenTarget(val url: AbsoluteUrl, val id: String, val at: String? = null)
+    private data class OpenTarget(
+        val url: AbsoluteUrl,
+        val id: String,
+        val at: String? = null,
+        /** The shelf's Continue listening opens this book to play its paused listening. */
+        val resumeListening: Boolean = false,
+    )
 
     private var target by mutableStateOf<OpenTarget?>(null)
 
@@ -166,6 +172,7 @@ class ReaderActivity : FragmentActivity() {
                 intent.getStringExtra(EXTRA_ID) ?: url.toString(),
                 // Only on a fresh open: after recreation the reader's own place wins.
                 intent.getStringExtra(EXTRA_AT).takeIf { savedInstanceState == null },
+                savedInstanceState == null && intent.getBooleanExtra(EXTRA_RESUME_LISTENING, false),
             )
         } else {
             // Handed over by another app. Shelve it, then read the copy
@@ -693,8 +700,8 @@ class ReaderActivity : FragmentActivity() {
                                             },
                                             awaitingCapture = viewModel::listenedPlaceAwaitingCapture,
                                             captured = viewModel::listenedPlaceCaptured,
-                                            restorePaused = {
-                                                viewModel.restorePausedReadAloud(
+                                            continueListening = {
+                                                viewModel.continueListening(
                                                     intent(this@ReaderActivity, open.url.toString(), open.id),
                                                 )
                                             },
@@ -1028,6 +1035,9 @@ class ReaderActivity : FragmentActivity() {
         private const val EXTRA_ID = "id"
         private const val EXTRA_AT = "at"
 
+        /** Opens the book to play its paused listening, as the shelf's Continue listening does. */
+        const val EXTRA_RESUME_LISTENING = "resume_listening"
+
         private val VOLUME_KEYS = setOf(
             KeyEvent.KEYCODE_VOLUME_DOWN,
             KeyEvent.KEYCODE_VOLUME_UP,
@@ -1059,11 +1069,18 @@ class ReaderActivity : FragmentActivity() {
         )
 
         /** [at] is a locator to open at for a look, leaving the saved place where it is. */
-        fun intent(context: Context, url: String, id: String = url, at: String? = null): Intent =
+        fun intent(
+            context: Context,
+            url: String,
+            id: String = url,
+            at: String? = null,
+            resumeListening: Boolean = false,
+        ): Intent =
             Intent(context, ReaderActivity::class.java)
                 .putExtra(EXTRA_URL, url)
                 .putExtra(EXTRA_ID, id)
                 .apply { if (at != null) putExtra(EXTRA_AT, at) }
+                .apply { if (resumeListening) putExtra(EXTRA_RESUME_LISTENING, true) }
     }
 }
 

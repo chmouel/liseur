@@ -83,6 +83,8 @@ internal fun ListLibrary(
     onSeriesSelected: (SeriesShelf) -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    /** The shelf's Continue listening row, drawn above everything else. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val compact = state.layout.compactList
     LazyVerticalGrid(
@@ -92,6 +94,9 @@ internal fun ListLibrary(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp + bottomInset),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        header?.let { above ->
+            item(key = "list:listening", span = { GridItemSpan(maxLineSpan) }) { above() }
+        }
         state.continueReading
             ?.takeIf { !state.layout.tabs && !state.isSearchActive && !state.filters.archived }
             ?.let { recent ->

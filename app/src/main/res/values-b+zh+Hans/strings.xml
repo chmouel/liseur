@@ -270,6 +270,7 @@
     <string name="series_source_personal">您自行设置的系列归属</string>
     <string name="clear">清除</string>
     <string name="continue_reading">继续阅读</string>
+    <string name="continue_listening">继续收听 · %1$s</string>
     <string name="empty_library_title">您的书库是空的</string>
     <string name="empty_library_subtitle">您可以这样把书加进来。</string>
     <string name="starter_catalog">从免费图书开始</string>

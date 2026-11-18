@@ -64,6 +64,7 @@ import com.chmouel.liseur.domain.Shelf
 import com.chmouel.liseur.domain.ShelfEntry
 import com.chmouel.liseur.domain.arrangedBy
 import com.chmouel.liseur.domain.asPickOption
+import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.groupedIntoSeries
 import com.chmouel.liseur.domain.homeDeskOf
 import com.chmouel.liseur.domain.ReadingPulse
@@ -79,6 +80,9 @@ import com.chmouel.liseur.domain.shelvesOf
 import com.chmouel.liseur.domain.syncsPositions
 import com.chmouel.liseur.domain.trackLengths
 import com.chmouel.liseur.domain.worthShowing
+import com.chmouel.liseur.readaloud.PausedListening
+import com.chmouel.liseur.readaloud.PausedReadAloud
+import com.chmouel.liseur.readaloud.ReadAloudFeature
 import com.chmouel.liseur.sync.PositionSyncCoordinator
 import com.chmouel.liseur.sync.SyncScope
 import kotlinx.coroutines.CancellationException
@@ -116,6 +120,32 @@ import java.time.ZoneId
 data class ContinueReading(
     val book: Book,
     val progression: Double?,
+)
+
+/**
+ * The book left paused while it was being read aloud, as the shelf offers
+ * to carry on with it: the row names the book and opens it asking the
+ * reader to play the listening on.
+ */
+data class ContinueListening(
+    /** The book's URL, which is the name its listening is filed under. */
+    val bookId: String,
+    /** What the row calls the book. */
+    val title: String,
+    /** The shelf entry the row opens. */
+    val book: Book,
+)
+
+/**
+ * What the shelf knows of the one paused listening: the record kept, and
+ * whether read aloud can take it up and is not already busy with it.
+ */
+private data class ListeningShelf(
+    val record: PausedReadAloud? = null,
+    val available: Boolean = false,
+    val configured: Boolean = false,
+    /** The book whose listening is under way, playing or still landing. */
+    val playingBookId: String? = null,
 )
 
 /** The Library tab's quick filter chips and how many books each would show. */
@@ -217,6 +247,8 @@ data class LibraryUiState(
      */
     val shelfEntries: List<ShelfEntry> = emptyList(),
     val continueReading: ContinueReading? = null,
+    /** The book left paused while read aloud, for the shelf's Continue listening row. */
+    val continueListening: ContinueListening? = null,
     val catalogStatus: CatalogStatus = CatalogStatus.Idle,
     val downloads: Map<String, DownloadProgress> = emptyMap(),
     val canDownload: Boolean = true,
@@ -453,6 +485,33 @@ internal fun continueReadingFrom(
             continueReadingFor(book, progressions[book.url], overrides[book.url])
         }
 
+/**
+ * The shelf's offer to carry on listening with [record]'s book, or null
+ * when it should say nothing.
+ *
+ * Nothing is offered without read aloud to offer it: a build or a device
+ * that cannot read aloud at all, a voice nobody has chosen yet, the
+ * archive or a search (where the row is not about what is on screen), a
+ * book gone or archived since the pause, and the book already being read
+ * aloud, playing or still landing, which leaves nothing to carry on with.
+ */
+internal fun continueListeningFor(
+    books: List<Book>,
+    record: PausedReadAloud?,
+    available: Boolean,
+    configured: Boolean,
+    /** The book whose listening is under way, playing or still landing. */
+    playingBookId: String?,
+    onShelf: Boolean,
+): ContinueListening? {
+    if (!available || !configured || !onShelf) return null
+    val paused = record ?: return null
+    if (playingBookId == paused.bookId) return null
+    val book = books.firstOrNull { it.url == paused.bookId } ?: return null
+    if (book.archived || book.hidden) return null
+    return ContinueListening(bookId = paused.bookId, title = book.displayTitle, book = book)
+}
+
 /** Whether [book] may be fetched: from its saved catalog if it has one, else the connection. */
 fun LibraryUiState.canDownload(book: Book): Boolean = book.browseServerId?.let { it in downloadableBrowse } ?: canDownload
 
@@ -512,6 +571,35 @@ data class ImportedOpen(
     val bookUrl: String?,
 )
 
+/**
+ * A tap on a book that was still on the server: which one, and whether
+ * the reader should play on the listening paused in it, as the Continue
+ * listening row asks.
+ */
+data class PendingOpen(
+    val url: String,
+    val resumeListening: Boolean = false,
+)
+
+/** The book to open once its file lands, and how to open it. */
+data class ReaderOpenRequest(
+    val book: Book,
+    val resumeListening: Boolean = false,
+)
+
+/**
+ * The open request [pending] stands for, or null while its book is not on
+ * the shelf or not openable yet.
+ */
+internal fun pendingOpenRequest(
+    pending: PendingOpen,
+    books: List<Book>,
+): ReaderOpenRequest? {
+    val book = books.firstOrNull { it.url == pending.url } ?: return null
+    if (book.openableUrl == null) return null
+    return ReaderOpenRequest(book, pending.resumeListening)
+}
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryViewModel(
     private val library: LocalLibraryRepository,
@@ -538,6 +626,14 @@ class LibraryViewModel(
     readingSessions: Flow<List<ReadingSession>> = flowOf(emptyList()),
     /** Quotes from what has been read, for Home; null leaves the card out. */
     private val homeQuotes: com.chmouel.liseur.data.quotes.HomeQuotes? = null,
+    /**
+     * Reading aloud, for the shelf's Continue listening row. Asked for
+     * only once a paused listening exists, so the shelf does not reach
+     * for a voice engine to say nothing.
+     */
+    private val readAloud: () -> ReadAloudFeature = { ReadAloudFeature.None },
+    /** The book left paused while read aloud, as the shelf offers it back. */
+    private val pausedListening: PausedListening? = null,
     savedState: SavedStateHandle = SavedStateHandle(),
     ratedBooks: Flow<List<String>> = flowOf(emptyList()),
 ) : ViewModel() {
@@ -608,7 +704,7 @@ class LibraryViewModel(
      * Tapping means "read this", so once the file lands the reader opens by
      * itself; downloads started any other way never do this.
      */
-    private val awaitingOpen = MutableStateFlow<String?>(null)
+    private val awaitingOpen = MutableStateFlow<PendingOpen?>(null)
 
     /**
      * Whether the offer to upload has been turned down since the app
@@ -619,21 +715,21 @@ class LibraryViewModel(
     private val uploadPromptDismissed = MutableStateFlow(false)
 
     /** Books that have finished downloading and were asked for by name. */
-    val openRequests: Flow<Book> =
-        awaitingOpen.flatMapLatest { url ->
-            if (url == null) {
+    val openRequests: Flow<ReaderOpenRequest> =
+        awaitingOpen.flatMapLatest { pending ->
+            if (pending == null) {
                 emptyFlow()
             } else {
                 library.books
-                    .mapNotNull { books -> books.firstOrNull { it.url == url } }
-                    .filter { it.openableUrl != null }
+                    .mapNotNull { books -> pendingOpenRequest(pending, books) }
                     .take(1)
             }
         }
 
     /** Downloads that were meant to be read right away and could not be. */
     val failedOpens: Flow<Book> =
-        awaitingOpen.flatMapLatest { url ->
+        awaitingOpen.flatMapLatest { pending ->
+            val url = pending?.url
             if (url == null) {
                 emptyFlow()
             } else {
@@ -787,6 +883,37 @@ class LibraryViewModel(
             }
         }
 
+    /** The book left paused while read aloud, or null when none is kept. */
+    private val pausedBook: Flow<PausedReadAloud?> = pausedListening?.record ?: flowOf(null)
+
+    /**
+     * What the shelf knows of the paused listening, which is everything
+     * [continueListeningFor] asks: the record, and whether read aloud is
+     * there to take it up and already busy with the same book. Read aloud
+     * is asked for here rather than held from the start, so the shelf does
+     * not reach for a voice engine to say nothing; asked for on the main
+     * thread, which is the only thread the feature agrees to be built on.
+     */
+    private val listeningShelf: Flow<ListeningShelf> =
+        pausedBook
+            .flatMapLatest { record ->
+                if (record == null) {
+                    flowOf(ListeningShelf())
+                } else {
+                    val feature = readAloud()
+                    combine(feature.configured, feature.session) { configured, session ->
+                        ListeningShelf(
+                            record = record,
+                            available = feature.isAvailable,
+                            configured = configured,
+                            playingBookId = session?.takeIf { it.playing || it.preparing }?.bookId,
+                        )
+                    }
+                }
+            }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.Main.immediate)
+
     val state: StateFlow<LibraryUiState> =
         combine(
             combine(
@@ -806,6 +933,7 @@ class LibraryViewModel(
                 kosyncPeer,
                 _seriesView,
                 ratedBooks,
+                listeningShelf,
             ) { values -> values },
             _searchQuery,
             _isSearchActive,
@@ -834,6 +962,7 @@ class LibraryViewModel(
             val seriesView = baseValues[14] as Boolean && settings.libraryLayout.tabs
             @Suppress("UNCHECKED_CAST")
             val rated = (baseValues[15] as List<String>).toSet()
+            val listening = baseValues[16] as ListeningShelf
 
             @Suppress("UNCHECKED_CAST")
             val readAtList = baseValues[7] as List<BookReadAt>
@@ -990,6 +1119,17 @@ class LibraryViewModel(
                         emptyList()
                     },
                 continueReading = current,
+                continueListening =
+                    continueListeningFor(
+                        books = books,
+                        record = listening.record,
+                        available = listening.available,
+                        configured = listening.configured,
+                        playingBookId = listening.playingBookId,
+                        // Not over a search or the archive, which are not
+                        // the shelf the row offers to carry on with.
+                        onShelf = !searchActive && !filters.archived,
+                    ),
                 catalogStatus = catalogStatus,
                 downloads = running,
                 canDownload = server?.canDownload != false,
@@ -1357,8 +1497,11 @@ class LibraryViewModel(
     }
 
     /** Fetch a book and open it as soon as it is here. */
-    fun downloadAndOpen(book: Book) {
-        awaitingOpen.value = book.url
+    fun downloadAndOpen(
+        book: Book,
+        resumeListening: Boolean = false,
+    ) {
+        awaitingOpen.value = PendingOpen(book.url, resumeListening)
         viewModelScope.launch { downloads.enqueue(book) }
     }
 
@@ -1368,7 +1511,7 @@ class LibraryViewModel(
     }
 
     fun cancelDownload(book: Book) {
-        if (awaitingOpen.value == book.url) awaitingOpen.value = null
+        if (awaitingOpen.value?.url == book.url) awaitingOpen.value = null
         viewModelScope.launch { downloads.cancel(book) }
     }
 
@@ -1982,6 +2125,8 @@ class LibraryViewModel(
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),
                         homeQuotes = container.homeQuotes,
+                        readAloud = { container.readAloud },
+                        pausedListening = container.pausedListening,
                         savedState = createSavedStateHandle(),
                         ratedBooks = container.database.bookEvaluationDao().observeRatedBooks(),
                     )

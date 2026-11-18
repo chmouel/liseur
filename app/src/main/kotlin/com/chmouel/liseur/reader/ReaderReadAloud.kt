@@ -22,8 +22,11 @@ class ReaderReadAloud(
     val awaitingCapture: () -> Locator?,
     /** The page showing the place listening saved was saved as [Locator]. */
     val captured: (Locator) -> Unit = {},
-    /** Puts back the session the book was paused in when the app closed, if it still stands. */
-    val restorePaused: suspend () -> Unit = {},
+    /**
+     * Carries on the book's paused listening once the page has landed,
+     * playing it when the shelf's Continue listening opened the reader.
+     */
+    val continueListening: suspend () -> Unit = {},
 )
 
 internal fun readAloudStartLocator(selected: Locator, original: Locator?, translated: Boolean): Locator =

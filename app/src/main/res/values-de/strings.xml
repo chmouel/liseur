@@ -104,6 +104,7 @@
     <string name="series_source_personal">Deine persönliche Reihenzuordnung</string>
     <string name="clear">Löschen</string>
     <string name="continue_reading">Weiterlesen</string>
+    <string name="continue_listening">Weiterhören · %1$s</string>
     <string name="empty_library_title">Deine Bibliothek ist leer</string>
     <string name="empty_library_subtitle">So füllst du sie.</string>
     <string name="starter_catalog">Mit kostenlosen Büchern starten</string>

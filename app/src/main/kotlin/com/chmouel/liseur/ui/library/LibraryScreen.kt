@@ -206,6 +206,8 @@ fun LibraryScreen(
     onAddBook: () -> Unit,
     onAddFolder: () -> Unit,
     onBookSelected: (Book) -> Unit,
+    /** Opens [Book] to play the listening paused in it, as Continue listening asks. */
+    onResumeListening: (Book) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
     /** Opens the sheet that turns translation on; shown in the menu only when set. */
@@ -240,7 +242,7 @@ fun LibraryScreen(
     onSyncNow: suspend () -> SyncOutcome,
     onSetSort: (LibrarySort) -> Unit,
     onToggleSortDirection: () -> Unit,
-    onDownloadAndOpen: (Book) -> Unit,
+    onDownloadAndOpen: (Book, resumeListening: Boolean) -> Unit,
     failedOpens: Flow<Book>,
     sentUp: Flow<Book>,
     uploadRefusals: Flow<UploadRefusal>,
@@ -345,14 +347,33 @@ fun LibraryScreen(
     val eInk = LocalEInk.current
     val notYetHere = stringResource(R.string.book_not_downloaded)
     val credentialsLost = stringResource(R.string.server_credentials_lost)
-    val openShelfBook: (Book) -> Unit = { book ->
+    // A shelf tap and the Continue listening row ask the same question of
+    // the book — where is it? — and differ only in what the reader is
+    // asked to do once it opens.
+    fun openBook(book: Book, resumeListening: Boolean) {
         when {
-            book.openableUrl != null -> onBookSelected(book)
+            book.openableUrl != null ->
+                if (resumeListening) onResumeListening(book) else onBookSelected(book)
             book.url in state.downloads ->
                 scope.launch { snackbarHost.showSnackbar(downloading) }
             !state.canDownload(book) ->
                 scope.launch { snackbarHost.showSnackbar(downloadsNotAllowed) }
-            else -> onDownloadAndOpen(book)
+            else -> onDownloadAndOpen(book, resumeListening)
+        }
+    }
+    val openShelfBook: (Book) -> Unit = { book -> openBook(book, resumeListening = false) }
+    // One row above the books, whatever style is showing. Whether it
+    // belongs at all is decided with the state (continueListeningFor), so
+    // this only draws it.
+    val listeningRow = state.continueListening
+    val listeningHeader: (@Composable () -> Unit)? = if (listeningRow == null) {
+        null
+    } else {
+        {
+            ContinueListeningRow(
+                row = listeningRow,
+                onClick = { openBook(listeningRow.book, resumeListening = true) },
+            )
         }
     }
     // A widget cover gets the same answer as a shelf tap, once the
@@ -1010,6 +1031,7 @@ fun LibraryScreen(
                         },
                         bottomInset = bottomInset,
                         modifier = Modifier.fillMaxSize(),
+                        header = listeningHeader,
                     )
 
                     // Every book on the shelf has been read. The rule
@@ -1041,18 +1063,25 @@ fun LibraryScreen(
                     state.books.isEmpty() || (showSeries && state.seriesTabSeries.isEmpty()) -> Column(fillAboveBar) {
                         if (showSeries) {
                             Box(Modifier.padding(horizontal = 16.dp)) { seriesControls() }
-                        } else if (!archived) {
-                            LibraryControlsRow(
-                                state = state,
-                                onSetSort = onSetSort,
-                                onToggleSortDirection = onToggleSortDirection,
-                                onToggleFilter = onToggleFilter,
-                                onSetGroupBySeries = onSetGroupBySeries,
-                                onClearFilters = onClearFilters,
-                                onChooseStyle = { choosingStyle = true },
-                                onSetReadingFilter = onSetReadingFilter,
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                            )
+                        } else {
+                            // Still the shelf the row offers to carry on
+                            // with, even when no book matches the filters.
+                            listeningHeader?.let { above ->
+                                Box(Modifier.padding(horizontal = 16.dp)) { above() }
+                            }
+                            if (!archived) {
+                                LibraryControlsRow(
+                                    state = state,
+                                    onSetSort = onSetSort,
+                                    onToggleSortDirection = onToggleSortDirection,
+                                    onToggleFilter = onToggleFilter,
+                                    onSetGroupBySeries = onSetGroupBySeries,
+                                    onClearFilters = onClearFilters,
+                                    onChooseStyle = { choosingStyle = true },
+                                    onSetReadingFilter = onSetReadingFilter,
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                )
+                            }
                         }
                         NothingMatched(
                             searching = false,
@@ -1110,6 +1139,7 @@ fun LibraryScreen(
                                 onSeriesSelected = onSeriesSelected,
                                 bottomInset = bottomInset,
                                 modifier = Modifier.fillMaxSize(),
+                                header = listeningHeader,
                             )
 
                             LibraryStyle.LIST -> ListLibrary(
@@ -1121,6 +1151,7 @@ fun LibraryScreen(
                                 onSeriesSelected = onSeriesSelected,
                                 bottomInset = bottomInset,
                                 modifier = Modifier.fillMaxSize(),
+                                header = listeningHeader,
                             )
 
                             LibraryStyle.CLASSIC, LibraryStyle.HOME -> BookGrid(
@@ -1138,6 +1169,7 @@ fun LibraryScreen(
                                 onSeriesSelected = onSeriesSelected,
                                 bottomInset = bottomInset,
                                 modifier = Modifier.fillMaxSize(),
+                                header = listeningHeader,
                             )
                         }
                     }
@@ -1930,6 +1962,8 @@ private fun BookGrid(
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
     onSetReadingFilter: ((Set<LibraryFilterOption>) -> Unit)? = null,
+    /** The shelf's Continue listening row, drawn above everything else. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     // Compact fits one more column than the comfortable width allows.
     val compact = state.layout.compactGrid && state.searchResults == null
@@ -1948,6 +1982,9 @@ private fun BookGrid(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        header?.let { above ->
+            item(key = "classic:listening", span = { GridItemSpan(maxLineSpan) }) { above() }
+        }
         // Not a search result, so it has no business sitting above them
         // and pushing the real answers off the screen. Nor is it an
         // archived book, so in the archive it is a book from somewhere

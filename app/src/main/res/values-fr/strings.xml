@@ -103,6 +103,7 @@
     <string name="series_source_personal">Votre classement personnel dans une série</string>
     <string name="clear">Effacer</string>
     <string name="continue_reading">Continuer la lecture</string>
+    <string name="continue_listening">Continuer l\'écoute · %1$s</string>
     <string name="empty_library_title">Votre bibliothèque est vide</string>
     <string name="empty_library_subtitle">Voici comment la remplir.</string>
     <string name="starter_catalog">Commencer avec des livres gratuits</string>

@@ -120,6 +120,8 @@ internal fun ShelvesLibrary(
     onSeriesSelected: (SeriesShelf) -> Unit,
     modifier: Modifier = Modifier,
     bottomInset: Dp = 0.dp,
+    /** The shelf's Continue listening row, drawn above everything else. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val columns = booksPerPlank(windowWidth())
     val packAuthors = state.shownShelfGrouping == ShelfGrouping.AUTHOR
@@ -144,6 +146,10 @@ internal fun ShelvesLibrary(
             listState.scrollToItem(0)
         }
     }
+    // The paused listening arrives after the shelves are laid out, and the
+    // list stays anchored on the first shelf; without this the row lands
+    // off-screen above it.
+    RevealInsertedRow(listState, present = header != null)
 
     val customUri = state.layout.shelfBackdropUri?.takeIf { backdrop == ShelfBackdrop.CUSTOM }
     Box(modifier = modifier) {
@@ -170,6 +176,11 @@ internal fun ShelvesLibrary(
             contentPadding = PaddingValues(top = 8.dp, bottom = 28.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            header?.let { above ->
+                item(key = "shelves:listening") {
+                    Box(Modifier.padding(horizontal = 16.dp)) { above() }
+                }
+            }
             state.continueReading
                 // Grouped by reading state, the Reading shelf comes first and
                 // already shows the book; with the bottom bar on, its cover is

@@ -120,11 +120,17 @@ internal fun HomeLibrary(
     quote: HomeQuote? = null,
     onOpenQuote: (HomeQuote) -> Unit = {},
     onAnotherQuote: () -> Unit = {},
+    /** The shelf's Continue listening row, drawn above everything else. */
+    header: (@Composable () -> Unit)? = null,
 ) {
     val desk = state.home
     val wide = widthClass() != WidthClass.COMPACT
     val current = state.continueReading
     val starter = desk.starter
+    // The paused listening is read from disk after Home is laid out, and the
+    // list stays anchored on the hero; without this the row lands off-screen
+    // above it.
+    RevealInsertedRow(listState, present = header != null)
     // The strips scroll to the screen edge; everything else keeps the gutter.
     val gutter = Modifier.padding(horizontal = 16.dp)
     LazyColumn(
@@ -133,6 +139,9 @@ internal fun HomeLibrary(
         contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp + bottomInset),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        header?.let { above ->
+            item(key = "home:listening") { Box(gutter) { above() } }
+        }
         item(key = "home:top") {
             val heroCard: @Composable (Modifier) -> Unit = { cardModifier ->
                 when {

@@ -109,6 +109,7 @@
     <string name="series_source_personal">Ваше личное распределение по сериям</string>
     <string name="clear">Очистить</string>
     <string name="continue_reading">Продолжить чтение</string>
+    <string name="continue_listening">Продолжить прослушивание · %1$s</string>
     <string name="empty_library_title">Библиотека пуста</string>
     <string name="empty_library_subtitle">Вот как её заполнить.</string>
     <string name="starter_catalog">Начать с бесплатных книг</string>
