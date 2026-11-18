@@ -20,41 +20,46 @@
 
 An open-source ebook reader for Android, and a client for [calibre-web](https://github.com/janeczku/calibre-web), [Komga](https://komga.org), [BookOrbit](https://bookorbit.app), [liseur-sync](https://github.com/chmouel/liseur-sync) and any [OPDS](https://specs.opds.io/opds-1.2) catalog: EPUBs on your phone or in sync with book server.
 
+<p align="center">
+  <a href="https://play.google.com/store/apps/details?id=com.chmouel.liseur">
+    <img alt="Get it on Google Play" src="https://appure.io/badges/playstore/en.svg" height="80" width="180" />
+  </a>
+  <a href="https://f-droid.org/en/packages/com.chmouel.liseur/">
+    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
+  </a>
+  <a href="https://github.com/chmouel/liseur/releases">
+    <img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png"
+         alt="Get it on GitHub" height="80" />
+  </a>
+</p>
+
+- Local shelves and a library that follows you: calibre-web, Komga, BookOrbit, liseur-sync or any OPDS catalog, with reading position synced to the sentence.
+- A reading companion that indexes characters, places and groups on your phone, with no server needed.
+- Highlights, notes, bookmarks, dictionary, translation and read aloud with device voices or your own speech server.
+- Light, Sepia, Dark, OLED Black and low-light themes, open typefaces and per-book layout.
+- Free software: no ads, no account, no trackers in the F-Droid and GitHub builds.
+
 <table>
   <tr>
-    <td width="33%" size="33%"><img src="docs/screenshots/30-home-dark.png" alt="Home: the book you are reading, your shelves and a quote from your reading"></td>
-    <td width="33%" size="33%"><img src="docs/screenshots/10-library-dark.png" alt="Library: covers standing on shelves, one shelf per series"></td>
+    <td width="33%"><img src="docs/screenshots/30-home-dark.png" alt="Home: the book you are reading, your shelves and a quote from your reading"></td>
+    <td width="33%"><img src="docs/screenshots/10-library-dark.png" alt="Library: covers standing on shelves, one shelf per series"></td>
+    <td width="33%"><img src="docs/screenshots/32-reading-light.png" alt="Reading, light theme"></td>
   </tr>
   <tr>
     <td align="center"><sub>Home: pick up where you left off.</sub></td>
-    <td align="center"><sub>Library: the shelf, sorted by what you are currently reading.</sub></td>
+    <td align="center"><sub>Library: your shelf, by what you are reading.</sub></td>
+    <td align="center"><sub>Distraction-free page, in light or dark.</sub></td>
   </tr>
-</table>
-
-<table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/02-reading.png" alt="Reading"></td>
     <td width="33%"><img src="docs/screenshots/24-read-aloud.png" alt="Read aloud"></td>
-    <td width="33%"><img src="docs/screenshots/14-series-detail.png" alt="One series"></td>
+    <td width="33%"><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
+    <td width="33%"><img src="docs/screenshots/26-codex-relationships.png" alt="Companion map of character relationships across chapters"></td>
   </tr>
   <tr>
-    <td align="center"><sub>Distraction-free page with notes and bookmarks.</sub></td>
-    <td align="center"><sub>Read aloud with device voices or your own speech server.</sub></td>
-    <td align="center"><sub>Reading order, progress, and which volumes are missing.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/25-companion-profile.png" alt="Reading companion character profile with source passages"></td>
-    <td><img src="docs/screenshots/26-codex-relationships.png" alt="Companion map of character relationships across chapters"></td>
-    <td><img src="docs/screenshots/29-note-editor.png" alt="Writing a note"></td>
-  </tr>
-  </tr>
-  <tr>
+    <td align="center"><sub>Read aloud with device voices or your own server.</sub></td>
     <td align="center"><sub>Character profiles grounded in earlier passages.</sub></td>
-    <td align="center"><sub>See which characters appear together across chapters.</sub></td>
-    <td align="center"><sub>Notes get the whole screen, with bold, italics, lists and quotes.</sub></td>
+    <td align="center"><sub>Which characters appear together, chapter by chapter.</sub></td>
   </tr>
-  
-
 </table>
 
 <sub><a href="docs/SCREENSHOTS.md">More screenshots</a> here</sub>
@@ -118,21 +123,6 @@ the reading companion. Browsing the free catalogs (Project Gutenberg,
 textos.info, ManyBooks, Gallica) and using an online dictionary
 also makes network requests. See the
 [privacy policy](https://chmouel.github.io/liseur/PRIVACY) for details.
-
-## Install
-
-<p align="center">
-  <a href="https://play.google.com/store/apps/details?id=com.chmouel.liseur">
-    <img alt="Get it on Google Play" src="https://appure.io/badges/playstore/en.svg" height="80" width="180" />
-  </a>
-  <a href="https://f-droid.org/en/packages/com.chmouel.liseur/">
-    <img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="80" />
-  </a>
-  <a href="https://github.com/chmouel/liseur/releases">
-    <img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png"
-         alt="Get it on GitHub" height="80" />
-  </a>
-</p>
 
 ## Related Projects
 
