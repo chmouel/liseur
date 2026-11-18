@@ -1422,7 +1422,7 @@
     <string name="read_aloud_settings_server_models_none">The server lists no models. Type one instead.</string>
     <string name="read_aloud_settings_server_model_price">$%1$s per million characters</string>
     <string name="read_aloud_settings_server_models_failed">The server did not list its models.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Tap a voice to choose it and hear it.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Tap a voice to choose it; use the play button to hear a sample.</string>
     <string name="read_aloud_settings_voice_type_detail">Type the name of a voice the service knows.</string>
     <string name="read_aloud_settings_voice_other">Other voice</string>
     <string name="read_aloud_settings_voice_stop">Stop</string>
@@ -1445,6 +1445,7 @@
     <string name="read_aloud_settings_voices_choose_detail">Only the voices you tick are offered on this screen and in the player.</string>
     <string name="read_aloud_settings_voices_tick_all">Tick all</string>
     <string name="read_aloud_settings_voices_untick_all">Untick all</string>
+    <string name="read_aloud_settings_voices_tick_one">Tick at least one voice.</string>
     <string name="read_aloud_settings_voice_hear_named">Hear %1$s</string>
     <string name="read_aloud_settings_test">Test connection</string>
     <string name="read_aloud_settings_test_running">Testing…</string>

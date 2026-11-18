@@ -1351,7 +1351,7 @@
     <string name="read_aloud_settings_server_models_none">Le serveur ne liste aucun modèle. Saisissez-en un.</string>
     <string name="read_aloud_settings_server_model_price">%1$s $ par million de caractères</string>
     <string name="read_aloud_settings_server_models_failed">Le serveur n\'a pas donné la liste de ses modèles.</string>
-    <string name="read_aloud_settings_voice_pick_detail">Touchez une voix pour la choisir et l\'écouter.</string>
+    <string name="read_aloud_settings_voice_pick_detail">Touchez une voix pour la choisir\u00a0; le bouton de lecture permet d\'en écouter un extrait.</string>
     <string name="read_aloud_settings_voice_type_detail">Saisissez le nom d\'une voix connue du service.</string>
     <string name="read_aloud_settings_voice_other">Autre voix</string>
     <string name="read_aloud_settings_voice_stop">Arrêter</string>
@@ -1374,6 +1374,7 @@
     <string name="read_aloud_settings_voices_choose_detail">Seules les voix cochées sont proposées sur cet écran et dans le lecteur.</string>
     <string name="read_aloud_settings_voices_tick_all">Tout cocher</string>
     <string name="read_aloud_settings_voices_untick_all">Tout décocher</string>
+    <string name="read_aloud_settings_voices_tick_one">Cochez au moins une voix.</string>
     <string name="read_aloud_settings_voice_hear_named">Écouter %1$s</string>
     <string name="read_aloud_settings_test">Tester la connexion</string>
     <string name="read_aloud_settings_test_running">Test en cours…</string>

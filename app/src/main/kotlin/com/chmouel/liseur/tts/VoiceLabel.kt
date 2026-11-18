@@ -70,6 +70,17 @@ internal data class VoiceLabel(
             return listed.filter { it in chosen || it == stored }
         }
 
+        /**
+         * The [ticked] voices to save for [listed]: an empty set when
+         * every listed voice is ticked, since empty in storage offers all,
+         * or null when none is ticked.
+         */
+        fun chosenToSave(listed: List<String>, ticked: Set<String>): Set<String>? = when {
+            ticked.isEmpty() -> null
+            ticked.size >= listed.size && listed.all { it in ticked } -> emptySet()
+            else -> ticked
+        }
+
         /** The flag of the country [language] names, as an emoji, or null when it names none. */
         fun flag(language: String): String? {
             val region = Locale.forLanguageTag(language).country
