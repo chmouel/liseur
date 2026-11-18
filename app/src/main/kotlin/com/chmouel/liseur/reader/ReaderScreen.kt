@@ -309,6 +309,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -576,6 +577,10 @@ internal fun ReaderScreen(
     var goToPercent by remember { mutableStateOf(false) }
     var clearingTranslations by remember { mutableStateOf(false) }
     var translationSettingsOpen by remember { mutableStateOf(false) }
+    // The voice sheet, opened from the menu when nothing is set up to read
+    // with: it saves a voice or the settings, and reading starts from the
+    // menu afterwards.
+    var readAloudSetup by remember { mutableStateOf(false) }
     var wholeBookOpen by remember { mutableStateOf(false) }
     var searchHit by remember { mutableStateOf<Locator?>(null) }
     var sheet by remember { mutableStateOf(ReaderSheet.NONE) }
@@ -679,6 +684,10 @@ internal fun ReaderScreen(
     // page following the voice. Anything else issued is the reader's.
     var appMoves by remember { mutableIntStateOf(0) }
     var returnRequestedAppMoves by remember { mutableIntStateOf(0) }
+    // Whether the voice's sentence is on the page in front while the
+    // session is paused: nothing follows then, so the page is the only
+    // witness of the reader being away. Null until the page has been asked.
+    var pausedShowing by remember { mutableStateOf<Boolean?>(null) }
 
     // Whether the reader has sent the page anywhere since asking for the
     // voice's page. Counted as the move is issued, because its arrival
@@ -2309,16 +2318,21 @@ internal fun ReaderScreen(
     // is left alone until they are done, and a reader who moved away
     // until the voice reaches the page they are on.
     val followBlocked = selection != null || tappedSelection != null
+
+    // Away from the voice, playing or paused: the player then offers the
+    // way back to it, and reading on from the page in front.
+    val awayFromVoice = readAloudAway(
+        voice = spoken != null,
+        playing = listeningPlaying,
+        followDetached = followDetached,
+        pausedShowing = pausedShowing,
+    )
     LaunchedEffect(
         navigator,
         spoken,
         listeningPlaying,
         followBlocked,
         followDetached,
-        returnRequested,
-        // A second ask after one a reader move left standing changes
-        // only this.
-        returnRequestedGeneration,
         lifecycle,
     ) {
         val nav = navigator ?: return@LaunchedEffect
@@ -2347,22 +2361,90 @@ internal fun ReaderScreen(
                 if (!voiceOn(utterance)) return@repeatOnLifecycle
                 if (showing && moves.generation() == generation && lastDragAt == dragAt) {
                     followDetached = false
-                    returnRequested = false
-                    return@repeatOnLifecycle
                 }
-                // The reader asked to go back to the voice: that ask
-                // outlasts the move the wait above let settle, so serve
-                // it below instead of dropping it here.
-                if (!returnStillWanted()) return@repeatOnLifecycle
+                // Otherwise the page stays where the reader took it: going
+                // after the voice is the ask below, not the follow.
+                return@repeatOnLifecycle
             }
             // A move still in the air is the reader's, or the last
             // follow: going after the voice now would undo the one or
-            // repeat the other. A reader who asked for the voice's page
-            // waits these out instead: neither the gate nor a reflow is
-            // an effect key to come back on, so the ask must not die on
-            // the guard.
+            // repeat the other. Neither the gate nor a reflow is an
+            // effect key to come back on, so the sentence after this one
+            // asks again.
+            val since = if (gate.isGated || reflow.active) {
+                IssuedMoves.NONE
+            } else {
+                moves.mark(SystemClock.elapsedRealtime())
+            }
+            if (since == IssuedMoves.NONE) return@repeatOnLifecycle
+            if (spokenShowing(nav, utterance)) {
+                currentCoroutineContext().ensureActive()
+                if (!voiceOn(utterance)) return@repeatOnLifecycle
+                // The sentence is on the page in front: nothing to follow.
+                return@repeatOnLifecycle
+            }
+            // The book's words are not on a translated page to go to: the
+            // translation shown in their place is, else their element.
+            val target = if (pageTranslated) {
+                TranslatedPages.shownLocator(nav, utterance) ?: utterance.copy(text = Locator.Text())
+            } else {
+                utterance
+            }
+            // The page queries above ignore cancellation. On waking, the
+            // run for the sentence heard before the screen went off is
+            // replaced by the current one, and acting on its answer would
+            // take the page back there; loaded slowly, that move is taken
+            // for the reader's and the page stops following.
+            currentCoroutineContext().ensureActive()
+            if (!voiceOn(utterance)) return@repeatOnLifecycle
+            // The reader may have dragged or turned the page while the
+            // queries ran, and the effect is only relaunched for it on
+            // the next frame: their state is read live instead.
+            if (followDetached) return@repeatOnLifecycle
+            // A move the app issued meanwhile may not have landed yet.
+            // Going after the voice now would race it; the sentence after
+            // this one asks again.
+            if (!moves.unchangedSince(since)) return@repeatOnLifecycle
+            followDetached = false
+            followedAt = SystemClock.elapsedRealtime()
+            navigate(nav, target, NavigatorPositionEvent.TTS_FOLLOW)
+        }
+    }
+
+    // The reader asked for the voice's page, from the player or the menu.
+    // Served apart from the follow above, which runs only while the voice
+    // plays: a paused session comes back to its sentence too, and asking
+    // never starts the voice again. A move the reader makes meanwhile
+    // wins, so their page is not pulled away under them.
+    LaunchedEffect(
+        navigator,
+        spoken,
+        returnRequested,
+        // A second ask after one a reader move left standing changes
+        // only this.
+        returnRequestedGeneration,
+        followBlocked,
+        lifecycle,
+    ) {
+        val nav = navigator ?: return@LaunchedEffect
+        val utterance = spoken
+        if (utterance == null) {
+            // The session the ask was made for is gone.
+            returnRequested = false
+            return@LaunchedEffect
+        }
+        if (!returnRequested || followBlocked) return@LaunchedEffect
+        // Paused, the voice's own state says nothing: the ask stands on the
+        // session keeping this book and this sentence.
+        fun stillOn(): Boolean {
+            val now = readAloudFeature.session.value ?: return false
+            return now.bookId == readAloud?.bookId && now.utterance == utterance
+        }
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             var target: Locator
             while (true) {
+                // The gate and a reflow are not effect keys to come back on:
+                // the ask waits them out rather than dying on the guard.
                 val since = if (gate.isGated || reflow.active) {
                     IssuedMoves.NONE
                 } else {
@@ -2372,21 +2454,22 @@ internal fun ReaderScreen(
                     if (!returnStillWanted()) return@repeatOnLifecycle
                     delay(READ_ALOUD_CAPTURE_WAIT_MS)
                     currentCoroutineContext().ensureActive()
-                    if (!voiceOn(utterance)) return@repeatOnLifecycle
+                    if (!stillOn()) return@repeatOnLifecycle
                     continue
                 }
                 if (spokenShowing(nav, utterance)) {
+                    // The page queries above ignore cancellation, and the
+                    // reader may have moved while they ran: their move wins.
                     currentCoroutineContext().ensureActive()
-                    if (!voiceOn(utterance)) return@repeatOnLifecycle
-                    // Read live, as below: the reader may have moved
-                    // while the page was asked.
-                    if (followDetached && !returnStillWanted()) return@repeatOnLifecycle
-                    if (!moves.unchangedSince(since)) {
-                        if (!returnStillWanted()) return@repeatOnLifecycle
-                        continue
-                    }
-                    followDetached = false
+                    if (!stillOn()) return@repeatOnLifecycle
+                    if (!returnStillWanted()) return@repeatOnLifecycle
+                    // A move the app issued meanwhile may not have landed
+                    // yet, and would take the sentence off this page: look
+                    // again rather than settle the ask over it.
+                    if (!moves.unchangedSince(since)) continue
+                    // The sentence is on the page in front: nothing to move.
                     returnRequested = false
+                    followDetached = false
                     return@repeatOnLifecycle
                 }
                 // The book's words are not on a translated page to go to: the
@@ -2396,27 +2479,48 @@ internal fun ReaderScreen(
                 } else {
                     utterance
                 }
-                // The page queries above ignore cancellation. On waking, the
-                // run for the sentence heard before the screen went off is
-                // replaced by the current one, and acting on its answer would
-                // take the page back there; loaded slowly, that move is taken
-                // for the reader's and the page stops following.
                 currentCoroutineContext().ensureActive()
-                if (!voiceOn(utterance)) return@repeatOnLifecycle
-                // The reader may have dragged or turned the page while the
-                // queries ran, and the effect is only relaunched for it on
-                // the next frame: their state is read live instead.
-                if (followDetached && !returnStillWanted()) return@repeatOnLifecycle
-                if (moves.unchangedSince(since)) break
-                // A move the app issued meanwhile may not have landed yet.
-                // Going after the voice now would race it, so look again
-                // once the guard above has waited it out.
+                if (!stillOn()) return@repeatOnLifecycle
+                // The page queries above ignore cancellation, and the reader
+                // may have moved while they ran: their move wins.
                 if (!returnStillWanted()) return@repeatOnLifecycle
+                // A move the app issued meanwhile may not have landed yet.
+                // Going to the voice now would race it, so look again once
+                // the guard above has waited it out.
+                if (moves.unchangedSince(since)) break
             }
             returnRequested = false
             followDetached = false
             followedAt = SystemClock.elapsedRealtime()
             navigate(nav, target, NavigatorPositionEvent.TTS_FOLLOW)
+        }
+    }
+
+    // Paused, nothing follows the voice, so whether the reader is away from
+    // its sentence is read off the page in front, once that page is at
+    // rest: Readium reports a scroll a tick behind it, and the words are
+    // found by what the view shows rather than by any page number.
+    LaunchedEffect(navigator, spoken, listeningPlaying, pageTranslated, lifecycle) {
+        val nav = navigator ?: return@LaunchedEffect
+        if (listeningPlaying) {
+            pausedShowing = null
+            return@LaunchedEffect
+        }
+        val utterance = spoken ?: return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val root = nav.publicationViewOrNull
+            // A rebuilt page moves the words on screen without the locator
+            // changing, where its layout can be watched at all.
+            val changes = if (root != null) {
+                merge(nav.currentLocator.map { }, layoutPasses(root))
+            } else {
+                nav.currentLocator.map { }
+            }
+            changes.collectLatest {
+                awaitPageAtRest(nav)
+                currentCoroutineContext().ensureActive()
+                pausedShowing = spokenShowing(nav, utterance)
+            }
         }
     }
 
@@ -2583,6 +2687,36 @@ internal fun ReaderScreen(
             start = { reading.start(it, null) },
         )
     }
+
+    // Reading the page in front aloud from where the reader is, which the
+    // menu's item and the player's both do: it replaces a session with one
+    // starting here.
+    val readAloudFromHere: (() -> Unit)? = readAloud
+        ?.takeIf { readAloudFeature.isAvailable && reflowableText }
+        ?.let { reading ->
+            {
+                // Reading on from here answers any ask for the voice's page.
+                returnRequested = false
+                val attempt = pageTranslationStarts.get()
+                effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                    val nav = navigatorNow ?: return@launch
+                    val captured = if (effectiveScrollingNow) {
+                        scrolledPlace(nav) ?: return@launch
+                    } else {
+                        capture(nav, nav.currentLocator.value)
+                    }
+                    if (
+                        pageTranslationStarts.get() != attempt ||
+                        navigatorNow !== nav
+                    ) {
+                        return@launch
+                    }
+                    startReadAloudFromHere(reading) {
+                        SpokenPassage.startingPoint(nav, captured)
+                    }
+                }
+            }
+        }
 
     /**
      * Translates the page sentence by sentence from [selection] on, the
@@ -4222,11 +4356,13 @@ internal fun ReaderScreen(
                         bookId = it.bookId,
                         theme = readingTheme,
                         controls = chromeVisible,
+                        away = awayFromVoice,
                         onReturnToVoice = {
                             returnRequestedGeneration = moves.generation()
                             returnRequestedAppMoves = appMoves
                             returnRequested = true
-                        }.takeIf { listeningPlaying && followDetached },
+                        },
+                        onReadFromHere = readAloudFromHere,
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         start = it.start,
                     )
@@ -4560,30 +4696,15 @@ internal fun ReaderScreen(
                                 startTranslatingPage(nav, locator, languages.source, languages.target)
                             }
                         }
-                        val readAloudFromHere: (() -> Unit)? = readAloud
-                            ?.takeIf { readAloudFeature.isAvailable && readAloudConfigured }
-                            ?.let { reading ->
-                                {
-                                    val attempt = pageTranslationStarts.get()
-                                    effectScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                        val nav = navigatorNow ?: return@launch
-                                        val captured = if (effectiveScrollingNow) {
-                                            scrolledPlace(nav) ?: return@launch
-                                        } else {
-                                            capture(nav, nav.currentLocator.value)
-                                        }
-                                        if (
-                                            pageTranslationStarts.get() != attempt ||
-                                            navigatorNow !== nav
-                                        ) {
-                                            return@launch
-                                        }
-                                        startReadAloudFromHere(reading) {
-                                            SpokenPassage.startingPoint(nav, captured)
-                                        }
-                                    }
-                                }
-                            }
+                        // The menu's read-aloud item: reading from here, or
+                        // setting a voice up first. Null hides the item.
+                        val narrateEntry = readAloud?.let {
+                            ReaderNarrateEntry.of(
+                                available = readAloudFeature.isAvailable,
+                                reflowable = reflowableText,
+                                configured = readAloudConfigured,
+                            )
+                        }
                         var moreOpen by remember { mutableStateOf(false) }
                         Box {
                             IconButton(onClick = { moreOpen = true }) {
@@ -4636,8 +4757,24 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                // While this book is read aloud, the item stops it, as the player's close button does.
+                                // While this book is read aloud, the items
+                                // read on from the page in front, replacing
+                                // the session, and stop it as the player's
+                                // close button does.
                                 if (listening != null) {
+                                    readAloudFromHere?.let { fromHere ->
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.read_aloud_from_this_page)) },
+                                            leadingIcon = {
+                                                Icon(Icons.AutoMirrored.Outlined.VolumeUp, contentDescription = null)
+                                            },
+                                            onClick = {
+                                                moreOpen = false
+                                                chromeVisible = false
+                                                fromHere()
+                                            },
+                                        )
+                                    }
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.read_aloud_stop)) },
                                         leadingIcon = {
@@ -4648,7 +4785,7 @@ internal fun ReaderScreen(
                                             readAloudFeature.stop()
                                         },
                                     )
-                                } else readAloudFromHere?.let { action ->
+                                } else narrateEntry?.let { entry ->
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.reader_narrate_from_here)) },
                                         leadingIcon = {
@@ -4656,8 +4793,13 @@ internal fun ReaderScreen(
                                         },
                                         onClick = {
                                             moreOpen = false
-                                            chromeVisible = false
-                                            action()
+                                            when (entry) {
+                                                ReaderNarrateEntry.Start -> {
+                                                    chromeVisible = false
+                                                    readAloudFromHere?.invoke()
+                                                }
+                                                ReaderNarrateEntry.SetUp -> readAloudSetup = true
+                                            }
                                         },
                                     )
                                 }
@@ -4673,7 +4815,7 @@ internal fun ReaderScreen(
                                 }
                                 if (
                                     codexEnabled || storyAvailable || translateEntry != null ||
-                                    listening != null || readAloudFromHere != null || syncable
+                                    listening != null || narrateEntry != null || syncable
                                 ) {
                                     HorizontalDivider()
                                 }
@@ -5544,6 +5686,16 @@ internal fun ReaderScreen(
 
     if (translationSettingsOpen) {
         ReaderTranslationSettings(translate, onClose = { translationSettingsOpen = false })
+    }
+
+    if (readAloudSetup) {
+        readAloud?.let { reading ->
+            readAloudFeature.VoiceSheet(
+                bookId = reading.bookId,
+                start = reading.start,
+                onDismiss = { readAloudSetup = false },
+            )
+        }
     }
 
     wholeBook?.takeIf { wholeBookOpen }?.let { book ->

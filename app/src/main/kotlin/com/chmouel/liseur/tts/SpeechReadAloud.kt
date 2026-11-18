@@ -756,6 +756,10 @@ internal class SpeechReadAloud(
     @Composable
     override fun SettingsScreen(onBack: () -> Unit) = ReadAloudSettingsScreen(this, onBack)
 
+    @Composable
+    override fun VoiceSheet(bookId: String, start: (Locator, SpeechTranslation?) -> Unit, onDismiss: () -> Unit) =
+        ReadAloudVoiceSheet(this, bookId, pending = null, start = start, onDismiss = onDismiss, standalone = true)
+
     /** The Services page, opened from read aloud's own settings. */
     @Composable
     fun ServicesPage(onBack: () -> Unit) = ServicesScreen(connections, accounts, onBack)
@@ -765,10 +769,12 @@ internal class SpeechReadAloud(
         bookId: String,
         theme: ReaderTheme,
         controls: Boolean,
-        onReturnToVoice: (() -> Unit)?,
+        away: Boolean,
+        onReturnToVoice: () -> Unit,
+        onReadFromHere: (() -> Unit)?,
         modifier: Modifier,
         start: (Locator, SpeechTranslation?) -> Unit,
-    ) = ReadAloudPlayer(this, bookId, theme, controls, onReturnToVoice, modifier, start)
+    ) = ReadAloudPlayer(this, bookId, theme, controls, away, onReturnToVoice, onReadFromHere, modifier, start)
 }
 
 private const val SLEEP_CHECK_MS = 30_000L
