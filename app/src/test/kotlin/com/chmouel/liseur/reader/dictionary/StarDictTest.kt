@@ -4,7 +4,9 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.CancellationException
+import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -116,6 +118,23 @@ class StarDictTest {
     }
 
     @Test
+    fun `rechecks budgets after gzip ignores an overflow while probing a trailing member`() {
+        val gzipMember = ByteArrayOutputStream().apply {
+            GZIPOutputStream(this).use { it.write("entry".encodeToByteArray()) }
+        }.toByteArray()
+        val input = CheckedZipEntryInputStream(
+            PrefixThenSuffixInputStream(gzipMember, byteArrayOf(1, 2)),
+            100,
+            {},
+            ExpandedBudget(gzipMember.size.toLong()),
+        )
+
+        GZIPInputStream(input).use { it.copyTo(ByteArrayOutputStream()) }
+
+        assertThrows(IOException::class.java) { input.read(ByteArray(8)) }
+    }
+
+    @Test
     fun `rejects synonym indexes that point outside the headword table`() {
         assertThrows(IOException::class.java) {
             StarDict.unpack(
@@ -196,5 +215,37 @@ class StarDictTest {
         val output = ByteArrayOutputStream()
         DataOutputStream(output).use(write)
         return output.toByteArray()
+    }
+
+    private class PrefixThenSuffixInputStream(
+        private val prefix: ByteArray,
+        private val suffix: ByteArray,
+    ) : InputStream() {
+        private var prefixOffset = 0
+        private var suffixOffset = 0
+
+        override fun read(): Int = when {
+            prefixOffset < prefix.size -> prefix[prefixOffset++].toInt() and 255
+            suffixOffset < suffix.size -> suffix[suffixOffset++].toInt() and 255
+            else -> -1
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (length == 0) return 0
+            val source: ByteArray
+            val sourceOffset: Int
+            if (prefixOffset < prefix.size) {
+                source = prefix
+                sourceOffset = prefixOffset
+            } else {
+                source = suffix
+                sourceOffset = suffixOffset
+            }
+            if (sourceOffset >= source.size) return -1
+            val size = minOf(length, source.size - sourceOffset)
+            source.copyInto(buffer, offset, sourceOffset, sourceOffset + size)
+            if (source === prefix) prefixOffset += size else suffixOffset += size
+            return size
+        }
     }
 }

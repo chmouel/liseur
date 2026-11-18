@@ -567,13 +567,16 @@ internal class CheckedZipEntryInputStream(
 
     override fun read(): Int {
         checkCancelled()
+        checkBudget()
         val value = super.read()
         if (value >= 0) consume(1)
         return value
     }
 
     override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (length == 0) return 0
         checkCancelled()
+        checkBudget()
         val size = super.read(buffer, offset, length)
         if (size > 0) consume(size)
         return size
@@ -585,6 +588,11 @@ internal class CheckedZipEntryInputStream(
         total += size
         requirePack(total <= limit)
         budget.consume(size)
+    }
+
+    private fun checkBudget() {
+        requirePack(total <= limit)
+        budget.consume(0)
     }
 }
 
