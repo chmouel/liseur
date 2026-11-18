@@ -1356,6 +1356,17 @@ changing reader behavior.
   (`IssuedMoves.unchangedSince`) or the reader detach looks again instead
   of moving over it. Auto-scroll and the
   voice exclude each other: starting one pauses or disarms the other.
+- A failure is a `ReadAloudProblem` reduced only by `ReadAloudProblems`;
+  it clears on dismissal, a voice or service change, a new start, or
+  audio of that book actually playing (`played`, not "started").
+- A chapter skip uses `readingOrder`, runs one at a time, and drops its
+  landing when a later move superseded it (`stillWanted`). The media
+  session keeps sentence skip.
+- Continue listening resumes in the reader: `resumeIfPaused(bookId)` for a
+  live session, else a paused restore with `resumeAfterRestore`, honored
+  only after `Landing.Sentence` and cleared by pause, stop, put-away or a
+  new start. `EXTRA_RESUME_LISTENING` is consumed once. Reasoning:
+  `docs/adr/0074-read-aloud-player-controls.md`.
 - Checkpoints go through `prepareLocator` (same `total_progression` as a
   page turn); local while playing (`signalSync = false`), synced on pause
   or stop. A heard sentence is not an exact anchor: while
@@ -1401,8 +1412,10 @@ changing reader behavior.
   - Picking a model saves it with a listed voice in one write
     (`setSpeechServerModelAndVoice`). Voice language flags
     (`VoiceLabel.flag`) are decorative and skipped by screen readers.
-    Voice samples go through `SpeechReadAloud.preview`, which pauses any
-    session; Gemini plays one only on "Hear this voice" (billed). Gemini's
+    A voice row selects; a separate preview button plays a sample through
+    `SpeechReadAloud.preview`, which pauses any session. Gemini plays one
+    only on "Hear this voice" (billed). Saving the voices list needs one
+    ticked voice. Gemini's
     model (`read_aloud_model`, blank is `GeminiTts.DEFAULT_MODEL`) comes
     from the key's `v1beta/models` ids containing `tts`, or is typed.
     "Choose voices" narrows to the server's `voices` (empty offers all;
