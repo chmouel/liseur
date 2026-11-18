@@ -1269,6 +1269,24 @@
         <item quantity="other">Читать %d часов</item>
     </plurals>
     <string name="reading_stats_weekly_goal_dialog_title">Цель чтения на неделю</string>
+    <string name="reading_stats_weekly_goal_reached">Цель достигнута</string>
+    <string name="reading_stats_longest_session">Макс. сессия</string>
+    <string name="reading_stats_peak_day">Лучший день</string>
+    <string name="reading_stats_consistency_title">Регулярность чтения</string>
+    <plurals name="reading_stats_consistency_active_week">
+        <item quantity="one">%1$d из %2$d активного дня на неделе</item>
+        <item quantity="few">%1$d из %2$d активных дней на неделе</item>
+        <item quantity="many">%1$d из %2$d активных дней на неделе</item>
+        <item quantity="other">%1$d из %2$d активных дней на неделе</item>
+    </plurals>
+    <plurals name="reading_stats_consistency_active_period">
+        <item quantity="one">%1$d из %2$d активного дня за период</item>
+        <item quantity="few">%1$d из %2$d активных дней за период</item>
+        <item quantity="many">%1$d из %2$d активных дней за период</item>
+        <item quantity="other">%1$d из %2$d активных дней за период</item>
+    </plurals>
+    <string name="reading_stats_consistency_keep_going">Так держать!</string>
+    <string name="reading_stats_consistency_last_4_weeks">За 4 недели</string>
     <string name="reading_stats_avg_sitting">Сред. подход</string>
     <string name="duration_minutes">%1$d мин</string>
     <string name="duration_hours">%1$d ч</string>

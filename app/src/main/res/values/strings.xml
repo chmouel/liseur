@@ -1209,6 +1209,20 @@
     </plurals>
     <string name="reading_stats_weekly_goal_progress" translatable="false">%1$s / %2$s</string>
     <string name="reading_stats_weekly_goal_dialog_title">Weekly reading goal</string>
+    <string name="reading_stats_weekly_goal_reached">Goal reached</string>
+    <string name="reading_stats_longest_session">Longest session</string>
+    <string name="reading_stats_peak_day">Peak day</string>
+    <string name="reading_stats_consistency_title">Reading consistency</string>
+    <plurals name="reading_stats_consistency_active_week">
+        <item quantity="one">%1$d of %2$d active day this week</item>
+        <item quantity="other">%1$d of %2$d active days this week</item>
+    </plurals>
+    <plurals name="reading_stats_consistency_active_period">
+        <item quantity="one">%1$d of %2$d active day in this period</item>
+        <item quantity="other">%1$d of %2$d active days in this period</item>
+    </plurals>
+    <string name="reading_stats_consistency_keep_going">Keep it going!</string>
+    <string name="reading_stats_consistency_last_4_weeks">Last 4 weeks</string>
     <string name="reading_stats_avg_sitting">Avg. sitting</string>
     <string name="duration_minutes">%1$d min</string>
     <string name="duration_hours">%1$d h</string>

@@ -78,8 +78,11 @@ class ComparisonWordingTest {
 
     @Test
     fun `chart axis scale chooses a 4-step ceiling at or above the busiest bar`() {
-        assertEquals(80, chartAxisMaxMinutes(0L))
-        assertEquals(80, chartAxisMaxMinutes(45 * 60_000L))
+        assertEquals(20, chartAxisMaxMinutes(0L))
+        assertEquals(20, chartAxisMaxMinutes(12 * 60_000L))
+        assertEquals(40, chartAxisMaxMinutes(25 * 60_000L))
+        assertEquals(60, chartAxisMaxMinutes(45 * 60_000L))
+        assertEquals(80, chartAxisMaxMinutes(58 * 60_000L))
         assertEquals(80, chartAxisMaxMinutes(62 * 60_000L))
         assertEquals(120, chartAxisMaxMinutes(95 * 60_000L))
         assertEquals(240, chartAxisMaxMinutes(190 * 60_000L))

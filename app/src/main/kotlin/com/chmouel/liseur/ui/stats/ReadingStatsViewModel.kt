@@ -35,6 +35,7 @@ import com.chmouel.liseur.domain.StatsBook
 import com.chmouel.liseur.domain.StatsRange
 import com.chmouel.liseur.domain.compareReading
 import com.chmouel.liseur.domain.dailySeries
+import com.chmouel.liseur.domain.dailyWindowSeries
 import com.chmouel.liseur.domain.day
 import com.chmouel.liseur.domain.displayAuthor
 import com.chmouel.liseur.domain.displayTitle
@@ -96,6 +97,12 @@ sealed interface ReadingStatsUiState {
          * own answer, needed for days before the span began, is missing.
          */
         val weekReadingMs: Long? = 0L,
+        /**
+         * Up to 4 weeks (28 days) of daily reading ending on [today], used
+         * for the compact consistency heatmap when the selected span is
+         * narrower or wider.
+         */
+        val consistencyDays: List<ReadingDay> = stats.recent,
     ) : ReadingStatsUiState
 }
 
@@ -564,6 +571,8 @@ class ReadingStatsViewModel(
         val previousMs: Long,
         /** This calendar week so far, from this device alone. */
         val weekMs: Long,
+        /** The last 28 days of reading, from this device alone. */
+        val consistencyDays: List<ReadingDay>,
     )
 
     // Shared so the dashboard and an open book page read one answer: as
@@ -617,6 +626,12 @@ class ReadingStatsViewModel(
             weekMs = StatsRange.THIS_WEEK.startDate(window.today, window.weekStart)
                 ?.let { readingTotals(spans, window.zone, DateSpan(it, window.today)).totalMs }
                 ?: 0L,
+            consistencyDays = dailyWindowSeries(
+                sessions = spans,
+                zone = window.zone,
+                start = window.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L),
+                today = window.today,
+            ),
         )
     }.flowOn(Dispatchers.Default)
         .shareIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), replay = 1)
@@ -715,8 +730,14 @@ class ReadingStatsViewModel(
                 united.stats.recent.filter { it.date in start..snapshot.today }.sumOf { it.totalMs }
             } ?: 0L
         }
+        val mergedStats = united?.stats ?: local.stats
+        val consistencyDays = if (united != null) {
+            mergedStats.recent.takeLast(CONSISTENCY_WINDOW_DAYS)
+        } else {
+            local.consistencyDays
+        }
         ReadingStatsUiState.Ready(
-            stats = united?.stats ?: local.stats,
+            stats = mergedStats,
             headline = headline,
             range = window.range,
             provenance = if (united != null) StatsProvenance.ALL_DEVICES else StatsProvenance.THIS_DEVICE,
@@ -724,6 +745,7 @@ class ReadingStatsViewModel(
             snapshotId = if (united != null) snapshot?.snapshotId else null,
             weeklyGoalMinutes = weeklyGoalMinutes,
             weekReadingMs = weekReadingMs,
+            consistencyDays = consistencyDays,
         )
     }.flowOn(Dispatchers.Default).stateIn(
         viewModelScope,
@@ -784,6 +806,7 @@ class ReadingStatsViewModel(
         private const val CLOCK_SAMPLE_MS = 60_000L
         private const val COMPARISON_REFRESH_MS = 5 * 60_000L
         private const val STALE_ATTEMPTS = 3
+        private const val CONSISTENCY_WINDOW_DAYS = 28
 
         /**
          * Folds the server's aggregates into the local ones, never
@@ -1010,6 +1033,7 @@ class ReadingStatsViewModel(
                 totalMs = books.sumOf { it.totalMs },
                 pendingMs = books.sumOf { it.pendingMs },
                 pendingSessions = books.sumOf { it.pendingSessions },
+                longestSessionMs = 0L,
                 booksRead = books.size,
                 booksFinished = books.count { it.finished },
                 books = books,

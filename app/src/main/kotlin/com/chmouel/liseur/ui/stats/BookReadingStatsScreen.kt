@@ -250,24 +250,24 @@ private fun BookOverviewSection(
     }
 
     val tiles = listOf(
-        Triple(
+        OverviewTileData(
             Icons.Outlined.BarChart,
             stringResource(R.string.reading_stats_tile_sessions),
             stats.sessions.toString(),
         ),
-        Triple(
+        OverviewTileData(
             Icons.Outlined.Schedule,
             stringResource(R.string.reading_stats_avg_sitting),
             avgSitting,
         ),
-        Triple(
+        OverviewTileData(
             Icons.Outlined.CalendarMonth,
             stringResource(R.string.reading_stats_reading_for_label),
             daysWithBook?.let {
                 pluralStringResource(R.plurals.reading_stats_reading_for_days, it, it)
             } ?: stringResource(R.string.reading_stats_pace_unknown),
         ),
-        Triple(
+        OverviewTileData(
             Icons.Outlined.HourglassBottom,
             stringResource(R.string.reading_stats_time_left_label),
             timeLeftValue,

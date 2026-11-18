@@ -1034,4 +1034,22 @@ class ReadingStatsTest {
         assertEquals(900_000L, merged[1].totalMs)
         assertEquals(1, merged[1].sessions)
     }
+
+    @Test
+    fun `longest sitting coalesces pauses shorter than sitting gap`() {
+        val stats = readingStats(
+            sessions = listOf(
+                SessionSpan("a", at(today, 10, 0), 600_000, lastReadAt = at(today, 10, 10)),
+                SessionSpan("a", at(today, 10, 12), 900_000, lastReadAt = at(today, 10, 27)),
+                SessionSpan("a", at(today, 15, 0), 1_200_000, lastReadAt = at(today, 15, 20)),
+                SessionSpan("b", at(today, 20, 0), 800_000, lastReadAt = at(today, 20, 13)),
+            ),
+            books = mapOf("a" to book("a"), "b" to book("b")),
+            zone = zone,
+            today = today,
+        )
+
+        assertEquals(1_500_000L, stats.longestSessionMs)
+        assertEquals(3, stats.sessions)
+    }
 }
