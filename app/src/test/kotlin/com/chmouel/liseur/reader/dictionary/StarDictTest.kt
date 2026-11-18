@@ -247,5 +247,7 @@ class StarDictTest {
             if (source === prefix) prefixOffset += size else suffixOffset += size
             return size
         }
+
+        override fun available(): Int = prefix.size - prefixOffset + suffix.size - suffixOffset
     }
 }
