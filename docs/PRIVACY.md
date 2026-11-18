@@ -153,16 +153,19 @@ decide which sites are offered; the four above are what this version offers.
 
 Looking a word up online is off by default. When you switch it on, Liseur
 sends the selected word to the dictionary site configured in Settings,
-by default the public Wiktionary API, over HTTPS. If you also enable
-“Open dictionary on long press”, holding a word opens its definition and
-sends it to that site without another tap. This gesture setting does not
-turn online lookups on. For plural or conjugated
+by default the public Wiktionary API, over HTTPS. “Open dictionary on long
+press” is on by default. Holding a word opens its definition. If online
+lookup is enabled and no offline entry is available, this sends the word
+to the site. Turn off “Open dictionary on long press” in Settings →
+Reading & navigation → Dictionary to keep a long press from opening the
+dictionary. You can still tap **Define** in the selection bar. The gesture
+setting does not enable online lookup. For plural or conjugated
 forms, it may also look up base words explicitly linked by that dictionary,
 on the same site. It follows these links one step only, with at most four
 additional requests. When the book declares a language other than Liseur's,
 the alternative language for translations is Liseur's language unless you
 choose another one or turn it off in Settings. With an alternative language,
-each lookup also fetches that word's full entry page from the
+each online definition lookup also fetches that word's full entry page from the
 same site, plus its translations page when the entry keeps them there, with
 at most two additional requests. Opening the translations, or tapping a
 translated word, looks that word up on the public Wiktionary of the
@@ -182,8 +185,9 @@ archive request and ordinary connection metadata (such as your IP address)
 are sent. You can also import a StarDict `.zip` archive from your device
 with no network request. When an enabled offline dictionary matches the
 book’s language and has an entry for the selected word, definitions are
-looked up entirely on your device; online lookup is consulted only when
-you have turned it on and no offline entry matches.
+looked up entirely on your device. If online lookup is enabled, Liseur
+checks the configured site when no offline entry is available. With an
+offline entry open, tapping the translation link requests translations online.
 
 ### Selection searches in other apps
 
