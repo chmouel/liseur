@@ -264,8 +264,8 @@ private fun GeminiRows(feature: SpeechReadAloud, service: GeminiSpeechService, o
                 }
             }
         }
-        // Not played on every pick, as the OpenAI-compatible voices are:
-        // each sample is a request billed to the reader's key.
+        // A pick only selects, as for every provider; the sample plays on
+        // this button alone, since each one is a request billed to the key.
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End,
