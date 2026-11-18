@@ -6,7 +6,8 @@
 # happens to be supply's native layout, so Play reads the same files. The
 # release lanes push the changelog and nothing else. The screenshots lane
 # pushes the phone and tablet screenshots, which the repository owns: the
-# set here replaces whatever the console holds, and the feature_graphic
+# en-US set replaces whatever the console holds in every listing language,
+# and the feature_graphic
 # lane does the same for the feature graphics. The rest of the listing is
 # edited in the console, because Play holds the declarations (data safety,
 # content rating, target audience) that no file in this repository
@@ -64,6 +65,23 @@ def liseur_promote(version_code, target_track)
   )
 end
 
+# The languages the Play listing is translated into, read from a
+# throwaway edit that is dropped again.
+def liseur_listing_languages
+  require "supply"
+  Supply.config = FastlaneCore::Configuration.create(
+    Supply::Options.available_options,
+    package_name: CredentialsManager::AppfileConfig.try_fetch_value(:package_name)
+  )
+  client = Supply::Client.make_from_config
+  client.begin_edit(package_name: Supply.config[:package_name])
+  begin
+    client.listings.map(&:language).sort
+  ensure
+    client.abort_current_edit
+  end
+end
+
 platform :android do
   desc "Upload the release bundle to the Play internal track, then promote it to the closed track (promote:false stops at internal)"
   lane :internal do |options|
@@ -114,7 +132,7 @@ platform :android do
     UI.success("#{version_code} is published on #{PRODUCTION_TRACK}")
   end
 
-  desc "Replace the Play listing's phone and tablet screenshots with the repository's"
+  desc "Replace the Play listing's phone and tablet screenshots in every language with the repository's en-US set"
   lane :screenshots do |options|
     requested = (options[:version_code] || ENV["PLAY_VERSION_CODE"] || liseur_version_code).to_s
     unless requested.match?(/\A[1-9][0-9]*\z/)
@@ -123,33 +141,53 @@ platform :android do
 
     # Refuse a set Play would refuse before opening an edit, rather than
     # after half of it has been uploaded.
-    images = File.expand_path("metadata/android/en-US/images", __dir__)
+    metadata = File.expand_path("metadata/android", __dir__)
+    images = File.join(metadata, "en-US", "images")
+    kinds = %w[phoneScreenshots tenInchScreenshots]
     checker = File.expand_path("../hack/store-images", __dir__)
-    unless system(checker, "--check", File.join(images, "phoneScreenshots"), File.join(images, "tenInchScreenshots"))
+    unless system(checker, "--check", *kinds.map { |kind| File.join(images, kind) })
       UI.user_error!("the store screenshots would be refused; run hack/store-images on them")
     end
 
-    # A listing edit still has to name a release on some track; internal
-    # holds every build. With no track_promote_to and no rollout, supply
-    # leaves the tracks exactly as they are.
-    upload_to_play_store(
-      track: INTERNAL_TRACK,
-      version_code: requested.to_i,
-      skip_upload_aab: true,
-      skip_upload_apk: true,
-      skip_upload_metadata: true,
-      skip_upload_images: true,
-      skip_upload_changelogs: true,
-      skip_upload_screenshots: false,
-      # Compare checksums in order: an unchanged set is no upload and no
-      # deletion, and anything else is replaced to match the repository.
-      sync_image_upload: true,
-      validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
-    )
+    # Each listing language has its own screenshots on Play, and a
+    # language with no screenshots folder is left with whatever it had.
+    # The repository keeps one set, so every language Play has a listing
+    # in gets a copy of it in a staged tree; F-Droid already falls back to
+    # en-US on its own. Play refuses images for a language it has no
+    # listing in, so the metadata folders cannot be the list.
+    languages = liseur_listing_languages
+    Dir.mktmpdir do |staged|
+      languages.each do |language|
+        kinds.each do |kind|
+          target = File.join(staged, language, "images", kind)
+          FileUtils.mkdir_p(target)
+          FileUtils.cp(Dir[File.join(images, kind, "*.png")], target)
+        end
+      end
+
+      # A listing edit still has to name a release on some track; internal
+      # holds every build. With no track_promote_to and no rollout, supply
+      # leaves the tracks exactly as they are.
+      upload_to_play_store(
+        track: INTERNAL_TRACK,
+        version_code: requested.to_i,
+        metadata_path: staged,
+        skip_upload_aab: true,
+        skip_upload_apk: true,
+        skip_upload_metadata: true,
+        skip_upload_images: true,
+        skip_upload_changelogs: true,
+        skip_upload_screenshots: false,
+        # Compare checksums in order: an unchanged set is no upload and no
+        # deletion, and anything else is replaced to match the repository.
+        sync_image_upload: true,
+        validate_only: ENV["PLAY_VALIDATE_ONLY"] == "true"
+      )
+    end
     if ENV["PLAY_VALIDATE_ONLY"] == "true"
-      UI.success("Play accepted the screenshot edit; nothing was committed")
+      UI.success("Play accepted the screenshot edit for #{languages.join(", ")}; nothing was committed")
     else
-      UI.success("the Play listing screenshots match the repository")
+      UI.success("the Play listing screenshots match the repository in #{languages.join(", ")}")
     end
   end
 
