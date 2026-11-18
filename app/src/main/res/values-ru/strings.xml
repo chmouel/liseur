@@ -719,7 +719,7 @@
     <string name="reader_highlight_make_default">Сделать по умолчанию</string>
     <string name="reader_text_align">Выравнивание</string>
     <string name="reader_text_align_default">По умолчанию</string>
-    <string name="reader_text_align_ragged">Без выравнивания по ширине</string>
+    <string name="reader_text_align_ragged">Не по ширине</string>
     <string name="reader_text_align_justified">По ширине</string>
     <string name="reader_hyphens">Переносы</string>
     <string name="reader_hyphens_default">По умолчанию</string>

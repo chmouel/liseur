@@ -741,7 +741,7 @@
     <!-- Fine typography: alignment, hyphenation, weight and spacing. -->
     <string name="reader_text_align">Zarovnání</string>
     <string name="reader_text_align_default">Výchozí</string>
-    <string name="reader_text_align_ragged">Bez zarovnání do bloku</string>
+    <string name="reader_text_align_ragged">Bez bloku</string>
     <string name="reader_text_align_justified">Do bloku</string>
     <string name="reader_hyphens">Dělení slov</string>
     <string name="reader_hyphens_default">Výchozí</string>
