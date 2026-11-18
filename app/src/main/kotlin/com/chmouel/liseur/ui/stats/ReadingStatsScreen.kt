@@ -770,6 +770,13 @@ private fun DashboardHero(
     val goalMs = weeklyGoalMinutes * 60_000L
     val goalReached = weekReadingMs != null && goalMs > 0L && weekReadingMs >= goalMs
     val compactSparkline = LocalDensity.current.fontScale <= 1.35f && periods.isNotEmpty()
+    val totalText = readingDuration(headline.totalMs)
+    val totalStyle = MaterialTheme.typography.displaySmall.copy(
+        fontWeight = FontWeight.Bold,
+        fontFeatureSettings = TABULAR,
+    )
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
 
     Surface(
         shape = shape,
@@ -784,49 +791,61 @@ private fun DashboardHero(
             .padding(top = 12.dp)
             .fillMaxWidth(),
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(backgroundModifier)
                 .padding(horizontal = 18.dp, vertical = 18.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(range.eyebrowRes).uppercase(),
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.3.sp,
-                        ),
-                        color = accent,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = readingDuration(headline.totalMs),
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontFeatureSettings = TABULAR,
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    headline.comparison?.let { comparison ->
-                        Spacer(Modifier.height(4.dp))
-                        ComparisonLine(comparison)
+            val showInlineSparkline = compactSparkline && with(density) {
+                val sparklineWidth = 112.dp
+                val headlineWidth =
+                    textMeasurer.measure(totalText, totalStyle, maxLines = 1, softWrap = false).size.width.toDp()
+                maxWidth - sparklineWidth - 12.dp >= maxOf(130.dp, headlineWidth)
+            }
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(range.eyebrowRes).uppercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.3.sp,
+                            ),
+                            color = accent,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = totalText,
+                            style = totalStyle,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        headline.comparison?.let { comparison ->
+                            Spacer(Modifier.height(4.dp))
+                            ComparisonLine(comparison)
+                        }
+                    }
+                    if (showInlineSparkline) {
+                        HeroMiniChart(
+                            periods = periods,
+                            unit = range.chartPeriod,
+                            today = today,
+                        )
                     }
                 }
-                if (compactSparkline) {
+                if (compactSparkline && !showInlineSparkline) {
+                    Spacer(Modifier.height(12.dp))
                     HeroMiniChart(
                         periods = periods,
                         unit = range.chartPeriod,
                         today = today,
                     )
                 }
-            }
-            Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(16.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -917,6 +936,7 @@ private fun DashboardHero(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+            }
             }
         }
     }
@@ -1145,6 +1165,7 @@ internal fun OverviewGrid(tiles: List<OverviewTileData>) {
         fontWeight = FontWeight.SemiBold,
         letterSpacing = 0.6.sp,
     )
+    val qualifierStyle = MaterialTheme.typography.labelSmall
     val valueStyle = overviewValueStyle()
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -1160,12 +1181,20 @@ internal fun OverviewGrid(tiles: List<OverviewTileData>) {
         val halfPx = with(density) { halfText.roundToPx() }.coerceAtLeast(0)
         val fitsTwo = tiles.all { tile ->
             val upper = tile.label.uppercase()
+            val qualifierFits = tile.qualifier?.let { q ->
+                q.split(' ').all { width(it, qualifierStyle) <= halfText } &&
+                    !textMeasurer.measure(
+                        q, qualifierStyle, maxLines = 2,
+                        constraints = Constraints(maxWidth = halfPx),
+                    ).hasVisualOverflow
+            } ?: true
             width(tile.value, valueStyle) <= halfText &&
                 upper.split(' ').all { width(it, labelStyle) <= halfText } &&
                 !textMeasurer.measure(
                     upper, labelStyle, maxLines = 2,
                     constraints = Constraints(maxWidth = halfPx),
-                ).hasVisualOverflow
+                ).hasVisualOverflow &&
+                qualifierFits
         }
         val perRow = if (fitsTwo) 2 else 1
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1270,7 +1299,7 @@ internal fun OverviewTile(
                             text = note,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.align(Alignment.Bottom).padding(bottom = 2.dp),
                         )

@@ -254,11 +254,16 @@ fun readingStats(
     val firstStarts = recorded.groupBy { it.bookUrl }
         .mapValues { (_, spans) -> spans.minOf { it.startedAt } }
     val start = range.startDate(today, weekStart)
-    // Per-day book breakdowns are kept for every recorded day up to today
-    // so the recent consistency heatmap can answer what was read on any of
-    // its days even when a narrower range (such as THIS_WEEK) is selected.
+    // Per-day book breakdowns cover the union of the selected range and
+    // the recent 28-day consistency window so tapping any day in either
+    // chart can show its books without building breakdowns for older history
+    // when a bounded range is selected.
+    val breakdownStart = start?.let { minOf(it, today.minusDays(27)) }
     val booksByDay = recorded
-        .filter { !it.day(zone).isAfter(today) }
+        .filter { session ->
+            val day = session.day(zone)
+            !day.isAfter(today) && (breakdownStart == null || !day.isBefore(breakdownStart))
+        }
         .groupBy { it.day(zone) }
         .mapValues { (_, daySpans) ->
             booksFromSpans(daySpans, books, firstStarts, zone)

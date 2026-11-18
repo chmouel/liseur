@@ -134,9 +134,9 @@ private fun searchTier(book: Book, phrase: String, words: List<String>): Int? {
  */
 private val hitOrder: Comparator<SearchHit> =
     compareBy<SearchHit> { it.tier }
-        .thenBy { sortKey((it.book.seriesName ?: it.book.displayTitle).foldForSearch()) }
+        .thenBy { sortKey(it.book.seriesName ?: it.book.displayTitle) }
         .thenBy(nullsLast<Double>()) { it.book.seriesIndex }
-        .thenBy { sortKey(it.book.displayTitle.foldForSearch()) }
+        .thenBy { sortKey(it.book.displayTitle) }
         .thenBy { it.book.id }
 
 private const val SEARCH_TIER_TITLE_PREFIX = 0

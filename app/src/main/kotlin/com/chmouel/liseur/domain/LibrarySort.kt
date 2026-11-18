@@ -50,20 +50,30 @@ private val ELIDED = listOf("l'", "l\u2019", "d'", "d\u2019")
  * top of the list.
  */
 fun sortKey(text: String?): String {
-    val trimmed = text?.trim()?.foldForSearch().orEmpty()
+    val trimmed = text?.trim()?.lowercase().orEmpty()
     if (trimmed.isEmpty()) return ""
 
     ELIDED.firstOrNull { trimmed.startsWith(it) }?.let { elision ->
         val rest = trimmed.removePrefix(elision).trimStart()
-        return rest.ifEmpty { trimmed }
+        return rest.ifEmpty { trimmed }.foldForSort()
     }
 
     val space = trimmed.indexOf(' ')
-    if (space <= 0) return trimmed
+    if (space <= 0) return trimmed.foldForSort()
     val first = trimmed.substring(0, space)
-    if (first !in ARTICLES) return trimmed
+    if (first !in ARTICLES) return trimmed.foldForSort()
     val rest = trimmed.substring(space + 1).trimStart()
-    return rest.ifEmpty { trimmed }
+    return rest.ifEmpty { trimmed }.foldForSort()
+}
+
+private val LATIN_COMBINING_MARKS = Regex("(\\p{IsLatin})\\p{Mn}+")
+
+internal fun String.foldForSort(): String {
+    val nfd = java.text.Normalizer.normalize(this, java.text.Normalizer.Form.NFD)
+        .replace(LATIN_COMBINING_MARKS, "$1")
+    return java.text.Normalizer.normalize(nfd, java.text.Normalizer.Form.NFC)
+        .lowercase()
+        .replace('ς', 'σ')
 }
 
 /**
