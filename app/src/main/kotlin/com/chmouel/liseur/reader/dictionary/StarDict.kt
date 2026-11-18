@@ -228,6 +228,8 @@ internal class StarDict(directory: File) {
         private const val MAX_INFLECTION_ENTRIES = 4
         private const val MAX_DIRECT_LEMMAS = 2
         private const val MAX_TOTAL_ENTRIES = 5
+        private const val MAX_IGNORED_ENTRY = 64L * 1024 * 1024
+        private const val MAX_EXPANDED_ARCHIVE = 1200L * 1024 * 1024
 
         private val INLINE_MARKUP = Safelist.none().addTags(
             "b", "strong", "i", "em", "u", "s", "sub", "sup",
@@ -238,6 +240,7 @@ internal class StarDict(directory: File) {
 
         fun unpack(input: InputStream, directory: File, checkCancelled: () -> Unit = {}): StarDict {
             var stem: String? = null
+            val expandedBudget = ExpandedBudget(MAX_EXPANDED_ARCHIVE)
             ZipInputStream(input.buffered()).use { zip ->
                 var entry = zip.nextEntry
                 while (entry != null) {
@@ -263,14 +266,27 @@ internal class StarDict(directory: File) {
                                 val entryStream = object : FilterInputStream(zip) {
                                     override fun close() = Unit
                                 }
-                                GZIPInputStream(entryStream).use { it.copyBounded(destination, limit, checkCancelled) }
+                                GZIPInputStream(entryStream).use {
+                                    it.copyBounded(destination, limit, checkCancelled, expandedBudget)
+                                }
                             } else {
-                                zip.copyBounded(destination, limit, checkCancelled)
+                                zip.copyBounded(destination, limit, checkCancelled, expandedBudget)
                             }
                             destination.flush()
                             file.fd.sync()
                         }
+                    } else {
+                        zip.copyBounded(
+                            object : OutputStream() {
+                                override fun write(byte: Int) = Unit
+                                override fun write(buffer: ByteArray, offset: Int, length: Int) = Unit
+                            },
+                            MAX_IGNORED_ENTRY,
+                            checkCancelled,
+                            expandedBudget,
+                        )
                     }
+                    checkCancelled()
                     entry = zip.nextEntry
                 }
             }
@@ -521,7 +537,21 @@ private fun requirePack(condition: Boolean) {
     if (!condition) throw IOException("Invalid or unsupported StarDict archive")
 }
 
-private fun InputStream.copyBounded(output: OutputStream, limit: Long, checkCancelled: () -> Unit) {
+private class ExpandedBudget(private val limit: Long) {
+    private var total = 0L
+
+    fun consume(size: Int) {
+        total += size
+        requirePack(total <= limit)
+    }
+}
+
+private fun InputStream.copyBounded(
+    output: OutputStream,
+    limit: Long,
+    checkCancelled: () -> Unit,
+    budget: ExpandedBudget,
+) {
     val buffer = ByteArray(64 * 1024)
     var total = 0L
     while (true) {
@@ -530,6 +560,7 @@ private fun InputStream.copyBounded(output: OutputStream, limit: Long, checkCanc
         if (size < 0) return
         total += size
         requirePack(total <= limit)
+        budget.consume(size)
         output.write(buffer, 0, size)
     }
 }

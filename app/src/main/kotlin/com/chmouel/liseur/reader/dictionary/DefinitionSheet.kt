@@ -762,7 +762,7 @@ private fun OfflineEntriesContent(
                             )
                         }
                         var number = 0
-                        section.items.take(MAX_OFFLINE_SECTION_ITEMS).forEach { itemHtml ->
+                        section.items.forEach { itemHtml ->
                             val isSubItem = itemHtml.startsWith("— ")
                             val prefix = if (isSubItem) {
                                 "    "
@@ -826,5 +826,3 @@ private fun OfflineEntriesContent(
         }
     }
 }
-
-private const val MAX_OFFLINE_SECTION_ITEMS = 6
