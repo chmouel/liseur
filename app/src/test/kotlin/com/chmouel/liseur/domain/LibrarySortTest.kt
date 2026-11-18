@@ -33,7 +33,7 @@ class LibrarySortTest {
     fun `a leading article does not decide where a book files`() {
         assertEquals("whale", sortKey("The Whale"))
         assertEquals("chartreuse de parme", sortKey("La Chartreuse de Parme"))
-        assertEquals("etranger", sortKey("L'Étranger".replace("É", "E")))
+        assertEquals("etranger", sortKey("L'Étranger"))
         assertEquals("etranger", sortKey("L\u2019Etranger"))
     }
 
@@ -61,6 +61,53 @@ class LibrarySortTest {
         assertEquals(
             listOf("Zeno", "The Whale", "a Passage"),
             books.arrangedBy(LibrarySort.TITLE, reversed = true).titles(),
+        )
+    }
+
+    @Test
+    fun `title order treats accented letters as their base letters`() {
+        val books = listOf("Zebra", "Órbita", "Éden", "Amor", "Sol", "Água", "Estrela").map { book(it) }
+        val expected = listOf("Água", "Amor", "Éden", "Estrela", "Órbita", "Sol", "Zebra")
+
+        assertEquals(expected, books.arrangedBy(LibrarySort.TITLE).titles())
+        assertEquals(expected.reversed(), books.arrangedBy(LibrarySort.TITLE, reversed = true).titles())
+    }
+
+    @Test
+    fun `sort keys fold composed and decomposed accents`() {
+        assertEquals("aaaaeeiooouc", sortKey("ÁÀÂÃÉÊÍÓÔÕÚÇ"))
+        assertEquals("eden", sortKey("E\u0301den"))
+    }
+
+    @Test
+    fun `accent equivalent titles keep their permanent identity order`() {
+        val books = listOf(
+            book("Éden", url = "https://example.test/a"),
+            book("E\u0301den", url = "https://example.test/b"),
+            book("Eden", url = "https://example.test/c"),
+        )
+
+        for (sort in LibrarySort.entries) {
+            assertEquals(books.map { it.url }, books.reversed().arrangedBy(sort).map { it.url })
+        }
+        assertEquals(
+            books.reversed().map { it.url },
+            books.arrangedBy(LibrarySort.TITLE, reversed = true).map { it.url },
+        )
+    }
+
+    @Test
+    fun `author order treats accented letters as their base letters`() {
+        val books = listOf(
+            book("Zola", author = "Émile Zola"),
+            book("Pessoa", author = "Fernando Pessoa"),
+            book("Camus", author = "Albert Camus"),
+        )
+
+        assertEquals(listOf("Camus", "Zola", "Pessoa"), books.arrangedBy(LibrarySort.AUTHOR).titles())
+        assertEquals(
+            listOf("Pessoa", "Zola", "Camus"),
+            books.arrangedBy(LibrarySort.AUTHOR, reversed = true).titles(),
         )
     }
 

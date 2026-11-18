@@ -42,15 +42,15 @@ private val ARTICLES = setOf(
 private val ELIDED = listOf("l'", "l\u2019", "d'", "d\u2019")
 
 /**
- * The string a title or an author actually files under: lower case,
- * trimmed, and without a leading article.
+ * The string a title or an author actually files under: case and accents
+ * folded, trimmed, and without a leading article.
  *
  * Only a *leading* article goes, and only when something follows it, so
  * a book called *The* still files under T rather than vanishing to the
  * top of the list.
  */
 fun sortKey(text: String?): String {
-    val trimmed = text?.trim()?.lowercase().orEmpty()
+    val trimmed = text?.trim()?.foldForSearch().orEmpty()
     if (trimmed.isEmpty()) return ""
 
     ELIDED.firstOrNull { trimmed.startsWith(it) }?.let { elision ->
