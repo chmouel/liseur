@@ -72,6 +72,15 @@ import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+internal fun shouldUseOnlineLookup(
+    offlineSelected: Boolean,
+    enabled: Boolean,
+    localResult: Result<OfflineDictionary.Lookup?>?,
+): Boolean = !offlineSelected || (
+    enabled && localResult != null &&
+        (localResult.isFailure || localResult.getOrNull()?.entries.isNullOrEmpty())
+    )
+
 /**
  * The Kindle-style definition card: the word, its senses, and a way out to a
  * real dictionary app or to the full entry when the short answer is not
@@ -123,7 +132,7 @@ fun DefinitionSheet(
     val definitionPack = offlineLookup?.pack ?: offline
     // When an offline dictionary is active, only reach over the network if the
     // reader has online lookup enabled AND the offline pack had no entry for this word.
-    val useOnline = offline == null || (enabled && localResult != null && (localResult.isFailure || offlineEntries?.isEmpty() == true))
+    val useOnline = shouldUseOnlineLookup(offline != null, enabled, localResult)
 
     var state by remember(term, languages, enabled, baseUrl, useOnline) {
         mutableStateOf<DictionaryState>(
