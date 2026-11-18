@@ -708,6 +708,7 @@
     <string name="reader_page_turn_style_lift_detail">Прочитанная страница поднимается с той, что под ней, как лист бумаги со стопки.</string>
     <string name="reader_page_turn_style_slide_detail">Обе страницы движутся вместе, как при перетаскивании пальцем.</string>
     <string name="reader_page_turn_style_none_detail">Следующая страница просто появляется. На экранах электронных чернил всегда используется этот вариант.</string>
+    <string name="reader_highlight_colours_title">Цвета выделения</string>
     <string name="reader_highlight_colours">Доступные цвета</string>
     <string name="reader_highlight_colours_help">Нажмите цвет, чтобы предлагать его при выделении. Удерживайте, чтобы сделать его цветом по умолчанию (сейчас %1$s). Выделения без выбора цвета получают цвет по умолчанию; заметки используют первый цвет на панели.</string>
     <string name="reader_highlight_colours_none">Цвета не предлагаются, поэтому выделение помечается цветом %1$s. Нажмите цвет, чтобы вернуть выбор.</string>

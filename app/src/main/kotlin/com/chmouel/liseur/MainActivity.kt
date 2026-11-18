@@ -792,6 +792,11 @@ private fun LiseurApp(
                                 scope.launch { readerPreferences.setFooterField(slot, field) }
                             },
                             onOpenSelectionToolbar = { backStack.push(Route.SelectionToolbar) },
+                            highlightPalette = settings.highlightPalette,
+                            onHighlightTintToggled = { scope.launch { repository.toggleHighlightTint(it) } },
+                            onHighlightDefaultTintChanged = {
+                                scope.launch { repository.setHighlightDefaultTint(it) }
+                            },
                             fineTypography = FineTypographyActions(
                                 onTextAlignChanged = { scope.launch { readerPreferences.setTextAlign(it) } },
                                 onHyphensChanged = { scope.launch { readerPreferences.setHyphens(it) } },

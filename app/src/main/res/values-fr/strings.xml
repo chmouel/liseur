@@ -656,6 +656,7 @@
     <string name="reader_page_turn_style_lift_detail">La page terminée se soulève de celle du dessous, comme une feuille qu\'on enlève d\'une pile.</string>
     <string name="reader_page_turn_style_slide_detail">Les deux pages se déplacent ensemble, comme quand on fait glisser la page du doigt.</string>
     <string name="reader_page_turn_style_none_detail">La page suivante est simplement là. Les écrans e-ink utilisent toujours ce mode.</string>
+    <string name="reader_highlight_colours_title">Couleurs de surlignage</string>
     <string name="reader_highlight_colours">Couleurs disponibles</string>
     <string name="reader_highlight_colours_help">Touchez une couleur pour la proposer quand vous marquez un passage. Maintenez-en une pour en faire la couleur par défaut (actuellement %1$s). Les surlignages faits sans choisir de couleur utilisent celle par défaut ; les notes utilisent la première couleur de la barre.</string>
     <string name="reader_highlight_colours_none">Aucune couleur n\'est proposée, donc marquer un passage le surligne en %1$s. Touchez une couleur pour ramener le choix.</string>

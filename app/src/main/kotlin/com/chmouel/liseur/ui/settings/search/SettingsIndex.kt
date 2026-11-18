@@ -118,6 +118,7 @@ object SettingsEntries {
     val FontSize = entry("font_size", Route.ReadingAppearance, R.string.reader_size)
     val Brightness = entry("brightness", Route.ReadingAppearance, R.string.reader_brightness)
     val Font = entry("font", Route.ReadingAppearance, R.string.reader_font)
+    val HighlightColours = entry("highlight_colours", Route.ReadingAppearance, R.string.reader_highlight_colours_title)
     val LineSpacing = advanced("line_spacing", Route.ReadingAppearance, R.string.reader_line_spacing)
     val Margins = advanced("margins", Route.ReadingAppearance, R.string.reader_margins)
     val Columns = advanced("columns", Route.ReadingAppearance, R.string.reader_columns, shown = { it.columnsAvailable })
