@@ -775,6 +775,11 @@ private fun DashboardHero(
         fontWeight = FontWeight.Bold,
         fontFeatureSettings = TABULAR,
     )
+    val locale = LocalLocale.current.platformLocale
+    val dayLabelStyle = MaterialTheme.typography.labelSmall.copy(
+        fontSize = 9.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
     val textMeasurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
@@ -798,7 +803,20 @@ private fun DashboardHero(
                 .padding(horizontal = 18.dp, vertical = 18.dp),
         ) {
             val showInlineSparkline = compactSparkline && with(density) {
-                val sparklineWidth = 112.dp
+                val shown = periods.takeLast(DAYS_IN_WEEK)
+                val showDayLabels = range.chartPeriod == StatsChartPeriod.DAY && shown.size <= DAYS_IN_WEEK
+                val barWidth = if (showDayLabels) 12.dp else 10.dp
+                val gap = if (showDayLabels) 4.dp else 5.dp
+                val columnsWidth = shown.sumOf { period ->
+                    val labelWidth = if (showDayLabels) {
+                        val label = period.from.dayOfWeek.getDisplayName(TextStyle.SHORT, locale).take(3)
+                        textMeasurer.measure(label, dayLabelStyle, maxLines = 1, softWrap = false).size.width.toDp()
+                    } else {
+                        0.dp
+                    }
+                    maxOf(barWidth, labelWidth).roundToPx()
+                }.toDp()
+                val sparklineWidth = columnsWidth + gap * (shown.size - 1).coerceAtLeast(0)
                 val headlineWidth =
                     textMeasurer.measure(totalText, totalStyle, maxLines = 1, softWrap = false).size.width.toDp()
                 maxWidth - sparklineWidth - 12.dp >= maxOf(130.dp, headlineWidth)
