@@ -1,8 +1,10 @@
 package com.chmouel.liseur.reader.dictionary
 
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 import java.io.IOException
+import java.util.concurrent.CancellationException
 import java.util.zip.GZIPOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -91,6 +93,26 @@ class StarDictTest {
                 temporaryFolder.newFolder(),
             )
         }
+    }
+
+    @Test
+    fun `bounds and checks cancellation while draining zip entry data`() {
+        val input = CheckedZipEntryInputStream(
+            ByteArrayInputStream(byteArrayOf(1, 2, 3, 4, 5)),
+            4,
+            {},
+            ExpandedBudget(100),
+        )
+        assertEquals(1, input.read())
+        assertThrows(IOException::class.java) { input.read(ByteArray(8)) }
+
+        val cancelledInput = CheckedZipEntryInputStream(
+            ByteArrayInputStream(byteArrayOf(1)),
+            4,
+            { throw CancellationException() },
+            ExpandedBudget(100),
+        )
+        assertThrows(CancellationException::class.java) { cancelledInput.read() }
     }
 
     @Test

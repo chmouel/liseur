@@ -229,6 +229,7 @@ internal class StarDict(directory: File) {
         private const val MAX_DIRECT_LEMMAS = 2
         private const val MAX_TOTAL_ENTRIES = 5
         private const val MAX_IGNORED_ENTRY = 64L * 1024 * 1024
+        private const val MAX_ZIP_ENTRY = 1024L * 1024 * 1024
         private const val MAX_EXPANDED_ARCHIVE = 1200L * 1024 * 1024
 
         private val INLINE_MARKUP = Safelist.none().addTags(
@@ -263,11 +264,21 @@ internal class StarDict(directory: File) {
                         output.outputStream().use { file ->
                             val destination = file.buffered()
                             if (extension == "dict.dz") {
-                                val entryStream = object : FilterInputStream(zip) {
-                                    override fun close() = Unit
-                                }
+                                val entryStream = CheckedZipEntryInputStream(
+                                    zip,
+                                    MAX_ZIP_ENTRY,
+                                    checkCancelled,
+                                    expandedBudget,
+                                )
                                 GZIPInputStream(entryStream).use {
                                     it.copyBounded(destination, limit, checkCancelled, expandedBudget)
+                                }
+                                // GZIPInputStream may stop at the first member. Drain any suffix
+                                // through the same meter so it remains bounded and cancellable.
+                                val buffer = ByteArray(64 * 1024)
+                                while (true) {
+                                    checkCancelled()
+                                    if (entryStream.read(buffer) < 0) break
                                 }
                             } else {
                                 zip.copyBounded(destination, limit, checkCancelled, expandedBudget)
@@ -537,12 +548,43 @@ private fun requirePack(condition: Boolean) {
     if (!condition) throw IOException("Invalid or unsupported StarDict archive")
 }
 
-private class ExpandedBudget(private val limit: Long) {
+internal class ExpandedBudget(private val limit: Long) {
     private var total = 0L
 
     fun consume(size: Int) {
         total += size
         requirePack(total <= limit)
+    }
+}
+
+internal class CheckedZipEntryInputStream(
+    input: InputStream,
+    private val limit: Long,
+    private val checkCancelled: () -> Unit,
+    private val budget: ExpandedBudget,
+) : FilterInputStream(input) {
+    private var total = 0L
+
+    override fun read(): Int {
+        checkCancelled()
+        val value = super.read()
+        if (value >= 0) consume(1)
+        return value
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        checkCancelled()
+        val size = super.read(buffer, offset, length)
+        if (size > 0) consume(size)
+        return size
+    }
+
+    override fun close() = Unit
+
+    private fun consume(size: Int) {
+        total += size
+        requirePack(total <= limit)
+        budget.consume(size)
     }
 }
 

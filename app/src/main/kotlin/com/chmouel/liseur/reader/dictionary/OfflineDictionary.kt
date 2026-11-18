@@ -47,6 +47,11 @@ internal object OfflineDictionary {
         val isReaderDict: Boolean,
     )
 
+    data class Lookup(
+        val pack: Pack,
+        val entries: List<StarDictEntry>,
+    )
+
     sealed interface Operation {
         data object Idle : Operation
         data class Downloading(
@@ -313,7 +318,7 @@ internal object OfflineDictionary {
         }
     }
 
-    suspend fun lookup(context: Context, id: String, word: String): List<StarDictEntry> = withContext(Dispatchers.IO) {
+    suspend fun lookup(context: Context, id: String, word: String): Lookup? = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val candidates = synchronized(lock) {
             val selected = _state.value.packs.firstOrNull { it.id == id && it.enabled }
@@ -332,15 +337,17 @@ internal object OfflineDictionary {
                 val opened = StarDict(dir)
                 synchronized(lock) {
                     if (_state.value.packs.none { it.id == pack.id && it.enabled }) continue
-                    cached.clear()
                     cached[pack.id] = opened
+                    while (cached.size > MAX_CACHED_DICTIONARIES) {
+                        cached.remove(cached.entries.iterator().next().key)
+                    }
                 }
                 opened
             }
             val entries = dict.lookup(word)
-            if (entries.isNotEmpty()) return@withContext entries
+            if (entries.isNotEmpty()) return@withContext Lookup(pack, entries)
         }
-        emptyList()
+        null
     }
 
     private fun isBusy(): Boolean {
@@ -512,6 +519,7 @@ internal object OfflineDictionary {
     private fun preferences(context: Context) = context.getSharedPreferences("offline_dictionary", Context.MODE_PRIVATE)
 
     private const val KEY_PACKS = "packs_json"
+    private const val MAX_CACHED_DICTIONARIES = 2
 }
 
 private class ProgressInputStream(
