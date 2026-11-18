@@ -470,6 +470,9 @@ class ReadingStatsViewModel(
                     }
                     if (token != generation || _window.value.asked() != window.asked()) return@launch
                     _snapshot.value = Answered(window, publish, week)
+                    viewModelScope.launch {
+                        remoteStats?.accept(publish, window.range, window.weekStart)
+                    }
                     val consistencyFrom = result.today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L)
                     val spanStart = window.range.startDate(result.today, window.weekStart)
                     if (spanStart != null && spanStart > consistencyFrom) {
@@ -477,15 +480,17 @@ class ReadingStatsViewModel(
                             context, sessions, window.range, result.today, window.weekStart,
                             compare = false, from = consistencyFrom, requireCurrent = false,
                         )?.takeIf { it.revision == result.revision && source.isCurrent(it) }
+                        if (resampleClock() || now(result.zone).toLocalDate() != result.today) {
+                            refreshServerInsights()
+                            return@launch
+                        }
                         if (consistency != null && token == generation &&
                             _window.value.asked() == window.asked() &&
-                            !resampleClock() && now(result.zone).toLocalDate() == result.today &&
                             source.isCurrent(result)
                         ) {
                             _snapshot.value = Answered(window, publish, week, consistency)
                         }
                     }
-                    remoteStats?.accept(publish, window.range, window.weekStart)
                     return@launch
                 }
             }
