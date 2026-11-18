@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -219,5 +220,17 @@ internal fun RevealInsertedRow(listState: LazyListState, present: Boolean) {
         if (!appeared) return@LaunchedEffect
         val atTop = listState.firstVisibleItemScrollOffset == 0 && listState.firstVisibleItemIndex <= 1
         if (atTop) listState.scrollToItem(0)
+    }
+}
+
+@Composable
+internal fun RevealInsertedRow(gridState: LazyGridState, present: Boolean) {
+    var wasPresent by remember { mutableStateOf(present) }
+    LaunchedEffect(present) {
+        val appeared = present && !wasPresent
+        wasPresent = present
+        if (!appeared) return@LaunchedEffect
+        val atTop = gridState.firstVisibleItemScrollOffset == 0 && gridState.firstVisibleItemIndex <= 1
+        if (atTop) gridState.scrollToItem(0)
     }
 }

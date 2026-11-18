@@ -87,6 +87,7 @@ internal fun ListLibrary(
     header: (@Composable () -> Unit)? = null,
 ) {
     val compact = state.layout.compactList
+    RevealInsertedRow(gridState, present = header != null)
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 340.dp),
         state = gridState,
