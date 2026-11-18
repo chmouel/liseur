@@ -728,6 +728,7 @@
     <string name="reader_page_turn_style_none_detail">Další stránka se zobrazí okamžitě. Na displeji s elektronickým inkoustem se všechny tři režimy chovají stejně.</string>
 
     <!-- The colours offered when a passage is marked. -->
+    <string name="reader_highlight_colours_title">Barvy zvýraznění</string>
     <string name="reader_highlight_colours">Dostupné barvy</string>
     <string name="reader_highlight_colours_help">Klepnutím na barvu ji přidáš do nabídky při zvýrazňování. Podržením nastavíš výchozí barvu, nyní %1$s. Použije se pro zvýraznění bez výběru barvy a poznámky používají první barvu podle pořadí v panelu.</string>
     <string name="reader_highlight_colours_none">Nejsou nabízeny žádné barvy, takže se pasáže zvýrazňují barvou %1$s. Klepnutím na barvu můžeš nabídku obnovit.</string>

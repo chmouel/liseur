@@ -42,7 +42,10 @@ import com.chmouel.liseur.data.settings.ReaderPrefs
 import com.chmouel.liseur.data.settings.fonts.UserFont
 import com.chmouel.liseur.data.settings.ReaderTheme
 import com.chmouel.liseur.data.settings.ReaderThemeChoice
+import com.chmouel.liseur.reader.annotations.HighlightPalette
+import com.chmouel.liseur.reader.annotations.HighlightTint
 import com.chmouel.liseur.ui.navigation.Route
+import com.chmouel.liseur.ui.reading.ReadingHighlightPaletteControls
 import com.chmouel.liseur.ui.reading.SelectionToolbarRow
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.contentWidthCap
@@ -97,6 +100,9 @@ fun ReadingAppearanceScreen(
     onFooterMode: (FooterMode) -> Unit,
     onFooterField: (FooterSlot, FooterField) -> Unit,
     onOpenSelectionToolbar: () -> Unit,
+    highlightPalette: HighlightPalette,
+    onHighlightTintToggled: (HighlightTint) -> Unit,
+    onHighlightDefaultTintChanged: (HighlightTint) -> Unit,
     fineTypography: FineTypographyActions,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -165,6 +171,20 @@ fun ReadingAppearanceScreen(
                                 onSelected = onFont,
                                 onImport = fontLibrary.pick,
                                 onRemove = fontLibrary.remove,
+                            )
+                        }
+                        // Kept out of Advanced: the selection bar offers one
+                        // colour by default, and readers missed the others
+                        // when they lived only in the toolbar editor.
+                        Column(
+                            Modifier.settingsAnchor(SettingsEntries.HighlightColours),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            ReadingSectionLabel(stringResource(R.string.reader_highlight_colours_title))
+                            ReadingHighlightPaletteControls(
+                                palette = highlightPalette,
+                                onTintToggled = onHighlightTintToggled,
+                                onDefaultChanged = onHighlightDefaultTintChanged,
                             )
                         }
                         Text(

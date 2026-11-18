@@ -656,6 +656,7 @@
     <string name="reader_page_turn_style_lift_detail">La pagina finita si solleva da quella sotto, come un foglio che si stacca da una pila.</string>
     <string name="reader_page_turn_style_slide_detail">Entrambe le pagine viaggiano insieme, come quando trascini la pagina con un dito.</string>
     <string name="reader_page_turn_style_none_detail">La pagina successiva c\'è e basta. Gli schermi e-ink usano sempre questa.</string>
+    <string name="reader_highlight_colours_title">Colori di evidenziazione</string>
     <string name="reader_highlight_colours">Colori disponibili</string>
     <string name="reader_highlight_colours_help">Tocca un colore per offrirlo quando segni un passaggio. Tieni premuto uno per renderlo predefinito (ora %1$s). Le evidenziazioni fatte senza scegliere un colore usano il predefinito; le note usano il primo colore nella barra.</string>
     <string name="reader_highlight_colours_none">Nessun colore è offerto, quindi segnare un passaggio lo evidenzia in %1$s. Tocca un colore per far tornare la scelta.</string>

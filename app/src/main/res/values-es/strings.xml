@@ -656,6 +656,7 @@
     <string name="reader_page_turn_style_lift_detail">La página que terminaste se levanta de la de debajo, como una hoja de papel al salir de una pila.</string>
     <string name="reader_page_turn_style_slide_detail">Ambas páginas se mueven juntas, como cuando arrastras la página con el dedo.</string>
     <string name="reader_page_turn_style_none_detail">La página siguiente simplemente está ahí. Las pantallas de tinta electrónica siempre usan esta opción.</string>
+    <string name="reader_highlight_colours_title">Colores de resaltado</string>
     <string name="reader_highlight_colours">Colores disponibles</string>
     <string name="reader_highlight_colours_help">Toca un color para ofrecerlo al marcar un pasaje. Mantén uno pulsado para hacerlo el predeterminado (ahora %1$s). Los resaltados hechos sin elegir color usan el predeterminado; las notas usan el primer color de la barra.</string>
     <string name="reader_highlight_colours_none">No se ofrece ningún color, así que marcar un pasaje lo resalta en %1$s. Toca un color para recuperar la elección.</string>

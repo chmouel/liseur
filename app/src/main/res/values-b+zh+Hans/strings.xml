@@ -731,6 +731,7 @@
     <string name="reader_page_turn_style_lift_detail">读完的页面会从下方页面掀起，就像从一叠纸中翻起一张。</string>
     <string name="reader_page_turn_style_slide_detail">两页一起移动，就像用手指把页面拖过去一样。</string>
     <string name="reader_page_turn_style_none_detail">下一页直接呈现。墨水屏始终使用这种效果。</string>
+    <string name="reader_highlight_colours_title">标注颜色</string>
     <string name="reader_highlight_colours">可用颜色</string>
     <string name="reader_highlight_colours_help">点击一种颜色即可在标注文段时提供该选项。长按可将其设为默认色（当前为 %1$s）。未选择颜色时所作的标注使用默认色；批注使用颜色栏中的第一种颜色。</string>
     <string name="reader_highlight_colours_none">当前未提供任何颜色，因此标注文段时将使用 %1$s 色。点击一种颜色即可恢复选择。</string>

@@ -665,6 +665,7 @@
     <string name="reader_page_turn_style_slide_detail">Beide Seiten wandern zusammen, wie wenn du die Seite mit dem Finger querziehst.</string>
     <string name="reader_page_turn_style_none_detail">Die nächste Seite ist einfach da. E-Ink-Bildschirme nutzen immer diese Einstellung.</string>
 
+    <string name="reader_highlight_colours_title">Markierungsfarben</string>
     <string name="reader_highlight_colours">Verfügbare Farben</string>
     <string name="reader_highlight_colours_help">Tippe eine Farbe an, um sie beim Markieren einer Passage anzubieten. Halte eine gedrückt, um sie zum Standard zu machen (derzeit %1$s). Markierungen ohne gewählte Farbe nutzen den Standard; Notizen nutzen die erste Farbe in der Leiste.</string>
     <string name="reader_highlight_colours_none">Es werden keine Farben angeboten, deshalb wird eine Passage in %1$s markiert. Tippe eine Farbe an, um die Auswahl zurückzubringen.</string>

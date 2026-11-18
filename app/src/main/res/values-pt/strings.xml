@@ -683,6 +683,7 @@
     <string name="reader_page_turn_style_lift_detail">A página lida se levanta sobre a próxima, como uma folha retirada de uma pilha.</string>
     <string name="reader_page_turn_style_slide_detail">As duas páginas se movem juntas, como ao arrastar a página com o dedo.</string>
     <string name="reader_page_turn_style_none_detail">A próxima página aparece diretamente. Telas e-ink sempre usam esta opção.</string>
+    <string name="reader_highlight_colours_title">Cores de destaque</string>
     <string name="reader_highlight_colours">Cores disponíveis</string>
     <string name="reader_highlight_colours_help">Toque em uma cor para oferecê-la ao destacar um trecho. Mantenha pressionado para torná-la padrão (atualmente %1$s). Destaques feitos sem escolher uma cor usam a padrão; notas usam a primeira cor da barra.</string>
     <string name="reader_highlight_colours_none">Nenhuma cor está disponível para escolha, então os trechos são destacados em %1$s. Toque em uma cor para voltar a oferecê-la.</string>
