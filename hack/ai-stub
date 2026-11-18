@@ -317,6 +317,8 @@ def handler(stub: Stub):
             if route == "/_stub/requests":
                 return self.send(200, stub.entries())
             stub.record(self.entry())
+            if args.delay:
+                time.sleep(args.delay)
             if route == "/api/voices":
                 return self.send(200, GRADIUM_VOICES) if self.gradium_authorized() else None
             if not self.authorized():
@@ -353,12 +355,12 @@ def handler(stub: Stub):
             elif route == "/audio/speech" and isinstance(body.get("instructions"), str):
                 entry["blocks"] = blocks(body["instructions"])
             stub.record(entry)
+            if args.delay:
+                time.sleep(args.delay)
             if route == "/api/post/speech/tts":
                 return self.gradium_speech(body) if self.gradium_authorized() else None
             if not self.authorized():
                 return None
-            if args.delay:
-                time.sleep(args.delay)
             if args.fail and route in ("/chat/completions", "/audio/speech"):
                 return self.error(args.fail, f"Stub failing with {args.fail}")
             if route == "/chat/completions":
@@ -402,14 +404,14 @@ def handler(stub: Stub):
 
         def speech(self, body: dict) -> None:
             fmt = body.get("response_format", "mp3")
+            if args.refuse_voice is not None and body.get("voice") == args.refuse_voice:
+                return self.error(400, f"Unsupported voice: {args.refuse_voice}")
             if fmt != "wav":
                 return self.error(400, f"Unsupported response_format: {fmt}")
             text = body.get("input") or ""
             self.send(200, wav(len(text) * SECONDS_PER_CHARACTER), "audio/wav")
 
         def gradium_speech(self, body: dict) -> None:
-            if args.delay:
-                time.sleep(args.delay)
             if args.fail:
                 return self.send(args.fail, f"error from server {args.fail}: stub failing".encode(), "text/plain")
             if body.get("output_format") != "wav" or body.get("only_audio") is not True:
@@ -436,9 +438,14 @@ def parse(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="JSON-lines request log (default: tmp/ai-stub/requests.jsonl)")
     parser.add_argument("--keep-log", action="store_true", help="append to the log instead of starting it empty")
     parser.add_argument("--prefix", default="[T] ", help="put before every translation (default: %(default)r)")
-    parser.add_argument("--delay", type=float, default=0, help="seconds to wait before answering chat and speech")
+    parser.add_argument("--delay", type=float, default=0, help="seconds to wait before answering any request but the log, so a slow server shows its waits")
     parser.add_argument("--speech-failures", type=int, default=0, metavar="COUNT", help="fail the first COUNT speech requests with HTTP 503")
     parser.add_argument("--fail", type=int, metavar="CODE", help="answer chat and speech with this HTTP status")
+    parser.add_argument(
+        "--refuse-voice",
+        metavar="VOICE",
+        help="refuse this voice on /v1/audio/speech with a 400 naming it, as a server without it does",
+    )
     parser.add_argument("--refuse", metavar="TEXT", help="refuse chat passages containing this text")
     parser.add_argument("--key", help="require this API key as a bearer token (x-api-key on the Gradium routes), refused otherwise")
     parser.add_argument("--long", action="store_true", help="fill every section of a companion term answer, so it scrolls")

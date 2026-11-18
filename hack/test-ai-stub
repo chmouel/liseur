@@ -284,6 +284,21 @@ def main() -> int:
     finally:
         stub.stop()
 
+    stub = Stub("--refuse-voice", "stub_a", "--delay", "0.2")
+    try:
+        started = time.monotonic()
+        code, voices = stub.json("GET", "/v1/audio/voices")
+        check("--delay waits before listing voices too", code == 200 and time.monotonic() - started >= 0.2)
+        started = time.monotonic()
+        code, _, _ = stub.call("POST", "/v1/audio/speech", {"input": "Hi", "voice": "stub_b", "response_format": "wav"})
+        check("--delay waits before answering a voice", code == 200 and time.monotonic() - started >= 0.2, code)
+        code, _, text = stub.call("POST", "/v1/audio/speech", {"input": "Hi", "voice": "stub_a", "response_format": "wav"})
+        check("--refuse-voice answers that voice with a 400 naming it", code == 400 and b"voice" in text, (code, text))
+        code, kind, _ = stub.call("POST", "/v1/audio/speech", {"input": "Hi", "voice": "stub_b", "response_format": "wav"})
+        check("--refuse-voice leaves the other voices alone", code == 200 and kind == "audio/wav", (code, kind))
+    finally:
+        stub.stop()
+
     stub = Stub("--speech-failures", "2")
     try:
         codes = [stub.call("POST", "/v1/audio/speech", {"input": "Hi", "response_format": "wav"})[0] for _ in range(3)]

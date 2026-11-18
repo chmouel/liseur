@@ -111,6 +111,9 @@ internal fun ReadAloudPlayer(
     }
     val pending by feature.pendingChoice.collectAsStateWithLifecycle()
     val asking = pending?.takeIf { it.bookId == bookId }
+    val startingBook by feature.starting.collectAsStateWithLifecycle()
+    // From the tap, before the session exists: the voice is already on its way.
+    val starting = startingBook == bookId && here == null && asking == null
     var choosing by remember { mutableStateOf(false) }
     // Opened from a problem, with no session to read on in: it saves the
     // voice or the settings and goes, and reading starts again from the menu.
@@ -142,7 +145,7 @@ internal fun ReadAloudPlayer(
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         val service by feature.service.collectAsStateWithLifecycle(null)
-        val waitShown = rememberWaitShown(here?.preparing == true)
+        val waitShown = rememberWaitShown(starting || here?.preparing == true)
         service?.AccessPrompt(theme)
         // A problem stays until it is answered, whether the chrome is up or not.
         shown?.let { current ->
@@ -181,28 +184,36 @@ internal fun ReadAloudPlayer(
                 )
             }
         }
-        // With the controls hidden, the wait for the voice still shows.
+        // With the controls hidden, the wait for the voice still shows, and
+        // from the tap: the session it ends up in is not there yet.
         AnimatedVisibility(
-            visible = here != null && !controls && waitShown && notice == null && shown == null,
+            visible = waitShown && notice == null && shown == null && (starting || (here != null && !controls)),
             enter = if (eInk) EnterTransition.None else fadeIn(),
             exit = if (eInk) ExitTransition.None else fadeOut(),
         ) {
             ChromePill(theme = theme) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp, vertical = 12.dp)
-                        .semantics(mergeDescendants = true) {
-                            liveRegion = LiveRegionMode.Polite
-                            progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
-                        },
+                    modifier = Modifier.padding(start = 20.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 ) {
-                    VoiceWait(color = LocalContentColor.current, barWidth = 2.5.dp, height = 16.dp)
-                    Text(
-                        text = stringResource(R.string.read_aloud_preparing),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier
+                            .padding(vertical = 8.dp)
+                            .semantics(mergeDescendants = true) {
+                                liveRegion = LiveRegionMode.Polite
+                                progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
+                            },
+                    ) {
+                        VoiceWait(color = LocalContentColor.current, barWidth = 2.5.dp, height = 16.dp)
+                        Text(
+                            text = stringResource(R.string.read_aloud_preparing),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    // Nothing is playing yet: the wait can be given up rather than paused.
+                    if (starting || here?.utterance == null) CancelAction(feature::stop)
                 }
             }
         }
@@ -255,7 +266,8 @@ internal fun ReadAloudPlayer(
  * Play, pause, or the wait for the voice, filled in the page's ink so the
  * one control that matters most is found without looking. While audio is
  * on its way the voice mark takes the icon's place; once playing, the
- * button still pauses.
+ * button still pauses. Before the first sentence has landed there is
+ * nothing to pause, so it gives up the wait instead.
  */
 @Composable
 private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: Boolean, theme: ReaderTheme) {
@@ -267,12 +279,13 @@ private fun PlayButton(feature: SpeechReadAloud, here: ReadAloudUi?, waitShown: 
     val preparing = stringResource(R.string.read_aloud_preparing)
     when {
         // Nothing heard yet: the first sentence is still on its way.
-        here == null || (here.preparing && !here.playing) -> Box(
+        here == null || (here.preparing && !here.playing && here.utterance == null) -> Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .size(PLAY_SIZE)
                 .clip(CircleShape)
                 .background(theme.foreground)
+                .clickable(role = Role.Button, onClickLabel = stringResource(R.string.cancel), onClick = feature::stop)
                 .semantics {
                     contentDescription = preparing
                     progressBarRangeInfo = ProgressBarRangeInfo.Indeterminate
@@ -578,6 +591,20 @@ private fun ControlButton(onClick: () -> Unit, content: @Composable () -> Unit) 
         onClick = onClick,
         colors = IconButtonDefaults.iconButtonColors(contentColor = LocalContentColor.current),
         content = content,
+    )
+}
+
+/** Gives up the wait for the voice, as a labelled action beside it. */
+@Composable
+private fun CancelAction(onClick: () -> Unit) {
+    Text(
+        text = stringResource(R.string.cancel),
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 14.dp),
     )
 }
 
