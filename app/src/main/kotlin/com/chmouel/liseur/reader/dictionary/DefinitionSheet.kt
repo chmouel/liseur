@@ -121,7 +121,7 @@ fun DefinitionSheet(
     val offlineEntries = localResult?.getOrNull()
     // When an offline dictionary is active, only reach over the network if the
     // reader has online lookup enabled AND the offline pack had no entry for this word.
-    val useOnline = offline == null || (enabled && localResult != null && (localResult!!.isFailure || offlineEntries?.isEmpty() == true))
+    val useOnline = offline == null || (enabled && localResult != null && (localResult.isFailure || offlineEntries?.isEmpty() == true))
 
     var state by remember(term, languages, enabled, baseUrl, useOnline) {
         mutableStateOf<DictionaryState>(
@@ -169,7 +169,7 @@ fun DefinitionSheet(
     val fetchTranslations = enabled && target != null && (!offlineResolved || showTranslations)
     val translations = key(entry, baseUrl, target, fetchTranslations, translationAttempt) {
         produceState<TranslationsState>(TranslationsState.Loading) {
-            value = if (!fetchTranslations || target == null) {
+            value = if (!fetchTranslations) {
                 TranslationsState.Empty
             } else {
                 client.translations(entry, baseUrl, target, fresh = translationAttempt > 0)
@@ -315,7 +315,10 @@ fun DefinitionSheet(
                                 showTranslations = true
                             },
                         )
-                        if (showTranslations && translations is TranslationsState.Failed) {
+                        val waitingForEntry = site != null && (targetEntry == null || targetEntry == DictionaryState.Loading)
+                        if (showTranslations && (translations == TranslationsState.Loading || waitingForEntry)) {
+                            Loading()
+                        } else if (showTranslations && (translations is TranslationsState.Failed || targetEntry is DictionaryState.Failed)) {
                             Text(
                                 text = stringResource(R.string.dictionary_failed),
                                 style = MaterialTheme.typography.bodySmall,
