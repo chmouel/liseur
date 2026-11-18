@@ -82,10 +82,3 @@ internal fun String.stripHtml(): String =
         .replace("&#39;", "'")
         .replace(Regex("\\s+"), " ")
         .trim()
-
-/** Strips the punctuation a selection tends to catch alongside a word. */
-fun normaliseLookupTerm(text: String): String =
-    text.trim()
-        .substringBefore('\n')
-        .trim { !it.isLetterOrDigit() && it != '-' && it != '\'' && it != ' ' }
-        .trim()

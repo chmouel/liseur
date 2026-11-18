@@ -23,6 +23,21 @@ class StarDictTest {
     val temporaryFolder = TemporaryFolder()
 
     @Test
+    fun `suggests nearby headwords including accent differences`() {
+        val pack = StarDict.unpack(
+            archive(
+                headwords = listOf("animal" to "Animal", "épuisant" to "Fatigant", "épuiser" to "Fatiguer"),
+            ).inputStream(),
+            temporaryFolder.newFolder(),
+        )
+
+        assertEquals(emptyList<StarDictEntry>(), pack.lookup("epuisante"))
+        assertEquals(listOf("épuisant"), pack.suggestions("epuisante"))
+        assertEquals("épuisant", pack.suggestions("epuisant").first())
+        assertEquals(emptyList<String>(), pack.suggestions("x"))
+    }
+
+    @Test
     fun `looks up headwords, non-ASCII casing, inflections, and strips active markup`() {
         val pack = StarDict.unpack(
             archive(

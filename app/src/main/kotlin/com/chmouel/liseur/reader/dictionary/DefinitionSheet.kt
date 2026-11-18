@@ -135,6 +135,7 @@ internal fun shouldUseOnlineLookup(
 @Composable
 fun DefinitionSheet(
     word: String,
+    fallbackWords: List<String>,
     languages: List<String>,
     bookLanguage: String? = null,
     enabled: Boolean,
@@ -144,6 +145,7 @@ fun DefinitionSheet(
     onOpenInDictionaryApp: (String) -> Unit,
     onOpenInBrowser: (term: String, site: String) -> Unit,
     onDismiss: () -> Unit,
+    onLookupSuggestion: (String, String?) -> Unit,
     onSelectText: (() -> Unit)? = null,
     selectionActions: (@Composable () -> Unit)? = null,
     selectedDefinitionActions: (@Composable (String, String?) -> Unit)? = null,
@@ -154,16 +156,27 @@ fun DefinitionSheet(
     val offline = remember(offlineState.packs, languages, bookLanguage) {
         OfflineDictionary.matchFor(context, languages, bookLanguage)
     }
-    val term = remember(word) { normaliseLookupTerm(word) }
+    val term = word.trim()
     // Keyed, not just re-run: produceState keeps its last value when its keys change, and a
     // previous word's miss must never let this word go online before its own lookup finishes.
-    val localResult = key(offlineState.packs, offline?.id, term) {
+    val localResult = key(offlineState.packs, offline?.id, term, fallbackWords) {
         produceState<Result<OfflineDictionary.Lookup?>?>(null) {
             val pack = offline ?: return@produceState
             value = try {
-                Result.success(OfflineDictionary.lookup(context, pack.id, term))
+                Result.success(OfflineDictionary.lookup(context, pack.id, term, fallbackWords))
             } catch (error: java.io.IOException) {
                 Result.failure(error)
+            }
+        }.value
+    }
+    val suggestions = key(offlineState.packs, offline?.id, term, fallbackWords) {
+        produceState(emptyList<String>(), localResult) {
+            val pack = offline ?: return@produceState
+            if (localResult?.isSuccess != true || localResult.getOrNull() != null) return@produceState
+            value = try {
+                OfflineDictionary.suggestions(context, pack.id, term)
+            } catch (_: java.io.IOException) {
+                emptyList()
             }
         }.value
     }
@@ -175,15 +188,15 @@ fun DefinitionSheet(
     // reader has online lookup enabled AND the offline pack had no entry for this word.
     val useOnline = shouldUseOnlineLookup(offline != null, enabled, localResult)
 
-    var state by remember(term, languages, enabled, baseUrl, useOnline) {
+    var state by remember(term, fallbackWords, languages, enabled, baseUrl, useOnline) {
         mutableStateOf<DictionaryState>(
             if (enabled && useOnline) DictionaryState.Loading else DictionaryState.Disabled,
         )
     }
 
-    LaunchedEffect(term, languages, enabled, baseUrl, useOnline) {
+    LaunchedEffect(term, fallbackWords, languages, enabled, baseUrl, useOnline) {
         if (!enabled || !useOnline) return@LaunchedEffect
-        state = client.define(term, languages, baseUrl) { initial ->
+        state = client.define(term, languages, baseUrl, fallbackWords = fallbackWords) { initial ->
             withContext(Dispatchers.Main.immediate) { state = initial }
         }
     }
@@ -340,6 +353,18 @@ fun DefinitionSheet(
                                     LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
                                 } else {
                                     LookupResult(DictionaryState.NotFound, term) {}
+                                }
+                                if (suggestions.isNotEmpty() && state !is DictionaryState.Found) {
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        suggestions.forEach { suggestion ->
+                                            AssistChip(
+                                                onClick = {
+                                                    onLookupSuggestion(suggestion, offline.language.takeIf(String::isNotBlank))
+                                                },
+                                                label = { Text(suggestion) },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                             else -> {

@@ -5329,6 +5329,7 @@ internal fun ReaderScreen(
         val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
         DefinitionSheet(
             word = query.word,
+            fallbackWords = query.fallbackWords(),
             languages = remember(definitionLanguage) {
                 WiktionaryClient.languagesFor(definitionLanguage)
             },
@@ -5348,6 +5349,10 @@ internal fun ReaderScreen(
                 context.openDictionaryEntry(term, site)
                 defineWord = null
                 if (automaticSelection != null) dismissSelection()
+            },
+            onLookupSuggestion = { word, language ->
+                if (automaticSelection != null) dismissSelection()
+                defineWord = DefinitionQuery(word, language ?: query.language)
             },
             selectedDefinitionActions = { text, language ->
                 val focus = LocalFocusManager.current

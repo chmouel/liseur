@@ -62,18 +62,6 @@ class WiktionaryTest {
     }
 
     @Test
-    fun `lookup term loses the punctuation a selection catches`() {
-        assertEquals("filehandle", normaliseLookupTerm("  “filehandle,” "))
-        assertEquals("well-known", normaliseLookupTerm("well-known."))
-        assertEquals("don't", normaliseLookupTerm("(don't)"))
-    }
-
-    @Test
-    fun `lookup term keeps only the first line`() {
-        assertEquals("first", normaliseLookupTerm("first\nsecond"))
-    }
-
-    @Test
     fun `book language comes first and english is always available`() {
         assertEquals(listOf("fr", "en"), WiktionaryClient.languagesFor("fr-FR"))
         assertEquals(listOf("en"), WiktionaryClient.languagesFor("en"))

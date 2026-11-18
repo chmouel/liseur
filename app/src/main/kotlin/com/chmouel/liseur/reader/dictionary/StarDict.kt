@@ -144,6 +144,32 @@ internal class StarDict(directory: File) {
         }
     }
 
+    fun suggestions(word: String, checkCancellation: () -> Unit = {}): List<String> {
+        val query = foldSuggestion(word.trim())
+        if (query.length !in 3..32 || query.any { !it.isLetter() && it != '\'' && it != '-' }) {
+            return emptyList()
+        }
+        val maxDistance = if (query.length < 6) 1 else 2
+        val previous = IntArray(query.length + 1)
+        val current = IntArray(query.length + 1)
+        val matches = linkedMapOf<String, Int>()
+        for (row in index.fields.indices) {
+            if (row % 1024 == 0) checkCancellation()
+            val headword = index.word(row, maxBytes = (query.length + maxDistance) * 4) ?: continue
+            if (headword in matches || headword.any(Char::isWhitespace)) continue
+            val candidate = foldSuggestion(headword)
+            if (kotlin.math.abs(candidate.length - query.length) > maxDistance) continue
+            val distance = suggestionDistance(query, candidate, maxDistance, previous, current)
+            if (distance > maxDistance) continue
+            val worst = matches.maxByOrNull { it.value }
+            if (matches.size < 5 || worst != null && distance < worst.value) {
+                if (matches.size == 5 && worst != null) matches.remove(worst.key)
+                matches[headword] = distance
+            }
+        }
+        return matches.entries.sortedBy { it.value }.map { it.key }
+    }
+
     /**
      * A StarDict index read through a memory map, so the file's bytes live in
      * the page cache and not on the app heap; only one int per entry does.
@@ -172,9 +198,12 @@ internal class StarDict(directory: File) {
             requirePack(start == size)
         }
 
-        fun word(row: Int): String {
+        fun word(row: Int): String = checkNotNull(word(row, Int.MAX_VALUE))
+
+        fun word(row: Int, maxBytes: Int): String? {
             val start = if (row == 0) 0 else fields[row - 1] + fieldWidth
             val end = fields[row] - 1
+            if (end - start > maxBytes) return null
             val out = ByteArray(end - start)
             for (i in out.indices) out[i] = bytes.get(start + i)
             return out.decodeToString()
@@ -613,4 +642,40 @@ private fun InputStream.copyBounded(
         budget.consume(size)
         output.write(buffer, 0, size)
     }
+}
+
+
+private val suggestionMarks = Regex("""\p{M}+""")
+
+private fun foldSuggestion(text: String): String =
+    Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFD)
+        .replace(suggestionMarks, "")
+
+private fun suggestionDistance(
+    query: String,
+    candidate: String,
+    limit: Int,
+    first: IntArray,
+    second: IntArray,
+): Int {
+    var previous = first
+    var current = second
+    for (column in previous.indices) previous[column] = column
+    candidate.forEachIndexed { row, letter ->
+        current[0] = row + 1
+        var minimum = current[0]
+        for (column in 1..query.length) {
+            current[column] = minOf(
+                current[column - 1] + 1,
+                previous[column] + 1,
+                previous[column - 1] + if (letter == query[column - 1]) 0 else 1,
+            )
+            minimum = minOf(minimum, current[column])
+        }
+        if (minimum > limit) return limit + 1
+        val completed = current
+        current = previous
+        previous = completed
+    }
+    return previous[query.length]
 }
