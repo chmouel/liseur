@@ -1,8 +1,34 @@
 package com.chmouel.liseur.reader.dictionary
 
 import android.icu.util.ULocale
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.contextmenu.modifier.filterTextContextMenuComponents
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -19,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -33,19 +60,31 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -57,6 +96,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.chmouel.liseur.R
 import com.chmouel.liseur.domain.DictionaryUrl
@@ -106,6 +146,7 @@ fun DefinitionSheet(
     onDismiss: () -> Unit,
     onSelectText: (() -> Unit)? = null,
     selectionActions: (@Composable () -> Unit)? = null,
+    selectedDefinitionActions: (@Composable (String, String?) -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
     val context = LocalContext.current
@@ -206,6 +247,17 @@ fun DefinitionSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
+        val entryScroll = key(term, source) { rememberScrollState() }
+        var selection by remember(term, source) { mutableStateOf<Pair<Any, String>?>(null) }
+        var focusedOwner by remember(term, source) { mutableStateOf<Any?>(null) }
+        var actionsFocused by remember(term, source) { mutableStateOf(false) }
+        val actionsFocusRequester = remember { FocusRequester() }
+        val selectedOwner = selection?.first
+        LaunchedEffect(selectedOwner, focusedOwner, actionsFocused) {
+            if (selectedOwner != null && selectedOwner !== focusedOwner && !actionsFocused) {
+                selection = null
+            }
+        }
         Column(
             modifier = Modifier
                 .align(Alignment.CenterHorizontally)
@@ -215,11 +267,15 @@ fun DefinitionSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            val onSelection: (Any, String?) -> Unit = { owner, text ->
+                if (text != null) selection = owner to text
+                else if (selection?.first === owner) selection = null
+            }
             // Only the entry scrolls, so a long one never pushes the actions off screen.
             Column(
                 modifier = Modifier
                     .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(entryScroll),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val firstPronunciation = offlineEntries?.firstOrNull()
@@ -253,57 +309,69 @@ fun DefinitionSheet(
                     }
                 }
 
-                if (offline != null) {
-                    val result = localResult
-                    when {
-                        result == null -> Loading()
-                        result.isFailure -> {
-                            if (enabled) {
-                                LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
-                            } else {
-                                Text(
-                                    text = stringResource(R.string.offline_dictionary_error),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error,
+                CompositionLocalProvider(
+                    LocalDefinitionSelection provides if (selectedDefinitionActions != null) onSelection else null,
+                    LocalDefinitionActionFocus provides DefinitionActionFocus(
+                        requester = actionsFocusRequester,
+                        ownsSelection = { selection?.first === it },
+                        onFocus = { owner, focused ->
+                            if (focused) focusedOwner = owner
+                            else if (focusedOwner === owner) focusedOwner = null
+                        },
+                    ),
+                ) {
+                    if (offline != null) {
+                        val result = localResult
+                        when {
+                            result == null -> Loading()
+                            result.isFailure -> {
+                                if (enabled) {
+                                    LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
+                                } else {
+                                    Text(
+                                        text = stringResource(R.string.offline_dictionary_error),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                            offlineEntries.isNullOrEmpty() -> {
+                                if (enabled) {
+                                    LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
+                                } else {
+                                    LookupResult(DictionaryState.NotFound, term) {}
+                                }
+                            }
+                            else -> {
+                                OfflineEntriesContent(
+                                    queriedTerm = term,
+                                    entries = offlineEntries,
+                                    pack = definitionPack ?: offline,
                                 )
                             }
                         }
-                        offlineEntries.isNullOrEmpty() -> {
-                            if (enabled) {
-                                LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
-                            } else {
-                                LookupResult(DictionaryState.NotFound, term) {}
+                    } else when (val current = state) {
+                        DictionaryState.Disabled -> Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.dictionary_disabled_explanation,
+                                    DictionaryUrl.hostOf(baseUrl),
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Button(onClick = onEnable) {
+                                Text(stringResource(R.string.dictionary_enable))
                             }
-                        }
-                        else -> {
-                            OfflineEntriesContent(
-                                queriedTerm = term,
-                                entries = offlineEntries,
-                                pack = definitionPack ?: offline,
+                            OfflineSetupRow(
+                                operation = offlineState.operation,
+                                onChoose = { choosingOffline = true },
                             )
                         }
-                    }
-                } else when (val current = state) {
-                    DictionaryState.Disabled -> Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text(
-                            text = stringResource(
-                                R.string.dictionary_disabled_explanation,
-                                DictionaryUrl.hostOf(baseUrl),
-                            ),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Button(onClick = onEnable) {
-                            Text(stringResource(R.string.dictionary_enable))
-                        }
-                        OfflineSetupRow(
-                            operation = offlineState.operation,
-                            onChoose = { choosingOffline = true },
-                        )
-                    }
 
-                    else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
+                        else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
+                    }
                 }
 
                 FlowRow(
@@ -359,7 +427,24 @@ fun DefinitionSheet(
                 }
             }
 
-            selectionActions?.invoke()
+            val selectedText = selection?.second
+            if (selectedText != null && selectedDefinitionActions != null) {
+                val selectionLanguage = if (offlineResolved) {
+                    definitionPack.language.takeIf(String::isNotBlank)
+                } else {
+                    source
+                }
+                Box(
+                    Modifier
+                        .focusRequester(actionsFocusRequester)
+                        .onFocusChanged { actionsFocused = it.hasFocus }
+                        .focusGroup(),
+                ) {
+                    selectedDefinitionActions(selectedText, selectionLanguage)
+                }
+            } else {
+                selectionActions?.invoke()
+            }
         }
     }
 
@@ -479,8 +564,9 @@ private fun Sense(sense: DictionarySense, onOpenInBrowser: (String) -> Unit) {
             )
         }
         sense.definitions.take(MAX_CARD_DEFINITIONS).forEachIndexed { index, definition ->
-            Text(
-                text = "${index + 1}. $definition",
+            DefinitionText(
+                text = AnnotatedString(definition),
+                displayPrefix = "${index + 1}. ",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -782,11 +868,9 @@ private fun OfflineEntriesContent(
                                 "$number. "
                             }
                             val rendered = AnnotatedString.fromHtml(itemHtml)
-                            Text(
-                                text = buildAnnotatedString {
-                                    append(prefix)
-                                    append(rendered)
-                                },
+                            DefinitionText(
+                                text = rendered,
+                                displayPrefix = prefix,
                                 style = if (isSubItem) {
                                     MaterialTheme.typography.bodySmall
                                 } else {
@@ -803,7 +887,7 @@ private fun OfflineEntriesContent(
                 }
 
                 entry.notes.take(2).forEach { noteHtml ->
-                    Text(
+                    DefinitionText(
                         text = AnnotatedString.fromHtml(noteHtml),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -811,7 +895,7 @@ private fun OfflineEntriesContent(
                 }
 
                 if (entry.sections.isEmpty() && entry.notes.isEmpty() && entry.fallbackHtml != null) {
-                    Text(
+                    DefinitionText(
                         text = AnnotatedString.fromHtml(entry.fallbackHtml),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -835,5 +919,208 @@ private fun OfflineEntriesContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+private val LocalDefinitionSelection = staticCompositionLocalOf<((Any, String?) -> Unit)?> { null }
+
+private class DefinitionActionFocus(
+    val requester: FocusRequester,
+    val ownsSelection: (Any) -> Boolean,
+    val onFocus: (Any, Boolean) -> Unit,
+)
+
+private val LocalDefinitionActionFocus = compositionLocalOf<DefinitionActionFocus?> { null }
+
+private object DefinitionTextToolbar : TextToolbar {
+    override val status = TextToolbarStatus.Hidden
+
+    override fun showMenu(
+        rect: Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?,
+    ) = Unit
+
+    override fun hide() = Unit
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DefinitionText(
+    text: AnnotatedString,
+    style: TextStyle,
+    color: Color = Color.Unspecified,
+    displayPrefix: String = "",
+) {
+    val displayedText = remember(text, displayPrefix) {
+        if (displayPrefix.isEmpty()) text else buildAnnotatedString {
+            append(displayPrefix)
+            append(text)
+        }
+    }
+    val onSelection = LocalDefinitionSelection.current
+    if (onSelection == null) {
+        Text(text = displayedText, style = style, color = color)
+        return
+    }
+
+    val owner = remember(displayedText) { Any() }
+    val reportSelection by rememberUpdatedState(onSelection)
+    val actionFocus = checkNotNull(LocalDefinitionActionFocus.current)
+    val reportFocus by rememberUpdatedState(actionFocus.onFocus)
+    val links = remember(displayedText) { displayedText.getLinkAnnotations(0, displayedText.length) }
+    val linkColor = MaterialTheme.colorScheme.primary
+    val styledText = remember(displayedText, linkColor) {
+        if (links.isEmpty()) displayedText else buildAnnotatedString {
+            append(displayedText)
+            links.forEach { link ->
+                addStyle(
+                    SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
+                        .merge(link.item.styles?.style),
+                    link.start,
+                    link.end,
+                )
+            }
+        }
+    }
+    var value by remember(displayedText) { mutableStateOf(TextFieldValue(displayedText)) }
+    var focused by remember(displayedText) { mutableStateOf(false) }
+    DisposableEffect(owner) {
+        onDispose {
+            reportSelection(owner, null)
+            reportFocus(owner, false)
+        }
+    }
+    val contentColor = LocalContentColor.current
+    val textColor = color.takeOrElse { contentColor }
+    val uriHandler = LocalUriHandler.current
+    fun openLink(link: LinkAnnotation) {
+        val listener = link.linkInteractionListener
+        if (listener != null) {
+            listener.onClick(link)
+        } else if (link is LinkAnnotation.Url) {
+            runCatching { uriHandler.openUri(link.url) }
+        }
+    }
+    var layout by remember(displayedText) { mutableStateOf<TextLayoutResult?>(null) }
+    val linkTaps = if (links.isEmpty()) Modifier else Modifier.pointerInput(links, uriHandler) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                waitForUpOrCancellation(PointerEventPass.Initial)
+            } ?: return@awaitEachGesture
+            if ((up.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                return@awaitEachGesture
+            }
+            val result = layout ?: return@awaitEachGesture
+            val line = result.getLineForVerticalPosition(up.position.y)
+            val offset = result.getOffsetForPosition(up.position)
+            val link = links.firstOrNull { range ->
+                val start = maxOf(range.start, result.getLineStart(line))
+                val end = minOf(range.end, result.getLineEnd(line, visibleEnd = true))
+                (offset - 1..offset).any { index ->
+                    index in start until end && result.getBoundingBox(index).contains(up.position)
+                }
+            }?.item ?: return@awaitEachGesture
+            openLink(link)
+        }
+    }
+    CompositionLocalProvider(LocalTextToolbar provides DefinitionTextToolbar) {
+        BasicTextField(
+            value = value.copy(annotatedString = styledText),
+            onValueChange = { next ->
+                value = next
+                val range = next.selection
+                if (focused) {
+                    val start = maxOf(displayPrefix.length, range.min)
+                    val selected = if (start < range.max) next.text.substring(start, range.max).trim() else ""
+                    reportSelection(owner, selected.takeIf(String::isNotEmpty))
+                }
+            },
+            readOnly = true,
+            textStyle = style.copy(color = textColor),
+            onTextLayout = { if (links.isNotEmpty()) layout = it },
+            decorationBox = { innerTextField ->
+                Box {
+                    innerTextField()
+                    val result = layout
+                    if (result != null) {
+                        links.forEach { link ->
+                            if (link.start < link.end) key(link) {
+                                val firstLine = result.getLineForOffset(link.start)
+                                val lastLine = result.getLineForOffset(link.end - 1)
+                                val label = displayedText.text.substring(link.start, link.end)
+                                (firstLine..lastLine).mapNotNull { line ->
+                                    val start = maxOf(link.start, result.getLineStart(line))
+                                    val end = minOf(link.end, result.getLineEnd(line, visibleEnd = true))
+                                    if (start >= end) null
+                                    else result.getPathForRange(start, end).getBounds().takeUnless { it.isEmpty }
+                                }.forEachIndexed { index, bounds ->
+                                    DefinitionLinkTarget(
+                                        label = label,
+                                        bounds = bounds,
+                                        keyboardFocusable = index == 0,
+                                        onOpen = { openLink(link.item) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(linkTaps)
+                .filterTextContextMenuComponents { false }
+                .focusProperties {
+                    if (actionFocus.ownsSelection(owner)) {
+                        next = actionFocus.requester
+                        down = actionFocus.requester
+                    }
+                }
+                .onFocusChanged {
+                    focused = it.isFocused
+                    reportFocus(owner, focused)
+                },
+        )
+    }
+}
+
+@Composable
+private fun DefinitionLinkTarget(
+    label: String,
+    bounds: Rect,
+    keyboardFocusable: Boolean,
+    onOpen: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    with(LocalDensity.current) {
+        Box(
+            Modifier
+                .absoluteOffset(bounds.left.toDp(), bounds.top.toDp())
+                .size(bounds.width.toDp(), bounds.height.toDp())
+                .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
+                .semantics {
+                    contentDescription = label
+                    role = Role.Button
+                    onClick {
+                        onOpen()
+                        true
+                    }
+                }
+                .onKeyEvent { event ->
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.DirectionCenter -> {
+                            if (event.type == KeyEventType.KeyUp) onOpen()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                .onFocusChanged { focused = it.isFocused }
+                .focusable(enabled = keyboardFocusable),
+        )
     }
 }

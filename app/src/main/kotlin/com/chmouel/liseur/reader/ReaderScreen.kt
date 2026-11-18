@@ -138,6 +138,7 @@ import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.use
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.IntOffset
 import com.chmouel.liseur.R
 import com.chmouel.liseur.translate.PageSwap
@@ -827,6 +828,7 @@ internal fun ReaderScreen(
     var noteFor by remember { mutableStateOf<ActiveSelection?>(null) }
     var bookNoteEditor by remember { mutableStateOf<BookNoteEditor?>(null) }
     var defineWord by remember { mutableStateOf<DefinitionQuery?>(null) }
+    var dictionaryTranslation by remember { mutableStateOf<DefinitionQuery?>(null) }
     var translatePassage by remember { mutableStateOf<ActiveSelection?>(null) }
     // The page translated sentence by sentence, while it is; see [TranslatedPages].
     var pageTranslation by remember { mutableStateOf<PageTranslation<Locator>?>(null) }
@@ -2885,7 +2887,9 @@ internal fun ReaderScreen(
         selection == null &&
         tappedSelection == null &&
         noteFor == null &&
+        bookNoteEditor == null &&
         defineWord == null &&
+        dictionaryTranslation == null &&
         jumpBack == null &&
         catchUp == null &&
         codexPanel?.visible != true &&
@@ -5066,12 +5070,12 @@ internal fun ReaderScreen(
                     dismissSelection()
                 }
             },
-            onNote = {
+            onNote = if (!pageTranslated) ({
                 act { live ->
                     noteFor = live
                     dismissSelection()
                 }
-            },
+            }) else null,
             onSearch = {
                 act { live ->
                     searchFor = live.text
@@ -5319,7 +5323,8 @@ internal fun ReaderScreen(
             )
         }
 
-    defineWord?.let { query ->
+    val query = defineWord
+    if (query != null) key(query) {
         val appLanguage = LocalConfiguration.current.locales[0].toLanguageTag()
         val definitionLanguage = query.language ?: publication.metadata.languages.firstOrNull()
         DefinitionSheet(
@@ -5343,6 +5348,58 @@ internal fun ReaderScreen(
                 context.openDictionaryEntry(term, site)
                 defineWord = null
                 if (automaticSelection != null) dismissSelection()
+            },
+            selectedDefinitionActions = { text, language ->
+                val focus = LocalFocusManager.current
+                fun closeCard() {
+                    defineWord = null
+                    if (automaticSelection != null) dismissSelection()
+                }
+                val title = publication.metadata.title
+                val authors = publication.metadata.authors.map { it.name }
+                SheetSelectionActionBar(
+                    actions = SelectionActions(
+                        layout = selectionActionLayout,
+                        annotate = false,
+                        onHighlight = {},
+                        onNote = {
+                            closeCard()
+                            bookNoteEditor = BookNoteEditor(existing = null, initialNote = text)
+                        },
+                        noteLabel = R.string.annotation_book_note_title,
+                        onLookUp = {
+                            val nextQuery = DefinitionQuery(text, language)
+                            if (nextQuery == query) focus.clearFocus()
+                            if (automaticSelection != null) dismissSelection()
+                            defineWord = nextQuery
+                        },
+                        onSearch = { closeCard(); searchFor = text },
+                        onShare = { closeCard(); context.shareText(text, title) },
+                        onCopy = { closeCard(); context.copySelection(text) },
+                        onOpenWith = if (processAvailable) ({
+                            closeCard()
+                            context.launchSelectionIntent(processTextIntent(text), chooser = true)
+                        }) else null,
+                        onWebSearch = if (webSearchAvailable) ({
+                            closeCard()
+                            context.launchSelectionIntent(webSearchIntent(text))
+                        }) else null,
+                        onWebsite = { entry ->
+                            val book = SelectionBookContext(title = title, authors = authors, isbn = isbnOf(publication.metadata.identifier))
+                            val request = if (entry.action.asksAi) context.askAiPrompt(text, language, book) else text
+                            selectionWebsiteIntent(entry, request, language, book)?.let { context.launchSelectionIntent(it) }
+                            closeCard()
+                        },
+                        onTranslate = if (translate.isAvailable && translateReady) ({
+                            closeCard()
+                            dictionaryTranslation = DefinitionQuery(text, language)
+                        }) else null,
+                        translateLabel = translateLabel,
+                    ),
+                    activeTint = null,
+                    palette = highlightPalette,
+                    lookUp = true,
+                )
             },
             selectionActions = automaticSelection?.let { active ->
                 {
@@ -5414,6 +5471,15 @@ internal fun ReaderScreen(
 
     companion?.let { CompanionPanelHost(it, navigatorNow, ::go, effectScope, onProgressAction) }
 
+    dictionaryTranslation?.let { passage ->
+        translate.Sheet(
+            passage = passage.word,
+            declared = listOfNotNull(passage.language),
+            bookUrl = wholeBook?.bookUrl ?: readAloud?.bookId,
+            onDismiss = { dictionaryTranslation = null },
+        )
+    }
+
     translatePassage?.let { passage ->
         translate.Sheet(
             passage = passage.text,
@@ -5455,7 +5521,8 @@ internal fun ReaderScreen(
     bookNoteEditor?.let { editor ->
         NoteEditor(
             passage = null,
-            initialNote = editor.existing?.note.orEmpty(),
+            initialNote = editor.initialNote,
+            canClear = editor.existing != null,
             initialTint = null,
             theme = readingTheme,
             palette = highlightPalette,
@@ -5773,7 +5840,10 @@ internal data class ActiveSelection(
 }
 
 /** The book-level note being written; null [existing] means a new one. */
-private data class BookNoteEditor(val existing: BookAnnotation?)
+private data class BookNoteEditor(
+    val existing: BookAnnotation?,
+    val initialNote: String = existing?.note.orEmpty(),
+)
 
 /** Decorations for search hits live apart from the reader's own marks. */
 private const val SEARCH_DECORATION_GROUP = "search"

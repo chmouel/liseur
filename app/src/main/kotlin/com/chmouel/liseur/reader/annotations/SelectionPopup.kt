@@ -69,7 +69,7 @@ import com.chmouel.liseur.ui.scrollEdgeCue
 /** What the reader can do with a passage they have just selected. */
 class SelectionActions(
     val onHighlight: (HighlightTint) -> Unit,
-    val onNote: () -> Unit,
+    val onNote: (() -> Unit)?,
     val onSearch: () -> Unit,
     val onLookUp: () -> Unit,
     val onShare: () -> Unit,
@@ -90,6 +90,7 @@ class SelectionActions(
     val onCompanion: (() -> Unit)? = null,
     /** False while the page shows a translation, whose words a highlight or note could not keep. */
     val annotate: Boolean = true,
+    @param:StringRes val noteLabel: Int = R.string.annotation_note,
 )
 
 /**
@@ -167,6 +168,7 @@ fun SheetSelectionActionBar(
     activeTint: HighlightTint?,
     palette: HighlightPalette,
     modifier: Modifier = Modifier,
+    lookUp: Boolean = false,
 ) {
     val eInk = LocalEInk.current
     Surface(
@@ -226,7 +228,7 @@ fun SheetSelectionActionBar(
                         ActionButtons(
                             actions = actions,
                             palette = palette,
-                            lookUp = false,
+                            lookUp = lookUp,
                             buttonSize = 44.dp,
                         )
                     }
@@ -316,7 +318,7 @@ private fun ActionButtons(
     actions.layout.entries.forEach { entry ->
         val action = entry.action
         val callback = when (action) {
-            SelectionAction.NOTE -> actions.onNote.takeIf { actions.annotate }
+            SelectionAction.NOTE -> actions.onNote
             SelectionAction.LOOK_UP -> actions.onLookUp.takeIf { lookUp }
             SelectionAction.COMPANION -> actions.onCompanion
             SelectionAction.SEARCH -> actions.onSearch
@@ -331,7 +333,11 @@ private fun ActionButtons(
             SelectionAction.WIKIPEDIA, SelectionAction.OPEN_LIBRARY, SelectionAction.ASK_BRAVE, SelectionAction.DUCK_AI, null -> actions.onWebsite?.let { open -> { open(entry) } }
         }
         if (callback != null && entry.style != SelectionActionStyle.HIDDEN) {
-            val label = entry.customLabel ?: stringResource(if (action == SelectionAction.TRANSLATE) actions.translateLabel else requireNotNull(action).label)
+            val label = entry.customLabel ?: stringResource(when (action) {
+                SelectionAction.NOTE -> actions.noteLabel
+                SelectionAction.TRANSLATE -> actions.translateLabel
+                else -> requireNotNull(action).label
+            })
             Row(
                 Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(50))
                     .clickable(role = Role.Button, onClick = callback)
