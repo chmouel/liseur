@@ -829,10 +829,11 @@ make feature-graphic        # fastlane featureGraphic.png per locale, from promo
 - `hack/screenshots-stale` (`make screenshots-stale`) lists the pictures
   committed before the last commit that touched `app/src/main`, marking the
   hand-captured ones. Informational; `--strict` fails instead.
-- Published images are light theme only, except the README's first pair,
-  `30-home-dark` and `10-library-dark`, which `hack/screenshots --hero`
-  retakes on its own. `11-reading-dark` and `17-empty-library-dark` are
-  captured but not filed with fastlane or the README.
+- The tour runs in the dark theme. The store set is six dark pictures (library, reading, read aloud, series, stats, highlights) plus
+  `31-library-light` and `32-reading-light`, retaken in a final light step.
+  `17-empty-library-dark` is captured but not filed with fastlane or the
+  README; `11-reading-dark` is no longer retaken (`02-reading` is dark).
+  `30-home-dark` and `10-library-dark` can be retaken alone with `--hero`.
 - Sign out of calibre-web first unless the server holds only publishable
   books. The script never writes to it.
 

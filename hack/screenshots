@@ -1028,7 +1028,7 @@ if ((setup_only)); then
     exit 0
 fi
 
-step "Light"
+step "Setup"
 
 # Screenshots show Liseur's own palette, not the emulator's wallpaper.
 # Wallpaper colours are the default on Android 12 and up, which would
@@ -1046,6 +1046,11 @@ sleep 1
 back
 sleep 1
 set_switch "Colours from your wallpaper" off
+
+# The tour runs in the dark theme, the one the app looks best in; a few
+# light pictures are retaken at the end (step "Light").
+adb shell cmd uimode night yes >/dev/null
+sleep 3
 
 # The README opens on these two: the Home and Library tabs, in the dark
 # theme, which is the one the app looks best in. Taken on their own so a
@@ -1085,6 +1090,7 @@ if ((want_dictionary)) && [[ $shot_class == phone ]]; then
 fi
 voice_before=""
 if [[ $shot_class == phone ]]; then
+    settings_top
     scroll_to "Read aloud" exact || die "no Read aloud row in Settings"
     tap_on "Read aloud" exact
     wait_for "Voice service" 15 exact >/dev/null || die "the read aloud settings never opened"
@@ -1142,7 +1148,7 @@ shelf_to_top
 shot 01-library
 
 open_first_book "Moby Dick"
-choose_reading_theme "Light"
+choose_reading_theme "Dark"
 reader_chrome_down
 shot 02-reading
 
@@ -1404,7 +1410,7 @@ shot 18-stats
 scroll_to "Moby Dick" || die "no book listed under the reading stats"
 tap_on "Moby Dick"
 sleep 3
-wait_for "Last read" 20 >/dev/null ||
+wait_for "Reading time by day" 20 >/dev/null ||
     die "the book's reading stats never opened"
 shot 19-stats-book
 back
@@ -1494,22 +1500,26 @@ shot 25-companion-profile
 
 restore_app_settings || die "could not put the app's settings back"
 
-step "Dark"
+step "Light"
 
-adb shell cmd uimode night yes >/dev/null
+adb shell cmd uimode night no >/dev/null
 sleep 3
 
-take_hero
+open_library
+shelf_to_top
+shot 31-library-light
 
 open_first_book "Moby Dick"
-choose_reading_theme "Dark"
-reader_chrome_down
-sleep 2
-shot 11-reading-dark
-
-# Put the reading theme back, so a rerun starts where this one did.
 choose_reading_theme "Light"
 reader_chrome_down
+sleep 2
+shot 32-reading-light
+
+# Put the reading theme back, so a rerun starts where this one did.
+choose_reading_theme "Dark"
+reader_chrome_down
+
+take_hero
 
 # And the definition lookup, if this run is what turned it on. Whether
 # the device may talk to a dictionary is the reader's answer, not a
@@ -1539,16 +1549,15 @@ fi
 
 step "The F-Droid set"
 i=1
-# All light. A dark screenshot in a store listing is read as the app
-# looking like that, rather than as the app being able to; the dark
-# theme is worth more as a line in the description than as one picture
-# in six that does not match the other five.
+# Mostly dark, with the library and the reading view again in light: the
+# dark theme is the one the app looks best in, and two light pictures show
+# it has both.
 #
 # All eight come from this one run, and eight is as many as Play
 # takes. An empty shelf used to be among them, which meant the set could only be completed by a second command
 # with a different flag -- and it was the weakest of the lot anyway:
 # nothing sells a reader like the hours somebody has already put into it.
-for name in 01-library 02-reading 24-read-aloud 13-series 04-typography 18-stats 06-highlights 29-note-editor; do
+for name in 01-library 02-reading 24-read-aloud 14-series-detail 18-stats 06-highlights 31-library-light 32-reading-light; do
     [[ -f "$OUT_DIR/$name.png" ]] ||
         die "no $OUT_DIR/$name.png: the step that takes it did not run"
     cp "$OUT_DIR/$name.png" "$FASTLANE_DIR/$i.png"

@@ -144,7 +144,7 @@ guessed about reading you did before Liseur arrived.
   <tr>
     <td width="25%"><img src="screenshots/30-home-dark.png" alt="Home, dark"></td>
     <td width="25%"><img src="screenshots/10-library-dark.png" alt="Library, dark"></td>
-    <td width="25%"><img src="screenshots/11-reading-dark.png" alt="Reading, dark"></td>
+    <td width="25%"><img src="screenshots/02-reading.png" alt="Reading, dark"></td>
     <td width="25%"><img src="screenshots/17-empty-library-dark.png" alt="An empty library, dark"></td>
   </tr>
   <tr>
