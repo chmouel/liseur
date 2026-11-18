@@ -25,6 +25,8 @@ data class ReadAloudUi(
     val preparing: Boolean = false,
     /** Read in translation: the voice says the translated page, and the page stays translated. */
     val translated: Boolean = false,
+    /** Whether the book is split into several resources, so a chapter skip has somewhere to go. */
+    val chapters: Boolean = false,
 )
 
 /** Something the reader should tell the listener about, once. */
@@ -142,6 +144,9 @@ interface ReadAloudFeature {
     fun skipForward()
     fun skipBackward()
 
+    /** Reads on from the next chapter, or starts this one again; playing or paused stays as it was. */
+    fun skipChapter(forward: Boolean)
+
     /** The row on the main settings screen that opens [SettingsScreen]. */
     @Composable
     fun SettingsEntry(onClick: () -> Unit)
@@ -200,6 +205,7 @@ interface ReadAloudFeature {
         override fun stop() = Unit
         override fun skipForward() = Unit
         override fun skipBackward() = Unit
+        override fun skipChapter(forward: Boolean) = Unit
 
         @Composable
         override fun SettingsEntry(onClick: () -> Unit) = Unit

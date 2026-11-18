@@ -531,6 +531,10 @@ internal class SpeechReadAloud(
         mutableCurrent.value?.skipBackward()
     }
 
+    override fun skipChapter(forward: Boolean) {
+        mutableCurrent.value?.skipChapter(forward)
+    }
+
     private fun notSetUp(bookId: String, quietly: Boolean = false) {
         if (quietly) return
         reportNotice(bookId, ReadAloudNotice.NotSetUp)

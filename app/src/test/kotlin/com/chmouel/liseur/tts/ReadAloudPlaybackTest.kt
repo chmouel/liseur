@@ -15,6 +15,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -501,6 +502,99 @@ class ReadAloudPlaybackTest {
         assertFalse(playback.navigator.value!!.playback.value.playWhenReady)
         assertEquals(failed, playback.failure.value)
         assertEquals(listOf(FIRST, SECOND), played.toList())
+    }
+
+    @Test
+    fun aLandingDroppedWhileItsNavigatorOpensLeavesThePlaceAlone() {
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(1)
+        val before = playback.navigator.value!!
+        val opening = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeOpen = {
+            opening.complete(Unit)
+            release.await()
+        }
+        val nextChapter = publication.locatorFromLink(publication.readingOrder[1])!!
+        // Counts the moves, as the session does: a newer one drops this landing.
+        var moves = 1
+
+        val landing = runBlocking(main) {
+            val landing = async { playback.start(nextChapter, stillWanted = { moves == 1 }) }
+            opening.await()
+            moves++
+            beforeOpen = {}
+            release.complete(Unit)
+            landing.await()
+        }
+
+        assertEquals(ReadAloudPlayback.Landing.Failed, landing)
+        assertSame(before, playback.navigator.value)
+        assertTrue(playback.navigator.value!!.playback.value.playWhenReady)
+    }
+
+    @Test
+    fun aResumeThatDropsAChapterOpenStillReplaysTheFailedSentence() {
+        failures[THIRD] = 1
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitFailure()
+        assertEquals(listOf(FIRST, SECOND), played.toList())
+        movePastTheFailure()
+        val opening = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeOpen = {
+            opening.complete(Unit)
+            release.await()
+        }
+        val nextChapter = publication.locatorFromLink(publication.readingOrder[1])!!
+        var moves = 1
+
+        val (skip, resume) = runBlocking(main) {
+            val skip = async { playback.start(nextChapter, stillWanted = { moves == 1 }) }
+            opening.await()
+            // Resume drops the chapter move whose navigator is still opening.
+            moves++
+            val resume = async { playback.resume() }
+            beforeOpen = {}
+            release.complete(Unit)
+            skip.await() to resume.await()
+        }
+
+        assertEquals(ReadAloudPlayback.Landing.Failed, skip)
+        assertEquals(ReadAloudPlayback.Landing.Sentence, resume)
+        awaitPlayed(3)
+        assertEquals(listOf(FIRST, SECOND, THIRD), played.take(3))
+        assertFalse(played.contains(NEXT_CHAPTER))
+    }
+
+    @Test
+    fun aVoiceSwitchWhileAChapterOpensSpeaksTheSentenceItWasOn() {
+        runBlocking(main) { playback.start(chapterStart) }
+        awaitPlayed(2)
+        val opening = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        beforeOpen = {
+            opening.complete(Unit)
+            release.await()
+        }
+        val nextChapter = publication.locatorFromLink(publication.readingOrder[1])!!
+        var moves = 1
+
+        val (skip, switch) = runBlocking(main) {
+            val skip = async { playback.start(nextChapter, stillWanted = { moves == 1 }) }
+            opening.await()
+            // The voice switch, whose replay waits for the chapter that is opening.
+            moves++
+            val switch = async { playback.replay() }
+            beforeOpen = {}
+            release.complete(Unit)
+            skip.await() to switch.await()
+        }
+
+        assertEquals(ReadAloudPlayback.Landing.Failed, skip)
+        assertEquals(ReadAloudPlayback.Landing.Sentence, switch)
+        assertEquals(chapterStart.href, playback.navigator.value!!.location.value.href)
+        assertFalse(played.contains(NEXT_CHAPTER))
     }
 
     @Test

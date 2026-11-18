@@ -6,6 +6,7 @@ import com.chmouel.liseur.readaloud.ListeningCheckpoints
 import com.chmouel.liseur.readaloud.ReadAloudNotice
 import com.chmouel.liseur.readaloud.ReadAloudUi
 import com.chmouel.liseur.reader.OpenBookHandle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -195,6 +196,12 @@ internal class ReadAloudSession(
 
     private var generation: Long? = null
     private var spokenAt = System.currentTimeMillis()
+
+    /** Counts the listener's moves, which a chapter skip still finding its chapter is checked against. */
+    private var moves = 0L
+
+    /** The chapter skip finding its chapter, while one is in flight */
+    private var chapterJob: Job? = null
     private var checkpointJob: Job? = null
     private var ended = false
 
@@ -236,6 +243,7 @@ internal class ReadAloudSession(
             utterance,
             preparing = starting || (playing && waiting),
             translated = translation != null,
+            chapters = publication.readingOrder.size > 1,
         )
     }
         .stateIn(
@@ -247,6 +255,7 @@ internal class ReadAloudSession(
                 utterance = null,
                 preparing = true,
                 translated = translation != null,
+                chapters = publication.readingOrder.size > 1,
             ),
         )
 
@@ -286,6 +295,7 @@ internal class ReadAloudSession(
      */
     fun start(selection: Locator, play: Boolean = true, restoring: Boolean = false) {
         startedFrom = selection
+        beginMove()
         if (play) claim()
         scope.launch {
             val sentences = DefaultTextContentTokenizer(TextUnit.Sentence, textLanguage ?: publication.metadata.language)
@@ -314,6 +324,7 @@ internal class ReadAloudSession(
 
     fun resume() {
         if (ended) return
+        beginMove()
         claim()
         scope.launch {
             if (playback.resume() == ReadAloudPlayback.Landing.Failed) {
@@ -336,14 +347,85 @@ internal class ReadAloudSession(
         cache.swap({ text, instructions -> voice.synthesizer.synthesize(text, instructions) }, voice.configurationIdentity)
         // Still starting: the first sentence is fetched with the new voice.
         if (playback.navigator.value == null) return
+        beginMove()
         scope.launch {
             if (playback.replay(recut) == ReadAloudPlayback.Landing.Failed) onNotice(ReadAloudNotice.Unavailable)
         }
     }
 
-    fun skipForward() = playback.skipToNext()
+    fun skipForward() {
+        beginMove()
+        playback.skipToNext()
+    }
 
-    fun skipBackward() = playback.skipToPrevious()
+    fun skipBackward() {
+        beginMove()
+        playback.skipToPrevious()
+    }
+
+    /**
+     * Reads on from the next chapter, or starts this one again, which
+     * becomes the one before once the voice is on its first sentence.
+     * Playing or paused stays as it was; nothing happens at the last
+     * chapter, or in a book of one.
+     *
+     * Finding the chapter to open suspends, so one skip runs at a time and
+     * the taps made meanwhile are dropped: each lands on the chapter after
+     * the one before it. A move made meanwhile drops this one, whose landing
+     * then opens nothing.
+     */
+    fun skipChapter(forward: Boolean) {
+        if (ended || chapterJob?.isActive == true) return
+        val location = playback.navigator.value?.location?.value ?: return
+        val move = beginMove()
+        // Assigned before it starts, since the immediate main dispatcher could run it to the end first
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val atStart = !forward && startsResource(location.utteranceLocator)
+                val target = ChapterTarget.of(publication.readingOrder, location.utteranceLocator.href, atStart, forward)
+                    ?: return@launch
+                val start = publication.locatorFromLink(target) ?: return@launch
+                if (move != moves) return@launch
+                val landing = playback.start(start, play = playback.playRequested, stillWanted = { move == moves })
+                if (move != moves) return@launch
+                if (landing == ReadAloudPlayback.Landing.Failed) onNotice(ReadAloudNotice.Unavailable)
+            } finally {
+                chapterJob = null
+            }
+        }
+        chapterJob = job
+        job.start()
+    }
+
+    /** Records a newer move, whose landing is the one that stands. */
+    private fun beginMove(): Long = ++moves
+
+    /**
+     * Whether [utterance] is the first sentence of its resource. The
+     * navigator only says whether a sentence comes before it anywhere in
+     * the book, so the resource is walked from its start, cut as the
+     * navigator cuts it.
+     */
+    private suspend fun startsResource(utterance: Locator): Boolean {
+        val settings = playback.navigator.value?.settings?.value
+        val cutIn = textLanguage
+        val first = try {
+            PublicationUtteranceCursor(
+                spokenPublication,
+                utterance.copy(locations = Locator.Locations(), text = Locator.Text()),
+                tokenizerFactory,
+                settings?.language ?: cutIn ?: publication.metadata.language,
+                settings?.overrideContentLanguage ?: (cutIn != null),
+            ).nextLocated()?.second
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        } ?: return false
+        return first.href == utterance.href &&
+            first.locations == utterance.locations &&
+            first.text == utterance.text
+    }
 
     /** Ends the session, saving the place heard if it still owns it. */
     fun stop() {
