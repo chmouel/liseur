@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.filled.KeyboardDoubleArrowRight
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -233,6 +235,8 @@ internal fun ReadAloudPlayer(
                     ) {
                         VoiceChip(feature, bookId, Modifier.weight(1f, fill = false)) { openVoice(false, false) }
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            SpeedButton(feature)
+                            SleepButton(feature)
                             if (away) {
                                 ControlButton(onReturnToVoice) {
                                     Icon(Icons.Filled.MyLocation, stringResource(R.string.read_aloud_return_to_voice))
@@ -248,7 +252,7 @@ internal fun ReadAloudPlayer(
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
                     ) {
-                        SpeedButton(feature)
+                        if (here?.chapters == true) ChapterButton(forward = false) { feature.skipChapter(false) }
                         ControlButton(feature::skipBackward) {
                             Icon(Icons.Filled.SkipPrevious, stringResource(R.string.read_aloud_previous_sentence))
                         }
@@ -256,7 +260,7 @@ internal fun ReadAloudPlayer(
                         ControlButton(feature::skipForward) {
                             Icon(Icons.Filled.SkipNext, stringResource(R.string.read_aloud_next_sentence))
                         }
-                        SleepButton(feature)
+                        if (here?.chapters == true) ChapterButton(forward = true) { feature.skipChapter(true) }
                     }
                     // Away from the voice, reading on is the other way back
                     // to it: the same words, from the page in front.
@@ -275,6 +279,21 @@ internal fun ReadAloudPlayer(
                 }
             }
         }
+    }
+}
+
+/**
+ * The chapter before or after, marked smaller than the sentence skips it
+ * stands beside since it moves further.
+ */
+@Composable
+private fun ChapterButton(forward: Boolean, onClick: () -> Unit) {
+    ControlButton(onClick) {
+        Icon(
+            if (forward) Icons.Filled.KeyboardDoubleArrowRight else Icons.Filled.KeyboardDoubleArrowLeft,
+            stringResource(if (forward) R.string.read_aloud_next_chapter else R.string.read_aloud_previous_chapter),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -452,6 +471,7 @@ private fun VoiceChip(feature: SpeechReadAloud, bookId: String, modifier: Modifi
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
+            .widthIn(min = 48.dp)
             .heightIn(min = 48.dp)
             .clip(CircleShape)
             .clickable(
@@ -652,5 +672,5 @@ private const val WAIT_HIDE_MS = 150L
 
 private val PLAY_SIZE = 56.dp
 
-// Long enough for "12 min", short enough that a translated "end of chapter" leaves the row its five controls.
+// Long enough for "12 min", short enough that a translated "end of chapter" leaves the row its other controls.
 private val SLEEP_LABEL_MAX = 72.dp

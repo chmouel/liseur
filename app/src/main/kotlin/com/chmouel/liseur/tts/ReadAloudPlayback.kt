@@ -193,6 +193,11 @@ class ReadAloudPlayback(
      * sentences. The element is the first one on screen, so the search may
      * cross a whole page of short sentences. Without [play] it lands there
      * paused.
+     *
+     * [stillWanted] is asked again right before a freshly opened navigator
+     * would take the place, so a move the caller has since dropped opens
+     * nothing and leaves the place the newer move made: it lands [Failed],
+     * and the caller tells that from a real failure by its own record.
      */
     suspend fun start(
         locator: Locator,
@@ -200,10 +205,22 @@ class ReadAloudPlayback(
         maxSteps: Int = START_STEPS,
         looser: ((TtsNavigator.Location) -> Boolean)? = null,
         play: Boolean = true,
+        stillWanted: () -> Boolean = { true },
     ): Landing {
         playRequested = play
-        mutableFailure.value = null
-        return landing.withLock { land(locator.copy(text = Locator.Text()), target, maxSteps, looser = looser) }
+        return landing.withLock {
+            val landed = land(
+                locator.copy(text = Locator.Text()),
+                target,
+                maxSteps,
+                looser = looser,
+                stillWanted = stillWanted,
+            )
+            // Cleared only once this move is taken, so a dropped one leaves the
+            // failure for the resume that dropped it to land back on
+            if (landed != Landing.Failed) mutableFailure.value = null
+            landed
+        }
     }
 
     fun pause() {
@@ -299,8 +316,9 @@ class ReadAloudPlayback(
         maxSteps: Int,
         fallbackToElement: Boolean = true,
         looser: ((TtsNavigator.Location) -> Boolean)? = null,
+        stillWanted: () -> Boolean = { true },
     ): Landing {
-        var fresh = replace(element) ?: return Landing.Failed
+        var fresh = replace(element, stillWanted) ?: return Landing.Failed
         suspend fun align(on: SpeechNavigator, matches: (TtsNavigator.Location) -> Boolean) = alignUtterance(
             location = on.location,
             hasNext = on::hasNextUtterance,
@@ -315,22 +333,25 @@ class ReadAloudPlayback(
         )
         var found = target == null || align(fresh, target)
         if (!found && looser != null && !closed && mutableNavigator.value === fresh) {
-            fresh = replace(element) ?: return Landing.Failed
+            fresh = replace(element, stillWanted) ?: return Landing.Failed
             found = align(fresh, looser)
         }
-        if (closed || mutableNavigator.value !== fresh) return Landing.Failed
+        if (closed || !stillWanted() || mutableNavigator.value !== fresh) return Landing.Failed
         if (!found && !fallbackToElement) return Landing.Failed
-        val playing = if (found) fresh else replace(element) ?: return Landing.Failed
+        val playing = if (found) fresh else replace(element, stillWanted) ?: return Landing.Failed
         if (playRequested) playing.play()
         return if (found) Landing.Sentence else Landing.ElementStart
     }
 
-    private suspend fun replace(initial: Locator): SpeechNavigator? {
-        if (closed) return null
+    private suspend fun replace(initial: Locator, stillWanted: () -> Boolean): SpeechNavigator? {
+        if (closed || !stillWanted()) return null
         prefetcher?.suspend()
         val fresh = opener.open(initial, this, listener) ?: return null
-        if (closed) {
+        // Nothing can move between this answer and the install that follows
+        if (closed || !stillWanted()) {
             fresh.close()
+            // A dropped landing leaves the prefetcher suspended, and no other move restarts it
+            if (!closed) resumePrefetching()
             return null
         }
         val previous = mutableNavigator.value
@@ -340,8 +361,18 @@ class ReadAloudPlayback(
         pendingSkipOrigin = null
         waitFor(null)
         mutableNavigator.value = fresh
+        // Armed for the end of the resource the new navigator opens in, which
+        // a chapter skip has just changed.
+        if (chapterEndArmed) chapterHref = initial.href
         previous?.close()
         return fresh
+    }
+
+    private fun resumePrefetching() {
+        val live = mutableNavigator.value ?: return
+        if (!live.playback.value.playWhenReady) return
+        prefetcher?.resume()
+        prefetchFrom(live.location.value)
     }
 
     override fun onSpeak(requestId: TtsEngine.RequestId, text: String): Boolean {

@@ -194,6 +194,8 @@ class ReadAloudService : MediaSessionService() {
     }
 
     private companion object {
+        // Sentences, not chapters: the notification names them, and headphones
+        // and car systems get the finer step.
         val PREVIOUS = SessionCommand("com.chmouel.liseur.tts.PREVIOUS_SENTENCE", Bundle.EMPTY)
         val NEXT = SessionCommand("com.chmouel.liseur.tts.NEXT_SENTENCE", Bundle.EMPTY)
     }
