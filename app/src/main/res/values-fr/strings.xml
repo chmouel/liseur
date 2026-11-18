@@ -2100,4 +2100,5 @@
     <string name="evaluation_rating">Ma note</string>
     <string name="evaluation_rated">Avec une note</string>
     <string name="evaluation_unrated">Sans note</string>
+    <string name="no_file_picker">Aucun sélecteur de fichiers n\'est disponible sur cet appareil</string>
 </resources>

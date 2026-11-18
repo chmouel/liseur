@@ -2176,4 +2176,5 @@
     <string name="evaluation_rating">My rating</string>
     <string name="evaluation_rated">Rated</string>
     <string name="evaluation_unrated">Unrated</string>
+    <string name="no_file_picker">No file picker is available on this device</string>
 </resources>

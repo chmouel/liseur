@@ -2294,4 +2294,5 @@
     <string name="evaluation_rating">Moje hodnocení</string>
     <string name="evaluation_rated">Ohodnocené</string>
     <string name="evaluation_unrated">Neohodnocené</string>
+    <string name="no_file_picker">V tomto zařízení není k dispozici žádný výběr souborů</string>
 </resources>

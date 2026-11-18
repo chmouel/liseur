@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.chmouel.liseur.ui.launchPicker
 
 /**
  * The types offered when picking a font.
@@ -49,5 +50,5 @@ fun rememberFontPicker(onPicked: (Uri, String?) -> Unit): () -> Unit {
         }.getOrNull()
         onPicked(uri, name)
     }
-    return remember(launcher) { { launcher.launch(FONT_MIME_TYPES) } }
+    return remember(launcher) { { launcher.launchPicker(context, FONT_MIME_TYPES) } }
 }

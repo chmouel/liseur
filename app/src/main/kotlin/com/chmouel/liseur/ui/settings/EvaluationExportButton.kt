@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.library.evaluationExport
+import com.chmouel.liseur.ui.launchPicker
 import com.chmouel.liseur.ui.settings.search.SettingsEntries
 import com.chmouel.liseur.ui.settings.search.settingsAnchor
 import kotlinx.coroutines.CancellationException
@@ -51,7 +52,7 @@ internal fun EvaluationExportButton(enabled: Boolean) {
         }
     }
     TextButton(
-        onClick = { launcher.launch("liseur-ratings-and-reviews.json") },
+        onClick = { launcher.launchPicker(context, "liseur-ratings-and-reviews.json") },
         enabled = enabled && !busy,
         modifier = Modifier.settingsAnchor(SettingsEntries.EvaluationExport),
     ) { Text(stringResource(R.string.evaluation_export)) }

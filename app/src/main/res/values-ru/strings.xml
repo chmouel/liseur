@@ -2262,4 +2262,5 @@
     <string name="evaluation_rating">Моя оценка</string>
     <string name="evaluation_rated">С оценкой</string>
     <string name="evaluation_unrated">Без оценки</string>
+    <string name="no_file_picker">На этом устройстве нет средства выбора файлов</string>
 </resources>

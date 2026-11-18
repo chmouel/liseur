@@ -53,6 +53,7 @@ import com.chmouel.liseur.domain.shouldResume
 import com.chmouel.liseur.providers.ServicesEntry
 import com.chmouel.liseur.providers.ServicesScreen
 import com.chmouel.liseur.reader.ReaderActivity
+import com.chmouel.liseur.ui.launchPicker
 import kotlinx.coroutines.launch
 import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.localeWeekStart
@@ -687,9 +688,10 @@ private fun LiseurApp(
                         ) { uri ->
                             if (uri != null) library.addFolder(uri)
                         }
+                        val context = LocalContext.current
                         WatchedFoldersScreen(
                             folders = folders,
-                            onAddFolder = { folderPicker.launch(null) },
+                            onAddFolder = { folderPicker.launchPicker(context, null) },
                             onRemoveFolder = { library.removeFolder(it) },
                             onBack = back,
                         )
@@ -1343,8 +1345,8 @@ private fun LibraryRoute(
                 translateReady,
             )
         },
-        onAddBook = { openBook.launch(arrayOf("application/epub+zip")) },
-        onAddFolder = { addFolder.launch(null) },
+        onAddBook = { openBook.launchPicker(context, arrayOf("application/epub+zip")) },
+        onAddFolder = { addFolder.launchPicker(context, null) },
         onBookSelected = { book ->
             book.openableUri()?.let {
                 context.startActivity(ReaderActivity.intent(context, it, book.url))
