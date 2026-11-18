@@ -174,6 +174,17 @@ installed on your device instead. When you pick or type a dictionary site in
 Settings, Liseur checks it once with a fixed word ("book"). A dead address
 fails then, and opening the screen makes no request.
 
+### Offline dictionaries
+
+When you choose a dictionary to download in Settings, Liseur fetches that
+language’s StarDict archive from `www.reader-dict.com` over HTTPS. Only the
+archive request and ordinary connection metadata (such as your IP address)
+are sent. You can also import a StarDict `.zip` archive from your device
+with no network request. When an enabled offline dictionary matches the
+book’s language and has an entry for the selected word, definitions are
+looked up entirely on your device; online lookup is consulted only when
+you have turned it on and no offline entry matches.
+
 ### Selection searches in other apps
 
 Wikipedia, Open Library, Ask Brave, Duck.ai and custom website actions

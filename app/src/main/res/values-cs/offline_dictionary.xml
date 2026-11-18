@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Offline slovníky</string>
+    <string name="offline_dictionary_empty_detail">Vyhledávejte slova přímo v zařízení bez připojení k síti</string>
+    <string name="offline_dictionary_add">Přidat offline slovník</string>
+    <string name="offline_dictionary_sheet_title">Přidat offline slovník</string>
+    <string name="offline_dictionary_import">Importovat archiv StarDict</string>
+    <string name="offline_dictionary_import_detail">Vybrat soubor .zip v zařízení</string>
+    <string name="offline_dictionary_catalog_heading">Stáhnout z reader.dict</string>
+    <string name="offline_dictionary_catalog_footer">Slovníky pocházejí ze služby reader.dict a vycházejí z Wikislovníku.</string>
+    <string name="offline_dictionary_installed_note">V zařízení · %1$s</string>
+    <string name="offline_dictionary_entries">Hesla: %1$s</string>
+    <string name="offline_dictionary_downloading">Stahování (%1$s) · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">Stahování (%1$s) · %2$s z %3$s</string>
+    <string name="offline_dictionary_unpacking_named">Instalace (%1$s)…</string>
+    <string name="offline_dictionary_working">Instalace slovníku…</string>
+    <string name="offline_dictionary_error">Archiv slovníku se nepodařilo otevřít nebo nainstalovat.</string>
+    <string name="offline_dictionary_download_error">Slovník se nepodařilo stáhnout nebo nainstalovat.</string>
+    <string name="offline_dictionary_retry">Zkusit znovu</string>
+    <string name="offline_dictionary_remove_title">Odebrat %1$s?</string>
+    <string name="offline_dictionary_remove_body">Kdykoli jej můžete znovu stáhnout nebo importovat.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Wikislovník</string>
+    <string name="dictionary_download_offline">Stáhnout offline slovník</string>
+</resources>

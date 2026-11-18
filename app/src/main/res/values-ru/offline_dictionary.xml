@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Офлайн-словари</string>
+    <string name="offline_dictionary_empty_detail">Ищите значения слов на устройстве без отправки в сеть</string>
+    <string name="offline_dictionary_add">Добавить офлайн-словарь</string>
+    <string name="offline_dictionary_sheet_title">Добавить офлайн-словарь</string>
+    <string name="offline_dictionary_import">Импортировать архив StarDict</string>
+    <string name="offline_dictionary_import_detail">Выбрать ZIP-файл на устройстве</string>
+    <string name="offline_dictionary_catalog_heading">Скачать с reader.dict</string>
+    <string name="offline_dictionary_catalog_footer">Словари предоставлены проектом reader.dict на основе Викисловаря.</string>
+    <string name="offline_dictionary_installed_note">На устройстве · %1$s</string>
+    <string name="offline_dictionary_entries">Статей: %1$s</string>
+    <string name="offline_dictionary_downloading">Загрузка (%1$s) · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">Загрузка (%1$s) · %2$s из %3$s</string>
+    <string name="offline_dictionary_unpacking_named">Установка (%1$s)…</string>
+    <string name="offline_dictionary_working">Установка словаря…</string>
+    <string name="offline_dictionary_error">Не удалось открыть или установить архив словаря.</string>
+    <string name="offline_dictionary_download_error">Не удалось скачать или установить словарь.</string>
+    <string name="offline_dictionary_retry">Повторить</string>
+    <string name="offline_dictionary_remove_title">Удалить %1$s?</string>
+    <string name="offline_dictionary_remove_body">Словарь можно скачать или импортировать заново в любой момент.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Викисловарь</string>
+    <string name="dictionary_download_offline">Скачать офлайн-словарь</string>
+</resources>

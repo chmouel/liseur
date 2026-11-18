@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Dictionnaires hors ligne</string>
+    <string name="offline_dictionary_empty_detail">Chercher le sens des mots sur l’appareil sans connexion</string>
+    <string name="offline_dictionary_add">Ajouter un dictionnaire hors ligne</string>
+    <string name="offline_dictionary_sheet_title">Ajouter un dictionnaire hors ligne</string>
+    <string name="offline_dictionary_import">Importer une archive StarDict</string>
+    <string name="offline_dictionary_import_detail">Choisir un fichier .zip sur cet appareil</string>
+    <string name="offline_dictionary_catalog_heading">Télécharger depuis reader.dict</string>
+    <string name="offline_dictionary_catalog_footer">Les dictionnaires proviennent de reader.dict et sont issus du Wiktionnaire.</string>
+    <string name="offline_dictionary_installed_note">Sur cet appareil · %1$s</string>
+    <string name="offline_dictionary_entries">Entrées : %1$s</string>
+    <string name="offline_dictionary_downloading">Téléchargement de %1$s · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">Téléchargement de %1$s · %2$s sur %3$s</string>
+    <string name="offline_dictionary_unpacking_named">Installation de %1$s…</string>
+    <string name="offline_dictionary_working">Installation du dictionnaire…</string>
+    <string name="offline_dictionary_error">Impossible d’ouvrir ou d’installer l’archive du dictionnaire.</string>
+    <string name="offline_dictionary_download_error">Impossible de télécharger ou d’installer le dictionnaire.</string>
+    <string name="offline_dictionary_retry">Réessayer</string>
+    <string name="offline_dictionary_remove_title">Supprimer %1$s ?</string>
+    <string name="offline_dictionary_remove_body">Vous pourrez le télécharger ou l’importer à nouveau plus tard.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Wiktionnaire</string>
+    <string name="dictionary_download_offline">Télécharger un dictionnaire hors ligne</string>
+</resources>

@@ -400,13 +400,28 @@ private fun QuoteCard(
     }
 }
 
-private val QUOTE_EDGE_MARKS = charArrayOf(
-    '"', '“', '”', '„', '‟', '«', '»', '‹', '›', '「', '」', '『', '』', '\u00A0', '\u202F',
+private val QUOTE_PAIRS = listOf(
+    '"' to '"', '“' to '”', '„' to '“', '„' to '”', '‟' to '”', '«' to '»', '»' to '«',
+    '‹' to '›', '›' to '‹', '「' to '」', '『' to '』',
 )
+private val QUOTE_SPACES = charArrayOf(' ', '\u00A0', '\u202F')
 
-/** Strips outer book quotation marks around a quoted passage. */
-internal fun String.trimQuoteMarks(): String =
-    trim().trim(*QUOTE_EDGE_MARKS).trim()
+/**
+ * Strips book quotation marks that enclose the whole passage. A mark at only
+ * one end, or one pair around part of it (`She called it “home”`), is
+ * punctuation and stays.
+ */
+internal fun String.trimQuoteMarks(): String {
+    val text = trim().trim(*QUOTE_SPACES)
+    if (text.length < 2) return text
+    val first = text.first()
+    val last = text.last()
+    if (QUOTE_PAIRS.none { it.first == first && it.second == last }) return text
+    val inner = text.substring(1, text.length - 1)
+    // “a” and “b”: the edge marks belong to two separate quotes.
+    if (inner.contains(last) || inner.contains(first)) return text
+    return inner.trim(*QUOTE_SPACES)
+}
 
 @Composable
 private fun QuoteBackdrop(book: Book, palette: HomePalette, modifier: Modifier = Modifier) {

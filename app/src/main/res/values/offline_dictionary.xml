@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Offline dictionaries</string>
+    <string name="offline_dictionary_empty_detail">Look up words on your device without sending them online</string>
+    <string name="offline_dictionary_add">Add offline dictionary</string>
+    <string name="offline_dictionary_sheet_title">Add offline dictionary</string>
+    <string name="offline_dictionary_import">Import StarDict archive</string>
+    <string name="offline_dictionary_import_detail">Choose a .zip file from your device</string>
+    <string name="offline_dictionary_catalog_heading">Download from reader.dict</string>
+    <string name="offline_dictionary_catalog_footer">Dictionaries come from reader.dict and are built from Wiktionary.</string>
+    <string name="offline_dictionary_installed_note">On this device · %1$s</string>
+    <string name="offline_dictionary_entries">Entries: %1$s</string>
+    <string name="offline_dictionary_downloading">Downloading %1$s · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">Downloading %1$s · %2$s of %3$s</string>
+    <string name="offline_dictionary_unpacking_named">Installing %1$s…</string>
+    <string name="offline_dictionary_working">Installing dictionary…</string>
+    <string name="offline_dictionary_error">Could not open or install the dictionary archive.</string>
+    <string name="offline_dictionary_download_error">Could not download or install the dictionary.</string>
+    <string name="offline_dictionary_retry">Try again</string>
+    <string name="offline_dictionary_remove_title">Remove %1$s?</string>
+    <string name="offline_dictionary_remove_body">It can be downloaded or imported again at any time.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Wiktionary</string>
+    <string name="dictionary_download_offline">Download an offline dictionary</string>
+</resources>

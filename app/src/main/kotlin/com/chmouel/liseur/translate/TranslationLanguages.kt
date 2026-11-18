@@ -79,11 +79,10 @@ internal object TranslationLanguages {
     fun englishName(tag: String): String = Locale.forLanguageTag(tag).getDisplayName(Locale.ENGLISH).ifBlank { tag }
 
     /**
-     * A flag for [tag], as an emoji, when one country is plainly its home or
-     * the tag names it (`pt-BR`, `zh-Hans`); null for a language many
-     * countries share, such as English, Spanish or Arabic, or a script
-     * written in several (`zh-Hant`), rather than pick one of them for
-     * every reader.
+     * A flag for [tag], as an emoji: its country of origin (`en` → `GB`,
+     * `es` → `ES`, `pt` → `PT`, `zh` → `CN`), or the one the tag names
+     * (`pt-BR`, `zh-Hans`). Null for a language with no single home, such as
+     * Arabic, and for a script written in several places (`zh-Hant`).
      */
     fun flag(tag: String): String? {
         val region = FLAG_REGIONS[tag] ?: FLAG_REGIONS[tag.substringBefore('-')]?.takeIf { tag.substringBefore('-') !in BY_TAG_ONLY }
@@ -115,20 +114,20 @@ internal object TranslationLanguages {
 
     private const val REGIONAL_A = 0x1F1E6
 
-    // Languages flagged only by a tag that names the country: bare `pt` or `zh` is left without.
+    // A tag with a script or region (`zh-Hant`, `pt-AO`) never falls back to bare `zh` or `pt`'s flag.
     private val BY_TAG_ONLY = setOf("pt", "zh")
 
     private val FLAG_REGIONS = mapOf(
-        "zh-Hans" to "CN", "pt-BR" to "BR", "pt-PT" to "PT",
+        "zh-Hans" to "CN", "pt-BR" to "BR", "pt-PT" to "PT", "zh" to "CN", "pt" to "PT", "es" to "ES",
         "am" to "ET", "az" to "AZ", "be" to "BY", "bg" to "BG", "bn" to "BD", "bs" to "BA",
-        "cs" to "CZ", "cy" to "GB", "da" to "DK", "de" to "DE", "el" to "GR", "et" to "EE",
-        "fa" to "IR", "fi" to "FI", "fil" to "PH", "fr" to "FR", "ga" to "IE", "he" to "IL",
-        "hi" to "IN", "hr" to "HR", "hu" to "HU", "hy" to "AM", "id" to "ID", "is" to "IS",
-        "it" to "IT", "ja" to "JP", "ka" to "GE", "kk" to "KZ", "km" to "KH", "ko" to "KR",
-        "lo" to "LA", "lt" to "LT", "lv" to "LV", "mk" to "MK", "mn" to "MN", "ms" to "MY",
-        "mt" to "MT", "my" to "MM", "nb" to "NO", "ne" to "NP", "nl" to "NL", "no" to "NO",
-        "pl" to "PL", "ro" to "RO", "ru" to "RU", "si" to "LK", "sk" to "SK", "sl" to "SI",
-        "sq" to "AL", "sr" to "RS", "sv" to "SE", "th" to "TH", "tl" to "PH", "tr" to "TR",
-        "uk" to "UA", "ur" to "PK", "uz" to "UZ", "vi" to "VN",
+        "cs" to "CZ", "cy" to "GB", "da" to "DK", "de" to "DE", "el" to "GR", "en" to "GB",
+        "et" to "EE", "fa" to "IR", "fi" to "FI", "fil" to "PH", "fr" to "FR", "ga" to "IE",
+        "he" to "IL", "hi" to "IN", "hr" to "HR", "hu" to "HU", "hy" to "AM", "id" to "ID",
+        "is" to "IS", "it" to "IT", "ja" to "JP", "ka" to "GE", "kk" to "KZ", "km" to "KH",
+        "ko" to "KR", "lo" to "LA", "lt" to "LT", "lv" to "LV", "mk" to "MK", "mn" to "MN",
+        "ms" to "MY", "mt" to "MT", "my" to "MM", "nb" to "NO", "ne" to "NP", "nl" to "NL",
+        "no" to "NO", "pl" to "PL", "ro" to "RO", "ru" to "RU", "si" to "LK", "sk" to "SK",
+        "sl" to "SI", "sq" to "AL", "sr" to "RS", "sv" to "SE", "th" to "TH", "tl" to "PH",
+        "tr" to "TR", "uk" to "UA", "ur" to "PK", "uz" to "UZ", "vi" to "VN",
     )
 }

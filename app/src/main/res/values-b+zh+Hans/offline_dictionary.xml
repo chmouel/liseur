@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">离线词典</string>
+    <string name="offline_dictionary_empty_detail">在设备本地查词，无需联网发送所选词语</string>
+    <string name="offline_dictionary_add">添加离线词典</string>
+    <string name="offline_dictionary_sheet_title">添加离线词典</string>
+    <string name="offline_dictionary_import">导入 StarDict 压缩包</string>
+    <string name="offline_dictionary_import_detail">从设备中选择 .zip 文件</string>
+    <string name="offline_dictionary_catalog_heading">从 reader.dict 下载</string>
+    <string name="offline_dictionary_catalog_footer">词典由 reader.dict 提供，基于维基词典构建。</string>
+    <string name="offline_dictionary_installed_note">已在此设备上 · %1$s</string>
+    <string name="offline_dictionary_entries">词条：%1$s</string>
+    <string name="offline_dictionary_downloading">正在下载 %1$s · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">正在下载 %1$s · %2$s / %3$s</string>
+    <string name="offline_dictionary_unpacking_named">正在安装 %1$s…</string>
+    <string name="offline_dictionary_working">正在安装词典…</string>
+    <string name="offline_dictionary_error">无法打开或安装该词典压缩包。</string>
+    <string name="offline_dictionary_download_error">无法下载或安装词典。</string>
+    <string name="offline_dictionary_retry">重试</string>
+    <string name="offline_dictionary_remove_title">移除 %1$s？</string>
+    <string name="offline_dictionary_remove_body">你可以随时重新下载或导入该词典。</string>
+    <string name="offline_dictionary_attribution">reader.dict · 维基词典</string>
+    <string name="dictionary_download_offline">下载离线词典</string>
+</resources>

@@ -431,6 +431,21 @@ class WiktionaryClientTest {
     }
 
     @Test
+    fun `an explicit retry asks again instead of reusing a cached failure`() = runBlocking {
+        server.enqueue(MockResponse(code = 503))
+        server.enqueue(MockResponse(body = WiktionaryTranslationsTest.WATER))
+        val client = WiktionaryClient()
+
+        assertTrue(client.translations("water", baseUrl(), "fr") is TranslationsState.Failed)
+        val retried = client.translations("water", baseUrl(), "fr", fresh = true)
+
+        assertEquals(
+            listOf("eau"),
+            (retried as TranslationsState.Found).sections.first().groups.flatMap { it.terms },
+        )
+    }
+
+    @Test
     fun `a pointer to another page's translations is not followed`() = runBlocking {
         server.enqueue(MockResponse(body = WiktionaryTranslationsTest.HOUSE.replace("house/translations", "home/translations")))
 

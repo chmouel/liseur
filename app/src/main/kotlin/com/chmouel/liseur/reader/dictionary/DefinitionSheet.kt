@@ -18,14 +18,18 @@ import com.chmouel.liseur.ui.BusyIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -44,7 +48,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -57,6 +64,8 @@ import com.chmouel.liseur.translate.TranslationLanguages
 import com.chmouel.liseur.tts.VoiceLabel
 import com.chmouel.liseur.ui.LiseurModalBottomSheet
 import com.chmouel.liseur.ui.contentWidthCap
+import com.chmouel.liseur.ui.settings.OfflineDictionaryPickerSheet
+import com.chmouel.liseur.ui.settings.dictionaryLanguageTitle
 import com.chmouel.liseur.ui.windowWidth
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +86,7 @@ import kotlinx.coroutines.withContext
 fun DefinitionSheet(
     word: String,
     languages: List<String>,
+    bookLanguage: String? = null,
     enabled: Boolean,
     baseUrl: String,
     altLanguage: String?,
@@ -88,34 +98,78 @@ fun DefinitionSheet(
     selectionActions: (@Composable () -> Unit)? = null,
     client: WiktionaryClient = remember { WiktionaryClient() },
 ) {
+    val context = LocalContext.current
+    val offlineState by OfflineDictionary.state(context).collectAsState()
+    val offline = remember(offlineState.packs, languages, bookLanguage) {
+        OfflineDictionary.matchFor(context, languages, bookLanguage)
+    }
     val term = remember(word) { normaliseLookupTerm(word) }
-    var state by remember(term, languages, enabled, baseUrl) {
+    // Keyed, not just re-run: produceState keeps its last value when its keys change, and a
+    // previous word's miss must never let this word go online before its own lookup finishes.
+    val localResult = key(offline?.id, term) {
+        produceState<Result<List<StarDictEntry>>?>(null) {
+            val pack = offline ?: return@produceState
+            value = try {
+                Result.success(OfflineDictionary.lookup(context, pack.id, term))
+            } catch (error: java.io.IOException) {
+                Result.failure(error)
+            }
+        }.value
+    }
+    var choosingOffline by remember { mutableStateOf(false) }
+    val offlineEntries = localResult?.getOrNull()
+    // When an offline dictionary is active, only reach over the network if the
+    // reader has online lookup enabled AND the offline pack had no entry for this word.
+    val useOnline = offline == null || (enabled && localResult != null && (localResult!!.isFailure || offlineEntries?.isEmpty() == true))
+
+    var state by remember(term, languages, enabled, baseUrl, useOnline) {
         mutableStateOf<DictionaryState>(
-            if (enabled) DictionaryState.Loading else DictionaryState.Disabled,
+            if (enabled && useOnline) DictionaryState.Loading else DictionaryState.Disabled,
         )
     }
 
-    LaunchedEffect(term, languages, enabled, baseUrl) {
-        if (!enabled) return@LaunchedEffect
+    LaunchedEffect(term, languages, enabled, baseUrl, useOnline) {
+        if (!enabled || !useOnline) return@LaunchedEffect
         state = client.define(term, languages, baseUrl) { initial ->
             withContext(Dispatchers.Main.immediate) { state = initial }
         }
     }
 
-    val found = state as? DictionaryState.Found
-    val entry = found?.term?.ifBlank { null } ?: term
-    val source = WiktionaryEditions.codeOf(baseUrl) ?: "en"
-    val target = remember(found, source, altLanguage) {
-        found?.let { translationTarget(it.senses, source, altLanguage) }
+    val offlineResolved = offline != null && offlineEntries?.isNotEmpty() == true
+    val found = (state as? DictionaryState.Found)?.takeIf { !offlineResolved }
+    val entry = found?.term?.ifBlank { null }
+        ?: offlineEntries?.firstOrNull()?.headword?.ifBlank { null }
+        ?: term
+    val source = if (offlineResolved && offline.language.isNotBlank()) {
+        OfflineDictionary.primaryLanguage(offline.language)
+    } else {
+        WiktionaryEditions.codeOf(baseUrl) ?: "en"
     }
-    // Fetched with the definition, so the button can name the word itself.
-    // Keyed so new inputs start from Loading, never pairing a flag with another language's word.
-    val translations = key(entry, baseUrl, target) {
-        produceState<TranslationsState>(TranslationsState.Loading) {
-            value = if (target == null) TranslationsState.Empty else client.translations(entry, baseUrl, target)
-        }.value
+    val target = remember(found, offlineResolved, source, altLanguage, enabled) {
+        when {
+            found != null -> translationTarget(found.senses, source, altLanguage)
+            offlineResolved && enabled -> translationTarget(
+                listOf(DictionarySense("", emptyList(), language = source)),
+                source,
+                altLanguage,
+            )
+            else -> null
+        }
     }
     var showTranslations by remember(entry, baseUrl, target) { mutableStateOf(false) }
+    var translationAttempt by remember(entry, baseUrl, target) { mutableIntStateOf(0) }
+    // Fetched with an online definition so the pill can name the word itself. An offline hit
+    // sends nothing until the reader asks for the translations.
+    val fetchTranslations = enabled && target != null && (!offlineResolved || showTranslations)
+    val translations = key(entry, baseUrl, target, fetchTranslations, translationAttempt) {
+        produceState<TranslationsState>(TranslationsState.Loading) {
+            value = if (!fetchTranslations || target == null) {
+                TranslationsState.Empty
+            } else {
+                client.translations(entry, baseUrl, target, fresh = translationAttempt > 0)
+            }
+        }.value
+    }
     val site = remember(baseUrl, target) { target?.let { translationSite(baseUrl, it) } }
     // The word's entry on the target's own Wiktionary, written in that
     // language: asked for only once the reader opens the translations, then
@@ -151,26 +205,68 @@ fun DefinitionSheet(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = term,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (onSelectText != null) {
-                        AssistChip(
-                            onClick = onSelectText,
-                            label = { Text(stringResource(R.string.dictionary_select_text)) },
+                val firstPronunciation = offlineEntries?.firstOrNull()
+                    ?.takeIf { it.headword.equals(term, ignoreCase = true) }
+                    ?.pronunciation
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = term,
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (onSelectText != null) {
+                            AssistChip(
+                                onClick = onSelectText,
+                                label = { Text(stringResource(R.string.dictionary_select_text)) },
+                            )
+                        }
+                    }
+                    if (firstPronunciation != null) {
+                        Text(
+                            text = firstPronunciation,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
 
-                when (val current = state) {
+                if (offline != null) {
+                    val result = localResult
+                    when {
+                        result == null -> Loading()
+                        result.isFailure -> {
+                            if (enabled) {
+                                LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.offline_dictionary_error),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        offlineEntries.isNullOrEmpty() -> {
+                            if (enabled) {
+                                LookupResult(state, term) { onOpenInBrowser(it, baseUrl) }
+                            } else {
+                                LookupResult(DictionaryState.NotFound, term) {}
+                            }
+                        }
+                        else -> {
+                            OfflineEntriesContent(
+                                queriedTerm = term,
+                                entries = offlineEntries,
+                                pack = offline,
+                            )
+                        }
+                    }
+                } else when (val current = state) {
                     DictionaryState.Disabled -> Column(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
@@ -184,6 +280,10 @@ fun DefinitionSheet(
                         Button(onClick = onEnable) {
                             Text(stringResource(R.string.dictionary_enable))
                         }
+                        OfflineSetupRow(
+                            operation = offlineState.operation,
+                            onChoose = { choosingOffline = true },
+                        )
                     }
 
                     else -> LookupResult(current, term) { onOpenInBrowser(it, baseUrl) }
@@ -197,20 +297,57 @@ fun DefinitionSheet(
                     val translated = (translations as? TranslationsState.Found)?.first
                     if (target != null && translated != null) {
                         TranslationsPill(target, translated, onClick = { showTranslations = true })
+                    } else if (offlineResolved && target != null) {
+                        DictionaryLink(
+                            label = stringResource(
+                                R.string.dictionary_translations_in,
+                                TranslationLanguages.name(target, LocalConfiguration.current.locales[0]),
+                            ),
+                            onClick = {
+                                // A failed or empty answer is asked for again; a found one is just shown.
+                                if (translations !is TranslationsState.Found) translationAttempt++
+                                showTranslations = true
+                            },
+                        )
+                        if (showTranslations && translations is TranslationsState.Failed) {
+                            Text(
+                                text = stringResource(R.string.dictionary_failed),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (showTranslations && translations is TranslationsState.Empty) {
+                            Text(
+                                text = stringResource(
+                                    R.string.dictionary_translations_empty,
+                                    entry,
+                                    TranslationLanguages.name(target, LocalConfiguration.current.locales[0]),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                     DictionaryLink(
                         label = stringResource(R.string.dictionary_other_app),
                         onClick = { onOpenInDictionaryApp(term) },
                     )
-                    DictionaryLink(
-                        label = stringResource(R.string.dictionary_open_full_entry),
-                        onClick = { onOpenInBrowser(term, baseUrl) },
-                    )
+                    if (enabled || offline == null) {
+                        DictionaryLink(
+                            label = stringResource(R.string.dictionary_open_full_entry),
+                            onClick = { onOpenInBrowser(entry, baseUrl) },
+                        )
+                    }
                 }
             }
 
             selectionActions?.invoke()
         }
+    }
+
+    if (choosingOffline) {
+        OfflineDictionaryPickerSheet(
+            pinnedLanguage = languages.firstOrNull(),
+            onDismiss = { choosingOffline = false },
+        )
     }
 
     val sections = (translations as? TranslationsState.Found)?.sections
@@ -246,6 +383,39 @@ private fun LookupResult(state: DictionaryState, term: String, onOpenInBrowser: 
         )
 
         is DictionaryState.Failed -> Failure(state.message, state.host)
+    }
+}
+
+/** The way to an offline dictionary from the card, and how its download is going. */
+@Composable
+private fun OfflineSetupRow(operation: OfflineDictionary.Operation, onChoose: () -> Unit) {
+    val context = LocalContext.current
+    val ui = LocalConfiguration.current.locales[0]
+    when (operation) {
+        is OfflineDictionary.Operation.Downloading -> Text(
+            text = stringResource(
+                R.string.offline_dictionary_downloading,
+                dictionaryLanguageTitle(operation.language, ui),
+                android.text.format.Formatter.formatShortFileSize(context, operation.downloadedBytes),
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        is OfflineDictionary.Operation.Unpacking -> Text(
+            text = stringResource(R.string.offline_dictionary_working),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        else -> {
+            if (operation is OfflineDictionary.Operation.Failed) {
+                Text(
+                    text = stringResource(R.string.offline_dictionary_download_error),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedButton(onClick = onChoose) {
+                Text(stringResource(R.string.dictionary_download_offline))
+            }
+        }
     }
 }
 
@@ -534,3 +704,116 @@ private fun languageLabel(target: String): String {
     val flag = remember(target) { flagOf(target) }
     return listOfNotNull(flag, TranslationLanguages.name(target, ui)).joinToString(" ")
 }
+
+@Composable
+private fun OfflineEntriesContent(
+    queriedTerm: String,
+    entries: List<StarDictEntry>,
+    pack: OfflineDictionary.Pack,
+) {
+    val ui = LocalConfiguration.current.locales[0]
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        entries.forEachIndexed { entryIndex, entry ->
+            if (entryIndex > 0) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val showBaseHeadword = !entry.headword.equals(queriedTerm, ignoreCase = true)
+                if (showBaseHeadword) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = entry.headword,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.alignByBaseline(),
+                        )
+                        if (entry.pronunciation != null) {
+                            Text(
+                                text = entry.pronunciation,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.alignByBaseline(),
+                            )
+                        }
+                    }
+                }
+
+                entry.sections.forEach { section ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (section.heading.isNotBlank()) {
+                            Text(
+                                text = section.heading,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontStyle = FontStyle.Italic,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        var number = 0
+                        section.items.take(MAX_OFFLINE_SECTION_ITEMS).forEach { itemHtml ->
+                            val isSubItem = itemHtml.startsWith("— ")
+                            val prefix = if (isSubItem) {
+                                "    "
+                            } else {
+                                number++
+                                "$number. "
+                            }
+                            val rendered = AnnotatedString.fromHtml(itemHtml)
+                            Text(
+                                text = buildAnnotatedString {
+                                    append(prefix)
+                                    append(rendered)
+                                },
+                                style = if (isSubItem) {
+                                    MaterialTheme.typography.bodySmall
+                                } else {
+                                    MaterialTheme.typography.bodyMedium
+                                },
+                                color = if (isSubItem) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    Color.Unspecified
+                                },
+                            )
+                        }
+                    }
+                }
+
+                entry.notes.take(2).forEach { noteHtml ->
+                    Text(
+                        text = AnnotatedString.fromHtml(noteHtml),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (entry.sections.isEmpty() && entry.notes.isEmpty() && entry.fallbackHtml != null) {
+                    Text(
+                        text = AnnotatedString.fromHtml(entry.fallbackHtml),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+
+        val provenance = if (pack.isReaderDict) {
+            val langLabel = pack.language.takeIf(String::isNotBlank)?.let { dictionaryLanguageTitle(it, ui) }
+            listOfNotNull(
+                langLabel,
+                stringResource(R.string.offline_dictionary_attribution),
+            ).joinToString(" · ")
+        } else {
+            pack.name
+        }
+        if (provenance.isNotBlank()) {
+            Text(
+                text = provenance,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private const val MAX_OFFLINE_SECTION_ITEMS = 6

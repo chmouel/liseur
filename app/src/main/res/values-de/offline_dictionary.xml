@@ -1,0 +1,23 @@
+<resources>
+    <string name="offline_dictionary_title">Offline-Wörterbücher</string>
+    <string name="offline_dictionary_empty_detail">Wörter direkt auf dem Gerät nachschlagen, ohne sie online zu senden</string>
+    <string name="offline_dictionary_add">Offline-Wörterbuch hinzufügen</string>
+    <string name="offline_dictionary_sheet_title">Offline-Wörterbuch hinzufügen</string>
+    <string name="offline_dictionary_import">StarDict-Archiv importieren</string>
+    <string name="offline_dictionary_import_detail">ZIP-Datei vom Gerät auswählen</string>
+    <string name="offline_dictionary_catalog_heading">Von reader.dict herunterladen</string>
+    <string name="offline_dictionary_catalog_footer">Die Wörterbücher stammen von reader.dict und basieren auf Wiktionary.</string>
+    <string name="offline_dictionary_installed_note">Auf diesem Gerät · %1$s</string>
+    <string name="offline_dictionary_entries">Einträge: %1$s</string>
+    <string name="offline_dictionary_downloading">%1$s wird heruntergeladen · %2$s</string>
+    <string name="offline_dictionary_downloading_progress">%1$s wird heruntergeladen · %2$s von %3$s</string>
+    <string name="offline_dictionary_unpacking_named">%1$s wird installiert…</string>
+    <string name="offline_dictionary_working">Wörterbuch wird installiert…</string>
+    <string name="offline_dictionary_error">Das Wörterbucharchiv konnte nicht geöffnet oder installiert werden.</string>
+    <string name="offline_dictionary_download_error">Das Wörterbuch konnte nicht heruntergeladen oder installiert werden.</string>
+    <string name="offline_dictionary_retry">Erneut versuchen</string>
+    <string name="offline_dictionary_remove_title">%1$s entfernen?</string>
+    <string name="offline_dictionary_remove_body">Es kann jederzeit erneut heruntergeladen oder importiert werden.</string>
+    <string name="offline_dictionary_attribution">reader.dict · Wiktionary</string>
+    <string name="dictionary_download_offline">Offline-Wörterbuch herunterladen</string>
+</resources>

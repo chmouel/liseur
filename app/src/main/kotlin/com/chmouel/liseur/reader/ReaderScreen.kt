@@ -5327,6 +5327,7 @@ internal fun ReaderScreen(
             languages = remember(definitionLanguage) {
                 WiktionaryClient.languagesFor(definitionLanguage)
             },
+            bookLanguage = definitionLanguage,
             enabled = dictionary.enabled,
             baseUrl = dictionary.baseUrl,
             altLanguage = remember(definitionLanguage, dictionary.altLanguage, appLanguage) {

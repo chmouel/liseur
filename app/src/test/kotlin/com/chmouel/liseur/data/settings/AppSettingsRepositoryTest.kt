@@ -61,15 +61,15 @@ class AppSettingsRepositoryTest {
     }
 
     @Test
-    fun `automatic dictionary is opt in and survives backup without enabling online lookup`() = runTest {
+    fun `automatic dictionary is on by default, can be turned off, and survives backup without enabling online lookup`() = runTest {
         val repo = AppSettingsRepository(store("dictionary.preferences_pb"))
-        assertFalse(repo.settings.first().dictionaryOnLongPress)
-        repo.setDictionaryOnLongPress(true)
         assertTrue(repo.settings.first().dictionaryOnLongPress)
+        repo.setDictionaryOnLongPress(false)
+        assertFalse(repo.settings.first().dictionaryOnLongPress)
         assertFalse(repo.settings.first().dictionaryLookupEnabled)
         val restored = AppSettingsRepository(store("dictionary-restored.preferences_pb"))
         restored.restoreBackupValues(repo.backupValues())
-        assertTrue(restored.settings.first().dictionaryOnLongPress)
+        assertFalse(restored.settings.first().dictionaryOnLongPress)
         assertFalse(restored.settings.first().dictionaryLookupEnabled)
     }
 
