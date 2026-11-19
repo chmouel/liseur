@@ -71,6 +71,27 @@ internal fun highlightWord(sentence: String, word: String): IntRange? {
         start = end
         end = characters.next()
     }
-    val match = folded.indexOf(target)
-    return if (match < 0) null else starts[match] until ends[match + target.length - 1]
+    val words = BreakIterator.getWordInstance(Locale.ROOT).apply { setText(sentence) }
+    val unspaced = setOf(
+        Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA,
+        Character.UnicodeScript.THAI, Character.UnicodeScript.LAO, Character.UnicodeScript.KHMER,
+        Character.UnicodeScript.MYANMAR,
+    )
+    fun boundary(offset: Int): Boolean {
+        if (words.isBoundary(offset)) return true
+        // Unspaced scripts can contain the selected word within a word-break run
+        return Character.UnicodeScript.of(sentence.codePointBefore(offset)) in unspaced ||
+            Character.UnicodeScript.of(sentence.codePointAt(offset)) in unspaced
+    }
+    var match = folded.indexOf(target)
+    while (match >= 0) {
+        val after = match + target.length
+        val wholeStart = match == 0 || starts[match] != starts[match - 1]
+        val wholeEnd = after == folded.length || ends[after - 1] != ends[after]
+        if (wholeStart && wholeEnd && boundary(starts[match]) && boundary(ends[after - 1])) {
+            return starts[match] until ends[after - 1]
+        }
+        match = folded.indexOf(target, match + 1)
+    }
+    return null
 }
