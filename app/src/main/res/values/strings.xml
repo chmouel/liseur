@@ -2262,4 +2262,15 @@
     <string name="vocabulary_no_recent_reviews">No recent reviews</string>
     <string name="vocabulary_session_progress">%1$d of %2$d reviews completed this session</string>
     <string name="vocabulary_daily_reviews">%1$s · Reviews: %2$d</string>
+    <string name="vocabulary_word_actions">Word actions</string>
+    <string name="vocabulary_copy_word">Copy word</string>
+    <string name="vocabulary_share_word">Share word</string>
+    <string name="vocabulary_edit_card">Edit card</string>
+    <string name="vocabulary_remove_word">Remove word</string>
+    <string name="vocabulary_meaning">Meaning</string>
+    <string name="vocabulary_meaning_hint">Write the meaning you want to remember.</string>
+    <string name="vocabulary_meaning_help">Shown when you reveal the answer.</string>
+    <string name="vocabulary_personal_note">Personal note (optional)</string>
+    <string name="vocabulary_note_help">An example, association, or memory aid.</string>
+    <string name="vocabulary_discard_changes">Your changes to this card will be lost.</string>
 </resources>

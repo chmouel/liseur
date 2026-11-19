@@ -61,6 +61,9 @@ import com.chmouel.liseur.ui.reading.FineTypographyActions
 import com.chmouel.liseur.ui.reading.orientationLockHonoured
 import com.chmouel.liseur.ui.stats.BookReadingStatsScreen
 import com.chmouel.liseur.vocabulary.VocabularyScreen
+import com.chmouel.liseur.vocabulary.VocabularyOccurrence
+import com.chmouel.liseur.vocabulary.VocabularyWordMenu
+import com.chmouel.liseur.vocabulary.VocabularyWordEditor
 import com.chmouel.liseur.ui.stats.ReadingStatsScreen
 import com.chmouel.liseur.ui.stats.ReadingStatsViewModel
 import com.chmouel.liseur.ui.library.BookActionsSheet
@@ -355,6 +358,18 @@ private fun LiseurApp(
     }
     val scope = rememberCoroutineScope()
     val repository = remember(context) { context.container.appSettings }
+    val openVocabularyPassage: (VocabularyOccurrence) -> Unit = { source ->
+        scope.launch {
+            val file = context.container.database.bookDao().getByUrl(source.bookUrl)?.openableUri()
+            if (file == null || source.locator == null) {
+                android.widget.Toast.makeText(
+                    context, R.string.vocabulary_book_unavailable, android.widget.Toast.LENGTH_SHORT,
+                ).show()
+            } else {
+                context.startActivity(ReaderActivity.intent(context, file, source.bookUrl, at = source.locator))
+            }
+        }
+    }
     val readerPreferences = remember(context) { context.container.readerPreferences }
     val readerPrefs by readerPreferences.prefs.collectAsStateWithLifecycle(ReaderPrefs())
     val appIsDark = settings.themeMode.isDark()
@@ -498,6 +513,7 @@ private fun LiseurApp(
                             onOpenStats = { backStack.push(Route.Stats) },
                             onOpenVocabulary = { backStack.push(Route.Vocabulary) },
                             onReviewVocabulary = { backStack.push(Route.VocabularyReview) },
+                            onOpenVocabularyPassage = openVocabularyPassage,
                             onOpenTranslation = { backStack.push(Route.Translation) },
                             onSyncNow = {
                                 context.container.positionSync.request(com.chmouel.liseur.sync.SyncScope.Full)
@@ -527,18 +543,7 @@ private fun LiseurApp(
                         onBack = back,
                         reviewOnly = route == Route.VocabularyReview,
                         onOpenSettings = { backStack.push(Route.VocabularySettings) },
-                        onOpenPassage = { source ->
-                            scope.launch {
-                                val file = context.container.database.bookDao().getByUrl(source.bookUrl)?.openableUri()
-                                if (file == null || source.locator == null) {
-                                    android.widget.Toast.makeText(
-                                        context, R.string.vocabulary_book_unavailable, android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    context.startActivity(ReaderActivity.intent(context, file, source.bookUrl, at = source.locator))
-                                }
-                            }
-                        },
+                        onOpenPassage = openVocabularyPassage,
                     )
 
                     Route.Stats -> {
@@ -1026,6 +1031,7 @@ private fun ServerAccountRoute(
 private fun LibraryRoute(
     onOpenVocabulary: () -> Unit,
     onReviewVocabulary: () -> Unit,
+    onOpenVocabularyPassage: (VocabularyOccurrence) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTranslation: () -> Unit,
@@ -1390,6 +1396,10 @@ private fun LibraryRoute(
     val heroDetail by viewModel.heroDetail.collectAsStateWithLifecycle()
     val homeQuote by viewModel.homeQuote.collectAsStateWithLifecycle()
     val homeVocabulary by viewModel.homeVocabulary.collectAsStateWithLifecycle()
+    var editingVocabularyId by rememberSaveable { mutableStateOf<Long?>(null) }
+    editingVocabularyId?.let { id ->
+        VocabularyWordEditor(context.container.vocabulary, id) { editingVocabularyId = null }
+    }
     LibraryScreen(
         state = state,
         pulse = pulse,
@@ -1404,6 +1414,12 @@ private fun LibraryRoute(
         homeVocabulary = homeVocabulary,
         onReviewVocabulary = onReviewVocabulary,
         onRateVocabulary = viewModel::rateHomeVocabulary,
+        vocabularyMenu = { id, expanded, onDismiss ->
+            VocabularyWordMenu(
+                context.container.vocabulary, id, expanded, onDismiss, onOpenVocabularyPassage,
+                onEdit = { editingVocabularyId = it },
+            )
+        },
         onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(

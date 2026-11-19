@@ -2380,4 +2380,15 @@
     <string name="vocabulary_no_recent_reviews">Žádná nedávná opakování</string>
     <string name="vocabulary_session_progress">V této relaci dokončeno %1$d z %2$d opakování</string>
     <string name="vocabulary_daily_reviews">%1$s: počet opakování: %2$d</string>
+    <string name="vocabulary_word_actions">Akce se slovem</string>
+    <string name="vocabulary_copy_word">Kopírovat slovo</string>
+    <string name="vocabulary_share_word">Sdílet slovo</string>
+    <string name="vocabulary_edit_card">Upravit kartičku</string>
+    <string name="vocabulary_remove_word">Odebrat slovo</string>
+    <string name="vocabulary_meaning">Význam</string>
+    <string name="vocabulary_meaning_hint">Napište význam, který si chcete zapamatovat.</string>
+    <string name="vocabulary_meaning_help">Zobrazí se po odhalení odpovědi.</string>
+    <string name="vocabulary_personal_note">Osobní poznámka (nepovinné)</string>
+    <string name="vocabulary_note_help">Příklad, asociace nebo paměťová pomůcka.</string>
+    <string name="vocabulary_discard_changes">Změny této kartičky budou ztraceny.</string>
 </resources>

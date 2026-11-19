@@ -2186,4 +2186,15 @@
     <string name="vocabulary_no_recent_reviews">Sin repasos recientes</string>
     <string name="vocabulary_session_progress">%1$d de %2$d repasos completados en esta sesión</string>
     <string name="vocabulary_daily_reviews">%1$s · Repasos: %2$d</string>
+    <string name="vocabulary_word_actions">Acciones de la palabra</string>
+    <string name="vocabulary_copy_word">Copiar palabra</string>
+    <string name="vocabulary_share_word">Compartir palabra</string>
+    <string name="vocabulary_edit_card">Editar tarjeta</string>
+    <string name="vocabulary_remove_word">Eliminar palabra</string>
+    <string name="vocabulary_meaning">Significado</string>
+    <string name="vocabulary_meaning_hint">Escribe el significado que quieres recordar.</string>
+    <string name="vocabulary_meaning_help">Se muestra al revelar la respuesta.</string>
+    <string name="vocabulary_personal_note">Nota personal (opcional)</string>
+    <string name="vocabulary_note_help">Un ejemplo, una asociación o una ayuda para recordar.</string>
+    <string name="vocabulary_discard_changes">Se perderán los cambios de esta tarjeta.</string>
 </resources>

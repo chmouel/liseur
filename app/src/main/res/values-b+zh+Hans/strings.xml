@@ -2106,4 +2106,15 @@
     <string name="vocabulary_no_recent_reviews">近期无复习记录</string>
     <string name="vocabulary_session_progress">本次已完成 %1$d/%2$d 次复习</string>
     <string name="vocabulary_daily_reviews">%1$s：复习 %2$d 次</string>
+    <string name="vocabulary_word_actions">单词操作</string>
+    <string name="vocabulary_copy_word">复制单词</string>
+    <string name="vocabulary_share_word">分享单词</string>
+    <string name="vocabulary_edit_card">编辑卡片</string>
+    <string name="vocabulary_remove_word">移除单词</string>
+    <string name="vocabulary_meaning">释义</string>
+    <string name="vocabulary_meaning_hint">写下你想记住的含义。</string>
+    <string name="vocabulary_meaning_help">揭晓答案后显示。</string>
+    <string name="vocabulary_personal_note">个人笔记（可选）</string>
+    <string name="vocabulary_note_help">例句、联想或记忆提示。</string>
+    <string name="vocabulary_discard_changes">对此卡片的更改将丢失。</string>
 </resources>

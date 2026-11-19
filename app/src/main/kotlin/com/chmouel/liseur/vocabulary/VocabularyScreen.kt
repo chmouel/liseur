@@ -1,5 +1,6 @@
 package com.chmouel.liseur.vocabulary
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -69,6 +70,7 @@ import com.chmouel.liseur.R
 import com.chmouel.liseur.container
 import com.chmouel.liseur.data.settings.AppSettings
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 private enum class VocabularyTab { REVIEW, WORDS, STATS }
@@ -395,14 +397,7 @@ private fun VocabularyDetail(
         }
     }
     if (editWord) {
-        var definition by rememberSaveable(id) { mutableStateOf(item.definition.orEmpty()) }
-        var notes by rememberSaveable(id) { mutableStateOf(item.notes) }
-        VocabularyEditDialog(item.word, { editWord = false }, {
-            scope.launch { repository.edit(id, definition, notes); editWord = false }
-        }) {
-            OutlinedTextField(definition, { definition = it.take(24000) }, maxLines = 6, label = { Text(stringResource(R.string.vocabulary_definition)) })
-            OutlinedTextField(notes, { notes = it.take(12000) }, maxLines = 4, label = { Text(stringResource(R.string.annotation_note)) })
-        }
+        VocabularyWordEditor(repository, item) { editWord = false }
     }
     occurrences.firstOrNull { it.id == editPassage }?.let { source ->
         var sentence by rememberSaveable(source.id) { mutableStateOf(source.sentence.orEmpty()) }
@@ -413,18 +408,43 @@ private fun VocabularyDetail(
         }
     }
     if (deleteWord) {
-        AlertDialog(
-            onDismissRequest = { deleteWord = false },
-            title = { Text(stringResource(R.string.vocabulary_confirm_delete, item.word)) },
-            text = { Text(stringResource(R.string.vocabulary_delete_detail)) },
-            confirmButton = {
-                TextButton(onClick = { scope.launch { repository.dao.deleteWord(id); onDelete() } }) {
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = { TextButton(onClick = { deleteWord = false }) { Text(stringResource(R.string.cancel)) } },
-        )
+        VocabularyWordDeleteDialog(repository, item, { deleteWord = false }, onDelete)
     }
+}
+
+@Composable
+internal fun VocabularyWordDeleteDialog(
+    repository: VocabularyRepository,
+    word: VocabularyWord,
+    onDismiss: () -> Unit,
+    onDeleted: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.vocabulary_confirm_delete, word.word)) },
+        text = { Text(stringResource(R.string.vocabulary_delete_detail)) },
+        confirmButton = {
+            TextButton(enabled = !busy, onClick = {
+                busy = true
+                scope.launch {
+                    try {
+                        repository.dao.deleteWord(word.id)
+                        onDeleted()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
+                    } finally {
+                        busy = false
+                    }
+                }
+            }) { Text(stringResource(R.string.delete)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 @Composable

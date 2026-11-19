@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -110,6 +111,7 @@ import com.chmouel.liseur.vocabulary.HomeSwipe
 import com.chmouel.liseur.vocabulary.HomeVocabulary
 import com.chmouel.liseur.vocabulary.Recall
 import com.chmouel.liseur.vocabulary.SwipeDeck
+import com.chmouel.liseur.vocabulary.vocabularySelectionPress
 import kotlin.math.ceil
 import kotlinx.coroutines.launch
 
@@ -142,6 +144,7 @@ internal fun HomeLibrary(
     onOpenVocabulary: () -> Unit = {},
     onReviewVocabulary: () -> Unit = {},
     onRateVocabulary: suspend (HomeVocabulary, Recall) -> Boolean = { _, _ -> false },
+    vocabularyMenu: @Composable (Long, Boolean, () -> Unit) -> Unit = { _, _, _ -> },
     /** The shelf's Continue listening row, drawn above everything else. */
     header: (@Composable () -> Unit)? = null,
 ) {
@@ -282,6 +285,7 @@ internal fun HomeLibrary(
                             word = vocabulary,
                             onReview = onReviewVocabulary,
                             onRate = onRateVocabulary,
+                            menu = vocabularyMenu,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
@@ -318,6 +322,7 @@ private fun DeskCard(
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
+    onLongClickLabel: String? = null,
     shape: Shape = RoundedCornerShape(16.dp),
     color: Color? = null,
     borderColor: Color? = null,
@@ -350,7 +355,8 @@ private fun DeskCard(
                         long()
                     }
                 },
-                onLongClickLabel = onLongClick?.let { stringResource(R.string.book_actions) },
+                onLongClickLabel = onLongClick?.let { onLongClickLabel ?: stringResource(R.string.book_actions) },
+                hapticFeedbackEnabled = false,
             ),
     ) {
         content()
@@ -467,6 +473,7 @@ private fun VocabularyCard(
     word: HomeVocabulary,
     onReview: () -> Unit,
     onRate: suspend (HomeVocabulary, Recall) -> Boolean,
+    menu: @Composable (Long, Boolean, () -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -476,6 +483,7 @@ private fun VocabularyCard(
     val ink = tint?.content ?: MaterialTheme.colorScheme.onSurface
     val scope = rememberCoroutineScope()
     var revealed by rememberSaveable { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     var rating by remember { mutableStateOf(false) }
     var flying by remember { mutableStateOf(false) }
     suspend fun rate(recall: Recall): Boolean {
@@ -491,109 +499,116 @@ private fun VocabularyCard(
         depth = (word.dueCount - 1).coerceIn(0, 2),
         layers = tint?.let { it.glow to it.glow.copy(alpha = 0.55f) },
         shape = shape,
-        enabled = revealed && !rating,
+        enabled = revealed && !rating && !menuOpen,
         thresholds = HomeSwipe,
         streak = word.streak,
         onSwipe = ::rate,
         onFlight = { flying = it },
         modifier = modifier,
     ) { swipes, actions ->
-        DeskCard(
-            onClick = { if (revealed) onReview() else revealed = true },
-            onClickLabel = stringResource(if (revealed) R.string.home_vocabulary_review else R.string.vocabulary_reveal),
-            shape = shape,
-            color = tint?.container,
-            borderColor = tint?.glow,
-            modifier = actions.fillMaxWidth(),
-        ) {
-            Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Pill(text = word.language.substringBefore('-').uppercase())
-                    word.bookTitle?.let { title ->
-                        Text(
-                            text = stringResource(R.string.home_vocabulary_from, title),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(start = 8.dp).weight(1f),
-                        )
+        Box {
+            DeskCard(
+                onClick = { if (revealed) onReview() else revealed = true },
+                onLongClick = { if (!rating && !flying) menuOpen = true },
+                onLongClickLabel = stringResource(R.string.vocabulary_word_actions),
+                onClickLabel = stringResource(if (revealed) R.string.home_vocabulary_review else R.string.vocabulary_reveal),
+                shape = shape,
+                color = tint?.container,
+                borderColor = tint?.glow,
+                modifier = actions.fillMaxWidth(),
+            ) {
+                Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Pill(text = word.language.substringBefore('-').uppercase())
+                        word.bookTitle?.let { title ->
+                            Text(
+                                text = stringResource(R.string.home_vocabulary_from, title),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(start = 8.dp).weight(1f),
+                            )
+                        }
                     }
-                }
-                Text(
-                    text = word.word,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-                word.sentence?.let { sentence ->
                     Text(
-                        text = sentence,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = word.word,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 6.dp),
+                        modifier = Modifier.padding(top = 12.dp),
                     )
-                }
-                if (revealed) {
-                    Text(
-                        text = word.definition ?: stringResource(R.string.vocabulary_no_definition),
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    if (swipes) {
+                    word.sentence?.let { sentence ->
                         Text(
-                            text = stringResource(R.string.vocabulary_swipe_hint),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = sentence,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
-                }
-                val accent = ButtonDefaults.textButtonColors(
-                    contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
-                ) {
                     if (revealed) {
-                        TextButton(onClick = { scope.launch { rate(Recall.AGAIN) } }, enabled = !rating && !flying, colors = accent) {
-                            Icon(Icons.Outlined.ChevronLeft, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Text(stringResource(R.string.vocabulary_again))
+                        SelectionContainer(Modifier.vocabularySelectionPress()) {
+                            Text(
+                                text = word.definition ?: stringResource(R.string.vocabulary_no_definition),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 10.dp),
+                            )
                         }
-                        TextButton(onClick = { scope.launch { rate(Recall.GOOD) } }, enabled = !rating && !flying, colors = accent) {
-                            Text(stringResource(R.string.vocabulary_good))
-                            Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                        if (swipes) {
+                            Text(
+                                text = stringResource(R.string.vocabulary_swipe_hint),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
                         }
                     }
-                    Button(
-                        onClick = onReview,
-                        colors = if (tint != null) {
-                            ButtonDefaults.buttonColors(containerColor = tint.content, contentColor = tint.container)
-                        } else {
-                            ButtonDefaults.buttonColors()
-                        },
+                    val accent = ButtonDefaults.textButtonColors(
+                        contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
                     ) {
-                        Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = stringResource(R.string.vocabulary_review_due, word.dueCount),
-                            modifier = Modifier.padding(start = 8.dp),
-                        )
-                    }
-                    if (!revealed) {
-                        TextButton(onClick = { revealed = true }, colors = accent) {
-                            Text(stringResource(R.string.vocabulary_reveal))
+                        if (revealed) {
+                            TextButton(onClick = { scope.launch { rate(Recall.AGAIN) } }, enabled = !rating && !flying, colors = accent) {
+                                Icon(Icons.Outlined.ChevronLeft, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Text(stringResource(R.string.vocabulary_again))
+                            }
+                            TextButton(onClick = { scope.launch { rate(Recall.GOOD) } }, enabled = !rating && !flying, colors = accent) {
+                                Text(stringResource(R.string.vocabulary_good))
+                                Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Button(
+                            onClick = onReview,
+                            colors = if (tint != null) {
+                                ButtonDefaults.buttonColors(containerColor = tint.content, contentColor = tint.container)
+                            } else {
+                                ButtonDefaults.buttonColors()
+                            },
+                        ) {
+                            Icon(Icons.Outlined.School, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(
+                                text = stringResource(R.string.vocabulary_review_due, word.dueCount),
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                        if (!revealed) {
+                            TextButton(onClick = { revealed = true }, colors = accent) {
+                                Text(stringResource(R.string.vocabulary_reveal))
+                            }
                         }
                     }
                 }
             }
+            menu(word.id, menuOpen) { menuOpen = false }
         }
     }
 }

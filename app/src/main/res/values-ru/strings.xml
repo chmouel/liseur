@@ -2348,4 +2348,15 @@
     <string name="vocabulary_no_recent_reviews">Нет недавних повторений</string>
     <string name="vocabulary_session_progress">В этом сеансе завершено повторений: %1$d из %2$d</string>
     <string name="vocabulary_daily_reviews">%1$s: повторений — %2$d</string>
+    <string name="vocabulary_word_actions">Действия со словом</string>
+    <string name="vocabulary_copy_word">Копировать слово</string>
+    <string name="vocabulary_share_word">Поделиться словом</string>
+    <string name="vocabulary_edit_card">Изменить карточку</string>
+    <string name="vocabulary_remove_word">Удалить слово</string>
+    <string name="vocabulary_meaning">Значение</string>
+    <string name="vocabulary_meaning_hint">Напишите значение, которое хотите запомнить.</string>
+    <string name="vocabulary_meaning_help">Показывается после раскрытия ответа.</string>
+    <string name="vocabulary_personal_note">Личная заметка (необязательно)</string>
+    <string name="vocabulary_note_help">Пример, ассоциация или подсказка для запоминания.</string>
+    <string name="vocabulary_discard_changes">Изменения этой карточки будут потеряны.</string>
 </resources>
