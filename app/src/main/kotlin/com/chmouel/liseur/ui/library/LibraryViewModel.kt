@@ -626,6 +626,9 @@ class LibraryViewModel(
     readingSessions: Flow<List<ReadingSession>> = flowOf(emptyList()),
     /** Quotes from what has been read, for Home; null leaves the card out. */
     private val homeQuotes: com.chmouel.liseur.data.quotes.HomeQuotes? = null,
+    /** The vocabulary word due for review, for Home, given the daily new and review limits. */
+    private val vocabularyCard: (newLimit: Int, reviewLimit: Int) -> Flow<com.chmouel.liseur.vocabulary.HomeVocabulary?> =
+        { _, _ -> flowOf(null) },
     /**
      * Reading aloud, for the shelf's Continue listening row. Asked for
      * only once a paused listening exists, so the shelf does not reach
@@ -1297,6 +1300,14 @@ class LibraryViewModel(
                     quotes.quote
                 }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /** A vocabulary word due for review, while Home asks for one. */
+    val homeVocabulary: StateFlow<com.chmouel.liseur.vocabulary.HomeVocabulary?> =
+        appSettings.settings
+            .map { if (it.libraryLayout.homeVocabulary) it.vocabularyNewLimit to it.vocabularyReviewLimit else null }
+            .distinctUntilChanged()
+            .flatMapLatest { limits -> limits?.let { (new, reviews) -> vocabularyCard(new, reviews) } ?: flowOf(null) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun anotherQuote() {
         viewModelScope.launch { homeQuotes?.another() }
@@ -2125,6 +2136,7 @@ class LibraryViewModel(
                         requestAccountTranslationClear = container::requestAccountTranslationClear,
                         readingSessions = container.database.readingSessionDao().observeAll(),
                         homeQuotes = container.homeQuotes,
+                        vocabularyCard = container.vocabulary::homeCard,
                         readAloud = { container.readAloud },
                         pausedListening = container.pausedListening,
                         savedState = createSavedStateHandle(),

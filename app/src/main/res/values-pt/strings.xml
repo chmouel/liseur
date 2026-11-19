@@ -2112,6 +2112,10 @@
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Citação das suas leituras</string>
     <string name="home_quote_setting_detail">Mostra uma frase de um livro lido, tirada só das páginas que você já leu</string>
+    <string name="home_vocabulary_title">Palavras para revisar</string>
+    <string name="home_vocabulary_setting_detail">Mostra uma palavra do vocabulário quando chega a hora de revisá-la</string>
+    <string name="home_vocabulary_from">de %1$s</string>
+    <string name="home_vocabulary_open">abrir o vocabulário</string>
     <string name="home_time_left_minutes">Faltam ~%d min</string>
     <string name="home_time_left_hours">Faltam ~%1$d h %2$d min</string>
     <string name="home_page_of">Página %1$d de %2$d</string>

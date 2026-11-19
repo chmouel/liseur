@@ -2051,6 +2051,10 @@
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Citation de vos lectures</string>
     <string name="home_quote_setting_detail">Affiche une phrase d\'un livre lu, prise uniquement dans les pages déjà lues</string>
+    <string name="home_vocabulary_title">Mots à réviser</string>
+    <string name="home_vocabulary_setting_detail">Affiche un mot de votre vocabulaire quand il est à revoir</string>
+    <string name="home_vocabulary_from">tiré de %1$s</string>
+    <string name="home_vocabulary_open">ouvrir le vocabulaire</string>
     <string name="home_time_left_minutes">~%d min restantes</string>
     <string name="home_time_left_hours">~%1$d h %2$d min restantes</string>
     <string name="home_page_of">Page %1$d sur %2$d</string>

@@ -33,6 +33,9 @@ sealed interface Route {
     data object Licences : Route
     data object About : Route
     data object Vocabulary : Route
+
+    /** The Vocabulary Builder opened straight on its review, leaving it when the review closes. */
+    data object VocabularyReview : Route
     data object VocabularySettings : Route
     data object Stats : Route
     data class BookStats(val bookUrl: String, val title: String) : Route
@@ -64,6 +67,7 @@ private val Route.tag: String
         Route.Licences -> "Licences"
         Route.About -> "About"
         Route.Vocabulary -> "Vocabulary"
+        Route.VocabularyReview -> "VocabularyReview"
         Route.VocabularySettings -> "VocabularySettings"
         Route.Stats -> "Stats"
         is Route.BookStats -> "BookStats"
@@ -74,7 +78,7 @@ private val objectRoutes: Map<String, Route> = listOf(
     Route.Library, Route.Settings, Route.SettingsSearch, Route.SettingsBackup, Route.ReadingAppearance, Route.SelectionToolbar,
     Route.ReadingNavigation, Route.PageTaps, Route.ReadAloud, Route.Translation, Route.ReadingCompanion, Route.Services,
     Route.WatchedFolders, Route.HiddenBooks, Route.ServerAccount, Route.BrowseLibraries, Route.Licences,
-    Route.About, Route.Stats, Route.Vocabulary, Route.VocabularySettings,
+    Route.About, Route.Stats, Route.Vocabulary, Route.VocabularyReview, Route.VocabularySettings,
 ).associateBy { it.tag }
 
 /**

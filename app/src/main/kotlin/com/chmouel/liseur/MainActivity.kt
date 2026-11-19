@@ -485,6 +485,7 @@ private fun LiseurApp(
                             onOpenSettings = { backStack.push(Route.Settings) },
                             onOpenStats = { backStack.push(Route.Stats) },
                             onOpenVocabulary = { backStack.push(Route.Vocabulary) },
+                            onReviewVocabulary = { backStack.push(Route.VocabularyReview) },
                             onOpenTranslation = { backStack.push(Route.Translation) },
                             onSyncNow = {
                                 context.container.positionSync.request(com.chmouel.liseur.sync.SyncScope.Full)
@@ -509,9 +510,10 @@ private fun LiseurApp(
                         onFreeCatalogsOpened = { openFreeCatalogs = false },
                     )
 
-                    Route.Vocabulary -> VocabularyScreen(
+                    Route.Vocabulary, Route.VocabularyReview -> VocabularyScreen(
                         repository = context.container.vocabulary,
                         onBack = back,
+                        reviewOnly = route == Route.VocabularyReview,
                         onOpenSettings = { backStack.push(Route.VocabularySettings) },
                         onOpenPassage = { source ->
                             scope.launch {
@@ -1011,6 +1013,7 @@ private fun ServerAccountRoute(
 @Composable
 private fun LibraryRoute(
     onOpenVocabulary: () -> Unit,
+    onReviewVocabulary: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTranslation: () -> Unit,
@@ -1374,6 +1377,7 @@ private fun LibraryRoute(
     val pulse by viewModel.pulse.collectAsStateWithLifecycle()
     val heroDetail by viewModel.heroDetail.collectAsStateWithLifecycle()
     val homeQuote by viewModel.homeQuote.collectAsStateWithLifecycle()
+    val homeVocabulary by viewModel.homeVocabulary.collectAsStateWithLifecycle()
     LibraryScreen(
         state = state,
         pulse = pulse,
@@ -1385,6 +1389,8 @@ private fun LibraryRoute(
             }
         },
         onAnotherQuote = viewModel::anotherQuote,
+        homeVocabulary = homeVocabulary,
+        onReviewVocabulary = onReviewVocabulary,
         onOpenTranslationSettings = onOpenTranslation,
         onSetUpTranslation = { settingUpTranslation = true }.takeIf {
             com.chmouel.liseur.translate.shouldOfferTranslationSetup(

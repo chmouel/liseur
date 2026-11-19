@@ -589,6 +589,7 @@ class AppSettingsRepository(
         val LEGACY_LIBRARY_BOTTOM_BAR = booleanPreferencesKey("library_bottom_bar")
         val LIBRARY_START_HOME = booleanPreferencesKey("library_start_home")
         val LIBRARY_HOME_QUOTE = booleanPreferencesKey("library_home_quote")
+        val LIBRARY_HOME_VOCABULARY = booleanPreferencesKey("library_home_vocabulary")
         val EINK_MODE = stringPreferencesKey("eink_mode")
         val COLOR_EINK = booleanPreferencesKey("color_eink")
         val VENDOR_REFRESH = booleanPreferencesKey("vendor_refresh")
@@ -714,6 +715,7 @@ class AppSettingsRepository(
                 scope = p.libraryScope(),
                 startOnHome = p[Keys.LIBRARY_START_HOME] ?: true,
                 homeQuote = p[Keys.LIBRARY_HOME_QUOTE] ?: true,
+                homeVocabulary = p[Keys.LIBRARY_HOME_VOCABULARY] ?: true,
             ),
             eInkMode = EInkMode.fromId(p[Keys.EINK_MODE]),
             colorEInk = p[Keys.COLOR_EINK] ?: false,
@@ -949,6 +951,7 @@ class AppSettingsRepository(
             it.remove(Keys.LEGACY_LIBRARY_BOTTOM_BAR)
             it[Keys.LIBRARY_START_HOME] = layout.startOnHome
             it[Keys.LIBRARY_HOME_QUOTE] = layout.homeQuote
+            it[Keys.LIBRARY_HOME_VOCABULARY] = layout.homeVocabulary
         }
     }
 
@@ -1513,6 +1516,7 @@ internal val APP_BACKUP_TYPES = mapOf(
     "library_grid_compact" to BackupValueType.BOOLEAN,
     "library_start_home" to BackupValueType.BOOLEAN,
     "library_home_quote" to BackupValueType.BOOLEAN,
+    "library_home_vocabulary" to BackupValueType.BOOLEAN,
     "library_scope" to BackupValueType.STRING,
     "library_bottom_bar" to BackupValueType.BOOLEAN,
     "eink_mode" to BackupValueType.STRING, "color_eink" to BackupValueType.BOOLEAN,

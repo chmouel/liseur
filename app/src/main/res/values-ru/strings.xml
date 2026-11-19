@@ -2201,6 +2201,10 @@
     <string name="home_quote_source">— %1$s</string>
     <string name="home_quote_setting">Цитата из прочитанного</string>
     <string name="home_quote_setting_detail">Показывает фразу из книги, взятую только из уже прочитанных страниц</string>
+    <string name="home_vocabulary_title">Слова для повторения</string>
+    <string name="home_vocabulary_setting_detail">Показывает слово из словаря для изучения, когда его пора повторить</string>
+    <string name="home_vocabulary_from">из книги %1$s</string>
+    <string name="home_vocabulary_open">открыть словарь для изучения</string>
     <string name="home_time_left_minutes">Осталось ~%d мин</string>
     <string name="home_time_left_hours">Осталось ~%1$d ч %2$d мин</string>
     <string name="home_page_of">Страница %1$d из %2$d</string>
