@@ -27,7 +27,7 @@
     </plurals>
     <string name="remove_folder">Убрать папку</string>
     <string name="remove_folder_a11y">Убрать %1$s</string>
-    <string name="remove_folder_warning">Liseur перестанет следить за «%1$s». Книги, найденные только в этой папке, исчезнут из библиотеки. Книги, которые есть также в другой отслеживаемой папке или на сервере, останутся. Файлы с устройства не удаляются.</string>
+    <string name="remove_folder_warning">Liseur перестанет отслеживать «%1$s». Книги только из этой папки исчезнут из библиотеки. Файлы не удаляются.</string>
     <string name="add_book_hint">Выберите один EPUB с устройства или из облачного хранилища.</string>
     <string name="connect_server_hint">Просматривайте calibre-web, Komga, liseur-sync или любой каталог OPDS.</string>
     <string name="search_books">Поиск книг</string>
@@ -322,12 +322,12 @@
     <string name="server_password_optional">Пароль (необязательно)</string>
     <string name="server_connect">Подключить</string>
     <string name="server_change_address">Изменить адрес</string>
-    <string name="server_change_address_note">Подключение к другому серверу заменяет текущий. Скачанные книги остаются на устройстве; ещё не скачанные убираются с полки.</string>
+    <string name="server_change_address_note">Подключение к другому серверу заменит этот. Скачанные книги останутся, остальные исчезнут с полки.</string>
     <string name="server_disconnect">Отключить</string>
     <string name="server_check_again">Проверить снова</string>
     <string name="server_try_http">Подключиться без шифрования</string>
     <string name="server_http_title">Подключиться без шифрования?</string>
-    <string name="server_http_warning">Этот сервер использует обычный HTTP. Имя пользователя, пароль и сведения о чтении можно перехватить, а ответы можно подменить. Подключайтесь так только в доверенной сети.</string>
+    <string name="server_http_warning">Этот сервер использует обычный HTTP: пароль и сведения о чтении можно перехватить. Подключайтесь так только в доверенной сети.</string>
     <string name="server_http_confirm">Всё равно подключить</string>
     <string name="server_error_credentials">Сервер отклонил это имя пользователя или пароль.</string>
     <string name="server_error_credentials_komga">Сервер отклонил этот API-ключ. Проверьте, что он скопирован целиком и не отозван.</string>
@@ -353,8 +353,8 @@
     <string name="server_no_download_right_custom">Этот каталог не предлагает книги для загрузки.</string>
     <string name="server_no_download_right_liseur_sync">Этому токену нельзя читать библиотеку. Создайте новый с областью library-read или отключитесь и войдите снова, затем проверьте ещё раз.</string>
     <string name="server_no_download_right_bookorbit">Эта учётная запись не может скачивать книги из BookOrbit. Администратор может выдать разрешение на скачивание, затем проверьте снова.</string>
-    <string name="server_token_storage_note">Токен устройства хранится на этом устройстве, в зашифрованном виде. Он отправляется на сервер при каждом обращении Liseur. Отзовите его на сервере, если потеряете телефон.</string>
-    <string name="server_bookorbit_storage_note">Пароль не сохраняется. Он один раз обменивается на сессию, которую Liseur продлевает сам и хранит зашифрованной на этом устройстве. Выход из BookOrbit отзывает её.</string>
+    <string name="server_token_storage_note">Хранится на этом устройстве в зашифрованном виде. Отзовите токен на сервере, если потеряете телефон.</string>
+    <string name="server_bookorbit_storage_note">Пароль не сохраняется, только зашифрованная сессия. Выход из BookOrbit отзывает её.</string>
     <string name="server_bookorbit_password_help">BookOrbit не выдаёт приложениям отдельный ключ, поэтому это пароль вашей учётной записи. Он обменивается на короткоживущую сессию и никогда не сохраняется.</string>
     <string name="server_sync_on">Позиция чтения синхронизируется между устройствами.</string>
     <string name="server_sync_off">Позиции чтения не синхронизируются. Возможно, на сервере выключена синхронизация Kobo.</string>
@@ -366,10 +366,10 @@
     <string name="calibre_token">Токен или URL синхронизации Kobo</string>
     <string name="calibre_save_token">Сохранить токен</string>
     <string name="calibre_token_help">Обычно Liseur подхватывает это сам. Если позиции чтения не синхронизируются, вставьте сюда URL синхронизации Kobo со страницы профиля calibre-web.</string>
-    <string name="server_password_storage_note">Пароль хранится на этом устройстве, в зашифрованном виде. Он отправляется на сервер при каждом обращении Liseur — так требует этот тип сервера.</string>
-    <string name="server_custom_storage_note">Всё, что вы вводите здесь, хранится на этом устройстве, в зашифрованном виде. Пароль каталога отправляется в каталог при каждом обращении Liseur; пароль синхронизации KOReader никогда не покидает телефон. Отправляется только значение, выведенное из него.</string>
-    <string name="server_custom_kosync_storage_note">Всё, что вы вводите здесь, хранится на этом устройстве, в зашифрованном виде. Пароль синхронизации KOReader никогда не покидает телефон. Отправляется только значение, выведенное из него.</string>
-    <string name="server_api_key_storage_note">API-ключ хранится на этом устройстве, в зашифрованном виде. Он отправляется на сервер при каждом обращении Liseur. Отзовите его в Komga, если потеряете телефон.</string>
+    <string name="server_password_storage_note">Хранится на этом устройстве в зашифрованном виде и отправляется на сервер с каждым запросом.</string>
+    <string name="server_custom_storage_note">Хранится на этом устройстве в зашифрованном виде. Пароль синхронизации KOReader никогда его не покидает.</string>
+    <string name="server_custom_kosync_storage_note">Хранится на этом устройстве в зашифрованном виде. Пароль синхронизации KOReader никогда его не покидает.</string>
+    <string name="server_api_key_storage_note">Хранится на этом устройстве в зашифрованном виде. Отзовите ключ в Komga, если потеряете телефон.</string>
     <string name="book_on_server">На сервере</string>
     <string name="book_not_downloaded">Эта книга всё ещё на сервере.</string>
     <string name="close">Закрыть</string>
@@ -450,8 +450,8 @@
         <item quantity="many">Скачать %1$d книг?</item>
         <item quantity="other">Скачать %1$d книги?</item>
     </plurals>
-    <string name="download_all_size">Примерно %1$s при %2$s свободно. Оценка по данным сервера — ориентировочная.</string>
-    <string name="download_all_size_unknown">Сервер не сообщает размер книг, поэтому неизвестно, сколько места понадобится. У вас свободно %1$s.</string>
+    <string name="download_all_size">Около %1$s, свободно %2$s.</string>
+    <string name="download_all_size_unknown">Сервер не сообщает размер книг. Свободно: %1$s.</string>
     <string name="download_all_tight">Примерно %1$s при %2$s свободно. Влезет, но почти впритык.</string>
     <string name="download_all_will_not_fit">Примерно %1$s, а свободно только %2$s. Загрузка остановится, когда на устройстве почти не останется места.</string>
     <string name="download_all_start">Скачать</string>
@@ -474,10 +474,10 @@
         <item quantity="many">%1$d книг скачано · %2$s</item>
         <item quantity="other">%1$d книги скачаны · %2$s</item>
     </plurals>
-    <string name="server_lost_to_restore">Вы вышли из учётной записи сервера. Пароли и API-ключи шифруются ключом, который остаётся на телефоне, где они были сохранены, поэтому после восстановления или переноса на новое устройство их нельзя прочитать. Войдите снова, чтобы вернуть доступ.</string>
+    <string name="server_lost_to_restore">Вы вышли из аккаунта сервера. Сохранённые пароли и ключи нельзя прочитать после восстановления или на новом устройстве. Войдите снова.</string>
     <string name="server_sync_identity">Позиции синхронизируются как %1$s. Чтение под другим входом остаётся на этом устройстве.</string>
     <string name="kosync_section">Синхронизация KOReader</string>
-    <string name="kosync_summary_custom">Каталог хранит книги, но не место в них. Подключите сервер синхронизации KOReader (kosync), чтобы синхронизировать позиции чтения скачанных книг между устройствами.</string>
+    <string name="kosync_summary_custom">Подключите сервер синхронизации KOReader (kosync), чтобы синхронизировать позиции чтения скачанных книг.</string>
     <string name="kosync_url">Адрес сервера синхронизации</string>
     <string name="kosync_register">Создать учётную запись на сервере</string>
     <string name="kosync_register_help_custom">Для серверов, которые принимают новые учётные записи так. Многие не принимают — пользователей KOReader создают в настройках самого сервера.</string>
@@ -843,13 +843,13 @@
     <string name="settings_volume_keys_off">Выключено</string>
     <string name="settings_volume_keys_reversed">Наоборот</string>
     <string name="settings_tap_zones">Стороны перелистывания</string>
-    <string name="settings_tap_zones_detail">Какие стороны страницы листают её при нажатии. С одной стороной её верхняя половина листает назад, нижняя вперёд, так что хватает одного большого пальца, а другая сторона открывает меню. Середина и верхняя полоса всегда открывают меню; «Выключено»: нажатие на сторону ничего не делает.</string>
+    <string name="settings_tap_zones_detail">Какие края листают страницу. Если край один, его верхняя половина листает назад, а нижняя — вперёд.</string>
     <string name="tap_zones_both">Обе</string>
     <string name="tap_zones_left">Только левая</string>
     <string name="tap_zones_right">Только правая</string>
     <string name="tap_zones_off">Выключено</string>
     <string name="settings_tap_side_width">Зона перелистывания</string>
-    <string name="settings_tap_side_width_detail">Какая часть каждого края листает страницу при нажатии. При узких краях середина страницы остаётся за меню, и нажатие, чтобы открыть чтение вслух или другие элементы управления, не перелистывает страницу. «Широкая» — исходная раскладка.</string>
+    <string name="settings_tap_side_width_detail">Какая часть края листает страницу. Чем уже края, тем больше места в центре для меню.</string>
     <string name="tap_side_width_wide">Широкая</string>
     <string name="tap_side_width_percent">%1$d%%</string>
     <string name="settings_page_taps">Нажатия на страницу</string>
@@ -867,38 +867,38 @@
     <string name="page_taps_preview_left_wide">Левая половина листает назад вверху и вперёд внизу. Правая половина, верх и область в середине открывают меню.</string>
     <string name="page_taps_preview_right_wide">Правая половина листает назад вверху и вперёд внизу. Левая половина, верх и область в середине открывают меню.</string>
     <string name="settings_pinch_to_resize">Масштаб текста щипком</string>
-    <string name="settings_pinch_to_resize_detail">Двумя пальцами на странице можно увеличить или уменьшить текст, не открывая меню. Отключите, если при вашем хвате жест срабатывает случайно. Увеличение изображения щипком работает в любом случае.</string>
-    <string name="settings_pinch_to_resize_eink">Выключено на экранах электронных чернил: они слишком медленно перерисовывают превью размера. Используйте ползунок «Размер». Увеличение изображения щипком всё равно работает. Выключите «Экран электронных чернил» выше, если у вас не такой экран.</string>
+    <string name="settings_pinch_to_resize_detail">Сведите или разведите пальцы на странице, чтобы изменить размер текста.</string>
+    <string name="settings_pinch_to_resize_eink">Выключено на экранах электронных чернил: они перерисовываются слишком медленно. Используйте ползунок «Размер» или выключите «Экран электронных чернил» выше.</string>
     <string name="settings_brightness_edge">Яркость жестом у края</string>
-    <string name="settings_brightness_edge_detail">Проведите вверх или вниз вдоль этого края страницы, чтобы изменить яркость, не открывая меню. Нажатия и перелистывание, начатые у края, работают как прежде. Только при перелистывании, не при прокрутке.</string>
+    <string name="settings_brightness_edge_detail">Проведите вверх или вниз вдоль этого края, чтобы изменить яркость. Только при перелистывании, не при прокрутке.</string>
     <string name="settings_reader_orientation">Ориентация экрана</string>
-    <string name="settings_reader_orientation_detail">Читалка поворачивается вместе с телефоном или остаётся в книжной или альбомной ориентации независимо от системной настройки поворота. На библиотеку это не влияет.</string>
+    <string name="settings_reader_orientation_detail">Следовать за телефоном или закрепить читалку в книжной или альбомной ориентации.</string>
     <string name="reader_orientation_auto">Авто</string>
     <string name="reader_orientation_portrait">Книжная</string>
     <string name="reader_orientation_landscape">Альбомная</string>
     <string name="settings_resume">Открывать книгу, которую читали</string>
     <string name="settings_resume_detail">Пропускать библиотеку, если вы остановились на середине книги.</string>
     <string name="settings_keep_screen_on">Не гасить экран</string>
-    <string name="settings_keep_screen_on_detail">Экран не засыпает, пока открыта книга, независимо от настроек устройства. Расходует батарею. Для одной книги это можно изменить в читалке.</string>
+    <string name="settings_keep_screen_on_detail">Экран не гаснет, пока открыта книга. Расходует батарею. Можно изменить для отдельной книги в читалке.</string>
     <string name="settings_scroll_mode">Читать прокруткой</string>
-    <string name="settings_scroll_mode_detail">Каждая глава показывается одной длинной страницей, которую вы прокручиваете, а не листаете. Для одной книги это можно изменить в читалке.</string>
+    <string name="settings_scroll_mode_detail">Каждая глава — одна длинная страница, которую прокручивают, а не листают. Можно изменить для отдельной книги в читалке.</string>
     <string name="settings_lock_footer">Заблокировать нижнюю строку</string>
     <string name="settings_lock_footer_detail">Касание нижней строки не меняет её во время чтения. Долгое нажатие по-прежнему открывает её настройки.</string>
     <string name="settings_eink">Экран электронных чернил</string>
-    <string name="settings_eink_detail">Отключает анимации, которые плохо отображаются на экранах электронных чернил. Liseur определяет такой экран автоматически, но здесь это можно изменить.</string>
+    <string name="settings_eink_detail">Отключает анимации, которые плохо выглядят на электронных чернилах. Определяется автоматически.</string>
     <string name="settings_color_eink">Цветные электронные чернила</string>
     <string name="settings_color_eink_detail">Сохраняет полезные акценты и цвета выделения в небольшой статичной палитре.</string>
     <string name="eink_auto">Авто</string>
     <string name="eink_on">Вкл.</string>
     <string name="eink_off">Выкл.</string>
     <string name="settings_vendor_refresh">Использовать контроллер экрана</string>
-    <string name="settings_vendor_refresh_found">Использует собственный контроллер экрана %1$s для обновления текста. Экспериментально; поддержка может различаться между устройствами, даже между моделями с одинаковым названием.</string>
+    <string name="settings_vendor_refresh_found">Использует собственный контроллер экрана %1$s для обновления текста. Экспериментально.</string>
     <string name="settings_dictionary">Словарь</string>
     <string name="settings_define_with">Определять через</string>
     <string name="definition_target_builtin">Встроенный</string>
     <string name="definition_target_external">Внешнее приложение</string>
     <string name="settings_dictionary_lookup">Искать определения в интернете</string>
-    <string name="settings_dictionary_lookup_detail">По умолчанию выключено. При поиске определения слово и его начальные формы по ссылкам отправляются на указанный ниже сайт словаря.</string>
+    <string name="settings_dictionary_lookup_detail">При поиске определения слово отправляется на сайт словаря, указанный ниже.</string>
     <string name="settings_dictionary_site">Сайт словаря</string>
     <string name="settings_dictionary_site_detail">Выберите, какой Wiktionary использовать для определений.</string>
     <string name="settings_dictionary_site_custom">Свой сайт…</string>
@@ -909,7 +909,7 @@
     <string name="settings_dictionary_site_ok">%1$s отвечает.</string>
     <string name="settings_dictionary_site_unreachable">%1$s не ответил: %2$s</string>
     <string name="settings_dictionary_alt_language">Дополнительный язык</string>
-    <string name="settings_dictionary_alt_language_detail">Добавляет к определениям в словаре кнопку перевода на основе таблиц переводов Wiktionary. В автоматическом режиме для книг на другом языке используется язык приложения. Переводы есть только у слов на языке выбранного словаря.</string>
+    <string name="settings_dictionary_alt_language_detail">Добавляет к определениям кнопку перевода из Wiktionary. В автоматическом режиме используется язык приложения.</string>
     <string name="settings_dictionary_alt_language_off">Выключен</string>
     <string name="settings_dictionary_alt_language_auto">Автоматически</string>
     <string name="settings_dictionary_alt_language_auto_detail">Язык приложения, для книг на другом языке</string>
@@ -923,9 +923,9 @@
     <string name="books_export_error_library">Не удалось прочитать библиотеку для экспорта.</string>
     <string name="books_export_error_folder">Не удалось экспортировать в эту папку. Выберите папку с разрешением на запись.</string>
     <string name="settings_backup_title">Резервное копирование и восстановление</string>
-    <string name="settings_backup_detail">Сохраните настройки, пользовательские шрифты, позиции чтения, выделения, заметки, закладки и сводки помощника в ZIP-копии.</string>
+    <string name="settings_backup_detail">Сохраните настройки, шрифты, позиции чтения, аннотации и сводки помощника в ZIP-копии.</string>
     <string name="settings_backup_export">Экспортировать резервную копию</string>
-    <string name="settings_backup_export_detail">Создайте ZIP-файл с датой, настройками, шрифтами, позициями чтения, аннотациями и сводками помощника.</string>
+    <string name="settings_backup_export_detail">Создайте ZIP-файл с датой.</string>
     <string name="settings_backup_restore">Восстановить резервную копию</string>
     <string name="settings_backup_restore_detail">Просмотрите содержимое резервной копии перед восстановлением.</string>
     <string name="settings_backup_companion_preview">Сводки глав: %1$d. Для книг в этой библиотеке будут добавлены недостающие сводки помощника; существующие сохранятся.</string>
@@ -977,7 +977,7 @@
     <string name="settings_backup_error_size">Копия слишком велика для восстановления.</string>
     <string name="settings_backup_error_storage">Не удалось подготовить копию в хранилище устройства.</string>
     <string name="settings_backup_error_restore">Не удалось восстановить резервную копию.</string>
-    <string name="settings_backup_error_partial">Часть копии восстановлена, но остальное применить не удалось. Проверьте настройки, шрифты, аннотации, позиции чтения, сводки помощника, аккаунты и сервисы.</string>
+    <string name="settings_backup_error_partial">Резервную копию удалось восстановить лишь частично.</string>
     <string name="settings_backup_include_stats">Включить статистику чтения</string>
     <string name="settings_backup_include_stats_detail">Сессии чтения для экрана статистики. Восстановленные сессии остаются на устройстве и никогда не отправляются на сервер синхронизации.</string>
     <string name="settings_backup_include_books">Включить файлы книг</string>
@@ -1061,8 +1061,8 @@
         <item quantity="other">Восстановлено %1$d сессии чтения.</item>
     </plurals>
     <string name="settings_library_help_title">Серверы книг</string>
-    <string name="settings_library_help_body" formatted="true">Сервер книг (calibre-web, Komga, liseur-sync или каталог OPDS) хранит вашу библиотеку: Liseur просматривает её и скачивает из неё, и синхронизирует место чтения, где сервер это поддерживает. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения. Одновременно подключён один сервер.\n\nliseur-sync также синхронизирует книги, которые есть только на этом телефоне: файл с SD-карты тоже синхронизирует позицию. Запустите свой с %1$s.</string>
-    <string name="settings_account_detail">Просматривайте и скачивайте с сервера calibre-web, Komga, liseur-sync или OPDS и синхронизируйте место чтения (для OPDS через связанный сервер синхронизации KOReader).</string>
+    <string name="settings_library_help_body" formatted="true">Подключите сервер книг (calibre-web, Komga, liseur-sync или каталог OPDS), чтобы просматривать, скачивать книги и синхронизировать место чтения. Своё подключение OPDS можно связать с сервером синхронизации KOReader для позиций чтения.\n\nliseur-sync также синхронизирует книги, которые есть только на этом телефоне. Запустите свой с %1$s.</string>
+    <string name="settings_account_detail">Просмотр, загрузка и синхронизация с calibre-web, Komga, BookOrbit, liseur-sync или OPDS.</string>
     <string name="settings_search">Поиск по настройкам</string>
     <string name="settings_search_prompt">Введите слово из названия или описания настройки.</string>
     <string name="settings_search_no_results">Нет настроек по запросу «%1$s».</string>
@@ -1312,7 +1312,7 @@
     <string name="reader_external_link_body">Эта ссылка откроет %1$s в браузере. Liseur не перейдёт по ней сам.</string>
     <string name="reader_external_link_open">Открыть</string>
     <string name="reader_external_link_failed">Ни одно приложение на этом устройстве не может открыть эту ссылку.</string>
-    <string name="server_sync_bookorbit">Позиции чтения синхронизируются при каждом перелистывании страницы для проверенных EPUB. Если на другом устройстве есть более новая позиция, Liseur предложит её во время чтения. Действует последнее сохранение на сервере. Отметки «прочитано» и «не прочитано» тоже синхронизируются, а аннотации нет.</string>
+    <string name="server_sync_bookorbit">Для проверенных EPUB синхронизируются позиции чтения и отметки «прочитано». Аннотации — нет.</string>
     <string name="server_sync_off_bookorbit">Позиции чтения не синхронизируются с BookOrbit.</string>
     <string name="browse_libraries">Просмотр удалённых библиотек</string>
     <string name="browse_add_connection">Добавить каталог</string>
@@ -1450,7 +1450,7 @@
     <string name="read_aloud_settings_title">Чтение вслух</string>
     <string name="read_aloud_settings_playback">Воспроизведение</string>
     <string name="read_aloud_settings_sentences_per_request">Предложений за запрос</string>
-    <string name="read_aloud_settings_sentences_per_request_detail">Больше предложений — меньше запросов и пауз у медленного голоса, но дольше ожидание перед началом. Подсветка и кнопки перехода тогда перемещаются на всю группу. Действует со следующего запуска чтения вслух.</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Больше предложений — меньше пауз, но дольше ожидание начала. Действует со следующего запуска чтения вслух.</string>
     <string name="read_aloud_settings_entry_missing">Не настроено</string>
     <string name="read_aloud_settings_provider">Голосовой сервис</string>
     <string name="read_aloud_settings_provider_change">Сменить голосовой сервис</string>
@@ -1602,7 +1602,7 @@
     <string name="translation_options_context_detail">Каждое предложение отправляется вместе с частью предшествующего текста, в пределах настроек перевода. Это помогает с местоимениями и именами.</string>
     <string name="translation_options_context_gemma">TranslateGemma переводит каждое предложение отдельно и не получает предшествующий текст.</string>
     <string name="context_shared_title">Общие настройки</string>
-    <string name="context_shared_detail">Предыдущий текст и сведения о книге: это одни и те же настройки в разделах «Перевод» и «Чтение вслух». Изменение здесь действует в обоих.\n\nПредыдущий текст: предложения перед отрывком из той же главы. Они помогают модели понять, кто говорит и к чему относится местоимение. Чем больше текста, тем медленнее и иногда дороже.\n\nСведения о книге: шаблон заполняется и отправляется с каждым запросом. {language} добавляет язык книги, {percent} показывает, где в книге начинается глава.</string>
+    <string name="context_shared_detail">Общие для разделов «Перевод» и «Чтение вслух»: изменение здесь действует в обоих.\n\nПредыдущий текст: предложения перед отрывком из той же главы, чтобы модель понимала, кто говорит. Чем больше текста, тем медленнее и иногда дороже.\n\nСведения о книге: отправляются с каждым запросом. {language} — язык книги, {percent} — где в книге начинается глава.</string>
     <string name="context_shared_with_translation">Общее с переводом</string>
     <string name="context_shared_with_read_aloud">Общее с чтением вслух</string>
     <string name="context_unused">Выбранный сервис это не использует</string>
@@ -1626,7 +1626,7 @@
     <string name="translation_book_example">Пример книги</string>
     <string name="read_aloud_context_switch">Отправлять контекст книги</string>
     <string name="read_aloud_context_switch_detail">Помогает голосу с интонацией и именами</string>
-    <string name="read_aloud_context_about">С каждым запросом чтение вслух может отправлять сведения о книге и несколько предыдущих предложений из той же главы. Голос использует их, чтобы выбрать интонацию, различать персонажей и правильно произносить имена. Они никогда не зачитываются, а произносимые слова остаются словами книги, даже при чтении перевода. Это принимают только некоторые голосовые модели. Предыдущий текст и сведения о книге общие с переводом.</string>
+    <string name="read_aloud_context_about">С каждым запросом чтение вслух может отправлять сведения о книге и несколько предыдущих предложений, чтобы голос выбрал интонацию и различал персонажей и имена. Они никогда не зачитываются. Это принимают только некоторые голосовые модели. Общее с Переводом.</string>
     <string name="read_aloud_context_unavailable">Недоступно с этой голосовой моделью</string>
     <string name="read_aloud_context_unavailable_kept">Недоступно с этой голосовой моделью. Ваш выбор сохранён.</string>
     <string name="translation_options_instructions">Дополнительные инструкции</string>
@@ -1808,9 +1808,9 @@
     <string name="companion_settings_detail_detailed">Подробно</string>
     <string name="companion_settings_recaps_group">Фоновые пересказы</string>
     <string name="companion_settings_recaps">Пересказывать главы во время чтения</string>
-    <string name="companion_settings_recaps_summary">Когда вы дочитываете главу, она пересказывается в фоне, чтобы следующие поиски быстрее находили отрывки. По умолчанию выключено. Для каждой книги это можно изменить в читалке: Aa, Дополнительно.</string>
+    <string name="companion_settings_recaps_summary">Пересказывает каждую дочитанную главу в фоне, чтобы поиск работал быстрее. Для отдельной книги: Aa, Дополнительно.</string>
     <string name="companion_settings_story_auto">Дополнять сюжет самостоятельно</string>
-    <string name="companion_settings_story_auto_summary">Когда Помощник открывается на вкладке «Сюжет», пересказывает главу перед вашим местом, если у неё нет пересказа, и поддерживает краткое содержание сюжета в актуальном состоянии. Включается кнопкой «Разрешить» на вкладке «Сюжет».</string>
+    <string name="companion_settings_story_auto_summary">Когда Помощник открывается на вкладке «Сюжет», пересказывает предыдущую главу и обновляет краткое содержание сюжета.</string>
     <string name="companion_settings_privacy">Текст книги до выделенного абзаца отправляется на выбранный сервер, а при включённых фоновых пересказах — целые главы. Его поставщик может брать плату за эти запросы.</string>
     <string name="settings_backup_include_connections">Включить аккаунты, сервисы и пароли</string>
     <string name="settings_backup_connections_replace">Сохранённые аккаунты библиотеки и KOReader, настройки сервисов и учётные данные будут автоматически заменены.</string>
@@ -1827,7 +1827,7 @@
     <string name="codex_title">Помощник</string>
     <string name="codex_settings_available">Только офлайн. Подключите ИИ-сервис, чтобы получить намного больше</string>
     <string name="codex_settings_enabled">Помощник на устройстве</string>
-    <string name="codex_settings_summary">Индексирует имена и связи при открытии Помощника. Без ИИ и ключа API. Если выключено, Помощник всё равно показывает сюжет и профили персонажей от ИИ.</string>
+    <string name="codex_settings_summary">Индексирует имена и связи офлайн при открытии Помощника. Без ИИ и ключа API.</string>
     <string name="codex_ai_hint_title">С ИИ-сервисом помощник умеет намного больше</string>
     <string name="codex_ai_hint">С ИИ-сервисом помощник также пересказывает сюжет и описывает каждого персонажа по тексту книги до вашего места.</string>
     <string name="codex_ai_hint_dismiss">Больше не показывать</string>
@@ -2029,7 +2029,7 @@
     <string name="book_translation_preview_wait">Перевод…</string>
     <string name="book_translation_preview_outdated">Этот предварительный перевод устарел. Переведите отрывок ещё раз.</string>
     <string name="settings_dictionary_on_long_press">Открывать словарь долгим нажатием</string>
-    <string name="settings_dictionary_on_long_press_detail">Открывает определения, когда вы отпускаете удерживаемое слово. Чтобы найти короткую фразу, проведите пальцем, не отпуская. В карточке остаются действия с выделением. Онлайн-поиск нужно включить отдельно.</string>
+    <string name="settings_dictionary_on_long_press_detail">Удерживайте слово и отпустите палец, чтобы увидеть определение. Чтобы найти фразу, сначала проведите пальцем. Онлайн-поиск включается отдельно.</string>
     <string name="dictionary_select_text">Выделить текст</string>
     <string name="selection_copy">Копировать</string>
     <string name="selection_citation">Копировать с цитатой</string>

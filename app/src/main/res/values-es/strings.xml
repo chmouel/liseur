@@ -23,7 +23,7 @@
     </plurals>
     <string name="remove_folder">Quitar carpeta</string>
     <string name="remove_folder_a11y">Quitar %1$s</string>
-    <string name="remove_folder_warning">Liseur dejará de vigilar “%1$s”. Los libros que solo están en esta carpeta salen de tu biblioteca. Los que también están en otra carpeta vigilada o en tu servidor se quedan. No se borra ningún archivo de este dispositivo.</string>
+    <string name="remove_folder_warning">Liseur dejará de vigilar «%1$s». Los libros que solo están en esta carpeta salen de tu biblioteca. No se borra ningún archivo.</string>
     <string name="add_book_hint">Elige un solo EPUB de tu dispositivo o de tu almacenamiento en la nube.</string>
     <string name="connect_server_hint">Explora calibre-web, Komga, liseur-sync o cualquier catálogo OPDS.</string>
     <string name="search_books">Buscar libros</string>
@@ -288,12 +288,12 @@
     <string name="server_password_optional">Contraseña (opcional)</string>
     <string name="server_connect">Conectar</string>
     <string name="server_change_address">Cambiar dirección</string>
-    <string name="server_change_address_note">Conectar a otro servidor sustituye a este. Los libros que hayas descargado se quedan en el dispositivo; los que aún no hayas descargado se quitan del estante.</string>
+    <string name="server_change_address_note">Conectar otro servidor sustituye a este. Los libros descargados se quedan; el resto sale de la estantería.</string>
     <string name="server_disconnect">Desconectar</string>
     <string name="server_check_again">Comprobar de nuevo</string>
     <string name="server_try_http">Conectar sin cifrado</string>
     <string name="server_http_title">¿Conectar sin cifrado?</string>
-    <string name="server_http_warning">Este servidor usa HTTP sin cifrar. Tu usuario, tu contraseña y tu actividad de lectura pueden interceptarse, y las respuestas pueden modificarse. Úsalo solo en una red de confianza.</string>
+    <string name="server_http_warning">Este servidor usa HTTP sin cifrar: tu contraseña y tu actividad de lectura pueden interceptarse. Úsalo solo en una red de confianza.</string>
     <string name="server_http_confirm">Conectar de todos modos</string>
     <string name="server_error_credentials">Ese usuario o contraseña fue rechazado por el servidor.</string>
     <string name="server_error_credentials_komga">Esa clave API fue rechazada por el servidor. Comprueba que se copió entera y que no se ha revocado desde entonces.</string>
@@ -319,8 +319,8 @@
     <string name="server_no_download_right_custom">Este catálogo no ofrece ningún libro para descargar.</string>
     <string name="server_no_download_right_liseur_sync">Este token no puede leer la biblioteca. Genera uno nuevo con el alcance library-read, o desconecta e inicia sesión de nuevo, y comprueba otra vez.</string>
     <string name="server_no_download_right_bookorbit">Esta cuenta no puede descargar libros de BookOrbit. Un administrador puede conceder el permiso de descarga; luego comprueba otra vez.</string>
-    <string name="server_token_storage_note">El token del dispositivo se guarda en este dispositivo, cifrado. Se envía a tu servidor cada vez que Liseur habla con él. Revócalo en el servidor si pierdes el teléfono.</string>
-    <string name="server_bookorbit_storage_note">Tu contraseña no se guarda. Se canjea una vez por una sesión que Liseur renueva por su cuenta y guarda cifrada en este dispositivo. Cerrar sesión en BookOrbit la revoca.</string>
+    <string name="server_token_storage_note">Se guarda cifrado en este dispositivo. Revoca el token en el servidor si pierdes el teléfono.</string>
+    <string name="server_bookorbit_storage_note">Tu contraseña no se guarda, solo una sesión cifrada. Cerrar sesión en BookOrbit la revoca.</string>
     <string name="server_bookorbit_password_help">BookOrbit no ofrece a las apps ninguna clave aparte, así que esta es la contraseña de tu cuenta. Se canjea por una sesión de corta duración y nunca se guarda.</string>
     <string name="server_sync_on">Tu posición de lectura se sincroniza entre dispositivos.</string>
     <string name="server_sync_off">Las posiciones de lectura no se sincronizan. Puede que el servidor tenga la sincronización Kobo desactivada.</string>
@@ -332,10 +332,10 @@
     <string name="calibre_token">Token o URL de sincronización Kobo</string>
     <string name="calibre_save_token">Guardar token</string>
     <string name="calibre_token_help">Liseur suele obtenerlo por ti. Si las posiciones de lectura no se sincronizan, pega aquí la URL de sincronización Kobo de la página de perfil de calibre-web.</string>
-    <string name="server_password_storage_note">Tu contraseña se guarda en este dispositivo, cifrada. Se envía a tu servidor cada vez que Liseur habla con él, como exige este tipo de servidor.</string>
-    <string name="server_custom_storage_note">Lo que escribas aquí se guarda en este dispositivo, cifrado. La contraseña del catálogo se envía a tu catálogo cada vez que Liseur habla con él; la contraseña de sincronización KOReader nunca sale de este teléfono. Solo se envía un valor derivado de ella.</string>
-    <string name="server_custom_kosync_storage_note">Lo que escribas aquí se guarda en este dispositivo, cifrado. La contraseña de sincronización KOReader nunca sale de este teléfono. Solo se envía un valor derivado de ella.</string>
-    <string name="server_api_key_storage_note">Tu clave API se guarda en este dispositivo, cifrada. Se envía a tu servidor cada vez que Liseur habla con él. Revócala en Komga si pierdes el teléfono.</string>
+    <string name="server_password_storage_note">Se guarda cifrada en este dispositivo y se envía al servidor con cada solicitud.</string>
+    <string name="server_custom_storage_note">Se guarda cifrado en este dispositivo. La contraseña de sincronización KOReader nunca sale de él.</string>
+    <string name="server_custom_kosync_storage_note">Se guarda cifrado en este dispositivo. La contraseña de sincronización KOReader nunca sale de él.</string>
+    <string name="server_api_key_storage_note">Se guarda cifrada en este dispositivo. Revoca la clave en Komga si pierdes el teléfono.</string>
     <string name="book_on_server">En el servidor</string>
     <string name="book_not_downloaded">Este libro sigue en el servidor.</string>
     <string name="close">Cerrar</string>
@@ -414,8 +414,8 @@
         <item quantity="one">¿Descargar %1$d libro?</item>
         <item quantity="other">¿Descargar %1$d libros?</item>
     </plurals>
-    <string name="download_all_size">Unos %1$s, con %2$s libres. Es una estimación según lo que reporta el servidor, así que tómalo como aproximado.</string>
-    <string name="download_all_size_unknown">El servidor no dice lo grandes que son sus libros, así que no se sabe cuánto espacio hace falta. Tienes %1$s libres.</string>
+    <string name="download_all_size">Unos %1$s, con %2$s libres.</string>
+    <string name="download_all_size_unknown">El servidor no indica el tamaño de los libros. Tienes %1$s libres.</string>
     <string name="download_all_tight">Unos %1$s, con %2$s libres. Cabe, pero sin mucho margen.</string>
     <string name="download_all_will_not_fit">Unos %1$s, y solo %2$s libres. La descarga se detendrá cuando el dispositivo se quede corto de espacio.</string>
     <string name="download_all_start">Descargar</string>
@@ -434,10 +434,10 @@
         <item quantity="one">%1$d libro descargado · %2$s</item>
         <item quantity="other">%1$d libros descargados · %2$s</item>
     </plurals>
-    <string name="server_lost_to_restore">Se cerró la sesión de tu cuenta del servidor. Las contraseñas y las claves API se cifran con una clave que se queda en el teléfono que las guardó, así que no se pueden leer tras una restauración o un cambio a un dispositivo nuevo. Vuelve a iniciar sesión para recuperarla.</string>
+    <string name="server_lost_to_restore">Se cerró la sesión de tu cuenta del servidor. Las contraseñas y claves guardadas no se pueden leer tras una restauración ni en otro dispositivo. Vuelve a iniciar sesión.</string>
     <string name="server_sync_identity">Las posiciones se sincronizan como %1$s. La lectura hecha con otro inicio de sesión se queda en este dispositivo.</string>
     <string name="kosync_section">Sincronización KOReader</string>
-    <string name="kosync_summary_custom">Tu catálogo guarda tus libros pero no tu lugar en ellos. Empareja un servidor de sincronización KOReader (kosync) para sincronizar entre dispositivos las posiciones de lectura de los libros descargados.</string>
+    <string name="kosync_summary_custom">Empareja un servidor de sincronización KOReader (kosync) para sincronizar las posiciones de lectura de los libros descargados.</string>
     <string name="kosync_url">Dirección del servidor de sincronización</string>
     <string name="kosync_register">Crear la cuenta en el servidor</string>
     <string name="kosync_register_help_custom">Para servidores que aceptan cuentas nuevas así. Muchos no lo hacen, y sus usuarios de KOReader se crean en los propios ajustes del servidor.</string>
@@ -791,13 +791,13 @@
     <string name="settings_volume_keys_off">Desactivadas</string>
     <string name="settings_volume_keys_reversed">Invertidas</string>
     <string name="settings_tap_zones">Lados de paso de página</string>
-    <string name="settings_tap_zones_detail">Qué lados de la página la pasan al tocarlos. Con un solo lado, su mitad superior retrocede y su mitad inferior avanza, así que un pulgar hace las dos cosas, y el otro lado abre el menú. El centro y la franja superior siempre abren el menú; con Desactivados, tocar un lado no hace nada.</string>
+    <string name="settings_tap_zones_detail">Qué lados pasan página. Con un solo lado, su mitad superior retrocede y la inferior avanza.</string>
     <string name="tap_zones_both">Ambos</string>
     <string name="tap_zones_left">Solo izquierda</string>
     <string name="tap_zones_right">Solo derecha</string>
     <string name="tap_zones_off">Desactivados</string>
     <string name="settings_tap_side_width">Zona de paso de página</string>
-    <string name="settings_tap_side_width_detail">Qué parte de cada borde pasa la página al tocarla. Con bordes estrechos el centro de la página queda para el menú, así que llegar a la lectura en voz alta u otros controles no pasa la página. Ancha es la disposición original.</string>
+    <string name="settings_tap_side_width_detail">Cuánto de cada borde pasa la página. Los bordes más estrechos dejan más espacio central para el menú.</string>
     <string name="tap_side_width_wide">Ancha</string>
     <string name="tap_side_width_percent">%1$d %%</string>
     <string name="settings_page_taps">Toques en la página</string>
@@ -815,38 +815,38 @@
     <string name="page_taps_preview_left_wide">La mitad izquierda retrocede arriba y avanza abajo. La mitad derecha, la parte superior y un recuadro en el centro abren el menú.</string>
     <string name="page_taps_preview_right_wide">La mitad derecha retrocede arriba y avanza abajo. La mitad izquierda, la parte superior y un recuadro en el centro abren el menú.</string>
     <string name="settings_pinch_to_resize">Pellizcar para cambiar el tamaño del texto</string>
-    <string name="settings_pinch_to_resize_detail">Un pellizco con dos dedos en la página agranda o reduce el texto, sin abrir el menú. Desactívalo si tu forma de sostener el teléfono lo activa por accidente. Pellizcar una imagen para ampliarla sigue funcionando de cualquier modo.</string>
-    <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que redibujan demasiado despacio la vista previa del tamaño. Usa en su lugar el control deslizante de Tamaño. Pellizcar una imagen para ampliarla sigue funcionando. Desactiva Pantalla de tinta electrónica arriba si esta no es una pantalla de tinta electrónica.</string>
+    <string name="settings_pinch_to_resize_detail">Pellizca la página para agrandar o reducir el texto.</string>
+    <string name="settings_pinch_to_resize_eink">Desactivado en pantallas de tinta electrónica, que se redibujan demasiado despacio. Usa el control de Tamaño o desactiva Pantalla de tinta electrónica arriba.</string>
     <string name="settings_brightness_edge">Deslizar para el brillo</string>
-    <string name="settings_brightness_edge_detail">Desliza hacia arriba o abajo por este borde de la página para cambiar el brillo sin abrir el menú. Los toques y los pases de página que empiezan en el borde funcionan igual. Solo al pasar páginas, no al desplazarse.</string>
+    <string name="settings_brightness_edge_detail">Desliza hacia arriba o abajo por este borde para cambiar el brillo. Solo al pasar páginas, no al desplazarte.</string>
     <string name="settings_reader_orientation">Orientación de la pantalla</string>
-    <string name="settings_reader_orientation_detail">El lector gira con el teléfono, o se queda en vertical u horizontal sin importar el ajuste de rotación del sistema. No afecta a la biblioteca.</string>
+    <string name="settings_reader_orientation_detail">Sigue al teléfono o fija el lector en vertical u horizontal.</string>
     <string name="reader_orientation_auto">Auto</string>
     <string name="reader_orientation_portrait">Vertical</string>
     <string name="reader_orientation_landscape">Horizontal</string>
     <string name="settings_resume">Abrir en el libro que estabas leyendo</string>
     <string name="settings_resume_detail">Sáltate la biblioteca cuando dejaste un libro a medias.</string>
     <string name="settings_keep_screen_on">Mantener la pantalla encendida</string>
-    <string name="settings_keep_screen_on_detail">La pantalla se mantiene despierta mientras hay un libro abierto, diga lo que diga el dispositivo sobre el sueño. Gasta batería. Puedes cambiarlo para un solo libro en el lector.</string>
+    <string name="settings_keep_screen_on_detail">Mantiene la pantalla encendida mientras hay un libro abierto. Gasta más batería. Se puede cambiar por libro en el lector.</string>
     <string name="settings_scroll_mode">Leer desplazando</string>
-    <string name="settings_scroll_mode_detail">Cada capítulo es una página larga que desplazas en lugar de páginas que pasas. Puedes cambiarlo para un solo libro en el lector.</string>
+    <string name="settings_scroll_mode_detail">Cada capítulo es una página larga que se desplaza en vez de pasar páginas. Se puede cambiar por libro en el lector.</string>
     <string name="settings_lock_footer">Bloquear el pie de página</string>
     <string name="settings_lock_footer_detail">Tocar el pie de página no lo cambia durante la lectura. Una pulsación larga sigue abriendo sus opciones.</string>
     <string name="settings_eink">Pantalla de tinta electrónica</string>
-    <string name="settings_eink_detail">Desactiva las animaciones, que no se ven bien en pantallas de tinta electrónica. Liseur detecta la tinta electrónica automáticamente, pero puedes cambiarlo aquí.</string>
+    <string name="settings_eink_detail">Desactiva animaciones que se ven mal en tinta electrónica. Se detecta automáticamente.</string>
     <string name="settings_color_eink">Tinta electrónica en color</string>
     <string name="settings_color_eink_detail">Conserva acentos útiles y colores de resaltado con una paleta pequeña y fija.</string>
     <string name="eink_auto">Automático</string>
     <string name="eink_on">Activado</string>
     <string name="eink_off">Desactivado</string>
     <string name="settings_vendor_refresh">Usar el controlador de la pantalla</string>
-    <string name="settings_vendor_refresh_found">Usa el propio controlador de pantalla de %1$s para refrescar el texto. Experimental; el soporte puede variar entre dispositivos, incluso entre modelos con el mismo nombre.</string>
+    <string name="settings_vendor_refresh_found">Usa el controlador de pantalla propio de %1$s para refrescar el texto. Experimental.</string>
     <string name="settings_dictionary">Diccionario</string>
     <string name="settings_define_with">Definir con</string>
     <string name="definition_target_builtin">Integrado</string>
     <string name="definition_target_external">App externa</string>
     <string name="settings_dictionary_lookup">Buscar definiciones en línea</string>
-    <string name="settings_dictionary_lookup_detail">Desactivado por defecto. Definir una palabra la envía, junto con sus formas base enlazadas, al sitio del diccionario de abajo.</string>
+    <string name="settings_dictionary_lookup_detail">Buscar una definición envía la palabra al sitio de diccionario de abajo.</string>
     <string name="settings_dictionary_site">Sitio del diccionario</string>
     <string name="settings_dictionary_site_detail">Elige qué Wiktionary usar para las definiciones.</string>
     <string name="settings_dictionary_site_custom">Sitio personalizado…</string>
@@ -857,7 +857,7 @@
     <string name="settings_dictionary_site_ok">%1$s responde.</string>
     <string name="settings_dictionary_site_unreachable">%1$s no respondió: %2$s</string>
     <string name="settings_dictionary_alt_language">Idioma alternativo</string>
-    <string name="settings_dictionary_alt_language_detail">Añade un botón de traducción a las definiciones del diccionario, a partir de las tablas de traducción de Wiktionary. En modo automático se usa el idioma de la aplicación para libros en otro idioma. Solo las palabras en el idioma del sitio de diccionario tienen traducciones.</string>
+    <string name="settings_dictionary_alt_language_detail">Añade a las definiciones un botón de traducción, de Wiktionary. En modo automático se usa el idioma de la aplicación.</string>
     <string name="settings_dictionary_alt_language_off">Desactivado</string>
     <string name="settings_dictionary_alt_language_auto">Automático</string>
     <string name="settings_dictionary_alt_language_auto_detail">El idioma de la aplicación, para libros escritos en otro idioma</string>
@@ -871,9 +871,9 @@
     <string name="books_export_error_library">No se pudo leer la biblioteca para exportarla.</string>
     <string name="books_export_error_folder">No se pudo exportar a esta carpeta. Elige una carpeta con permiso de escritura.</string>
     <string name="settings_backup_title">Copia de seguridad y restauración</string>
-    <string name="settings_backup_detail">Guarda ajustes, fuentes personalizadas, posiciones de lectura, resaltados, notas, marcadores y resúmenes del compañero en una copia ZIP.</string>
+    <string name="settings_backup_detail">Guarda ajustes, fuentes, posiciones de lectura, anotaciones y resúmenes del compañero en una copia ZIP.</string>
     <string name="settings_backup_export">Exportar copia</string>
-    <string name="settings_backup_export_detail">Crea un archivo ZIP fechado con tus ajustes, fuentes, posiciones de lectura, anotaciones y resúmenes del compañero.</string>
+    <string name="settings_backup_export_detail">Crea un archivo ZIP fechado.</string>
     <string name="settings_backup_restore">Restaurar copia</string>
     <string name="settings_backup_restore_detail">Previsualiza una copia antes de aplicarla.</string>
     <string name="settings_backup_companion_preview">Resúmenes de capítulos: %1$d. Se añadirán los resúmenes del compañero que falten para los libros de esta biblioteca; se conservarán los existentes.</string>
@@ -913,7 +913,7 @@
     <string name="settings_backup_error_size">La copia es demasiado grande para restaurarla.</string>
     <string name="settings_backup_error_storage">No se pudo preparar la copia en el almacenamiento del dispositivo.</string>
     <string name="settings_backup_error_restore">No se pudo restaurar la copia.</string>
-    <string name="settings_backup_error_partial">Se restauró parte de la copia, pero no se pudo aplicar el resto. Revisa los ajustes, fuentes, anotaciones, posiciones de lectura, resúmenes del compañero, cuentas y servicios.</string>
+    <string name="settings_backup_error_partial">Solo se pudo restaurar parte de la copia.</string>
     <string name="settings_backup_include_stats">Incluir estadísticas de lectura</string>
     <string name="settings_backup_include_stats_detail">Sesiones de lectura detrás de la pantalla de estadísticas. Las sesiones restauradas permanecen en el dispositivo y nunca se envían a un servidor de sincronización.</string>
     <string name="settings_backup_include_books">Incluir archivos de libros</string>
@@ -975,8 +975,8 @@
         <item quantity="other">Se restauraron %1$d sesiones de lectura.</item>
     </plurals>
     <string name="settings_library_help_title">Servidores de libros</string>
-    <string name="settings_library_help_body" formatted="true">Un servidor de libros (calibre-web, Komga, liseur-sync o un catálogo OPDS) guarda tu biblioteca: Liseur la explora y descarga de ella, y mantiene tu lugar al día donde el servidor lo permite. Una conexión OPDS personalizada puede emparejarse con un servidor de sincronización KOReader para las posiciones de lectura. Solo se conecta un servidor a la vez.\n\nliseur-sync también mantiene al día los libros que solo están en este teléfono: un archivo de una tarjeta SD sincroniza también su posición. Monta el tuyo desde %1$s.</string>
-    <string name="settings_account_detail">Explora y descarga desde un servidor calibre-web, Komga, liseur-sync u OPDS, y mantén tu lugar al día (en OPDS, a través de un servidor de sincronización KOReader emparejado).</string>
+    <string name="settings_library_help_body" formatted="true">Conecta un servidor de libros (calibre-web, Komga, liseur-sync o un catálogo OPDS) para explorar, descargar y mantener tu lugar al día. Una conexión OPDS personalizada puede emparejarse con un servidor de sincronización KOReader para las posiciones de lectura.\n\nliseur-sync también sincroniza los libros que solo están en este teléfono. Monta el tuyo desde %1$s.</string>
+    <string name="settings_account_detail">Explora, descarga y sincroniza con calibre-web, Komga, BookOrbit, liseur-sync u OPDS.</string>
     <string name="settings_search">Buscar en los ajustes</string>
     <string name="settings_search_prompt">Escribe una palabra del nombre o la descripción de un ajuste.</string>
     <string name="settings_search_no_results">Ningún ajuste coincide con «%1$s».</string>
@@ -1200,7 +1200,7 @@
     <string name="reader_external_link_body">Este enlace abre %1$s en tu navegador. Liseur no lo seguirá por ti.</string>
     <string name="reader_external_link_open">Abrir</string>
     <string name="reader_external_link_failed">Ninguna app de este dispositivo puede abrir ese enlace.</string>
-    <string name="server_sync_bookorbit">Las posiciones de lectura se sincronizan en cada cambio de página para los EPUB verificados. Si otro dispositivo tiene una posición más reciente, Liseur te la ofrece mientras lees. Prevalece el último guardado en el servidor. El estado de leído y no leído también se sincroniza, pero las anotaciones no.</string>
+    <string name="server_sync_bookorbit">Las posiciones de lectura y el estado de leído se sincronizan para los EPUB verificados. Las anotaciones no.</string>
     <string name="server_sync_off_bookorbit">Las posiciones de lectura no se sincronizan con BookOrbit.</string>
     <string name="browse_libraries">Explorar bibliotecas remotas</string>
     <string name="browse_add_connection">Añadir un catálogo</string>
@@ -1324,7 +1324,7 @@
     <string name="read_aloud_settings_title">Leer en voz alta</string>
     <string name="read_aloud_settings_playback">Reproducción</string>
     <string name="read_aloud_settings_sentences_per_request">Frases por solicitud</string>
-    <string name="read_aloud_settings_sentences_per_request_detail">Más frases significan menos solicitudes y menos pausas con una voz lenta, pero una espera más larga antes de empezar. El resaltado y los botones de salto avanzan entonces por el grupo entero. Se aplica la próxima vez que empiece la lectura en voz alta.</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Más frases significan menos pausas pero más espera al empezar. Se aplica la próxima vez que empiece la lectura en voz alta.</string>
     <string name="read_aloud_settings_entry_missing">Sin configurar</string>
     <string name="read_aloud_settings_provider">Servicio de voz</string>
     <string name="read_aloud_settings_provider_change">Cambiar el servicio de voz</string>
@@ -1468,7 +1468,7 @@
     <string name="translation_options_context_detail">Cada frase se envía con parte del texto que la precede, hasta el límite de los ajustes de traducción. Esto ayuda con los pronombres y los nombres.</string>
     <string name="translation_options_context_gemma">TranslateGemma traduce cada frase por separado y nunca recibe el texto anterior.</string>
     <string name="context_shared_title">Ajustes compartidos</string>
-    <string name="context_shared_detail">El texto anterior y los datos del libro son los mismos ajustes en Traducción y Leer en voz alta. Un cambio aquí afecta a los dos.\n\nTexto anterior: las frases antes del pasaje, del mismo capítulo. Ayudan al modelo a saber quién habla y a qué se refiere un pronombre. Más texto es más lento y puede costar más.\n\nDatos del libro: la plantilla se rellena y se envía con cada solicitud. {language} añade el idioma del libro, {percent} en qué punto del libro empieza el capítulo.</string>
+    <string name="context_shared_detail">Compartido por Traducción y Leer en voz alta: un cambio aquí afecta a los dos.\n\nTexto anterior: las frases antes del pasaje, del mismo capítulo, para que el modelo sepa quién habla. Más texto es más lento y puede costar más.\n\nDatos del libro: se envían con cada solicitud. {language} es el idioma del libro, {percent} en qué punto del libro empieza el capítulo.</string>
     <string name="context_shared_with_translation">Compartido con la traducción</string>
     <string name="context_shared_with_read_aloud">Compartido con leer en voz alta</string>
     <string name="context_unused">El servicio elegido no lo usa</string>
@@ -1490,7 +1490,7 @@
     <string name="translation_book_example">Libro de ejemplo</string>
     <string name="read_aloud_context_switch">Enviar contexto del libro</string>
     <string name="read_aloud_context_switch_detail">Ayuda a la voz con el tono y los nombres</string>
-    <string name="read_aloud_context_about">Con cada solicitud, la lectura en voz alta puede enviar los datos del libro y algunas frases anteriores del mismo capítulo. La voz los usa para elegir el tono, distinguir a los personajes y pronunciar bien los nombres. Nunca se leen, y las palabras dichas siguen siendo las del libro, incluso al leer una traducción. Solo algunos modelos de voz los aceptan. El texto anterior y los datos del libro se comparten con Traducción.</string>
+    <string name="read_aloud_context_about">Con cada solicitud, la lectura en voz alta puede enviar los datos del libro y algunas frases anteriores, para que la voz elija el tono y distinga personajes y nombres. Nunca se leen. Solo algunos modelos de voz los aceptan. Compartido con Traducción.</string>
     <string name="read_aloud_context_unavailable">No disponible con este modelo de voz</string>
     <string name="read_aloud_context_unavailable_kept">No disponible con este modelo de voz. Tu elección se guarda.</string>
     <string name="translation_options_instructions">Instrucciones adicionales</string>
@@ -1668,9 +1668,9 @@
     <string name="companion_settings_detail_detailed">Detallada</string>
     <string name="companion_settings_recaps_group">Resúmenes en segundo plano</string>
     <string name="companion_settings_recaps">Resumir capítulos mientras lees</string>
-    <string name="companion_settings_recaps_summary">Cuando pasas el final de un capítulo, se resume en segundo plano para que las búsquedas posteriores encuentren pasajes antes. Desactivado por defecto. Cada libro puede cambiarlo en Aa, Avanzado, en el lector.</string>
+    <string name="companion_settings_recaps_summary">Resume cada capítulo en segundo plano al terminarlo, para búsquedas más rápidas. Cada libro puede cambiarlo en Aa, Avanzado.</string>
     <string name="companion_settings_story_auto">Completar la historia por sí sola</string>
-    <string name="companion_settings_story_auto_summary">Cuando el Compañero se abre en Historia, resume el capítulo anterior a tu posición si le falta y mantiene al día la sinopsis de la historia hasta ahora. Se activa con Permitir en la pestaña Historia.</string>
+    <string name="companion_settings_story_auto_summary">Cuando el Compañero se abre en Historia, resume el capítulo anterior y mantiene al día la historia hasta ahora.</string>
     <string name="companion_settings_privacy">El texto del libro anterior al párrafo seleccionado se envía al servidor elegido, y capítulos enteros si los resúmenes en segundo plano están activados. Su proveedor puede cobrar por estas solicitudes.</string>
     <string name="settings_backup_include_connections">Incluir cuentas, servicios y contraseñas</string>
     <string name="settings_backup_connections_replace">Las cuentas de biblioteca y KOReader, la configuración de servicios y las credenciales guardadas se reemplazarán automáticamente.</string>
@@ -1687,7 +1687,7 @@
     <string name="codex_title">Compañero</string>
     <string name="codex_settings_available">Solo sin conexión. Añade un servicio de IA para mucho más</string>
     <string name="codex_settings_enabled">Compañero en el dispositivo</string>
-    <string name="codex_settings_summary">Indexa nombres y conexiones sin conexión al abrir el Compañero. Sin IA ni clave API. Desactivado, el Compañero sigue mostrando la historia y los perfiles de personajes con IA.</string>
+    <string name="codex_settings_summary">Indexa nombres y conexiones sin conexión al abrir el Compañero. Sin IA ni clave API.</string>
     <string name="codex_ai_hint_title">El compañero hace mucho más con un servicio de IA</string>
     <string name="codex_ai_hint">Con un servicio de IA, el compañero también resume la historia y describe a cada personaje, a partir del libro hasta donde vas.</string>
     <string name="codex_ai_hint_dismiss">No volver a mostrar</string>
@@ -1879,7 +1879,7 @@
     <string name="book_translation_preview_wait">Traduciendo…</string>
     <string name="book_translation_preview_outdated">Esta vista previa está desactualizada. Vuelva a probar el pasaje.</string>
     <string name="settings_dictionary_on_long_press">Abrir el diccionario con una pulsación larga</string>
-    <string name="settings_dictionary_on_long_press_detail">Abre las definiciones al soltar una palabra mantenida. Arrastra sin soltar para buscar una expresión corta. La ficha conserva las acciones de selección. Las consultas en línea se activan por separado.</string>
+    <string name="settings_dictionary_on_long_press_detail">Mantén pulsada una palabra y levanta el dedo para ver su definición. Arrastra antes para buscar una frase. La búsqueda en línea se activa aparte.</string>
     <string name="dictionary_select_text">Seleccionar texto</string>
     <string name="selection_copy">Copiar</string>
     <string name="selection_citation">Copiar con cita</string>

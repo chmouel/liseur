@@ -28,7 +28,7 @@
     </plurals>
     <string name="remove_folder">Odebrat složku</string>
     <string name="remove_folder_a11y">Odebrat %1$s</string>
-    <string name="remove_folder_warning">Liseur přestane sledovat složku „%1$s“. Knihy, které byly pouze v této složce, zmizí z knihovny. Knihy v jiných sledovaných složkách nebo uložené na serveru zůstanou. Ze zařízení se nesmažou žádné soubory.</string>
+    <string name="remove_folder_warning">Liseur přestane sledovat „%1$s“. Knihy jen z této složky z knihovny zmizí. Žádné soubory se nesmažou.</string>
     <string name="add_book_hint">Vyber jeden soubor EPUB ze zařízení nebo cloudového úložiště.</string>
     <string name="connect_server_hint">Procházej katalogy calibre-web, Komga, liseur-sync nebo libovolný katalog OPDS.</string>
     <string name="search_books">Hledat knihy</string>
@@ -333,12 +333,12 @@
     <string name="server_password_optional">Heslo (nepovinné)</string>
     <string name="server_connect">Připojit</string>
     <string name="server_change_address">Změnit adresu</string>
-    <string name="server_change_address_note">Připojení k jinému serveru nahradí současné. Stažené knihy zůstanou v zařízení, ale knihy, které ještě stažené nejsou, zmizí z knihovny.</string>
+    <string name="server_change_address_note">Připojení k jinému serveru nahradí tento. Stažené knihy zůstanou, ostatní z police zmizí.</string>
     <string name="server_disconnect">Odpojit</string>
     <string name="server_check_again">Zkontrolovat znovu</string>
     <string name="server_try_http">Připojit bez šifrování</string>
     <string name="server_http_title">Připojit bez šifrování?</string>
-    <string name="server_http_warning">Liseur bude s tímto serverem komunikovat přes nezabezpečené HTTP. Při každém požadavku se odesílá uživatelské jméno a heslo, které může kdokoli ve stejné síti nebo po cestě k serveru přečíst. Může také zjistit, co čteš, a změnit odpovědi serveru. Používej pouze v síti, které důvěřuješ.</string>
+    <string name="server_http_warning">Tento server používá nešifrované HTTP: heslo i údaje o čtení lze zachytit. Používej ho jen v důvěryhodné síti.</string>
     <string name="server_http_confirm">Přesto se připojit</string>
     <string name="server_error_credentials">Server odmítl uživatelské jméno nebo heslo.</string>
     <string name="server_error_credentials_komga">Server odmítl klíč API. Zkontroluj, zda je zkopírovaný celý a nebyl mezitím zneplatněn.</string>
@@ -364,8 +364,8 @@
     <string name="server_no_download_right_custom">Tento katalog nenabízí žádné knihy ke stažení.</string>
     <string name="server_no_download_right_liseur_sync">Tento token nemá oprávnění číst knihovnu. Vytvoř nový token s oprávněním „library-read“ nebo se odpoj a znovu přihlas. Potom to zkontroluj znovu.</string>
     <string name="server_no_download_right_bookorbit">Tento účet možná nemá oprávnění stahovat knihy z BookOrbit. Správce může stahování povolit. Potom to zkontroluj znovu.</string>
-    <string name="server_token_storage_note">Token zařízení je v tomto zařízení uložen šifrovaně. Odesílá se serveru při každé komunikaci s Liseurem. Pokud telefon ztratíš, zneplatni token na serveru.</string>
-    <string name="server_bookorbit_storage_note">Heslo se neukládá. Jednorázově se vymění za relaci, kterou Liseur automaticky obnovuje a uchovává šifrovanou v zařízení. Odhlášení z BookOrbit ji zneplatní.</string>
+    <string name="server_token_storage_note">Ukládá se šifrovaně v tomto zařízení. Pokud telefon ztratíš, zneplatni token na serveru.</string>
+    <string name="server_bookorbit_storage_note">Heslo se neukládá, jen šifrovaná relace. Odhlášení z BookOrbit ji zneplatní.</string>
     <string name="server_bookorbit_password_help">BookOrbit neposkytuje aplikacím samostatný klíč, proto se používá heslo k účtu. Vymění se za krátkodobou relaci a nikdy se neukládá.</string>
     <string name="server_sync_on">Pozice čtení se budou synchronizovat mezi tvými zařízeními.</string>
     <string name="server_sync_off">Pozice čtení se nesynchronizují. Na serveru může být vypnutá synchronizace Kobo.</string>
@@ -377,10 +377,10 @@
     <string name="calibre_token">Token nebo URL pro synchronizaci Kobo</string>
     <string name="calibre_save_token">Uložit token</string>
     <string name="calibre_token_help">Liseur jej obvykle získá automaticky. Pokud se pozice čtení nesynchronizují, vlož sem URL pro synchronizaci Kobo ze svého profilu v calibre-web.</string>
-    <string name="server_password_storage_note">Heslo je v tomto zařízení uloženo šifrovaně. Při každé komunikaci Liseuru se serverem se odesílá, protože to tento typ serveru vyžaduje.</string>
-    <string name="server_custom_storage_note">Vše, co sem zadáš, se v tomto zařízení ukládá šifrovaně. Heslo katalogu se odesílá při každé komunikaci s katalogem. Heslo synchronizace KOReader telefon neopouští — odesílá se pouze hodnota z něj odvozená.</string>
-    <string name="server_custom_kosync_storage_note">Vše, co sem zadáš, se v tomto zařízení ukládá šifrovaně. Heslo synchronizace KOReader telefon neopouští — odesílá se pouze hodnota z něj odvozená.</string>
-    <string name="server_api_key_storage_note">Klíč API je v tomto zařízení uložen šifrovaně. Při každé komunikaci Liseuru se serverem se odesílá. Pokud telefon ztratíš, zneplatni klíč v Komga.</string>
+    <string name="server_password_storage_note">Ukládá se šifrovaně v tomto zařízení a odesílá se serveru s každým požadavkem.</string>
+    <string name="server_custom_storage_note">Ukládá se šifrovaně v tomto zařízení. Heslo synchronizace KOReader zařízení neopouští.</string>
+    <string name="server_custom_kosync_storage_note">Ukládá se šifrovaně v tomto zařízení. Heslo synchronizace KOReader zařízení neopouští.</string>
+    <string name="server_api_key_storage_note">Ukládá se šifrovaně v tomto zařízení. Pokud telefon ztratíš, zneplatni klíč v Komga.</string>
     <string name="book_on_server">Na serveru</string>
     <string name="book_not_downloaded">Tato kniha je zatím pouze na serveru.</string>
     <string name="close">Zavřít</string>
@@ -462,8 +462,8 @@
         <item quantity="many">Stáhnout %1$d knihy?</item>
         <item quantity="other">Stáhnout %1$d knih?</item>
     </plurals>
-    <string name="download_all_size">Přibližně %1$s; volné místo: %2$s. Jde o hrubý odhad podle údajů ze serveru.</string>
-    <string name="download_all_size_unknown">Server neuvádí velikost knih, takže potřebné místo nelze určit. Volné místo: %1$s.</string>
+    <string name="download_all_size">Přibližně %1$s, volné místo %2$s.</string>
+    <string name="download_all_size_unknown">Server neuvádí velikost knih. Volné místo: %1$s.</string>
     <string name="download_all_tight">Přibližně %1$s; volné místo: %2$s. Knihy se vejdou, ale nezůstane velká rezerva.</string>
     <string name="download_all_will_not_fit">Přibližně %1$s; volné místo jen %2$s. Stahování se zastaví, až začne v zařízení docházet místo.</string>
     <string name="download_all_start">Stáhnout</string>
@@ -486,10 +486,10 @@
         <item quantity="many">Staženo %1$d knihy · %2$s</item>
         <item quantity="other">Staženo %1$d knih · %2$s</item>
     </plurals>
-    <string name="server_lost_to_restore">Účet na serveru byl odhlášen. Hesla a klíče API jsou šifrovány klíčem, který nikdy neopouští původní telefon. Po obnovení zálohy nebo přenosu do jiného zařízení je proto nelze přečíst. Přihlas se znovu.</string>
+    <string name="server_lost_to_restore">Účet serveru byl odhlášen. Uložená hesla a klíče nejdou po obnovení ani na novém zařízení přečíst. Přihlas se znovu.</string>
     <string name="server_sync_identity">Pozice se synchronizují pod účtem %1$s. Čtení zaznamenané pod jiným přihlášením zůstává v tomto zařízení.</string>
     <string name="kosync_section">Synchronizace KOReader</string>
-    <string name="kosync_summary_custom">Katalog uchovává knihy, ale ne pozice čtení. Připoj synchronizační server KOReader (kosync), aby se pozice ve stažených knihách synchronizovaly mezi zařízeními.</string>
+    <string name="kosync_summary_custom">Připoj synchronizační server KOReader (kosync) pro synchronizaci pozic ve stažených knihách.</string>
     <string name="kosync_url">Adresa synchronizačního serveru</string>
     <string name="kosync_register">Vytvořit účet na serveru</string>
     <string name="kosync_register_help_custom">Pro servery, které umožňují takto zakládat účty. Mnohé to nepodporují a uživatele KOReader je nutné vytvořit přímo v nastavení serveru.</string>
@@ -867,13 +867,13 @@
     <string name="settings_volume_keys_off">Vypnuto</string>
     <string name="settings_volume_keys_reversed">Obráceně</string>
     <string name="settings_tap_zones">Strany pro listování</string>
-    <string name="settings_tap_zones_detail">Vyber, které strany obrazovky při klepnutí listují. Při ovládání jednou stranou horní polovina listuje zpět a dolní vpřed, takže obojí zvládneš jedním palcem; druhá strana otevírá nabídku. Střed a horní okraj vždy otevírají nabídku. Při vypnutí klepnutí na strany nic nedělá.</string>
+    <string name="settings_tap_zones_detail">Které strany obrazovky otáčejí stránku. U jedné strany vrací horní polovina zpět a dolní posouvá vpřed.</string>
     <string name="tap_zones_both">Obě strany</string>
     <string name="tap_zones_left">Pouze levá</string>
     <string name="tap_zones_right">Pouze pravá</string>
     <string name="tap_zones_off">Vypnuto</string>
     <string name="settings_tap_side_width">Šířka oblasti pro listování</string>
-    <string name="settings_tap_side_width_detail">Určuje, jak široká část u každého okraje při klepnutí obrací stránky. Užší oblasti ponechají střed pro otevření nabídky, takže při sahání po předčítání nebo jiných ovládacích prvcích omylem neotočíš stránku. Široká oblast odpovídá původnímu rozvržení.</string>
+    <string name="settings_tap_side_width_detail">Jak velká část okraje otáčí stránku. Užší okraje nechávají víc místa uprostřed pro nabídku.</string>
     <string name="tap_side_width_wide">Široká</string>
     <string name="tap_side_width_percent">%1$d%%</string>
     <string name="settings_page_taps">Klepnutí na stránku</string>
@@ -891,38 +891,38 @@
     <string name="page_taps_preview_left_wide">Horní polovina levé strany listuje zpět, dolní polovina vpřed. Pravá polovina, horní okraj a oblast uprostřed otevírají nabídku.</string>
     <string name="page_taps_preview_right_wide">Horní polovina pravé strany listuje zpět, dolní polovina vpřed. Levá polovina, horní okraj a oblast uprostřed otevírají nabídku.</string>
     <string name="settings_pinch_to_resize">Měnit velikost textu gestem sevření</string>
-    <string name="settings_pinch_to_resize_detail">Sevřením nebo roztažením dvou prstů na stránce zmenšíš nebo zvětšíš text bez otevírání nabídky. Vypni to, pokud gesto při držení telefonu spouštíš omylem. Zvětšování obrázků tímto gestem funguje vždy.</string>
-    <string name="settings_pinch_to_resize_eink">Na displeji s elektronickým inkoustem je funkce vypnutá, protože překresluje průběžný náhled velikosti příliš pomalu. Použij posuvník velikosti. Zvětšování obrázků gestem funguje dál. Pokud zařízení tento typ displeje nemá, vypni výše volbu E-ink displej.</string>
+    <string name="settings_pinch_to_resize_detail">Sevřením nebo roztažením prstů na stránce zvětšíš nebo zmenšíš text.</string>
+    <string name="settings_pinch_to_resize_eink">Na displeji s elektronickým inkoustem vypnuto, překresluje se příliš pomalu. Použij posuvník velikosti, nebo výše vypni E-ink displej.</string>
     <string name="settings_brightness_edge">Ovládání jasu přejetím</string>
-    <string name="settings_brightness_edge_detail">Přejetím prstem nahoru nebo dolů podél zvoleného okraje změníš jas bez otevření nabídky. Klepnutí i vodorovné listování od okraje funguje jako dřív. Platí jen při stránkování, ne při posouvání.</string>
+    <string name="settings_brightness_edge_detail">Přejetím nahoru nebo dolů podél tohoto okraje změníš jas. Jen při otáčení stránek, ne při posouvání.</string>
     <string name="settings_reader_orientation">Orientace obrazovky</string>
-    <string name="settings_reader_orientation_detail">Čtečka se otáčí s telefonem, nebo zůstává na výšku či na šířku bez ohledu na systémové nastavení otáčení obrazovky. Knihovnu toto nastavení neovlivňuje.</string>
+    <string name="settings_reader_orientation_detail">Podle natočení telefonu, nebo čtečka zamčená na výšku či na šířku.</string>
     <string name="reader_orientation_auto">Automaticky</string>
     <string name="reader_orientation_portrait">Na výšku</string>
     <string name="reader_orientation_landscape">Na šířku</string>
     <string name="settings_resume">Otevřít naposledy rozečtenou knihu</string>
     <string name="settings_resume_detail">Pokud zůstala kniha rozečtená, při spuštění se otevře rovnou místo knihovny.</string>
     <string name="settings_keep_screen_on">Nechat obrazovku zapnutou</string>
-    <string name="settings_keep_screen_on_detail">Při otevřené knize obrazovka nezhasne bez ohledu na systémové nastavení uspávání. Zvyšuje spotřebu baterie. Každá kniha může mít vlastní nastavení.</string>
+    <string name="settings_keep_screen_on_detail">Obrazovka nezhasne, dokud je otevřená kniha. Spotřebuje víc baterie. Lze změnit pro každou knihu ve čtečce.</string>
     <string name="settings_scroll_mode">Číst posouváním</string>
-    <string name="settings_scroll_mode_detail">Kapitola se zobrazí jako jedna dlouhá stránka místo jednotlivých stránek k listování. Každá kniha může mít vlastní nastavení.</string>
+    <string name="settings_scroll_mode_detail">Každá kapitola je jedna dlouhá stránka, kterou posouváš místo otáčení. Lze změnit pro každou knihu ve čtečce.</string>
     <string name="settings_lock_footer">Zamknout zápatí</string>
     <string name="settings_lock_footer_detail">Klepnutí na zápatí už při čtení nezmění jeho údaje. Dlouhým podržením stále otevřeš možnosti.</string>
     <string name="settings_eink">E-ink displej</string>
-    <string name="settings_eink_detail">Vypne animace, které elektronický inkoust místo plynulého zobrazení rozmazává. Typ displeje se rozpoznává automaticky; pokud rozpoznání selže, nastav jej ručně.</string>
+    <string name="settings_eink_detail">Vypne animace, které se na elektronickém inkoustu zobrazují špatně. Rozpozná se automaticky.</string>
     <string name="settings_color_eink">Barevný E-ink</string>
     <string name="settings_color_eink_detail">Zachovat užitečné barevné akcenty a zvýraznění pomocí malé, stálé palety.</string>
     <string name="eink_auto">Automaticky</string>
     <string name="eink_on">Zapnuto</string>
     <string name="eink_off">Vypnuto</string>
     <string name="settings_vendor_refresh">Používat řadič displeje</string>
-    <string name="settings_vendor_refresh_found">Požádá vlastní řadič displeje zařízení %1$s o překreslení stránky v textovém režimu. Experimentální: používá reflexi pro přístup k firmwaru, který se může lišit i mezi zařízeními se stejným názvem.</string>
+    <string name="settings_vendor_refresh_found">Pro obnovení textu používá vlastní řadič displeje %1$s. Experimentální.</string>
     <string name="settings_dictionary">Slovník</string>
     <string name="settings_define_with">Vyhledávat význam pomocí</string>
     <string name="definition_target_builtin">Vestavěný slovník</string>
     <string name="definition_target_external">Externí aplikace</string>
     <string name="settings_dictionary_lookup">Vyhledávat významy slov online</string>
-    <string name="settings_dictionary_lookup_detail">Ve výchozím stavu vypnuto. Při vyhledání významu slova se toto slovo a jeho související základní tvary odešlou na níže uvedený slovníkový web.</string>
+    <string name="settings_dictionary_lookup_detail">Při hledání definice se slovo odešle na slovníkový web níže.</string>
     <string name="settings_dictionary_site">Slovníkový web</string>
     <string name="settings_dictionary_site_detail">Vyber jazykovou verzi Wikislovníku, aby se významy zobrazovaly v jejím jazyce.</string>
     <string name="settings_dictionary_site_custom">Vlastní web…</string>
@@ -933,7 +933,7 @@
     <string name="settings_dictionary_site_ok">%1$s odpovídá.</string>
     <string name="settings_dictionary_site_unreachable">%1$s neodpovídá: %2$s</string>
     <string name="settings_dictionary_alt_language">Alternativní jazyk</string>
-    <string name="settings_dictionary_alt_language_detail">Přidá na kartu s definicí tlačítko pro překlady slova z překladových tabulek Wikislovníku. Automatická volba používá jazyk aplikace pro knihy napsané jiným jazykem. Překlady jsou dostupné jen pro slova v jazyce daného slovníkového webu.</string>
+    <string name="settings_dictionary_alt_language_detail">Přidá k definicím tlačítko překladu z Wikislovníku. Automatická volba používá jazyk aplikace.</string>
     <string name="settings_dictionary_alt_language_off">Vypnuto</string>
     <string name="settings_dictionary_alt_language_auto">Automaticky</string>
     <string name="settings_dictionary_alt_language_auto_detail">Jazyk aplikace pro knihy v jiném jazyce</string>
@@ -947,9 +947,9 @@
     <string name="books_export_error_library">Knihovnu se nepodařilo načíst pro export.</string>
     <string name="books_export_error_folder">Složku se nepodařilo otevřít pro export. Vyber složku s oprávněním k zápisu.</string>
     <string name="settings_backup_title">Zálohování a obnovení</string>
-    <string name="settings_backup_detail">Uložit nastavení, vlastní písma, pozice čtení, zvýraznění, poznámky, záložky a shrnutí průvodce čtením do zálohy ZIP.</string>
+    <string name="settings_backup_detail">Uložit nastavení, písma, pozice čtení, anotace a shrnutí průvodce čtením do zálohy ZIP.</string>
     <string name="settings_backup_export">Exportovat zálohu</string>
-    <string name="settings_backup_export_detail">Vytvoří datovanou zálohu ZIP obsahující nastavení, písma, pozice čtení, poznámky a zvýraznění i shrnutí průvodce čtením.</string>
+    <string name="settings_backup_export_detail">Vytvoří datovaný soubor ZIP.</string>
     <string name="settings_backup_restore">Obnovit zálohu</string>
     <string name="settings_backup_restore_detail">Před obnovením zobrazit náhled zálohy.</string>
     <string name="settings_backup_companion_preview">Shrnutí kapitol: %1$d. Chybějící shrnutí průvodce čtením se přidají pro knihy v této knihovně; existující zůstanou.</string>
@@ -1001,7 +1001,7 @@
     <string name="settings_backup_error_size">Záloha je příliš velká pro obnovení.</string>
     <string name="settings_backup_error_storage">Zálohu se nepodařilo připravit v úložišti zařízení.</string>
     <string name="settings_backup_error_restore">Zálohu se nepodařilo obnovit.</string>
-    <string name="settings_backup_error_partial">Část zálohy byla obnovena, ale zbytek se nepodařilo použít. Zkontroluj nastavení, písma, anotace, pozice čtení, shrnutí průvodce, účty a služby.</string>
+    <string name="settings_backup_error_partial">Zálohu se podařilo obnovit jen zčásti.</string>
     <string name="settings_backup_include_stats">Zahrnout statistiky čtení</string>
     <string name="settings_backup_include_stats_detail">Relace čtení za obrazovkou statistik. Obnovené relace zůstávají v zařízení a nikdy se neodesílají na synchronizační server.</string>
     <string name="settings_backup_include_books">Zahrnout soubory knih</string>
@@ -1085,8 +1085,8 @@
         <item quantity="other">Obnoveno %1$d relací čtení.</item>
     </plurals>
     <string name="settings_library_help_title">Knižní servery</string>
-    <string name="settings_library_help_body" formatted="true">Knižní server — calibre-web, Komga, liseur-sync nebo katalog OPDS — uchovává tvoji knihovnu. Liseur umožňuje knihy procházet a stahovat a tam, kde to server podporuje, synchronizuje pozice čtení. Vlastní katalog OPDS lze pro pozice čtení propojit se synchronizačním serverem KOReader. Současně může být připojen jeden server.\n\nliseur-sync navíc synchronizuje také knihy, které pocházejí jen z tohoto telefonu: i pozice v souboru z SD karty se tak přenášejí mezi zařízeními. Vlastní server si můžeš spustit z %1$s.</string>
-    <string name="settings_account_detail">Procházej a stahuj knihy ze serveru calibre-web, Komga, liseur-sync nebo OPDS a synchronizuj pozice čtení — u OPDS pomocí připojeného serveru KOReader.</string>
+    <string name="settings_library_help_body" formatted="true">Připoj jeden knižní server (calibre-web, Komga, liseur-sync nebo katalog OPDS) pro procházení, stahování a synchronizaci pozic čtení. Vlastní katalog OPDS lze pro pozice čtení propojit se synchronizačním serverem KOReader.\n\nliseur-sync synchronizuje i knihy, které jsou jen v tomto telefonu. Vlastní server si můžeš spustit z %1$s.</string>
+    <string name="settings_account_detail">Procházení, stahování a synchronizace s calibre-web, Komga, BookOrbit, liseur-sync nebo OPDS.</string>
     <string name="settings_search">Hledat v nastavení</string>
     <string name="settings_search_prompt">Zadej slovo z názvu nebo popisu nastavení.</string>
     <string name="settings_search_no_results">Žádné nastavení neodpovídá „%1$s“.</string>
@@ -1344,7 +1344,7 @@
     <string name="reader_external_link_body">Tento odkaz otevře adresu %1$s v prohlížeči. Liseur ji nebude sledovat.</string>
     <string name="reader_external_link_open">Otevřít</string>
     <string name="reader_external_link_failed">Tento odkaz neumí otevřít žádná aplikace v zařízení.</string>
-    <string name="server_sync_bookorbit">U ověřených knih EPUB se pozice synchronizují po každé stránce a během čtení se nabídnou pozice uložené jinde. Platí poslední zápis na server. Synchronizují se i označení přečteno/nepřečteno, ale ne anotace.</string>
+    <string name="server_sync_bookorbit">U ověřených knih EPUB se synchronizují pozice čtení a stav přečteno, anotace ne.</string>
     <string name="server_sync_off_bookorbit">Pozice čtení se s BookOrbit nesynchronizují.</string>
     <string name="browse_libraries">Procházet vzdálené knihovny</string>
     <string name="browse_add_connection">Přidat katalog</string>
@@ -1482,10 +1482,10 @@
     <string name="read_aloud_settings_title">Předčítání</string>
     <string name="read_aloud_settings_playback">Přehrávání</string>
     <string name="read_aloud_settings_sentences_per_request">Počet vět na požadavek</string>
-    <string name="read_aloud_settings_sentences_per_request_detail">Více vět znamená méně požadavků a méně přestávek při pomalé syntéze řeči, ale delší čekání na začátku. Zvýrazňování a přeskakování pak funguje pro celou skupinu vět. Změna se projeví při dalším spuštění předčítání.</string>
+    <string name="read_aloud_settings_sentences_per_request_detail">Víc vět znamená méně přestávek, ale delší čekání na začátku. Projeví se při dalším spuštění předčítání.</string>
     <string name="read_aloud_context_switch">Posílat kontext knihy</string>
     <string name="read_aloud_context_switch_detail">Pomáhá hlasu se správným tónem a výslovností jmen</string>
-    <string name="read_aloud_context_about">S každým požadavkem může předčítání odeslat údaje o knize a několik předchozích vět ze stejné kapitoly. Hlas podle nich vybírá tón, rozlišuje postavy a správně vyslovuje jména. Tento kontext se nepředčítá a mluvená slova zůstávají přesně podle knihy, i při čtení překladu. Podporují to jen některé hlasové modely. Předchozí text a údaje o knize se sdílejí s nastavením Překladu.</string>
+    <string name="read_aloud_context_about">S každým požadavkem může předčítání odeslat údaje o knize a několik předchozích vět, aby hlas zvolil správný tón a rozlišil postavy a jména. Nikdy se nepředčítají. Podporují to jen některé hlasové modely. Sdíleno s Překladem.</string>
     <string name="read_aloud_context_unavailable">Tento hlasový model funkci nepodporuje</string>
     <string name="read_aloud_context_unavailable_kept">Tento hlasový model funkci nepodporuje. Tvoje volba zůstane uložena.</string>
     <string name="read_aloud_settings_entry_missing">Nenastaveno</string>
@@ -1639,7 +1639,7 @@
     <string name="translation_options_context_detail">Při překladu stránky dostane model s každou větou i část předchozího textu knihy podle nastavení Překladu. Pomáhá to správně překládat zájmena a jména.</string>
     <string name="translation_options_context_gemma">TranslateGemma překládá každou větu samostatně a nikdy nedostává předchozí text.</string>
     <string name="context_shared_title">Sdílená nastavení</string>
-    <string name="context_shared_detail">Předchozí text a údaje o knize jsou společná nastavení Překladu a Předčítání. Změna se projeví u obou.\n\nPředchozí text: věty před překládanou pasáží ze stejné kapitoly. Pomáhají modelu určit, kdo mluví a ke komu se vztahují zájmena. Více textu znamená pomalejší zpracování a možné vyšší náklady.\n\nÚdaje o knize: šablona se před každým požadavkem vyplní a odešle. {language} doplní jazyk knihy, {percent} údaj, jak daleko v knize kapitola začíná.</string>
+    <string name="context_shared_detail">Společné pro Překlad a Předčítání: změna se projeví u obou.\n\nPředchozí text: věty před pasáží ze stejné kapitoly, aby model věděl, kdo mluví. Více textu je pomalejší a může stát víc.\n\nÚdaje o knize: odesílají se s každým požadavkem. {language} je jazyk knihy, {percent} jak daleko v knize kapitola začíná.</string>
     <string name="context_shared_with_translation">Sdíleno s překladem</string>
     <string name="context_shared_with_read_aloud">Sdíleno s předčítáním</string>
     <string name="context_unused">Vybraná služba to nepoužívá</string>
@@ -1840,9 +1840,9 @@
     <string name="companion_settings_detail_detailed">Podrobné</string>
     <string name="companion_settings_recaps_group">Shrnutí na pozadí</string>
     <string name="companion_settings_recaps">Shrnovat kapitoly během čtení</string>
-    <string name="companion_settings_recaps_summary">Jakmile dočteš kapitolu, na pozadí se vytvoří její shrnutí, aby pozdější hledání rychleji nacházelo pasáže. Ve výchozím stavu vypnuto. Pro jednotlivé knihy lze změnit v nabídce Aa → Pokročilé.</string>
+    <string name="companion_settings_recaps_summary">Po dočtení kapitoly se na pozadí vytvoří její shrnutí pro rychlejší hledání. Pro jednotlivé knihy v nabídce Aa → Pokročilé.</string>
     <string name="companion_settings_story_auto">Automaticky doplňovat příběh</string>
-    <string name="companion_settings_story_auto_summary">Při otevření záložky Příběh v Průvodci se shrne předchozí kapitola, pokud ještě nemá shrnutí, a aktualizuje se přehled dosavadního děje. Zapne se po volbě Povolit na záložce Příběh.</string>
+    <string name="companion_settings_story_auto_summary">Při otevření záložky Příběh v Průvodci shrne předchozí kapitolu a aktualizuje dosavadní děj.</string>
     <string name="companion_settings_privacy">Text knihy před vybraným odstavcem se odesílá na vybraný server; při zapnutém shrnování na pozadí se odesílají celé kapitoly. Poskytovatel může za požadavky účtovat poplatky.</string>
     <string name="settings_backup_include_connections">Zahrnout účty, služby a hesla</string>
     <string name="settings_backup_connections_replace">Uložené účty knihoven a KOReader, nastavení služeb a přihlašovací údaje budou automaticky nahrazeny.</string>
@@ -1859,7 +1859,7 @@
     <string name="codex_title">Průvodce</string>
     <string name="codex_settings_available">Zatím jen offline. Se službou AI zvládne Průvodce mnohem víc.</string>
     <string name="codex_settings_enabled">Průvodce v zařízení</string>
-    <string name="codex_settings_summary">Při otevření Průvodce offline vytvoří rejstřík jmen a vztahů. Není potřeba AI ani klíč API. Po vypnutí Průvodce stále zobrazuje Příběh a profily postav vytvořené pomocí AI.</string>
+    <string name="codex_settings_summary">Při otevření Průvodce offline vytvoří rejstřík jmen a vztahů. Bez AI a klíče API.</string>
     <string name="codex_ai_hint_title">Se službou AI toho Průvodce zvládne mnohem víc</string>
     <string name="codex_ai_hint">Se službou AI dokáže Průvodce také shrnovat děj a popisovat jednotlivé postavy podle textu knihy až po místo, kde právě čteš.</string>
     <string name="codex_ai_hint_dismiss">Znovu nezobrazovat</string>
@@ -2061,7 +2061,7 @@
     <string name="book_translation_preview_wait">Překládání…</string>
     <string name="book_translation_preview_outdated">Tento náhled je zastaralý. Zkus pasáž znovu.</string>
     <string name="settings_dictionary_on_long_press">Při dlouhém podržení otevřít slovník</string>
-    <string name="settings_dictionary_on_long_press_detail">Když podržíš slovo, otevřou se přímo jeho definice. Na kartě s definicí zůstanou akce s výběrem textu. Online vyhledávání je třeba zapnout zvlášť.</string>
+    <string name="settings_dictionary_on_long_press_detail">Podrž slovo a zvedni prst, zobrazí se definice. Tažením předtím vyhledáš frázi. Online vyhledávání se zapíná zvlášť.</string>
     <string name="dictionary_select_text">Vybrat text</string>
     <string name="selection_copy">Kopírovat</string>
     <string name="selection_citation">Kopírovat s citací</string>
