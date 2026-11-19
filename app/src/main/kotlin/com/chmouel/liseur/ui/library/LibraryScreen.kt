@@ -174,6 +174,7 @@ import com.chmouel.liseur.ui.navigation.mainTabBarSpace
 import com.chmouel.liseur.ui.navigation.rememberMainTabsState
 import com.chmouel.liseur.ui.messageRes
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import com.chmouel.liseur.data.db.Book
 import com.chmouel.liseur.data.db.RefusedBytes
 import com.chmouel.liseur.data.db.UploadRefusal
@@ -197,8 +198,13 @@ import com.chmouel.liseur.ui.libraryBarHeight
 import com.chmouel.liseur.ui.windowWidth
 import com.chmouel.liseur.ui.withoutBottom
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.chmouel.liseur.domain.searchMatchRanges
 import com.chmouel.liseur.domain.seriesKey
+import com.chmouel.liseur.vocabulary.Recall
+import com.chmouel.liseur.vocabulary.formatInterval
+import com.chmouel.liseur.vocabulary.rememberIntervalFormat
+import com.chmouel.liseur.vocabulary.scheduleVocabulary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -270,6 +276,9 @@ fun LibraryScreen(
     /** A vocabulary word due for review, shown on Home. */
     homeVocabulary: com.chmouel.liseur.vocabulary.HomeVocabulary? = null,
     onReviewVocabulary: () -> Unit = {},
+    /** Rates the Home word; answers how to take the rating back, or null when it was not taken. */
+    onRateVocabulary: suspend (com.chmouel.liseur.vocabulary.HomeVocabulary, Recall) -> (suspend () -> Unit)? =
+        { _, _ -> null },
     onSetSearchActive: (Boolean) -> Unit = {},
     onSeriesSelected: (SeriesShelf) -> Unit = {},
     onStartWithFreeBooks: () -> Unit = {},
@@ -347,6 +356,34 @@ fun LibraryScreen(
                 )
                 if (result == SnackbarResult.ActionPerformed) onConnectServer()
             }
+        }
+    }
+    val intervals = rememberIntervalFormat()
+    // A word rated on Home can be taken back from the snackbar. A newer
+    // rating replaces it, so Undo always means the last word. The card that
+    // asked may scroll away mid-save, so the rating and its Undo still land.
+    val rateVocabulary: suspend (com.chmouel.liseur.vocabulary.HomeVocabulary, Recall) -> Boolean = { word, recall ->
+        withContext(NonCancellable) {
+            val undo = try {
+                onRateVocabulary(word, recall)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                scope.launch { snackbarHost.showSnackbar(resources.getString(R.string.vocabulary_error)) }
+                null
+            }
+            if (undo != null) {
+                snackbarHost.currentSnackbarData?.dismiss()
+                val next = intervals.formatInterval(scheduleVocabulary(word.streak, recall, 0).intervalMinutes)
+                scope.launch {
+                    val result = snackbarHost.showSnackbar(
+                        message = resources.getString(R.string.vocabulary_next_review, word.word, next),
+                        actionLabel = resources.getString(R.string.undo),
+                    )
+                    if (result == SnackbarResult.ActionPerformed) undo()
+                }
+            }
+            undo != null
         }
     }
     val eInk = LocalEInk.current
@@ -1015,6 +1052,7 @@ fun LibraryScreen(
                         vocabulary = homeVocabulary,
                         onOpenVocabulary = onOpenVocabulary,
                         onReviewVocabulary = onReviewVocabulary,
+                        onRateVocabulary = rateVocabulary,
                         listState = homeState,
                         onBookSelected = openShelfBook,
                         onBookLongPress = { sheetBook = it },

@@ -1,20 +1,26 @@
 package com.chmouel.liseur.vocabulary
 
-import android.icu.text.MeasureFormat
-import android.icu.util.Measure
-import android.icu.util.MeasureUnit
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,7 +33,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,8 +55,7 @@ internal fun VocabularyReviewScreen(
     val context = LocalContext.current
     val word = queue.card
     var undo by remember { mutableStateOf<VocabularyReviewUndo?>(null) }
-    val locale = LocalConfiguration.current.locales[0]
-    val duration = remember(locale) { MeasureFormat.getInstance(locale, MeasureFormat.FormatWidth.SHORT) }
+    val duration = rememberIntervalFormat()
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -73,58 +77,108 @@ internal fun VocabularyReviewScreen(
             key(word.id, word.repetitions) {
                 var revealed by rememberSaveable { mutableStateOf(false) }
                 var submitting by remember { mutableStateOf(false) }
-                Text(word.word, style = MaterialTheme.typography.headlineLarge)
+                var flying by remember { mutableStateOf(false) }
+                suspend fun rate(rating: Recall): Boolean {
+                    if (submitting) return false
+                    submitting = true
+                    return try {
+                        val done = repository.review(word, rating, newLimit, reviewLimit)
+                        if (done != null) undo = done
+                        done != null
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
+                        false
+                    } finally {
+                        submitting = false
+                    }
+                }
+                var expanded by rememberSaveable { mutableStateOf(false) }
+                var overflowing by remember { mutableStateOf(false) }
+                val shape = RoundedCornerShape(20.dp)
+                SwipeDeck(
+                    depth = (queue.dueCount - 1).coerceIn(0, 2),
+                    layers = MaterialTheme.colorScheme.surfaceContainerHighest to
+                        MaterialTheme.colorScheme.surfaceContainerHigh,
+                    shape = shape,
+                    enabled = revealed && !submitting,
+                    thresholds = ReviewSwipe,
+                    streak = word.streak,
+                    onSwipe = ::rate,
+                    onFlight = { flying = it },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { swipes, actions ->
+                    Surface(
+                        shape = shape,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        shadowElevation = 2.dp,
+                        onClick = { revealed = true },
+                        modifier = actions.fillMaxWidth().heightIn(min = 180.dp),
+                    ) {
+                        Column(
+                            Modifier.padding(horizontal = 24.dp, vertical = 28.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(word.word, style = MaterialTheme.typography.headlineLarge)
+                            if (revealed) {
+                                Text(
+                                    word.definition ?: stringResource(R.string.vocabulary_no_definition),
+                                    maxLines = if (expanded) Int.MAX_VALUE else 6,
+                                    overflow = TextOverflow.Ellipsis,
+                                    onTextLayout = { if (!expanded) overflowing = it.hasVisualOverflow },
+                                )
+                                if (swipes) {
+                                    Text(
+                                        stringResource(R.string.vocabulary_swipe_hint),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    stringResource(R.string.vocabulary_tap_to_reveal),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
                 if (revealed) {
                     val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
                         .collectAsStateWithLifecycle(emptyList())
                     val passage = occurrences.firstOrNull { (bookUrl == null || it.bookUrl == bookUrl) && !it.sentence.isNullOrBlank() }
-                    var expanded by rememberSaveable { mutableStateOf(false) }
-                    var overflowing by remember { mutableStateOf(false) }
-                    SelectionContainer {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                word.definition ?: stringResource(R.string.vocabulary_no_definition),
-                                maxLines = if (expanded) Int.MAX_VALUE else 6,
-                                overflow = TextOverflow.Ellipsis,
-                                onTextLayout = { if (!expanded) overflowing = it.hasVisualOverflow },
-                            )
-                            if (word.notes.isNotBlank()) Text(word.notes)
-                            passage?.sentence?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                        }
-                    }
                     if (overflowing || expanded) {
                         TextButton(onClick = { expanded = !expanded }) {
                             Text(stringResource(if (expanded) R.string.annotation_show_less else R.string.annotation_show_more))
                         }
                     }
+                    if (word.notes.isNotBlank() || passage?.sentence != null) {
+                        SelectionContainer {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (word.notes.isNotBlank()) Text(word.notes)
+                                passage?.sentence?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                            }
+                        }
+                    }
                     FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((rating, label) in recallButtons) {
                             val interval = scheduleVocabulary(word.streak, rating, 0).intervalMinutes
-                            val measure = when {
-                                interval % 1440 == 0 -> Measure(interval / 1440, MeasureUnit.DAY)
-                                interval % 60 == 0 -> Measure(interval / 60, MeasureUnit.HOUR)
-                                else -> Measure(interval, MeasureUnit.MINUTE)
-                            }
                             OutlinedButton(
-                                enabled = !submitting,
-                                onClick = {
-                                    submitting = true
-                                    scope.launch {
-                                        try {
-                                            undo = repository.review(word, rating, newLimit, reviewLimit) ?: undo
-                                        } catch (error: CancellationException) {
-                                            throw error
-                                        } catch (_: Exception) {
-                                            Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
-                                        } finally {
-                                            submitting = false
-                                        }
-                                    }
-                                },
+                                enabled = !submitting && !flying,
+                                onClick = { scope.launch { rate(rating) } },
                             ) {
+                                if (rating == Recall.AGAIN) {
+                                    Icon(Icons.Outlined.ChevronLeft, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
                                 Column {
                                     Text(stringResource(label))
-                                    Text(duration.format(measure), style = MaterialTheme.typography.labelSmall)
+                                    Text(duration.formatInterval(interval), style = MaterialTheme.typography.labelSmall)
+                                }
+                                if (rating == Recall.GOOD) {
+                                    Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }

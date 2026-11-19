@@ -87,7 +87,9 @@ translated sentence by sentence as you read.
 Tap **Save to vocabulary** in the dictionary to keep the word, its definition,
 and the passage where you found it. Open **Vocabulary Builder** from the
 library menu to review words offline, or from a book’s **Notes** to see its
-words and return to their passages. The vocabulary menu can export a JSON
+words and return to their passages. Tap a review card to see the answer,
+then swipe it left for Again or right for Good, either in the review or on
+Home's **Words to review** card. The vocabulary menu can export a JSON
 backup or an Anki-compatible CSV. Dictionary settings control automatic
 saving, and Vocabulary settings offer daily limits and reminders.
 

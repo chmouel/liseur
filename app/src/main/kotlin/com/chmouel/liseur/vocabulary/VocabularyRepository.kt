@@ -166,6 +166,8 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
                     sentence = source?.sentence?.takeIf(String::isNotBlank),
                     bookTitle = source?.bookTitle?.takeIf(String::isNotBlank),
                     dueCount = queue.dueCount,
+                    streak = word.streak,
+                    repetitions = word.repetitions,
                 )
             }
             .distinctUntilChanged()
@@ -194,6 +196,12 @@ internal class VocabularyRepository(private val database: LiseurDatabase) {
             intervalMinutes = next.intervalMinutes, dueAt = next.dueAt, firstReview = first,
         ))
         VocabularyReviewUndo(id, word)
+    }
+
+    /** Rates the word Home shows, unless it has been reviewed since Home read it. */
+    suspend fun review(home: HomeVocabulary, rating: Recall, newLimit: Int, reviewLimit: Int): VocabularyReviewUndo? {
+        val card = dao.word(home.id)?.takeIf { it.repetitions == home.repetitions } ?: return null
+        return review(card, rating, newLimit, reviewLimit)
     }
 
     suspend fun undoReview(undo: VocabularyReviewUndo) = database.withTransaction {
@@ -235,4 +243,6 @@ data class HomeVocabulary(
     val sentence: String?,
     val bookTitle: String?,
     val dueCount: Int,
+    val streak: Int,
+    val repetitions: Int,
 )

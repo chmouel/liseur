@@ -629,6 +629,13 @@ class LibraryViewModel(
     /** The vocabulary word due for review, for Home, given the daily new and review limits. */
     private val vocabularyCard: (newLimit: Int, reviewLimit: Int) -> Flow<com.chmouel.liseur.vocabulary.HomeVocabulary?> =
         { _, _ -> flowOf(null) },
+    /** Rates the Home word within the daily limits; answers how to take it back, or null when not taken. */
+    private val rateVocabulary: suspend (
+        com.chmouel.liseur.vocabulary.HomeVocabulary,
+        com.chmouel.liseur.vocabulary.Recall,
+        newLimit: Int,
+        reviewLimit: Int,
+    ) -> (suspend () -> Unit)? = { _, _, _, _ -> null },
     /**
      * Reading aloud, for the shelf's Continue listening row. Asked for
      * only once a paused listening exists, so the shelf does not reach
@@ -1308,6 +1315,14 @@ class LibraryViewModel(
             .distinctUntilChanged()
             .flatMapLatest { limits -> limits?.let { (new, reviews) -> vocabularyCard(new, reviews) } ?: flowOf(null) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    suspend fun rateHomeVocabulary(
+        word: com.chmouel.liseur.vocabulary.HomeVocabulary,
+        rating: com.chmouel.liseur.vocabulary.Recall,
+    ): (suspend () -> Unit)? {
+        val settings = appSettings.settings.first()
+        return rateVocabulary(word, rating, settings.vocabularyNewLimit, settings.vocabularyReviewLimit)
+    }
 
     fun anotherQuote() {
         viewModelScope.launch { homeQuotes?.another() }
@@ -2137,6 +2152,10 @@ class LibraryViewModel(
                         readingSessions = container.database.readingSessionDao().observeAll(),
                         homeQuotes = container.homeQuotes,
                         vocabularyCard = container.vocabulary::homeCard,
+                        rateVocabulary = { word, rating, newLimit, reviewLimit ->
+                            container.vocabulary.review(word, rating, newLimit, reviewLimit)
+                                ?.let { undo -> { container.vocabulary.undoReview(undo) } }
+                        },
                         readAloud = { container.readAloud },
                         pausedListening = container.pausedListening,
                         savedState = createSavedStateHandle(),

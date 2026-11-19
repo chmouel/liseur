@@ -2054,7 +2054,7 @@
     <string name="home_vocabulary_title">Mots à réviser</string>
     <string name="home_vocabulary_setting_detail">Affiche un mot de votre vocabulaire quand il est à revoir</string>
     <string name="home_vocabulary_from">tiré de %1$s</string>
-    <string name="home_vocabulary_open">ouvrir le vocabulaire</string>
+    <string name="home_vocabulary_review">commencer la révision</string>
     <string name="home_time_left_minutes">~%d min restantes</string>
     <string name="home_time_left_hours">~%1$d h %2$d min restantes</string>
     <string name="home_page_of">Page %1$d sur %2$d</string>
@@ -2146,6 +2146,9 @@
     <string name="vocabulary_review_progress">%1$d révisés aujourd’hui · %2$d restants</string>
     <string name="vocabulary_review_done">C’est fini pour l’instant.</string>
     <string name="vocabulary_reveal">Afficher la réponse</string>
+    <string name="vocabulary_tap_to_reveal">Touchez la carte pour voir la réponse</string>
+    <string name="vocabulary_swipe_hint">Glissez à gauche pour Encore, à droite pour Bien</string>
+    <string name="vocabulary_next_review">%1$s revient dans %2$s</string>
     <string name="vocabulary_again">Encore</string>
     <string name="vocabulary_hard">Difficile</string>
     <string name="vocabulary_good">Bien</string>

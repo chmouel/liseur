@@ -2204,7 +2204,7 @@
     <string name="home_vocabulary_title">Слова для повторения</string>
     <string name="home_vocabulary_setting_detail">Показывает слово из словаря для изучения, когда его пора повторить</string>
     <string name="home_vocabulary_from">из книги %1$s</string>
-    <string name="home_vocabulary_open">открыть словарь для изучения</string>
+    <string name="home_vocabulary_review">начать повторение</string>
     <string name="home_time_left_minutes">Осталось ~%d мин</string>
     <string name="home_time_left_hours">Осталось ~%1$d ч %2$d мин</string>
     <string name="home_page_of">Страница %1$d из %2$d</string>
@@ -2308,6 +2308,9 @@
     <string name="vocabulary_review_progress">Сегодня повторено: %1$d · осталось: %2$d</string>
     <string name="vocabulary_review_done">На сегодня пока всё.</string>
     <string name="vocabulary_reveal">Показать ответ</string>
+    <string name="vocabulary_tap_to_reveal">Нажмите на карточку, чтобы увидеть ответ</string>
+    <string name="vocabulary_swipe_hint">Смахните влево — «Снова», вправо — «Хорошо»</string>
+    <string name="vocabulary_next_review">%1$s вернётся через %2$s</string>
     <string name="vocabulary_again">Снова</string>
     <string name="vocabulary_hard">Трудно</string>
     <string name="vocabulary_good">Хорошо</string>

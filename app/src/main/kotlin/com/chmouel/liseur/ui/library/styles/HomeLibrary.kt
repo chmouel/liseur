@@ -32,6 +32,8 @@ import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.ChevronLeft
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MoreHoriz
@@ -51,7 +53,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -92,6 +97,7 @@ import com.chmouel.liseur.domain.displayTitle
 import com.chmouel.liseur.domain.seriesIndexLabel
 import com.chmouel.liseur.ui.LocalEInk
 import com.chmouel.liseur.ui.WidthClass
+import com.chmouel.liseur.ui.rememberMotionRemoved
 import com.chmouel.liseur.ui.library.BookCover
 import com.chmouel.liseur.ui.library.ContinueReading
 import com.chmouel.liseur.ui.library.HeroDetail
@@ -100,8 +106,12 @@ import com.chmouel.liseur.ui.theme.HomePalette
 import com.chmouel.liseur.ui.theme.TileTint
 import com.chmouel.liseur.ui.theme.homePalette
 import com.chmouel.liseur.ui.widthClass
+import com.chmouel.liseur.vocabulary.HomeSwipe
 import com.chmouel.liseur.vocabulary.HomeVocabulary
+import com.chmouel.liseur.vocabulary.Recall
+import com.chmouel.liseur.vocabulary.SwipeDeck
 import kotlin.math.ceil
+import kotlinx.coroutines.launch
 
 /**
  * The Home tab: a short desk about the book being read and what comes
@@ -131,6 +141,7 @@ internal fun HomeLibrary(
     vocabulary: HomeVocabulary? = null,
     onOpenVocabulary: () -> Unit = {},
     onReviewVocabulary: () -> Unit = {},
+    onRateVocabulary: suspend (HomeVocabulary, Recall) -> Boolean = { _, _ -> false },
     /** The shelf's Continue listening row, drawn above everything else. */
     header: (@Composable () -> Unit)? = null,
 ) {
@@ -253,19 +264,27 @@ internal fun HomeLibrary(
             }
         }
         if (vocabulary != null) {
-            item(key = "home:vocabulary:${vocabulary.id}") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = gutter) {
+            item(key = "home:vocabulary") {
+                val still = LocalEInk.current || rememberMotionRemoved()
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = gutter.then(
+                        if (still) Modifier else Modifier.animateItem(),
+                    ),
+                ) {
                     HomeSectionHeader(
                         text = stringResource(R.string.home_vocabulary_title),
                         actionText = stringResource(R.string.home_see_all),
                         onAction = onOpenVocabulary,
                     )
-                    VocabularyCard(
-                        word = vocabulary,
-                        onOpen = onOpenVocabulary,
-                        onReview = onReviewVocabulary,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    key(vocabulary.id, vocabulary.repetitions) {
+                        VocabularyCard(
+                            word = vocabulary,
+                            onReview = onReviewVocabulary,
+                            onRate = onRateVocabulary,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
         }
@@ -439,14 +458,15 @@ private fun QuoteCard(
 
 /**
  * A word due for review, drawn as the top card of a small deck so it does
- * not read as another quote. The meaning stays hidden until asked for: the
- * review opens on this same word.
+ * not read as another quote. The meaning stays hidden until the card is
+ * tapped; once shown, the word can be swiped left for Again or right for
+ * Good, rated with the buttons, or reviewed with the rest by tapping again.
  */
 @Composable
 private fun VocabularyCard(
     word: HomeVocabulary,
-    onOpen: () -> Unit,
     onReview: () -> Unit,
+    onRate: suspend (HomeVocabulary, Recall) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val eInk = LocalEInk.current
@@ -454,30 +474,37 @@ private fun VocabularyCard(
     val tint = palette?.series
     val shape = RoundedCornerShape(18.dp)
     val ink = tint?.content ?: MaterialTheme.colorScheme.onSurface
-    Box(modifier) {
-        if (tint != null) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .padding(horizontal = 28.dp)
-                    .background(tint.glow.copy(alpha = 0.55f), shape),
-            )
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .padding(top = 5.dp, start = 14.dp, end = 14.dp)
-                    .background(tint.glow, shape),
-            )
+    val scope = rememberCoroutineScope()
+    var revealed by rememberSaveable { mutableStateOf(false) }
+    var rating by remember { mutableStateOf(false) }
+    var flying by remember { mutableStateOf(false) }
+    suspend fun rate(recall: Recall): Boolean {
+        if (rating) return false
+        rating = true
+        return try {
+            onRate(word, recall)
+        } finally {
+            rating = false
         }
+    }
+    SwipeDeck(
+        depth = (word.dueCount - 1).coerceIn(0, 2),
+        layers = tint?.let { it.glow to it.glow.copy(alpha = 0.55f) },
+        shape = shape,
+        enabled = revealed && !rating,
+        thresholds = HomeSwipe,
+        streak = word.streak,
+        onSwipe = ::rate,
+        onFlight = { flying = it },
+        modifier = modifier,
+    ) { swipes, actions ->
         DeskCard(
-            onClick = onOpen,
-            onClickLabel = stringResource(R.string.home_vocabulary_open),
+            onClick = { if (revealed) onReview() else revealed = true },
+            onClickLabel = stringResource(if (revealed) R.string.home_vocabulary_review else R.string.vocabulary_reveal),
             shape = shape,
             color = tint?.container,
             borderColor = tint?.glow,
-            modifier = Modifier
-                .padding(top = if (tint != null) 10.dp else 0.dp)
-                .fillMaxWidth(),
+            modifier = actions.fillMaxWidth(),
         ) {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -512,7 +539,6 @@ private fun VocabularyCard(
                         modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                var revealed by rememberSaveable { mutableStateOf(false) }
                 if (revealed) {
                     Text(
                         text = word.definition ?: stringResource(R.string.vocabulary_no_definition),
@@ -521,11 +547,32 @@ private fun VocabularyCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 10.dp),
                     )
+                    if (swipes) {
+                        Text(
+                            text = stringResource(R.string.vocabulary_swipe_hint),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
                 }
+                val accent = ButtonDefaults.textButtonColors(
+                    contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
+                )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 14.dp).fillMaxWidth(),
                 ) {
+                    if (revealed) {
+                        TextButton(onClick = { scope.launch { rate(Recall.AGAIN) } }, enabled = !rating && !flying, colors = accent) {
+                            Icon(Icons.Outlined.ChevronLeft, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(stringResource(R.string.vocabulary_again))
+                        }
+                        TextButton(onClick = { scope.launch { rate(Recall.GOOD) } }, enabled = !rating && !flying, colors = accent) {
+                            Text(stringResource(R.string.vocabulary_good))
+                            Icon(Icons.Outlined.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
+                        }
+                    }
                     Button(
                         onClick = onReview,
                         colors = if (tint != null) {
@@ -541,12 +588,7 @@ private fun VocabularyCard(
                         )
                     }
                     if (!revealed) {
-                        TextButton(
-                            onClick = { revealed = true },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (eInk) MaterialTheme.colorScheme.onSurface else ink,
-                            ),
-                        ) {
+                        TextButton(onClick = { revealed = true }, colors = accent) {
                             Text(stringResource(R.string.vocabulary_reveal))
                         }
                     }

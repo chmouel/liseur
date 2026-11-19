@@ -2236,7 +2236,7 @@
     <string name="home_vocabulary_title">Slova k opakování</string>
     <string name="home_vocabulary_setting_detail">Zobrazí slovíčko, když je na řadě k opakování</string>
     <string name="home_vocabulary_from">z knihy %1$s</string>
-    <string name="home_vocabulary_open">otevřít slovíčka</string>
+    <string name="home_vocabulary_review">spustit opakování</string>
     <string name="home_time_left_minutes">zbývá ~%d min</string>
     <string name="home_time_left_hours">zbývá ~%1$d h %2$d min</string>
     <string name="home_page_of">Strana %1$d z %2$d</string>
@@ -2340,6 +2340,9 @@
     <string name="vocabulary_review_progress">Dnes zopakováno: %1$d · zbývá: %2$d</string>
     <string name="vocabulary_review_done">Prozatím máte hotovo.</string>
     <string name="vocabulary_reveal">Zobrazit odpověď</string>
+    <string name="vocabulary_tap_to_reveal">Klepnutím na kartu zobrazíte odpověď</string>
+    <string name="vocabulary_swipe_hint">Přejeďte doleva pro Znovu, doprava pro Dobré</string>
+    <string name="vocabulary_next_review">%1$s se vrátí za %2$s</string>
     <string name="vocabulary_again">Znovu</string>
     <string name="vocabulary_hard">Těžké</string>
     <string name="vocabulary_good">Dobré</string>

@@ -2066,7 +2066,7 @@
     <string name="home_vocabulary_title">Wörter zum Wiederholen</string>
     <string name="home_vocabulary_setting_detail">Zeigt ein Wort aus dem Vokabeltrainer, wenn es fällig ist</string>
     <string name="home_vocabulary_from">aus %1$s</string>
-    <string name="home_vocabulary_open">Vokabeltrainer öffnen</string>
+    <string name="home_vocabulary_review">Wiederholung starten</string>
     <string name="home_time_left_minutes">Noch ~%d Min.</string>
     <string name="home_time_left_hours">Noch ~%1$d Std. %2$d Min.</string>
     <string name="home_page_of">Seite %1$d von %2$d</string>
@@ -2158,6 +2158,9 @@
     <string name="vocabulary_review_progress">%1$d heute wiederholt · %2$d übrig</string>
     <string name="vocabulary_review_done">Fürs Erste bist du fertig.</string>
     <string name="vocabulary_reveal">Antwort zeigen</string>
+    <string name="vocabulary_tap_to_reveal">Tippe auf die Karte, um die Antwort zu sehen</string>
+    <string name="vocabulary_swipe_hint">Nach links wischen für Nochmal, nach rechts für Gut</string>
+    <string name="vocabulary_next_review">%1$s kommt in %2$s wieder</string>
     <string name="vocabulary_again">Nochmal</string>
     <string name="vocabulary_hard">Schwer</string>
     <string name="vocabulary_good">Gut</string>

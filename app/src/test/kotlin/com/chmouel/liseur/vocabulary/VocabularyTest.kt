@@ -113,9 +113,26 @@ class VocabularyTest {
                 val id = checkNotNull(repo.collect(VocabularyLookup("basis", "en", source("one")), "Foundation", null, time))
                 repo.collect(VocabularyLookup("basis", "en", source("two").copy(locationKey = "later", sentence = null, lastSeenAt = 5)), null, null, time + 1)
                 val card = checkNotNull(repo.homeCard(20, 0).first())
-                assertEquals(HomeVocabulary(id, "basis", "en", "Foundation", "That is the word.", "Title of one", 1), card)
+                assertEquals(HomeVocabulary(id, "basis", "en", "Foundation", "That is the word.", "Title of one", 1, 0, 0), card)
                 repo.review(checkNotNull(repo.dao.word(id)), Recall.GOOD, 20, 0, time + 2)
                 assertNull(repo.homeCard(20, 0).first())
+            }
+        }
+    }
+
+    @Test
+    fun `home rates the word it shows and skips one reviewed since`() = runBlocking {
+        withTimeout(15_000) {
+            withDatabase { db ->
+                val repo = VocabularyRepository(db)
+                val id = checkNotNull(repo.collect(VocabularyLookup("basis", "en", source("one")), "Foundation", null, System.currentTimeMillis() - 1000))
+                val card = checkNotNull(repo.homeCard(20, 0).first())
+                val undo = checkNotNull(repo.review(card, Recall.AGAIN, 20, 0))
+                assertEquals(1, checkNotNull(repo.dao.word(id)).repetitions)
+                assertNull(repo.review(card, Recall.GOOD, 20, 0))
+                assertEquals(1, repo.dao.reviews(id).size)
+                repo.undoReview(undo)
+                assertEquals(card, repo.homeCard(20, 0).first())
             }
         }
     }
