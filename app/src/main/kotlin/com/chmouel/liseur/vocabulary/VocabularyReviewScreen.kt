@@ -2,6 +2,7 @@ package com.chmouel.liseur.vocabulary
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -61,6 +63,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.chmouel.liseur.R
@@ -114,74 +118,111 @@ internal fun VocabularyReviewScreen(
     BoxWithConstraints(modifier) {
         val compact = maxHeight < 360.dp
         val twoRows = maxWidth < 360.dp || LocalDensity.current.fontScale > 1.3f
-        val scrollReview = maxHeight < if (twoRows) 252.dp else 176.dp
         val scroll = rememberScrollState()
-        LaunchedEffect(word?.id, word?.repetitions, scrollReview) {
-            if (scrollReview) scroll.scrollTo(0)
-        }
-        Column(
-            Modifier.fillMaxSize()
-                .then(if (scrollReview) Modifier.verticalScroll(scroll) else Modifier)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 12.dp),
-        ) {
-            ReviewProgress(sessionCount, queue, compact, undo != null && !submitting && !flying) {
-                val previous = undo ?: return@ReviewProgress
-                submitting = true
-                scope.launch {
-                    try {
-                        if (repository.undoReview(previous)) onUndone()
-                        undo = null
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Exception) {
-                        Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
-                    } finally {
-                        submitting = false
-                    }
-                }
-            }
-            Box(Modifier.fillMaxWidth().then(if (scrollReview) Modifier else Modifier.weight(1f))) {
-                if (word == null) {
-                    Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.vocabulary_review_done), style = MaterialTheme.typography.headlineSmall)
-                        TextButton(onClick = onDone) { Text(stringResource(R.string.back)) }
-                    }
-                } else {
-                    key(word.id, word.repetitions) {
-                        val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
-                            .collectAsStateWithLifecycle(emptyList())
-                        val sources = occurrences.filter { bookUrl == null || it.bookUrl == bookUrl }
-                        val passage = sources.firstOrNull { !it.sentence.isNullOrBlank() }
-                            ?: sources.firstOrNull { it.locator != null }
-                        val shape = RoundedCornerShape(24.dp)
-                        SwipeDeck(
-                            depth = (queue.dueCount - 1).coerceIn(0, 2),
-                            layers = MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.surfaceContainerHigh,
-                            shape = shape,
-                            enabled = revealed && !submitting,
-                            thresholds = ReviewSwipe,
-                            streak = word.streak,
-                            onSwipe = ::rate,
-                            onFlight = { flying = it },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { swipes, actions ->
-                            ReviewCard(word, passage, revealed, swipes, !scrollReview, speaker, { revealed = true }, onOpenPassage, actions)
+        LaunchedEffect(word?.id, word?.repetitions) { scroll.scrollTo(0) }
+        ReviewLayout(
+            viewportHeight = constraints.maxHeight,
+            gap = if (compact) 6.dp else 12.dp,
+            scroll = scroll,
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+            header = {
+                ReviewProgress(sessionCount, queue, compact, undo != null && !submitting && !flying) {
+                    val previous = undo ?: return@ReviewProgress
+                    submitting = true
+                    scope.launch {
+                        try {
+                            if (repository.undoReview(previous)) onUndone()
+                            undo = null
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            Toast.makeText(context, R.string.vocabulary_error, Toast.LENGTH_SHORT).show()
+                        } finally {
+                            submitting = false
                         }
                     }
                 }
-            }
-            if (word != null) {
-                if (revealed) {
-                    RecallTiles(word, !submitting && !flying, compact, if (twoRows) 2 else 4, Modifier.padding(bottom = if (compact) 6.dp else 12.dp)) { rating ->
-                        scope.launch { rate(rating) }
-                    }
-                } else {
-                    Button(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
-                        Text(stringResource(R.string.vocabulary_reveal))
+            },
+            card = { scrollCard ->
+                Box(Modifier.fillMaxWidth()) {
+                    if (word == null) {
+                        Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(stringResource(R.string.vocabulary_review_done), style = MaterialTheme.typography.headlineSmall)
+                            TextButton(onClick = onDone) { Text(stringResource(R.string.back)) }
+                        }
+                    } else {
+                        key(word.id, word.repetitions) {
+                            val occurrences by remember(word.id) { repository.dao.occurrences(word.id) }
+                                .collectAsStateWithLifecycle(emptyList())
+                            val sources = occurrences.filter { bookUrl == null || it.bookUrl == bookUrl }
+                            val passage = sources.firstOrNull { !it.sentence.isNullOrBlank() }
+                                ?: sources.firstOrNull { it.locator != null }
+                            val shape = RoundedCornerShape(24.dp)
+                            SwipeDeck(
+                                depth = (queue.dueCount - 1).coerceIn(0, 2),
+                                layers = MaterialTheme.colorScheme.surfaceContainerHighest to MaterialTheme.colorScheme.surfaceContainerHigh,
+                                shape = shape,
+                                enabled = revealed && !submitting,
+                                thresholds = ReviewSwipe,
+                                streak = word.streak,
+                                onSwipe = ::rate,
+                                onFlight = { flying = it },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { swipes, actions ->
+                                ReviewCard(word, passage, revealed, swipes, scrollCard, speaker, { revealed = true }, onOpenPassage, actions)
+                            }
+                        }
                     }
                 }
-            }
+            },
+            controls = {
+                if (word != null) {
+                    if (revealed) {
+                        RecallTiles(word, !submitting && !flying, compact, if (twoRows) 2 else 4, Modifier.padding(bottom = if (compact) 6.dp else 12.dp)) { rating ->
+                            scope.launch { rate(rating) }
+                        }
+                    } else {
+                        Button(onClick = { revealed = true }, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)) {
+                            Text(stringResource(R.string.vocabulary_reveal))
+                        }
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ReviewLayout(
+    viewportHeight: Int,
+    gap: Dp,
+    scroll: ScrollState,
+    modifier: Modifier,
+    header: @Composable () -> Unit,
+    card: @Composable (scrollCard: Boolean) -> Unit,
+    controls: @Composable () -> Unit,
+) {
+    SubcomposeLayout(modifier.verticalScroll(scroll)) { constraints ->
+        val width = constraints.maxWidth
+        val loose = Constraints(minWidth = width, maxWidth = width)
+        val headerPlaceable = subcompose("header") { Box { header() } }.single().measure(loose)
+        val controlsPlaceable = subcompose("controls") { Box { controls() } }.single().measure(loose)
+        val spacing = gap.roundToPx()
+        val available = viewportHeight - headerPlaceable.height - controlsPlaceable.height - 2 * spacing
+        val scrollCard = available >= 180.dp.roundToPx()
+        val cardConstraints = if (scrollCard) {
+            loose.copy(minHeight = available, maxHeight = available)
+        } else {
+            loose
+        }
+        val cardPlaceable = subcompose("card") {
+            Box(propagateMinConstraints = true) { card(scrollCard) }
+        }.single().measure(cardConstraints)
+        val height = maxOf(viewportHeight, headerPlaceable.height + cardPlaceable.height + controlsPlaceable.height + 2 * spacing)
+        layout(width, height) {
+            headerPlaceable.placeRelative(0, 0)
+            cardPlaceable.placeRelative(0, headerPlaceable.height + spacing)
+            controlsPlaceable.placeRelative(0, height - controlsPlaceable.height)
         }
     }
 }
